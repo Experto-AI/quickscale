@@ -53,5 +53,8 @@ urlpatterns = [
         feature_view,
         name="feature-view",
     ),
+    # Include auth URLs so the quickscale_auth namespace is registered
+    # in all URL configurations used by the orgs test harness.
+    path("accounts/", include("quickscale_modules_auth.urls")),
     path("admin/", admin.site.urls),
 ]

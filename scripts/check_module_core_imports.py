@@ -49,11 +49,11 @@ ALLOWED_CORE_IMPORTS: frozenset[str] = frozenset(
 
 # Per-module legacy deep imports that are architecturally necessary
 # framework-seam imports (module-registration adapter surface). These exist
-# only in billing and CRM and are not part of the runtime API that SA9.3–9.5
-# migrated. They are kept here so the gate passes the current codebase while
-# preventing *new* deep imports from being added to any module (including
-# billing and CRM). Each entry should be removed when the corresponding module
-# migrates its adapter imports to a public seam.
+# in billing, CRM, and social and are not part of the runtime API that
+# SA9.3–SA9.5 migrated. They are kept here so the gate passes the current
+# codebase while preventing *new* deep imports from being added to any module
+# (including billing, CRM, and social). Each entry should be removed when the
+# corresponding module migrates its adapter imports to a public seam.
 #
 # Key design property: LEGACY_ALLOWED_IMPORTS is keyed by module directory
 # name so no module inherits another module's exception.
@@ -68,6 +68,15 @@ LEGACY_ALLOWED_IMPORTS: dict[str, frozenset[str]] = {
         {
             "quickscale_core.manifest.entry_point",
             "quickscale_core.module_wiring",
+        }
+    ),
+    # Social adapter imports from quickscale_core.runtime.manifest directly
+    # to avoid pulling in the DR surface at import time (which triggers
+    # circular imports through the combined runtime facade).  See the
+    # runtime/__init__.py docstring for the architectural rationale.
+    "social": frozenset(
+        {
+            "quickscale_core.runtime.manifest",
         }
     ),
 }

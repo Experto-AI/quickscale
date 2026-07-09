@@ -1,6 +1,6 @@
 [project]
 name = "quickscale-core"
-version = "0.86.0"
+version = "0.87.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 requires-python = ">=3.13,<3.15"
 readme = "README.md"

@@ -54,63 +54,57 @@ def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
     try:
         storage_helpers = _load_storage_helpers()
         selection = storage_helpers.select_storage_backend(settings)
-    except Exception as exc:
-        return {
-            **base_payload,
-            "status": "unsupported",
-            "reason": "storage helper is unavailable in this runtime",
-            "error_type": exc.__class__.__name__,
-            "storage": {
-                "backend": (
-                    str(
-                        getattr(settings, "QUICKSCALE_STORAGE_BACKEND", "local")
-                    ).strip()
-                    or "local"
-                ),
-            },
-            "inventory": [],
-        }
+    except Exception:
+        selection = None
 
-    storage_payload: dict[str, Any] = {
-        "backend": selection.backend,
-        "django_backend": selection.django_backend,
-        "use_s3_compatible": selection.use_s3_compatible,
-    }
-    if selection.use_s3_compatible:
-        storage_payload.update(
-            {
-                "bucket_name": str(selection.options.get("bucket_name", "")),
-                "endpoint_url": str(selection.options.get("endpoint_url", "")),
-                "region_name": str(selection.options.get("region_name", "")),
-                "querystring_auth": bool(
-                    selection.options.get("querystring_auth", False)
-                ),
-                "access_key_id_configured": bool(
-                    str(selection.options.get("access_key_id", ""))
-                ),
-                "secret_access_key_configured": bool(
-                    str(selection.options.get("secret_access_key", ""))
-                ),
-            }
-        )
-        try:
-            remote_inventory = storage_helpers.list_s3_compatible_media_inventory(
-                settings
+    if selection is not None:
+        storage_payload: dict[str, Any] = {
+            "backend": selection.backend,
+            "django_backend": selection.django_backend,
+            "use_s3_compatible": selection.use_s3_compatible,
+        }
+        if selection.use_s3_compatible:
+            storage_payload.update(
+                {
+                    "bucket_name": str(selection.options.get("bucket_name", "")),
+                    "endpoint_url": str(selection.options.get("endpoint_url", "")),
+                    "region_name": str(selection.options.get("region_name", "")),
+                    "querystring_auth": bool(
+                        selection.options.get("querystring_auth", False)
+                    ),
+                    "access_key_id_configured": bool(
+                        str(selection.options.get("access_key_id", ""))
+                    ),
+                    "secret_access_key_configured": bool(
+                        str(selection.options.get("secret_access_key", ""))
+                    ),
+                }
             )
-        except Exception as exc:
+            try:
+                remote_inventory = storage_helpers.list_s3_compatible_media_inventory(
+                    settings
+                )
+            except Exception as exc:
+                return {
+                    **base_payload,
+                    "status": "inventory_failed",
+                    "reason": str(exc),
+                    "error_type": exc.__class__.__name__,
+                    "storage": storage_payload,
+                    "inventory": [],
+                }
             return {
                 **base_payload,
-                "status": "inventory_failed",
-                "reason": str(exc),
-                "error_type": exc.__class__.__name__,
+                "status": "ready",
                 "storage": storage_payload,
-                "inventory": [],
+                "inventory": remote_inventory,
             }
-        return {
-            **base_payload,
-            "status": "ready",
-            "storage": storage_payload,
-            "inventory": remote_inventory,
+    else:
+        storage_payload = {
+            "backend": (
+                str(getattr(settings, "QUICKSCALE_STORAGE_BACKEND", "local")).strip()
+                or "local"
+            ),
         }
 
     media_root_text = str(getattr(settings, "MEDIA_ROOT", "")).strip()

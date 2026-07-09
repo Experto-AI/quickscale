@@ -264,6 +264,7 @@ def _collect_defined_names(py_file: Path) -> set[str]:
     - Top-level ``AnnAssign`` targets that are simple ``Name`` nodes
     - Re-exported imports (e.g. ``from x import y``) at top level
     - ``__all__`` if it is a literal list of strings
+    - ``__getattr__`` for lazy-loading modules (trusts ``__all__`` directly)
     """
     try:
         tree = ast.parse(py_file.read_text(encoding="utf-8"))
@@ -272,10 +273,13 @@ def _collect_defined_names(py_file: Path) -> set[str]:
 
     names: set[str] = set()
     all_list: set[str] | None = None
+    has_getattr: bool = False
 
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             names.add(node.name)
+            if node.name == "__getattr__":
+                has_getattr = True
         elif isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name):
@@ -312,11 +316,145 @@ def _collect_defined_names(py_file: Path) -> set[str]:
                             if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
                         }
 
-    # If __all__ is present, the public surface is restricted to that list
+    # If __all__ is present, the public surface is restricted to that list.
+    # For modules with __getattr__ (lazy-loading facades), trust __all__
+    # directly — lazy symbols are resolved at runtime and won't appear in
+    # the literal names set (the __getattr__ body handles them).
     if all_list is not None:
+        if has_getattr:
+            return all_list  # __getattr__ resolves lazy symbols at runtime
         return all_list & names  # only names that are actually defined
 
     return names
+
+
+def _collect_lazy_symbol_names(tree: ast.AST) -> set[str]:
+    """
+    Collect lazy symbol names from frozenset literals in ``__getattr__`` modules.
+
+    Handles patterns like::
+
+        _LAZY_ORCHESTRATION_SYMBOLS: frozenset[str] = frozenset({"a", "b"})
+        _LAZY_PRIMITIVES_SYMBOLS = frozenset({"c", "d"})
+
+    Returns the set of string literals found in all such assignments.
+    """
+    lazy_names: set[str] = set()
+    for node in ast.iter_child_nodes(tree):
+        target: ast.expr | None = None
+        value: ast.expr | None = None
+
+        if isinstance(node, ast.Assign):
+            if len(node.targets) == 1:
+                target = node.targets[0]
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            target = node.target
+            value = node.value  # type: ignore[assignment]
+
+        if target is None or value is None:
+            continue
+        if not isinstance(target, ast.Name):
+            continue
+        if not target.id.startswith("_LAZY_") or "_SYMBOLS" not in target.id:
+            continue
+
+        # Value should be frozenset({...}) or frozenset[...]({...})
+        if (
+            isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name)
+            and value.func.id == "frozenset"
+            and value.args
+        ):
+            container = value.args[0]
+            if isinstance(container, (ast.Set, ast.List, ast.Tuple)):
+                for elt in container.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        lazy_names.add(elt.value)
+    return lazy_names
+
+
+def _collect_submodule_aliases(tree: ast.AST) -> dict[str, str]:
+    """
+    Collect sub-module aliases from import statements in a module.
+
+    Handles::
+
+        from quickscale_core.runtime import dr as _dr
+        import quickscale_core.runtime.dr as _dr
+
+    Returns a mapping: ``{alias_name: dotted_module_path}``.
+    """
+    aliases: dict[str, str] = {}
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                if alias.asname:
+                    aliases[alias.asname] = f"{node.module}.{alias.name}"
+                else:
+                    aliases[alias.name] = f"{node.module}.{alias.name}"
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname:
+                    aliases[alias.asname] = alias.name
+                else:
+                    aliases[alias.name] = alias.name
+    return aliases
+
+
+def _resolve_name_via_getattr_chain(
+    name: str,
+    target_file: Path,
+    core_src_root: Path,
+    *,
+    _visited: set[Path] | None = None,
+) -> bool:
+    """
+    Try to resolve *name* through a module's ``__getattr__`` delegation.
+
+    Checks:
+    1. Whether the module defines ``__getattr__``.
+    2. Lazy frozenset literal assignments (``_LAZY_*_SYMBOLS``).
+    3. Sub-module aliases (``from X import Y as _alias``), recursively.
+
+    Guards against cycles via ``_visited``.
+    """
+    if _visited is None:
+        _visited = set()
+    if target_file in _visited:
+        return False
+    _visited.add(target_file)
+
+    try:
+        tree = ast.parse(target_file.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return False
+
+    # Check if __getattr__ is defined
+    has_getattr = any(
+        isinstance(node, ast.FunctionDef) and node.name == "__getattr__"
+        for node in ast.iter_child_nodes(tree)
+    )
+    if not has_getattr:
+        return False
+
+    # Check lazy frozenset literals
+    if name in _collect_lazy_symbol_names(tree):
+        return True
+
+    # Check sub-module aliases recursively
+    for _alias_name, alias_module in _collect_submodule_aliases(tree).items():
+        sub_path = _module_path_to_fs_path(core_src_root, alias_module)
+        if sub_path and sub_path.is_file():
+            # Check sub-module's defined names first
+            sub_defined = _collect_defined_names(sub_path)
+            if name in sub_defined:
+                return True
+            # Chase sub-module's __getattr__ chain
+            if _resolve_name_via_getattr_chain(name, sub_path, core_src_root, _visited=_visited):
+                return True
+
+    return False
 
 
 def _resolve_import(
@@ -358,6 +496,10 @@ def _resolve_import(
                 )
             continue
         if name not in defined:
+            # Fallback: the module may use __getattr__ to re-export symbols
+            # from frozenset-based lazy tables or sub-module aliases.
+            if _resolve_name_via_getattr_chain(name, target_file, core_src_root):
+                continue
             issues.append(f"  Symbol {name!r} not found in {module_path}.")
 
     return issues

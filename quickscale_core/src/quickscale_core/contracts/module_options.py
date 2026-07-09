@@ -532,6 +532,10 @@ def normalize_notifications_module_options(
 ) -> dict[str, Any]:
     """Return notifications options with legacy raw-secret keys raising.
 
+    When *options* is empty (``None`` or ``{}``), returns the full manifest
+    defaults so that implied modules without an explicit ``default_config``
+    materialise the same options as an explicit default configuration.
+
     Raises:
         ConfigValidationError: if a legacy raw-secret key is present, naming the
             dead key and its env-var replacement.
@@ -550,6 +554,14 @@ def normalize_notifications_module_options(
                 f"Legacy config key '{legacy_key}' is no longer supported. "
                 f"Use '{env_var_option}' to reference an environment variable instead."
             )
+
+    if not normalized:
+        # No explicit options provided — return full manifest defaults.
+        # Lazy import avoids circular dependency (resolvers imports from this
+        # module for the normalize_*_module_options helpers).
+        from quickscale_core.contracts.resolvers import default_notifications_module_options  # fmt: skip
+
+        return default_notifications_module_options()
 
     if normalized.get("reply_to_email") is None:
         normalized["reply_to_email"] = ""

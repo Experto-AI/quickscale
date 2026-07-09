@@ -99,11 +99,12 @@ class TestCrmRlsBoundaryRestrictedRole:
         set_current_org_id(org_a.id)
         try:
             Tag.objects.create(name="Org A Tag", organization=org_a)
-            Company.objects.create(name="Org A Company", organization=org_a)
+            company_a = Company.objects.create(name="Org A Company", organization=org_a)
             Contact.objects.create(
                 first_name="Alice",
                 last_name="A",
                 email="alice@example.com",
+                company=company_a,
                 organization=org_a,
             )
         finally:
@@ -132,10 +133,12 @@ class TestCrmRlsBoundaryRestrictedRole:
 
         set_current_org_id(org_a.id)
         try:
+            company_a = Company.objects.create(name="Org A Company", organization=org_a)
             Contact.objects.create(
                 first_name="Alice",
                 last_name="A",
                 email="alice@example.com",
+                company=company_a,
                 organization=org_a,
             )
         finally:
@@ -143,10 +146,12 @@ class TestCrmRlsBoundaryRestrictedRole:
 
         set_current_org_id(org_b.id)
         try:
+            company_b = Company.objects.create(name="Org B Company", organization=org_b)
             Contact.objects.create(
                 first_name="Bob",
                 last_name="B",
                 email="bob@example.com",
+                company=company_b,
                 organization=org_b,
             )
         finally:
@@ -281,10 +286,12 @@ class TestCrmRlsBoundaryRestrictedRole:
 
         set_current_org_id(org_a.id)
         try:
+            company_a = Company.objects.create(name="Org A Company", organization=org_a)
             Contact.objects.create(
                 first_name="Alice",
                 last_name="A",
                 email="alice@example.com",
+                company=company_a,
                 organization=org_a,
             )
         finally:

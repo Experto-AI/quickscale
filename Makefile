@@ -267,11 +267,11 @@ test:
 	fi; \
 	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Testing quickscale_core..."; \
-		$(PYTHON) -m pytest quickscale_core/tests -v --tb=short -m "not e2e"; \
+		$(PYTHON) -m pytest quickscale_core/tests -q --tb=short -m "not e2e"; \
 	fi; \
 	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Testing quickscale_cli..."; \
-		$(PYTHON) -m pytest quickscale_cli/tests -v --tb=short -m "not e2e" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90; \
+		$(PYTHON) -m pytest quickscale_cli/tests -q --tb=short -m "not e2e" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90; \
 	fi; \
 	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
 		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
@@ -296,7 +296,7 @@ test:
 				if [ -n "$$PYTHONPATH" ]; then \
 					module_pythonpath="$$module_pythonpath:$$PYTHONPATH"; \
 				fi; \
-				PYTHONPATH="$$module_pythonpath" $(PYTHON) -m pytest "$$mod/tests/" -v --tb=short -o "addopts=" -m "not e2e" -p pytest_django --ds=tests.settings; \
+				PYTHONPATH="$$module_pythonpath" $(PYTHON) -m pytest "$$mod/tests/" -q --tb=short -o "addopts=" -m "not e2e" -p pytest_django --ds=tests.settings; \
 			fi; \
 		done; \
 		if [ "$$mod_found" -eq 0 ]; then \
@@ -312,11 +312,11 @@ test-unit:
 	fi; \
 	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Unit testing quickscale_core..."; \
-		$(PYTHON) -m pytest quickscale_core/tests -v --tb=short -m "not integration and not e2e"; \
+		$(PYTHON) -m pytest quickscale_core/tests -q --tb=short -m "not integration and not e2e"; \
 	fi; \
 	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Unit testing quickscale_cli..."; \
-		$(PYTHON) -m pytest quickscale_cli/tests -v --tb=short -m "not integration and not e2e" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90; \
+		$(PYTHON) -m pytest quickscale_cli/tests -q --tb=short -m "not integration and not e2e" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90; \
 	fi; \
 	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
 		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
@@ -324,6 +324,13 @@ test-unit:
 			exit 1; \
 		fi; \
 		mod_found=0; \
+		# SA2.1/T1.18: The orgs boot guard raises ImproperlyConfigured when the \
+		# PostgreSQL role has BYPASSRLS privilege.  Set the documented test/dev \
+		# escape hatch so module suites that depend on orgs can run.  Preserve any \
+		# explicit user setting (e.g. to skip BYPASSRLS-dependent tests). \
+		if [ -z "$${QUICKSCALE_ALLOW_BYPASSRLS:-}" ]; then \
+			export QUICKSCALE_ALLOW_BYPASSRLS=1; \
+		fi; \
 		for mod in $(MODULE_DIRS); do \
 			if [ -d "$$mod/tests" ]; then \
 				mod_found=1; \
@@ -341,7 +348,7 @@ test-unit:
 				if [ -n "$$PYTHONPATH" ]; then \
 					module_pythonpath="$$module_pythonpath:$$PYTHONPATH"; \
 				fi; \
-				PYTHONPATH="$$module_pythonpath" $(PYTHON) -m pytest "$$mod/tests/" -v --tb=short -o "addopts=" -m "not integration and not e2e" -p pytest_django --ds=tests.settings; \
+				PYTHONPATH="$$module_pythonpath" $(PYTHON) -m pytest "$$mod/tests/" -q --tb=short -o "addopts=" -m "not integration and not e2e" -p pytest_django --ds=tests.settings; \
 			fi; \
 		done; \
 		if [ "$$mod_found" -eq 0 ]; then \
@@ -359,7 +366,7 @@ test-agent:
 
 # Run tests with coverage (90% total, 80% per-file threshold)
 test-cov:
-	@$(PYTHON) -m pytest $(TEST_DIRS) -v \
+	@$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short \
 		--cov=quickscale_core/src \
 		--cov=quickscale_cli/src \
 		--cov-report=term-missing \

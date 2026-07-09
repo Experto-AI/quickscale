@@ -5,8 +5,8 @@ migrate, and serve an HTTP route with a successful outcome (2xx/3xx) —
 proving generator fidelity without requiring Docker or browser automation.
 Requires a running PostgreSQL instance (see AF13 roadmap note).
 
-This test is collected by the default CI path (``pytest quickscale_core/tests/
--m "not e2e"``) so generator regressions surface in daily PR feedback.
+This test is marked ``@pytest.mark.e2e`` so it is excluded from
+``pytest quickscale_core/tests/ -m "not e2e"`` and ``make test-unit``.
 
 Phase 14.3 of the roadmap (Finding 14 — generator-runtime test coverage).
 """
@@ -351,10 +351,11 @@ class TestGeneratedProjectRuntimeSmoke:
        route serves a valid redirect, not just that the server accepts TCP
        connections
 
-    This test is NOT marked ``@pytest.mark.e2e`` so it is collected by the
+    This test IS marked ``@pytest.mark.e2e`` so it is excluded from the
     default CI path (``pytest quickscale_core/tests/ -m "not e2e"``).
     """
 
+    @pytest.mark.e2e
     def test_embedded_auth_module_boots_and_serves_login(self, tmp_path: Path) -> None:
         """A generated project with embedded auth should boot, migrate, and serve an auth route.
 

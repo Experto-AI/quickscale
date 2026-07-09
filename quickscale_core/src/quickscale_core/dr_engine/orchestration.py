@@ -77,7 +77,7 @@ from quickscale_core.dr_engine.verification import (
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
 
-from quickscale_modules_backups.models import (  # type: ignore[import-untyped]
+from quickscale_modules_backups.models import (
     BackupArtifact,
     BackupPolicy,
     BackupSnapshot,
@@ -643,7 +643,7 @@ def _get_authoritative_snapshot_for_artifact(
 ) -> BackupSnapshot | None:
     """Return the linked snapshot for a dump artifact if one exists."""
     try:
-        return artifact.authoritative_snapshot
+        return cast("BackupSnapshot", artifact.authoritative_snapshot)  # type: ignore[attr-defined]
     except BackupSnapshot.DoesNotExist:
         return None
 
@@ -1909,28 +1909,34 @@ def _resolve_media_runtime(
     """Resolve local or s3-compatible media runtime settings."""
     try:
         selection = _load_storage_helpers().select_storage_backend(settings_obj)
-    except Exception as exc:
-        raise BackupConfigurationError(
-            "Media sync requires quickscale_modules_storage.helpers to resolve storage backends."
-        ) from exc
+    except Exception:
+        selection = None
 
-    if require_s3_compatible and not selection.use_s3_compatible:
-        raise BackupConfigurationError(
-            "Railway-target media sync requires an s3-compatible target media backend; "
-            "local MEDIA_ROOT is not a supported Railway target."
-        )
-    if selection.use_s3_compatible:
-        bucket_name = str(selection.options.get("bucket_name", "")).strip()
-        if not bucket_name:
+    if selection is not None:
+        if require_s3_compatible and not selection.use_s3_compatible:
             raise BackupConfigurationError(
-                "S3-compatible media sync requires AWS_STORAGE_BUCKET_NAME"
+                "Railway-target media sync requires an s3-compatible target media backend; "
+                "local MEDIA_ROOT is not a supported Railway target."
             )
-        return {
-            "backend": selection.backend,
-            "use_s3_compatible": True,
-            "storage": _build_s3_storage_from_selection(selection),
-            "bucket_name": bucket_name,
-        }
+        if selection.use_s3_compatible:
+            bucket_name = str(selection.options.get("bucket_name", "")).strip()
+            if not bucket_name:
+                raise BackupConfigurationError(
+                    "S3-compatible media sync requires AWS_STORAGE_BUCKET_NAME"
+                )
+            return {
+                "backend": selection.backend,
+                "use_s3_compatible": True,
+                "storage": _build_s3_storage_from_selection(selection),
+                "bucket_name": bucket_name,
+            }
+    else:
+        # Storage helpers unavailable — fall back to local detection.
+        if require_s3_compatible:
+            raise BackupConfigurationError(
+                "Railway-target media sync requires an s3-compatible target media backend; "
+                "storage helper is unavailable in this runtime."
+            )
 
     media_root_text = str(_read_setting_value(settings_obj, "MEDIA_ROOT", "")).strip()
     if not media_root_text:
@@ -2364,7 +2370,7 @@ def _resolve_restore_source(
     def _policy_resolver(art: ArtifactLike) -> Any:
         nonlocal resolved_policy
         resolved_policy = _resolve_artifact_remote_policy(
-            art,
+            cast("BackupArtifact", art),
             resolved_policy or _load_active_policy_snapshot(),
         )
         return resolved_policy
@@ -2396,7 +2402,7 @@ def _resolve_authoritative_snapshot_dump(snapshot_id: str) -> BackupArtifact:
             "authoritative database dump artifact."
         )
 
-    return artifact
+    return cast("BackupArtifact", artifact)
 
 
 def _ensure_postgresql_18_restore_runtime(current_engine: str) -> None:
@@ -2444,7 +2450,7 @@ def _execute_restore_for_resolved_source(
 
     if result.executed and restore_source.artifact is not None:
         restore_warnings = _persist_restore_artifact_metadata(
-            restore_source.artifact,
+            cast("BackupArtifact", restore_source.artifact),
             restored_at=django_timezone.now(),
         )
         if restore_warnings:

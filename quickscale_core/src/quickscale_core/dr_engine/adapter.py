@@ -38,7 +38,7 @@ def capture_snapshot(
     This is the adapter replacement for the ``backups_create`` management
     command.  Parameters are explicit (no env-var protocol).
     """
-    from quickscale_modules_backups.services import (
+    from quickscale_core.dr_engine.orchestration import (
         build_backup_snapshot_report,
         create_backup,
     )
@@ -73,7 +73,7 @@ def fetch_snapshot_report(
 
     Adapter replacement for the ``backups_report`` management command.
     """
-    from quickscale_modules_backups.services import report_backup_snapshot
+    from quickscale_core.dr_engine.orchestration import report_backup_snapshot
 
     return report_backup_snapshot(
         snapshot_id,
@@ -100,7 +100,7 @@ def record_verification(
     Adapter replacement for the ``backups_record_verification`` management
     command.
     """
-    from quickscale_modules_backups.services import (
+    from quickscale_core.dr_engine.orchestration import (
         record_backup_snapshot_verification,
     )
 
@@ -129,7 +129,7 @@ def set_rollback_pin(
 
     Adapter replacement for ``backups_pin`` (set path).
     """
-    from quickscale_modules_backups.services import (
+    from quickscale_core.dr_engine.orchestration import (
         set_backup_snapshot_rollback_pin,
     )
 
@@ -154,7 +154,7 @@ def build_database_plan(
     Extracts restore file metadata from the report and validates through
     the guarded restore pipeline in dry-run mode.
     """
-    from quickscale_modules_backups.services import restore_backup_source
+    from quickscale_core.dr_engine.orchestration import restore_backup_source
 
     authoritative_dump = snapshot_report.get("authoritative_dump") or {}
     restore_file = str(authoritative_dump.get("local_path") or "").strip()
@@ -198,7 +198,7 @@ def execute_database_restore(
     """
     from django.core.management import call_command
 
-    from quickscale_modules_backups.services import restore_backup_source
+    from quickscale_core.dr_engine.orchestration import restore_backup_source
 
     authoritative_dump = snapshot_report.get("authoritative_dump") or {}
     restore_file = str(authoritative_dump.get("local_path") or "").strip()
@@ -253,7 +253,7 @@ def sync_media(
 
     ``target_runtime_settings`` is the required explicit runtime payload.
     """
-    from quickscale_modules_backups.services import sync_backup_snapshot_media
+    from quickscale_core.dr_engine.orchestration import sync_backup_snapshot_media
 
     return sync_backup_snapshot_media(
         snapshot_id,
@@ -273,7 +273,7 @@ def prune_backups() -> dict[str, Any]:
 
     Adapter replacement for the ``backups_prune`` management command.
     """
-    from quickscale_modules_backups.services import prune_expired_backups
+    from quickscale_core.dr_engine.orchestration import prune_expired_backups
 
     deleted_count = prune_expired_backups()
     return {"deleted_count": deleted_count}
@@ -293,7 +293,7 @@ def validate_artifact(
     Adapter replacement for the ``backups_validate`` management command.
     """
     from quickscale_modules_backups.models import BackupArtifact
-    from quickscale_modules_backups.services import validate_backup_artifact
+    from quickscale_core.dr_engine.orchestration import validate_backup_artifact
 
     try:
         artifact = BackupArtifact.objects.get(pk=artifact_id)
@@ -323,7 +323,7 @@ def clear_rollback_pin(
     Adapter replacement for the ``backups_pin`` (clear path) management
     command.
     """
-    from quickscale_modules_backups.services import (
+    from quickscale_core.dr_engine.orchestration import (
         clear_backup_snapshot_rollback_pin,
     )
 
@@ -357,7 +357,7 @@ def restore_backup(
     """
     from quickscale_core.dr_engine.recovery import RestoreSourceResolutionMode
     from quickscale_modules_backups.models import BackupArtifact
-    from quickscale_modules_backups.services import restore_backup_source
+    from quickscale_core.dr_engine.orchestration import restore_backup_source
 
     if resolution_mode is None:
         resolution_mode = RestoreSourceResolutionMode.REMOTE_FALLBACK

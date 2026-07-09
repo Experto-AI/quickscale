@@ -172,7 +172,7 @@ def _build_snapshot_capture_resume_policy(
 
 def _snapshot_uses_private_remote(snapshot: Any) -> bool:
     """Return whether the stored snapshot topology expects private remote upload."""
-    from quickscale_modules_backups.models import BackupArtifact  # type: ignore[import-untyped]
+    from quickscale_modules_backups.models import BackupArtifact
 
     if snapshot.remote_root_key.strip():
         return True

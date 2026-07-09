@@ -179,13 +179,18 @@ def _write_project_with_modules_non_consolidated(
     project_path.mkdir()
     (project_path / "manage.py").write_text("# manage")
 
+    _repo_manifests_root = Path(__file__).resolve().parents[2] / "quickscale_modules"
     for module_name in module_names:
         module_dir = project_path / "modules" / module_name
         module_dir.mkdir(parents=True)
         (module_dir / "__init__.py").write_text("")
-        (module_dir / "module.yml").write_text(
-            f'name: {module_name}\nversion: "0.71.0"\n'
-        )
+        repo_manifest = _repo_manifests_root / module_name / "module.yml"
+        if repo_manifest.exists():
+            (module_dir / "module.yml").write_text(repo_manifest.read_text())
+        else:
+            (module_dir / "module.yml").write_text(
+                f'name: {module_name}\nversion: "0.71.0"\n'
+            )
 
     _write_quickscale_config_with_modules(project_path, module_names)
     _write_non_consolidated_state_with_modules(project_path, module_names)
@@ -271,13 +276,18 @@ def _write_project_with_modules(project_path: Path, module_names: list[str]) -> 
     project_path.mkdir()
     (project_path / "manage.py").write_text("# manage")
 
+    _repo_manifests_root = Path(__file__).resolve().parents[2] / "quickscale_modules"
     for module_name in module_names:
         module_dir = project_path / "modules" / module_name
         module_dir.mkdir(parents=True)
         (module_dir / "__init__.py").write_text("")
-        (module_dir / "module.yml").write_text(
-            f'name: {module_name}\nversion: "0.71.0"\n'
-        )
+        repo_manifest = _repo_manifests_root / module_name / "module.yml"
+        if repo_manifest.exists():
+            (module_dir / "module.yml").write_text(repo_manifest.read_text())
+        else:
+            (module_dir / "module.yml").write_text(
+                f'name: {module_name}\nversion: "0.71.0"\n'
+            )
 
     _write_quickscale_config_with_modules(project_path, module_names)
     _write_initial_state_with_modules(project_path, module_names)
@@ -757,6 +767,16 @@ def test_apply_backups_private_remote_stays_offline_with_env_var_refs() -> None:
         assert backups_options["remote_region_name"] == "auto"
 
 
+def _copy_repo_module_manifest(project_path: Path, module_name: str) -> None:
+    """Copy a module.yml from the maintainer repo into the embedded project."""
+    repo_root = Path(__file__).resolve().parents[2]
+    source = repo_root / "quickscale_modules" / module_name / "module.yml"
+    module_dir = project_path / "modules" / module_name
+    module_dir.mkdir(parents=True, exist_ok=True)
+    (module_dir / "__init__.py").write_text("")
+    (module_dir / "module.yml").write_text(source.read_text())
+
+
 def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
     """Repeat apply should treat blog.enable_rss as mutable and avoid re-embed."""
     cli_runner = CliRunner()
@@ -771,10 +791,135 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
         (package_dir / "__init__.py").write_text("")
         (package_dir / "urls.py").write_text("urlpatterns = []\n")
         (project_path / "manage.py").write_text("# manage\n")
+        (project_path / "pyproject.toml").write_text(
+            "[tool.poetry]\n"
+            'name = "myproject"\n'
+            'version = "0.1.0"\n'
+            'description = ""\n'
+            "authors = []\n"
+            "\n"
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.12"\n'
+        )
 
-        _write_blog_quickscale_config(project_path, enable_rss=False)
-        _write_blog_state(project_path, enable_rss=True)
+        # Blog requires orgs>=0.86.0, and orgs requires auth — embed all three
+        # so the required-module version constraint is satisfied.
+        _copy_repo_module_manifest(project_path, "auth")
+        _copy_repo_module_manifest(project_path, "orgs")
         _write_embedded_blog_manifest(project_path)
+
+        # quickscale.yml: blog with enable_rss=False; auth and orgs are
+        # installed.  Orgs implies notifications which is materialized
+        # by _load_and_validate_config.
+        config_data = {
+            "version": "1",
+            "project": {
+                "slug": "myproject",
+                "package": "myproject",
+                "theme": "showcase_html",
+            },
+            "modules": {
+                "auth": {},
+                "orgs": {},
+                "blog": {"enable_rss": False},
+            },
+            "docker": {"start": False},
+        }
+        (project_path / "quickscale.yml").write_text(
+            yaml.safe_dump(config_data, sort_keys=False)
+        )
+
+        # State: auth, orgs, notifications (implied by orgs), and blog with
+        # enable_rss=True so the delta shows one mutable change.
+        state_data = {
+            "version": "1",
+            "project": {
+                "slug": "myproject",
+                "package": "myproject",
+                "theme": "showcase_html",
+                "created_at": "2025-01-01T00:00:00",
+                "last_applied": "2025-01-01T00:00:00",
+            },
+            "modules": {
+                "auth": {
+                    "name": "auth",
+                    "version": "0.86.0",
+                    "commit_sha": "abc123",
+                    "embedded_at": "2025-01-01T00:00:00",
+                    "options": {},
+                    "prefix": "modules/auth",
+                    "branch": "splits/auth-module",
+                    "installed_at": "2025-01-01",
+                },
+                "orgs": {
+                    "name": "orgs",
+                    "version": "0.86.0",
+                    "commit_sha": "abc123",
+                    "embedded_at": "2025-01-01T00:00:00",
+                    "options": {},
+                    "prefix": "modules/orgs",
+                    "branch": "splits/orgs-module",
+                    "installed_at": "2025-01-01",
+                },
+                "notifications": {
+                    "name": "notifications",
+                    "version": "0.78.0",
+                    "commit_sha": "abc123",
+                    "embedded_at": "2025-01-01T00:00:00",
+                    "options": {},
+                    "prefix": "modules/notifications",
+                    "branch": "splits/notifications-module",
+                    "installed_at": "2025-01-01",
+                },
+                "blog": {
+                    "name": "blog",
+                    "version": "0.73.0",
+                    "commit_sha": "abc123",
+                    "embedded_at": "2025-01-01T00:00:00",
+                    "options": {"enable_rss": True},
+                },
+            },
+            "managed_files": {},
+        }
+        state_dir = project_path / ".quickscale"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "state.yml").write_text(
+            yaml.safe_dump(state_data, sort_keys=False)
+        )
+
+        # Legacy tracking config so the consolidated state has tracking metadata.
+        tracking_data = {
+            "default_remote": "https://github.com/Experto-AI/quickscale.git",
+            "modules": {
+                "auth": {
+                    "prefix": "modules/auth",
+                    "branch": "splits/auth-module",
+                    "installed_version": "0.86.0",
+                    "installed_at": "2025-01-01",
+                },
+                "orgs": {
+                    "prefix": "modules/orgs",
+                    "branch": "splits/orgs-module",
+                    "installed_version": "0.86.0",
+                    "installed_at": "2025-01-01",
+                },
+                "notifications": {
+                    "prefix": "modules/notifications",
+                    "branch": "splits/notifications-module",
+                    "installed_version": "0.78.0",
+                    "installed_at": "2025-01-01",
+                },
+                "blog": {
+                    "prefix": "modules/blog",
+                    "branch": "splits/blog-module",
+                    "installed_version": "0.73.0",
+                    "installed_at": "2025-01-01",
+                },
+            },
+        }
+        (state_dir / "config.yml").write_text(
+            yaml.safe_dump(tracking_data, sort_keys=False)
+        )
 
         with (
             patch(

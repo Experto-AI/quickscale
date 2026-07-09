@@ -357,6 +357,14 @@ echo "📦 Testing quickscale_modules..."
 # Modules are installed in editable mode via root pyproject.toml
 # PYTHONPATH keeps the current module root first and adds sibling module src dirs
 # so cross-module imports like notifications -> forms resolve during bootstrap.
+#
+# SA2.1/T1.18: The orgs boot guard raises ImproperlyConfigured when the
+# PostgreSQL role has BYPASSRLS privilege.  Set the documented test/dev
+# escape hatch so module suites that depend on orgs can run.  Preserve any
+# explicit user setting (e.g. to skip BYPASSRLS-dependent tests).
+if [ -z "${QUICKSCALE_ALLOW_BYPASSRLS:-}" ]; then
+  export QUICKSCALE_ALLOW_BYPASSRLS=1
+fi
 if [ -d "quickscale_modules" ]; then
   for mod in quickscale_modules/*; do
     if [ -d "$mod" ]; then

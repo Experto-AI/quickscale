@@ -15,6 +15,10 @@ in the DR surface at import time and triggering circular imports.
 
 Backward-compatible: all existing imports from ``quickscale_core.runtime``
 continue to work through this combined facade.
+
+``__all__`` is a hardcoded literal (union of both sub-module exports) so
+the SA9.2 module-core compatibility checker's static analysis can resolve
+all symbols without Python import-time side effects.
 """
 
 from __future__ import annotations
@@ -26,9 +30,78 @@ import typing
 from quickscale_core.runtime import dr as _dr  # noqa: F401
 from quickscale_core.runtime import manifest as _manifest  # noqa: F401
 
-# Build combined __all__ from both sub-modules (union).
-__all__ = list(_dr.__all__) + [
-    sym for sym in _manifest.__all__ if sym not in _dr.__all__
+# ---------------------------------------------------------------------------
+# Public API — complete hardcoded literal union of dr.__all__ and
+# manifest.__all__.  Kept as a literal so the SA9.2 static-analysis
+# checker (check_module_core_compatibility.py) can resolve every
+# symbol without importing the sub-modules.
+#
+# When adding a new public symbol to dr.py or manifest.py, add it
+# here too.  The compatibility checker will catch any mismatch.
+# ---------------------------------------------------------------------------
+__all__ = [
+    # DR adapter surface (from dr)
+    "ADAPTER_FUNCTIONS",
+    "BackupError",
+    "build_database_plan",
+    "capture_snapshot",
+    "execute_database_restore",
+    "fetch_snapshot_report",
+    "record_verification",
+    "set_rollback_pin",
+    "sync_media",
+    # DR orchestration surface — backups module (lazy-loaded)
+    "BackupLockError",
+    "StagedAdminRestoreUpload",
+    "build_backup_filename",
+    "build_backup_snapshot_report",
+    "clear_backup_snapshot_rollback_pin",
+    "create_backup",
+    "delete_artifact_files",
+    "download_backup_path",
+    "get_backup_snapshot",
+    "get_local_backup_directory",
+    "prune_expired_backups",
+    "record_backup_snapshot_verification",
+    "report_backup_snapshot",
+    "restore_admin_uploaded_backup",
+    "restore_backup_artifact",
+    "restore_backup_source",
+    "_cleanup_admin_restore_upload_directory",
+    "_resolve_admin_uploaded_restore_artifact",
+    "_stage_admin_restore_upload",
+    "set_backup_snapshot_rollback_pin",
+    "sync_backup_snapshot_media",
+    "validate_backup_artifact",
+    # DR primitives surface
+    "BackupConfigurationError",
+    "BackupPolicySnapshot",
+    "ShellCommandRunner",
+    # DR recovery surface — backups module (lazy-loaded)
+    "ArtifactLike",
+    "BackupRestoreBlocked",
+    "RemoteMaterializer",
+    "ResolvedRestoreSource",
+    "RestoreResult",
+    "RestoreSourceResolutionMode",
+    "RestoreWarning",
+    # Module wiring spec (from manifest)
+    "ModuleWiringSpec",
+    # Manifest/resolver types
+    "ResolverResult",
+    "assemble_wiring_spec",
+    # Social-manifest path constants
+    "SOCIAL_EMBEDS_PATH",
+    "SOCIAL_INTEGRATION_BASE_PATH",
+    "SOCIAL_INTEGRATION_EMBEDS_PATH",
+    "SOCIAL_LINK_TREE_PATH",
+    # Social-manifest surface
+    "load_social_manifest",
+    "render_social_managed_init_module",
+    "render_social_managed_urls_module",
+    "render_social_managed_views_module",
+    "resolve_social_module_options",
+    "social_provider_supports_embeds",
 ]
 
 

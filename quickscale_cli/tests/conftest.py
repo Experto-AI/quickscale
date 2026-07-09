@@ -20,6 +20,15 @@ for _src_path in (
         sys.path.remove(_src_path_str)
     sys.path.insert(0, _src_path_str)
 
+# Make module adapter packages importable so that managed-wiring regeneration
+# (refresh_managed_adapters) can import quickscale_modules_{name}.adapter.
+for _module_entry in sorted((_REPO_ROOT / "quickscale_modules").iterdir()):
+    _module_src = _module_entry / "src"
+    if _module_src.is_dir():
+        _src_str = str(_module_src.resolve())
+        if _src_str not in sys.path:
+            sys.path.insert(0, _src_str)
+
 
 @pytest.fixture
 def cli_runner() -> CliRunner:

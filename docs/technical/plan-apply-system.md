@@ -95,7 +95,7 @@ myapp/
 ### `quickscale.yml` (Desired State)
 
 ```yaml
-version: 0.86.0
+version: 0.87.0
 
 project:
   slug: myapp
@@ -130,7 +130,7 @@ state first.
 ### `.quickscale/state.yml` (Applied State — Sole Authoritative Store)
 
 ```yaml
-version: 0.86.0
+version: 0.87.0
 
 project:
   slug: myapp
@@ -141,7 +141,7 @@ project:
 
 modules:
   auth:
-    version: 0.86.0
+    version: 0.87.0
     commit_sha: "abc1234"
     embedded_at: "2025-11-28T10:05:00"
     options:
@@ -166,7 +166,7 @@ Legacy `.quickscale/config.yml` and `.quickscale/file_hashes.yml` are compatibil
 
 ```yaml
 name: auth
-version: 0.86.0
+version: 0.87.0
 
 config:
   mutable:                       # Can change after embed

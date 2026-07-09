@@ -7,6 +7,7 @@ that the ``__all__`` export list matches the declared re-export surface.
 from __future__ import annotations
 
 from inspect import isclass, isfunction
+from typing import Any
 
 import pytest
 
@@ -274,3 +275,107 @@ class TestRuntimeImportable:
         assert getattr(runtime, symbol_name) is not None, (
             f"runtime.{symbol_name} is None"
         )
+
+
+# ===================================================================
+# dr sub-module — __getattr__ / __dir__
+# ===================================================================
+
+
+class TestRuntimeDrGetAttrDir:
+    """Lazy-loading via dr.__getattr__ and dr.__dir__.
+
+    Tests the ``__getattr__`` dispatcher in ``runtime.dr`` for orchestration,
+    primitives, recovery, and verification sub-modules, plus the error path
+    for unknown symbols.  All sub-modules are mocked to avoid Django/model
+    dependencies.
+    """
+
+    @staticmethod
+    def _mock_modules(
+        orchestration: dict[str, Any] | None = None,
+        primitives: dict[str, Any] | None = None,
+        recovery: dict[str, Any] | None = None,
+        verification: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build a ``sys.modules`` dict patch with mock sub-modules."""
+        from unittest.mock import MagicMock
+
+        patches: dict[str, Any] = {}
+
+        if orchestration is not None:
+            m = MagicMock()
+            for k, v in orchestration.items():
+                setattr(m, k, v)
+            patches["quickscale_core.dr_engine.orchestration"] = m
+        if primitives is not None:
+            m = MagicMock()
+            for k, v in primitives.items():
+                setattr(m, k, v)
+            patches["quickscale_core.dr_engine.primitives"] = m
+        if recovery is not None:
+            m = MagicMock()
+            for k, v in recovery.items():
+                setattr(m, k, v)
+            patches["quickscale_core.dr_engine.recovery"] = m
+        if verification is not None:
+            m = MagicMock()
+            for k, v in verification.items():
+                setattr(m, k, v)
+            patches["quickscale_core.dr_engine.verification"] = m
+
+        return patches
+
+    def test_getattr_orchestration_symbol(self) -> None:
+        from unittest.mock import patch
+
+        from quickscale_core.runtime import dr as _dr
+
+        patches = self._mock_modules(orchestration={"create_backup": "mock_fn"})
+        with patch.dict("sys.modules", patches):
+            result = _dr.__getattr__("create_backup")
+        assert result == "mock_fn"
+
+    def test_getattr_primitives_additional_symbol(self) -> None:
+        """Primitives is Django-free; the real module should resolve."""
+        from quickscale_core.runtime import dr as _dr
+
+        result = _dr.__getattr__("BackupConfigurationError")
+        from quickscale_core.dr_engine.primitives import BackupConfigurationError
+
+        assert result is BackupConfigurationError
+
+    def test_getattr_recovery_symbol(self) -> None:
+        """Recovery symbols resolve to the real objects."""
+        from quickscale_core.runtime import dr as _dr
+
+        result = _dr.__getattr__("ArtifactLike")
+        from quickscale_core.dr_engine.recovery import ArtifactLike
+
+        assert result is ArtifactLike
+
+    def test_getattr_verification_symbol(self) -> None:
+        """Verification symbols resolve to the real objects."""
+        from quickscale_core.runtime import dr as _dr
+
+        result = _dr.__getattr__("_validate_verification_inputs")
+        from quickscale_core.dr_engine.verification import (
+            _validate_verification_inputs,
+        )
+
+        assert result is _validate_verification_inputs
+
+    def test_getattr_unknown_raises_attribute_error(self) -> None:
+        from quickscale_core.runtime import dr as _dr
+
+        try:
+            _dr.__getattr__("nonexistent_symbol_xyz")
+            assert False, "Expected AttributeError"
+        except AttributeError:
+            pass
+
+    def test_dir_includes_all_exported_symbols(self) -> None:
+        from quickscale_core.runtime import dr as _dr
+
+        result = _dr.__dir__()
+        assert result == sorted(_dr.__all__)

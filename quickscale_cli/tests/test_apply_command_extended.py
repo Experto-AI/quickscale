@@ -6485,6 +6485,19 @@ class TestCallerParityAcrossProvenancePaths:
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text('name: auth\nversion: "0.83.0"\n')
 
+        # _update_single_module needs a root pyproject.toml for
+        # dependency sync (mirrors the generated-project contract).
+        (tmp_path / "pyproject.toml").write_text(
+            "[tool.poetry]\n"
+            'name = "myapp"\n'
+            'version = "0.1.0"\n'
+            'description = ""\n'
+            "authors = []\n"
+            "\n"
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.12"\n'
+        )
+
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
         state_path = quickscale_dir / "state.yml"

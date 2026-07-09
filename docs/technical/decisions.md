@@ -506,7 +506,7 @@ Automatic changes made:
 **Current workflow**:
 ```yaml
 # quickscale.yml (v0.68.0+)
-version: 0.86.0
+version: 0.87.0
 project:
   slug: myproject
   package: myproject

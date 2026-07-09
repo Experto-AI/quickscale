@@ -18,7 +18,10 @@ from pathlib import Path
 from typing import Callable
 
 from quickscale_core.apply.steps.types import StepContext
-from quickscale_core.apply.steps.wiring import step_capture_hashes
+from quickscale_core.apply.steps.wiring import (
+    step_capture_hashes,
+    step_regenerate_wiring,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -281,3 +284,104 @@ class TestStepCaptureHashesReporterNone:
         )
 
         assert outcome.success is True
+
+
+# ---------------------------------------------------------------------------
+# step_regenerate_wiring  (step 3 — managed module wiring generation)
+# ---------------------------------------------------------------------------
+
+
+class TestStepRegenerateWiring:
+    """step_regenerate_wiring: reporter interaction, success, and failure paths."""
+
+    def test_success_with_reporter(self) -> None:
+        messages: list[str] = []
+
+        def _reporter(msg: str, *, ok: bool = True) -> None:
+            messages.append(msg)
+
+        ctx = _make_context(
+            reporter=_reporter,
+            qs_config={},
+            existing_state=None,
+            delta=None,
+        )
+
+        outcome = step_regenerate_wiring(
+            ctx,
+            embedded_modules=["auth"],
+            regenerate_wiring_fn=lambda _o, **kw: (True, "ok"),
+        )
+
+        assert outcome.success is True
+        assert outcome.message == "Managed module wiring regenerated"
+        assert any("Regenerating managed module wiring" in m for m in messages)
+        assert any("Managed module wiring regenerated" in m for m in messages)
+
+    def test_success_without_reporter(self) -> None:
+        ctx = _make_context(
+            reporter=None,
+            qs_config={},
+            existing_state=None,
+            delta=None,
+        )
+
+        outcome = step_regenerate_wiring(
+            ctx,
+            embedded_modules=["auth"],
+            regenerate_wiring_fn=lambda _o, **kw: (True, "ok"),
+        )
+
+        assert outcome.success is True
+
+    def test_failure_with_message(self) -> None:
+        ctx = _make_context(
+            reporter=lambda _m, **kw: None,
+            qs_config={},
+            existing_state=None,
+            delta=None,
+        )
+
+        outcome = step_regenerate_wiring(
+            ctx,
+            embedded_modules=["auth"],
+            regenerate_wiring_fn=lambda _o, **kw: (False, "wiring error"),
+        )
+
+        assert outcome.success is False
+        assert outcome.failed_step_label == "managed module wiring generation"
+        assert outcome.message == "wiring error"
+
+    def test_failure_empty_message_falls_back(self) -> None:
+        ctx = _make_context(
+            reporter=lambda _m, **kw: None,
+            qs_config={},
+            existing_state=None,
+            delta=None,
+        )
+
+        outcome = step_regenerate_wiring(
+            ctx,
+            embedded_modules=["auth"],
+            regenerate_wiring_fn=lambda _o, **kw: (False, ""),
+        )
+
+        assert outcome.success is False
+        assert outcome.message == "Managed wiring regeneration failed"
+
+    def test_failure_without_reporter(self) -> None:
+        ctx = _make_context(
+            reporter=None,
+            qs_config={},
+            existing_state=None,
+            delta=None,
+        )
+
+        outcome = step_regenerate_wiring(
+            ctx,
+            embedded_modules=["auth"],
+            regenerate_wiring_fn=lambda _o, **kw: (False, "error"),
+        )
+
+        assert outcome.success is False
+        assert outcome.failed_step_label == "managed module wiring generation"
