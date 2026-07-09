@@ -12,6 +12,10 @@ SECRET_KEY = "test-secret-key-for-notifications-module"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
+# Required by quickscale_modules_orgs; saas is the correct mode for
+# orgs-dependent module test suites (forms, blog, listings, crm, social).
+QUICKSCALE_MODE = "saas"
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -83,6 +87,8 @@ DATABASES = {
 
 USE_TZ = True
 TIME_ZONE = "UTC"
+USE_X_FORWARDED_FOR = False
+TRUSTED_PROXY_COUNT = 0
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 STATIC_URL = "/static/"
 
