@@ -7,7 +7,7 @@ when the module package is importable.
 
 When the module package is **not** importable,
 :func:`refresh_managed_adapters` raises
-:class:`~django.core.exceptions.ImproperlyConfigured` — bundled/installed
+:class:`~quickscale_core.contracts.module_discovery.ImproperlyConfigured` — bundled/installed
 without module source is not a supported context (AF7 fail-hard decision).
 """
 
