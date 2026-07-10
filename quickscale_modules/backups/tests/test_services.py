@@ -2868,16 +2868,21 @@ class TestBackupLifecycle:
 class TestBackupServiceHelpers:
     """Focused tests for helper branches that underpin coverage policy enforcement."""
 
-    def test_build_media_sync_manifest_falls_back_to_local_when_storage_helpers_malformed(
+    def test_build_media_sync_manifest_falls_back_to_local_when_storage_module_missing(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When select_storage_backend is missing, fall back to local MEDIA_ROOT detection."""
+        """When the storage module is not installed (ModuleNotFoundError), fall back to local MEDIA_ROOT detection."""
+
+        def missing_module() -> object:
+            raise ModuleNotFoundError(
+                "No module named 'quickscale_modules_storage'",
+                name="quickscale_modules_storage",
+            )
+
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.import_module",
-            lambda _module_name: SimpleNamespace(
-                list_s3_compatible_media_inventory=lambda _settings_obj: []
-            ),
+            "quickscale_core.dr_engine.orchestration._load_storage_helpers",
+            missing_module,
         )
 
         manifest = backup_services._build_media_sync_manifest(
@@ -2886,6 +2891,90 @@ class TestBackupServiceHelpers:
 
         assert manifest["status"] == "missing_media_root"
         assert manifest["inventory"] == []
+
+    def test_build_media_sync_manifest_returns_unsupported_on_config_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When select_storage_backend raises ImproperlyConfigured, return unsupported status."""
+        from django.core.exceptions import ImproperlyConfigured
+
+        def failing_select(_settings_obj: object) -> object:
+            raise ImproperlyConfigured(
+                "QUICKSCALE_STORAGE_BACKEND must be set when storage module is installed"
+            )
+
+        def loaded_helpers() -> object:
+            return SimpleNamespace(
+                select_storage_backend=failing_select,
+                list_s3_compatible_media_inventory=lambda _: [],
+            )
+
+        monkeypatch.setattr(
+            "quickscale_core.dr_engine.orchestration._load_storage_helpers",
+            loaded_helpers,
+        )
+
+        manifest = backup_services._build_media_sync_manifest(
+            captured_at=datetime(2026, 4, 30, tzinfo=timezone.utc)
+        )
+
+        assert manifest["status"] == "unsupported"
+        assert "QUICKSCALE_STORAGE_BACKEND" in manifest["reason"]
+        assert manifest["error_type"] == "ImproperlyConfigured"
+        assert manifest["inventory"] == []
+
+    def test_build_media_sync_manifest_returns_unsupported_when_helper_import_fails_internally(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A ModuleNotFoundError for a sub-dependency (broken installed helper)
+        must NOT fall back to local media — status must be 'unsupported'."""
+
+        def broken_helper_import() -> object:
+            # Simulate a broken internal dependency inside an installed helper.
+            raise ModuleNotFoundError(
+                "No module named 'some_internal_dep'",
+                name="some_internal_dep",
+            )
+
+        monkeypatch.setattr(
+            "quickscale_core.dr_engine.orchestration._load_storage_helpers",
+            broken_helper_import,
+        )
+
+        manifest = backup_services._build_media_sync_manifest(
+            captured_at=datetime(2026, 4, 30, tzinfo=timezone.utc)
+        )
+
+        assert manifest["status"] == "unsupported"
+        assert "some_internal_dep" in manifest["reason"]
+        assert manifest["error_type"] == "ModuleNotFoundError"
+        assert manifest["inventory"] == []
+
+    def test_resolve_media_runtime_raises_config_error_when_helper_import_fails_internally(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A ModuleNotFoundError for a sub-dependency (broken installed helper)
+        must raise BackupConfigurationError — not silently fall back to local."""
+        from quickscale_core.dr_engine.orchestration import _resolve_media_runtime
+
+        def broken_helper_import() -> object:
+            raise ModuleNotFoundError(
+                "No module named 'some_internal_dep'",
+                name="some_internal_dep",
+            )
+
+        monkeypatch.setattr(
+            "quickscale_core.dr_engine.orchestration._load_storage_helpers",
+            broken_helper_import,
+        )
+
+        with pytest.raises(BackupConfigurationError) as exc_info:
+            _resolve_media_runtime(settings)
+
+        assert "some_internal_dep" in str(exc_info.value)
 
     def test_build_media_sync_manifest_inventory_failed(
         self,
