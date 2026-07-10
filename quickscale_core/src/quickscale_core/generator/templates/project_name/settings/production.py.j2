@@ -21,6 +21,7 @@ OPTIONAL ENVIRONMENT VARIABLES:
 - TRUSTED_PROXY_COUNT: Defaults to ``1``; the number of reverse proxies in front of the app
 """
 
+import os
 import sys
 from typing import cast
 
@@ -168,6 +169,19 @@ database_url = config("DATABASE_URL", default=None)
 
 if _runtime_db_url:
     _db_url = _runtime_db_url
+elif _runtime_db_url == "" and os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
+    # Explicit bridge: start.sh sets RUNTIME_DATABASE_URL="" with
+    # QUICKSCALE_ALLOW_BYPASSRLS=1 when spawning privileged launcher
+    # commands (createcachetable, etc.) that need the superuser
+    # DATABASE_URL instead of the restricted runtime role.
+    if not database_url:
+        raise ValueError(
+            "DATABASE_URL environment variable is not set or is empty. "
+            "QUICKSCALE_ALLOW_BYPASSRLS=1 requires the superuser "
+            "DATABASE_URL for privileged operations. "
+            "Ensure the database service is linked to your app service."
+        )
+    _db_url = database_url
 elif "migrate" in sys.argv:
     # Migration path: require the superuser DATABASE_URL
     if not database_url:

@@ -295,6 +295,87 @@ class TestGeneratedProjectSettingsProxyMath:
             compile(py_file.read_text(), str(py_file), "exec")
 
 
+class TestGeneratedProjectSa63RegenerationEvidence:
+    """Fresh regeneration evidence tests for SA63 launcher-contract behavior.
+
+    CR-SA63-002/003 regression: verify that a fresh ``quickscale plan/apply``
+    (simulated via ``ProjectGenerator``) emits the correct env pairs and
+    bridge code in the generated project's ``start.sh``, ``production.py``,
+    and ``local.py``.
+    """
+
+    def test_emitted_start_sh_has_createcachetable_env_pair(
+        self, generated_project_path: Path
+    ) -> None:
+        """The emitted start.sh must have QUICKSCALE_ALLOW_BYPASSRLS=1 on createcachetable."""
+        start_sh = generated_project_path / "start.sh"
+        assert start_sh.exists(), "Generated start.sh not found"
+
+        content = start_sh.read_text()
+
+        createcachetable_line = next(
+            line
+            for line in content.splitlines()
+            if "python manage.py createcachetable" in line
+        )
+        assert "QUICKSCALE_ALLOW_BYPASSRLS=1" in createcachetable_line, (
+            "start.sh createcachetable must carry QUICKSCALE_ALLOW_BYPASSRLS=1"
+        )
+        assert 'RUNTIME_DATABASE_URL=""' in createcachetable_line, (
+            "start.sh createcachetable must clear RUNTIME_DATABASE_URL"
+        )
+
+    def test_emitted_production_py_has_import_os_and_bridge(
+        self, generated_project_path: Path
+    ) -> None:
+        """The emitted production.py must import os and contain the bridge."""
+        production_py = (
+            generated_project_path / "testproject" / "settings" / "production.py"
+        )
+        assert production_py.exists(), "Generated production.py not found"
+
+        content = production_py.read_text()
+
+        # Must import os
+        assert "import os" in content, (
+            "production.py must import os for QUICKSCALE_ALLOW_BYPASSRLS check"
+        )
+
+        # Must contain the bridge condition
+        assert 'os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1"' in content, (
+            "production.py must check QUICKSCALE_ALLOW_BYPASSRLS env var"
+        )
+
+        # Must reference the bypass name
+        assert "QUICKSCALE_ALLOW_BYPASSRLS" in content, (
+            "production.py must reference QUICKSCALE_ALLOW_BYPASSRLS"
+        )
+
+    def test_emitted_local_py_has_no_argv_inspection(
+        self, generated_project_path: Path
+    ) -> None:
+        """The emitted local.py must not use argv sniffing (SA63)."""
+        local_py = generated_project_path / "testproject" / "settings" / "local.py"
+        assert local_py.exists(), "Generated local.py not found"
+
+        content = local_py.read_text()
+
+        assert "import sys" not in content, "local.py should not import sys after SA63"
+        assert "sys.argv" not in content, (
+            "local.py should not inspect sys.argv after SA63"
+        )
+
+    def test_emitted_production_py_valid_python(
+        self, generated_project_path: Path
+    ) -> None:
+        """The emitted production.py must be syntactically valid Python."""
+        production_py = (
+            generated_project_path / "testproject" / "settings" / "production.py"
+        )
+        assert production_py.exists()
+        compile(production_py.read_text(), str(production_py), "exec")
+
+
 class TestProjectGeneratorAtomicCreation:
     """Tests for atomic project creation (rollback on failure)"""
 
