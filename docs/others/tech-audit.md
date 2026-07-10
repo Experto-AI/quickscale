@@ -83,14 +83,14 @@ TOML before writing in its two main writers (but see TA52).
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |----|----------|----------|-------|--------|------------|--------|
 | TA47 | S2 | error-swallowing / data-handling (DR) | DR media capture/sync silently falls back to local `MEDIA_ROOT` when storage-backend resolution fails — fail-closed test flipped to bless it | Small | High | open |
-| TA48 | S3 | security (defense-in-depth) | RLS boot guard checks `rolbypassrls` but not `rolsuper` — superuser connections (CI's default, misconfigured deployments) pass the guard with RLS silently bypassed | Trivial | High | open — quick win |
+| TA48 | S3 | security (defense-in-depth) | RLS boot guard checks `rolbypassrls` but not `rolsuper` — superuser connections (CI's default, misconfigured deployments) pass the guard with RLS silently bypassed | Trivial | High | resolved (SA58) |
 | TA49 | S3 | test-integrity / operability | `make test-unit` + `scripts/test_unit.sh` auto-prime `QUICKSCALE_ALLOW_BYPASSRLS=1`, contradicting the SA14.4 decision still documented in the test settings; CI's coverage gate inherits it | Small | High | open |
 | TA50 | S3 | data-handling / consistency | Composite-FK helper flipped to `NOT DEFERRABLE` undocumented — diverges from forms' asserted `DEFERRABLE` contract and from every existing database | Small | High (facts) / Medium (impact) | open |
 | TA51 | S4 | build hygiene (TA23 class) | Test-run artifacts committed: tracked `pytest_log.txt` updated per commit + 13 accumulating blog test-media PNGs | Trivial | High | open |
 | TA52 | S4 | correctness (CLI) | `_patch_module_path_dependencies` writes line-spliced TOML without the `_write_validated_toml` guard its sibling writers use | Trivial | High | open |
 
-Counts: **S1: 0 · S2: 1 · S3: 3 · S4: 2.** Quick wins: TA48 (Trivial S3), TA51, TA52.
-Resolved since the 2026-07-07/08 passes: **TA45** (SA54). Both TA47 and TA50 are one-day-old
+Counts: **S1: 0 · S2: 1 · S3: 2 · S4: 2.** Quick wins: TA51, TA52.
+Resolved since the 2026-07-07/08 passes: **TA45** (SA54), **TA48** (SA58). Both TA47 and TA50 are one-day-old
 regressions from `6ea37301` — revert-and-redo is a live option for each.
 
 ---
@@ -176,6 +176,7 @@ regressions from `6ea37301` — revert-and-redo is a live option for each.
   is a defense-in-depth loss, not direct exposure). **Fix:** change the query to
   `SELECT rolbypassrls OR rolsuper …` and update the error message; adjust
   `test_rls_boot_guard.py` mocks. Effort: Trivial (quick win). Confidence: High.
+  **Status:** Resolved (SA58).
 - **TA49 — `test-tooling-auto-primes-bypassrls-hatch`** · S3 ·
   `Makefile:321-327` (test-unit) and `scripts/test_unit.sh:365-366`, run by CI's repository
   coverage gate (`.github/workflows/ci.yml:340`). Both auto-export
@@ -272,8 +273,8 @@ like and skip the modules that were clean.
   auto-escaped placeholders. (`services.py`/`orchestration.py` fallback is TA47, already open.)
 - **orgs** — clean. `TenantMiddleware` fail-closed (redirect/403 on missing/non-member org, session
   cleared on invalid); `TenantManager.get_queryset` returns `.none()` with no org context;
-  VIEW-AS debug enforces superuser-only and clears stale keys. (RLS boot guard is TA48; NOT
-  DEFERRABLE is TA50 — both already open.)
+  VIEW-AS debug enforces superuser-only and clears stale keys. (RLS boot guard is TA48, resolved SA58; NOT
+  DEFERRABLE is TA50, still open.)
 - **quickscale_core** — clean. No `shell=True`, no archive extraction, no unsafe deserialization;
   all subprocess calls list-form with schema-validated args; Jinja2 autoescape-off is correct for
   a code generator (Python/shell/TOML output, not HTML); advisory lock releases in `finally` and
@@ -377,6 +378,7 @@ evidence, not a category).
 - 2026-07-08 (doc-review follow-up) — **TA46: resolved** (SA53 + CR-SA53-REV-002 complete — the fd-based short-write retry loop replaces the interim `.tmp`+`os.replace` copy path from the initial SA53 fix. The final seam uses `mkstemp` for the fd, `os.write` in a `memoryview`-slicing retry loop, a single `finally: os.close(fd)`, and `except: os.unlink(tmp_path)` cleanup. `TestPrepareAdminUploadedRestoreArtifactSA53` covers copy-failure, happy-path, and short-write-retry regressions on the `mkstemp`+fd write path — 3 tests total. Full detail in CHANGELOG.md CR-SA53-REV-002 entry.) Findings-table counts updated (S4: 2→1).
 - 2026-07-09 (re-run, HEAD `198a1951`) — **TA45: resolved** (SA54, `4b57c264` — `restore_admin_uploaded_backup` takes `stale_threshold_minutes` as a parameter; the admin caller passes `services.STALE_RESTORE_THRESHOLD_MINUTES` explicitly (`backups/admin.py:441-443`), so the canonical constant lives only in `services.py:554`. Residual noted, not promoted: the engine signature keeps a `= 30` default (`orchestration.py:2790`) — dead for the only live caller, but a future caller omitting the argument silently reintroduces the drift; consider making the parameter required). **TA47–TA52: opened this pass** — TA47 (S2) `dr-media-storage-fallback-swallows-misconfiguration`, TA48 (S3) `rls-boot-guard-misses-superuser`, TA49 (S3) `test-tooling-auto-primes-bypassrls-hatch`, TA50 (S3) `composite-fk-deferability-contract-diverged`, TA51 (S4) `test-artifacts-committed-again` (TA23 class), TA52 (S4) `module-pyproject-splice-unvalidated`. Four of the six (TA47, TA49, TA50, TA51) trace to the unreviewed CI-fix commits `6ea37301`/`198a1951` — see Structural smells. The SA42–SA56 review-tracked delta itself came through clean.
 - 2026-07-10 (module-by-module deep pass, core and cli included as modules) — **zero new findings.** All 13 modules plus `quickscale_core` and `quickscale_cli` read at their live surfaces (see Per-module verdicts) — every module clean. TA47/TA48/TA50/TA51/TA52 re-confirmed at their locations during the pass (no change). Empirical check added: PostgreSQL 18 verified `SET CONSTRAINTS <name> IMMEDIATE` on a `NOT DEFERRABLE` FK is a no-op, retracting a stronger test-breakage hypothesis for TA50 (the crm `SET CONSTRAINTS ... IMMEDIATE` tests still pass; their comments are merely stale). Secondary items recorded inside existing findings rather than as new IDs: billing `credit_user` re-verified idempotent (in-lock check + unique constraint + `IntegrityError` re-fetch); notifications webhook re-verified HMAC+TTL+constant-time+idempotent; `TenantManager` fail-closed and `TenantMiddleware` fail-closed re-verified; `storage.sanitize_relative_media_path` exported but has no first-party caller (dead-ish, not promoted).
+- 2026-07-10 (SA58 closeout) — **TA48: resolved** (SA58 — RLS boot guard now queries `rolbypassrls OR rolsuper`; error message reports SUPERUSER/NOSUPERUSER alongside BYPASSRLS/NOBYPASSRLS; test mocks and assertions updated; findings table and counts aligned). Findings-table counts updated (S3: 3→2, total: 6→5).
 
 ## Notes (not violations, watch items)
 

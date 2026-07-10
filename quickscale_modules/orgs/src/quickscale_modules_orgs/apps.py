@@ -1,8 +1,8 @@
 """Django app configuration for QuickScale organizations.
 
-T1.18 / SA2.1 — BYPASSRLS boot guard: raises ``ImproperlyConfigured``
+T1.18 / SA2.1 — BYPASSRLS/SUPERUSER boot guard: raises ``ImproperlyConfigured``
 at startup when connected as a PostgreSQL role with the BYPASSRLS
-privilege.  The guard has two narrow exemptions:
+privilege and/or the SUPERUSER attribute.  The guard has two narrow exemptions:
 
 1. ``manage.py migrate`` — ``start.sh`` deliberately unsets
    ``RUNTIME_DATABASE_URL`` so DDL runs under the superuser
@@ -32,13 +32,14 @@ from django.db.backends.signals import connection_created
 def _is_migrate_command() -> bool:
     """Return ``True`` when Django is running ``manage.py migrate``.
 
-    Only ``migrate`` is exempt from the BYPASSRLS boot guard because
+    Only ``migrate`` is exempt from the BYPASSRLS/SUPERUSER boot guard because
     the generated ``start.sh`` deliberately unsets
     ``RUNTIME_DATABASE_URL`` so that schema DDL runs under the
-    superuser ``DATABASE_URL`` with ``BYPASSRLS``.  All other
-    management commands (notably ``runserver``) and non-manage.py
-    startup (gunicorn, WSGI) must still fail closed — running with
-    BYPASSRLS on a runtime server is catastrophic for RLS enforcement.
+    superuser ``DATABASE_URL`` with ``BYPASSRLS`` (and thus also
+    ``SUPERUSER``).  All other management commands (notably
+    ``runserver``) and non-manage.py startup (gunicorn, WSGI) must
+    still fail closed — running with BYPASSRLS or SUPERUSER on a
+    runtime server is catastrophic for RLS enforcement.
 
     SA2.1: For the separate ``QUICKSCALE_ALLOW_BYPASSRLS=1`` escape
     hatch see ``_check_rls_role``.
@@ -75,7 +76,7 @@ def _check_quickscale_mode() -> None:
 
 
 def _check_rls_role() -> None:
-    """Verify the connected PostgreSQL role does not have BYPASSRLS.
+    """Verify the connected PostgreSQL role does not have BYPASSRLS or SUPERUSER.
 
     SA2.1: The guard is always active (regardless of ``QUICKSCALE_MODE``
     or ``DEBUG``) with two narrow exemptions:
@@ -96,14 +97,16 @@ def _check_rls_role() -> None:
         return
 
     with connection.cursor() as cursor:
-        cursor.execute("SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user")
+        cursor.execute(
+            "SELECT rolbypassrls, rolsuper FROM pg_roles WHERE rolname = current_user"
+        )
         row = cursor.fetchone()
-        if row is not None and row[0]:
+        if row is not None and (row[0] or row[1]):
             raise ImproperlyConfigured(
-                "The connected PostgreSQL role has BYPASSRLS privilege. "
-                "Postgres Row-Level Security policies are silently "
-                "disabled for roles with BYPASSRLS. "
-                "Use a restricted role created with NOBYPASSRLS "
+                "The connected PostgreSQL role has BYPASSRLS and/or SUPERUSER privilege. "
+                "PostgreSQL Row-Level Security policies are silently "
+                "disabled for roles with BYPASSRLS or SUPERUSER. "
+                "Use a restricted role created with NOSUPERUSER and NOBYPASSRLS "
                 "as documented in the operations guide."
             )
 
@@ -140,11 +143,11 @@ class QuickscaleOrgsConfig(AppConfig):
         # default to solo-mode tenancy when QUICKSCALE_MODE is omitted.
         _check_quickscale_mode()
 
-        # ---- T1.18 / SA2.1 — BYPASSRLS boot guard ----------------------
+        # ---- T1.18 / SA2.1 — BYPASSRLS/SUPERUSER boot guard -------------
         # Two narrow exemptions:
         #   1. manage.py migrate — start.sh deliberately unsets
         #      RUNTIME_DATABASE_URL so DDL runs under the superuser
-        #      DATABASE_URL with BYPASSRLS.
+        #      DATABASE_URL with BYPASSRLS (and thus SUPERUSER).
         #   2. QUICKSCALE_ALLOW_BYPASSRLS=1 env-var escape hatch
         #      (checked inside _check_rls_role).
         # All other startup (runserver, gunicorn, WSGI) must still

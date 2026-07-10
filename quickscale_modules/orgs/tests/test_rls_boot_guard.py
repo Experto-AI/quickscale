@@ -1,9 +1,9 @@
-"""T1.18 / SA2.1 — RLS boot guard unit tests.
+"""T1.18 / SA2.1+SA58 — RLS boot guard unit tests.
 
 Tests for ``quickscale_modules_orgs.apps._check_rls_role`` — the
 standalone function called by ``QuickscaleOrgsConfig.ready()`` that
 raises ``ImproperlyConfigured`` when the connected PostgreSQL role has
-BYPASSRLS.
+BYPASSRLS or SUPERUSER (either alone suffices to fail the guard).
 
 The guard is always active (regardless of ``QUICKSCALE_MODE`` or
 ``DEBUG``) with two narrow exemptions:
@@ -15,7 +15,7 @@ The guard is always active (regardless of ``QUICKSCALE_MODE`` or
    intentional single-tenant or development use.
 
 ``manage.py runserver``, gunicorn, and WSGI startup must all still
-fail closed under BYPASSRLS.
+fail closed under BYPASSRLS or SUPERUSER.
 """
 
 from __future__ import annotations
@@ -48,13 +48,14 @@ def _clear_escape_hatch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("QUICKSCALE_ALLOW_BYPASSRLS", raising=False)
 
 
-def _mock_postgres_connection(rolbypassrls: bool) -> MagicMock:
+def _mock_postgres_connection(rolbypassrls: bool, rolsuper: bool = False) -> MagicMock:
     """Build a mock ``connection`` object for a PostgreSQL backend.
 
-    ``rolbypassrls`` controls the value returned by the pg_roles query.
+    ``rolbypassrls`` and ``rolsuper`` control the values returned by
+    the ``pg_roles`` query.
     """
     mock_cursor = MagicMock()
-    mock_cursor.fetchone.return_value = (rolbypassrls,)
+    mock_cursor.fetchone.return_value = (rolbypassrls, rolsuper)
 
     mock_conn = MagicMock()
     mock_conn.vendor = "postgresql"
@@ -95,6 +96,25 @@ def test_rls_guard_passes_for_nobypassrls_role(settings) -> None:
 
     with patch("quickscale_modules_orgs.apps.connection", mock_conn):
         _check_rls_role()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Raise: SA58 — rolsuper=True + rolbypassrls=False also raises
+# ---------------------------------------------------------------------------
+
+
+def test_rls_guard_raises_for_superuser_role(settings) -> None:
+    """SUPERUSER role without BYPASSRLS must also raise."""
+    settings.QUICKSCALE_MODE = "saas"
+    settings.DEBUG = False
+    mock_conn = _mock_postgres_connection(rolbypassrls=False, rolsuper=True)
+
+    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
+        with pytest.raises(ImproperlyConfigured) as exc_info:
+            _check_rls_role()
+
+    assert "SUPERUSER" in str(exc_info.value)
+    assert "NOSUPERUSER" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------
