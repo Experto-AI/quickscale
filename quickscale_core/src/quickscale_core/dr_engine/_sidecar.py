@@ -54,8 +54,30 @@ def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
     try:
         storage_helpers = _load_storage_helpers()
         selection = storage_helpers.select_storage_backend(settings)
-    except Exception:
-        selection = None
+    except ModuleNotFoundError as exc:
+        if exc.name in (
+            "quickscale_modules_storage",
+            "quickscale_modules_storage.helpers",
+        ):
+            selection = None
+        else:
+            # Storage helper is installed but a sub-dependency is missing.
+            # Fail hard — do not silently fall back to local media.
+            return {
+                **base_payload,
+                "status": "unsupported",
+                "reason": str(exc),
+                "error_type": exc.__class__.__name__,
+                "inventory": [],
+            }
+    except Exception as exc:
+        return {
+            **base_payload,
+            "status": "unsupported",
+            "reason": str(exc),
+            "error_type": exc.__class__.__name__,
+            "inventory": [],
+        }
 
     if selection is not None:
         storage_payload: dict[str, Any] = {
@@ -100,12 +122,7 @@ def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
                 "inventory": remote_inventory,
             }
     else:
-        storage_payload = {
-            "backend": (
-                str(getattr(settings, "QUICKSCALE_STORAGE_BACKEND", "local")).strip()
-                or "local"
-            ),
-        }
+        storage_payload = {"backend": "local"}
 
     media_root_text = str(getattr(settings, "MEDIA_ROOT", "")).strip()
     storage_payload["media_root"] = media_root_text

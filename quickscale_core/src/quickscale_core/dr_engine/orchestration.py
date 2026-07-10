@@ -1909,8 +1909,18 @@ def _resolve_media_runtime(
     """Resolve local or s3-compatible media runtime settings."""
     try:
         selection = _load_storage_helpers().select_storage_backend(settings_obj)
-    except Exception:
-        selection = None
+    except ModuleNotFoundError as exc:
+        if exc.name in (
+            "quickscale_modules_storage",
+            "quickscale_modules_storage.helpers",
+        ):
+            selection = None
+        else:
+            # Storage helper is installed but a sub-dependency is missing.
+            # Fail hard — do not silently fall back to local media.
+            raise BackupConfigurationError(str(exc)) from exc
+    except Exception as exc:
+        raise BackupConfigurationError(str(exc)) from exc
 
     if selection is not None:
         if require_s3_compatible and not selection.use_s3_compatible:
