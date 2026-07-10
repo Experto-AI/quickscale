@@ -1,6 +1,7 @@
 """Django settings for blog module tests"""
 
 import os
+import tempfile
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -77,8 +78,11 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Media files
+# SA61: Use a temporary directory so test media files never land in the
+# tracked worktree. The conftest.py session fixture overrides this with
+# a pytest-managed tmp_path for proper cleanup; this is the safe fallback.
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "tests" / "media"
+MEDIA_ROOT = Path(tempfile.mkdtemp(prefix="qs_blog_test_media_"))
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

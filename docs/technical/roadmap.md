@@ -120,11 +120,11 @@ SA21.2, SA37, SA38, SA40, SA43, SA51, SA52, SA53, SA54, plus its earlier share o
 
 ### Track 3 — Core/CLI plumbing
 
-SA44 (Finding 1 stage 1, `dr-engine-module-circular-lattice`) and SA56 (Finding 5, `json-api-boundary-idiom-fragmentation`, now fully closed) are complete — detail in [CHANGELOG.md](../../CHANGELOG.md). New this pass: SA61–SA63, below.
+SA44 (Finding 1 stage 1, `dr-engine-module-circular-lattice`), SA56 (Finding 5, `json-api-boundary-idiom-fragmentation`, now fully closed), and SA61 (test artifacts untracked, gitignore patterns added, blog test media pointed at tmp_path) are complete — detail in [CHANGELOG.md](../../CHANGELOG.md). New this pass: SA62–SA63, below.
 
 #### Finding — `test-artifacts-committed-again` (`why →` [tech-audit.md TA51](../others/tech-audit.md), TA23 class)
 
-- [ ] **SA61 — Untrack accreting test artifacts and close the class with a gitignore fix.** `Tier 1 · Track 3 · deps: none`
+- [x] **SA61 — Untrack accreting test artifacts and close the class with a gitignore fix.** `Tier 1 · Track 3 · deps: none`
   Tracked `pytest_log.txt` is updated at every commit (`.gitignore:232` covers `pytest_cov_log.txt` but not `pytest_log.txt`), and 13 (growing) `quickscale_modules/blog/tests/media/blog/uploads/2026/07/test-*.png` files have accumulated across the last two commits because blog's test `MEDIA_ROOT` writes into the working tree instead of a tmp path.
   *Files:* `.gitignore`; `pytest_log.txt` (git rm --cached); `quickscale_modules/blog/tests/media/` (git rm --cached the 13 PNGs); `quickscale_modules/blog/tests/` settings/conftest (point `MEDIA_ROOT` at a `tmp_path`/`TemporaryDirectory` fixture so the class can't recur for blog specifically).
   *Acceptance:* `git rm --cached` removes all 14 currently-tracked artifact files; `.gitignore` gains patterns for `pytest_log.txt` and `quickscale_modules/*/tests/media/`; blog's test suite no longer writes uploaded test media into a tracked path (verified by running the suite twice and confirming `git status` stays clean).

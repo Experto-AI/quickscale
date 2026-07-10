@@ -33,6 +33,18 @@ if not settings.configured:
 User = get_user_model()
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _sa61_media_root_tmp_path(tmp_path_factory):
+    """SA61: Redirect MEDIA_ROOT to a pytest-managed temporary directory so
+    uploaded test media files are never written into the tracked worktree.
+    Individual tests that also override MEDIA_ROOT (e.g. with a function-scoped
+    tmp_path) are unaffected — the most recent override wins per-test.
+    """
+    from django.conf import settings
+
+    settings.MEDIA_ROOT = str(tmp_path_factory.mktemp("media"))
+
+
 @pytest.fixture(scope="session")
 def django_db_setup(django_db_blocker):
     """Set up test database with migrations"""
