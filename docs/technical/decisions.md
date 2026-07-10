@@ -1054,6 +1054,38 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 
 ---
 
+### ImproperlyConfigured Exception Identity {#improperlyconfigured-exception-identity}
+
+**Decision (2026-07-10, SA69):** QuickScale's shared contract layer
+(``quickscale_core.contracts``) defines its own
+:class:`~quickscale_core.contracts.module_discovery.ImproperlyConfigured`
+exception, decoupled from Django's ``django.core.exceptions.ImproperlyConfigured``.
+
+Two same-named ``ImproperlyConfigured`` classes coexist — one in the contracts
+layer and one in Django's module-runtime layer. Catchers and raisers must choose
+the correct import:
+
+- **Contracts-layer catchers** (code in ``quickscale_core.contracts`` or
+  code that catches exceptions from contract-layer APIs) import
+  ``quickscale_core.contracts.module_discovery.ImproperlyConfigured``.
+- **Django-runtime catchers** (generated-project settings, module
+  ``AppConfig.ready()`` code, standard Django startup paths) import
+  ``django.core.exceptions.ImproperlyConfigured``.
+
+Importing the wrong class will silently fail to catch the intended exception,
+causing an unhandled crash instead of graceful handling. This is a documented
+identity-split — not a refactoring opportunity to consolidate into one shared
+alias.
+
+**Watch item — housekeeping-label discipline (deferred):** The commit that
+introduced this split (``628c7d28``) was the third consecutive delta that
+landed load-bearing semantics under a housekeeping-labeled commit message.
+If a fourth such commit is detected, a lint/naming guard should be
+considered to validate that module-owned adapter imports match their
+documented exception identity. No guard is added in this pass.
+
+---
+
 ### Fail-Hard Principle {#fail-hard-principle}
 
 **Rule:** Every configuration error, missing required dependency, or invalid runtime state must raise an explicit, descriptive exception immediately. Silent fallbacks, best-effort defaults, and graceful degradation are prohibited in the generator, CLI, and manifest stack.
