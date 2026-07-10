@@ -13,9 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from django.core.exceptions import ImproperlyConfigured
-
 from quickscale_core.contracts.module_discovery import (
+    ImproperlyConfigured,
     PLACEHOLDER_MODULE_NAMES,
     discover_shipped_module_names,
     discover_shipped_module_paths,

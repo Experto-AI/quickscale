@@ -1291,7 +1291,11 @@ git_index_checkpoint: "deadbeefcafebabedeadbeefcafebabedeadbeef"
 
         assert result.exit_code == 0
         assert "Nothing to do" not in result.output
-        assert "Pending post-embed apply recovery detected" in result.output
+        # auth now implies orgs→notifications, so the delta has changes
+        # and the recovery path proceeds through normal apply with implied
+        # modules instead of the dedicated recovery no-op gate message.
+        assert "Added implied module config to quickscale.yml" in result.output
+        assert "Pending post-embed apply recovery detected" not in result.output
         mock_execute.assert_called_once()
         assert mock_execute.call_args.args[0].has_pending_post_embed_recovery is True
         assert mock_execute.call_args.args[0].existing_state is not None

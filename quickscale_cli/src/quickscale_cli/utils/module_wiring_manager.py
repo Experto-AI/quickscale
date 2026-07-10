@@ -5,9 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
-from django.core.exceptions import ImproperlyConfigured
-
 from quickscale_core.contracts.module_discovery import (
+    ImproperlyConfigured,
     get_modules_base_path,
     set_modules_base_path,
 )

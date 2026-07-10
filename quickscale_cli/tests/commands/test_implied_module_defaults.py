@@ -17,7 +17,7 @@ class TestResolveModuleImplications:
 
     def test_no_implication_for_standalone_modules(self) -> None:
         """Modules without implications should not trigger new configs."""
-        result = resolve_module_implications(["auth", "storage"])
+        result = resolve_module_implications(["storage"])
         assert result == {}
 
     def test_single_module_no_match_returns_empty(self) -> None:
@@ -143,6 +143,26 @@ class TestResolveModuleImplications:
         assert "notifications" in result
         assert result["orgs"] == {}
 
+    # --- auth -> orgs (Cluster A) ---
+
+    def test_auth_implies_orgs(self) -> None:
+        """Selecting auth should materialize orgs."""
+        result = resolve_module_implications(["auth"])
+        assert "orgs" in result
+        assert result["orgs"] == {}
+
+    def test_auth_with_orgs_already_selected(self) -> None:
+        """auth with orgs already present should not duplicate orgs."""
+        result = resolve_module_implications(["auth", "orgs"])
+        assert "orgs" not in result
+
+    def test_auth_chain_implies_notifications(self) -> None:
+        """Chain: auth → orgs → notifications should materialize both."""
+        result = resolve_module_implications(["auth"])
+        assert "orgs" in result
+        assert "notifications" in result
+        assert result["orgs"] == {}
+
     # --- existing behavior preservation ---
 
     def test_billing_orgs_notifications_chain_preserved(self) -> None:
@@ -155,11 +175,6 @@ class TestResolveModuleImplications:
         """crm → orgs chain still works unchanged."""
         result = resolve_module_implications(["crm"])
         assert "orgs" in result
-
-    def test_unaffected_module_does_not_trigger(self) -> None:
-        """A selected module with no implications changes nothing."""
-        result = resolve_module_implications(["auth"])
-        assert result == {}
 
     def test_case_sensitivity(self) -> None:
         """Module names are case-sensitive; wrong case returns empty."""

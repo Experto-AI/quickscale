@@ -21,7 +21,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Final
 
-from django.core.exceptions import ImproperlyConfigured
+
+class ImproperlyConfigured(Exception):
+    """Raised when QuickScale is improperly configured.
+
+    Replaces Django's ``django.core.exceptions.ImproperlyConfigured`` as the
+    canonical configuration-failure exception for QuickScale's shared contract
+    layer.  Callers outside Django contexts should import this exception from
+    this module rather than from ``django.core.exceptions``.
+    """
+
 
 # ---------------------------------------------------------------------------
 # Known placeholder module names

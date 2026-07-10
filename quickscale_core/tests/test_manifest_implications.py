@@ -254,6 +254,41 @@ class TestOrgsImplications:
 
 
 # ---------------------------------------------------------------------------
+# auth → orgs → notifications (Cluster A)
+# ---------------------------------------------------------------------------
+
+
+class TestAuthImplications:
+    """auth → orgs → notifications chain."""
+
+    def test_auth_implies_orgs(self, modules_base_path: Path) -> None:
+        """Selecting auth should materialize orgs."""
+        result = resolve_module_implications(
+            ["auth"],
+            modules_base_path=modules_base_path,
+        )
+        assert "orgs" in result
+        assert result["orgs"] == {}
+
+    def test_auth_with_orgs_already_selected(self, modules_base_path: Path) -> None:
+        """auth with orgs already present should not duplicate."""
+        result = resolve_module_implications(
+            ["auth", "orgs"],
+            modules_base_path=modules_base_path,
+        )
+        assert "orgs" not in result
+
+    def test_auth_chain_implies_notifications(self, modules_base_path: Path) -> None:
+        """auth → orgs → notifications chain."""
+        result = resolve_module_implications(
+            ["auth"],
+            modules_base_path=modules_base_path,
+        )
+        assert "orgs" in result
+        assert "notifications" in result
+
+
+# ---------------------------------------------------------------------------
 # Multiple implicators
 # ---------------------------------------------------------------------------
 
@@ -308,13 +343,15 @@ class TestMultipleImplicators:
         assert "orgs" in result
         assert "notifications" in result
 
-    def test_unaffected_module_does_not_trigger(self, modules_base_path: Path) -> None:
-        """A selected module with no implications changes nothing."""
+    def test_auth_implies_orgs(self, modules_base_path: Path) -> None:
+        """Selecting auth should materialize orgs (and transitively notifications)."""
         result = resolve_module_implications(
             ["auth"],
             modules_base_path=modules_base_path,
         )
-        assert result == {}
+        assert "orgs" in result
+        assert result["orgs"] == {}
+        assert "notifications" in result
 
 
 # ---------------------------------------------------------------------------

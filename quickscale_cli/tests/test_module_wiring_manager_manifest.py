@@ -316,8 +316,8 @@ class TestRegenerateManagedWiringEmbeddedNoMonorepo:
     ) -> None:
         """regenerate_managed_wiring succeeds when get_modules_base_path raises
         ImproperlyConfigured but the project has real embedded manifests."""
-        from django.core.exceptions import ImproperlyConfigured
         from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts.module_discovery import ImproperlyConfigured
 
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})

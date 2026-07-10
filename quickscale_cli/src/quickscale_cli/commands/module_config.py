@@ -900,6 +900,25 @@ def configure_listings_module(
     return config
 
 
+def apply_listings_configuration(
+    project_path: Path,
+    config: dict[str, Any],
+    *,
+    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
+) -> None:
+    """Apply listings module configuration.
+
+    This is an apply-time shim that preserves the ModuleConfigurator
+    callable contract.  Listings defaults/normalization/validation are
+    handled by the manifest-driven derivation path in entry_point.py
+    (SA6.2), so this function emits a notice and returns without
+    additional wiring work.
+    """
+    normalized = get_default_listings_config() | config
+    click.echo("\n\U0001f4cb Listings configuration noted (manifest-driven path):")
+    click.echo(f"  \u2022 Listings per page: {normalized['listings_per_page']}")
+
+
 # ============================================================================
 # STORAGE MODULE CONFIGURATION
 # ============================================================================
@@ -2077,7 +2096,7 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
         ModuleConfigurator(
             name="listings",
             configure=configure_listings_module,
-            apply=None,
+            apply=apply_listings_configuration,
             get_defaults=get_default_listings_config,
         ),
         ModuleConfigurator(

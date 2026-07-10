@@ -538,9 +538,8 @@ class TestRefreshManagedAdaptersFailure:
         """refresh_managed_adapters raises ImproperlyConfigured when a managed
         module has a module.yml at the active base path but its Python adapter
         package cannot be imported."""
-        from django.core.exceptions import ImproperlyConfigured
-
         from quickscale_core.contracts.module_discovery import (
+            ImproperlyConfigured,
             get_modules_base_path,
             set_modules_base_path,
         )

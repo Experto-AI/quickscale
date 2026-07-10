@@ -1,6 +1,7 @@
 """Extended tests for apply_command.py - covering helper functions and edge cases."""
 # ruff: noqa: E402 — AF5 Phase 4: module-level bypass set before imports
 
+import sys
 from pathlib import Path
 import subprocess
 from unittest.mock import ANY, Mock, patch
@@ -479,7 +480,7 @@ class TestStartDocker:
         mock_run.return_value = (True, "")
         assert _start_docker(Path("/tmp/proj"), build=True, verbose=False) is True
         mock_run.assert_called_once_with(
-            ["quickscale", "up", "--build"],
+            [sys.executable, "-m", "quickscale_cli.main", "up", "--build"],
             Path("/tmp/proj"),
             "Starting Docker services",
             capture=False,
@@ -1224,7 +1225,10 @@ class TestPrepareApplyContext:
         assert ctx.had_existing_state is False
         assert ctx.existing_state is not None
         assert list(ctx.existing_state.modules) == ["auth"]
-        assert ctx.delta.has_changes is False
+        # auth now implies orgs→notifications, so the delta includes
+        # these implied modules as new modules to add during recovery.
+        assert ctx.delta.has_changes is True
+        assert sorted(ctx.delta.modules_to_add) == ["notifications", "orgs"]
 
 
 # ============================================================================

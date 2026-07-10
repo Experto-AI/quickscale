@@ -18,7 +18,7 @@ of two paths:
    package (social, billing, CRM).  The registry entry is established by
    :func:`refresh_managed_adapters`, which imports the module-owned adapter
    from ``quickscale_modules_{name}.adapter`` and fails hard (raises
-   :class:`~django.core.exceptions.ImproperlyConfigured`) when the module
+   :class:`~quickscale_core.contracts.module_discovery.ImproperlyConfigured`) when the module
    package is not importable.  Bundled/installed-without-module-source is
    not a supported context.
 
@@ -198,7 +198,7 @@ def refresh_managed_adapters() -> None:
 
     * If the module's ``module.yml`` is at the active base path but the
       module-owned adapter **cannot** be imported, an
-      :class:`~django.core.exceptions.ImproperlyConfigured` exception is
+       :class:`~quickscale_core.contracts.module_discovery.ImproperlyConfigured` exception is
       raised — bundled/installed-without-module-source is not a supported
       context.
 
@@ -220,9 +220,8 @@ def refresh_managed_adapters() -> None:
     """
     import importlib  # noqa: PLC0415
 
-    from django.core.exceptions import ImproperlyConfigured  # noqa: PLC0415
-
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        ImproperlyConfigured,
         discover_shipped_module_names,
     )
 

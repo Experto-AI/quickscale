@@ -1297,6 +1297,22 @@ CACHES = {{
     }}
 }}
 
+# Override staticfiles storage for test/e2e context — no collectstatic is
+# run before the dev server starts.  Without this override, any template
+# referencing a static asset (e.g. ``images/favicon.svg`` in the auth
+# login page) triggers:
+#   ValueError: Missing staticfiles manifest entry for 'images/favicon.svg'
+# This matches the pattern in
+# ``test_generated_project_runtime.py::_write_postgres_test_settings``.
+STORAGES = {{
+    'default': {{
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    }},
+    'staticfiles': {{
+        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+    }},
+}}
+
 # Override logging to use console only (no file logging in tests)
 LOGGING = {{
     'version': 1,
@@ -1370,8 +1386,30 @@ LOGGING = {{
         )
         assert result.returncode == 0, f"collectstatic failed: {result.stderr}"
 
-    def _start_dev_server(self, project_path: Path, port: int = 8000):
-        """Start Django development server in background."""
+    def _start_dev_server(
+        self,
+        project_path: Path,
+        port: int = 8000,
+        env_overrides: dict[str, str] | None = None,
+    ):
+        """Start Django development server in background.
+
+        Args:
+        ----
+            project_path: Path to the generated project.
+            port: TCP port for the dev server.
+            env_overrides: Optional additional env vars merged into the
+                subprocess environment. These override any existing
+                environment variables with the same key.
+
+        """
+        env = {
+            **os.environ,
+            "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
+        }
+        if env_overrides:
+            env.update(env_overrides)
+
         # Start server without capturing output so we can see errors
         return subprocess.Popen(
             [
@@ -1386,10 +1424,7 @@ LOGGING = {{
             cwd=project_path,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,  # Merge stderr into stdout for easier debugging
-            env={
-                **os.environ,
-                "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
-            },
+            env=env,
             text=True,
             bufsize=1,  # Line buffered
         )
@@ -1435,7 +1470,9 @@ LOGGING = {{
             # Try to get some output for debugging
             output_lines = []
             try:
-                for _ in range(20):  # Read up to 20 lines
+                for _ in range(
+                    80
+                ):  # Read up to 80 lines (bounded increase for diagnostics)
                     line = server_process.stdout.readline()
                     if not line:
                         break
@@ -1546,82 +1583,38 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
             timeout=60,
         )
 
-    def _embed_auth_module_via_subtree(self, project_path: Path) -> str:
-        """Init a git repo, commit the scaffold, and embed the auth module.
+    def _embed_auth_and_orgs_via_subtree(self, project_path: Path) -> str:
+        """Copy auth + orgs module content into the generated project.
 
-        Returns the branch name used for the subtree add so callers can log it.
+        Sources both modules from ``quickscale_modules/`` into
+        ``modules/`` so the layout matches generated-project expectations.
+        Org is embedded alongside auth because the auth manifest declares
+        ``implies: [{name: orgs}]`` — the auth module's views import
+        ``quickscale_modules_orgs.models`` at import time.
+
+        Returns the local repo branch name for logging continuity with callers
+        that previously received a subtree branch label.
         """
-        # Initialise a fresh repo so subtree add has a clean parent.
-        init_result = self._run_git(project_path, "init")
-        assert init_result.returncode == 0, f"git init failed: {init_result.stderr}"
-        self._run_git(
-            project_path,
-            "config",
-            "user.email",
-            "quickscale-e2e@example.com",
-        )
-        self._run_git(project_path, "config", "user.name", "QuickScale E2E")
-        self._run_git(
-            project_path,
-            "config",
-            "commit.gpgsign",
-            "false",
-        )
-
-        # Subtree add requires at least one commit on the parent branch.
-        add_result = self._run_git(project_path, "add", ".")
-        assert add_result.returncode == 0, f"git add failed: {add_result.stderr}"
-        commit_result = self._run_git(project_path, "commit", "-m", "initial scaffold")
-        assert commit_result.returncode == 0, (
-            f"Initial commit failed: {commit_result.stderr}"
-        )
-
-        branch = self._get_local_repo_branch()
-
-        # git subtree add requires full history; unshallow if needed.
-        shallow_check = subprocess.run(
-            ["git", "rev-parse", "--is-shallow-repository"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if shallow_check.stdout.strip() == "true":
-            subprocess.run(
-                ["git", "fetch", "--unshallow"],
-                cwd=REPO_ROOT,
-                capture_output=True,
-                text=True,
-                timeout=300,
+        for module_name in ("auth", "orgs"):
+            _copytree_for_generated_project_smoke(
+                REPO_ROOT / "quickscale_modules" / module_name,
+                project_path / "modules" / module_name,
             )
 
-        subtree_result = self._run_git(
-            project_path,
-            "subtree",
-            "add",
-            "--prefix=modules/auth",
-            "--squash",
-            str(REPO_ROOT),
-            branch,
-        )
-        assert subtree_result.returncode == 0, (
-            f"git subtree add failed (branch={branch!r}):\n"
-            f"stdout: {subtree_result.stdout}\n"
-            f"stderr: {subtree_result.stderr}"
-        )
+        # Sanity-check that both embeds actually landed.
+        for module_name in ("auth", "orgs"):
+            module_dir = project_path / "modules" / module_name
+            assert (module_dir / "module.yml").exists(), (
+                f"{module_name} module manifest missing after copy"
+            )
+            assert (module_dir / "pyproject.toml").exists(), (
+                f"{module_name} module pyproject.toml missing after copy"
+            )
+            assert (
+                module_dir / "src" / f"quickscale_modules_{module_name}"
+            ).is_dir(), f"{module_name} module source tree missing after copy"
 
-        # Sanity-check that the embed actually landed.
-        assert (project_path / "modules" / "auth" / "module.yml").exists(), (
-            "Auth module manifest missing after git subtree add"
-        )
-        assert (project_path / "modules" / "auth" / "pyproject.toml").exists(), (
-            "Auth module pyproject.toml missing after git subtree add"
-        )
-        assert (
-            project_path / "modules" / "auth" / "src" / "quickscale_modules_auth"
-        ).is_dir(), "Auth module source tree missing after git subtree add"
-
-        return branch
+        return self._get_local_repo_branch()
 
     def _write_quickscale_yml_with_auth(
         self,
@@ -1629,9 +1622,18 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         project_name: str,
         theme: str,
         auth_options: dict[str, object],
+        orgs_options: dict[str, object] | None = None,
     ) -> None:
-        """Write a minimal quickscale.yml that declares the auth module."""
+        """Write a minimal quickscale.yml that declares auth + orgs modules.
+
+        Org is included because the auth manifest declares
+        ``implies: [{name: orgs}]`` — the auth module's views import
+        ``quickscale_modules_orgs.models`` at import time.
+        """
         import yaml
+
+        if orgs_options is None:
+            orgs_options = {"mode": "solo"}
 
         config_payload = {
             "version": "1",
@@ -1641,7 +1643,10 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
                 "theme": theme,
             },
             "docker": {"start": False},
-            "modules": {"auth": dict(auth_options)},
+            "modules": {
+                "auth": dict(auth_options),
+                "orgs": dict(orgs_options),
+            },
         }
         rendered = yaml.safe_dump(
             config_payload,
@@ -1650,29 +1655,47 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         )
         (project_path / "quickscale.yml").write_text(rendered)
 
-    def _sync_auth_module_dependency(
-        self, project_path: Path, auth_options: dict[str, object]
+    def _sync_module_dependencies(
+        self,
+        project_path: Path,
+        auth_options: dict[str, object],
+        orgs_options: dict[str, object] | None = None,
     ) -> None:
-        """Add the embedded auth module as a Poetry path dependency.
+        """Add embedded auth + orgs modules as Poetry path dependencies.
 
         Regenerating managed wiring only writes settings/URL files; it does
         not register the module with Poetry. Without this step the module's
-        Python package is not importable from the generated project venv.
+        Python packages are not importable from the generated project venv.
+
+        Org is synced alongside auth because the auth manifest declares
+        ``implies: [{name: orgs}]`` — the auth module's views import
+        ``quickscale_modules_orgs.models`` at import time.
         """
         from quickscale_cli.utils.module_dependency_sync import (
             sync_project_module_dependencies,
         )
 
+        if orgs_options is None:
+            orgs_options = {"mode": "solo"}
+
         sync_result = sync_project_module_dependencies(
-            project_path, {"auth": auth_options}
+            project_path,
+            {
+                "auth": auth_options,
+                "orgs": orgs_options,
+            },
         )
         assert "quickscale-module-auth" in sync_result.added_path_dependencies, (
             "sync_project_module_dependencies did not register the auth module "
             f"as a path dependency: {sync_result}"
         )
+        assert "quickscale-module-orgs" in sync_result.added_path_dependencies, (
+            "sync_project_module_dependencies did not register the orgs module "
+            f"as a path dependency: {sync_result}"
+        )
 
     def _regenerate_wiring(self, project_path: Path) -> None:
-        """Regenerate managed settings/URL wiring for the embedded auth module."""
+        """Regenerate managed settings/URL wiring for all embedded modules."""
         from quickscale_cli.utils.module_wiring_manager import (
             regenerate_managed_wiring,
         )
@@ -1742,10 +1765,13 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         auth_options = get_default_auth_config()
 
         # Declarative config + managed wiring + path-dependency registration.
+        # Org is handled alongside auth because the auth manifest declares
+        # ``implies: [{name: orgs}]`` — the auth module's views import
+        # ``quickscale_modules_orgs.models`` at import time.
         self._write_quickscale_yml_with_auth(
             project_path, project_name, theme, auth_options
         )
-        self._sync_auth_module_dependency(project_path, auth_options)
+        self._sync_module_dependencies(project_path, auth_options)
         self._regenerate_wiring(project_path)
 
         # Install resolved dependencies (poetry lock + install).
@@ -1758,7 +1784,15 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         self._run_migrations(project_path)
 
         server_port = self._find_free_port()
-        server_process = self._start_dev_server(project_path, port=server_port)
+        # The generated-project test PostgreSQL role is a bootstrap superuser
+        # with BYPASSRLS, so ``quickscale_modules_orgs.apps._check_rls_role()``
+        # aborts unless QUICKSCALE_ALLOW_BYPASSRLS is set. Pass the escape-hatch
+        # env var only to this dev-server subprocess to keep the override scoped.
+        server_process = self._start_dev_server(
+            project_path,
+            port=server_port,
+            env_overrides={"QUICKSCALE_ALLOW_BYPASSRLS": "1"},
+        )
 
         try:
             self._wait_for_server(
@@ -1779,7 +1813,10 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         _ = subtree_branch
 
     def test_auth_module_embed_html_theme(self, tmp_path, e2e_postgres_url):
-        """Validate the full auth embed workflow for the showcase_html theme."""
+        """Validate the full auth embed workflow for the showcase_html theme.
+
+        Auth implies orgs per its manifest, so both modules are embedded.
+        """
         from quickscale_core.generator import ProjectGenerator
 
         project_name = "embed_auth_html"
@@ -1787,7 +1824,7 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
 
         ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
 
-        subtree_branch = self._embed_auth_module_via_subtree(project_path)
+        subtree_branch = self._embed_auth_and_orgs_via_subtree(project_path)
 
         self._run_module_embed_lifecycle(
             project_path=project_path,
@@ -1799,7 +1836,10 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         )
 
     def test_auth_module_embed_react_theme(self, tmp_path, e2e_postgres_url):
-        """Validate the full auth embed workflow for the showcase_react theme."""
+        """Validate the full auth embed workflow for the showcase_react theme.
+
+        Auth implies orgs per its manifest, so both modules are embedded.
+        """
         from quickscale_core.generator import ProjectGenerator
 
         project_name = "embed_auth_react"
@@ -1807,7 +1847,7 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
 
         ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
 
-        subtree_branch = self._embed_auth_module_via_subtree(project_path)
+        subtree_branch = self._embed_auth_and_orgs_via_subtree(project_path)
 
         self._run_module_embed_lifecycle(
             project_path=project_path,

@@ -60,8 +60,8 @@ appeared in the delta; the SA46 gate got stronger (`cbde517a`).
 |---|----|---------|------|------------------|
 | 1 | `dr-engine-module-circular-lattice` | now | M remaining (Option 2) | DR logic lives in core but its state and lifecycle live in the backups module; the cycle is held by hand-maintained symbol tables that the facade split *relocated and grew* rather than removed, and new modules now route around the facade via a growing linter exception list |
 | 6 | `db-privilege-mode-procedural` | now | M | "Which DB role does this process get" is decided independently by start.sh (env-unset), production settings (argv-shaped errors), local settings (argv-switching, new this delta), and the orgs boot guard (positional argv) — four mechanisms, three semantics, one live source-level collision |
-| 2 | `deletion-invariants-per-boundary-reimplementation` | 6–18 months (teams) | M remaining | Org/billing invariants at the account-deletion boundary now share one canonical last-owner check (SA47) but still have no domain-level `pre_delete` backstop — every deletion path other than `AccountDeleteView` enforces nothing |
-| 4 | `org-model-universe-hand-enumerated` | 6–18 months (teams) | M remaining (Option 2) | orgs hand-enumerates the cross-module tenant-model universe; membership is CI-gated against derivations (SA15.3/SA45/SA49) but the purge *order* is still hand-written, and this delta changed two derivation-input semantics without a decision record |
+| 2 | `deletion-invariants-per-boundary-reimplementation` | deferred (teams unscheduled) | M remaining | Org/billing invariants at the account-deletion boundary now share one canonical last-owner check (SA47) but still have no domain-level `pre_delete` backstop — every deletion path other than `AccountDeleteView` enforces nothing |
+| 4 | `org-model-universe-hand-enumerated` | deferred (teams unscheduled) | M remaining (Option 2) | orgs hand-enumerates the cross-module tenant-model universe; membership is CI-gated against derivations (SA15.3/SA45/SA49) but the purge *order* is still hand-written, and this delta changed two derivation-input semantics without a decision record |
 
 ---
 
@@ -254,12 +254,14 @@ appeared in the delta; the SA46 gate got stronger (`cbde517a`).
 - **Rank rationale (blast radius × likelihood):** blast is money and org integrity (orphaned live
   Stripe subscriptions, ownerless shared orgs); likelihood moderate today, rising sharply when
   teams multiplies membership-like invariants.
-- **Horizon & trigger:** `6–18 months` — the teams build; second trigger: the first
-  account-deletion path that isn't `AccountDeleteView` (a GDPR erasure command would be a third
+- **Horizon & trigger:** `deferred` — teams is not scheduled (decided 2026-07-10, see
+  decisions.md §Teams module status: brainstormed placeholder only, no committed timeline), so the
+  teams-build trigger is not on a clock. Live trigger regardless of teams: the first
+  account-deletion path that isn't `AccountDeleteView` (a GDPR erasure command would be a second
   boundary).
 - **Confidence:** High — re-verified this pass: the canonical check is consumed at all four
   callsites, and repo-wide search confirms zero `pre_delete` receivers in orgs, billing, or auth.
-- **Context dependence:** wrong-for-now → wrong-regardless at teams kickoff.
+- **Context dependence:** wrong-for-now → wrong-regardless if/when teams kicks off.
 - **Problem:** org-domain and billing-domain rules for "what must hold when a user disappears"
   are enforced only at boundaries that choose to invoke them — there is no layer every ORM
   deletion path traverses.
@@ -299,12 +301,13 @@ appeared in the delta; the SA46 gate got stronger (`cbde517a`).
 
 - **ID:** `org-model-universe-hand-enumerated`
 - **Rank rationale (blast radius × likelihood):** the enumerations back the isolation boundary's
-  bookkeeping and the org-offboarding path; likelihood approaches 1 at the teams build.
-- **Horizon & trigger:** `6–18 months` — the teams build; also fires on any new model added to an
-  existing module.
+  bookkeeping and the org-offboarding path; likelihood approaches 1 if/when a teams build lands.
+- **Horizon & trigger:** `deferred` — teams is not scheduled (decided 2026-07-10, see
+  decisions.md §Teams module status), so this finding is not on a teams-driven clock. It also
+  fires independently on any new model added to an existing (already-shipped) module.
 - **Confidence:** High — literals re-verified this pass (49 registry entries, hand-ordered
   `_DELETE_SPECS`); gates re-verified landed (SA15.3, SA45, SA49).
-- **Context dependence:** wrong-for-now on the new-domain dimension (teams).
+- **Context dependence:** wrong-for-now on the new-domain dimension, if/when teams lands.
 - **Problem:** knowledge of "which models belong to an organization, and how they die" lives in
   hand-written literals inside orgs; membership staleness is now fully CI-gated, but the purge
   *order* remains hand-encoded, and the derivation inputs themselves changed semantics this delta
@@ -334,7 +337,7 @@ appeared in the delta; the SA46 gate got stronger (`cbde517a`).
 - **Steelman:** hand-ordered deletion is explicit, reviewable, and encodes FK subtleties naive
   traversal gets wrong; membership gates are now complete and derivation-backed. What keeps the
   finding open is the ordering half — which the `NOT DEFERRABLE` change just made *less*
-  forgiving — and the teams build that multiplies entries.
+  forgiving — and a teams build, if scheduled, would multiply entries.
 - **Correct shape:** one derivation path from the existing sources of truth (tenant markers + FK
   topology) produces classification, RLS-conformance parametrization, and the purge plan; any
   remaining literal is a pinned snapshot CI-validated against the derivation.
@@ -342,13 +345,16 @@ appeared in the delta; the SA46 gate got stronger (`cbde517a`).
   1. ~~Derive the completeness gates~~ — **done** (SA15.3 + SA45 + SA49).
   2. **Derive the purge plan itself (the live option):** topological delete order from the FK
      graph restricted to org-owned models, `_DELETE_SPECS` reduced to explicit overrides. M
-     effort; do it when teams' models land and give the derivation a real test bed.
+     effort; do it if/when teams' models land and give the derivation a real test bed — not
+     time-boxed, since teams is unscheduled (decisions.md §Teams module status).
   3. **Module-contributed specs** via the manifest/`AppConfig.ready()` seam — only if a second
      consumer of per-module lifecycle knowledge appears.
-- **Recommendation:** Option 2 at teams kickoff, unchanged. Meanwhile: record the
-  `NOT DEFERRABLE` and `tenant_excluded`-precedence decisions in decisions.md (S, doc-only —
-  they are load-bearing inputs to this finding's gates). · **Size:** M remaining · **First
-  step:** the decisions.md entries now; the purge-order derivation when teams' first models land.
+- **Recommendation:** Option 2 if/when teams kicks off, unchanged; not scheduled otherwise.
+  Meanwhile: record the `NOT DEFERRABLE` and `tenant_excluded`-precedence decisions in
+  decisions.md (S, doc-only — they are load-bearing inputs to this finding's gates, independent
+  of teams' timeline). · **Size:** M remaining · **First step:** the decisions.md entries now
+  (scheduled as SA60, `why →` roadmap.md); the purge-order derivation only if/when teams' first
+  models land.
 
 ---
 
@@ -357,12 +363,14 @@ appeared in the delta; the SA46 gate got stronger (`cbde517a`).
 1. **Finding 6's first step rides the red-flag fix** — the start.sh createcachetable line and the
    `local.py.j2` argv deletion belong in one template pass; do it before the next generated-app
    release. Independent of all other findings.
-2. **Finding 1 Option 2 (persistence port)** — schedule in the next planning cycle; the teams
-   adapter should land *after* it (or accept a fourth routing workaround). Independent of
-   Findings 2/4/6.
-3. **Findings 2 and 4** both key to teams kickoff and are independent of each other; Finding 2's
-   receiver backstop is small enough to land beforehand.
-4. Finding 4's doc-only sub-item (decision records for the two semantics changes) can land today.
+2. **Finding 1 Option 2 (persistence port)** — schedule in the next planning cycle; a future teams
+   adapter should land *after* it (or accept a fourth routing workaround), but this is not gated
+   on a teams timeline — teams is unscheduled. Independent of Findings 2/4/6.
+3. **Findings 2 and 4** are both deferred (teams unscheduled, decisions.md §Teams module status)
+   and independent of each other; Finding 2's receiver backstop is small enough to land as a
+   general hardening item without waiting on teams.
+4. Finding 4's doc-only sub-item (decision records for the two semantics changes) is scheduled now
+   as SA60 (`why →` roadmap.md), independent of teams.
 
 ### Sound load-bearing decisions (protect these during remediation)
 
@@ -434,7 +442,7 @@ appeared in the delta; the SA46 gate got stronger (`cbde517a`).
   `listings_per_page` across the manifest pair, `entry_point.py`, the CLI defaults, and the
   views consumer — the coordination stations were all paid correctly, which is the tax working,
   not failing. T2.4/T2.5 remain unscheduled with the roadmap now empty · promotes when a default
-  changes in one station only, or at teams kickoff.
+  changes in one station only, or if/when teams kicks off (unscheduled — not a near-term trigger).
 - **Deploy-time configuration contract for generated apps — narrowed.** The privilege-selection
   half promoted to Finding 6; what remains is the broader class (a settings-template requirement
   discovered per-instance instead of asserted by a template test — TA33's class) · still cheapest
@@ -444,7 +452,11 @@ appeared in the delta; the SA46 gate got stronger (`cbde517a`).
 `orgs/middleware.py`. The `_is_migrate_command()` argv-sniffing item is no longer carried
 separately — it is Finding 6's Mechanism 4.)*
 
-### Teams landing checklist (carried forward, updated)
+### Teams landing checklist (carried forward, updated — speculative, teams unscheduled)
+
+> Teams is not scheduled (decided 2026-07-10, see decisions.md §Teams module status). This
+> checklist is kept for reference *if* a future scheduling decision puts teams on the roadmap —
+> it is not an implication that teams is imminent.
 
 Declarative manifest path (freeze enforces) · `TenantModel` base + markers for every model ·
 `TenantModelAdmin` for its admin · own module for views (not `orgs/views.py`) ·
@@ -538,10 +550,12 @@ Per-module verdicts:
 
 ### Questions that would change the ranking
 
-- **T2.4/T2.5 and the teams build — fifth pass, now with an empty roadmap.** All tracks are
-  drained; whether teams is next determines the horizon of Findings 2 and 4 and the scheduling
-  of Finding 1 Option 2. An explicit "teams next / teams deferred" decision would settle three
-  findings' urgency at once.
+- **T2.4/T2.5 and the teams build — answered 2026-07-10.** Decided: teams is **not next, not
+  planned** — `quickscale_modules/teams/` is a brainstormed placeholder only, with no committed
+  scoping or timeline (see decisions.md §Teams module status). Findings 2 and 4 are accordingly
+  `deferred` rather than `6–18 months`, and Finding 1 Option 2 is scheduled on its own
+  merits (next planning cycle) rather than as a pre-teams gate. Re-open this question only when a
+  future scheduling decision actually puts teams on the roadmap.
 - **Was `NOT DEFERRABLE` a deliberate policy change for the composite-FK child-table API?**
   (Affects Finding 4's purge-order risk and the locked Option C child-table policy.) If
   deliberate, one decisions.md paragraph closes the caution; if incidental to making `make check`

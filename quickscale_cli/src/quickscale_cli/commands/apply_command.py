@@ -4,7 +4,9 @@ Implements `quickscale apply [config]` - executes quickscale.yml configuration
 """
 
 import copy
+import os
 import subprocess
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -207,6 +209,51 @@ _FAILED_STEP = {
 }
 
 
+def _build_quickscale_env() -> dict[str, str]:
+    """Build subprocess env with PYTHONPATH for QuickScale import context.
+
+    Scans the current ``sys.path`` for directories that contain
+    ``quickscale_core`` or ``quickscale_cli`` — the two packages that
+    child subprocesses (``sys.executable -m quickscale_cli.main``) need
+    to resolve.  When found (e.g. during test or dev with ``src/``-layout
+    paths), the relevant entries are propagated as ``PYTHONPATH`` so
+    child processes see the same QuickScale code as the parent.
+
+    In production (packages installed in site-packages) these paths are
+    not present in ``sys.path``, so the returned env is an unmodified
+    copy of the current environment and the subprocess resolves packages
+    normally.
+    """
+    extra_paths: list[str] = []
+    for p in sys.path:
+        if not p or p == ".":
+            continue
+        p_obj = Path(p)
+        if not p_obj.is_dir():
+            continue
+        # Keep entries that make quickscale packages importable.
+        if (p_obj / "quickscale_core").is_dir() or (p_obj / "quickscale_cli").is_dir():
+            extra_paths.append(p)
+
+    if not extra_paths:
+        return os.environ.copy()
+
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    combined = os.pathsep.join(extra_paths)
+    if existing:
+        combined = existing + os.pathsep + combined
+    env["PYTHONPATH"] = combined
+    return env
+
+
+#: Cached subprocess environment that propagates the parent's QuickScale
+#: import context so child processes (``sys.executable -m quickscale_cli.main``)
+#: can resolve ``quickscale_cli`` and ``quickscale_core`` packages from the
+#: same source tree as the parent.
+_QUICKSCALE_SUBPROCESS_ENV: dict[str, str] = _build_quickscale_env()
+
+
 def _is_pre_embed_authoritative_path(path: str) -> bool:
     """Return whether a path belongs to authoritative QuickScale config state."""
     return path in _PRE_EMBED_AUTHORITATIVE_GIT_PATHS
@@ -372,6 +419,7 @@ def _run_command(
             capture_output=capture,
             text=True,
             check=False,
+            env=_QUICKSCALE_SUBPROCESS_ENV,
         )
         if result.returncode == 0:
             click.secho(f"✅ {description}", fg="green")
@@ -518,7 +566,7 @@ def _run_migrations(project_path: Path) -> bool:
 def _run_migrations_in_docker_impl(project_path: Path) -> bool:
     """Original implementation used as callback for core step body."""
     return _run_command(
-        ["quickscale", "manage", "migrate"],
+        [sys.executable, "-m", "quickscale_cli.main", "manage", "migrate"],
         project_path,
         "Running migrations (Docker)",
     )[0]
@@ -564,7 +612,7 @@ def _start_docker_impl(
     project_path: Path, build: bool = True, verbose: bool = False
 ) -> bool:
     """Original implementation used as callback for core step body."""
-    cmd = ["quickscale", "up"]
+    cmd = [sys.executable, "-m", "quickscale_cli.main", "up"]
     if build:
         cmd.append("--build")
     if verbose:
@@ -576,6 +624,7 @@ def _start_docker_impl(
                 cwd=project_path,
                 text=True,
                 check=False,
+                env=_QUICKSCALE_SUBPROCESS_ENV,
             )
             click.echo("=" * 50)
             if result.returncode == 0:

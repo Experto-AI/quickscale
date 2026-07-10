@@ -498,7 +498,8 @@ def test_lifecycle_create_apply_remove_readd_apply_e2e_expected_state(
     assert apply_result.exit_code == 0
     assert mock_embed_modules_step.call_count == 1
     called_modules = mock_embed_modules_step.call_args.args[1]
-    assert called_modules == ["auth"]
+    # auth now implies orgs→notifications, so all three are embedded
+    assert sorted(called_modules) == ["auth", "notifications", "orgs"]
 
     assert (project_path / "modules" / "auth").exists()
     state_after_readd = yaml.safe_load(
@@ -1295,6 +1296,10 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
             ),
             patch(
                 "quickscale_cli.commands.module_commands.click.confirm",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._sync_module_dependencies",
                 return_value=True,
             ),
         ):

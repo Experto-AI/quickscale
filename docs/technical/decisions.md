@@ -145,6 +145,8 @@ myproject/
 
 Billing now has a public-ready implementation line in `quickscale_modules/billing` through the current runtime APIs, module-owned billing pages, and React integration guide. Public `quickscale plan`, `quickscale.yml`, and `quickscale apply` flows now surface billing. The generated `showcase_react` SPA surfaces billing as a module flag only (`modules.billing`); it does not currently include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards/links, module paths for billing, or full-document links into billing Django pages. The D1 org-switch blocker that originally prevented these entry points is now resolved — see §D1; restoration is separate implementation work. Teams remains placeholder inventory only.
 
+**Teams module status (decided 2026-07-10):** `quickscale_modules/teams/` is a README-only placeholder from early brainstorming; it has never been scoped, designed, or scheduled. It is **not next** and **not planned** — there is no committed timeline or kickoff date. Structural findings in [arch-audit.md](../others/arch-audit.md) that key their horizon or trigger off "teams kickoff"/"the teams build" (e.g. `deletion-invariants-per-boundary-reimplementation`, `org-model-universe-hand-enumerated`) describe conditions that would apply *if and when* teams is scheduled — they are not on a 6–18 month clock and should not be read as committed roadmap items. Treat them as open-ended/deferred until a separate scheduling decision is made and recorded here.
+
 **Key Characteristics:**
 - ✅ Runtime dependencies (in INSTALLED_APPS)
 - ✅ Updated over project lifetime
