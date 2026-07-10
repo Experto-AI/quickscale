@@ -3,7 +3,7 @@
 # See decisions.md §Module Manifest Architecture for schema specification
 
 name: auth
-version: "0.71.0"
+version: "0.72.0"
 description: "Production-ready authentication module using django-allauth"
 
 config:
@@ -49,3 +49,11 @@ django_apps:
   - allauth
   - allauth.account
   - quickscale_modules_auth
+
+# Required first-party modules with minimum versions
+required_modules:
+  - orgs>=0.86.0
+
+# Modules implied when this module is selected
+implies:
+  - name: orgs
