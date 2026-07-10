@@ -105,14 +105,154 @@ IN_PLACE_INFRASTRUCTURE_TARGETS = (
     "frontend/postcss.config.js",
     "frontend/prettier.config.js",
     "frontend/src/hooks/useModules.ts",
+    "start.sh",
 )
 IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS = frozenset(
     {
         "Dockerfile",
         "docker-compose.yml",
         "frontend/src/hooks/useModules.ts",
+        "start.sh",
     }
 )
+INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
+    # ---- Project-level user-owned files ----
+    # Root-level generated files that are one-time scaffold and
+    # user-editable after generation.  Not touched during migration.
+    "Makefile",
+    "README.md",
+    ".gitignore",
+    ".dockerignore",
+    ".editorconfig",
+    ".env.example",
+    ".env",
+    "scripts/lint.sh",
+    ".github/workflows/ci.yml",
+    "poetry.lock",
+    "db/init.sql",
+    "OPERATIONS.md",
+    # ---- Package __init__ files ----
+    # Generated Django package markers.  Fresh-first replaces the entire
+    # package directory during identity reconciliation, so the __init__
+    # files are identity-resolved through the package rename, not a
+    # dedicated taxonomy entry.
+    "{package}/__init__.py",
+    "{package}/settings/__init__.py",
+    # ---- User Django templates ----
+    # All generated templates under templates/ are user-editable
+    # Django templates.  Unlike infrastructure files (Dockerfile,
+    # start.sh), they are not copy targets during migration.  Fresh-first
+    # preserves the recipient's templates; in-place does not touch them.
+    "templates/404.html",
+    "templates/500.html",
+    "templates/base.html",
+    "templates/index.html",
+    "templates/admin/index.html",
+    "templates/admin/app_index.html",
+    "templates/components/navigation.html",
+    "templates/social/link_tree.html",
+    "templates/social/embeds.html",
+    # ---- User static assets (showcase_html only) ----
+    "static/css/style.css",
+    "static/images/favicon.svg",
+    # ---- User test scaffolding ----
+    "tests/__init__.py",
+    "tests/conftest.py",
+    "tests/test_example.py",
+    # ---- Frontend root configs (user-owned after generation) ----
+    # Generated once, user-editable.  Not migration targets.
+    # infrastructure frontend configs (vite, tsconfig, eslint, postcss,
+    # prettier.config) are in IN_PLACE_INFRASTRUCTURE_TARGETS.
+    "frontend/package.json",
+    "frontend/pnpm-workspace.yaml",
+    "frontend/.prettierignore",
+    "frontend/.prettierrc",
+    "frontend/vitest.config.ts",
+    "frontend/playwright.config.ts",
+    "frontend/components.json",
+    "frontend/tailwind.config.js",
+    "frontend/index.html",
+    "frontend/public/favicon.svg",
+    # ---- Frontend user-owned source files ----
+    # Files under frontend/src/ are user-editable application code.
+    # Specific files may be migration targets (e.g. App.tsx is replaced
+    # in fresh-first; useModules.ts is in-place infrastructure); those
+    # are in the managed tuples.  Everything else stays with the user.
+    "frontend/src/main.tsx",
+    "frontend/src/index.css",
+    "frontend/src/vite-env.d.ts",
+    "frontend/src/posthog-js.d.ts",
+    "frontend/src/lib/utils.ts",
+    "frontend/src/lib/analytics.ts",
+    "frontend/src/stores/themeStore.ts",
+    "frontend/src/test/setup.ts",
+    "frontend/src/test/App.test.tsx",
+    "frontend/src/test/PublicSocialPages.test.tsx",
+    "frontend/e2e/home.spec.ts",
+    # ---- Forms module components (module-conditional) ----
+    # These form-renderer components are emitted only when the forms
+    # module is selected at generation time.  After generation they are
+    # user-editable.  The forms module page (FormsPage.tsx) is managed
+    # via IN_PLACE_MODULE_REACT_SURFACES; the renderer components are
+    # not post-apply adoption targets.
+    "frontend/src/components/forms/FormRenderer.tsx",
+    "frontend/src/components/forms/FormFieldRenderer.tsx",
+    "frontend/src/components/forms/FormSuccess.tsx",
+    # ---- shadcn/ui components (user-owned after generation) ----
+    "frontend/src/components/ui/checkbox.tsx",
+    "frontend/src/components/ui/radio-group.tsx",
+    "frontend/src/components/ui/form.tsx",
+    "frontend/src/components/ui/card.tsx",
+    "frontend/src/components/ui/textarea.tsx",
+    "frontend/src/components/ui/input.tsx",
+    "frontend/src/components/ui/separator.tsx",
+    "frontend/src/components/ui/label.tsx",
+    "frontend/src/components/ui/button.tsx",
+    "frontend/src/components/ui/badge.tsx",
+    "frontend/src/components/ui/tooltip.tsx",
+    "frontend/src/components/ui/select.tsx",
+    # ---- Layout components ----
+    "frontend/src/components/layout/Header.tsx",
+    "frontend/src/components/layout/Layout.tsx",
+    "frontend/src/components/layout/Sidebar.tsx",
+    # ---- Org components ----
+    "frontend/src/components/orgs/OrgStatePanel.tsx",
+    "frontend/src/components/orgs/OrgSwitcher.tsx",
+    # ---- Social components (theme-owned wrapper) ----
+    # PublicSocialShell.tsx is the React theme's user-editable social
+    # wrapper.  Module-owned surfaces for social are tracked separately
+    # in IN_PLACE_MODULE_REACT_SURFACES.
+    "frontend/src/components/social/PublicSocialShell.tsx",
+    # ---- Non-module pages ----
+    "frontend/src/pages/Dashboard.tsx",
+    "frontend/src/pages/NotFound.tsx",
+    "frontend/src/pages/ProfilePage.tsx",
+    "frontend/src/pages/SettingsPage.tsx",
+    # ---- Module-conditional pages (user-owned after generation) ----
+    # These pages are emitted only when the gating module is selected.
+    # After generation they are user-editable.  FormsPage.tsx,
+    # SocialLinkTreePublicPage.tsx, and SocialEmbedsPublicPage.tsx are
+    # managed via IN_PLACE_MODULE_REACT_SURFACES (post-apply adoption
+    # targets) so they are intentionally NOT listed here.
+    "frontend/src/pages/BlogPage.tsx",
+    "frontend/src/pages/CrmPage.tsx",
+    "frontend/src/pages/ListingsPage.tsx",
+    # ---- Org pages (always emitted for React theme) ----
+    "frontend/src/pages/orgs/OrgLayout.tsx",
+    "frontend/src/pages/orgs/OrgDashboardPage.tsx",
+    "frontend/src/pages/orgs/OrgMembersPage.tsx",
+    "frontend/src/pages/orgs/OrgSettingsPage.tsx",
+    "frontend/src/pages/orgs/OrgCreatePage.tsx",
+    "frontend/src/pages/orgs/OrgListPage.tsx",
+    # ---- Non-infrastructure hooks ----
+    "frontend/src/hooks/useOrgNavigation.ts",
+    "frontend/src/hooks/useOrgs.ts",
+    "frontend/src/hooks/useApi.ts",
+    "frontend/src/hooks/useFormSchema.ts",
+)
+
+# Module-specific React surfaces adopted during the post-apply in-place step.
+# Keyed by module name; values are paths relative to the project root.
 IN_PLACE_MODULE_REACT_SURFACES: dict[str, tuple[str, ...]] = {
     "forms": ("frontend/src/pages/FormsPage.tsx",),
     "social": (
