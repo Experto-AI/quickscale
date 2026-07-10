@@ -65,6 +65,7 @@ from quickscale_cli.commands.apply_command import (
     _run_command,
     _run_migrations,
     _run_migrations_in_docker,
+    _run_migrations_in_docker_impl,
     _run_poetry_lock,
     _run_poetry_install,
     _run_post_generation_steps,
@@ -74,6 +75,7 @@ from quickscale_cli.commands.apply_command import (
     _sync_billing_env_example,
     _sync_project_module_dependencies_for_apply,
     _start_docker,
+    _start_docker_impl,
     _sync_analytics_env_example,
     _sync_notifications_env_example,
     _update_module_config_in_state,
@@ -186,6 +188,111 @@ class TestRunCommand:
         success, output = _run_command(["cmd"], Path("."), "No capture", capture=False)
         assert success is True
         assert output == ""
+
+
+# ============================================================================
+# SA65 — PYTHONPATH scoping to nested CLI calls only
+# ============================================================================
+
+
+class TestSA65SubprocessEnvScoping:
+    """SA65: Dev-context PYTHONPATH must reach only nested quickscale_cli.main
+    subprocesses, not foreign subprocesses like poetry/git/docker.
+
+    ``_run_command`` should pass ``env=None`` (inherit parent) by default.
+    The two call sites that need the injected PYTHONPATH must explicitly
+    pass ``env=_build_quickscale_env()``.
+    """
+
+    def _assert_dev_source_path_in_env(
+        self, mock_run, tmp_path, func, *args, **kwargs
+    ) -> None:
+        """Inject a controlled development source path into ``sys.path``,
+        call *func*, then assert the injected path appears in the
+        ``PYTHONPATH`` of the ``subprocess.run`` env dict.
+
+        This helper proves that ``_build_quickscale_env`` propagates
+        a real dev-context source-tree entry through to the nested
+        subprocess environment.
+        """
+        src_dir = tmp_path / "dev_src"
+        src_dir.mkdir()
+        (src_dir / "quickscale_cli").mkdir()
+
+        original_path = sys.path.copy()
+        sys.path.insert(0, str(src_dir))
+        try:
+            result = func(*args, **kwargs)
+        finally:
+            sys.path = original_path
+
+        assert result is True
+        _call_kwargs = mock_run.call_args.kwargs
+        assert "env" in _call_kwargs
+        _env = _call_kwargs["env"]
+        assert _env is not None
+        assert "PYTHONPATH" in _env, "Env dict must contain PYTHONPATH"
+        assert str(src_dir) in _env["PYTHONPATH"], (
+            f"Injected dev source path {src_dir} must appear in PYTHONPATH, "
+            f"got: {_env['PYTHONPATH']}"
+        )
+
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    def test_run_command_default_env_is_none(self, mock_run):
+        """``_run_command`` must not pass an ``env`` kwarg by default."""
+        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+
+        _run_command(["poetry", "install"], Path("."), "Test default env")
+
+        _call_kwargs = mock_run.call_args.kwargs
+        assert _call_kwargs.get("env") is None, (
+            f"Expected env=None for foreign subprocess, got {_call_kwargs.get('env')}"
+        )
+
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    def test_run_migrations_in_docker_passes_quickscale_env(self, mock_run, tmp_path):
+        """``_run_migrations_in_docker_impl`` must pass the scoped env
+        so the nested ``quickscale_cli.main`` child can resolve packages."""
+        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+
+        self._assert_dev_source_path_in_env(
+            mock_run,
+            tmp_path,
+            _run_migrations_in_docker_impl,
+            Path("/tmp/test"),
+        )
+
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    def test_start_docker_impl_non_verbose_passes_quickscale_env(
+        self, mock_run, tmp_path
+    ):
+        """``_start_docker_impl`` (non-verbose path) must pass the scoped env
+        to the nested ``quickscale_cli.main`` child."""
+        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+
+        self._assert_dev_source_path_in_env(
+            mock_run,
+            tmp_path,
+            _start_docker_impl,
+            Path("/tmp/test"),
+            False,
+            False,
+        )
+
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    def test_start_docker_impl_verbose_passes_quickscale_env(self, mock_run, tmp_path):
+        """``_start_docker_impl`` (verbose path) must pass the scoped env
+        to the nested ``quickscale_cli.main`` child."""
+        mock_run.return_value = Mock(returncode=0)
+
+        self._assert_dev_source_path_in_env(
+            mock_run,
+            tmp_path,
+            _start_docker_impl,
+            Path("/tmp/test"),
+            True,
+            True,
+        )
 
 
 # ============================================================================
@@ -479,11 +586,13 @@ class TestStartDocker:
         """Test Docker start without verbose"""
         mock_run.return_value = (True, "")
         assert _start_docker(Path("/tmp/proj"), build=True, verbose=False) is True
+        # SA65: _run_command now receives env= for nested CLI calls
         mock_run.assert_called_once_with(
             [sys.executable, "-m", "quickscale_cli.main", "up", "--build"],
             Path("/tmp/proj"),
             "Starting Docker services",
             capture=False,
+            env=ANY,
         )
 
     @patch("quickscale_cli.commands.apply_command.subprocess.run")
