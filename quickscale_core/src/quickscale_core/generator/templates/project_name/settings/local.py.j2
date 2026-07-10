@@ -10,7 +10,6 @@ This file contains settings specific to local development:
 DO NOT use these settings in production!
 """
 
-import sys
 from typing import Any
 
 import dj_database_url
@@ -36,7 +35,7 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0", "*"]
 _runtime_db_url = config("RUNTIME_DATABASE_URL", default=None)
 _database_url = config("DATABASE_URL", default=None)
 
-if _runtime_db_url and "migrate" not in sys.argv:
+if _runtime_db_url:
     _db_url = _runtime_db_url
 elif _database_url:
     _db_url = _database_url

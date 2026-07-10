@@ -55,19 +55,19 @@ git merge --no-ff wt-track{N}
 
 > **Origin note (2026-07-10, fix-plan pass):** SA57–SA64 trace to the 2026-07-09/10 findings in [tech-audit.md](../others/tech-audit.md) (TA47–TA52, all opened by the unreviewed `6ea37301`/`198a1951` "fix: make check"/"fix: some make ci" commits) and [arch-audit.md](../others/arch-audit.md) (the Red flags section's DR-media/social-admin/createcachetable/TOML-splice/test-artifact items — several of which are the same defects tech-audit found independently and are merged into one task below — plus Finding 6's recommended first step and Finding 4's doc-only decision-record sub-item). Findings 1, 2 and 4's *remaining* structural work (the persistence port, the `pre_delete` backstop, the purge-order derivation) stay in arch-audit.md — each is sized M. Findings 2 and 4 are `deferred`: teams is decided **not next, not planned** (brainstormed placeholder only, no committed timeline — see [decisions.md §Teams module status](../technical/decisions.md#multitenant-saas-architecture)), so their teams-driven horizon no longer applies and there is no near-term trigger pulling them into this batch. Finding 1 Option 2 (the persistence port) is independent of teams' timeline but still M-sized and scheduled for its own next planning cycle rather than this fix-plan pass. Pulling any of the three into this batch as full structural rewrites would be Tier 3. Every item below fit Tier 1–2 without splitting; SA60 (composite-FK policy + conformance gate) and SA63 (Finding 6's launcher-contract first step) are Tier 2, the rest are Tier 1.
 
-> **Track status (2026-07-10):** Track 1 — **2 open items** (SA59, SA60), clean to continue. Track 2 — **0 open items**, fully drained, clean to continue. Track 3 — **1 open item** (SA63), clean to continue.
+> **Track status (2026-07-10, SA57–SA64 opened):** Track 1 — **2 open items** (SA59, SA60). SA58 completed. Track 2 — **0 open items**, fully drained, clean to continue. Track 3 — **0 open items**. SA61, SA62, SA63 completed.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
-SA59 — drop bypassrls auto-prime        (no open items — fully drained)           SA63 — Finding 6 launcher-contract
-SA60 — composite-FK deferability                                                    first step (start.sh/local.py.j2)
+SA59 — drop bypassrls auto-prime        (no open items — fully drained)           (no open items — all complete)
+SA60 — composite-FK deferability
   policy + conformance gate
 ```
 
-All three tracks run fully in parallel — no hard cross-track implementation dependencies exist; every task below touches files no other open task touches. Within Track 1, SA59 and SA60 touch disjoint files (`Makefile`+`scripts/test_unit.sh`; `orgs/tenancy.py`+`decisions.md`+forms migrations), so either order works. Track 3's SA63 is its sole open item, touching `start.sh.j2`/`local.py.j2`/`production.py.j2`. (The shared closeout files `CHANGELOG.md` and `docs/technical/roadmap.md` are the one cross-track exception — every track touches them during closeout, managed by the merge procedure above.)
+All three tracks run fully in parallel — no hard cross-track implementation dependencies exist; every task below touches files no other open task touches. Within Track 1, SA59 and SA60 touch disjoint files (`Makefile`+`scripts/test_unit.sh`; `orgs/tenancy.py`+`decisions.md`+forms migrations), so either order works. Track 3's SA63 (which touched `start.sh.j2`/`local.py.j2`/`production.py.j2`) is complete — no Track 3 items remain open. (The shared closeout files `CHANGELOG.md` and `docs/technical/roadmap.md` are the one cross-track exception — every track touches them during closeout, managed by the merge procedure above.)
 
 ### Track 1 — Tenant-context surface
 
@@ -99,10 +99,11 @@ SA44 (Finding 1 stage 1, `dr-engine-module-circular-lattice`), SA56 (Finding 5, 
 
 #### Finding — `db-privilege-mode-procedural`, first step (`why →` [arch-audit.md Finding 6](../others/arch-audit.md))
 
-- [ ] **SA63 — Fix the createcachetable/boot-guard collision and start the launcher-owned env contract.** `Tier 2 · Track 3 · deps: none`
+- [x] **SA63 — Fix the createcachetable/boot-guard collision and start the launcher-owned env contract.** `Tier 2 · Track 3 · deps: none`
   Four mechanisms currently decide "does this process run under the superuser `DATABASE_URL` or the restricted `RUNTIME_DATABASE_URL`" with three different semantics (start.sh env-unset, production settings' argv ladder, local settings' argv switch introduced by `198a1951`, and the orgs boot guard's positional argv check) — and one collision already exists at source level: `start.sh.j2:59`'s `createcachetable` step (run when `REDIS_URL` is unset) executes under the superuser role but sets no `QUICKSCALE_ALLOW_BYPASSRLS=1`, so the boot guard (which exempts only `migrate`) should raise `ImproperlyConfigured` on any no-Redis Railway deploy at first boot. Per arch-audit's recommended fix order, this task does the one-line collision fix and Finding 6's first structural step together in one template pass, rather than the collision fix alone: add the env pair to start.sh's `createcachetable` line, and delete `local.py.j2`'s argv-sniffing branch in favor of the same launcher-owned `RUNTIME_DATABASE_URL`/`QUICKSCALE_ALLOW_BYPASSRLS` env pair (documented as a one-liner wrapper for bare `python manage.py migrate` in local dev). The full Option 1 contract (production settings becoming a pure env reader, deleting `orgs/apps.py`'s `_is_migrate_command()` in favor of the existing hatch) is the remainder of Finding 6 and stays open in arch-audit.md pending confirmation the collision fix alone doesn't already resolve the live defect.
   *Files:* `quickscale_core/src/quickscale_core/generator/templates/start.sh.j2` (add `QUICKSCALE_ALLOW_BYPASSRLS=1` to the `createcachetable` line); `quickscale_core/src/quickscale_core/generator/templates/local.py.j2` (delete the argv-sniffing branch, use the env pair); generated-project e2e/boot test coverage for the no-Redis path.
   *Acceptance:* a generated project with `REDIS_URL` unset boots `createcachetable` successfully under the runtime role (or, if intentionally superuser, passes the boot guard because the env pair is now set) — verified by booting a generated app with `REDIS_URL` unset per arch-audit's suggested empirical check; `local.py.j2` no longer inspects `sys.argv`; local dev's `python manage.py migrate` UX is preserved via the documented wrapper.
+  *Findings:* CR-SA63-001 (narrow `QUICKSCALE_ALLOW_BYPASSRLS=1` bridge added to `production.py.j2`), CR-SA63-002 (deterministic no-Redis production/orgs e2e confirmed), and CR-SA63-003 (fresh `quickscale plan`/`apply` regeneration evidence produced) were discovered during technical review and resolved in the implementation pass.
   *(why →* [arch-audit.md Finding 6](../others/arch-audit.md)*)*
 
 ---

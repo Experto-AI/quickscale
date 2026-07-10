@@ -121,81 +121,101 @@ def _install_project_dependencies(project_path: Path) -> None:
     )
 
 
-def _write_postgres_test_settings(project_path: Path, project_name: str) -> None:
+def _write_postgres_test_settings(
+    project_path: Path,
+    project_name: str,
+    cache_database: bool = False,
+) -> None:
     """Write a test settings module that uses PostgreSQL.
 
     Requires a running PostgreSQL instance reachable via the env vars below.
     This replaces the former SQLite fallback — see AF13 in the roadmap.
+
+    When *cache_database* is True, uses DatabaseCache instead of
+    LocMemCache so that ``createcachetable`` can be exercised (SA63).
     """
-    settings_content = '''"""Runtime smoke test settings — uses PostgreSQL."""
-import os
+    cache_backend = (
+        "django.core.cache.backends.db.DatabaseCache"
+        if cache_database
+        else "django.core.cache.backends.locmem.LocMemCache"
+    )
+    cache_location_line = (
+        '        "LOCATION": "django_cache_table",\n' if cache_database else ""
+    )
 
-from .base import *  # noqa: F401, F403
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("QS_SMOKE_DB_NAME", "test_quickscale_smoke"),
-        "USER": os.environ.get("QS_SMOKE_DB_USER", "postgres"),
-        "PASSWORD": os.environ.get("QS_SMOKE_DB_PASSWORD", ""),
-        "HOST": os.environ.get("QS_SMOKE_DB_HOST", "localhost"),
-        "PORT": os.environ.get("QS_SMOKE_DB_PORT", "5432"),
-    }
-}
-
-DEBUG = False
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "testserver"]
-
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-    }
-}
-
-# Override the base settings' manifest-based staticfiles storage
-# (whitenoise.storage.CompressedManifestStaticFilesStorage) with the simple
-# in-place backend.  The smoke test does not run ``collectstatic``, so the
-# manifest file does not exist; without this override, any template
-# reference to a static asset (e.g. ``images/favicon.svg`` in the auth
-# login page) raises ``ValueError: Missing staticfiles manifest entry``.
-# This mirrors the override that ``local.py`` applies for development.
-STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
-    },
-}
-
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "verbose": {
-            "format": "{levelname} {asctime} {module} {message}",
-            "style": "{",
-        },
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "verbose",
-        },
-    },
-    "root": {
-        "handlers": ["console"],
-        "level": "WARNING",
-    },
-    "loggers": {
-        "django": {
-            "handlers": ["console"],
-            "level": "WARNING",
-            "propagate": False,
-        },
-    },
-}
-'''
+    settings_content = (
+        '"""Runtime smoke test settings — uses PostgreSQL."""\n'
+        "import os\n"
+        "\n"
+        "from .base import *  # noqa: F401, F403\n"
+        "\n"
+        "DATABASES = {\n"
+        '    "default": {\n'
+        '        "ENGINE": "django.db.backends.postgresql",\n'
+        '        "NAME": os.environ.get("QS_SMOKE_DB_NAME", '
+        '"test_quickscale_smoke"),\n'
+        '        "USER": os.environ.get("QS_SMOKE_DB_USER", "postgres"),\n'
+        '        "PASSWORD": os.environ.get("QS_SMOKE_DB_PASSWORD", ""),\n'
+        '        "HOST": os.environ.get("QS_SMOKE_DB_HOST", "localhost"),\n'
+        '        "PORT": os.environ.get("QS_SMOKE_DB_PORT", "5432"),\n'
+        "    }\n"
+        "}\n"
+        "\n"
+        "DEBUG = False\n"
+        'ALLOWED_HOSTS = ["localhost", "127.0.0.1", "testserver"]\n'
+        "\n"
+        "CACHES = {\n"
+        '    "default": {\n'
+        f'        "BACKEND": "{cache_backend}",\n'
+        f"{cache_location_line}"
+        "    }\n"
+        "}\n"
+        "\n"
+        "# Override the base settings' manifest-based staticfiles storage\n"
+        "# (whitenoise.storage.CompressedManifestStaticFilesStorage) with the simple\n"
+        "# in-place backend.  The smoke test does not run ``collectstatic``, so the\n"
+        "# manifest file does not exist; without this override, any template\n"
+        "# reference to a static asset (e.g. ``images/favicon.svg`` in the auth\n"
+        "# login page) raises ``ValueError: Missing staticfiles manifest entry``.\n"
+        "# This mirrors the override that ``local.py`` applies for development.\n"
+        "STORAGES = {\n"
+        '    "default": {\n'
+        '        "BACKEND": "django.core.files.storage.FileSystemStorage",\n'
+        "    },\n"
+        '    "staticfiles": {\n'
+        '        "BACKEND": '
+        '"django.contrib.staticfiles.storage.StaticFilesStorage",\n'
+        "    },\n"
+        "}\n"
+        "\n"
+        "LOGGING = {\n"
+        '    "version": 1,\n'
+        '    "disable_existing_loggers": False,\n'
+        '    "formatters": {\n'
+        '        "verbose": {\n'
+        '            "format": "{levelname} {asctime} {module} {message}",\n'
+        '            "style": "{",\n'
+        "        },\n"
+        "    },\n"
+        '    "handlers": {\n'
+        '        "console": {\n'
+        '            "class": "logging.StreamHandler",\n'
+        '            "formatter": "verbose",\n'
+        "        },\n"
+        "    },\n"
+        '    "root": {\n'
+        '        "handlers": ["console"],\n'
+        '        "level": "WARNING",\n'
+        "    },\n"
+        '    "loggers": {\n'
+        '        "django": {\n'
+        '            "handlers": ["console"],\n'
+        '            "level": "WARNING",\n'
+        '            "propagate": False,\n'
+        "        },\n"
+        "    },\n"
+        "}\n"
+    )
     settings_path = project_path / project_name / "settings" / "test_smoke.py"
     settings_path.write_text(settings_content)
 
@@ -464,6 +484,186 @@ class TestGeneratedProjectRuntimeSmoke:
         finally:
             _stop_server(server_process)
 
+    @pytest.mark.e2e
+    def test_no_redis_createcachetable_succeeds(self, tmp_path: Path) -> None:
+        """A generated project with DatabaseCache must run createcachetable successfully.
+
+        SA63 regression: the createcachetable step must complete without
+        triggering the orgs boot guard when QUICKSCALE_ALLOW_BYPASSRLS=1
+        is set alongside RUNTIME_DATABASE_URL="".
+
+        This test generates a minimal project, installs its Poetry
+        dependencies, writes a test settings module with DatabaseCache,
+        and runs ``python manage.py createcachetable`` — proving the
+        no-Redis deploy-script path works through a real Django boot.
+        """
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "runtime_smoke_cache"
+        project_path = tmp_path / project_name
+        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+
+        assert (project_path / "manage.py").exists()
+        assert (project_path / "pyproject.toml").exists()
+
+        # Install dependencies (no module embedding needed for this test).
+        _install_project_dependencies(project_path)
+
+        # Write test settings with DatabaseCache (no-Redis production profile).
+        _write_postgres_test_settings(project_path, project_name, cache_database=True)
+
+        # Run createcachetable with QUICKSCALE_ALLOW_BYPASSRLS set
+        # (simulating the start.sh environment).
+        _create_test_database()
+        result = subprocess.run(
+            ["poetry", "run", "python", "manage.py", "createcachetable"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_smoke",
+            },
+        )
+        assert result.returncode == 0, (
+            f"createcachetable failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        assert "django_cache_table" in result.stdout or not result.stderr, (
+            "createcachetable should report success"
+        )
+
+    @pytest.mark.e2e
+    def test_production_settings_createcachetable_with_orgs_bypass_hatch(
+        self, tmp_path: Path
+    ) -> None:
+        """Generated project with orgs module and production settings must pass
+        createcachetable through the env-var bridge (CR-SA63-002).
+
+        This is the genuine production-settings/boot-guard e2e that the prior
+        SA63 pass missed: it embeds the orgs module, uses the actual generated
+        ``*.settings.production`` module (not ``test_smoke``), sets
+        ``RUNTIME_DATABASE_URL=""`` and ``QUICKSCALE_ALLOW_BYPASSRLS=1`` in
+        the subprocess environment, and runs ``createcachetable`` — proving
+        the complete ``start.sh``-launched path works through Django's real
+        production settings and the orgs boot guard.
+
+        The production settings bridge (CR-SA63-001) must select
+        ``DATABASE_URL`` because ``RUNTIME_DATABASE_URL`` is explicitly blank
+        and the bypass hatch is set.  The orgs boot guard must also pass
+        because ``QUICKSCALE_ALLOW_BYPASSRLS=1`` bypasses the RLS role check.
+        """
+        from quickscale_cli.commands.module_config import (
+            get_default_auth_config,
+            get_default_orgs_config,
+        )
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_module_dependencies,
+        )
+        from quickscale_cli.utils.module_wiring_manager import (
+            regenerate_managed_wiring,
+        )
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "runtime_sa63_prod"
+        project_path = tmp_path / project_name
+
+        # Phase 1: Generate project scaffold (HTML theme — no frontend build).
+        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        assert (project_path / "manage.py").exists()
+        assert (project_path / "pyproject.toml").exists()
+
+        # Phase 2: Embed both auth and orgs modules (orgs depends on auth).
+        for mod_name in ("auth", "orgs"):
+            embedded_path = project_path / "modules" / mod_name
+            _copytree_for_generated_project_smoke(
+                REPO_ROOT / "quickscale_modules" / mod_name,
+                embedded_path,
+            )
+            assert (embedded_path / "module.yml").exists(), (
+                f"{mod_name} module manifest missing after embed"
+            )
+            assert (embedded_path / "pyproject.toml").exists(), (
+                f"{mod_name} module pyproject.toml missing after embed"
+            )
+
+        # Phase 3: Write declarative config and sync dependencies for both modules.
+        auth_options = get_default_auth_config()
+        orgs_options = get_default_orgs_config()
+        self._write_quickscale_yml_with_modules(
+            project_path,
+            project_name,
+            "showcase_html",
+            {"auth": auth_options, "orgs": orgs_options},
+        )
+
+        sync_result = sync_project_module_dependencies(
+            project_path, {"auth": auth_options, "orgs": orgs_options}
+        )
+        assert any(
+            "quickscale-module-orgs" in dep
+            for dep in sync_result.added_path_dependencies
+        ), (
+            "sync_project_module_dependencies did not register the orgs module "
+            f"as a path dependency: {sync_result}"
+        )
+        assert any(
+            "quickscale-module-auth" in dep
+            for dep in sync_result.added_path_dependencies
+        ), (
+            "sync_project_module_dependencies did not register the auth module "
+            f"as a path dependency: {sync_result}"
+        )
+
+        # Phase 4: Regenerate managed wiring (settings + URLs).
+        success, message = regenerate_managed_wiring(project_path)
+        assert success, f"regenerate_managed_wiring failed: {message}"
+
+        # Phase 5: Install dependencies.
+        _install_project_dependencies(project_path)
+
+        # Phase 6: Create the test database.
+        _create_test_database()
+
+        # Phase 7: Run createcachetable with production settings and the
+        # bridge env pair (simulating the start.sh.j2 createcachetable
+        # invocation).
+        db_user = os.environ.get("QS_SMOKE_DB_USER", "postgres")
+        db_password = os.environ.get("QS_SMOKE_DB_PASSWORD", "")
+        db_host = os.environ.get("QS_SMOKE_DB_HOST", "localhost")
+        db_port = os.environ.get("QS_SMOKE_DB_PORT", "5432")
+        db_name = os.environ.get("QS_SMOKE_DB_NAME", "test_quickscale_smoke")
+        database_url = (
+            f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        )
+
+        # Build subprocess env from a copy so we can strip ambient REDIS_URL.
+        # The test must prove DatabaseCache/no-Redis path (CR-SA63-002).
+        subprocess_env = {
+            **os.environ,
+            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+            "SECRET_KEY": "qs-sa63-test-production-secret-key-not-for-real-use",
+            "DATABASE_URL": database_url,
+            "RUNTIME_DATABASE_URL": "",
+            "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+            "ALLOWED_HOSTS": "localhost,127.0.0.1",
+        }
+        subprocess_env.pop("REDIS_URL", None)
+
+        result = subprocess.run(
+            ["poetry", "run", "python", "manage.py", "createcachetable"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env=subprocess_env,
+        )
+        assert result.returncode == 0, (
+            f"createcachetable under production settings with orgs module "
+            f"failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        assert "django_cache_table" in result.stdout or not result.stderr, (
+            "createcachetable should report success under production settings"
+        )
+
     @staticmethod
     def _write_quickscale_yml_with_auth(
         project_path: Path,
@@ -483,6 +683,63 @@ class TestGeneratedProjectRuntimeSmoke:
             },
             "docker": {"start": False},
             "modules": {"auth": dict(auth_options)},
+        }
+        rendered = yaml.safe_dump(
+            config_payload,
+            sort_keys=False,
+            default_flow_style=False,
+        )
+        (project_path / "quickscale.yml").write_text(rendered)
+
+    @staticmethod
+    def _write_quickscale_yml_with_orgs(
+        project_path: Path,
+        project_name: str,
+        theme: str,
+        orgs_options: dict[str, object],
+    ) -> None:
+        """Write a minimal quickscale.yml that declares the orgs module."""
+        import yaml
+
+        config_payload = {
+            "version": "1",
+            "project": {
+                "slug": project_name,
+                "package": project_name,
+                "theme": theme,
+            },
+            "docker": {"start": False},
+            "modules": {"orgs": dict(orgs_options)},
+        }
+        rendered = yaml.safe_dump(
+            config_payload,
+            sort_keys=False,
+            default_flow_style=False,
+        )
+        (project_path / "quickscale.yml").write_text(rendered)
+
+    @staticmethod
+    def _write_quickscale_yml_with_modules(
+        project_path: Path,
+        project_name: str,
+        theme: str,
+        modules_config: dict[str, dict[str, object]],
+    ) -> None:
+        """Write a minimal quickscale.yml that declares multiple modules."""
+        import yaml
+
+        config_payload = {
+            "version": "1",
+            "project": {
+                "slug": project_name,
+                "package": project_name,
+                "theme": theme,
+            },
+            "docker": {"start": False},
+            "modules": {
+                mod_name: dict(mod_options)
+                for mod_name, mod_options in modules_config.items()
+            },
         }
         rendered = yaml.safe_dump(
             config_payload,

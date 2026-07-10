@@ -91,3 +91,23 @@ def test_start_sh_createcachetable_conditional_on_redis() -> None:
     assert "database cache table via superuser DATABASE_URL" in output, (
         "start.sh must describe the DatabaseCache createcachetable path"
     )
+
+
+def test_start_sh_createcachetable_sets_quickscale_allow_bypassrls() -> None:
+    """createcachetable must include QUICKSCALE_ALLOW_BYPASSRLS=1 alongside
+    RUNTIME_DATABASE_URL=\"\" so the orgs boot guard does not reject the
+    superuser connection (SA63)."""
+    output = _render_start_sh()
+
+    createcachetable_line = next(
+        line
+        for line in output.splitlines()
+        if "python manage.py createcachetable" in line
+    )
+    assert "QUICKSCALE_ALLOW_BYPASSRLS=1" in createcachetable_line, (
+        "createcachetable must be invoked with QUICKSCALE_ALLOW_BYPASSRLS=1 "
+        "so the superuser connection passes the boot guard"
+    )
+    assert 'RUNTIME_DATABASE_URL=""' in createcachetable_line, (
+        "createcachetable must still clear RUNTIME_DATABASE_URL"
+    )
