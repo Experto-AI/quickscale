@@ -1,80 +1,108 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Audit date:** 2026-07-09 (re-run, delta pass) + 2026-07-10 (module-by-module deep pass) ·
-> **Branch:** `v87` (HEAD `198a1951`)
-> **Mode:** re-run against the SA42–SA56 closeout batch plus the two untracked
-> "fix: make check" / "fix: some make ci" commits (`6ea37301`, `198a1951`), followed by a
-> module-by-module deep pass (all 13 modules + `quickscale_core` and `quickscale_cli` as modules).
-> The sole prior open finding (TA45) re-verified directly in code and **resolved** (SA54); the full
-> first-party production diff `1e618ed8..HEAD` read (112 files, ~7.9k insertions); the deep pass
-> read each module's live surfaces in full (see per-module verdicts). Prior IDs are stable;
-> this document states **present reality for planning** — closed findings live only in the
-> Reconciliation log at the bottom. Structural findings live in [arch-audit.md](arch-audit.md);
-> fail-hard policy SSOT is [decisions.md §fail-hard-principle](../technical/decisions.md#fail-hard-principle).
-> **Headline this pass:** the two CI-fix commits landed behavior changes outside the SA review
-> discipline — including a fail-hard→silent-fallback regression on the DR media path whose
-> fail-closed regression test was renamed and assertion-flipped to bless the fallback (TA47). The
-> 2026-07-10 deep pass added **zero new findings** — every module's live surface is clean.
+> **Audit date:** 2026-07-10 (second pass of the day — V2-prompt re-run, delta pass) ·
+> **Branch:** `v87` (HEAD `ae8c386e`) · **Prompt:** [tech-audit-prompt.md](tech-audit-prompt.md) (V2 — first run)
+> **Mode:** re-run against the SA57–SA64 closeout delta (`198a1951..ae8c386e`, 57 files) plus the
+> side-channel commit `628c7d28` ("fix: some make quality issues", 21 files, +435), which received
+> elevated scrutiny per V2 §2f.2. Every closure claimed since the prior pass (SA57, SA58, SA61,
+> SA62) was **verified directly in code** per V2 §2f.3 — all four confirmed complete. The two
+> still-open prior findings (TA49, TA50) re-verified at their locations, unchanged. One new
+> finding opened (TA53), from the side-channel commit. Prior IDs are stable; this document states
+> **present reality for planning** — closed findings live only in the Reconciliation log at the
+> bottom. Structural findings live in [arch-audit.md](arch-audit.md); fail-hard policy SSOT is
+> [decisions.md §fail-hard-principle](../technical/decisions.md#fail-hard-principle).
+> **Headline this pass:** the SA57–SA64 review-tracked fixes are all verified complete and
+> well-scoped (SA63's `QUICKSCALE_ALLOW_BYPASSRLS` bridge is strictly command-scoped; the serving
+> path stays fail-closed). The side-channel commit `628c7d28` again landed undocumented behavior
+> changes — an auth→orgs manifest implication (justified: auth's views already import orgs
+> models), a re-homed `ImproperlyConfigured` exception class, and a subprocess-environment change
+> that is this pass's one new finding (TA53). No regression slipped through this time, but the
+> unreviewed channel remains open (see Structural smells).
 
 ## Orientation summary
 
 QuickScale is a **Python 3.13 Django project generator** (Poetry monorepo: `quickscale_core`
 manifest/apply/generator/DR engine, `quickscale_cli` Click CLI, 13 shipped `quickscale_modules/*`
-Django apps + an empty `teams` placeholder, Jinja2 generator templates; version bumped 0.86.0 →
-0.87.0 this delta). Two deployment realities: **(a)** the *generated project* — an internet-facing
-Django app targeting Railway (edge proxy → gunicorn, non-root container, fail-closed runtime DB
-role, production settings enforce HTTPS/HSTS/secure cookies, active `CACHES`, trusted-proxy
-client-IP with SA36 math); **(b)** the *CLI/generator* — a local developer tool. Trust boundaries
-unchanged from the 2026-07-07 pass, with one improvement: billing's four plain-View + manual-CSRF
-endpoints migrated onto the DRF baseline (SA56 — `SessionAuthentication` enforces CSRF for
-session-authenticated POSTs; `StripeWebhookView` unchanged, signature-verified), and the orgs JSON
-API consolidated onto `OrgApiBaseView` (SA50 — saas-gate → auth → org-role dispatch order
-verified). Tenant isolation remains DB-level RLS + fail-closed `TenantManager`; SA47 unified the
-last-owner invariant behind `OrganizationMembership.is_last_owner_with_members()` with normalized
-org→membership lock ordering and an atomic account-deletion path. Tooling baseline: ruff + strict
-mypy in CI (now with `py.typed` markers on all modules), csrf_exempt pairing gate (SA46, extended
-with conservative unpack-element literal folding), delete-rule and module-core
-compatibility/import gates; **still no dependency-audit / bandit / semgrep step; pylint
-duplication-only, not CI-wired**.
+Django apps + an empty `teams` placeholder — decided 2026-07-10 as *not planned*, see
+decisions.md §Teams module status — and Jinja2 generator templates; project version 0.87.0,
+unreleased). Two deployment realities: **(a)** the *generated project* — an internet-facing Django
+app targeting Railway (edge proxy → gunicorn, non-root container, fail-closed runtime DB role,
+production settings enforce HTTPS/HSTS/secure cookies, active `CACHES`, trusted-proxy client-IP
+with SA36 math); **(b)** the *CLI/generator* — a local developer tool, installable both from the
+monorepo (Poetry) and via `pip install quickscale` (README:146). Trust boundaries unchanged from
+the 2026-07-09/10 passes; one manifest-level change: **auth now declares
+`required_modules: [orgs>=0.86.0]` and `implies: [orgs]`** (628c7d28), matching the code-level
+dependency SA47 had already introduced (`auth/views.py:13` imports `quickscale_modules_orgs.models`)
+— every auth project now pulls the orgs (→notifications) stack by design. Declared-invariant
+oracle (V2 §2g) used for this pass: the fail-hard principle (decisions.md SSOT), the RLS runtime
+role contract (`NOSUPERUSER`/`NOBYPASSRLS`, boot-guard enforced since SA58 on both attributes),
+the launcher-owned env contract started by SA63 (`RUNTIME_DATABASE_URL`/`QUICKSCALE_ALLOW_BYPASSRLS`
+pair, command-scoped), Option C child-table RLS, the csrf_exempt pairing gate (SA46), and the
+artifact-hygiene rules (SA61). Tooling baseline: ruff + strict mypy in CI, csrf_exempt gate,
+delete-rule and module-core compatibility/import gates, manifest sync gate; **still no
+dependency-audit / bandit / semgrep step**.
 
-**Coverage (this pass):** read in full — the entire first-party production diff `1e618ed8..HEAD`:
-billing `views.py` (SA56 DRF migration, all four views + `_RenderedAPIView` + credit views tail),
-orgs `views.py` (SA50 `OrgApiBaseView` fold + all subclass conversions), orgs `models.py` (SA47
-canonical check + `save()`/`delete()` lock-ordering rewrite), auth `views.py` (SA47 atomic
-deletion), orgs `current_org.py` (SA48 fail-hard reads), `tenancy.py` diff (NOT DEFERRABLE flip +
-`tenant_excluded` marker), backups `services.py` diff (SA53 fd-copy path, SA54 threshold, SA52
-`_get_manage_py` raise) and `admin.py` diff, DR `orchestration.py` diff (SA54 parameter,
-`_resolve_media_runtime` fallback) and `_sidecar.py` diff (media-manifest fallback) and
-`adapter.py`/`_paths.py`, `entry_point.py` (SA42 post-hooks + SA44 registry deletion),
-`runtime/{__init__,dr,manifest}.py` split, `contracts/module_options.py` (notifications
-empty→defaults), CLI `module_config.py`/`module_wiring_manager.py` diffs and the new
-`module_dependency_sync.py` complete (93 lines), all five settings/urls/views generator template
-diffs, `check_csrf_exempt_gate.py`/`check_module_core_imports.py`/
-`check_module_core_compatibility.py` diffs, Makefile + `scripts/test_unit.sh` + ci.yml gate
-wiring. Sampled — orgs/notifications test settings, conftests (SA14.4 comments), crm/forms
-migration tests (DEFERRABLE assertions), backups `test_services.py` (flipped fallback test).
-Skipped — test bodies otherwise, `htmlcov/`, `graphify-out/`, module interiors unchanged since the
-2026-07-05/06 deep passes. **Empirical checks run:** PostgreSQL 18 (`quickscale-test-postgres`
-container) — verified `SET CONSTRAINTS <name> IMMEDIATE` on a NOT DEFERRABLE FK is accepted as a
-no-op (rolled-back transaction; retracted a stronger test-breakage hypothesis for TA50). Audit
-tools run: none available (`pip-audit`/`bandit`/`safety` not installed; installs prohibited);
-dependency posture verified unchanged via git — `poetry.lock` untouched since 2026-06-17
-(`5ffa8cdc`).
+**Coverage (this pass):** read in full — the entire first-party production diff
+`198a1951..ae8c386e`: `apply_command.py` (`_build_quickscale_env` + `_QUICKSCALE_SUBPROCESS_ENV` +
+nested-CLI invocation changes), `module_config.py` (`apply_listings_configuration` shim),
+`module_wiring_manager.py` and `module_discovery.py` (`ImproperlyConfigured` re-homing),
+`entry_point.py` (docstring + import updates), auth `module.yml` ×2 / `pyproject.toml` /
+`__init__.py` (0.72.0 + orgs requirement), `orchestration.py`/`_sidecar.py` (SA57),
+`orgs/apps.py` (SA58), `social/admin.py` complete (SA64), `local.py.j2`/`production.py.j2`/
+`start.sh.j2` (SA63, full current DB-selection block and launcher script re-read),
+`module_dependency_sync.py` `_patch_module_path_dependencies` complete (SA62), `.gitignore` +
+blog test settings/conftest (SA61). Test-integrity diff (V2 §3.7) run over every changed test
+file: backups `test_services.py` (fail-closed tests restored + module-absent fallback pinned —
+strengthened), orgs `test_rls_boot_guard.py` (superuser cases added — strengthened),
+implications/entry-point/discovery/wiring tests (coherent extensions of the auth→orgs change),
+`test_apply_command*.py` (assertions flipped to bless auth→orgs — behavior change is justified,
+see Clean sweeps), `test_e2e_full_workflow.py` (rework for auth+orgs embed),
+`test_module_lifecycle_cycle.py` (new mock of `_sync_module_dependencies` in the update e2e —
+noted as a watch item). Sampled — CHANGELOG/roadmap/decisions deltas for coverage cross-checks.
+Skipped — module interiors (unchanged since the same-day 2026-07-10 deep pass; per-module
+verdicts carried), `htmlcov/`, `graphify-out/`. **Empirical checks run:** simulated a wheel-install
+layout (scratch dir with `quickscale_core/` subdir on `sys.path`) against `_build_quickscale_env`'s
+scan logic — confirmed a site-packages-style directory **is** swept into the child `PYTHONPATH`,
+refuting the function's own docstring claim (feeds TA53). Audit tools run: none available
+(`pip-audit`/`bandit`/`safety` not installed; installs prohibited); dependency posture unchanged
+via git — `poetry.lock` untouched since 2026-06-17 (`5ffa8cdc`).
 
-**Clean sweeps worth recording (delta):** SA56 preserves CSRF (DRF `SessionAuthentication`
-enforces CSRF for session-authenticated requests; unauthenticated POSTs return 401 before any
-state change and carry no session to ride); SA50's dispatch returns 403 (not 404) when the org
-lookup fails — consistent non-existence/no-role responses; SA47's lock ordering (org rows before
-membership row, pk-sorted) is deadlock-consistent with `AccountDeleteView`, and its
-`is_last_owner_with_members` semantic change is documented and test-asserted (see Notes); SA53's
-fd-based copy is crash-safe (mkstemp → fsync → `os.replace`, unlink-on-failure, close-in-finally,
-staging cleanup in outer finally); SA42 post-hooks verified as direct required reads across
-blog/listings/forms/notifications; SA44's explicit-registration contract holds at every live
-caller (`module_wiring_manager` refreshes on all three branches; `_build_specs` self-refreshes per
-CR-SA44-REV-001); the runtime facade split introduces no import cycles and social's
-`runtime.manifest` deep import is gate-listed per-module; SA46 gate's unpack-element folding is
-conservative (pure-unpack containers → uncertain); `sync_project_module_dependencies` validates
-TOML before writing in its two main writers (but see TA52).
+**Clean sweeps worth recording (this pass — every closure verified in code, V2 §2f.3):**
+
+- **SA57 verified:** both DR media call sites (`orchestration.py:1911-1923`,
+  `_sidecar.py:54-68`) now catch `ModuleNotFoundError` with an **exact `exc.name` check** against
+  the two storage-module names — even a missing storage *sub-dependency* fails hard; every other
+  exception propagates as `BackupConfigurationError`/an `unsupported` manifest with `error_type`.
+  The flipped test is restored fail-closed (`test_services.py:2899-2924, 2960-2974`) plus a
+  second test pinning the module-absent fallback.
+- **SA58 verified:** boot guard queries `rolbypassrls, rolsuper` and raises on either
+  (`orgs/apps.py:99-111`); test mocks extended with superuser-only cases.
+- **SA61 verified:** `git ls-files` shows no `pytest_log.txt`/`coverage.json`/test-media tracked;
+  `.gitignore:221-222` covers the class; blog test `MEDIA_ROOT` is a `mkdtemp` path.
+- **SA62 verified:** `_patch_module_path_dependencies` routes through `_write_validated_toml`
+  (`module_dependency_sync.py:427`), matching its siblings.
+- **SA63 verified across the config matrix (V2 §2h):** the bypass env pair is strictly
+  command-scoped in `start.sh.j2:59` (shell-prefix assignment on the `createcachetable` line only;
+  the `exec gunicorn` line carries neither); `production.py.j2`'s new bridge branch fires **only**
+  on the explicit `RUNTIME_DATABASE_URL=""` + `QUICKSCALE_ALLOW_BYPASSRLS=1` combination and
+  fail-hards when `DATABASE_URL` is missing; empty-without-flag and unset-with-flag both fall
+  through to the pre-existing fail-closed serving raise. `local.py.j2`'s argv-sniffing branch is
+  deleted — this resolves the prior "migrate detection looser than the boot-guard exemption"
+  watch item.
+- **SA64 verified:** both social admins inherit the already-audited orgs-owned `TenantModelAdmin`
+  directly (VIEW-AS priority + org-field form-locking gained); the local `PerOrgAdminMixin`
+  prototype is deleted; the admin test suite grew by ~213 lines.
+- **auth→orgs implication verified justified:** `auth/views.py:13` imports
+  `quickscale_modules_orgs.models` (introduced with SA47's account-deletion work), so
+  auth-without-orgs was already a broken configuration; the 628c7d28 manifest change
+  (`required_modules`, `implies`, 0.72.0 bump, orgs pyproject constraint `>=0.86.0,<0.87.0` —
+  satisfied, orgs is 0.86.0) makes the manifest match reality. The associated apply/e2e test
+  assertion flips are consistent with this intent, not concealment.
+- **`ImproperlyConfigured` re-homing internally consistent:** the new
+  `module_discovery.ImproperlyConfigured` (decoupling core's contract layer from Django) is
+  raised at `module_discovery.py:115` and `entry_point.py:247,258` and caught only in
+  `module_wiring_manager.py`, which imports the new class; no production catcher of Django's
+  class wraps these paths (repo-wide search).
 
 ---
 
@@ -82,257 +110,151 @@ TOML before writing in its two main writers (but see TA52).
 
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |----|----------|----------|-------|--------|------------|--------|
-| TA47 | S2 | error-swallowing / data-handling (DR) | DR media capture/sync silently falls back to local `MEDIA_ROOT` when storage-backend resolution fails — fail-closed test flipped to bless it | Small | High | resolved (SA57) |
-| TA48 | S3 | security (defense-in-depth) | RLS boot guard checks `rolbypassrls` but not `rolsuper` — superuser connections (CI's default, misconfigured deployments) pass the guard with RLS silently bypassed | Trivial | High | resolved (SA58) |
-| TA49 | S3 | test-integrity / operability | `make test-unit` + `scripts/test_unit.sh` auto-prime `QUICKSCALE_ALLOW_BYPASSRLS=1`, contradicting the SA14.4 decision still documented in the test settings; CI's coverage gate inherits it | Small | High | open (SA59, Track 1, scheduled) |
+| TA49 | S3 | test-integrity / operability | `make test-unit` + `scripts/test_unit.sh` auto-prime `QUICKSCALE_ALLOW_BYPASSRLS=1`, contradicting the SA14.4 decision; CI's coverage gate inherits it | Small | High | open (SA59, Track 1, scheduled) |
 | TA50 | S3 | data-handling / consistency | Composite-FK helper flipped to `NOT DEFERRABLE` undocumented — diverges from forms' asserted `DEFERRABLE` contract and from every existing database | Small | High (facts) / Medium (impact) | open (SA60, Track 1, scheduled) |
-| TA51 | S4 | build hygiene (TA23 class) | Test-run artifacts committed: tracked `pytest_log.txt` updated per commit + 13 accumulating blog test-media PNGs | Trivial | High | resolved (SA61) |
-| TA52 | S4 | correctness (CLI) | `_patch_module_path_dependencies` writes line-spliced TOML without the `_write_validated_toml` guard its sibling writers use | Trivial | High | resolved (SA62) |
+| TA53 | S3 | resources-I/O / correctness (CLI) | `quickscale apply` injects a cached import-time `PYTHONPATH` env into **every** subprocess — including poetry and the generated project's own Python — and its production-safety docstring claim is false for pip-installed CLIs | Small | High | open (new this pass) — quick win |
 
-Counts: **S1: 0 · S2: 0 · S3: 2 · S4: 0.** Remaining open: TA49, TA50 — both scheduled, Track 1 (roadmap.md).
-Resolved since the 2026-07-07/08 passes: **TA45** (SA54), **TA48** (SA58), **TA47** (SA57), **TA51** (SA61), **TA52** (SA62).
+Counts: **S1: 0 · S2: 0 · S3: 3 · S4: 0.** TA49/TA50 scheduled (Track 1, roadmap.md); TA53 new, unscheduled.
+Closure verification this pass: TA47 (SA57), TA48 (SA58), TA51 (SA61), TA52 (SA62) — all four confirmed in code.
 
 ---
 
 ## Findings detail
 
-### Finding 1: DR media capture/sync silently falls back to local `MEDIA_ROOT` when storage-backend resolution fails
-
-- **ID:** `dr-media-storage-fallback-swallows-misconfiguration`  (TA47)
-- **Severity:** S2 — silent wrong-data on the disaster-recovery media path; trigger is a storage
-  misconfiguration or helper failure, i.e. precisely the condition DR runs must surface, at the
-  moment least tolerant of silence.
-- **Category:** §4.I error swallowing / §4.IX data handling (fail-hard SSOT class).
-- **Confidence:** High — both hunks, the flipped test, and the introducing commit verified
-  directly; end-to-end consequence traced through `sync_backup_snapshot_media`.
-- **Location:** `quickscale_core/src/quickscale_core/dr_engine/orchestration.py:1910-1913`
-  (`_resolve_media_runtime`) and `quickscale_core/src/quickscale_core/dr_engine/_sidecar.py:54-58,102-108`
-  (`_build_media_sync_manifest`); flipped test at
-  `quickscale_modules/backups/tests/test_services.py:2871-2888`.
-- **Defect:** Both call sites wrap `_load_storage_helpers().select_storage_backend(settings)` in
-  `except Exception: selection = None` and fall through to local-`MEDIA_ROOT` detection. This
-  conflates the one legitimate fallback case (storage module not installed —
-  `ModuleNotFoundError`) with every failure case, including `ImproperlyConfigured` — the exact
-  exception SA30 made `select_storage_backend` raise so that missing/invalid
-  `QUICKSCALE_STORAGE_BACKEND`/S3 settings fail hard. Previously the orchestration side raised
-  `BackupConfigurationError` and the sidecar returned an explicit `status: "unsupported"` manifest
-  (which the sync step then refused: "Media sync requires a ready media manifest").
-- **Failure scenario:** An S3-media deployment runs `quickscale dr capture` in a context where the
-  storage settings don't resolve (env var missing in the capture runtime, a typo introduced by an
-  env sync, or any bug inside the helpers). Capture walks the local container `MEDIA_ROOT` —
-  empty or ephemeral on Railway, which README explicitly excludes from the durable media contract
-  — and emits a `status: "ready"` manifest with the wrong (likely empty) inventory. `dr execute`
-  media sync then "completes" against that inventory. The real S3 media is never captured or
-  promoted; the loss is discovered only after cutover. On the sync side, the same swallow applies
-  to the **target** runtime resolution: a non-Railway promotion target whose
-  `QUICKSCALE_STORAGE_BACKEND` is missing from `target_runtime_settings` silently receives media
-  onto local disk instead of its bucket (`require_s3_compatible` still protects Railway targets
-  only).
-- **Evidence:**
-  ```python
-  # orchestration.py:1910 (was: raise BackupConfigurationError(...) from exc)
-  try:
-      selection = _load_storage_helpers().select_storage_backend(settings_obj)
-  except Exception:
-      selection = None
-  ```
-  The regression test that guarded the old behavior,
-  `test_build_media_sync_manifest_fails_closed_for_malformed_storage_helpers`
-  (asserting `status == "unsupported"`), was renamed in the same commit to
-  `..._falls_back_to_local_when_storage_helpers_malformed` and its assertions flipped to
-  `status == "missing_media_root"`. The sidecar fallback also reintroduces a permissive
-  `getattr(settings, "QUICKSCALE_STORAGE_BACKEND", "local")` read (`_sidecar.py:105`) — the
-  coercion idiom SA17/SA30/SA42/SA48 systematically removed.
-- **Fix:** In both call sites, catch only `ImportError`/`ModuleNotFoundError` as the
-  "storage module not installed → local media project" fallback; let every other exception
-  propagate (orchestration: `BackupConfigurationError` with the original message; sidecar: the
-  explicit `unsupported`/error-status payload with `error_type`). Restore the fail-closed test
-  and add a second test for the module-absent fallback so both behaviors are pinned. **Effort:**
-  Small.
-- **Verification:** Unit test: monkeypatch `select_storage_backend` to raise
-  `ImproperlyConfigured` → `_build_media_sync_manifest` must not return `status: "ready"`, and
-  `_resolve_media_runtime` must raise `BackupConfigurationError`; monkeypatch
-  `import_module` to raise `ModuleNotFoundError` → local fallback engages.
-- **Deliberate?** No sign of a decision: introduced in `6ea37301` ("fix: make check"), no
-  CHANGELOG entry, no decisions.md exemption; the flipped test is the only artifact, and it
-  documents no rationale. The DR engine's sanctioned fallback modes (§fail-hard-principle
-  exemption) cover *recovery routing*, not configuration-error suppression.
-- **Age:** 1 day (`6ea37301`, 2026-07-09) — a fresh regression; reverting both hunks and the test
-  rename, then re-fixing whatever CI failure motivated them, is a reasonable alternative to a
-  forward fix.
-
 ### S3 — compact
 
-- **TA48 — `rls-boot-guard-misses-superuser`** · S3 ·
-  `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:98-108` (`_check_rls_role`).
-  The guard queries `SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user`, but
-  PostgreSQL superusers bypass RLS regardless of the BYPASSRLS attribute — and typically have
-  `rolbypassrls = false`. decisions.md:1124 states the runtime contract as
-  `NOSUPERUSER/NOBYPASSRLS`; the guard enforces only half. Live consequences: CI module suites
-  connect as the `postgres` superuser and pass the guard while RLS is silently inert; a
-  misconfigured generated deployment pointing `RUNTIME_DATABASE_URL` at a superuser role boots
-  cleanly with DB-level tenant isolation off (app-level `TenantManager` filtering remains — this
-  is a defense-in-depth loss, not direct exposure). **Fix:** change the query to
-  `SELECT rolbypassrls OR rolsuper …` and update the error message; adjust
-  `test_rls_boot_guard.py` mocks. Effort: Trivial (quick win). Confidence: High.
-  **Status:** Resolved (SA58).
 - **TA49 — `test-tooling-auto-primes-bypassrls-hatch`** · S3 ·
-  `Makefile:321-327` (test-unit) and `scripts/test_unit.sh:365-366`, run by CI's repository
-  coverage gate (`.github/workflows/ci.yml:340`). Both auto-export
+  `Makefile:325-326` (test-unit) and `scripts/test_unit.sh:365-366`, run by CI's repository
+  coverage gate (`.github/workflows/ci.yml:340` — re-verified this pass). Both auto-export
   `QUICKSCALE_ALLOW_BYPASSRLS=1`, which (a) disables the orgs boot guard for every module suite
   and (b) flips the SA14.4 collection-time opt-in so `bypass_rls`-marked tests are always
   included. This directly contradicts the SA14.4 decision still documented at
-  `quickscale_modules/orgs/tests/settings.py:14-18` and in every module conftest ("No module test
-  code automatically primes QUICKSCALE_ALLOW_BYPASSRLS"). On a dev machine whose role has
-  BYPASSRLS, module suites now pass with DB-level RLS unexercised and zero signal. Chains with
-  TA48: between them, no environment — CI or local — any longer demonstrates the boot guard
-  firing against a bypassing role. **Fix:** remove the blanket export; create a NOBYPASSRLS role
-  in CI (export `QS_*_DB_USER`) and let developers set the hatch explicitly per SA14.4, or scope
-  the export to the specific suites that require it with a comment referencing a decisions.md
-  amendment. Effort: Small. Confidence: High. Introduced in `6ea37301`.
+  `quickscale_modules/orgs/tests/settings.py:14-18` and in every module conftest. On a dev machine
+  whose role has BYPASSRLS, module suites pass with DB-level RLS unexercised and zero signal.
+  Chains with the (resolved) TA48: no environment — CI or local — currently demonstrates the boot
+  guard firing against a bypassing role; SA58's superuser extension widened what goes untested.
+  **Fix:** remove the blanket export; create a NOBYPASSRLS role in CI (export `QS_*_DB_USER`) and
+  let developers set the hatch explicitly per SA14.4, or scope the export to the specific suites
+  that require it with a decisions.md amendment. Effort: Small. Confidence: High. Introduced in
+  `6ea37301`. **Status:** open — scheduled as SA59 (Track 1).
 - **TA50 — `composite-fk-deferability-contract-diverged`** · S3 ·
-  `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py:903`
+  `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py:906`
   (`_ADD_COMPOSITE_FK_SQL`). Flipped `DEFERRABLE INITIALLY DEFERRED` → `NOT DEFERRABLE` in
-  `6ea37301`, undocumented, no test asserts the new behavior. Divergences it creates:
-  `forms/0007` inlines its own `DEFERRABLE INITIALLY DEFERRED` SQL and
-  `forms/tests/test_migrations.py:457-505` asserts DEFERRABLE as "the contract" — so forms and
-  crm (0009, via the helper) now install different constraint semantics, and every *existing*
-  database keeps DEFERRABLE while fresh ones get NOT DEFERRABLE (fleet drift, no migration
-  aligns them). Behavioral edge: Django's constraint-disabling on PostgreSQL
-  (`SET CONSTRAINTS ALL DEFERRED`, used by `loaddata`/fixture restore) no longer covers
+  `6ea37301`, undocumented, no test asserts the new behavior. Divergences: `forms/0007` inlines
+  its own `DEFERRABLE INITIALLY DEFERRED` SQL and `forms/tests/test_migrations.py:457-505` asserts
+  DEFERRABLE as "the contract" — forms and crm (0009, via the helper) now install different
+  constraint semantics, and every *existing* database keeps DEFERRABLE while fresh ones get NOT
+  DEFERRABLE (fleet drift, no migration aligns them). Behavioral edge: Django's
+  `SET CONSTRAINTS ALL DEFERRED` (used by `loaddata`/fixture restore) no longer covers
   helper-created FKs, so out-of-order fixture loads fail on exactly these tables, differently per
-  module and per database age. (Verified empirically: `SET CONSTRAINTS <name> IMMEDIATE` on a
-  NOT DEFERRABLE FK is a no-op, so the crm tests still pass — their comments at
-  `crm/tests/test_migrations.py:1107,1158` are now stale.) NOT DEFERRABLE is defensible on
-  fail-fast grounds — but then it should be the *documented* Option C policy, applied uniformly
-  with a migration and a conformance gate, not a one-module drift. **Fix:** pick one deferability
-  policy in decisions.md, align helper + forms SQL + tests, and extend the SA35-style conformance
-  gate to assert it. Effort: Small. Confidence: High on facts, Medium on downstream impact.
-
-### S4 — one line each
-
-- **TA51 — `test-artifacts-committed-again`** (TA23 class, collapsed): tracked `pytest_log.txt`
-  updated at HEAD (`198a1951`); 13 `quickscale_modules/blog/tests/media/blog/uploads/2026/07/test-*.png`
-  committed (12 in `6ea37301`, +1 in `198a1951` — one more per test run whenever `git add -A` is
-  used; `.gitignore:232` covers `pytest_cov_log.txt` but not `pytest_log.txt` or module test
-  media) — `git rm --cached` all 14, add `pytest_log.txt` and `quickscale_modules/*/tests/media/`
-  to `.gitignore`, optionally point blog test `MEDIA_ROOT` at a tmp path.
-- **TA52 — `module-pyproject-splice-unvalidated`**:
-  `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py` —
-  `_patch_module_path_dependencies` rewrites embedded-module `pyproject.toml` by line splicing
-  and writes via bare `write_text`, skipping the `_write_validated_toml` guard its two sibling
-  writers use; a malformed splice (e.g. a multi-line table entry) writes invalid TOML that breaks
-  the subsequent `poetry lock` — route the write through `_write_validated_toml`. (Same file,
-  noted not promoted: `.get("backend", "local")` permissive defaults at
-  `_should_skip_manifest_dependency`/`_build_module_path_dependency_value` — options are resolved
-  upstream post-SA27 so the default is dead, but it is the banned idiom.)
+  module and per database age. (Empirically verified 2026-07-10: `SET CONSTRAINTS <name>
+  IMMEDIATE` on a NOT DEFERRABLE FK is a no-op, so the crm tests still pass — their comments at
+  `crm/tests/test_migrations.py:1107,1158` are stale.) NOT DEFERRABLE is defensible fail-fast —
+  but then it should be the *documented* Option C policy, applied uniformly with a migration and a
+  conformance gate. **Fix:** pick one deferability policy in decisions.md, align helper + forms
+  SQL + tests, extend the SA35-style conformance gate. Effort: Small. Confidence: High on facts,
+  Medium on downstream impact. **Status:** open — scheduled as SA60 (Track 1).
+- **TA53 — `apply-subprocess-env-pythonpath-pollution`** · S3 (deployment reality (b), CLI) ·
+  `quickscale_cli/src/quickscale_cli/commands/apply_command.py:212-254`
+  (`_build_quickscale_env` + module-level `_QUICKSCALE_SUBPROCESS_ENV`), applied at `:422`
+  (`_run_command` — **every** apply subprocess) and `:627` (`_start_docker_impl`).
+  **Defect:** the env — computed once at import time — adds every `sys.path` directory containing
+  a `quickscale_core`/`quickscale_cli` subdirectory to the child `PYTHONPATH`, and `_run_command`
+  passes it to *all* children: not just the two nested `sys.executable -m quickscale_cli.main`
+  invocations it was built for, but also `poetry install`, `poetry lock`,
+  `poetry run python manage.py migrate` (foreign interpreters in the generated project's own
+  venv), `git`, and docker. The docstring's safety claim — "In production (packages installed in
+  site-packages) these paths are not present in `sys.path`" — is **false**: site-packages *is* on
+  `sys.path` and contains `quickscale_core/` after a `pip install quickscale` (a documented
+  install path, README:146); empirically confirmed via a simulated wheel layout. **Failure
+  scenario:** pip-installed CLI runs `quickscale apply` → children get
+  `PYTHONPATH=<CLI venv site-packages>` → since `PYTHONPATH` precedes a venv's own site-packages,
+  the generated project's `manage.py migrate` resolves Django/psycopg/etc. from the **CLI's**
+  venv wherever versions overlap-but-differ, and pipx-installed poetry runs with the CLI's copies
+  of its shared deps — wrong-version migrations and hard-to-diagnose breakage. Secondary angles:
+  the import-time `os.environ.copy()` snapshot drops any later env mutation for all children (no
+  first-party mutator exists today), and the scan is an import-time filesystem side effect.
+  **Refutation attempted:** searched for a layer-up filter (none — `_run_command` applies the env
+  unconditionally); checked whether children need the paths (poetry/git/docker never import
+  quickscale; generated projects contain no `quickscale_core`/`quickscale_cli` imports — template
+  grep clean); checked for a blessing (no test asserts propagation to foreign interpreters, no
+  CHANGELOG/decisions coverage — the docstring itself is the only defense and it is factually
+  wrong). **Fix:** build the env lazily and pass it only to the two nested `quickscale_cli.main`
+  invocations; additionally (or alternatively) skip path entries where the packages are already
+  importable by a bare child (site-packages case). Effort: Small — **quick win**. Confidence:
+  High (mechanism verified empirically; installed layout documented). Age: fresh —
+  `628c7d28`, 2026-07-10, the side-channel commit.
 
 ---
 
-## Per-module verdicts (2026-07-10 deep pass)
+## Per-module verdicts (carried from the 2026-07-10 deep pass, same day)
 
-Each module's live surface (views, services, serializers, admin, apps/startup guards, management
-commands) read directly; **zero new findings**. Recorded here so a re-run can compare like with
-like and skip the modules that were clean.
+The module-by-module deep pass earlier today read each module's live surface in full with zero
+new findings; this delta pass re-read only what the delta touched (orgs `apps.py`, social
+`admin.py`, auth manifest/version files, backups/DR fix sites). Verdicts carried unchanged:
 
-- **forms** — clean. Public submit path (`FormSubmitAPIView`) is throttled on the canonical
-  `get_client_ip` (SA21.2), honeypot-silent, non-string JSON rejected (SA40), CSV export
-  formula-neutralized (`_neutralize_csv_cell`), notification/analytics side effects run
-  post-commit and never raise. Startup guard fail-hard on the three required settings.
-- **blog** — clean. Token auth uses `secrets.compare_digest`; session auth pairs with
-  `_enforce_csrf` (SA46 gate holds); image upload validates size/format/dimensions with a
-  DecompressionBomb guard; markdown rendered through `escape()` → `markdownify` →
-  `_sanitize_rendered_html` (SA26); startup guard validates `BLOG_API_TOKENS` shape. RSS feed
-  scopes to System org under `org_scope`.
-- **listings** — clean. `PublicSystemOrgReadMixin` org-scoping, shared `TenantManager`/
-  `OperatorManager` (fail-closed), SA30 fail-hard settings reads.
-- **notifications** — clean. Webhook ingest is HMAC-SHA256 signed + TTL-bounded + constant-time
-  compared (`_verify_webhook_signature`) and idempotent via `NotificationDeliveryEvent`
-  get-or-create inside a transaction; send/dispatch use `select_for_update` and per-delivery
-  failure isolation; startup guard fail-hard on required settings.
-- **social** — clean. Org-partitioned cache keys; embed metadata derivation raises `ValueError`
-  on unresolvable ids (React-escaped at the sink); `invalidate_social_cache` stays out of
-  `__all__` (SA32).
-- **storage** — clean. `select_storage_backend` fail-hard on missing/invalid backend (SA30);
-  S3 inventory paginates; `sanitize_relative_media_path` neutralizes traversal (exported, no
-  first-party caller yet).
-- **analytics** — clean. Client init lock-guarded, disable states explicit and tested; template
-  tag JSON-escapes `<>&` before `mark_safe` (SA24). Runtime missing-key → silent disable is the
-  deliberate SA17.7 shape.
-- **auth** — clean. `AccountDeleteView` atomic + SA47 last-owner delegation + SA41 anomaly
-  handling; adapter fail-hard on `ACCOUNT_ALLOW_REGISTRATION`.
-- **crm** — clean. API gated on `CRM_ENABLE_API`; composite-FK org-ownership enforced at the DB
-  (subject to TA50's deferability question). Verified idempotent credit paths live in billing.
-- **billing** — clean. Four state-changing endpoints migrated to DRF (SA56); Stripe webhook
-  signature-verified, sliced-atomic, event-idempotent; `credit_user` double-protected
-  (in-lock existing-transaction check + unique constraint + `IntegrityError` re-fetch); DR
-  adapter secrets on stdin.
-- **backups** — clean. Dispatch lifecycle race-safe (CAS claim, stale reset, SA53 fd-copy);
-  `dr_adapter_call` bridge reads kwargs from stdin (SA31); admin `format_html` sites use
-  auto-escaped placeholders. (`services.py`/`orchestration.py` fallback is TA47, already open.)
-- **orgs** — clean. `TenantMiddleware` fail-closed (redirect/403 on missing/non-member org, session
-  cleared on invalid); `TenantManager.get_queryset` returns `.none()` with no org context;
-  VIEW-AS debug enforces superuser-only and clears stale keys. (RLS boot guard is TA48, resolved SA58; NOT
-  DEFERRABLE is TA50, still open.)
-- **quickscale_core** — clean. No `shell=True`, no archive extraction, no unsafe deserialization;
-  all subprocess calls list-form with schema-validated args; Jinja2 autoescape-off is correct for
-  a code generator (Python/shell/TOML output, not HTML); advisory lock releases in `finally` and
-  `__exit__`.
-- **quickscale_cli** — clean. Local dev tool: list-form argv, secrets on stdin (SA31), Railway
-  variable set via `--stdin`; destructive `remove`/`apply --force` gate on `click.confirm` unless
-  `--force`, with snapshot/rollback. (Dependency-sync TOML write is TA52, already open.)
+- **forms, blog, listings, notifications, social, storage, analytics, auth, crm, billing,
+  backups, orgs** — clean at their live surfaces (see the 2026-07-09/10 entries in the
+  Reconciliation log and version control for the full per-module rationale).
+- **quickscale_core** — clean; this pass re-verified the DR media seam (SA57) and the generator
+  templates (SA63).
+- **quickscale_cli** — clean except TA53 (this pass, `apply_command.py` subprocess env).
 
 ---
 
 ## Structural smells (candidates for `arch-audit.md`)
 
-- **CI-fix commits as an unreviewed side channel:** `6ea37301` ("fix: make check") and
-  `198a1951` ("fix: some make ci") landed a fail-hard→fallback regression (TA47), a DB-constraint
-  contract change (TA50), a test-posture inversion (TA49), a flipped regression test, committed
-  test artifacts (TA51), and a version bump — none with CHANGELOG/decisions.md coverage, while
-  every SA-tracked change in the same window got both. The review discipline has a hole exactly
-  where changes are least scrutinized.
-- **Deletion invariants enforced per boundary:** carried — SA47 landed the canonical
-  `is_last_owner_with_members` + view-level atomicity (a real step), but the domain-level
-  `pre_delete` backstop is still absent; see arch-audit
-  `deletion-invariants-per-boundary-reimplementation`.
-- **No single "how does a generated app get configured at deploy time" contract:** carried
-  (SA29/SA34 fixed instances; the class remains).
+- **Side-channel commits as an unreviewed change lane — second consecutive pass:** `628c7d28`
+  ("fix: some make quality issues") landed a product-visible manifest change (auth→orgs→
+  notifications implication), an exception-class re-homing across the core contract layer, and a
+  subprocess-environment change (TA53) — none with CHANGELOG or decisions.md coverage, while
+  every SA-tracked change in the same window got both. This time the changes were individually
+  defensible (the implication matches a real code dependency) and only TA53 qualified as a
+  defect, but the channel that produced TA47/TA49/TA50/TA51 last pass remains open. The
+  CHANGELOG-coverage gate under Tooling gaps below is the ticket-shaped mitigation.
+- **Deletion invariants enforced per boundary:** carried — domain-level `pre_delete` backstop
+  still absent; see arch-audit `deletion-invariants-per-boundary-reimplementation` (deferred:
+  teams not planned).
+- **No single "how does a generated app get configured at deploy time" contract:** carried —
+  SA63 landed the first step of the launcher-owned env contract (Option 1); the remainder
+  (production settings as pure env reader, `_is_migrate_command()` removal) stays deferred in
+  arch-audit.md Finding 6.
 - **Verbatim security-code copies accumulating:** carried — SA26 `_sanitize_href` pair still
-  duplicated in blog/listings; TA45's threshold copy is now closed (SA54) but the generated
-  `get_client_ip` remains duplicated across `base.py.j2`/`production.py.j2`.
+  duplicated in blog/listings; the generated `get_client_ip` remains duplicated across
+  `base.py.j2`/`production.py.j2`.
 
 ## Tooling gaps
 
-- **`pip-audit`/`safety` CI step** — no dependency-CVE gate; the lockfile read stays manual and
-  low-confidence. (Dependency class, ongoing.)
-- **`bandit`/`semgrep` CI step** — would systematically catch the `except Exception:` +
-  fallback-assignment shape (TA47, and the resolved TA42 before it), `|safe`/`mark_safe` on
-  non-constant, and argv/redirect classes as they recur. TA47 is the second instance of this
-  class landing after the fail-hard cleanup — the grep is cheap and the class demonstrably
-  recurs.
-- **Tracked-artifact gate** — a CI check that fails when `git ls-files` matches artifact patterns
-  (`pytest*_log.txt`, `coverage.json`, `*/tests/media/`, `htmlcov/`) would close TA51/TA23 as a
-  class instead of per-file.
+- **CHANGELOG/decisions coverage gate for production commits** *(new)* — a CI check that fails
+  when a commit touches production source (`quickscale_*/src`, templates, manifests) without a
+  CHANGELOG entry in the same series would close the side-channel lane that produced
+  TA47/TA49/TA50/TA51 (last pass) and TA53 (this pass) as a class.
+- **`pip-audit`/`safety` CI step** — carried; no dependency-CVE gate; the lockfile read stays
+  manual and low-confidence (lockfile unchanged since 2026-06-17).
+- **`bandit`/`semgrep` CI step** — carried; would systematically catch the `except Exception:` +
+  fallback-assignment shape (TA47's class) and the argv/redirect classes as they recur.
+- **Tracked-artifact gate** — a CI check failing when `git ls-files` matches artifact patterns
+  (`pytest*_log.txt`, `coverage.json`, `*/tests/media/`, `htmlcov/`) — SA61 fixed the instances
+  and the `.gitignore`; the gate would prevent re-accretion (TA51/TA23 class).
 - **Composite-FK conformance gate** — extend the SA35-style cross-module gate to assert one
-  deferability policy for all Option C composite FKs (ties to TA50).
-- **Generated-project boot smoke test** — carried; would catch settings-template/deploy-script
-  drift (TA33's class).
+  deferability policy for all Option C composite FKs (ties to TA50/SA60).
+- **Generated-project boot smoke test** — carried, partially mitigated: SA63's closeout verified
+  a generated project end-to-end on the production-settings + orgs path manually, and
+  `test_generated_project_runtime.py` grew substantially (+395 lines this delta); a standing CI
+  boot smoke remains the systematic version (TA33's class).
 - **csrf_exempt gate matcher coverage** — carried; attribute-form usage, list/tuple
   `method_decorator` arguments, and URLconf-level wrapping still slip the matcher (no live usage
   today).
-- **Landed since last pass:** SA46 unary/unpack literal folding completed; module-core
-  compatibility checker now understands lazy `__getattr__` facades (SA44); orgs conformance env
-  module list derived (SA49-the-roadmap-item, distinct from finding TA49).
 
-Categories swept with no qualifying finding this pass: injection sinks (dependency-sync TOML
-writes are local-CLI, validated in main writers; no shell interpolation), XSS (no new
-template/`mark_safe` surface), auth/CSRF on the changed endpoints (SA56/SA50 verified),
-concurrency (SA47 lock ordering verified; SA53 fd-copy race-safe), resource leaks (SA53 fd closed
-in finally), timeouts, N+1/perf, import-time side effects (SA44 removed one), dependency CVEs
-(lockfile unchanged since 2026-06-17; low confidence without a scanner), test-quality on the new
-suites (SA47 concurrent-deletion test asserts real behavior; the one flipped test is TA47
-evidence, not a category).
+Categories swept with no qualifying finding this pass (V2 §3.9 chain pass ran — no new chains
+beyond TA49's carried guard-untested chain): injection/XSS (no new sink surface; templates
+re-read under output-language rules — shell quoting in `start.sh.j2` sound), auth/CSRF (SA64
+inherits the audited `TenantModelAdmin`; no endpoint changes), concurrency (no new locks or
+shared state; `_QUICKSCALE_SUBPROCESS_ENV` is read-only after init), resource leaks, timeouts,
+N+1/perf, data-handling boundaries (SA63 bridge fail-hards on missing `DATABASE_URL`),
+dependency CVEs (lockfile unchanged; low confidence without a scanner), weakened tests (every
+assertion flip in the delta traced to the justified auth→orgs change; the one true weakening is
+the `_sync_module_dependencies` mock, noted below).
 
 ---
 
@@ -379,44 +301,47 @@ evidence, not a category).
 - 2026-07-10 (module-by-module deep pass, core and cli included as modules) — **zero new findings.** All 13 modules plus `quickscale_core` and `quickscale_cli` read at their live surfaces (see Per-module verdicts) — every module clean. TA47/TA48/TA50/TA51/TA52 re-confirmed at their locations during the pass (no change). Empirical check added: PostgreSQL 18 verified `SET CONSTRAINTS <name> IMMEDIATE` on a `NOT DEFERRABLE` FK is a no-op, retracting a stronger test-breakage hypothesis for TA50 (the crm `SET CONSTRAINTS ... IMMEDIATE` tests still pass; their comments are merely stale). Secondary items recorded inside existing findings rather than as new IDs: billing `credit_user` re-verified idempotent (in-lock check + unique constraint + `IntegrityError` re-fetch); notifications webhook re-verified HMAC+TTL+constant-time+idempotent; `TenantManager` fail-closed and `TenantMiddleware` fail-closed re-verified; `storage.sanitize_relative_media_path` exported but has no first-party caller (dead-ish, not promoted).
 - 2026-07-10 (SA58 closeout) — **TA48: resolved** (SA58 — RLS boot guard now queries `rolbypassrls OR rolsuper`; error message reports SUPERUSER/NOSUPERUSER alongside BYPASSRLS/NOBYPASSRLS; test mocks and assertions updated; findings table and counts aligned). Findings-table counts updated (S3: 3→2, total: 6→5).
 - 2026-07-10 (SA57/61/62 closeout, doc-consistency correction) — **TA47: resolved** (SA57 — both DR media call sites (`orchestration.py:_resolve_media_runtime`, `_sidecar.py:_build_media_sync_manifest`) now catch only `ImportError`/`ModuleNotFoundError` as the module-absent fallback; real `select_storage_backend` errors (`ImproperlyConfigured` etc.) propagate as `BackupConfigurationError`/an explicit error-status manifest instead of silently coercing to local `MEDIA_ROOT`; the flipped fail-closed test was restored and a second test pins the module-absent fallback). **TA51: resolved** (SA61 — `pytest_log.txt`, `coverage.json`, `pytest_cov_log.txt`, and the 13 accumulated blog test-upload PNGs untracked via `git rm --cached`; `.gitignore` extended; blog test `MEDIA_ROOT` now points at a tmp path so the class can't reaccrete). **TA52: resolved** (SA62 — `_patch_module_path_dependencies`'s bare `write_text()` now routes through `_write_validated_toml`, matching its two sibling writers). This entry corrects the findings-summary table above, which had drifted stale (still marking all three "open" despite CHANGELOG confirming SA57/SA61/SA62 landed on 2026-07-10) — caught during the roadmap-reconciliation pass for SA57–SA64. Findings-table counts updated (S2: 1→0, S4: 2→0, total: 5→2). Remaining open: TA49 (SA59), TA50 (SA60), both scheduled on Track 1.
+- 2026-07-10 (V2-prompt re-run, HEAD `ae8c386e`) — **TA49: still-open** (Makefile:325-326, `scripts/test_unit.sh:365-366`, `ci.yml:340` all re-verified unchanged; SA59 scheduled). **TA50: still-open** (`tenancy.py:906` re-verified unchanged; SA60 scheduled). **TA53: opened** — `apply-subprocess-env-pythonpath-pollution` (S3, from side-channel commit `628c7d28`). **Closure verification per V2 §2f.3:** TA47 (SA57), TA48 (SA58), TA51 (SA61), TA52 (SA62) — each fix location opened and confirmed complete in code, including SA57's restored fail-closed tests; no regressed closures. Full first-party production diff `198a1951..HEAD` read; SA63/SA64 verified clean (SA63 additionally resolves the prior `local.py.j2` argv-sniffing watch item); the auth→orgs manifest implication in `628c7d28` verified justified (auth views import orgs models since SA47) though undocumented (Structural smells). Empirical check: simulated wheel-install layout confirms `_build_quickscale_env` sweeps site-packages-style directories into child `PYTHONPATH`, refuting its docstring (TA53 evidence). This is the first pass run under [tech-audit-prompt.md](tech-audit-prompt.md) V2.
 
 ## Notes (not violations, watch items)
 
-- **SA47 sole-member self-removal orphans the org (deliberate, watch):** the unified
-  `is_last_owner_with_members` semantic permits an owner who is the org's only member to remove
-  themselves (HTML members action and `OrgApiMemberRemoveView`), leaving a memberless org row and
-  its tenant data reachable by no one. CHANGELOG documents and tests assert this as the chosen
-  semantic ("allowed when sole member"); there is currently no cleanup/purge path for orphaned
-  orgs — worth pairing with one if it starts occurring.
-- **Stripe call inside the SA47 atomic block:** `AccountDeleteView.form_valid` holds
-  `select_for_update` locks on all owner org rows across the external
-  `_cancel_personal_org_subscriptions` Stripe call. A slow Stripe response blocks concurrent
-  membership writes on those orgs for the duration; the cancel-then-rollback asymmetry (Stripe
-  state changed, DB rolled back) predates SA47. Acceptable at account-deletion frequency; a
-  timeout on the Stripe client call is the cheap mitigation.
-- **`local.py.j2` migrate detection is looser than the boot-guard exemption:** the new local
-  DB-URL selection uses `"migrate" not in sys.argv` (anywhere in argv) while the orgs boot guard
-  exempts only `sys.argv[1] == "migrate"`. Local-dev only; align to positional matching when
-  convenient.
+- **Two same-named `ImproperlyConfigured` classes now coexist** (new, 628c7d28):
+  `quickscale_core.contracts.module_discovery.ImproperlyConfigured` (contract layer, non-Django)
+  vs `django.core.exceptions.ImproperlyConfigured` (module runtime). All current raise/catch
+  pairs are consistent, but a future catcher importing the wrong one fails silently open —
+  worth a naming or lint guard if it recurs. The billing/crm/social adapter docstrings still
+  cite the Django class for the entry-point contract that now raises the contract-layer class
+  (doc drift only).
+- **`test_update_auto_commits_each_module_e2e` now mocks `_sync_module_dependencies`**
+  (628c7d28, `test_module_lifecycle_cycle.py:1298-1302`): the update e2e no longer exercises
+  dependency sync. Coverage moved rather than lost (SA62 added `TestBetaMigration` sync suites,
+  +147 lines), but the e2e is weaker than its name implies — watch.
+- **auth's orgs pyproject cap `<0.87.0`** (628c7d28): satisfied today (orgs 0.86.0); when orgs
+  bumps to 0.87.x the cap must move with it — the dependency-sync tooling should handle it, but
+  nothing gates the pair.
+- **SA47 sole-member self-removal orphans the org (deliberate, watch):** carried — an owner who
+  is the org's only member may remove themselves, leaving a memberless org reachable by no one;
+  documented and test-asserted as chosen; no cleanup/purge path yet.
+- **Stripe call inside the SA47 atomic block:** carried — `AccountDeleteView.form_valid` holds
+  `select_for_update` locks across the external Stripe call; acceptable at account-deletion
+  frequency; a client timeout is the cheap mitigation.
 - **`reset_stale_restore` `None`-`restore_started_at` edge** (`services.py:590-649`): carried —
-  the f-string would raise `TypeError` for a `STATUS_RESTORING` row with `restore_started_at=None`;
   unreachable from the only caller (pre-filtered by `is_restore_stale()`).
 - **`normalize_notifications_module_options` empty→full-defaults materialization**
-  (`contracts/module_options.py:555-562`): documented in the docstring as implied-module support
-  (empty options materialize the manifest defaults). It is a defaults-injection point at the
-  manifest boundary — fine where it is; watch that the pattern doesn't migrate into runtime
-  settings reads.
+  (`contracts/module_options.py:555-562`): carried — documented implied-module support at the
+  manifest boundary; watch that the pattern doesn't migrate into runtime settings reads. The new
+  `apply_listings_configuration` shim (628c7d28) is display-only (echoes defaults-merged values,
+  persists nothing) — same boundary, no state coerced.
 - **Storage legacy-credential conversion is deliberate:** carried (SA29 migration behavior).
 - `orgs/public_context.py:66,132`: `except Exception → None` on system-org lookup is
-  **fail-closed** (tenant managers return `.none()`) — carried; consider letting
-  non-`DoesNotExist` errors propagate.
+  **fail-closed** — carried; consider letting non-`DoesNotExist` errors propagate.
 - DR engine fallback modes (`REMOTE_FALLBACK`, JSON fallback backups, `QUICKSCALE_ENVIRONMENT`
-  default `local`) are by-design recovery behavior, exempt per §fail-hard-principle — carried;
-  TA47 is *not* covered by this exemption (it suppresses configuration errors, not recovery
-  routing).
+  default `local`) are by-design recovery behavior, exempt per §fail-hard-principle — carried.
 - Analytics runtime missing-API-key → silent disable (`services.py:192-203`) is the deliberate
   SA17.7 shape — carried, tested.
 - `subprocess.Popen` in the dispatchers is never `wait()`ed — carried; at most one transient
   zombie per dispatch.
 - Malformed staff-authored validation rules surface as field-level 400s to public submitters
   (SA40) — carried, reviewed choice.
+- *(resolved this pass, removed from watch:)* the `local.py.j2` "migrate detection looser than
+  the boot-guard exemption" item — SA63 deleted the argv-sniffing branch entirely.

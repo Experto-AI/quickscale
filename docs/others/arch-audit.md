@@ -8,243 +8,318 @@
 
 ---
 
-## Autopsy — 2026-07-09 (re-run, delta pass) and module-by-module deep pass
+## Autopsy — 2026-07-10 (re-run, delta pass — first run on the V2 prompt)
 
-### Orientation (2026-07-09)
+### Orientation (2026-07-10)
 
 QuickScale is a solo-maintained (Experto-AI/Victor Rocco) Python 3.13/3.14 + Poetry monorepo
-(VERSION 0.87.0, integration branch `v87`) that generates user-owned Django 6 SaaS projects:
-`quickscale_cli` (Click: plan/apply/dr/deploy), `quickscale_core` (Jinja2 generator, plan/apply
-engine with the 16-step recovery ledger, manifest/contracts/derivation stack, DR engine), and 13
-shipped Django modules under `quickscale_modules/` (teams still a README-only placeholder,
-re-verified). Generated apps: Django 6 + PostgreSQL 18, single-service Railway; tenancy enforced
-twice (fail-closed `TenantManager` + FORCE RLS with the AF9 execute-wrapper). **This is a delta
-pass over two batches**: the SA47–SA56 closeout (already reconciled line-by-line in the log
-below) and — new to this pass — the 2026-07-09 `fix: make check` / `fix: some make ci` commits
-(`6ea37301`, `198a1951`, ~4,300 insertions), which landed behavioral changes under housekeeping
-messages: the `runtime.py` → `runtime/` package split (dr/manifest facade), a new `social` entry
-in the import linter's shrink-only legacy list, an argv-sniffing DB-role ladder in `local.py.j2`,
-a composite-FK `NOT DEFERRABLE` semantic change in `tenancy.py`, a `tenant_excluded` precedence
-change in `is_tenant_model()`, a third (unvalidated) TOML splice function in the CLI, and a new
-listings configurator. Read fully this pass — the SA54/SA53 diffs, `runtime/__init__.py` +
-`runtime/dr.py`, `check_module_core_imports.py` delta, all three settings templates + `start.sh.j2`,
-`orgs/apps.py` boot guard, `module_dependency_sync.py`, the `module_config.py` listings addition;
-**deep-pass first-ever full reads** — the entire social module (models/services/contracts/admin),
-`storage/helpers.py`, `remove_command.py`, `orgs/admin.py`'s `TenantModelAdmin`, and the
-`_sidecar.py`/`_resolve_media_runtime` storage-coercion diffs. Sampled — SA53's retry/checkpoint
-tests, `check_module_core_compatibility.py` facade support, billing's SA56-migrated view bodies,
-lifecycle e2e tests. Skipped — files verified untouched since 2026-07-07 by git log
-(`billing/services.py`, `apply_command.py`, `apply/`, `project_state.py`, orgs
-middleware/current_org/managers, tenancy trigger APIs beyond the one-line SQL change). Severity floor
-unchanged: CLI is single-process local; generated apps are single-service WSGI; tenant isolation
-is the highest-blast property. Growth direction: **the roadmap is fully drained** (all three
-tracks 0 open items) and teams remains unscheduled — this pass feeds the next planning cycle.
+(VERSION 0.87.0, integration branch `v87`) that generates user-owned Django 6 SaaS projects.
+Packages: `quickscale_cli` (Click: plan/apply/dr/deploy), `quickscale_core` (Jinja2 generator,
+plan/apply engine, manifest/contracts/derivation stack, DR engine), 13 shipped Django modules
+under `quickscale_modules/` (teams still README-only, re-verified), and — **given first-class
+attention this pass** — `quickscale_devtools` (maintainer-only beta-site migration tooling, one
+2,543-line module). Generated apps: Django 6 + PostgreSQL 18, single-service Railway; tenancy
+enforced twice (fail-closed `TenantManager` + FORCE RLS with the AF9 execute-wrapper), backstopped
+by the boot guard that now rejects `SUPERUSER` as well as `BYPASSRLS` (SA58). **Commit-delta
+classification (V2 §2f)** for `d0f835ea..HEAD`: *closeouts* — SA57 (`04f397bc`), SA58
+(`3645ba9f`), SA61 (`a19cfae6`), SA62 (`6e3dacc7`), SA63 (`e33a30f6`), SA64 (`bae824cb`), all
+verified mapped to scheduled items; *housekeeping* — merges, `4d538a2d`, `1ea8fe85`, `ae8c386e`
+(tech-audit status table only); *unlabeled-behavioral* — **`628c7d28` "fix: some make quality
+issues"**, read in full: it re-homed `ImproperlyConfigured` from Django's class to a new
+first-party exception (`contracts/module_discovery.py:25` — exception *identity* changed for the
+contracts layer; all in-repo catchers verified migrated in the same commit), added an import-time
+sys.path-sniffing subprocess env builder to apply (`apply_command.py:212–254`) and swapped
+`quickscale …` child invocations to `sys.executable -m quickscale_cli.main`, filled the listings
+configurator's `apply` station with a notice-only shim, and bumped auth's manifest to
+`implies: orgs` (uses the pre-existing T2.2 implication resolver — verified not a new mechanism;
+the module.yml copy-pair was paid correctly under the CI byte-identical sync gate). Third
+consecutive delta in which behavioral semantics landed under a housekeeping message. Read fully
+this pass: SA63's three templates + `orgs/apps.py` boot guard, `beta_migration.py`'s file
+taxonomy + TOML helpers, both SA57 sites, `social/admin.py`, `module_dependency_sync.py` splice
+sites, the full `628c7d28` diff, `LEGACY_ALLOWED_IMPORTS`, `runtime/__init__.py`,
+`orchestration.py`'s import block. Sampled: `test_beta_migration.py`,
+`test_generated_project_runtime.py` (new boot smoke tests), planning docs. Skipped — verified
+untouched by git log: `billing/services.py`, orgs middleware/current_org/managers, `tenancy.py`,
+`purge_organization.py`, `apply/`, `project_state.py`. Severity floor unchanged: CLI is
+single-process local; generated apps are single-service WSGI; tenant isolation is the
+highest-blast property. **Growth direction (V2 §2d, from the planning surface):** the roadmap
+holds two open items (SA59, SA60); the real production pressure is the **beta-site upgrade
+cadence** — `experto-ai-web` and `bap-web` are the only deployed consumers, kept current via the
+`quickscale_devtools` migration playbook (`docs/planning/beta-site-migration.md`). That seam got
+this pass's change-cost probe and produced the new finding.
 
-**Result: three prior findings still open, one new finding from the delta pass, zero new
-findings from the module deep pass** (five candidates investigated and held, two new red flags,
-two watchlist items sharpened — see the deep-pass section below). Finding 1 is *progressed and
-re-strengthened* (the facade split landed — the right direction — but added a new hand-synced
-symbol station, and the social module had to route around the facade via a linter exception,
-breaking that list's shrink-only contract). **New Finding 6**: the "which DB privilege does this
-process run under" decision has no single owner — four mechanisms with three different semantics,
-already colliding at source level on the no-Redis deploy path. Finding 2 is *narrowed* (SA47's
-canonical check verified consumed at all four callsites; the receiver backstop is still missing).
-Finding 4 is *unchanged in structure* with a caution: two derivation-input semantics
-(`is_tenant_model` exclusion precedence, composite-FK deferrability) changed inside housekeeping
-commits with no decision record. Finding 5 remains closed — no unsanctioned endpoint idiom
-appeared in the delta; the SA46 gate got stronger (`cbde517a`).
+**Result: four prior findings still-open (two narrowed), one new finding, five prior red flags
+verified fixed, one tracked.** Finding 6 is *substantially narrowed* — SA63 landed the launcher
+env-pair contract, deleted local's argv ladder, fixed the createcachetable collision, and the fix
+is verified by new generated-project boot smoke tests; the residual is the migrate path's
+three-decider legacy. **New Finding 7**: generated projects have no file-level ownership
+contract — the beta-migration tool hand-encodes the generator's ownership taxonomy in eight
+unlinked tuple literals, and the gap is live this release (SA63's two changed files each miss one
+of the two migration paths). Finding 1 is unchanged (no new lattice stations this delta — first
+quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams unscheduled).
+
+### Enforcement census (V2 §3.4)
+
+| # | Invariant | Enforced by | Class | Trend this pass |
+|---|-----------|-------------|-------|-----------------|
+| 1 | Tenant isolation on reads/writes | fail-closed `TenantManager` + FORCE RLS + AF9 execute-wrapper | structural | stable |
+| 2 | No bypassing DB role at boot | orgs boot guard (`apps.py:78–113`), now `rolbypassrls` **and** `rolsuper` | structural | strengthened (SA58) — but neutralized in the `make test-unit` path (SA59, open) |
+| 3 | Admin org-scoping | `TenantModelAdmin`; tripwire = NOBYPASSRLS test posture (SA14.4) | structural + gated | completed (SA64: last straggler ported); tripwire currently disabled by the SA59 blanket hatch |
+| 4 | DB privilege selection per process | launcher env pair (`RUNTIME_DATABASE_URL=""` + `QUICKSCALE_ALLOW_BYPASSRLS=1`), consumed by production settings + boot guard | mixed | improved (SA63) — argv residues remain for `migrate`/`collectstatic` (Finding 6) |
+| 5 | JSON endpoint idiom | `OrgApiBaseView`/DRF baseline + SA46 csrf-exempt CI gate | structural + gated | stable (Finding 5 closed) |
+| 6 | Core↔module import direction | import linter + `LEGACY_ALLOWED_IMPORTS` (3 modules) | gated, with exceptions | stable this delta — list did not grow (Finding 1) |
+| 7 | Module manifest copy-pairs (module.yml ×2) | CI byte-identical sync gate | gated | exercised correctly (auth bump) |
+| 8 | Tenant-model universe **membership** | SA15.3/SA45/SA49 derivation gates | gated | stable |
+| 9 | Tenant-model purge **order** | hand-ordered `_DELETE_SPECS`, comment-justified | convention | unchanged (Finding 4) |
+| 10 | Deletion invariants at account boundary | one canonical check, invoked per boundary; no `pre_delete` backstop | convention | unchanged (Finding 2; zero receivers re-verified) |
+| 11 | pyproject TOML write safety | `_write_validated_toml` (all 3 CLI splice sites) | structural per package | fixed in-package (SA62) — **copied, not shared, in devtools** (watchlist) |
+| 12 | Generator-owned file taxonomy for upgrades | eight hand tuples in `beta_migration.py:43–115` | convention, ungated | **new — Finding 7** |
+| 13 | Generated-project boot correctness | `test_generated_project_runtime.py` boot smoke tests (no-Redis createcachetable, bypass-hatch path, embedded auth) | gated | **new this delta** — the harness the 2026-07-09 pass asked for landed |
 
 ### Summary table
 
 | # | ID | Horizon | Size | One-line problem |
 |---|----|---------|------|------------------|
-| 1 | `dr-engine-module-circular-lattice` | now | M remaining (Option 2) | DR logic lives in core but its state and lifecycle live in the backups module; the cycle is held by hand-maintained symbol tables that the facade split *relocated and grew* rather than removed, and new modules now route around the facade via a growing linter exception list |
-| 6 | `db-privilege-mode-procedural` | now | M | "Which DB role does this process get" is decided independently by start.sh (env-unset), production settings (argv-shaped errors), local settings (argv-switching, new this delta), and the orgs boot guard (positional argv) — four mechanisms, three semantics, one live source-level collision |
-| 2 | `deletion-invariants-per-boundary-reimplementation` | deferred (teams unscheduled) | M remaining | Org/billing invariants at the account-deletion boundary now share one canonical last-owner check (SA47) but still have no domain-level `pre_delete` backstop — every deletion path other than `AccountDeleteView` enforces nothing |
-| 4 | `org-model-universe-hand-enumerated` | deferred (teams unscheduled) | M remaining (Option 2) | orgs hand-enumerates the cross-module tenant-model universe; membership is CI-gated against derivations (SA15.3/SA45/SA49) but the purge *order* is still hand-written, and this delta changed two derivation-input semantics without a decision record |
+| 1 | `dr-engine-module-circular-lattice` | now | M remaining (Option 2) | DR logic lives in core but its state and lifecycle live in the backups module; the cycle is carried by hand-synced symbol stations and a linter exception list — unchanged this delta; persistence port scheduled |
+| 7 | `generated-file-ownership-unmodeled` | now | M (S first step) | The generator emits projects with no per-file ownership contract; the beta-site upgrade tool re-encodes that taxonomy by hand in eight unlinked literals, ungated — and this release's SA63 template fixes each miss one of the two migration paths |
+| 6 | `db-privilege-mode-procedural` | 6–18 months | S–M remaining | SA63's launcher env-pair contract now owns privilege selection for new commands; the `migrate` path still has three deciders (start.sh env-unset, production argv branch, boot-guard positional argv), and the one-bit escape hatch is overloaded across prod sanction / dev opt-out / test harness |
+| 2 | `deletion-invariants-per-boundary-reimplementation` | deferred (teams unscheduled) | M remaining | One canonical last-owner check, but no domain-level `pre_delete` backstop — every deletion path other than `AccountDeleteView` enforces nothing |
+| 4 | `org-model-universe-hand-enumerated` | deferred (teams unscheduled) | M remaining (Option 2) | Tenant-model membership is CI-gated against derivations but the purge *order* is hand-written; SA60 (open) owns the missing deferrability/`tenant_excluded` decision records |
 
 ---
 
 ### Finding 1: DR domain is split across the core↔module boundary into a circular import lattice
 
 - **ID:** `dr-engine-module-circular-lattice`
-- **Rank rationale (blast radius × likelihood):** every DR feature and now every *new module
-  adapter* crosses this seam; empirical rate is ~1 compounding instance per batch (SA20 guard
-  growth, CR-SA38-001 hand-copy, and this delta's social linter exception + facade `__all__`
-  station).
-- **Horizon & trigger:** `now` — the social exception landed this delta; the teams module's
-  adapter will face the same import choice. Any DR feature or new adapter pays the tax until
-  Option 2.
-- **Confidence:** High — every edge re-verified this pass in current code.
-- **Context dependence:** wrong-regardless — the tax is paid today, at current scale, by a solo
-  maintainer; it has now fired in three consecutive batches.
+- **Rank rationale (blast radius × likelihood):** every DR feature and every new module adapter
+  crosses this seam; empirical rate had been ~1 compounding instance per batch for three
+  consecutive batches. This delta is the first quiet pass — no DR feature landed, so no tax was
+  charged, which is absence of trigger, not absence of mechanism.
+- **Horizon & trigger:** `now` — Option 2 (persistence port) is scheduled for the next planning
+  cycle per the 2026-07-09 escalation; any DR feature or new module adapter landing before it
+  pays the tax.
+- **Confidence:** High — all edges re-verified in current code this pass.
+- **Context dependence:** wrong-regardless — the tax is paid at current scale by a solo maintainer.
 - **Problem:** the DR engine's logic was extracted into core while its persistent state
   (`BackupArtifact`, `BackupPolicy`) and its Django-facing entry points stayed in the backups
   module — so neither side can import the other top-down, and the system holds the cycle together
-  with lazy-loading tables, a re-export shim, hand-synced `__all__` literals, and a growing
-  per-module linter exception list.
-- **Evidence (updated this pass):**
-  - **The facade split landed — and added a station.** `runtime.py` is now the `runtime/`
-    package: `runtime/dr.py` + `runtime/manifest.py` + a combined facade. The four `_LAZY_*`
-    frozensets and the `__getattr__` loader survived intact (`runtime/dr.py:91–210, 213–236`).
-    The combined facade (`runtime/__init__.py:42–105`) carries a **hardcoded literal `__all__`**
-    that must be hand-kept as the union of `dr.__all__` and `manifest.__all__` — its own
-    docstring says "When adding a new public symbol to dr.py or manifest.py, add it here too"
-    (`:39–40`). Mismatches are partially gated (`check_module_core_compatibility.py` resolves
-    `__all__` literals and was extended for the facade), but the sync itself is manual.
-  - **New modules now route *around* the facade.** `runtime/__init__.py:12–14` instructs:
-    "Module-owned adapters should import from `quickscale_core.runtime.manifest` directly to
-    avoid pulling in the DR surface at import time and triggering circular imports." To let the
-    social adapter do that, `check_module_core_imports.py:77–81` added a `"social"` entry to
-    `LEGACY_ALLOWED_IMPORTS` — a list whose own contract says entries exist only to be removed
-    (`:55–57`). The shrink-only list grew, and the linter now classifies as "legacy" the exact
-    import the facade docstring *recommends*. Two governance artifacts state opposite rules for
-    the same import; the root is the cycle.
-  - **SA54's dedup chose a parameter seam with a test-pinned copy.** The stale-restore threshold
-    now flows module→core through an explicit parameter
-    (`orchestration.py` `restore_admin_uploaded_backup(..., stale_threshold_minutes: int = 30)`;
-    admin passes `STALE_RESTORE_THRESHOLD_MINUTES` from `services.py:554`), with an
-    `inspect.signature` test failing CI if the core default drifts from the module constant
-    (`test_services.py::test_sa54_stale_threshold_default_matches_constant`). Right direction —
-    but the default is still a literal copy held consistent by a gate, because core still cannot
-    import the module's constant.
-  - Core → module (narrowed): `dr_engine/orchestration.py:80` imports
-    `quickscale_modules_backups.models` at module level; `dr_engine/adapter.py` carries 12+
-    function-level lazy imports of orchestration plus two direct `quickscale_modules_backups`
-    imports (`adapter.py:295`). **Improvement found in the deep pass:** `6ea37301` repointed the
-    adapter's lazy imports from `quickscale_modules_backups.services` (the round-trip through the
-    module shim) to `quickscale_core.dr_engine.orchestration` directly — one lattice edge the
-    2026-07-07 pass cited is now gone.
-  - Module → core (unchanged): `backups/services.py:20–129` re-exports ~80 names from
-    `quickscale_core.runtime`, dozens underscore-private (`_build_pg_dump_command`,
-    `_SNAPSHOTS_DIRECTORY_NAME`, …) — and three underscore-private names are now codified in the
-    facade's public `__all__` (`runtime/__init__.py:70–72`).
+  with lazy-loading tables, a re-export shim, hand-synced `__all__` literals, and a per-module
+  linter exception list.
+- **Evidence (all anchors re-verified this pass):**
+  - Core → module: `dr_engine/orchestration.py:80–84` still imports
+    `quickscale_modules_backups.models` at module level.
+  - The combined facade's hand-synced literal `__all__` station is intact
+    (`runtime/__init__.py:19–22, 36–43` — "When adding a new public symbol to dr.py or
+    manifest.py, add it here too").
+  - `LEGACY_ALLOWED_IMPORTS` still carries the social routing exception
+    (`check_module_core_imports.py:61–82`) — **did not grow this delta** (billing, crm, social;
+    same three as 2026-07-09).
+  - Module → core: `backups/services.py` re-export shim unchanged (650 lines, verified
+    untouched by git log since SA54).
+  - SA54's gated copy-pair (stale-restore threshold parameter + signature-pin test) unchanged.
+- **Counter-evidence (V2):** searched the delta for new lazy-table entries, facade `__all__`
+  growth, or new linter exceptions — none landed; searched the roadmap for the persistence port —
+  it is named as scheduled for the next planning cycle (roadmap.md origin note, 2026-07-10).
+  Nothing disproves the mechanism; the quiet delta shows only that no DR work happened.
 - **Why it compounds:** every DR feature touches up to six stations (orchestration function +
-  dr.py lazy table + dr.py `__all__` + the combined facade's literal `__all__` + services shim +
-  adapter signature); every boundary-crossing invariant becomes a gated copy pair (SA54's shape);
-  and — new this pass — **every new module whose adapter needs manifest surface either adds a
-  linter exception or pays the cycle**. Teams is the next module. Built on top: all backups
-  management commands, admin restore/create/prune, the DR CLI, apply/deploy DR integration, and
-  now the social adapter's import path.
+  dr.py lazy table + dr.py `__all__` + facade literal `__all__` + services shim + adapter
+  signature); every boundary-crossing invariant becomes a gated copy pair; every new module whose
+  adapter needs manifest surface either adds a linter exception or pays the cycle. Built on top:
+  all backups management commands, admin restore/create/prune, the DR CLI, apply/deploy DR
+  integration, the social adapter's import path.
 - **Detection signal:** growth of `_LAZY_*` tables, the facade `__all__`, or
-  `LEGACY_ALLOWED_IMPORTS` in any diff (all three fired or persisted this delta); any diff
-  editing one side of a gated copy pair (SA54's test is the tripwire).
-- **Steelman:** each individual mechanism is a standard pattern (lazy facades, parameter
-  injection, linter grandfathering), all are now gated, and generated apps ship backups+core
-  together so the cycle never bites end users at runtime. That held for two passes and has now
-  failed on evidence three times — the mechanisms are multiplying, not converging.
+  `LEGACY_ALLOWED_IMPORTS` in any diff; any diff editing one side of a gated copy pair.
+- **Steelman:** each mechanism is a standard pattern, all are gated, and generated apps ship
+  backups+core together so the cycle never bites end users at runtime. It failed on evidence in
+  three consecutive batches before this quiet one; one quiet delta does not restore it.
 - **Correct shape:** imports across the core↔module boundary form a DAG (modules → core only);
-  no underscore-private name crosses a package boundary; a boundary-crossing invariant has
-  exactly one implementation; adding a module adapter requires zero linter exceptions.
+  no underscore-private name crosses a package boundary; a boundary-crossing invariant has exactly
+  one implementation; adding a module adapter requires zero linter exceptions.
 - **Options:**
-  1. ~~Registration-not-import + facade split~~ — **done** (SA44 + this delta's `runtime/`
-     package). It removed the classifier and clarified the surface, but demonstrably did not
-     remove the cycle: social had to route around the facade the same week the split landed.
-  2. **Persistence port (the live option).** Core defines protocols for artifact/policy
-     persistence; the backups module implements and injects them at app-ready. Kills
-     `orchestration.py:80`, the lazy tables' reason to exist, the SA54 copy-pair class, and the
-     need for adapter deep-import exceptions. M–L effort.
+  1. ~~Registration-not-import + facade split~~ — **done** (SA44 + the `runtime/` package); it
+     clarified the surface but demonstrably did not remove the cycle.
+  2. **Persistence port (the live option, now scheduled).** Core defines protocols for
+     artifact/policy persistence; the backups module implements and injects them at app-ready.
+     Kills `orchestration.py:80`, the lazy tables' reason to exist, the SA54 copy-pair class, and
+     adapter deep-import exceptions. M–L effort.
   3. **Invert ownership.** Move all Django-model-touching orchestration into the backups module;
      core keeps pure primitives. Largest migration; complicates the CLI's non-Django DR paths.
-- **Recommendation:** Option 2. The trigger condition named last pass ("the next time a DR
-  feature must add lazy-table symbols *or* duplicate an invariant") has been met twice since —
-  SA54 duplicated an invariant (mitigated by a gate) and social needed a routing exception.
-  Schedule it in the next planning cycle, before the teams adapter lands a fourth workaround.
-  · **Size:** M remaining · **First step:** define the artifact/policy persistence protocol in
-  core and port `restore_admin_uploaded_backup` (the SA54 seam) onto it — that one function
-  exercises the model import, the threshold copy, and the staging lifecycle at once.
+- **Recommendation:** Option 2, as scheduled — land it before the next DR feature or module
+  adapter. · **Size:** M remaining · **First step:** define the artifact/policy persistence
+  protocol in core and port `restore_admin_uploaded_backup` (the SA54 seam) onto it — that one
+  function exercises the model import, the threshold copy, and the staging lifecycle at once.
 
 ---
 
-### Finding 6: Database-privilege selection has no owning contract — four mechanisms, three semantics
+### Finding 7: Generated projects have no file-level ownership contract — the upgrade path re-encodes it by hand
+
+- **ID:** `generated-file-ownership-unmodeled`
+- **Rank rationale (blast radius × likelihood):** blast is the deploy/infra correctness of the
+  only two production deployments (`experto-ai-web`, `bap-web`) plus every future generated
+  project's upgrade story; likelihood is ~1 per release — the migration playbook runs on every
+  QuickScale release, and the coverage gap has already opened against this very release's SA63
+  files. Ranked below Finding 1 on confidence (no recorded incident yet vs. three dated
+  instances); it outranks Finding 1 if the beta sites deploy without Redis (see Questions).
+- **Horizon & trigger:** `now` — the SA63 rollout to the beta sites is the live trigger; every
+  subsequent template-surface change re-fires it.
+- **Confidence:** High for the mechanism (lists read in full; absence of derivation/gate verified
+  by search in both the tool and its tests); Medium for the live-impact claim (the playbook's
+  manual steps may compensate — static analysis cannot confirm what the operator does by hand).
+- **Context dependence:** wrong-for-now on the **consumer-count** dimension: with one maintainer
+  and two sites, human memory papers over the gap; a third consumer site, a second operator, or a
+  public "update my generated project" command each make it wrong-regardless.
+- **Problem:** the generator has no machine-readable concept of which emitted files are
+  generator-owned (safe to overwrite on upgrade) versus user-owned (seeded once, then the
+  project's) — that taxonomy exists only as eight hand-written tuple literals inside the
+  maintainer migration tool, differently partitioned per migration path, with nothing deriving
+  them from the template tree and no gate detecting drift.
+- **Evidence:**
+  - The taxonomy: `quickscale_devtools/src/quickscale_devtools/beta_migration.py:43–115` —
+    `FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES`, `…_RECIPIENT_PACKAGE_FILES`,
+    `…_IDENTITY_ROOT_FILES`, `…_PROTECTED_PACKAGE_FILES`, `IN_PLACE_INFRASTRUCTURE_TARGETS`,
+    `IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS`, plus per-module React surface maps — eight
+    hand partitions of the generated-file universe.
+  - The source of truth they snapshot: the template tree
+    (`quickscale_core/src/quickscale_core/generator/templates/` — 30+ emitted files including
+    `start.sh.j2`, `railway.json.j2`, `db/init.sql.j2`, `Makefile.j2`, `OPERATIONS.md.j2`,
+    four settings templates).
+  - **The live gap:** `IN_PLACE_INFRASTRUCTURE_TARGETS` (`:96–108`) does **not** include
+    `start.sh` — the file SA63 just changed (`start.sh.j2:59`, the createcachetable env-pair
+    line) — so the in-place path will not deliver the deploy fix. The fresh-first path copies the
+    **donor's** `settings/production.py` onto the fresh scaffold
+    (`FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES`, `:43–48`), so the beta site keeps its old
+    production settings and misses SA63's env-pair bridge (`production.py.j2:172–184`). Each of
+    SA63's two changed files is missed by exactly one of the two paths.
+  - No derivation or cross-check: searched `beta_migration.py` and
+    `quickscale_cli/tests/test_beta_migration.py` for any reference to the generator/template
+    tree — none; the tool's only core imports are `config_schema` and `project_identity`.
+- **Counter-evidence (V2):** searched for a conformance test tying the lists to the template
+  tree (none); for playbook prose naming `start.sh`/`production.py` as manual follow-ups (the
+  playbook keeps env vars, deploy, and smoke checks manual but does not enumerate per-file
+  template deltas); for a generator-side ownership/provenance record (the apply engine tracks
+  module wiring and contract vintage, but nothing marks emitted-file ownership). The strongest
+  disconfirming fact found: `settings/production.py` being donor-owned is arguably *deliberate* —
+  beta sites customize it — which reframes that half of the gap as a policy choice with a missing
+  merge story rather than an omission. That narrows, but does not close, the finding: the policy
+  itself is recorded nowhere and enforced by nothing.
+- **Why it compounds:** every template-surface change now requires a human to remember (a) which
+  of the eight lists, across two paths, classifies the changed file, and (b) whether the playbook's
+  manual steps cover it — for every consumer site, on every release. Cost grows
+  O(template files × migration paths × consumer sites). Built on top: the shipped
+  `make beta-migrate-fresh` / `make beta-migrate-in-place` automation (v0.81.0), its checkpoint
+  and verification sequences, and the two beta sites' release cadence. The devtools package also
+  copies rather than shares the CLI's TOML-splice machinery (`_write_validated_toml` twins at
+  `beta_migration.py:597` / `module_dependency_sync.py:223`) because it deliberately depends only
+  on `quickscale-core` — a second manifestation of the same root: the upgrade tool re-implements
+  product knowledge it cannot import or derive.
+- **Detection signal:** none today — a missed file produces a *silently stale* beta site, not an
+  error. Instrument by diffing a freshly generated scaffold against each beta site's
+  generator-owned files after every migration (the fresh-first path already has both trees on
+  disk at once — the diff is nearly free).
+- **Steelman:** this is maintainer-only tooling, explicitly not a public CLI command; the operator
+  is the same person who wrote SA63 and reviews checkpoint reports before anything applies; file
+  lists change rarely; and hand-curated lists encode judgment (donor-owned production.py) that
+  naive derivation would get wrong. That holds exactly as long as the maintainer's memory is the
+  gate — the moment a release's template delta is rolled by an assistant following the playbook,
+  or a third site joins, the silent-staleness class fires.
+- **Correct shape:** the generator owns a single machine-readable statement of per-file ownership
+  (generator-owned / user-seeded / protected), emitted with each project or derivable from the
+  template tree; any upgrade tooling *consumes* that statement, and a gate fails when a template
+  file exists that no ownership class covers.
+- **Options:**
+  1. **Derivation gate over the existing lists (recommended now).** A CI test enumerates the
+     template tree's emitted files and asserts every file is classified by each migration path's
+     taxonomy (explicitly, including an "intentionally unmanaged" class), failing on any new or
+     renamed template file until classified. Keeps the hand-curated judgment; makes drift loud.
+     S–M, no behavior change, the house governance-by-gate pattern.
+  2. **Generator-emitted ownership manifest.** The generator writes per-file
+     ownership/provenance (template path + vintage) into the project state it already maintains;
+     `beta_migration` and any future public update command derive their copy/protect sets from
+     it. Removes the parallel taxonomy entirely; M–L, and the natural substrate for a public
+     upgrade story.
+  3. **Fold the upgrade path into the product.** Extend `quickscale apply`'s contract-vintage
+     machinery (SA10) to refresh generator-owned infra on existing projects, retiring the
+     separate devtools path. L; only worth it when generated-project upgrades become a public
+     feature.
+- **Recommendation:** Option 1 immediately (it is the same shape as SA15.3/SA45/SA49 — this
+  codebase's most reliable defense), with Option 2 as the recorded direction for when a third
+  consumer or a public update command appears. Also record the "production.py is donor-owned"
+  policy in decisions.md — it is currently an unstated convention inside a tuple literal.
+  · **Size:** M (S for the gate itself) · **First step:** the conformance test deriving the
+  emitted-file universe from `generator/templates/` and asserting complete classification per
+  migration path — it will immediately surface `start.sh` and force the SA63-rollout decision.
+
+---
+
+### Finding 6: Database-privilege selection — contract landed, migrate path still has three deciders
 
 - **ID:** `db-privilege-mode-procedural`
-- **Rank rationale (blast radius × likelihood):** blast is generated-app deploy availability and
-  the legibility of the RLS privilege boundary (the system's highest-blast property); likelihood
-  is high — one collision is already present at source level, and teams migrations plus every new
-  privileged command re-enter this seam.
-- **Horizon & trigger:** `now` — the `local.py.j2` argv ladder landed this delta
-  (`198a1951`), and the start.sh↔boot-guard collision on the no-Redis path exists in current
-  templates. Also fires on: any new command needing DDL, any new execution context (DR
-  subprocesses, cron, background workers).
-- **Confidence:** High for the structural divergence (all four mechanisms read directly this
-  pass); Medium for the live deploy defect (static analysis only — confirm by booting a generated
-  app with `REDIS_URL` unset and a superuser `DATABASE_URL`; the tech-audit's proposed
-  generated-project boot smoke test is the right harness).
-- **Context dependence:** wrong-regardless for the divergence; the collision is
-  wrong-for-Railway-deploys-without-Redis specifically.
-- **Problem:** the decision "does this process run under the superuser `DATABASE_URL` or the
-  restricted NOSUPERUSER/NOBYPASSRLS `RUNTIME_DATABASE_URL`" — the switch on which the RLS
-  isolation guarantee rests — is re-decided independently by four components using three
-  different detection semantics, instead of being decided once by the process launcher and
-  consumed everywhere else.
-- **Evidence:**
-  - **Mechanism 1 — start.sh env-unset (the sanctioned one):** `start.sh.j2:47–59` runs
-    `RUNTIME_DATABASE_URL="" python manage.py migrate` and, when `REDIS_URL` is unset,
-    `RUNTIME_DATABASE_URL="" python manage.py createcachetable`.
-  - **Mechanism 2 — production settings argv ladder:** `production.py.j2:166–194` — runtime URL
-    wins when present; `elif "migrate" in sys.argv` (membership, any position) requires the
-    superuser URL; `collectstatic`/`compilemessages` get a dummy-URL fallback; serving without
-    the runtime URL fails closed.
-  - **Mechanism 3 — local settings argv switch (new this delta):** `local.py.j2:36–43` —
-    `if _runtime_db_url and "migrate" not in sys.argv:` use the runtime role, `elif
-    _database_url:` use the superuser. Here argv *is* the switch, precedence is inverted relative
-    to production, and non-migrate serving **falls back open** to the superuser URL when the
-    runtime URL is unset (production fails closed).
-  - **Mechanism 4 — orgs boot guard positional check:** `orgs/apps.py:32–50`
-    (`_is_migrate_command()`: `sys.argv[1] == "migrate"`, exact position) is the *only* exemption
-    from the BYPASSRLS boot guard (`apps.py:152–154`, `_check_rls_role():77–109`), whose
-    docstring names start.sh's env-unset as the mechanism it trusts.
-  - **The collision:** start.sh's `createcachetable` line runs under the superuser (BYPASSRLS)
-    role, but the boot guard exempts only `migrate` and that line sets no
-    `QUICKSCALE_ALLOW_BYPASSRLS=1` — so on a deploy without Redis, `ready()` should raise
-    `ImproperlyConfigured` and the deploy fails at that step. Mechanisms 1 and 4 disagree about
-    whether the same invocation is sanctioned. (Also listed under Red flags — the one-line fix is
-    independent of the structural one.)
-- **Why it compounds:** every new privileged operation must be hand-registered in up to three
-  places (a start.sh unset line, an argv token in local's sniff, a boot-guard exemption), and
-  each registration uses a different matching idiom — `createcachetable` already demonstrates a
-  missed registration. Every new execution context (the DR engine's spawned `manage.py`
-  subprocesses, future cron/workers, teams' data migrations) inherits whichever role its argv
-  happens to imply. Built on top: the entire generated-app boot path, start.sh, both settings
-  templates, and the boot guard that backstops RLS.
-- **Detection signal:** deploy failures at the `createcachetable` step on no-Redis Railway
-  deploys (`ImproperlyConfigured: ...BYPASSRLS...`); locally, `manage.py createcachetable` or any
-  non-migrate DDL command failing with PostgreSQL permission errors under the runtime role. If
-  neither has been seen, the paths are unexercised — the boot smoke test would surface both.
-- **Steelman:** the fail direction is correct almost everywhere — the boot guard hard-fails on
-  unexpected BYPASSRLS, production serving hard-fails without the runtime URL — so the isolation
-  guarantee itself is not silently breachable; and argv-sniffing for `migrate` is a common Django
-  idiom. That steelman holds for *isolation* but not for *operability*: the divergence already
-  produces a deploy-breaking disagreement, and each future privileged command re-rolls the dice.
-  Local's silent superuser fallback for serving also weakens the "fail direction" half in dev.
-- **Correct shape:** exactly one component (the process launcher) interprets the execution
-  context and publishes the privilege decision through one channel; settings files and boot
-  guards *consume* the published decision and never inspect argv themselves.
+- **Rank rationale (blast radius × likelihood):** blast remains generated-app deploy availability
+  and the legibility of the RLS privilege boundary; likelihood dropped materially this delta —
+  the live collision is fixed and verified by boot smoke tests, and the change-cost probe (below)
+  shows a *new* privileged command now costs one station. What remains is the migrate path's
+  legacy divergence and the escape hatch's overload.
+- **Horizon & trigger:** `6–18 months` (downgraded from `now`) — fires when the migrate path's
+  argv deciders next disagree with a new execution context (DR-spawned `manage.py` subprocesses,
+  cron/workers, a data migration run outside start.sh), or when the deferred remainder is
+  scheduled.
+- **Confidence:** High — all four mechanisms re-read this pass; the fix verified against the new
+  generated-project boot smoke tests (`test_generated_project_runtime.py:488,536`).
+- **Context dependence:** wrong-regardless for the residual divergence; low urgency at current
+  deployment shape.
+- **Problem:** privilege selection now has an owning contract (the launcher env pair) for new
+  privileged commands, but the `migrate` path still spans three independent deciders with three
+  matching idioms, and the single `QUICKSCALE_ALLOW_BYPASSRLS` bit is overloaded across
+  per-command production sanction, per-environment dev opt-out, and blanket test-harness
+  convenience.
+- **Evidence (updated this pass):**
+  - **Landed (SA63):** `start.sh.j2:59` sets the env pair for createcachetable;
+    `production.py.j2:172–184` consumes it as an explicit bridge branch; `local.py.j2:38–43` is
+    now a pure env reader (argv ladder deleted); verified end-to-end by the new boot smoke tests
+    including the no-Redis path.
+  - **Residual mechanism A:** `production.py.j2:185` — `elif "migrate" in sys.argv` (membership,
+    any position) still selects the superuser URL; `:195` — `collectstatic`/`compilemessages`
+    dummy-URL fallback.
+  - **Residual mechanism B:** `orgs/apps.py:32–51` — `_is_migrate_command()` (positional
+    `sys.argv[1] == "migrate"`) remains the boot guard's migrate exemption (`apps.py:155`).
+  - **Hatch overload:** the same flag that sanctions one launcher command
+    (`start.sh.j2:59`) is blanket-exported for entire test suites (`Makefile:325–326`,
+    `scripts/test_unit.sh:365–366` — TA49/SA59, open), meaning CI never demonstrates the boot
+    guard firing; and it is also the documented dev opt-out. One bit, three meanings, no
+    granularity.
+- **Counter-evidence (V2):** the change-cost probe (below) actively tried to show a new
+  privileged command still needs multi-station registration — it doesn't; one start.sh line now
+  suffices. That disconfirms the 2026-07-09 "up to three places" claim for *new* commands and is
+  why this finding narrows rather than carries.
+- **Why it compounds:** the residual cost is confined to the migrate path: any new execution
+  context that runs migrations (or any command matching/failing the two argv idioms differently)
+  re-opens the disagreement class; and every consumer added to the one-bit hatch further blurs
+  what "allowed" means, which is exactly how SA59's CI blind spot happened.
+- **Detection signal:** PostgreSQL permission errors or `ImproperlyConfigured` boot failures on
+  any migration-like command invoked outside start.sh; the SA59 fix landing will itself reveal
+  whether any test actually exercises the guard.
+- **Steelman:** `migrate`-via-argv is a common Django idiom, the fail direction is correct
+  everywhere that matters, and the remainder is explicitly recorded as deferred in the roadmap —
+  this is a scheduled tail, not drift. That mostly holds; what it doesn't cover is the hatch
+  overload, which no scheduled item currently owns beyond SA59's test-path half.
+- **Correct shape:** exactly one component (the launcher) interprets execution context and
+  publishes the privilege decision through one channel; settings and boot guards consume it and
+  never inspect argv; the escape hatch distinguishes "this invocation is sanctioned" from "this
+  environment opts out."
 - **Options:**
-  1. **Launcher-owned env contract (recommended).** start.sh (and generated dev tooling —
-     Makefile target or compose command — for local) sets the pair
-     `RUNTIME_DATABASE_URL="" QUICKSCALE_ALLOW_BYPASSRLS=1` for its fixed list of privileged
-     commands; both settings templates become pure env readers (runtime URL if set, else
-     superuser URL, no argv anywhere); orgs' `_is_migrate_command()` is deleted in favor of the
-     existing `QUICKSCALE_ALLOW_BYPASSRLS` hatch. One decider, one escape hatch, and the
-     createcachetable defect fixes itself. Cost: bare `python manage.py migrate` in local dev
-     needs the wrapper (or both URLs unset except `DATABASE_URL`) — a documented one-liner.
-  2. **Generated manage.py wrapper.** Keep argv interpretation but move it to *one* owned place:
-     a generated `manage.py` that maps a fixed privileged-command allowlist to the env pair
-     before Django loads. Preserves `python manage.py migrate` UX exactly; adds a generated-file
-     surface to maintain.
-  3. **Separate settings modules.** `settings/maintenance.py` (superuser, privileged flag) vs
-     serving settings; start.sh selects `DJANGO_SETTINGS_MODULE` per command; the boot guard
-     keys off the settings flag. Most Django-idiomatic; most template surface and the largest
-     migration for existing generated projects.
-- **Recommendation:** Option 1, with Option 2's wrapper as the dev-UX sweetener if bare
-  `manage.py migrate` friction proves real. This is a generator: the contract ships in templates,
-  so fixing it now costs one template pass; fixing it after teams ships its own migrations and
-  management commands costs a re-generation story. · **Size:** M (start.sh + two settings
-  templates + orgs guard + docs + e2e) · **First step:** add `QUICKSCALE_ALLOW_BYPASSRLS=1` to
-  start.sh's createcachetable line (the red-flag fix), then delete `local.py.j2`'s argv branch in
-  the same PR that gives local a documented privileged-command wrapper.
+  1. ~~Env-pair contract for privileged launcher commands~~ — **landed** (SA63 first step).
+  2. **Finish Option 1 (the live option):** start.sh adopts the env pair for `migrate` too; delete
+     `production.py.j2`'s argv branches and orgs' `_is_migrate_command()`; local-dev migrate uses
+     the documented wrapper. S–M, mostly template surface, rides on the now-existing boot smoke
+     tests.
+  3. **Generated manage.py wrapper** mapping a privileged-command allowlist to the env pair —
+     preserves bare `manage.py migrate` UX; adds a generated-file surface.
+- **Recommendation:** Option 2 when next touching the templates (bundle with SA59's landing so
+  the guard is demonstrably exercised in CI the same week the last argv decider dies). Consider
+  splitting the hatch (`QUICKSCALE_PRIVILEGED_COMMAND=1` for launcher sanction vs. the existing
+  flag for environment opt-out) as part of it. · **Size:** S–M remaining · **First step:** add
+  the env pair to start.sh's migrate line and delete `_is_migrate_command()` in the same PR — the
+  boot smoke tests catch regressions.
 
 ---
 
@@ -252,48 +327,37 @@ appeared in the delta; the SA46 gate got stronger (`cbde517a`).
 
 - **ID:** `deletion-invariants-per-boundary-reimplementation`
 - **Rank rationale (blast radius × likelihood):** blast is money and org integrity (orphaned live
-  Stripe subscriptions, ownerless shared orgs); likelihood moderate today, rising sharply when
-  teams multiplies membership-like invariants.
-- **Horizon & trigger:** `deferred` — teams is not scheduled (decided 2026-07-10, see
-  decisions.md §Teams module status: brainstormed placeholder only, no committed timeline), so the
-  teams-build trigger is not on a clock. Live trigger regardless of teams: the first
-  account-deletion path that isn't `AccountDeleteView` (a GDPR erasure command would be a second
-  boundary).
-- **Confidence:** High — re-verified this pass: the canonical check is consumed at all four
-  callsites, and repo-wide search confirms zero `pre_delete` receivers in orgs, billing, or auth.
+  Stripe subscriptions, ownerless shared orgs); likelihood moderate and static while user deletion
+  stays single-path and teams stays unscheduled.
+- **Horizon & trigger:** `deferred` — teams is not scheduled (decisions.md §Teams module status,
+  2026-07-10). Live trigger regardless of teams: the first account-deletion path that isn't
+  `AccountDeleteView` (e.g. a GDPR erasure command).
+- **Confidence:** High — re-verified this pass: zero `pre_delete` receivers in orgs, billing, or
+  auth (repo search); the SA47 canonical check and its four callsites verified untouched by
+  git log since the 2026-07-09 read.
 - **Context dependence:** wrong-for-now → wrong-regardless if/when teams kicks off.
 - **Problem:** org-domain and billing-domain rules for "what must hold when a user disappears"
   are enforced only at boundaries that choose to invoke them — there is no layer every ORM
   deletion path traverses.
-- **Evidence (updated):**
-  - **SA47 closed the divergence half:** `OrganizationMembership.is_last_owner_with_members()`
-    (`orgs/models.py:165`) is now the single semantic, consumed by the model's lock-guarded
-    `delete()` (`models.py:329`), `AccountDeleteView._get_blocking_orgs_for_deletion`
-    (`auth/views.py:114,147–164`), and both orgs view callsites (`orgs/views.py:808,1161`).
-  - **The backstop half is unchanged:** instance `delete()` overrides do not run under the
-    deletion collector, so a `User` cascade still bypasses the model rule; there is no
-    `pre_delete` receiver on `User` anywhere (re-verified by search this pass). Every deletion
-    boundary other than `AccountDeleteView` enforces nothing.
-  - The project already names the receiver pattern as canonical for cross-module lifecycle
-    behavior (`orgs/signals.py:3–9`, SA7.1).
-- **Why it compounds:** cost is N deletion boundaries × M invariants; teams adds M
-  (membership/ownership rules), an erasure command adds N. With SA47 the invariant count is
-  honest, but each new boundary must still *remember to call* it.
+- **Evidence:** unchanged from 2026-07-09 —
+  `OrganizationMembership.is_last_owner_with_members()` (`orgs/models.py:165`) consumed by the
+  lock-guarded `delete()` (`models.py:329`), `AccountDeleteView` (`auth/views.py:114,147–164`),
+  and both orgs view callsites (`orgs/views.py:808,1161`); instance `delete()` overrides don't
+  run under the deletion collector, so a `User` cascade bypasses the model rule.
+- **Counter-evidence (V2):** searched again for receivers, collector hooks, or DB-level
+  ownership constraints added since the last pass — none; the delta touched none of these files.
+- **Why it compounds:** cost is N deletion boundaries × M invariants; teams adds M, an erasure
+  command adds N.
 - **Detection signal:** none today — instrument by alerting on `Organization` rows with zero
   OWNER memberships and on active `Subscription` rows whose org has no members.
-- **Steelman:** exactly one deletion path exists today, the operator is the maintainer, and SA47
-  settled the semantics. Holds only while user deletion stays single-path; the locked teams
-  design breaks that assumption.
-- **Correct shape:** each domain owns its lifecycle rules in exactly one place, enforced at a
-  layer every ORM deletion path traverses (domain service + `pre_delete` receiver backstop);
-  boundaries *invoke* the domain rather than re-implementing it.
-- **Options:** unchanged from 2026-07-06 (orgs-owned deletion service + signal backstop /
-  signal-only / DB-level constraints; full text in version control).
-- **Recommendation:** Option 1's remaining half — a `pre_delete` receiver on `User` in orgs (and
-  a billing receiver for subscription anomaly detection) that calls the SA47 check. Do it before
-  teams lands its first membership-like model. · **Size:** M remaining · **First step:** the
-  orgs `pre_delete` receiver, wired through the existing `signals.py` seam, with a test that
-  deletes a last-owner `User` directly via the ORM (bypassing the view) and asserts refusal.
+- **Steelman:** exactly one deletion path exists today and the operator is the maintainer. Holds
+  while user deletion stays single-path.
+- **Correct shape / Options:** unchanged (orgs-owned deletion service + `pre_delete` receiver
+  backstop / signal-only / DB-level constraints — full text in version control).
+- **Recommendation:** the `pre_delete` receiver backstop is small enough to land as a general
+  hardening item without waiting on teams — wire it through the existing `signals.py` seam,
+  with a test that deletes a last-owner `User` directly via the ORM and asserts refusal.
+  · **Size:** M remaining · **First step:** the orgs `pre_delete` receiver calling the SA47 check.
 
 ---
 
@@ -301,316 +365,208 @@ appeared in the delta; the SA46 gate got stronger (`cbde517a`).
 
 - **ID:** `org-model-universe-hand-enumerated`
 - **Rank rationale (blast radius × likelihood):** the enumerations back the isolation boundary's
-  bookkeeping and the org-offboarding path; likelihood approaches 1 if/when a teams build lands.
-- **Horizon & trigger:** `deferred` — teams is not scheduled (decided 2026-07-10, see
-  decisions.md §Teams module status), so this finding is not on a teams-driven clock. It also
-  fires independently on any new model added to an existing (already-shipped) module.
-- **Confidence:** High — literals re-verified this pass (49 registry entries, hand-ordered
-  `_DELETE_SPECS`); gates re-verified landed (SA15.3, SA45, SA49).
-- **Context dependence:** wrong-for-now on the new-domain dimension, if/when teams lands.
+  bookkeeping and org-offboarding; likelihood approaches 1 if/when a teams build lands, near-zero
+  otherwise except for new models in shipped modules.
+- **Horizon & trigger:** `deferred` — teams unscheduled (decisions.md §Teams module status);
+  fires independently on any new model added to an already-shipped module.
+- **Confidence:** High — `tenancy.py` and `purge_organization.py` verified untouched by git log
+  since `6ea37301`; the SA15.3/SA45/SA49 gates re-verified landed on the 2026-07-09 pass and
+  none of their files changed this delta.
+- **Context dependence:** wrong-for-now on the new-domain dimension.
 - **Problem:** knowledge of "which models belong to an organization, and how they die" lives in
-  hand-written literals inside orgs; membership staleness is now fully CI-gated, but the purge
-  *order* remains hand-encoded, and the derivation inputs themselves changed semantics this delta
-  without a decision record.
-- **Evidence (updated):**
-  - `orgs/tenancy.py:128` — `TENANT_TABLE_REGISTRY`, 49 hand-written entries (unchanged), gated
-    bidirectionally against the marker-driven derivation (SA15.3).
-  - `purge_organization.py:64` — `_DELETE_SPECS`, hand-ordered with comment-justified deletion
-    order; the SA45 gate checks membership, not orderability — a wrong hand-ordering still
-    surfaces as `ProtectedError` mid-offboarding.
-  - SA49's coverage-boundary gate landed: orgs' conformance-env module list is derived from
-    `quickscale_modules/*/pyproject.toml` presence, closing the one-level-up enumeration gap
-    named last pass.
-  - **New caution — derivation inputs moved inside housekeeping commits:** `6ea37301`
-    ("fix: make check") changed `is_tenant_model()` so a truthy `tenant_excluded` marker now
-    beats manager/base-class detection (`tenancy.py:1548+`), and switched the composite-FK
-    template from `DEFERRABLE INITIALLY DEFERRED` to `NOT DEFERRABLE` (`tenancy.py:903`).
-    Both are plausibly correct; neither has a decision record, and both alter what the Finding 4
-    gates *mean* (classification semantics; FK enforcement timing during purge/restore). The
-    locked child-table policy docs (decisions.md/organizations.md) don't mention deferrability.
-- **Why it compounds:** every new tenant model still requires K coordinated edits (marker +
-  registry literal + `_DELETE_SPECS` entry with correct position); teams multiplies the entry
-  count, and purge-order correctness is the one property no gate checks.
-- **Detection signal:** `ProtectedError` from `purge_organization` in any environment (ordering
-  defects — still ungated); `NOT DEFERRABLE` composite-FK violations surfacing mid-purge where
-  deferred checking previously masked ordering sensitivity (same signal, now stricter timing).
+  hand-written literals inside orgs; membership is fully CI-gated, purge *order* is not.
+- **Evidence:** unchanged — `TENANT_TABLE_REGISTRY` (`tenancy.py:128`, 49 entries, bidirectionally
+  gated); `_DELETE_SPECS` (`purge_organization.py:64`, hand-ordered; the SA45 gate checks
+  membership, not orderability). The 2026-07-09 caution (two derivation-input semantics changed
+  inside housekeeping commits) is now owned by **SA60, open on Track 1** (composite-FK
+  deferrability policy + conformance gate).
+- **Counter-evidence (V2):** checked the delta for changes to the registry, purge specs, or
+  derivation inputs — none; checked decisions.md for the SA60 records — not yet written (SA60
+  open), so the caution stands as tracked rather than resolved.
+- **Why it compounds:** every new tenant model requires K coordinated edits (marker + registry
+  literal + `_DELETE_SPECS` entry with correct position); purge-order correctness is the one
+  property no gate checks, and the `NOT DEFERRABLE` change made it less forgiving.
+- **Detection signal:** `ProtectedError` from `purge_organization` in any environment;
+  `NOT DEFERRABLE` composite-FK violations surfacing mid-purge.
 - **Steelman:** hand-ordered deletion is explicit, reviewable, and encodes FK subtleties naive
-  traversal gets wrong; membership gates are now complete and derivation-backed. What keeps the
-  finding open is the ordering half — which the `NOT DEFERRABLE` change just made *less*
-  forgiving — and a teams build, if scheduled, would multiply entries.
-- **Correct shape:** one derivation path from the existing sources of truth (tenant markers + FK
-  topology) produces classification, RLS-conformance parametrization, and the purge plan; any
-  remaining literal is a pinned snapshot CI-validated against the derivation.
-- **Options:**
-  1. ~~Derive the completeness gates~~ — **done** (SA15.3 + SA45 + SA49).
-  2. **Derive the purge plan itself (the live option):** topological delete order from the FK
-     graph restricted to org-owned models, `_DELETE_SPECS` reduced to explicit overrides. M
-     effort; do it if/when teams' models land and give the derivation a real test bed — not
-     time-boxed, since teams is unscheduled (decisions.md §Teams module status).
-  3. **Module-contributed specs** via the manifest/`AppConfig.ready()` seam — only if a second
-     consumer of per-module lifecycle knowledge appears.
-- **Recommendation:** Option 2 if/when teams kicks off, unchanged; not scheduled otherwise.
-  Meanwhile: record the `NOT DEFERRABLE` and `tenant_excluded`-precedence decisions in
-  decisions.md (S, doc-only — they are load-bearing inputs to this finding's gates, independent
-  of teams' timeline). · **Size:** M remaining · **First step:** the decisions.md entries now
-  (scheduled as SA60, `why →` roadmap.md); the purge-order derivation only if/when teams' first
-  models land.
+  traversal gets wrong; membership gates are complete and derivation-backed.
+- **Correct shape / Options:** unchanged — Option 2 (derive the purge plan topologically from the
+  FK graph, `_DELETE_SPECS` reduced to overrides) is the live option, if/when teams' models land.
+- **Recommendation:** Option 2 if/when teams kicks off; meanwhile SA60 closes the
+  decision-record caution. · **Size:** M remaining · **First step:** SA60 (already scheduled);
+  purge-order derivation only when a real second consumer (teams) gives it a test bed.
 
 ---
 
+### Change-cost probes (V2 §3.6)
+
+- **Probe A — "a QuickScale release changes a deploy-affecting template; roll it to the two beta
+  sites."** Chosen because it is this exact release's reality (SA63 changed `start.sh.j2` and
+  `production.py.j2`). Measured stations: (1) the template edit; (2) template tests
+  (`test_templates.py`/`test_start_sh_template.py` — gated); (3) the generated-project boot smoke
+  tests (gated, landed this delta); (4) **classification of the changed file in
+  `beta_migration.py`'s eight lists × two paths — ungated, and currently misses both SA63 files
+  (one per path)**; (5) playbook prose (`beta-site-migration.md` — manual); (6) per-site
+  migration run + operator review + manual deploy. Stations 1–3 are gated and healthy; station 4
+  has no gate connecting it to station 1. **Verdict: finding evidence → Finding 7.**
+- **Probe B — "add a new privileged management command to generated apps"** (Finding 6's
+  compounding claim, re-measured post-SA63). Measured stations: one — a start.sh line carrying
+  the env pair; `production.py.j2`'s bridge branch and the boot guard's hatch consume it with no
+  further registration. The 2026-07-09 claim of "up to three places" no longer holds for new
+  commands. **Verdict: seam exonerated for new commands; Finding 6 narrowed accordingly** (the
+  migrate path's legacy deciders remain its residual scope).
+
 ### Fix order and interactions
 
-1. **Finding 6's first step rides the red-flag fix** — the start.sh createcachetable line and the
-   `local.py.j2` argv deletion belong in one template pass; do it before the next generated-app
-   release. Independent of all other findings.
-2. **Finding 1 Option 2 (persistence port)** — schedule in the next planning cycle; a future teams
-   adapter should land *after* it (or accept a fourth routing workaround), but this is not gated
-   on a teams timeline — teams is unscheduled. Independent of Findings 2/4/6.
-3. **Findings 2 and 4** are both deferred (teams unscheduled, decisions.md §Teams module status)
-   and independent of each other; Finding 2's receiver backstop is small enough to land as a
-   general hardening item without waiting on teams.
-4. Finding 4's doc-only sub-item (decision records for the two semantics changes) is scheduled now
-   as SA60 (`why →` roadmap.md), independent of teams.
+1. **Finding 7's first step (the template↔lists conformance gate)** is independent of everything
+   else and should land before the next release's beta migration; the immediate manual action
+   (verify SA63 reached both beta sites) is red-flagged below and shouldn't wait for the gate.
+2. **Finding 1 Option 2 (persistence port)** — scheduled next planning cycle; independent of
+   Findings 2/4/6/7.
+3. **Finding 6's remainder (S–M)** bundles naturally with **SA59** — kill the last argv deciders
+   and un-blind the boot guard's CI coverage in the same batch, so the guard is demonstrably
+   exercised the week the contract completes.
+4. **Findings 2 and 4** stay deferred (teams unscheduled) and independent; Finding 2's receiver
+   backstop is small enough to land as opportunistic hardening.
 
 ### Sound load-bearing decisions (protect these during remediation)
 
-- **Dual-layer tenancy enforcement, re-read in full this pass:** fail-closed `TenantManager` +
-  FORCE RLS with the AF9 execute-wrapper, the always-on BYPASSRLS boot guard
-  (`orgs/apps.py:77–109,152–154`), and production's fail-closed serving ladder
-  (`production.py.j2:185–194` — no silent superuser fallback). Finding 6's remediation must
-  preserve exactly this fail direction.
-- **Governance by gate — the family grew again and keeps paying:** the csrf-exempt gate's AST
-  matcher was hardened (`cbde517a`), `check_module_core_compatibility.py` learned the facade's
-  `__all__`/`__getattr__` shape, and SA54 added the signature-pin test class (a gate holding a
-  copy pair honest). The pattern of "every hand-list gets a derivation gate" is this codebase's
-  most reliable defense.
+- **Dual-layer tenancy enforcement, strengthened this delta:** fail-closed `TenantManager` +
+  FORCE RLS with the AF9 execute-wrapper, and the boot guard now rejecting `rolsuper` as well as
+  `rolbypassrls` (`orgs/apps.py:99–113`, SA58). Finding 6's remaining work must preserve exactly
+  this fail direction.
+- **SA63's launcher env-pair contract:** one channel (`RUNTIME_DATABASE_URL=""` +
+  `QUICKSCALE_ALLOW_BYPASSRLS=1`), published by start.sh, consumed by production settings and the
+  boot guard — Probe B measured a new privileged command at one station. Finish it (Finding 6
+  Option 2); don't parallel it.
+- **The generated-project boot smoke harness** (`test_generated_project_runtime.py`, grown +395
+  lines this delta including the no-Redis and bypass-hatch paths): this is the runtime-confirmation
+  layer the last two passes kept asking for — route future template-contract claims through it.
+- **Governance by gate, exercised again:** the manifest byte-identical sync gate absorbed the
+  auth `implies: orgs` bump correctly; the SA46/SA15.3/SA45/SA49 family carried. Finding 7's
+  recommended fix is deliberately the same pattern.
+- **`TenantModelAdmin` as the single admin-scoping seam:** SA64 ported the last straggler
+  (social); every tenant-model admin now inherits the orgs-owned base with VIEW-AS priority and
+  org-field locking.
 - **SA47's canonical last-owner seam:** one implementation, four consumers, lock-guarded —
-  Finding 2's remaining work should extend it, not parallel it.
-- **The facade split direction itself** (`runtime/dr.py` vs `runtime/manifest.py`): separating
-  the manifest surface (which modules legitimately need at import time) from the DR surface
-  (which triggers the cycle) is the right decomposition — Finding 1's Option 2 completes it
-  rather than reversing it.
-- **SA54's parameter-injection direction:** boundary-crossing invariants flowing as explicit
-  call parameters (module constant → core parameter) is the correct interim shape while the
-  persistence port doesn't exist.
+  Finding 2's remaining work extends it, not parallels it.
 
-### Watchlist
+### Watchlist (every carried item shows this pass's trigger evaluation — V2 §8)
 
-- **Shared module-runtime code has no *written* sanctioned home — sharpened, and the de facto
-  answer has emerged.** The deep pass found the third shared concern the trigger was waiting
-  for: per-org admin machinery (`_org_db_context` + view wrappers + fail-closed queryset). It
-  resolved itself into orgs — `TenantModelAdmin`'s docstring calls itself "the generalization of
-  the `PerOrgAdminMixin` pattern that social/admin.py proves works under RLS"
-  (`orgs/admin.py:300`). Tally: client-IP → orgs (SA21.2), admin machinery → orgs (SA14.1),
-  sanitizer → still byte-identical copies in blog+listings. Two of three concerns landing in
-  orgs is a de facto "orgs is the module commons" rule with no decisions.md record · doesn't
-  qualify as a finding: the seam exists and works; what's missing is the written rule and the
-  sanitizer's migration — both ticket-shaped · close by writing the rule at (or before) teams
-  kickoff and moving the sanitizer to orgs in the same change. Client-IP also remains
-  triple-implemented across the settings templates (`base.py.j2` + `production.py.j2`
-  redefinition forced by `from .base import *` layering) — distinct structural cause, watch for
-  divergence.
-- **String-spliced TOML editing — sharpened, holding condition broken.** The 2026-07-06 steelman
-  rested on "`_write_validated_toml` re-parses before writing, so corruption fails loud." The new
-  `_patch_module_path_dependencies` (`module_dependency_sync.py:345–427`, landed `198a1951`)
-  writes module pyproject.toml files with bare `write_text()` (`:425–427`) — no validation. The
-  one-line fix is a red flag below; the watch is the pattern: three splice functions and growing
-  per-module dependency knowledge (`_STORAGE_CLOUD_BACKENDS`) · promotes on the fourth splice
-  site or any corruption incident.
-- **Billing webhook concurrent-duplicate window** — carried; `billing/services.py` verified
-  untouched since 2026-07-07 · promotes when any non-idempotent side effect lands in a handler.
-- **Dual child-table tenancy APIs — sharpened.** Carried, plus this delta changed the
-  composite-FK API's SQL semantics (`NOT DEFERRABLE`, `tenancy.py:903`) inside a housekeeping
-  commit (see Finding 4's caution) · promotes if any teams child table lands on the trigger API.
-- **Mutating CLI operations have divergent compensation mechanisms — broadened from the
-  apply-regeneration item.** The deep pass's first-ever read of `remove_command.py` (785 lines)
-  found a third mechanism: hand-rolled `PathSnapshot` rollback with snapshots in a
-  `TemporaryDirectory` (`remove_command.py:279–317,636`) — exception-safe but not crash-safe,
-  same class as SA22's regeneration recovery. The update path's git-commit-per-module is a
-  fourth strategy. Cross-mechanism glue already exists:
-  `_build_updated_apply_recovery_state` (`remove_command.py:206–228`) hand-reconciles remove's
-  mutations against the apply ledger's pending snapshots, with dedicated e2e tests
-  (`test_module_lifecycle_cycle.py:510`) · doesn't qualify yet: each mechanism fits its
-  operation's shape, all are exception-safe, advisory-locked, and the generated project is a
-  user-owned git repo (the universal undo) · promotes on the next piece of cross-mechanism
-  reconciliation glue, a new mutating command hand-rolling a fifth mechanism, or any
-  crash-mid-operation report git couldn't recover.
-- **`orgs/views.py` fusion** — carried; 1,226 lines post-SA50-fold · promotes when teams begins
-  extending org-facing surfaces.
-- **Grandfathered option defaults multi-sourced — fifth consecutive pass; tax paid again.** The
-  new listings configurator (`module_config.py:864–899` + registry entry `:2077`) added
-  `listings_per_page` across the manifest pair, `entry_point.py`, the CLI defaults, and the
-  views consumer — the coordination stations were all paid correctly, which is the tax working,
-  not failing. T2.4/T2.5 remain unscheduled with the roadmap now empty · promotes when a default
-  changes in one station only, or if/when teams kicks off (unscheduled — not a near-term trigger).
-- **Deploy-time configuration contract for generated apps — narrowed.** The privilege-selection
-  half promoted to Finding 6; what remains is the broader class (a settings-template requirement
-  discovered per-instance instead of asserted by a template test — TA33's class) · still cheapest
-  as the tech-audit's boot smoke test plus a one-paragraph decisions.md rule.
+- **Shared module-runtime code has no *written* commons rule.** Trigger ("a new shared concern
+  lands somewhere other than orgs, or teams kickoff"): **not fired** — SA64 *consumed* the
+  commons correctly (social's admin moved onto orgs' base); the SA26 sanitizer remains
+  byte-similar copies in `blog/views.py` + `listings/views.py` (re-verified present). Carry:
+  write the "orgs is the module commons" rule and move the sanitizer in one change.
+- **String-spliced TOML editing.** Trigger ("fourth splice site or corruption incident"):
+  **fired in modified form** — not a fourth CLI site (all three verified through
+  `_write_validated_toml`, SA62), but a *parallel copied implementation* in
+  `quickscale_devtools/beta_migration.py:597` (near-identical body, different exception type),
+  forced by devtools' deliberate core-only dependency. Evaluated for promotion: held — both
+  copies validate before writing, so the defect class is closed; the copy itself is Finding 7's
+  second manifestation and is absorbed there. Retire the standalone item; successor trigger lives
+  in the devtools-governance item below.
+- **`quickscale_devtools` sits outside the governance architecture (new).** Its tests live in
+  `quickscale_cli/tests/`, it appears in no CI gate, linter universe, or the publishing PACKAGES
+  list (deliberate per its pyproject header), and it copies CLI machinery it won't depend on ·
+  doesn't qualify: one tool, maintainer-only, the exemption is documented in its own pyproject ·
+  promotes when a second devtool lands in the package, when its tests gate a release, or when
+  any copied helper drifts from its CLI twin.
+- **Billing webhook concurrent-duplicate window.** Trigger ("non-idempotent side effect in a
+  handler"): **not fired** — `billing/services.py` verified untouched since SA41. Carry.
+- **Dual child-table tenancy APIs.** Trigger ("a teams child table lands on the trigger API"):
+  **not fired** — teams unscheduled; SA60 (open) will record the deferrability policy the
+  2026-07-09 pass flagged. Carry.
+- **Mutating CLI operations have divergent compensation mechanisms.** Trigger ("a new mutating
+  command hand-rolls a fifth mechanism, more reconciliation glue, or a crash git couldn't
+  recover"): **fired in modified form** — `beta_migration` is a new mutating tool with its own
+  checkpoint/dry-run/report compensation model. Evaluated: held — it mutates *other projects'*
+  trees (both git repos, operator-reviewed), never the apply ledger's, so no cross-mechanism
+  reconciliation exists; the in-product mechanisms (apply/remove/update) are unchanged. Carry
+  with the trigger unchanged; the devtools half is covered by Finding 7 and the governance item.
+- **`orgs/views.py` fusion.** Trigger ("teams begins extending org-facing surfaces"): **not
+  fired** — 1,226 lines, unchanged, teams unscheduled. Carry.
+- **Grandfathered option defaults multi-sourced — sixth pass.** Trigger ("a default changes in
+  one station only"): **not fired** — this delta *filled* a station (the listings configurator
+  gained a notice-only `apply` shim, `module_config.py:903–919`) rather than desyncing one;
+  T2.4/T2.5 remain unscheduled. Carry.
+- **Deploy-time configuration contract for generated apps — narrowed to doc-only.** Trigger
+  evaluation: the substantive half **landed** — the generated-project boot smoke tests are
+  exactly TA33's asked-for harness. What remains is the one-paragraph decisions.md rule naming
+  the settings-template requirements contract. Carry at low priority; retire when the paragraph
+  is written (natural home: the SA63/Finding 6 closeout).
 
 *(Carried unchanged at low priority, unprinted: hardcoded `EXEMPT_PATH_PREFIXES` in
-`orgs/middleware.py`. The `_is_migrate_command()` argv-sniffing item is no longer carried
-separately — it is Finding 6's Mechanism 4.)*
+`orgs/middleware.py`.)*
 
-### Teams landing checklist (carried forward, updated — speculative, teams unscheduled)
+### Teams landing checklist (carried unchanged from 2026-07-09 — speculative, teams unscheduled)
 
-> Teams is not scheduled (decided 2026-07-10, see decisions.md §Teams module status). This
-> checklist is kept for reference *if* a future scheduling decision puts teams on the roadmap —
-> it is not an implication that teams is imminent.
-
-Declarative manifest path (freeze enforces) · `TenantModel` base + markers for every model ·
-`TenantModelAdmin` for its admin · own module for views (not `orgs/views.py`) ·
-notifications-PII exclusion review at kickoff · membership/ownership invariants go into the
-SA47 seam (and its coming `pre_delete` backstop), not into views · background work reuses the
-`dispatch_background_*` service pattern · teams' app enters orgs' cross-module test env in the
-same PR as its first model (SA49 gate now derives the expected list — it will fail loudly) ·
-endpoints subclass `OrgApiBaseView`/the DRF baseline per decisions.md
-§json-api-endpoint-base-contract; a teams webhook adds its verifier to the SA46 gate ·
-client-IP/attribution uses `current_org.get_client_ip`; a third shared-runtime helper triggers
-the commons decision · **new:** the teams *adapter* imports `quickscale_core.runtime.manifest`
-only (never the combined facade), and lands after Finding 1's persistence port if scheduling
-allows · **new:** teams data migrations and management commands must not assume a DB role from
-argv — they traverse Finding 6's seam; land them after the mode contract · **new:** teams'
-admin subclasses `TenantModelAdmin` — never a `PerOrgAdminMixin`-style local prototype (see the
-social red flag).
-
-### Module-by-module deep pass (2026-07-09, core and cli included as modules)
-
-**Zero new findings promoted.** First-ever full reads this pass: the entire social module
-(models, services, contracts resolution surface, admin), `storage/helpers.py`,
-`remove_command.py`, `runtime/dr.py` + `runtime/__init__.py`, `dr_engine/_sidecar.py` (diff
-depth). Candidates investigated and *not* promoted, each with its holding gate and breaking
-trigger:
-
-1. **billing: auth enforced per-handler in the sanctioned DRF baseline.** Every SA56-migrated
-   POST view declares `permission_classes = [AllowAny]` + `SessionAuthentication` and opens with
-   a manual `if not request.user.is_authenticated: return 401` preamble
-   (`billing/views.py:171–330`) — procedural where `IsAuthenticated` (or a custom permission
-   returning the legacy 401 body) would be structural. **Held by:** per-view tests assert the
-   401s; the contract-preserving motive is legible. **Breaks if:** a new billing endpoint omits
-   the two-line preamble — then centralize via a shared permission class and reopen Finding 5's
-   reopen-condition review.
-2. **social: missing-table tolerance by exception-message matching.**
-   `_is_missing_social_table_error` (`services.py:74–89`) string-matches Postgres/SQLite
-   "relation does not exist" texts — the shape SA44 deleted from core's entry point. **Held by:**
-   narrow exception types (`OperationalError`/`ProgrammingError` only), exact
-   table-name matching, re-raise on non-match (permission errors stay fail-hard), and a real
-   deploy-window rationale (public link tree between code rollout and migrate). **Breaks if:**
-   the pattern spreads to another module or the matcher loosens — then replace with an
-   app-registry/migration-state check.
-3. **backups: restore-attempt-not-an-entity — carried, trigger re-checked, did not fire.**
-   SA53's "blocked restore checkpoint" added no lifecycle state (`BackupArtifact` status set
-   unchanged, re-verified `models.py:89–101`); the work was crash-safe copy mechanics
-   (mkstemp + fd-writes + fsync + `os.replace`) and consolidated cleanup — sound. Watch
-   condition unchanged (promote when restore grows queueing/progress/cancellation states).
-4. **cli: remove/apply/update compensation divergence** — promoted into the broadened watchlist
-   item above, not to a finding (git-repo backstop + advisory lock + single-process context).
-5. **core: `normalize_notifications_module_options` empty→manifest-defaults materialization**
-   with a lazy import to dodge a contracts-internal cycle (`module_options.py:555–563`) —
-   in-package, function-level, ticket-shape at most; watch only if the contracts↔resolvers
-   cycle grows more lazy-import sites.
-
-Per-module verdicts:
-
-- **quickscale_core** — Finding 1 evidence updated (adapter shim round-trip removed; facade
-  split landed with the new `__all__` station). New red flag: the DR media-path silent-local
-  coercion (two sites, `6ea37301`). `apply/`, `project_state.py`, manifest loader verified
-  untouched since the 2026-07-06 deep read — prior candidates carry unchanged.
-- **quickscale_cli** — `remove_command.py` read in full for the first time: confirmation prompt,
-  advisory lock, snapshot/rollback, ledger-reconciliation glue — disciplined but a third
-  compensation mechanism (watchlist). Dependency-sync TOML red flag recorded in the delta pass.
-  Lifecycle e2e tests assert the right invariants (removed modules don't resurrect through
-  pending recovery). The listings configurator paid the option-pipeline tax correctly.
-- **orgs** — load-bearing seams (`middleware.py`, `current_org.py`, `managers.py`) churn-free
-  since the already-reconciled SA21.2/SA48. `TenantModelAdmin` read in full: fail-closed,
-  RLS-primed via `org_scope`, VIEW-AS + org-field locking — sound; it is the sanctioned home of
-  the per-org admin pattern (see social red flag for the straggler prototype).
-- **social** — first-ever deep read; disciplined overall: `tenant_org_fk` + dual managers,
-  org-partitioned cache keys with old-org invalidation (CR-T1-9-001), provider allowlists
-  enforced in `clean()`, embed "resolution" is pure URL derivation (no network in `save()` —
-  verified against contracts.py imports). Two items: the missing-table classifier (candidate 2)
-  and the admin prototype (red flag).
-- **storage** — helpers are fail-hard (`ImproperlyConfigured` on missing/invalid backend
-  setting) but expose no "is storage active in this runtime?" query, which is why DR callers
-  resorted to blanket excepts — note for the red-flag fix.
-- **backups** — SA53/SA54 read in full; sound (candidate 3). Services file is 650 lines of
-  sanctioned module-side lifecycle; header contract now accurate (SA51).
-- **billing** — SA56 migration verified real (DRF `APIView`s, webhook `csrf_exempt` remains the
-  SA46-gated exception); candidate 1 recorded. `services.py` untouched since SA41.
-- **auth** — re-read; Finding 2 territory unchanged (module-top orgs import, function-level
-  billing import behind a settings check).
-- **blog / listings** — type-annotation churn only; SA26 sanitizer copies carried (commons
-  watchlist). Listings admin on `TenantModelAdmin` (verified).
-- **crm / notifications / analytics** — churn-free since SA35/make-check test-only additions;
-  spot-checked, nothing new. CRM admin on `TenantModelAdmin` (verified).
-- **forms** — still on the manager-idiom (`TenantManager` + `tenant_org_fk`, no `TenantModel`
-  base; re-verified `models.py:45–74,135–155`) — the 2026-07-04 ticket-shaped port remains
-  pending and is now the *second* straggler-idiom instance alongside social's admin.
-- **teams** — README-only placeholder (re-verified).
+> Teams is not scheduled (decisions.md §Teams module status, 2026-07-10). Carried for reference
+> *if* a future scheduling decision lands; see the 2026-07-09 pass text in version control for
+> the full checklist. Additions since remain valid: the teams adapter imports
+> `quickscale_core.runtime.manifest` only; teams data migrations traverse Finding 6's seam and
+> land after the mode contract completes; teams' admin subclasses `TenantModelAdmin`.
 
 ### Questions that would change the ranking
 
-- **T2.4/T2.5 and the teams build — answered 2026-07-10.** Decided: teams is **not next, not
-  planned** — `quickscale_modules/teams/` is a brainstormed placeholder only, with no committed
-  scoping or timeline (see decisions.md §Teams module status). Findings 2 and 4 are accordingly
-  `deferred` rather than `6–18 months`, and Finding 1 Option 2 is scheduled on its own
-  merits (next planning cycle) rather than as a pre-teams gate. Re-open this question only when a
-  future scheduling decision actually puts teams on the roadmap.
-- **Was `NOT DEFERRABLE` a deliberate policy change for the composite-FK child-table API?**
-  (Affects Finding 4's purge-order risk and the locked Option C child-table policy.) If
-  deliberate, one decisions.md paragraph closes the caution; if incidental to making `make check`
-  pass, it deserves review before the next migration ships.
-- **Is `local.py.j2`'s argv ladder intended as the local contract, or a stopgap for compose/e2e?**
-  (Affects Finding 6's option choice — a deliberate "local is argv-driven" answer argues for
-  Option 2's owned wrapper over Option 1's pure-env contract.)
+- **Do the beta sites deploy without Redis?** If yes, SA63's createcachetable fix is
+  load-bearing for their next deploy and Finding 7's live instance becomes urgent enough to
+  outrank Finding 1 — verify the rollout manually this release either way (red flag below).
+  (Affects Findings 7 and 6.)
+- **Is `settings/production.py` being donor-owned in fresh-first migrations a deliberate policy**
+  ("beta sites own their production settings, template changes reach them by hand") **or an
+  accident of the file lists?** If deliberate, Finding 7's fix is a recorded policy + merge
+  story; if accidental, the SA63 env-pair bridge never reaches the beta sites. (Affects
+  Finding 7's first step.)
+- **Was the `NOT DEFERRABLE` composite-FK switch deliberate?** — carried, now owned by SA60
+  (open); the answer lands in decisions.md via that item. (Affects Finding 4's purge-order risk.)
 
 ### Red flags (out of scope — fix now)
 
-- **DR media path silently coerces storage failures to "local" — two sites, data-loss-shaped.**
-  `6ea37301` changed `_sidecar.py`'s `_build_media_sync_manifest` and `orchestration.py`'s
-  `_resolve_media_runtime` from fail-loud (`status: "unsupported"` / `BackupConfigurationError`)
-  to `except Exception: selection = None` → treat as local backend. `storage.helpers.
-  select_storage_backend` raises the *same* `ImproperlyConfigured` for "module not installed"
-  (local is correct) and "backend misconfigured" (must fail), so the blanket except conflates
-  them: an S3 project whose selection fails at capture writes a `status: "ready"` manifest with
-  a local (likely empty) inventory, and `sync_backup_snapshot_media` — which hard-rejects
-  non-"ready" manifests — proceeds on wrong premises; restore verification passes with all
-  remote media missing. Fix: distinguish module-absence (app-registry check or
-  `ImportError`-only except) from selection errors, which stay fail-hard. This is the
-  fail-hard-audit class (tech-audit SSOT) — hand off as a TA item.
-- **Social's admin still runs the `PerOrgAdminMixin` prototype that `TenantModelAdmin`
-  generalized** (`social/admin.py:112–262` vs `orgs/admin.py:240–330`): near-duplicate
-  isolation-critical machinery, and drift is already real — social's copy lacks the VIEW-AS
-  debug-session priority and the org-field form locking the generalized base has. Port social
-  onto `TenantModelAdmin`, delete the prototype (same shape as the SA14.2/SA14.3 ports).
-- **start.sh's `createcachetable` step runs under the superuser but the boot guard only exempts
-  `migrate`** (`start.sh.j2:59` vs `orgs/apps.py:152` — no `QUICKSCALE_ALLOW_BYPASSRLS=1` on the
-  line): the no-Redis deploy path should fail with `ImproperlyConfigured` at first boot. One-line
-  fix; also Finding 6's collision evidence. Needs runtime confirmation.
-- **`_patch_module_path_dependencies` writes pyproject.toml without validation**
-  (`module_dependency_sync.py:425–427`) — route it through `_write_validated_toml` like its two
-  siblings.
-- **Test artifacts are git-tracked and accreting:** 13 generated PNGs under
-  `quickscale_modules/blog/tests/media/blog/uploads/2026/07/` (one more added per CI-fix commit)
-  and `pytest_log.txt` at the repo root (modified by `198a1951`). Point test `MEDIA_ROOT` at a
-  temp directory, untrack the files, and gitignore both.
-- **Two tenancy-semantics changes landed inside housekeeping commits with no decision record**
-  (`NOT DEFERRABLE`, `tenant_excluded` precedence — both in `6ea37301` "fix: make check"). The
-  code may be right; the record is missing. One decisions.md entry each.
+- **Verify SA63 actually reaches `experto-ai-web` and `bap-web` this release** — the in-place
+  migration path does not copy `start.sh` and the fresh-first path keeps the donor's
+  `production.py` (`beta_migration.py:43–48,96–108`), so both SA63 files are missed by one path
+  each; a manual diff/patch of the two files on both sites closes the immediate gap independent
+  of Finding 7's structural fix.
+- **`ImproperlyConfigured` re-homed from Django's class to a first-party exception inside a
+  housekeeping commit** (`628c7d28`, `contracts/module_discovery.py:25`) — all in-repo catchers
+  were migrated in the same commit (verified: `module_wiring_manager.py` catches the new class;
+  no stale `django.core.exceptions.ImproperlyConfigured` imports remain in core/cli), but this is
+  a contracts-layer exception-identity change with no decision record; external/generated-project
+  code catching Django's class around manifest APIs would silently stop catching. One
+  decisions.md paragraph. (Third consecutive delta with load-bearing semantics under a
+  housekeeping message — `6ea37301`, `198a1951`, now `628c7d28`; worth a process rule alongside
+  the record.)
+- **`apply`'s subprocess env builder snapshots `sys.path` at import time**
+  (`apply_command.py:212–254`, module-level `_QUICKSCALE_SUBPROCESS_ENV`) — dev/test-context
+  plumbing baked into the production command path; inert when installed from site-packages, but
+  the import-time cache means env mutations after import never propagate. Hand off to tech-audit
+  as a hygiene item.
 
-Lenses scanned with no qualifying finding this pass: data/state integrity beyond Finding 4's
-caution, trust boundaries beyond Finding 6 (boot guard re-read in full — fail direction sound),
-module cohesion beyond Findings 1/6, consistency/failure models (SA53's checkpoint/retry work
-read — sound at code level), observability, API contracts (Finding 5 verified still closed — no
-new endpoint idiom in the delta), testing architecture (the new gate work is the right kind),
-design conflicts beyond Finding 6, concurrency, security architecture (copies → watchlist),
-build/supply chain (pip-audit gap remains a tech-audit tooling item), performance.
+Lenses scanned with no qualifying finding this pass: data/state integrity, trust boundaries
+beyond Finding 6's residual (boot guard re-read — fail direction strengthened), module cohesion
+beyond Findings 1/7, consistency/failure models, observability, API contracts (no new endpoint
+idiom; Finding 5 spot-verified still closed), testing architecture (the boot smoke harness is the
+right kind; SA59 is its scheduled blind-spot fix), design conflicts beyond the red-flagged
+decision-record drift, concurrency, security architecture, performance. Governance/gate lens
+(V2 §5.XV) produced Finding 7's fix shape and the enforcement census rather than a separate
+finding.
+
+---
+
+## Autopsy — 2026-07-09 (re-run, delta pass) and module-by-module deep pass
+
+> Superseded by the 2026-07-10 delta pass above, which re-verified all open findings' evidence
+> anchors directly, audited the SA57–SA64 closeout batch for fix-regressions, and read the
+> `628c7d28` unlabeled-behavioral commit in full. The 2026-07-09 passes' full text (Finding 6
+> opened, module-by-module verdicts, five held candidates) is preserved in version control. This
+> stub heading is kept so existing links resolve.
 
 ---
 
 ## Autopsy — 2026-07-07 (re-run, delta pass)
 
-> Superseded by the 2026-07-09 delta pass above, which re-verified all open findings' evidence
+> Superseded by the 2026-07-09 delta pass, which re-verified all open findings' evidence
 > anchors directly and read the SA47–SA56 closeout plus the 2026-07-09 make-check/make-ci delta
 > in full. This stub heading is kept so existing links resolve.
 
@@ -851,3 +807,50 @@ build/supply chain (pip-audit gap remains a tech-audit tooling item), performanc
   forms (no `TenantModel` base, re-verified) and social admin. Periphery
   (crm/notifications/analytics/blog/listings) verified churn-free or type-only since reconciled
   SAs; teams still README-only.
+- 2026-07-10 (re-run, delta pass over the SA57–SA64 closeout batch; first run on the V2 prompt —
+  falsification pass, enforcement census, change-cost probes, and fix-regression audit added) —
+  **four findings still-open (two narrowed), one new finding.**
+  `dr-engine-module-circular-lattice`: still-open, **unchanged** — first quiet delta in four
+  passes (no DR work landed; no new lattice stations; `LEGACY_ALLOWED_IMPORTS` did not grow);
+  Option 2 (persistence port) confirmed scheduled for the next planning cycle.
+  `db-privilege-mode-procedural`: still-open, **substantially narrowed** — SA63 passed the
+  fix-regression audit (mechanism partially removed, not relocated; fail direction preserved; no
+  new stations): the launcher env-pair contract landed, local's argv ladder deleted, the
+  createcachetable collision fixed and verified by new generated-project boot smoke tests; Probe
+  B re-measured a new privileged command at one station, disconfirming the prior "up to three
+  places" claim for new commands; residual scope is the migrate path's three deciders
+  (`production.py.j2:185,195` argv branches, `orgs/apps.py` `_is_migrate_command()`) plus the
+  one-bit hatch overload (SA59's blanket test-harness export is its live consequence); horizon
+  downgraded now → 6–18 months. **New Finding 7 `generated-file-ownership-unmodeled`**: the
+  generator has no per-file ownership contract; `quickscale_devtools/beta_migration.py:43–115`
+  hand-encodes the taxonomy in eight unlinked tuples with no derivation from the template tree
+  and no gate; live gap — SA63's `start.sh` is absent from `IN_PLACE_INFRASTRUCTURE_TARGETS` and
+  fresh-first keeps the donor's `production.py`, so each SA63 file is missed by one migration
+  path (immediate manual verification red-flagged).
+  `deletion-invariants-per-boundary-reimplementation`: still-open, deferred — zero `pre_delete`
+  receivers re-verified; delta touched none of its files.
+  `org-model-universe-hand-enumerated`: still-open, deferred — literals verified untouched; the
+  2026-07-09 decision-record caution is now owned by SA60 (open, Track 1).
+  Prior red flags reconciled: DR media silent-local coercion → **fixed** (SA57, verified
+  `ModuleNotFoundError`-narrow with fail-hard on all other errors at both sites); social admin
+  prototype → **fixed** (SA64, both admins verified on `TenantModelAdmin`, prototype deleted);
+  createcachetable/boot-guard collision → **fixed** (SA63, verified `start.sh.j2:59` + smoke
+  tests); unvalidated TOML write → **fixed** (SA62, all three CLI splice sites verified through
+  `_write_validated_toml`); git-tracked test artifacts → **fixed** (SA61/SA25, `git ls-files`
+  verified clean); undocumented tenancy-semantics changes → **tracked** (SA60 open; records not
+  yet written). Watchlist trigger evaluations (V2 discipline): commons — not fired, carried;
+  TOML-splicing — fired in modified form (devtools copy), retired into Finding 7 + new
+  devtools-governance item; billing webhook — not fired (untouched since SA41), carried;
+  dual child-table API — not fired, carried (SA60 pending); CLI compensation divergence — fired
+  in modified form (beta_migrate's checkpoint model), held (no cross-mechanism reconciliation;
+  operates on external trees), carried; orgs-views fusion — not fired (1,226 lines, unchanged),
+  carried; grandfathered defaults — not fired (sixth pass; listings apply-shim filled a station
+  correctly), carried; deploy-config contract — substantially landed (boot smoke harness),
+  narrowed to the doc-only paragraph. Questions: local-argv-ladder intent → **answered by SA63**
+  (deleted; env pair is the contract), retired; `NOT DEFERRABLE` deliberateness → carried, owned
+  by SA60. New red flags: SA63 beta-site rollout verification; `ImproperlyConfigured` re-homing
+  undocumented (`628c7d28` — third consecutive delta with semantics under a housekeeping
+  message); apply's import-time subprocess-env snapshot (tech-audit hand-off). New watchlist
+  item: `quickscale_devtools` outside the governance architecture. Sound decisions: boot guard
+  strengthened (SA58 `rolsuper`); the generated-project boot smoke harness recorded as the
+  runtime-confirmation layer prior passes asked for.
