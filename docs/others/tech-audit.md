@@ -302,16 +302,22 @@ the `_sync_module_dependencies` mock, noted below).
 - 2026-07-10 (SA58 closeout) — **TA48: resolved** (SA58 — RLS boot guard now queries `rolbypassrls OR rolsuper`; error message reports SUPERUSER/NOSUPERUSER alongside BYPASSRLS/NOBYPASSRLS; test mocks and assertions updated; findings table and counts aligned). Findings-table counts updated (S3: 3→2, total: 6→5).
 - 2026-07-10 (SA57/61/62 closeout, doc-consistency correction) — **TA47: resolved** (SA57 — both DR media call sites (`orchestration.py:_resolve_media_runtime`, `_sidecar.py:_build_media_sync_manifest`) now catch only `ImportError`/`ModuleNotFoundError` as the module-absent fallback; real `select_storage_backend` errors (`ImproperlyConfigured` etc.) propagate as `BackupConfigurationError`/an explicit error-status manifest instead of silently coercing to local `MEDIA_ROOT`; the flipped fail-closed test was restored and a second test pins the module-absent fallback). **TA51: resolved** (SA61 — `pytest_log.txt`, `coverage.json`, `pytest_cov_log.txt`, and the 13 accumulated blog test-upload PNGs untracked via `git rm --cached`; `.gitignore` extended; blog test `MEDIA_ROOT` now points at a tmp path so the class can't reaccrete). **TA52: resolved** (SA62 — `_patch_module_path_dependencies`'s bare `write_text()` now routes through `_write_validated_toml`, matching its two sibling writers). This entry corrects the findings-summary table above, which had drifted stale (still marking all three "open" despite CHANGELOG confirming SA57/SA61/SA62 landed on 2026-07-10) — caught during the roadmap-reconciliation pass for SA57–SA64. Findings-table counts updated (S2: 1→0, S4: 2→0, total: 5→2). Remaining open: TA49 (SA59), TA50 (SA60), both scheduled on Track 1.
 - 2026-07-10 (V2-prompt re-run, HEAD `ae8c386e`) — **TA49: still-open** (Makefile:325-326, `scripts/test_unit.sh:365-366`, `ci.yml:340` all re-verified unchanged; SA59 scheduled). **TA50: still-open** (`tenancy.py:906` re-verified unchanged; SA60 scheduled). **TA53: opened** — `apply-subprocess-env-pythonpath-pollution` (S3, from side-channel commit `628c7d28`). **Closure verification per V2 §2f.3:** TA47 (SA57), TA48 (SA58), TA51 (SA61), TA52 (SA62) — each fix location opened and confirmed complete in code, including SA57's restored fail-closed tests; no regressed closures. Full first-party production diff `198a1951..HEAD` read; SA63/SA64 verified clean (SA63 additionally resolves the prior `local.py.j2` argv-sniffing watch item); the auth→orgs manifest implication in `628c7d28` verified justified (auth views import orgs models since SA47) though undocumented (Structural smells). Empirical check: simulated wheel-install layout confirms `_build_quickscale_env` sweeps site-packages-style directories into child `PYTHONPATH`, refuting its docstring (TA53 evidence). This is the first pass run under [tech-audit-prompt.md](tech-audit-prompt.md) V2.
+- 2026-07-10 (roadmap cleanup) — SA69 closed: `decisions.md §ImproperlyConfigured-Exception-Identity`
+  now records the exception-identity split; the adapter-docstring doc-drift flagged in the Notes
+  section below is corrected. The lint/naming guard remains an open watch item per the decision
+  record, not a defect. `roadmap.md` had left SA63 and SA69's checklist entries in place after
+  both closed (already CHANGELOG-documented) — pruned there as part of this pass.
 
 ## Notes (not violations, watch items)
 
-- **Two same-named `ImproperlyConfigured` classes now coexist** (new, 628c7d28):
+- **Two same-named `ImproperlyConfigured` classes now coexist** (628c7d28; decision recorded
+  2026-07-10 via SA69, `decisions.md §ImproperlyConfigured-Exception-Identity`):
   `quickscale_core.contracts.module_discovery.ImproperlyConfigured` (contract layer, non-Django)
   vs `django.core.exceptions.ImproperlyConfigured` (module runtime). All current raise/catch
-  pairs are consistent, but a future catcher importing the wrong one fails silently open —
-  worth a naming or lint guard if it recurs. The billing/crm/social adapter docstrings still
-  cite the Django class for the entry-point contract that now raises the contract-layer class
-  (doc drift only).
+  pairs are consistent, but a future catcher importing the wrong one fails silently open — the
+  lint/naming guard is explicitly deferred as a watch item per the SA69 decision record, not yet
+  built. The billing/crm/social adapter docstrings were corrected from the Django class to the
+  first-party class as part of SA69 (doc drift resolved).
 - **`test_update_auto_commits_each_module_e2e` now mocks `_sync_module_dependencies`**
   (628c7d28, `test_module_lifecycle_cycle.py:1298-1302`): the update e2e no longer exercises
   dependency sync. Coverage moved rather than lost (SA62 added `TestBetaMigration` sync suites,
@@ -345,3 +351,6 @@ the `_sync_module_dependencies` mock, noted below).
   (SA40) — carried, reviewed choice.
 - *(resolved this pass, removed from watch:)* the `local.py.j2` "migrate detection looser than
   the boot-guard exemption" item — SA63 deleted the argv-sniffing branch entirely.
+- *(resolved 2026-07-10, roadmap cleanup:)* the adapter-docstring doc-drift half of the
+  `ImproperlyConfigured` note above — SA69 corrected the three named adapter docstrings and added
+  the decisions.md record; the lint/naming-guard half remains open, see above.

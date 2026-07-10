@@ -528,15 +528,6 @@ quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams
   `production.py` (`beta_migration.py:43–48,96–108`), so both SA63 files are missed by one path
   each; a manual diff/patch of the two files on both sites closes the immediate gap independent
   of Finding 7's structural fix.
-- **`ImproperlyConfigured` re-homed from Django's class to a first-party exception inside a
-  housekeeping commit** (`628c7d28`, `contracts/module_discovery.py:25`) — all in-repo catchers
-  were migrated in the same commit (verified: `module_wiring_manager.py` catches the new class;
-  no stale `django.core.exceptions.ImproperlyConfigured` imports remain in core/cli), but this is
-  a contracts-layer exception-identity change with no decision record; external/generated-project
-  code catching Django's class around manifest APIs would silently stop catching. One
-  decisions.md paragraph. (Third consecutive delta with load-bearing semantics under a
-  housekeeping message — `6ea37301`, `198a1951`, now `628c7d28`; worth a process rule alongside
-  the record.)
 - **`apply`'s subprocess env builder snapshots `sys.path` at import time**
   (`apply_command.py:212–254`, module-level `_QUICKSCALE_SUBPROCESS_ENV`) — dev/test-context
   plumbing baked into the production command path; inert when installed from site-packages, but
@@ -854,3 +845,11 @@ finding.
   item: `quickscale_devtools` outside the governance architecture. Sound decisions: boot guard
   strengthened (SA58 `rolsuper`); the generated-project boot smoke harness recorded as the
   runtime-confirmation layer prior passes asked for.
+- 2026-07-10 (roadmap cleanup) — **Red flag resolved:** the `ImproperlyConfigured` re-homing
+  decision-record gap is closed (SA69 — `decisions.md §ImproperlyConfigured-Exception-Identity`
+  now records the exception-identity split, which class a contracts-layer vs. a Django-runtime
+  catcher should import, and the housekeeping-label-discipline watch item; the three named
+  adapter docstrings are corrected from the Django class to the first-party class). Removed from
+  the Red flags section above. The lint/naming guard for the two same-named classes remains an
+  open watch item per the decision record (also tracked in tech-audit.md's Notes section), not
+  promoted to its own finding.
