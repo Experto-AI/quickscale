@@ -1125,7 +1125,7 @@ The SA46 CI gate continues to enforce the pairing requirement across all `csrf_e
 **RLS enforcement rule (critical, updated by SA2.1 + SA2.2):**
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
 - Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named migration path intentionally uses the superuser `DATABASE_URL`
-- **Always-on boot guard (SA2.1):** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false` on every non-`migrate` boot — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS unless one of the two explicit exemptions applies:
+- **Always-on boot guard (SA2.1):** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every non-`migrate` boot — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
   1. `manage.py migrate` — the deployment `start.sh` unsets `RUNTIME_DATABASE_URL` so migrations run under the superuser role (correct and deliberate).
   2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — environment-variable escape hatch for intentional single-tenant or development use.
 - `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate`; `runserver`/`gunicorn` must still use the restricted runtime role
@@ -1178,7 +1178,7 @@ Django superusers may activate a debug session that scopes the entire request to
 - ❌ Per-client Railway deployment (linear overhead per tenant — not a SaaS platform)
 - ❌ App-layer-only filtering without a PostgreSQL RLS backstop (no defence-in-depth; one missed filter leaks cross-tenant data)
 - ❌ PostgreSQL schema-per-tenant isolation (schema metadata bloat, migration complexity)
-- ❌ Connecting generated apps in saas/prod mode under a BYPASSRLS role (silently disables all RLS policies across all modules)
+- ❌ Connecting generated apps in saas/prod mode under a BYPASSRLS or SUPERUSER role (silently disables all RLS policies across all modules)
 - ❌ Route-slug-based org resolution for content routes (`/orgs/<slug>/crm/...`) — use flat routes + session active-org; org-admin API may keep `/api/orgs/<slug>/`
 
 **Package Structure:**

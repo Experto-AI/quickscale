@@ -55,7 +55,7 @@ git merge --no-ff wt-track{N}
 
 > **Origin note (2026-07-10, fix-plan pass):** SA57–SA64 trace to the 2026-07-09/10 findings in [tech-audit.md](../others/tech-audit.md) (TA47–TA52, all opened by the unreviewed `6ea37301`/`198a1951` "fix: make check"/"fix: some make ci" commits) and [arch-audit.md](../others/arch-audit.md) (the Red flags section's DR-media/social-admin/createcachetable/TOML-splice/test-artifact items — several of which are the same defects tech-audit found independently and are merged into one task below — plus Finding 6's recommended first step and Finding 4's doc-only decision-record sub-item). Findings 1, 2 and 4's *remaining* structural work (the persistence port, the `pre_delete` backstop, the purge-order derivation) stay in arch-audit.md — each is sized M. Findings 2 and 4 are `deferred`: teams is decided **not next, not planned** (brainstormed placeholder only, no committed timeline — see [decisions.md §Teams module status](../technical/decisions.md#multitenant-saas-architecture)), so their teams-driven horizon no longer applies and there is no near-term trigger pulling them into this batch. Finding 1 Option 2 (the persistence port) is independent of teams' timeline but still M-sized and scheduled for its own next planning cycle rather than this fix-plan pass. Pulling any of the three into this batch as full structural rewrites would be Tier 3. Every item below fit Tier 1–2 without splitting; SA60 (composite-FK policy + conformance gate) and SA63 (Finding 6's launcher-contract first step) are Tier 2, the rest are Tier 1.
 
-> **Track status (2026-07-10, SA57–SA64 opened):** Track 1 — **3 open items** (SA58, SA59, SA60). Track 2 — **2 open items** (SA57, SA64). Track 3 — **3 open items** (SA61, SA62, SA63).
+> **Track status (2026-07-10, SA57–SA64 opened):** Track 1 — **2 open items** (SA59, SA60). SA58 completed. Track 2 — **2 open items** (SA57, SA64). Track 3 — **3 open items** (SA61, SA62, SA63).
 
 ### Dependency & parallelization overview
 
@@ -76,7 +76,7 @@ SA47, SA48, SA49, SA50 are complete — detail in [CHANGELOG.md](../../CHANGELOG
 
 #### Finding — `rls-boot-guard-misses-superuser` (`why →` [tech-audit.md TA48](../others/tech-audit.md))
 
-- [ ] **SA58 — Make the RLS boot guard check `rolsuper` as well as `rolbypassrls`.** `Tier 1 · Track 1 · deps: none`
+- [x] **SA58 — Make the RLS boot guard check `rolsuper` as well as `rolbypassrls`.** `Tier 1 · Track 1 · deps: none`
   `orgs/apps.py:98-108` (`_check_rls_role`) queries only `rolbypassrls`, but PostgreSQL superusers bypass RLS regardless of that attribute and typically have `rolbypassrls = false` — so CI's default `postgres`-superuser connection, and any misconfigured deployment pointing `RUNTIME_DATABASE_URL` at a superuser role, boots cleanly with DB-level tenant isolation silently off (app-level `TenantManager` filtering still applies — this is a defense-in-depth loss, not direct exposure). decisions.md:1124 already states the runtime contract as `NOSUPERUSER/NOBYPASSRLS`; the guard only enforces half of it.
   *Files:* `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:98-108`; `quickscale_modules/orgs/tests/test_rls_boot_guard.py`.
   *Acceptance:* the guard query becomes `SELECT rolbypassrls OR rolsuper …` (or equivalent two-column read with an OR in Python), the `ImproperlyConfigured` message names both attributes, and `test_rls_boot_guard.py`'s mocks are extended with a `rolsuper=True, rolbypassrls=False` case that must raise.
