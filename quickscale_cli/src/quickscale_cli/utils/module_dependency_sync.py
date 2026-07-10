@@ -422,9 +422,7 @@ def _patch_module_path_dependencies(
                         break
                 if not matched:
                     result_lines.append(line)
-            module_pyproject_path.write_text(
-                "\n".join(result_lines) + "\n", encoding="utf-8"
-            )
+            _write_validated_toml(module_pyproject_path, "\n".join(result_lines) + "\n")
 
 
 def sync_project_module_dependencies(

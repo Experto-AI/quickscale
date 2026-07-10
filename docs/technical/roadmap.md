@@ -55,7 +55,7 @@ git merge --no-ff wt-track{N}
 
 > **Origin note (2026-07-10, fix-plan pass):** SA57–SA64 trace to the 2026-07-09/10 findings in [tech-audit.md](../others/tech-audit.md) (TA47–TA52, all opened by the unreviewed `6ea37301`/`198a1951` "fix: make check"/"fix: some make ci" commits) and [arch-audit.md](../others/arch-audit.md) (the Red flags section's DR-media/social-admin/createcachetable/TOML-splice/test-artifact items — several of which are the same defects tech-audit found independently and are merged into one task below — plus Finding 6's recommended first step and Finding 4's doc-only decision-record sub-item). Findings 1, 2 and 4's *remaining* structural work (the persistence port, the `pre_delete` backstop, the purge-order derivation) stay in arch-audit.md — each is sized M. Findings 2 and 4 are `deferred`: teams is decided **not next, not planned** (brainstormed placeholder only, no committed timeline — see [decisions.md §Teams module status](../technical/decisions.md#multitenant-saas-architecture)), so their teams-driven horizon no longer applies and there is no near-term trigger pulling them into this batch. Finding 1 Option 2 (the persistence port) is independent of teams' timeline but still M-sized and scheduled for its own next planning cycle rather than this fix-plan pass. Pulling any of the three into this batch as full structural rewrites would be Tier 3. Every item below fit Tier 1–2 without splitting; SA60 (composite-FK policy + conformance gate) and SA63 (Finding 6's launcher-contract first step) are Tier 2, the rest are Tier 1.
 
-> **Track status (2026-07-10, SA57–SA64 opened):** Track 1 — **2 open items** (SA59, SA60). SA58 completed. Track 2 — **2 open items** (SA57, SA64). Track 3 — **3 open items** (SA61, SA62, SA63).
+> **Track status (2026-07-10, SA57–SA64 opened):** Track 1 — **2 open items** (SA59, SA60). SA58 completed. Track 2 — **2 open items** (SA57, SA64). Track 3 — **1 open item** (SA63). Track 3 completed: SA61, SA62.
 
 ### Dependency & parallelization overview
 
@@ -121,7 +121,7 @@ SA21.2, SA37, SA38, SA40, SA43, SA51, SA52, SA53, SA54, plus its earlier share o
 
 ### Track 3 — Core/CLI plumbing
 
-SA44 (Finding 1 stage 1, `dr-engine-module-circular-lattice`), SA56 (Finding 5, `json-api-boundary-idiom-fragmentation`, now fully closed), and SA61 (test artifacts untracked, gitignore patterns added, blog test media pointed at tmp_path) are complete — detail in [CHANGELOG.md](../../CHANGELOG.md). New this pass: SA62–SA63, below.
+SA44 (Finding 1 stage 1, `dr-engine-module-circular-lattice`), SA56 (Finding 5, `json-api-boundary-idiom-fragmentation`, now fully closed), SA61 (test artifacts untracked, gitignore patterns added, blog test media pointed at tmp_path), and SA62 (module pyproject TOML splice routed through the validated writer) are complete — detail in [CHANGELOG.md](../../CHANGELOG.md). New this pass: SA63, below.
 
 #### Finding — `test-artifacts-committed-again` (`why →` [tech-audit.md TA51](../others/tech-audit.md), TA23 class)
 
@@ -133,7 +133,7 @@ SA44 (Finding 1 stage 1, `dr-engine-module-circular-lattice`), SA56 (Finding 5, 
 
 #### Finding — `module-pyproject-splice-unvalidated` (`why →` [tech-audit.md TA52](../others/tech-audit.md), [arch-audit.md Red flags/Watchlist](../others/arch-audit.md))
 
-- [ ] **SA62 — Route the module pyproject TOML splice through the validated writer.** `Tier 1 · Track 3 · deps: none`
+- [x] **SA62 — Route the module pyproject TOML splice through the validated writer.** `Tier 1 · Track 3 · deps: none`
   `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py`'s `_patch_module_path_dependencies` rewrites embedded-module `pyproject.toml` by line splicing and writes via bare `write_text()` (`:425-427`), skipping the `_write_validated_toml` guard its two sibling writers in the same file use. A malformed splice (e.g. a multi-line table entry) writes invalid TOML that breaks the subsequent `poetry lock` with no earlier signal. This is the third unvalidated splice function in this file per arch-audit's watchlist — fixing it now holds the "re-parse before writing" steelman that justifies the pattern at all.
   *Files:* `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py` (`_patch_module_path_dependencies`, its sibling `_write_validated_toml`).
   *Acceptance:* `_patch_module_path_dependencies` writes through `_write_validated_toml` (parse-before-write) exactly like its two siblings; a regression test feeds a splice that would produce invalid TOML (e.g. an unterminated multi-line table entry) and asserts the write is rejected before touching disk, matching the sibling writers' existing test coverage.
