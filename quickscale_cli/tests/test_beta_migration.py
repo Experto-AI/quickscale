@@ -2040,3 +2040,150 @@ def test_verification_command_timeout_blocks_with_actionable_diagnostic(
     assert any(
         "VERIFICATION_COMMAND_TIMEOUT_SECONDS" in blocker for blocker in report.blockers
     )
+
+
+# ---------------------------------------------------------------------------
+# SA62 regression: module-dependency-sync validated writer rejects invalid TOML
+# ---------------------------------------------------------------------------
+
+
+def test_module_dependency_sync_write_validated_toml_accepts_valid_content(
+    tmp_path: Path,
+) -> None:
+    """The module-dependency-sync validated writer should accept valid TOML."""
+    from quickscale_cli.utils.module_dependency_sync import (
+        _write_validated_toml,
+    )
+
+    target = tmp_path / "pyproject.toml"
+    valid_content = (
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.14"\n'
+        'quickscale-core = ">=0.86.0,<0.87.0"\n'
+    )
+    _write_validated_toml(target, valid_content)
+    assert target.read_text() == valid_content
+
+
+def test_module_dependency_sync_write_validated_toml_rejects_invalid_content(
+    tmp_path: Path,
+) -> None:
+    """The module-dependency-sync validated writer must refuse to write TOML
+    that does not parse, matching the sibling writers' existing test pattern.
+
+    This is the regression guard for SA62: _patch_module_path_dependencies now
+    routes through _write_validated_toml, so invalid splice output is rejected
+    before touching disk — exactly like _append_dependency_entries and
+    _update_dependency_entries.
+    """
+    from quickscale_cli.utils.module_dependency_sync import (
+        DependencySyncError,
+        _write_validated_toml,
+    )
+
+    target = tmp_path / "pyproject.toml"
+    # Unquoted version string is invalid TOML — same pattern as the existing
+    # test_write_validated_toml_rejects_invalid_content sibling test.
+    invalid = "[tool.poetry.dependencies]\npython = ^3.14\n"
+    with pytest.raises(DependencySyncError, match="invalid TOML"):
+        _write_validated_toml(target, invalid)
+    assert not target.exists()
+
+
+def test_patch_module_path_dependencies_replaces_path_with_version(
+    tmp_path: Path,
+) -> None:
+    """SA62 regression: _patch_module_path_dependencies should replace non-existent
+    path dependencies with version constraints from the module manifest when the
+    splice produces valid TOML, exercising the validated-writer route."""
+    from quickscale_cli.utils.module_dependency_sync import (
+        _patch_module_path_dependencies,
+    )
+
+    project = tmp_path / "project"
+    project.mkdir()
+    module_dir = project / "modules" / "foo"
+    module_dir.mkdir(parents=True)
+
+    # Module pyproject.toml with a path dependency pointing to a non-existent
+    # location — this triggers the patch check.
+    (module_dir / "pyproject.toml").write_text(
+        "[tool.poetry]\n"
+        'name = "quickscale-module-foo"\n'
+        'version = "0.1.0"\n'
+        "\n"
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.14"\n'
+        'quickscale-core = {path = "../../nonexistent", develop = true}\n'
+    )
+
+    # Module manifest with a version constraint for the path dependency.
+    (module_dir / "module.yml").write_text(
+        'name: "quickscale-module-foo"\n'
+        'version: "0.1.0"\n'
+        "dependencies:\n"
+        '  - "quickscale-core>=0.86.0,<0.87.0"\n'
+    )
+
+    _patch_module_path_dependencies(project, {"foo": None})
+
+    updated = (module_dir / "pyproject.toml").read_text()
+    # The path-style entry must be replaced with the version constraint.
+    assert 'quickscale-core = ">=0.86.0,<0.87.0"' in updated
+    # The original path syntax must be gone.
+    assert '{path = "../../nonexistent", develop = true}' not in updated
+    # The rewritten TOML must still parse as valid TOML.
+    import tomllib
+
+    tomllib.loads(updated)
+
+
+def test_patch_module_path_dependencies_rejects_invalid_splice(
+    tmp_path: Path,
+) -> None:
+    """SA62 regression: _patch_module_path_dependencies must refuse to write
+    TOML when the line-level splice produces invalid content, protecting
+    against silent data corruption before target-file mutation.
+
+    The module.yml manifest carries a version spec with an embedded
+    double-quote character that, after line-level splice, produces
+    unparseable TOML.  _write_validated_toml catches the malformed
+    document and raises DependencySyncError before anything touches disk.
+    """
+    from quickscale_cli.utils.module_dependency_sync import (
+        DependencySyncError,
+        _patch_module_path_dependencies,
+    )
+
+    project = tmp_path / "project"
+    project.mkdir()
+    module_dir = project / "modules" / "foo"
+    module_dir.mkdir(parents=True)
+
+    module_pyproject = (
+        "[tool.poetry]\n"
+        'name = "quickscale-module-foo"\n'
+        'version = "0.1.0"\n'
+        "\n"
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.14"\n'
+        'quickscale-core = {path = "../../nonexistent", develop = true}\n'
+    )
+    pyproject_path = module_dir / "pyproject.toml"
+    pyproject_path.write_text(module_pyproject)
+
+    # Module manifest with a spec that contains a double-quote character.
+    # After line-level splice: quickscale-core = "">=0.86.0,<0.87.0"
+    # which is invalid TOML (empty string followed by garbage).
+    (module_dir / "module.yml").write_text(
+        'name: "quickscale-module-foo"\n'
+        'version: "0.1.0"\n'
+        "dependencies:\n"
+        "  - 'quickscale-core\">=0.86.0,<0.87.0'\n"
+    )
+
+    with pytest.raises(DependencySyncError, match="invalid TOML"):
+        _patch_module_path_dependencies(project, {"foo": None})
+
+    # The file must not have been modified.
+    assert pyproject_path.read_text() == module_pyproject
