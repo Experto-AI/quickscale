@@ -55,7 +55,7 @@ git merge --no-ff wt-track{N}
 
 > **Origin note (2026-07-10, fix-plan pass):** SA57–SA64 trace to the 2026-07-09/10 findings in [tech-audit.md](../others/tech-audit.md) (TA47–TA52, all opened by the unreviewed `6ea37301`/`198a1951` "fix: make check"/"fix: some make ci" commits) and [arch-audit.md](../others/arch-audit.md) (the Red flags section's DR-media/social-admin/createcachetable/TOML-splice/test-artifact items — several of which are the same defects tech-audit found independently and are merged into one task below — plus Finding 6's recommended first step and Finding 4's doc-only decision-record sub-item). Findings 1, 2 and 4's *remaining* structural work (the persistence port, the `pre_delete` backstop, the purge-order derivation) stay in arch-audit.md — each is sized M. Findings 2 and 4 are `deferred`: teams is decided **not next, not planned** (brainstormed placeholder only, no committed timeline — see [decisions.md §Teams module status](../technical/decisions.md#multitenant-saas-architecture)), so their teams-driven horizon no longer applies and there is no near-term trigger pulling them into this batch. Finding 1 Option 2 (the persistence port) is independent of teams' timeline but still M-sized and scheduled for its own next planning cycle rather than this fix-plan pass. Pulling any of the three into this batch as full structural rewrites would be Tier 3. Every item below fit Tier 1–2 without splitting; SA60 (composite-FK policy + conformance gate) and SA63 (Finding 6's launcher-contract first step) are Tier 2, the rest are Tier 1.
 
-> **Track status (2026-07-10, SA57–SA64 opened):** Track 1 — **2 open items** (SA59, SA60). SA58 completed. Track 2 — **2 open items** (SA57, SA64). Track 3 — **1 open item** (SA63). Track 3 completed: SA61, SA62.
+> **Track status (2026-07-10, SA57–SA64 opened):** Track 1 — **2 open items** (SA59, SA60). SA58 completed. Track 2 — **all items completed** (SA57, SA64). Track 3 — **1 open item** (SA63). Track 3 completed: SA61, SA62.
 
 ### Dependency & parallelization overview
 
@@ -100,7 +100,7 @@ SA47, SA48, SA49, SA50 are complete — detail in [CHANGELOG.md](../../CHANGELOG
 
 ### Track 2 — Module contracts & settings
 
-SA21.2, SA37, SA38, SA40, SA43, SA51, SA52, SA53, SA54, plus its earlier share of the SA19–SA33 batch, are complete — detail in [CHANGELOG.md](../../CHANGELOG.md). The `backups-dispatch-fail-open-robustness` finding (SA52/SA53, `why →` [tech-audit.md TA46](../others/tech-audit.md)) is fully closed. New this pass: SA57 and SA64, below.
+SA21.2, SA37, SA38, SA40, SA43, SA51, SA52, SA53, SA54, SA57, SA64, plus its earlier share of the SA19–SA33 batch, are complete — detail in [CHANGELOG.md](../../CHANGELOG.md). The `backups-dispatch-fail-open-robustness` finding (SA52/SA53, `why →` [tech-audit.md TA47](../others/tech-audit.md)) and the `social-admin-perorgadminmixin-prototype` finding (SA64, `why →` [arch-audit.md Red flags](../others/arch-audit.md)) are fully closed. All Track 2 items complete.
 
 #### Finding — `dr-media-storage-fallback-swallows-misconfiguration` (`why →` [tech-audit.md TA47](../others/tech-audit.md), [arch-audit.md Red flags](../others/arch-audit.md))
 
@@ -113,10 +113,11 @@ SA21.2, SA37, SA38, SA40, SA43, SA51, SA52, SA53, SA54, plus its earlier share o
 
 #### Finding — `social-admin-perorgadminmixin-prototype` (`why →` [arch-audit.md Red flags](../others/arch-audit.md))
 
-- [ ] **SA64 — Port social's admin off the `PerOrgAdminMixin` prototype onto `TenantModelAdmin`.** `Tier 2 · Track 2 · deps: none`
+- [x] **SA64 — Port social's admin off the `PerOrgAdminMixin` prototype onto `TenantModelAdmin`.** `Tier 2 · Track 2 · deps: none`
   `social/admin.py:112-262` still runs its own near-duplicate of the per-org admin machinery that `orgs/admin.py`'s `TenantModelAdmin` (`:240-330`) already generalizes — `TenantModelAdmin`'s own docstring calls itself "the generalization of the `PerOrgAdminMixin` pattern that social/admin.py proves works under RLS." Drift is already real: social's copy lacks the VIEW-AS debug-session priority and the org-field form-locking the generalized base has. This is isolation-critical admin machinery (`_org_db_context` + view wrappers + fail-closed queryset) — same shape as the already-completed SA14.2/SA14.3 ports of crm/blog/forms/listings/billing.
   *Files:* `quickscale_modules/social/src/quickscale_modules_social/admin.py:112-262`; `quickscale_modules/orgs/src/quickscale_modules_orgs/admin.py:240-330` (base class, read-only reference); social's admin test suite.
   *Acceptance:* social's admin classes subclass `TenantModelAdmin` instead of the local `PerOrgAdminMixin` prototype; the prototype is deleted (not deprecated in place — nothing else uses it, per the arch-audit read); VIEW-AS debug-session priority and org-field locking now apply to social exactly as they do to the other five ported modules; existing social admin tests pass unchanged in behavior (isolation assertions), with new assertions for the two previously-missing behaviors.
+  *Findings:* None.
   *(why →* [arch-audit.md Red flags](../others/arch-audit.md)*)*
 
 ### Track 3 — Core/CLI plumbing

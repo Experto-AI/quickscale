@@ -4,9 +4,10 @@ T1.15 — social admin uses a per-org contract (fail-closed) via
 ``ACTIVE_ORG_SESSION_KEY`` with both ContextVar and DB-level
 ``app.current_org_id`` propagation.
 
-Org selection follows a two-priority source order:
-  1. Explicit request selection (GET list-filter / POST form field).
-  2. Session persistence.
+Org selection follows a three-priority source order (via ``TenantModelAdmin``):
+  1. VIEW-AS debug session.
+  2. Explicit request selection (GET list-filter / POST form field).
+  3. Session persistence.
 
 On PostgreSQL the ``_org_db_context`` context manager wraps every admin
 view in a ``transaction.atomic()`` block that also runs
@@ -25,9 +26,13 @@ from django.contrib import admin
 from django.contrib.admin.sites import AdminSite
 from django.db import connection
 from django.test import Client, RequestFactory
+from django.test.client import WSGIRequest
 from django.urls import reverse
 
-from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+from quickscale_modules_orgs.constants import (
+    ACTIVE_ORG_SESSION_KEY,
+    DEBUG_AS_ORG_SESSION_KEY,
+)
 from quickscale_modules_orgs.current_org import (
     get_current_org_id,
     set_current_org_id,
@@ -927,6 +932,206 @@ class TestSocialAdminNonexistentOrg:
                 "get_queryset must not call set_current_org_id with the "
                 "bogus UUID"
             )
+
+
+# ---------------------------------------------------------------------------
+# SA64 — VIEW-AS priority tests
+# ---------------------------------------------------------------------------
+# Under TenantModelAdmin, _resolve_active_org_id follows a three-priority
+# order: VIEW-AS debug session > explicit selection > session persistence.
+# These tests prove the VIEW-AS priority works and is ignored for
+# non-superusers (matching the orgs TenantModelAdmin contract).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestSocialAdminViewAsPriority:
+    """VIEW-AS debug session priority in ``_resolve_active_org_id``.
+
+    Every test must simulate the request with the VIEW-AS session key
+    and a superuser, because ``get_debug_as_org`` enforces the
+    superuser-only invariant.
+    """
+
+    def test_view_as_takes_priority_over_session(
+        self, rf: RequestFactory, org_a, org_b
+    ) -> None:
+        """VIEW-AS debug session takes priority over regular session."""
+        request = rf.get("/admin/")
+        request.session = {
+            ACTIVE_ORG_SESSION_KEY: str(org_b.pk),
+            DEBUG_AS_ORG_SESSION_KEY: str(org_a.pk),
+        }  # type: ignore[assignment]
+        request.user = type("FakeUser", (), {"is_superuser": True})()
+        result = _resolve_active_org_id(request)
+        assert result == org_a.pk
+
+    def test_view_as_ignored_for_non_superuser(
+        self, rf: RequestFactory, org_a, org_b
+    ) -> None:
+        """VIEW-AS debug session is ignored for non-superusers."""
+        request = rf.get("/admin/")
+        request.session = {
+            ACTIVE_ORG_SESSION_KEY: str(org_b.pk),
+            DEBUG_AS_ORG_SESSION_KEY: str(org_a.pk),
+        }  # type: ignore[assignment]
+        request.user = type("FakeUser", (), {"is_superuser": False})()
+        result = _resolve_active_org_id(request)
+        # Should fall through to session persistence.
+        assert result == org_b.pk
+
+    def test_view_as_ignored_when_not_set(self, rf: RequestFactory, org) -> None:
+        """When VIEW-AS is not active, falls through to other sources."""
+        request = rf.get("/admin/")
+        request.session = {ACTIVE_ORG_SESSION_KEY: str(org.pk)}  # type: ignore[assignment]
+        result = _resolve_active_org_id(request)
+        assert result == org.pk
+
+
+# ---------------------------------------------------------------------------
+# SA64 — VIEW-AS org-field locking via TenantModelAdmin.get_form
+# ---------------------------------------------------------------------------
+# Under VIEW-AS, TenantModelAdmin.get_form disables the organization field
+# so add/change POST submissions cannot write a different org than the
+# active VIEW-AS debug org.  The disabled-field logic ignores any
+# POST-supplied value and uses the initial value (add) or the instance
+# value (change) instead.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestSocialAdminViewAsOrgLock:
+    """VIEW-AS org locking inherited through ``TenantModelAdmin``.
+
+    Every test that exercises ``get_form`` must simulate the request
+    with the VIEW-AS session key and a superuser, because
+    ``get_debug_as_org`` enforces the superuser-only invariant.
+    """
+
+    def _view_as_request(self, rf, org_id, *, method: str = "get") -> WSGIRequest:
+        """Build a GET/POST request with VIEW-AS session + superuser."""
+        request = getattr(rf, method)("/admin/")
+        request.session = {DEBUG_AS_ORG_SESSION_KEY: str(org_id)}
+        request.user = type("FakeUser", (), {"is_superuser": True})()
+        return request
+
+    def test_get_form_disables_org_under_view_as_add(self, rf, org) -> None:
+        """``get_form`` returns add form with disabled+prefilled org under VIEW-AS."""
+        from quickscale_modules_social.admin import SocialLinkAdmin
+
+        request = self._view_as_request(rf, org.pk)
+        admin_instance = SocialLinkAdmin(SocialLink, AdminSite())
+        form_class = admin_instance.get_form(request, obj=None)
+        form = form_class()
+
+        assert form.base_fields["organization"].disabled is True
+        assert form.base_fields["organization"].initial == org.pk
+
+    def test_get_form_disables_org_under_view_as_change(self, rf, org) -> None:
+        """``get_form`` returns change form with disabled org under VIEW-AS."""
+        from quickscale_modules_social.admin import SocialLinkAdmin
+
+        link = SocialLink.objects.create(
+            title="Change Test Link",
+            url="https://www.linkedin.com/company/change-test/",
+            organization=org,
+        )
+
+        request = self._view_as_request(rf, org.pk)
+        admin_instance = SocialLinkAdmin(SocialLink, AdminSite())
+        form_class = admin_instance.get_form(request, obj=link)
+        form = form_class(instance=link)
+
+        assert form.base_fields["organization"].disabled is True
+        # Change forms use the instance value, not initial
+        assert form["organization"].value() == org.pk
+
+    def test_get_form_not_disabled_without_view_as(self, rf, org) -> None:
+        """Without VIEW-AS, the organization field is not disabled."""
+        from quickscale_modules_social.admin import SocialLinkAdmin
+
+        request = rf.get("/admin/")
+        request.session = {ACTIVE_ORG_SESSION_KEY: str(org.pk)}
+        request.user = type("FakeUser", (), {"is_superuser": True})()
+        admin_instance = SocialLinkAdmin(SocialLink, AdminSite())
+        form_class = admin_instance.get_form(request, obj=None)
+
+        assert "organization" in form_class.base_fields
+        assert form_class.base_fields["organization"].disabled is False
+
+    def test_get_form_disabled_for_non_superuser_ignored(self, rf, org) -> None:
+        """A non-superuser with a VIEW-AS session key is ignored
+        (``get_debug_as_org`` clears the key for non-superusers)."""
+        from quickscale_modules_social.admin import SocialLinkAdmin
+
+        request = rf.get("/admin/")
+        request.session = {DEBUG_AS_ORG_SESSION_KEY: str(org.pk)}
+        request.user = type("FakeUser", (), {"is_superuser": False})()
+        admin_instance = SocialLinkAdmin(SocialLink, AdminSite())
+        form_class = admin_instance.get_form(request, obj=None)
+
+        assert form_class.base_fields["organization"].disabled is False
+
+    def test_view_as_add_form_saves_with_debug_org(self, rf, org_a, org_b) -> None:
+        """Form from ``get_form`` under VIEW-AS saves with the debug org."""
+        from quickscale_modules_social.admin import SocialLinkAdmin
+
+        request = self._view_as_request(rf, org_a.pk)
+        admin_instance = SocialLinkAdmin(SocialLink, AdminSite())
+        form_class = admin_instance.get_form(request, obj=None)
+
+        form = form_class(
+            data={
+                "title": "View As Add Form",
+                "url": "https://www.linkedin.com/company/view-as-add-form/",
+                "organization": str(org_b.pk),  # Try to create in org_b
+                "display_order": 0,
+            },
+        )
+
+        assert form.is_valid(), form.errors
+        instance = form.save()
+        assert instance.organization_id == org_a.pk, (
+            f"Saved instance should have org_a ({org_a.pk}), "
+            f"but got org_id={instance.organization_id}"
+        )
+
+    def test_view_as_change_form_preserves_org(self, rf, org_a, org_b) -> None:
+        """Form from ``get_form`` under VIEW-AS preserves the instance org."""
+        from quickscale_modules_social.admin import SocialLinkAdmin
+
+        link = SocialLink.objects.create(
+            title="View As Change Form",
+            url="https://www.linkedin.com/company/view-as-change-form/",
+            organization=org_a,
+        )
+
+        request = self._view_as_request(rf, org_a.pk)
+        admin_instance = SocialLinkAdmin(SocialLink, AdminSite())
+        form_class = admin_instance.get_form(request, obj=link)
+
+        form = form_class(
+            data={
+                "title": "Updated Form Title",
+                "url": "https://www.linkedin.com/company/updated-form-title/",
+                "organization": str(org_b.pk),  # Try to move to org_b
+                "display_order": 0,
+            },
+            instance=link,
+        )
+
+        assert form.is_valid(), form.errors
+        instance = form.save()
+        assert instance.organization_id == org_a.pk, (
+            f"Instance org should remain org_a ({org_a.pk}), "
+            f"but changed to org_id={instance.organization_id}"
+        )
+        assert instance.title == "Updated Form Title", (
+            "Non-org fields should still update"
+        )
+        assert instance.url == "https://www.linkedin.com/company/updated-form-title/", (
+            "Non-org fields should still update"
+        )
 
 
 # ---------------------------------------------------------------------------
