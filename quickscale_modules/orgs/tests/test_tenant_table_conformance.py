@@ -935,17 +935,13 @@ _RESTRICTED_ROLE = "quickscale_rls_test_role"
 
 
 def _ensure_rls_test_role() -> None:
-    """Create a non-superuser role for RLS boundary testing.
+    """Assert the pre-provisioned RLS test role exists (SA59.3).
 
-    Connects via psycopg2 directly because ``CREATE ROLE`` is DDL and
-    cannot run inside a Django test transaction.  Idempotent.
+    The role must be pre-created by the test harness
+    (``scripts/provision_test_roles.sh`` or equivalent).  Raises
+    ``RuntimeError`` with setup instructions if missing.
     Grants SELECT on every ENROLLED tenant table so the restricted role
     can verify RLS policy enforcement.
-
-    Under SA59.1 restricted-role testing, the connected user may not
-    have ``CREATE ROLE`` or ``GRANT`` privilege.  The role and grants
-    are pre-created by the test harness bootstrap, so silent permission
-    errors are acceptable — the grants are idempotent for existing roles.
     """
     import psycopg2  # type: ignore[import-untyped]
 
@@ -962,16 +958,17 @@ def _ensure_rls_test_role() -> None:
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
-            try:
-                cur.execute(f"""
-                    DO $$
-                    BEGIN
-                        CREATE ROLE {_RESTRICTED_ROLE};
-                    EXCEPTION WHEN duplicate_object THEN NULL;
-                    END $$;
-                """)
-            except Exception:
-                pass
+            # SA59.3: assert the role is pre-provisioned instead of CREATE ROLE.
+            cur.execute(
+                "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                [_RESTRICTED_ROLE],
+            )
+            if cur.fetchone() is None:
+                raise RuntimeError(
+                    f"Pre-provisioned role {_RESTRICTED_ROLE} not found. "
+                    f"Run scripts/provision_test_roles.sh to create it before "
+                    f"running tenant-table conformance tests."
+                )
             try:
                 cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
             except Exception:
