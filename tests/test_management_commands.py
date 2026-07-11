@@ -17,7 +17,10 @@ from quickscale_modules_billing.models import (
     Plan,
     Subscription,
 )
-from quickscale_modules_orgs.current_org import set_current_org_id
+from quickscale_modules_orgs.current_org import (
+    reset_current_org_id,
+    set_current_org_id,
+)
 from quickscale_modules_orgs.management.commands.migrate_billing_to_orgs import (
     _billing_user_ids,
     _candidate_customer_ids_for_user,
@@ -274,14 +277,18 @@ def test_migrate_billing_billing_user_ids_from_subscription() -> None:
     )
     plan = _create_plan(slug="growth-bill-ids", price_id="price_growth_bill_ids")
     org = Organization.objects.create(name="Billing IDs", slug="billing-ids")
-    Subscription.objects.create(
-        user=user,
-        organization=org,
-        plan=plan,
-        stripe_subscription_id="sub_bill_ids",
-        stripe_customer_id="cus_bill_ids",
-        status=Subscription.Status.ACTIVE,
-    )
+    set_current_org_id(org.pk)
+    try:
+        Subscription.objects.create(
+            user=user,
+            organization=org,
+            plan=plan,
+            stripe_subscription_id="sub_bill_ids",
+            stripe_customer_id="cus_bill_ids",
+            status=Subscription.Status.ACTIVE,
+        )
+    finally:
+        reset_current_org_id()
     set_current_org_id(org.pk)
     user_ids = _billing_user_ids()
     assert user.pk in user_ids
@@ -425,14 +432,18 @@ def test_migrate_billing_candidate_customer_ids_current() -> None:
         slug="growth-candidate-curr", price_id="price_growth_candidate_curr"
     )
     org = Organization.objects.create(name="Candidate", slug="candidate")
-    Subscription.objects.create(
-        user=user,
-        organization=org,
-        plan=plan,
-        stripe_subscription_id="sub_candidate_curr",
-        stripe_customer_id="cus_candidate_curr",
-        status=Subscription.Status.ACTIVE,
-    )
+    set_current_org_id(org.pk)
+    try:
+        Subscription.objects.create(
+            user=user,
+            organization=org,
+            plan=plan,
+            stripe_subscription_id="sub_candidate_curr",
+            stripe_customer_id="cus_candidate_curr",
+            status=Subscription.Status.ACTIVE,
+        )
+    finally:
+        reset_current_org_id()
     set_current_org_id(org.pk)
     customer_ids = _candidate_customer_ids_for_user(user_id=user.pk)
     assert "cus_candidate_curr" in customer_ids
@@ -450,14 +461,18 @@ def test_migrate_billing_candidate_customer_ids_historical() -> None:
         slug="growth-candidate-hist", price_id="price_growth_candidate_hist"
     )
     org = Organization.objects.create(name="Candidate Hist", slug="candidate-hist")
-    Subscription.objects.create(
-        user=user,
-        organization=org,
-        plan=plan,
-        stripe_subscription_id="sub_candidate_hist",
-        stripe_customer_id="cus_candidate_hist",
-        status=Subscription.Status.CANCELED,
-    )
+    set_current_org_id(org.pk)
+    try:
+        Subscription.objects.create(
+            user=user,
+            organization=org,
+            plan=plan,
+            stripe_subscription_id="sub_candidate_hist",
+            stripe_customer_id="cus_candidate_hist",
+            status=Subscription.Status.CANCELED,
+        )
+    finally:
+        reset_current_org_id()
     set_current_org_id(org.pk)
     customer_ids = _candidate_customer_ids_for_user(user_id=user.pk)
     assert "cus_candidate_hist" in customer_ids
@@ -506,27 +521,31 @@ def test_migrate_billing_completes_with_preassigned_org() -> None:
         user=user, organization=org, role=OrgRole.ADMIN
     )
 
-    Subscription.objects.create(
-        user=user,
-        organization=org,
-        plan=plan,
-        stripe_subscription_id="sub_preassigned",
-        stripe_customer_id="cus_preassigned",
-        status=Subscription.Status.ACTIVE,
-    )
-    CreditBalance.objects.create(
-        organization=org,
-        user=user,
-        balance=50,
-    )
-    CreditTransaction.objects.create(
-        organization=org,
-        user=user,
-        amount=25,
-        transaction_type=CreditTransaction.TransactionType.PURCHASE,
-        description="Preassigned test",
-        balance_after=50,
-    )
+    set_current_org_id(org.pk)
+    try:
+        Subscription.objects.create(
+            user=user,
+            organization=org,
+            plan=plan,
+            stripe_subscription_id="sub_preassigned",
+            stripe_customer_id="cus_preassigned",
+            status=Subscription.Status.ACTIVE,
+        )
+        CreditBalance.objects.create(
+            organization=org,
+            user=user,
+            balance=50,
+        )
+        CreditTransaction.objects.create(
+            organization=org,
+            user=user,
+            amount=25,
+            transaction_type=CreditTransaction.TransactionType.PURCHASE,
+            description="Preassigned test",
+            balance_after=50,
+        )
+    finally:
+        reset_current_org_id()
 
     set_current_org_id(org.pk)
     stdout = StringIO()
@@ -565,14 +584,18 @@ def test_migrate_billing_syncs_stripe_customer_id_when_org_has_none() -> None:
         user=user, organization=org, role=OrgRole.ADMIN
     )
 
-    Subscription.objects.create(
-        user=user,
-        organization=org,
-        plan=plan,
-        stripe_subscription_id="sub_sync_cus",
-        stripe_customer_id="cus_synced",
-        status=Subscription.Status.ACTIVE,
-    )
+    set_current_org_id(org.pk)
+    try:
+        Subscription.objects.create(
+            user=user,
+            organization=org,
+            plan=plan,
+            stripe_subscription_id="sub_sync_cus",
+            stripe_customer_id="cus_synced",
+            status=Subscription.Status.ACTIVE,
+        )
+    finally:
+        reset_current_org_id()
 
     set_current_org_id(org.pk)
     stdout = StringIO()
@@ -611,14 +634,18 @@ def test_migrate_billing_fails_on_conflicting_stripe_customer_id() -> None:
         user=user, organization=org, role=OrgRole.ADMIN
     )
 
-    Subscription.objects.create(
-        user=user,
-        organization=org,
-        plan=plan,
-        stripe_subscription_id="sub_conflict_cus",
-        stripe_customer_id="cus_diff",
-        status=Subscription.Status.ACTIVE,
-    )
+    set_current_org_id(org.pk)
+    try:
+        Subscription.objects.create(
+            user=user,
+            organization=org,
+            plan=plan,
+            stripe_subscription_id="sub_conflict_cus",
+            stripe_customer_id="cus_diff",
+            status=Subscription.Status.ACTIVE,
+        )
+    finally:
+        reset_current_org_id()
 
     set_current_org_id(org.pk)
     with pytest.raises(CommandError, match="already has stripe_customer_id"):
@@ -1125,27 +1152,31 @@ def test_purge_organization_with_billing_rows() -> None:
         currency="usd",
         billing_interval=Plan.BillingInterval.MONTHLY,
     )
-    Subscription.objects.create(
-        organization=organization,
-        user=owner,
-        plan=plan,
-        stripe_subscription_id="sub_billing_purge",
-        stripe_customer_id="cus_billing_purge",
-        status=Subscription.Status.ACTIVE,
-    )
-    CreditBalance.objects.create(
-        organization=organization,
-        user=owner,
-        balance=100,
-    )
-    CreditTransaction.objects.create(
-        organization=organization,
-        user=owner,
-        amount=100,
-        transaction_type=CreditTransaction.TransactionType.PURCHASE,
-        description="Billing purge test",
-        balance_after=100,
-    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            stripe_subscription_id="sub_billing_purge",
+            stripe_customer_id="cus_billing_purge",
+            status=Subscription.Status.ACTIVE,
+        )
+        CreditBalance.objects.create(
+            organization=organization,
+            user=owner,
+            balance=100,
+        )
+        CreditTransaction.objects.create(
+            organization=organization,
+            user=owner,
+            amount=100,
+            transaction_type=CreditTransaction.TransactionType.PURCHASE,
+            description="Billing purge test",
+            balance_after=100,
+        )
+    finally:
+        reset_current_org_id()
     org_id = organization.pk
 
     stdout = StringIO()
@@ -1201,19 +1232,23 @@ def test_purge_organization_rollback_on_error() -> None:
         currency="usd",
         billing_interval=Plan.BillingInterval.MONTHLY,
     )
-    Subscription.objects.create(
-        organization=organization,
-        user=owner,
-        plan=plan,
-        stripe_subscription_id="sub_rollback",
-        stripe_customer_id="cus_rollback",
-        status=Subscription.Status.ACTIVE,
-    )
-    CreditBalance.objects.create(
-        organization=organization,
-        user=owner,
-        balance=50,
-    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            stripe_subscription_id="sub_rollback",
+            stripe_customer_id="cus_rollback",
+            status=Subscription.Status.ACTIVE,
+        )
+        CreditBalance.objects.create(
+            organization=organization,
+            user=owner,
+            balance=50,
+        )
+    finally:
+        reset_current_org_id()
     org_id = organization.pk
 
     # Simulate a failure after some rows have been deleted by patching
@@ -1239,12 +1274,14 @@ def test_purge_organization_rollback_on_error() -> None:
         )
 
     # Everything must still exist after the rollback.
-    # Use all_objects (super-scope bypass) since the purge finally block
-    # resets the ContextVar — TenantManager.objects would return .none().
     assert Organization.objects.filter(pk=org_id).exists()
     assert OrganizationMembership.objects.filter(organization_id=org_id).count() == 1
-    assert Subscription.all_objects.filter(organization_id=org_id).count() == 1
-    assert CreditBalance.all_objects.filter(organization_id=org_id).count() == 1
+    set_current_org_id(organization.pk)
+    try:
+        assert Subscription.all_objects.filter(organization_id=org_id).count() == 1
+        assert CreditBalance.all_objects.filter(organization_id=org_id).count() == 1
+    finally:
+        reset_current_org_id()
     assert not OrganizationTombstone.objects.filter(organization_id=org_id).exists()
 
 
@@ -1605,27 +1642,31 @@ def test_purge_organization_guarded_context_counts_billing_rows() -> None:
         currency="usd",
         billing_interval=Plan.BillingInterval.MONTHLY,
     )
-    Subscription.objects.create(
-        organization=organization,
-        user=owner,
-        plan=plan,
-        stripe_subscription_id="sub_guarded_counts",
-        stripe_customer_id="cus_guarded_counts",
-        status=Subscription.Status.ACTIVE,
-    )
-    CreditBalance.objects.create(
-        organization=organization,
-        user=owner,
-        balance=100,
-    )
-    CreditTransaction.objects.create(
-        organization=organization,
-        user=owner,
-        amount=50,
-        transaction_type=CreditTransaction.TransactionType.PURCHASE,
-        description="Guarded counts test",
-        balance_after=100,
-    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            stripe_subscription_id="sub_guarded_counts",
+            stripe_customer_id="cus_guarded_counts",
+            status=Subscription.Status.ACTIVE,
+        )
+        CreditBalance.objects.create(
+            organization=organization,
+            user=owner,
+            balance=100,
+        )
+        CreditTransaction.objects.create(
+            organization=organization,
+            user=owner,
+            amount=50,
+            transaction_type=CreditTransaction.TransactionType.PURCHASE,
+            description="Guarded counts test",
+            balance_after=100,
+        )
+    finally:
+        reset_current_org_id()
 
     # Ensure no ambient context before the call (simulating the RLS path
     # where TenantManager.objects would return .none()).
@@ -1787,17 +1828,21 @@ def test_purge_organization_deletes_social_rows() -> None:
     from quickscale_modules_social.models import SocialLink
 
     org = Organization.objects.create(name="Social Purge", slug="social-purge")
-    SocialLink.objects.bulk_create(
-        [
-            SocialLink(
-                organization=org,
-                title="Test Link",
-                url="https://www.linkedin.com/company/quickscale",
-                description="Test",
-                display_order=0,
-            ),
-        ]
-    )
+    set_current_org_id(org.pk)
+    try:
+        SocialLink.objects.bulk_create(
+            [
+                SocialLink(
+                    organization=org,
+                    title="Test Link",
+                    url="https://www.linkedin.com/company/quickscale",
+                    description="Test",
+                    display_order=0,
+                ),
+            ]
+        )
+    finally:
+        reset_current_org_id()
     org_id = org.pk
 
     call_command(
@@ -1818,11 +1863,17 @@ def test_purge_organization_deletes_forms_rows() -> None:
     from quickscale_modules_forms.models import Form, FormSubmission
 
     org = Organization.objects.create(name="Forms Purge", slug="forms-purge")
-    form = Form.objects.create(organization=org, title="Test Form", slug="test-form")
-    FormSubmission.all_objects.create(
-        form=form,
-        organization=form.organization,
-    )
+    set_current_org_id(org.pk)
+    try:
+        form = Form.objects.create(
+            organization=org, title="Test Form", slug="test-form"
+        )
+        FormSubmission.all_objects.create(
+            form=form,
+            organization=form.organization,
+        )
+    finally:
+        reset_current_org_id()
     org_id = org.pk
 
     call_command(
@@ -1844,7 +1895,13 @@ def test_purge_organization_deletes_listings_rows() -> None:
     from quickscale_modules_listings.models import Listing
 
     org = Organization.objects.create(name="Listings Purge", slug="listings-purge")
-    Listing.objects.create(organization=org, title="Test Listing", slug="test-listing")
+    set_current_org_id(org.pk)
+    try:
+        Listing.objects.create(
+            organization=org, title="Test Listing", slug="test-listing"
+        )
+    finally:
+        reset_current_org_id()
     org_id = org.pk
 
     call_command(
@@ -1865,17 +1922,21 @@ def test_purge_organization_deletes_blog_rows() -> None:
     from quickscale_modules_blog.models import Category, Post, Tag
 
     org = Organization.objects.create(name="Blog Purge", slug="blog-purge")
-    category = Category.objects.create(
-        organization=org, name="Test Cat", slug="test-cat"
-    )
-    Tag.objects.create(organization=org, name="Test Tag", slug="test-tag")
-    Post.objects.create(
-        organization=org,
-        title="Test Post",
-        slug="test-post",
-        category=category,
-        content="# Hello",
-    )
+    set_current_org_id(org.pk)
+    try:
+        category = Category.objects.create(
+            organization=org, name="Test Cat", slug="test-cat"
+        )
+        Tag.objects.create(organization=org, name="Test Tag", slug="test-tag")
+        Post.objects.create(
+            organization=org,
+            title="Test Post",
+            slug="test-post",
+            category=category,
+            content="# Hello",
+        )
+    finally:
+        reset_current_org_id()
     org_id = org.pk
 
     call_command(
@@ -1904,22 +1965,26 @@ def test_purge_organization_deletes_crm_rows() -> None:
     )
 
     org = Organization.objects.create(name="CRM Purge", slug="crm-purge")
-    company = Company.objects.create(organization=org, name="Test Co")
-    stage = Stage.objects.create(organization=org, name="Test Stage", order=0)
-    contact = Contact.objects.create(
-        organization=org,
-        first_name="A",
-        last_name="B",
-        email="a@b.com",
-        company=company,
-    )
-    Deal.objects.create(
-        organization=org,
-        title="Test Deal",
-        contact=contact,
-        stage=stage,
-    )
-    Tag.objects.create(organization=org, name="Test Tag")
+    set_current_org_id(org.pk)
+    try:
+        company = Company.objects.create(organization=org, name="Test Co")
+        stage = Stage.objects.create(organization=org, name="Test Stage", order=0)
+        contact = Contact.objects.create(
+            organization=org,
+            first_name="A",
+            last_name="B",
+            email="a@b.com",
+            company=company,
+        )
+        Deal.objects.create(
+            organization=org,
+            title="Test Deal",
+            contact=contact,
+            stage=stage,
+        )
+        Tag.objects.create(organization=org, name="Test Tag")
+    finally:
+        reset_current_org_id()
     org_id = org.pk
 
     call_command(
@@ -1948,20 +2013,24 @@ def test_purge_organization_dry_run_counts_all_modules() -> None:
     from quickscale_modules_social.models import SocialLink
 
     org = Organization.objects.create(name="Multi Dryrun", slug="multi-dryrun")
-    SocialLink.objects.bulk_create(
-        [
-            SocialLink(
-                organization=org,
-                title="SL",
-                url="https://www.linkedin.com/company/quickscale",
-                display_order=0,
-            ),
-        ]
-    )
-    Form.objects.create(organization=org, title="F", slug="f")
-    Listing.objects.create(organization=org, title="L")
-    Post.objects.create(organization=org, title="P", slug="p", content="x")
-    Company.objects.create(organization=org, name="Dryrun Co")
+    set_current_org_id(org.pk)
+    try:
+        SocialLink.objects.bulk_create(
+            [
+                SocialLink(
+                    organization=org,
+                    title="SL",
+                    url="https://www.linkedin.com/company/quickscale",
+                    display_order=0,
+                ),
+            ]
+        )
+        Form.objects.create(organization=org, title="F", slug="f")
+        Listing.objects.create(organization=org, title="L")
+        Post.objects.create(organization=org, title="P", slug="p", content="x")
+        Company.objects.create(organization=org, name="Dryrun Co")
+    finally:
+        reset_current_org_id()
     org_id = org.pk
 
     stdout = StringIO()
@@ -2001,16 +2070,20 @@ def test_purge_organization_clears_social_cache() -> None:
     from quickscale_modules_social.models import SocialLink
 
     org = Organization.objects.create(name="Cache Purge", slug="cache-purge")
-    SocialLink.objects.bulk_create(
-        [
-            SocialLink(
-                organization=org,
-                title="CL",
-                url="https://www.linkedin.com/company/quickscale",
-                display_order=0,
-            ),
-        ]
-    )
+    set_current_org_id(org.pk)
+    try:
+        SocialLink.objects.bulk_create(
+            [
+                SocialLink(
+                    organization=org,
+                    title="CL",
+                    url="https://www.linkedin.com/company/quickscale",
+                    display_order=0,
+                ),
+            ]
+        )
+    finally:
+        reset_current_org_id()
     org_id = org.pk
 
     # Seed cache keys before purge.

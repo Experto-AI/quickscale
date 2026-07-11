@@ -15,6 +15,11 @@ from django.conf import settings
 from django.db.models import CASCADE, PROTECT, SET_NULL
 from django.test import Client
 
+from quickscale_modules_orgs.current_org import (
+    reset_current_org_id,
+    set_current_org_id,
+)
+
 
 @pytest.mark.django_db
 class TestUserFkDeleteRuleConformance:
@@ -159,11 +164,15 @@ class TestUserFkDeleteRuleConformance:
             name="SA35 Survivor Org",
             slug="sa35-survivor-org",
         )
-        post = Post.objects.create(
-            title="SA35 Survivor Post",
-            author=user,
-            organization=org,
-        )
+        set_current_org_id(org.pk)
+        try:
+            post = Post.objects.create(
+                title="SA35 Survivor Post",
+                author=user,
+                organization=org,
+            )
+        finally:
+            reset_current_org_id()
         post_id = post.pk
         user_id = user.pk
 
@@ -171,15 +180,20 @@ class TestUserFkDeleteRuleConformance:
         user.delete()
 
         # Post must survive with author set to NULL.
-        post.refresh_from_db()
+        set_current_org_id(org.pk)
+        try:
+            post.refresh_from_db()
+        finally:
+            reset_current_org_id()
         assert post.author is None
         # Verify the user is actually gone.
         assert not User.objects.filter(pk=user_id).exists()
         # Verify the post record itself still exists.
-        # Use all_objects to bypass TenantManager auto-scoping — the test
-        # does not set an org contextvar, so Post.objects would scope to
-        # NULL org and miss this record.
-        assert Post.all_objects.filter(pk=post_id).exists()
+        set_current_org_id(org.pk)
+        try:
+            assert Post.all_objects.filter(pk=post_id).exists()
+        finally:
+            reset_current_org_id()
 
 
 # ---------------------------------------------------------------------------
@@ -253,11 +267,15 @@ class TestAccountDeleteViewSurvivorRegression:
         """Create a blog Post authored by *user* in *org*."""
         from quickscale_modules_blog.models import Post
 
-        return Post.objects.create(
-            title="SA35 Survivor View Post",
-            author=user,
-            organization=org,
-        )
+        set_current_org_id(org.pk)
+        try:
+            return Post.objects.create(
+                title="SA35 Survivor View Post",
+                author=user,
+                organization=org,
+            )
+        finally:
+            reset_current_org_id()
 
     def _create_crm_contact_note(self, user: object, org: object) -> object:
         """Create a CRM ContactNote whose created_by points to *user*."""
@@ -267,23 +285,27 @@ class TestAccountDeleteViewSurvivorRegression:
             ContactNote,
         )
 
-        company = Company.objects.create(
-            name="SA35 Survivor Co",
-            organization=org,
-        )
-        contact = Contact.objects.create(
-            first_name="Sa35",
-            last_name="Contact",
-            email="sa35_contact@example.com",
-            company=company,
-            organization=org,
-        )
-        return ContactNote.objects.create(
-            contact=contact,
-            created_by=user,
-            text="SA35 survivor regression note",
-            organization=org,
-        )
+        set_current_org_id(org.pk)
+        try:
+            company = Company.objects.create(
+                name="SA35 Survivor Co",
+                organization=org,
+            )
+            contact = Contact.objects.create(
+                first_name="Sa35",
+                last_name="Contact",
+                email="sa35_contact@example.com",
+                company=company,
+                organization=org,
+            )
+            return ContactNote.objects.create(
+                contact=contact,
+                created_by=user,
+                text="SA35 survivor regression note",
+                organization=org,
+            )
+        finally:
+            reset_current_org_id()
 
     def _create_crm_deal_note(self, user: object, org: object) -> object:
         """Create a CRM DealNote whose created_by points to *user*."""
@@ -295,34 +317,38 @@ class TestAccountDeleteViewSurvivorRegression:
             Stage,
         )
 
-        company = Company.objects.create(
-            name="SA35 Survivor Deal Co",
-            organization=org,
-        )
-        contact = Contact.objects.create(
-            first_name="Sa35",
-            last_name="DealContact",
-            email="sa35_deal_contact@example.com",
-            company=company,
-            organization=org,
-        )
-        stage = Stage.objects.create(
-            name="SA35 Pipeline",
-            order=1,
-            organization=org,
-        )
-        deal = Deal.objects.create(
-            title="SA35 Survivor Deal",
-            contact=contact,
-            stage=stage,
-            organization=org,
-        )
-        return DealNote.objects.create(
-            deal=deal,
-            created_by=user,
-            text="SA35 survivor deal note",
-            organization=org,
-        )
+        set_current_org_id(org.pk)
+        try:
+            company = Company.objects.create(
+                name="SA35 Survivor Deal Co",
+                organization=org,
+            )
+            contact = Contact.objects.create(
+                first_name="Sa35",
+                last_name="DealContact",
+                email="sa35_deal_contact@example.com",
+                company=company,
+                organization=org,
+            )
+            stage = Stage.objects.create(
+                name="SA35 Pipeline",
+                order=1,
+                organization=org,
+            )
+            deal = Deal.objects.create(
+                title="SA35 Survivor Deal",
+                contact=contact,
+                stage=stage,
+                organization=org,
+            )
+            return DealNote.objects.create(
+                deal=deal,
+                created_by=user,
+                text="SA35 survivor deal note",
+                organization=org,
+            )
+        finally:
+            reset_current_org_id()
 
     def test_account_delete_view_preserves_blog_and_crm_content(
         self, _sa35_user: object, _sa35_authenticated_client: Client

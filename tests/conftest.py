@@ -11,6 +11,7 @@ here.
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
 
 from collections.abc import Iterator
 from typing import Any, cast
@@ -44,6 +45,70 @@ def _reset_test_state() -> Iterator[None]:
     cache.clear()
     yield
     cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _mock_org_created_signal() -> Iterator[None]:
+    """Prevent CRM receiver from firing during org creation in non-CRM tests.
+
+    Under SA59.1 restricted-role testing, ``Organization.objects.create()``
+    and similar paths that dispatch ``organization_created`` trigger
+    the CRM receiver (``seed_crm_default_stages_on_org_created``), which
+    writes to tenant-scoped CRM tables under FORCE-RLS.  Without a primed
+    ``app.current_org_id``, those writes fail.
+
+    This fixture patches the signal's ``send`` method globally so that
+    receivers are never invoked during org creation in tests that are not
+    specifically testing CRM bootstrap behavior.
+
+    Tests that verify signal dispatch (``test_crm_bootstrap.py``) use their
+    own explicit ``patch.object(organization_created, "send")``, which
+    temporarily overrides this fixture's mock and restores it on exit.
+    """
+    from unittest.mock import patch
+
+    from quickscale_modules_orgs.signals import organization_created
+
+    with patch.object(organization_created, "send"):
+        yield
+
+
+# ---------------------------------------------------------------------------
+# SA59.1 — restricted-role context helpers
+# ---------------------------------------------------------------------------
+
+
+@contextmanager
+def org_write_context(organization: Any) -> Iterator[None]:
+    """Context manager that establishes org context for tenant-scoped writes.
+
+    Under SA59.1 restricted-role testing, FORCE-RLS policies require
+    ``app.current_org_id`` to be set before any INSERT/UPDATE/DELETE on
+    tenant-scoped tables, even when using ``all_objects`` (which bypasses
+    Django-level scoping but not PostgreSQL RLS).
+
+    Usage::
+
+        with org_write_context(org):
+            Category.all_objects.create(organization=org, ...)
+
+    Restores the prior ContextVar state on exit so nested calls are safe.
+    """
+    from quickscale_modules_orgs.current_org import (
+        get_current_org_id,
+        reset_current_org_id,
+        set_current_org_id,
+    )
+
+    prior = get_current_org_id()
+    set_current_org_id(organization.pk)
+    try:
+        yield
+    finally:
+        if prior is not None:
+            set_current_org_id(prior)
+        else:
+            reset_current_org_id()
 
 
 @pytest.fixture

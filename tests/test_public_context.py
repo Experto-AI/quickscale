@@ -14,7 +14,11 @@ from django.http import HttpResponse
 from django.test import RequestFactory
 from django.views import View
 
-from quickscale_modules_orgs.current_org import get_current_org_id
+from quickscale_modules_orgs.current_org import (
+    get_current_org_id,
+    reset_current_org_id,
+    set_current_org_id,
+)
 from quickscale_modules_orgs.models import Organization
 from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
 
@@ -73,11 +77,15 @@ class TestPublicSystemOrgReadMixinDispatch:
         from quickscale_modules_blog.models import Category  # type: ignore[import-untyped]  # noqa: F401 — blog stubs not shipped
 
         org = Organization.objects.create(name="CBV-Query", slug="cbv-query")
-        cat = Category.all_objects.create(
-            organization=org,
-            name="CBV Cat",
-            slug="cbv-cat",
-        )
+        set_current_org_id(org.pk)
+        try:
+            cat = Category.all_objects.create(
+                organization=org,
+                name="CBV Cat",
+                slug="cbv-cat",
+            )
+        finally:
+            reset_current_org_id()
         captured: dict[str, object] = {}
 
         class TestView(PublicSystemOrgReadMixin, View):
@@ -102,11 +110,15 @@ class TestPublicSystemOrgReadMixinDispatch:
         from quickscale_modules_blog.models import Category  # noqa: F401 — blog stubs not shipped
 
         org = Organization.objects.create(name="CBV-Fail", slug="cbv-fail")
-        Category.all_objects.create(
-            organization=org,
-            name="Should Not Appear",
-            slug="should-not-appear",
-        )
+        set_current_org_id(org.pk)
+        try:
+            Category.all_objects.create(
+                organization=org,
+                name="Should Not Appear",
+                slug="should-not-appear",
+            )
+        finally:
+            reset_current_org_id()
         captured: dict[str, object] = {}
 
         class TestView(PublicSystemOrgReadMixin, View):
@@ -151,11 +163,15 @@ class TestPublicSystemOrgReadMixinDispatch:
             name="LazyRenderTest",
             slug="lazy-render-test",
         )
-        Category.all_objects.create(
-            organization=org,
-            name="Lazy Cat",
-            slug="lazy-cat",
-        )
+        set_current_org_id(org.pk)
+        try:
+            Category.all_objects.create(
+                organization=org,
+                name="Lazy Cat",
+                slug="lazy-cat",
+            )
+        finally:
+            reset_current_org_id()
 
         class TestView(PublicSystemOrgReadMixin, View):
             def get_public_org(self) -> Organization:
