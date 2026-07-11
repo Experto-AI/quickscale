@@ -65,12 +65,11 @@ git merge --no-ff wt-track{N}
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
 SA59 — drop bypassrls auto-prime       (no open items this pass)                 SA67 — verify + patch SA63 on the
-  (umbrella, split → SA59.1–SA59.4)
-SA60 — composite-FK deferability                                                    beta sites (urgent, do first)
-  policy + conformance gate                                                       SA65 — stop propagating the CLI's
-SA70 — orgs pre_delete receiver                                                     PYTHONPATH env to foreign
-  backstop (Finding 2 first step)                                                   subprocesses (quick win)
-                                                                                   SA66 — generated-file ownership
+  (umbrella, split → SA59.1–SA59.4)                                                  beta sites (urgent, do first)
+SA60 — composite-FK deferability                                                    SA65 — stop propagating the CLI's
+  policy + conformance gate                                                         PYTHONPATH env to foreign
+SA70 — orgs pre_delete receiver                                                     subprocesses (quick win)
+  backstop (Finding 2 first step)                                                   SA66 — generated-file ownership
                                                                                      conformance gate (Finding 7)
                                                                                    SA68 — finish the migrate-path
                                                                                      launcher env-pair contract
