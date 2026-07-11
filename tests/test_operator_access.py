@@ -547,14 +547,13 @@ class TestOperatorAccessCrossTenantReadOnly:
 
     @staticmethod
     def _ensure_role() -> None:
-        """Create a non-superuser role for RLS boundary testing.
-        Idempotent.  Connects via psycopg2 because CREATE ROLE is DDL.
+        """Assert the pre-provisioned RLS role exists and issue table grants.
 
-        Under SA59.1 restricted-role testing, the connected user may not
-        have ``CREATE ROLE`` privilege.  The role is pre-created by the
-        test harness bootstrap (``docker exec`` as superuser), so silent
-        permission errors are acceptable — the existing GRANT statements
-        are idempotent for already-existing roles.
+        SA59.3: The role must be pre-created by the test harness
+        (``scripts/provision_test_roles.sh`` or equivalent) instead of
+        creating it at runtime.  Raises ``RuntimeError`` with setup
+        instructions if missing.  Per-table grants are still issued here
+        (idempotent, requires table existence post-migration).
         """
         import psycopg2  # type: ignore[import-untyped]
 
@@ -571,18 +570,18 @@ class TestOperatorAccessCrossTenantReadOnly:
         conn.autocommit = True
         try:
             with conn.cursor() as cur:
-                try:
-                    cur.execute(f"""
-                        DO $$
-                        BEGIN
-                            CREATE ROLE {TestOperatorAccessCrossTenantReadOnly._RESTRICTED_ROLE};
-                        EXCEPTION WHEN duplicate_object THEN NULL;
-                        END $$;
-                    """)
-                except Exception:
-                    # Role creation requires superuser; the role is
-                    # pre-created by the test harness bootstrap.
-                    pass
+                # SA59.3: assert the role is pre-provisioned instead of CREATE ROLE.
+                cur.execute(
+                    "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                    [TestOperatorAccessCrossTenantReadOnly._RESTRICTED_ROLE],
+                )
+                if cur.fetchone() is None:
+                    raise RuntimeError(
+                        f"Pre-provisioned role "
+                        f"{TestOperatorAccessCrossTenantReadOnly._RESTRICTED_ROLE} "
+                        f"not found. Run scripts/provision_test_roles.sh to "
+                        f"create it before running operator-access tests."
+                    )
                 try:
                     cur.execute(
                         f"GRANT USAGE ON SCHEMA public TO "
