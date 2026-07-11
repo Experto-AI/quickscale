@@ -4,6 +4,7 @@
 # See scripts/test_isolation_conformance.sh for the restricted role pattern.
 #
 # NOTE: This script runs module integration tests only.
+# @pytest.mark.e2e tests are explicitly excluded (they belong under test_e2e.sh).
 # Unit tests (core + CLI) are run via scripts/test_unit.sh.
 # E2E tests are run via scripts/test_e2e.sh.
 #
@@ -95,6 +96,26 @@ run_with_pythonpath() {
 }
 
 cd "$REPO_ROOT"
+
+persist_module_coverage_xml() {
+  local stage_name="$1"
+  local coverage_xml="$2"
+  local mod_name=""
+
+  case "$stage_name" in
+    module\ *)
+      mod_name="${stage_name#module }"
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  local target_path="quickscale_modules/${mod_name}/coverage.xml"
+  if [ -n "$target_path" ] && [ -f "$coverage_xml" ]; then
+    cp "$coverage_xml" "$target_path"
+  fi
+}
 
 show_help() {
   echo "Usage: $0 [OPTIONS] [-- <pytest-args>]"
@@ -271,6 +292,7 @@ run_pytest_stage() {
 
   local coverage_pct
   coverage_pct="$(extract_coverage_percent "$coverage_xml" || true)"
+  persist_module_coverage_xml "$stage_name" "$coverage_xml"
   if [ -n "$coverage_pct" ]; then
     printf '%s|%s\n' "$stage_name" "$coverage_pct" >> "$COVERAGE_RESULTS_FILE"
   fi
@@ -341,7 +363,7 @@ if [ -d "quickscale_modules" ]; then
           "$pkg_name" \
           false \
           run_with_pythonpath "$(build_module_pythonpath "$mod")${PYTHONPATH:+:$PYTHONPATH}" run_repo_tool pytest "$mod/tests/" \
-            -p pytest_django --ds=tests.settings; then
+            -m "not e2e" -p pytest_django --ds=tests.settings; then
           EXIT_CODE=1
         fi
       else

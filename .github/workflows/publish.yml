@@ -185,6 +185,17 @@ jobs:
         run: |
           ./scripts/test_integration.sh
 
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v5
+        if: always()
+        with:
+          files: ./quickscale_core/coverage.xml,./quickscale_cli/coverage.xml,./quickscale_modules/*/coverage.xml
+          flags: unittests,integration
+          name: codecov-umbrella
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+
   build:
     name: Build Packages
     runs-on: ubuntu-latest

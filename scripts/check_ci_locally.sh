@@ -36,7 +36,7 @@ echo "  5. Manifest sync gate (sync_module_manifests)"
 echo "  6. Org-context primitives gate (check_org_context_primitives)"
 echo "  7. CSRF-exempt gate (check_csrf_exempt_gate)"
 echo "  8. Type check (mypy)"
-echo "  9. Unit/integration tests (quickscale_core, quickscale_cli, modules)"
+echo "  9. Unit tests (core + CLI), then integration tests when PostgreSQL is available"
 echo " 10. E2E tests (optional, with --e2e flag)"
             exit 0
             ;;
@@ -125,17 +125,37 @@ make typecheck -- --core --cli --modules
 echo "✓ Type checks passed"
 
 echo ""
-echo "[9/10] Running unit/integration tests..."
+echo "[9/10] Running unit tests..."
 ./scripts/test_unit.sh || FAILED=true
 
 if [ "$FAILED" = true ]; then
     echo ""
     echo "╔════════════════════════════════════════╗"
-    echo "║   ✗ Unit/Integration Tests Failed      ║"
+    echo "║   ✗ Unit Tests Failed                  ║"
     echo "╚════════════════════════════════════════╝"
     exit 1
 fi
-echo "✓ All unit/integration tests passed"
+echo "✓ Unit tests passed"
+
+echo ""
+echo "     Running integration tests (requires PostgreSQL)..."
+if command -v pg_isready >/dev/null 2>&1 && pg_isready -h localhost -q 2>/dev/null; then
+    echo "PostgreSQL is available — running integration tests..."
+    ./scripts/test_integration.sh || FAILED=true
+    if [ "$FAILED" = true ]; then
+        echo ""
+        echo "╔════════════════════════════════════════╗"
+        echo "║   ✗ Integration Tests Failed           ║"
+        echo "╚════════════════════════════════════════╝"
+        exit 1
+    fi
+    echo "✓ Integration tests passed"
+else
+    echo "  ⚠ PostgreSQL not available — integration tests skipped."
+    echo "  (Full CI parity requires PostgreSQL 18 on localhost:5432"
+    echo "   with pre-created module test databases and a"
+    echo "   quickscale_test_role with LOGIN CREATEDB NOBYPASSRLS NOSUPERUSER.)"
+fi
 
 # Optional E2E tests
 if [ "$RUN_E2E" = true ]; then

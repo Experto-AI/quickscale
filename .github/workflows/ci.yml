@@ -404,7 +404,7 @@ jobs:
       uses: codecov/codecov-action@v5
       if: always() && github.ref == 'refs/heads/main'
       with:
-        files: ./quickscale_core/coverage.xml,./quickscale_cli/coverage.xml
+        files: ./quickscale_core/coverage.xml,./quickscale_cli/coverage.xml,./quickscale_modules/*/coverage.xml
         flags: unittests,integration
         name: codecov-umbrella
       env:
