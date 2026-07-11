@@ -335,15 +335,76 @@ jobs:
           createdb -h localhost -U postgres "$db" 2>/dev/null || echo "Database $db already exists"
         done
 
-    - name: Run repository coverage gate
+    - name: Create PostgreSQL restricted role for module tests
       run: |
-        ./scripts/test_unit.sh
+        ROLE="quickscale_test_role"
+        psql -h localhost -U postgres -tc \
+          "SELECT 1 FROM pg_roles WHERE rolname = '${ROLE}'" \
+          | grep -q 1 \
+          || psql -h localhost -U postgres -c \
+            "CREATE ROLE ${ROLE} WITH LOGIN CREATEDB NOBYPASSRLS NOSUPERUSER"
+        echo "✓ ${ROLE} created with NOBYPASSRLS NOSUPERUSER"
+
+        # Verify the role cannot bypass RLS or act as superuser.
+        for attr in rolbypassrls rolsuper; do
+          val=$(psql -h localhost -U postgres -tc \
+            "SELECT ${attr} FROM pg_roles WHERE rolname = '${ROLE}'" \
+            | tr -d ' ')
+          if [ "$val" != "f" ]; then
+            echo "ERROR: ${ROLE} has ${attr}=${val} — module tests would bypass RLS!"
+            exit 1
+          fi
+          echo "  ${attr}=${val} ✓"
+        done
+
+        # Grant ownership of all test databases to the restricted role so
+        # Django's test runner can create test_* databases from these templates.
+        for db in \
+          test_quickscale_analytics \
+          test_quickscale_auth \
+          test_quickscale_billing \
+          test_quickscale_blog \
+          test_quickscale_crm \
+          test_quickscale_forms \
+          test_quickscale_listings \
+          test_quickscale_notifications \
+          test_quickscale_orgs \
+          test_quickscale_social \
+          test_quickscale_storage; do
+          psql -h localhost -U postgres -c "ALTER DATABASE \"$db\" OWNER TO ${ROLE};"
+          psql -h localhost -U postgres -d "$db" -c "GRANT ALL ON SCHEMA public TO ${ROLE};"
+        done
+        echo "✓ Database ownership and schema permissions granted to ${ROLE}"
+
+    - name: Run unit tests (core + CLI, DB-free)
+      run: |
+        make test-unit SECTION="core cli"
+
+    - name: Run integration tests (modules, PostgreSQL NOBYPASSRLS gate)
+      env:
+        # Keep the SA58 boot guard active against the NOBYPASSRLS/NOSUPERUSER role.
+        QUICKSCALE_ALLOW_BYPASSRLS: "0"
+        # Wire every PostgreSQL-using module's test settings to the
+        # restricted role so module suites run without BYPASSRLS/SUPERUSER.
+        QS_ANALYTICS_DB_USER: quickscale_test_role
+        QS_AUTH_DB_USER: quickscale_test_role
+        QS_BILLING_DB_USER: quickscale_test_role
+        QS_BLOG_DB_USER: quickscale_test_role
+        QS_CRM_DB_USER: quickscale_test_role
+        QS_FORMS_DB_USER: quickscale_test_role
+        QS_LISTINGS_DB_USER: quickscale_test_role
+        QS_NOTIFICATIONS_DB_USER: quickscale_test_role
+        QS_ORGS_DB_USER: quickscale_test_role
+        QS_SOCIAL_DB_USER: quickscale_test_role
+        QS_STORAGE_DB_USER: quickscale_test_role
+      run: |
+        ./scripts/test_integration.sh
 
     - name: Upload coverage reports
       uses: codecov/codecov-action@v5
       if: always() && github.ref == 'refs/heads/main'
       with:
-        files: ./quickscale_core/coverage.xml,./quickscale_cli/coverage.xml
+        files: ./quickscale_core/coverage.xml,./quickscale_cli/coverage.xml,./quickscale_modules/*/coverage.xml
         flags: unittests,integration
         name: codecov-umbrella
       env:

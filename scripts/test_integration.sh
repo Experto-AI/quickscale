@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
-# Run unit tests (core + CLI) in the repository with Poetry.
-# Module integration tests are run separately via scripts/test_integration.sh.
-# Default output is dot-style. Use --full to show full per-file pytest + coverage output.
+# Run integration tests (module suites requiring PostgreSQL) in the repository.
+# Requires PostgreSQL 18 running on localhost:5432.
+# See scripts/test_isolation_conformance.sh for the restricted role pattern.
 #
-# NOTE: This script runs unit tests only (core + CLI; DB-free).
-# E2E tests are excluded (too slow for regular runs).
-# To run E2E tests, use: ./scripts/test_e2e.sh
-# To run module integration tests, use: ./scripts/test_integration.sh
+# NOTE: This script runs module integration tests only.
+# @pytest.mark.e2e tests are explicitly excluded (they belong under test_e2e.sh).
+# Unit tests (core + CLI) are run via scripts/test_unit.sh.
+# E2E tests are run via scripts/test_e2e.sh.
+#
+# Prerequisites:
+#   - PostgreSQL 18 running on localhost:5432
+#   - All test databases pre-created (see ci.yml create-test-databases step)
+#   - A NOBYPASSRLS NOINHERIT NOLOGIN role (e.g. quickscale_test_role) with
+#     ownership + schema grants on all module test databases
+#   - Poetry installed, dependencies installed
 
 set -e
 
@@ -90,20 +97,21 @@ run_with_pythonpath() {
 
 cd "$REPO_ROOT"
 
-persist_coverage_xml() {
+persist_module_coverage_xml() {
   local stage_name="$1"
   local coverage_xml="$2"
-  local target_path=""
+  local mod_name=""
 
   case "$stage_name" in
-    quickscale_core)
-      target_path="quickscale_core/coverage.xml"
+    module\ *)
+      mod_name="${stage_name#module }"
       ;;
-    quickscale_cli)
-      target_path="quickscale_cli/coverage.xml"
+    *)
+      return 0
       ;;
   esac
 
+  local target_path="quickscale_modules/${mod_name}/coverage.xml"
   if [ -n "$target_path" ] && [ -f "$coverage_xml" ]; then
     cp "$coverage_xml" "$target_path"
   fi
@@ -116,6 +124,12 @@ show_help() {
   echo "  --full            Show full pytest output (per-file lines + coverage details)"
   echo "  --verbose, -v     Alias for --full"
   echo "  --help, -h        Show this help message"
+  echo ""
+  echo "Required environment (PostgreSQL 18):"
+  echo "  - PostgreSQL running on localhost:5432"
+  echo "  - Module test databases pre-created"
+  echo "  - Restricted role (e.g. quickscale_test_role) with LOGIN CREATEDB NOBYPASSRLS NOSUPERUSER"
+  echo "  - QS_*_DB_USER env vars set to the restricted role for each module"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -278,7 +292,7 @@ run_pytest_stage() {
 
   local coverage_pct
   coverage_pct="$(extract_coverage_percent "$coverage_xml" || true)"
-  persist_coverage_xml "$stage_name" "$coverage_xml"
+  persist_module_coverage_xml "$stage_name" "$coverage_xml"
   if [ -n "$coverage_pct" ]; then
     printf '%s|%s\n' "$stage_name" "$coverage_pct" >> "$COVERAGE_RESULTS_FILE"
   fi
@@ -309,13 +323,10 @@ run_pytest_stage() {
   return 0
 }
 
-echo "🧪 Running unit tests (core + CLI)..."
-if [ "$SHOW_FULL_OUTPUT" = true ]; then
-  echo "Output mode: full"
-else
-  echo "Output mode: dots"
-fi
-echo "Coverage policy: ${COVERAGE_MEAN_THRESHOLD}% overall mean, ${FILE_COVERAGE_THRESHOLD}% per file"
+echo "🧪 Running integration tests (module suites requiring PostgreSQL)..."
+echo "  Required role attributes: LOGIN CREATEDB NOBYPASSRLS NOSUPERUSER"
+echo "  (see scripts/test_isolation_conformance.sh for role-creation pattern)"
+echo ""
 if [ "$POETRY_AVAILABLE" = false ] && [ -x "$VENV_BIN/python" ]; then
   echo "Execution environment: repo-local .venv (Poetry not found on PATH)"
 fi
@@ -328,40 +339,41 @@ fi
 # Track exit codes
 EXIT_CODE=0
 
-echo "📦 Testing quickscale_core..."
-# Run from root directory to use root Poetry environment (monorepo setup)
-# Skip E2E tests (run separately with ./scripts/test_e2e.sh)
-# Use package name (not src/) to avoid double-counting with pyproject.toml addopts
-if ! run_pytest_stage \
-  "quickscale_core" \
-  "quickscale_core" \
-  true \
-  run_repo_tool pytest quickscale_core/tests/ -m "not integration and not e2e"; then
-  EXIT_CODE=1
+echo "📦 Testing quickscale_modules..."
+# Test modules using ROOT poetry environment (centralized dependencies)
+# Modules are installed in editable mode via root pyproject.toml
+# PYTHONPATH keeps the current module root first and adds sibling module src dirs
+# so cross-module imports like notifications -> forms resolve during bootstrap.
+#
+# NOTE: No blanket QUICKSCALE_ALLOW_BYPASSRLS=1 here — the SA58 boot guard
+# stays active against the NOBYPASSRLS role.  Set the SA14.4 hatch explicitly
+# per-suite when BYPASSRLS-dependent tests need to run.
+if [ -d "quickscale_modules" ]; then
+  for mod in quickscale_modules/*; do
+    if [ -d "$mod" ]; then
+      mod_name=$(basename "$mod")
+      if [ -d "$mod/tests" ]; then
+        echo "  → Testing module: $mod_name"
+        # Package name format: quickscale_modules_<name> (underscores, not hyphens)
+        pkg_name="quickscale_modules_${mod_name}"
+        # Use ROOT poetry environment with PYTHONPATH pointing to module
+        # Coverage uses package name (importable), not filesystem path
+        if ! run_pytest_stage \
+          "module ${mod_name}" \
+          "$pkg_name" \
+          false \
+          run_with_pythonpath "$(build_module_pythonpath "$mod")${PYTHONPATH:+:$PYTHONPATH}" run_repo_tool pytest "$mod/tests/" \
+            -m "not e2e" -p pytest_django --ds=tests.settings; then
+          EXIT_CODE=1
+        fi
+      else
+        echo "  → Skipping $mod_name (no tests/ directory)"
+      fi
+    fi
+  done
+else
+  echo "  → No quickscale_modules directory found"
 fi
-
-echo ""
-echo "📦 Testing quickscale_cli..."
-# Run from root directory to use root Poetry environment (monorepo setup)
-# Skip E2E tests (run separately with ./scripts/test_e2e.sh)
-# Use package name (not src/) to avoid double-counting with pyproject.toml addopts
-if ! run_pytest_stage \
-  "quickscale_cli" \
-  "quickscale_cli" \
-  true \
-  run_repo_tool pytest quickscale_cli/tests/ -m "not integration and not e2e"; then
-  EXIT_CODE=1
-fi
-
-echo ""
-echo "📦 Module integration tests are available via:"
-echo "    make test-integration"
-echo "  or directly:"
-echo "    ./scripts/test_integration.sh"
-echo ""
-echo "  Requires PostgreSQL 18 with a NOBYPASSRLS NOINHERIT NOLOGIN role."
-echo "  Override QUICKSCALE_ALLOW_BYPASSRLS=1 explicitly per-suite for the"
-echo "  SA14.4 BYPASSRLS hatch."
 
 echo ""
 if ! check_overall_mean_coverage; then
@@ -370,8 +382,8 @@ fi
 
 echo ""
 if [ $EXIT_CODE -eq 0 ]; then
-  echo "✅ Tests passed!"
+  echo "✅ Integration tests passed!"
 else
-  echo "❌ Some tests failed!"
+  echo "❌ Some integration tests failed!"
   exit $EXIT_CODE
 fi

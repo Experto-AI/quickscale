@@ -559,6 +559,7 @@ def test_create_subscription_checkout_session_reuses_customer_on_recreated_reser
 def test_create_subscription_checkout_session_reuses_live_reservation_after_create_race(
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan()
@@ -623,6 +624,7 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_crea
 def test_create_subscription_checkout_session_raises_validation_error_after_create_race(
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan()
@@ -681,6 +683,7 @@ def test_create_subscription_checkout_session_raises_validation_error_after_crea
 def test_create_subscription_checkout_session_reuses_live_reservation_after_recreate_race(
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan()
@@ -765,6 +768,7 @@ def test_create_subscription_checkout_session_reuses_live_reservation_after_recr
 def test_handle_stripe_event_updates_pending_row_on_subscription_created(
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_created")
@@ -814,6 +818,7 @@ def test_handle_stripe_event_updates_pending_row_on_subscription_created(
 def test_handle_stripe_event_reconciles_incomplete_reservation_before_crediting(
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_invoice_first_incomplete")
@@ -901,6 +906,7 @@ def test_handle_stripe_event_reconciles_incomplete_reservation_before_crediting(
 def test_handle_stripe_event_marks_subscription_past_due_on_payment_failed(
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_failed")
@@ -944,6 +950,7 @@ def test_handle_stripe_event_marks_subscription_past_due_on_payment_failed(
 def test_handle_stripe_event_recovers_after_payment_failed_and_resync(
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_recovery")
@@ -1020,6 +1027,7 @@ def test_handle_stripe_event_recovers_after_payment_failed_and_resync(
 def test_handle_stripe_event_recovers_after_payment_failed_on_later_invoice_paid(
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_recovery_invoice_paid")
@@ -1083,6 +1091,7 @@ def test_handle_stripe_event_recovers_after_payment_failed_on_later_invoice_paid
 def test_handle_stripe_event_rejects_unsupported_subscription_status(
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_future")
@@ -1158,6 +1167,7 @@ def test_handle_stripe_event_does_not_credit_subscription_checkout_completion(
 def test_handle_stripe_event_ignores_non_creditable_invoice_paid_reason(
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
     billing_reason: str | None,
     event_id: str,

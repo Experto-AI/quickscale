@@ -43,7 +43,6 @@ from quickscale_modules_orgs.models import Organization
 # Restricted role helpers (mirror the social module pattern)
 # ---------------------------------------------------------------------------
 
-_RESTRICTED_ROLE = "quickscale_rls_test_role"
 _BILLING_RLS_TABLES = (
     "quickscale_modules_billing_creditbalance",
     "quickscale_modules_billing_credittransaction",
@@ -51,37 +50,22 @@ _BILLING_RLS_TABLES = (
 )
 
 
-def _ensure_rls_test_role() -> None:
-    """Create a non-superuser role for RLS boundary testing.
+def _verify_role_is_nobypassrls() -> None:
+    """Assert the connected PostgreSQL role does NOT have BYPASSRLS.
 
-    Connects via psycopg2 directly because ``CREATE ROLE`` is DDL and
-    cannot run inside a Django test transaction.  Idempotent.
+    RLS boundary tests are meaningless when the connected role can bypass
+    row-level security.  This check replaces the prior CREATE ROLE / SET ROLE
+    pattern — the already-connected ``quickscale_test_role`` has
+    NOBYPASSRLS, so tests run directly as that role without requiring a
+    separate NOLOGIN probe.
     """
-    import psycopg2
-
-    db = connection.settings_dict
-    conn = psycopg2.connect(
-        dbname=db["NAME"],
-        user=db["USER"],
-        password=db["PASSWORD"],
-        host=db.get("HOST", "localhost"),
-        port=db.get("PORT", "5432"),
-    )
-    conn.autocommit = True
-    try:
-        with conn.cursor() as cur:
-            cur.execute(f"""
-                DO $$
-                BEGIN
-                    CREATE ROLE {_RESTRICTED_ROLE};
-                EXCEPTION WHEN duplicate_object THEN NULL;
-                END $$;
-            """)
-            cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
-            for table in _BILLING_RLS_TABLES:
-                cur.execute(f"GRANT SELECT ON {table} TO {_RESTRICTED_ROLE}")
-    finally:
-        conn.close()
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user")
+        (rolbypassrls,) = cursor.fetchone()
+        assert not rolbypassrls, (
+            f"Role {connection.settings_dict['USER']} has BYPASSRLS — "
+            "RLS boundary tests are meaningless under a privileged role"
+        )
 
 
 def _ensure_rls_policies() -> None:
@@ -316,8 +300,12 @@ class TestBillingRlsBoundaryRestrictedRole:
 
     def test_restricted_role_sees_nothing_with_non_matching_org_context(self) -> None:
         """With ``app.current_org_id`` set to a bogus UUID, RLS returns zero
-        rows on all billing RLS-protected tables (fail-closed at the DB level)."""
-        _ensure_rls_test_role()
+        rows on all billing RLS-protected tables (fail-closed at the DB level).
+
+        Runs directly as the already-connected ``quickscale_test_role`` which
+        has NOBYPASSRLS — no separate role creation or SET ROLE needed.
+        """
+        _verify_role_is_nobypassrls()
         _ensure_rls_policies()
 
         org = self._make_org("Billing Org A", "billing-org-a")
@@ -333,22 +321,18 @@ class TestBillingRlsBoundaryRestrictedRole:
         bogus_org = uuid.uuid4()
         with connection.cursor() as cursor:
             cursor.execute("RESET app.current_org_id")
-            cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
-            try:
-                cursor.execute("SET SESSION app.current_org_id = %s", [str(bogus_org)])
-                for table in _BILLING_RLS_TABLES:
-                    cursor.execute(f"SELECT COUNT(*) FROM {table}")
-                    (count,) = cursor.fetchone()
-                    assert count == 0, (
-                        f"RLS should block all rows on {table} with non-matching org"
-                    )
-            finally:
-                cursor.execute("RESET ROLE")
+            cursor.execute("SET SESSION app.current_org_id = %s", [str(bogus_org)])
+            for table in _BILLING_RLS_TABLES:
+                cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                (count,) = cursor.fetchone()
+                assert count == 0, (
+                    f"RLS should block all rows on {table} with non-matching org"
+                )
 
     def test_restricted_role_sees_only_own_org_credit_balance(self) -> None:
         """With ``app.current_org_id`` set, a restricted role sees only the
         owning org's CreditBalance and cannot see another org's."""
-        _ensure_rls_test_role()
+        _verify_role_is_nobypassrls()
         _ensure_rls_policies()
 
         org_a = self._make_org("Billing Org A2", "billing-org-a2")
@@ -368,32 +352,28 @@ class TestBillingRlsBoundaryRestrictedRole:
 
         with connection.cursor() as cursor:
             cursor.execute("RESET app.current_org_id")
-            cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
-            try:
-                cursor.execute("SET SESSION app.current_org_id = %s", [str(org_a.pk)])
-                cursor.execute(
-                    "SELECT organization_id FROM quickscale_modules_billing_creditbalance"
-                )
-                org_ids = [str(r[0]) for r in cursor.fetchall()]
-                assert org_ids == [str(org_a.pk)], (
-                    f"Expected only org_a balance, got {org_ids}"
-                )
+            cursor.execute("SET SESSION app.current_org_id = %s", [str(org_a.pk)])
+            cursor.execute(
+                "SELECT organization_id FROM quickscale_modules_billing_creditbalance"
+            )
+            org_ids = [str(r[0]) for r in cursor.fetchall()]
+            assert org_ids == [str(org_a.pk)], (
+                f"Expected only org_a balance, got {org_ids}"
+            )
 
-                cursor.execute("SET SESSION app.current_org_id = %s", [str(org_b.pk)])
-                cursor.execute(
-                    "SELECT organization_id FROM quickscale_modules_billing_creditbalance"
-                )
-                org_ids = [str(r[0]) for r in cursor.fetchall()]
-                assert org_ids == [str(org_b.pk)], (
-                    f"Cross-org: expected only org_b balance, got {org_ids}"
-                )
-            finally:
-                cursor.execute("RESET ROLE")
+            cursor.execute("SET SESSION app.current_org_id = %s", [str(org_b.pk)])
+            cursor.execute(
+                "SELECT organization_id FROM quickscale_modules_billing_creditbalance"
+            )
+            org_ids = [str(r[0]) for r in cursor.fetchall()]
+            assert org_ids == [str(org_b.pk)], (
+                f"Cross-org: expected only org_b balance, got {org_ids}"
+            )
 
     def test_unset_org_context_returns_zero_rows_credit_balance(self) -> None:
         """With no ``app.current_org_id`` set (NULL from current_setting), RLS
         returns zero rows — fail-closed behavior."""
-        _ensure_rls_test_role()
+        _verify_role_is_nobypassrls()
         _ensure_rls_policies()
 
         org = self._make_org("Billing Org C", "billing-org-c")
@@ -406,18 +386,14 @@ class TestBillingRlsBoundaryRestrictedRole:
 
         with connection.cursor() as cursor:
             cursor.execute("RESET app.current_org_id")
-            cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
-            try:
-                cursor.execute("SET SESSION app.current_org_id = ''")
-                cursor.execute(
-                    "SELECT COUNT(*) FROM quickscale_modules_billing_creditbalance"
-                )
-                (count,) = cursor.fetchone()
-                assert count == 0, (
-                    "RLS should block all credit balances when org context is unset"
-                )
-            finally:
-                cursor.execute("RESET ROLE")
+            cursor.execute("SET SESSION app.current_org_id = ''")
+            cursor.execute(
+                "SELECT COUNT(*) FROM quickscale_modules_billing_creditbalance"
+            )
+            (count,) = cursor.fetchone()
+            assert count == 0, (
+                "RLS should block all credit balances when org context is unset"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -515,7 +491,24 @@ class TestWebhookEstablishesOrgContextInternally:
         )
 
         assert result.event_type == "checkout.session.completed"
-        # CreditTransaction row should exist and only be visible under correct org context
-        assert CreditTransaction.all_objects.filter(
+
+        # --- Fail-closed: no rows visible without org context ---
+        # TenantManager returns .none() when ContextVar is None; combined
+        # with FORCE RLS at the DB level, zero rows are visible.
+        assert not CreditTransaction.objects.filter(
             stripe_event_id=stripe_event_id
-        ).exists(), "CreditTransaction should be created by the handler"
+        ).exists(), (
+            "CreditTransaction must NOT be visible without org context (fail-closed)"
+        )
+
+        # --- Rows ARE visible within a matching org_scope ---
+        # ``org_scope`` sets both the Python ContextVar and the PostgreSQL
+        # ``app.current_org_id`` GUC inside an atomic block, so that the
+        # TenantManager scoping and FORCE RLS both resolve to the correct org.
+        with org_scope(organization):
+            assert CreditTransaction.objects.filter(
+                stripe_event_id=stripe_event_id
+            ).exists(), "CreditTransaction must be visible within matching org scope"
+
+        # ContextVar must be restored to None after org_scope exit
+        assert get_current_org_id() is None, "org_scope did not leak context after exit"

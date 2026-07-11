@@ -935,6 +935,7 @@ def test_credit_user_db_constraint_rejects_direct_duplicate(
 def test_credit_user_concurrent_duplicate_integrity_path(
     user,
     organization,
+    org_context,
 ) -> None:
     """Deterministically exercise ``credit_user``'s ``IntegrityError`` recovery branch.
 
@@ -995,6 +996,7 @@ def test_credit_user_concurrent_duplicate_integrity_path(
 def test_credit_user_deterministic_integrity_recovery(
     user,
     organization,
+    org_context,
 ) -> None:
     """Deterministically exercise ``credit_user``'s ``except IntegrityError`` recovery path.
 
@@ -1185,10 +1187,11 @@ def test_handle_stripe_event_credits_subscription_user_and_records_event(
 @pytest.mark.django_db
 def test_handle_stripe_event_prefers_org_reference_and_credits_authoritative_org_balance(
     user,
+    organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_plan(price_id="price_org_runtime")
-    organization = Organization.objects.create(name="Nova", slug="nova")
     Subscription.all_objects.create(
         user=user,
         organization=organization,
