@@ -1,6 +1,13 @@
 """Django settings for QuickScale backups module tests."""
 
+import os
 from pathlib import Path
+
+# SA14.4: BYPASSRLS escape hatch removed from settings.py AND conftest.py.
+# No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
+# NOBYPASSRLS is the default for module test suites. Mark individual
+# tests that need BYPASSRLS with @pytest.mark.bypass_rls.
+# Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include bypass_rls tests.
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -47,10 +54,18 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "tests.wsgi.application"
 
+# SA59.2 — Backups module now uses the PostgreSQL/RLS integration seam
+# via QS_BACKUPS_DB_* env vars, matching every other module's pattern.
+# SQLite-specific backup-format coverage is preserved in the one test
+# that exercises the JSON export codepath (test_create_backup_uses_json_export_for_sqlite).
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "test.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("QS_BACKUPS_DB_NAME", "test_quickscale_backups"),
+        "USER": os.environ.get("QS_BACKUPS_DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("QS_BACKUPS_DB_PASSWORD", ""),
+        "HOST": os.environ.get("QS_BACKUPS_DB_HOST", "localhost"),
+        "PORT": os.environ.get("QS_BACKUPS_DB_PORT", "5432"),
     }
 }
 
