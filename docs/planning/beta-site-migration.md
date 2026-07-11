@@ -728,6 +728,7 @@ railway redeploy <deployment-id> --service experto-ai-web
 [ ] In-place only: recipient-owned `App.tsx` and `main.tsx` reviewed manually when newly added modules need routing or public-surface adoption
 [ ] Verification stack completed: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test`
 [ ] Local smoke-test completed — existing pages intact and new module pages work
+[ ] Redis state verified on target site; rollout order adjusted per Redis-present/absent conditions (see §SA68 rollout closeout notes → Safe rollout ordering)
 [ ] Result committed or staged in the target repo
 [ ] Module env vars set in Railway (storage, notifications if added)
 [ ] Merged to main and Railway deployment confirmed
@@ -756,7 +757,7 @@ Findings from the completed SA68 work (the migrate-path launcher env-pair contra
 
 The final design uses two explicit one-shot command env vars — `QUICKSCALE_PRIVILEGED_COMMAND` and `QUICKSCALE_NON_DB_COMMAND` — instead of the earlier single-flag/argv-sniffing idiom. All three argv deciders (`start.sh.j2`'s migrate-line env gap, `production.py.j2`'s `elif "migrate" in sys.argv` branch, `orgs/apps.py`'s `_is_migrate_command()`) are deleted. Every launcher command now routes through the same env-pair bridge.
 
-### Safe rollout ordering
+### Safe rollout ordering (SA63/SA68 env-pair bridge)
 
 The compatibility of new launchers/docs with an older donor-owned `settings/production.py`
 depends on whether Redis is present:
@@ -776,15 +777,19 @@ depends on whether Redis is present:
   unless the older ``settings/production.py`` already has the SA63+ env-pair
   bridge for ``createcachetable``.
 
-Manually transplanting the new ``settings/production.py`` without paired
-launcher/doc updates is unsafe in all cases — the new settings expect the
-env-pair signal and fail closed without it.
+Manually adopting the env-pair bridge into the donor-owned
+``settings/production.py`` without the paired launcher/doc updates is unsafe
+in all cases — the bridge expects the env-pair signal and fails closed
+without it.
 
 **Recommended order for beta-site upgrades:** launcher (``start.sh.j2``),
-docs/operator contracts, then proceed with ``settings/production.py`` last
-**only after verifying** the Redis state on the target site. When Redis is
-absent, deploy the launcher + docs first, then confirm ``createcachetable``
-runs correctly before deploying the new ``settings/production.py``.
+docs/operator contracts, then adopt the env-pair bridge into the donor-owned
+``settings/production.py`` last **only after verifying** the Redis state on the
+target site. When Redis is absent, deploy the launcher + docs first, then
+confirm ``createcachetable`` runs correctly before cherry-picking the env-pair
+bridge into the existing ``settings/production.py`` (do not replace it
+wholesale — ``settings/production.py`` is donor-owned by policy and carries the
+site's real production configuration).
 
 ### Non-blocking validation findings preserved
 
