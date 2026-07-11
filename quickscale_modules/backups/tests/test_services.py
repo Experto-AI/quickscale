@@ -417,7 +417,28 @@ class TestBackupLifecycle:
         superuser: AbstractBaseUser,
         backup_policy: BackupPolicy,
         local_backup_settings: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        # SA59.2 — the default test settings now use PostgreSQL, so this
+        # test forces the connection engine to SQLite to exercise the JSON
+        # export codepath that would otherwise be unreachable under PG.
+        from django.db import connections
+
+        monkeypatch.setitem(
+            connections["default"].settings_dict,
+            "ENGINE",
+            "django.db.backends.sqlite3",
+        )
+        monkeypatch.setitem(
+            connections["default"].settings_dict,
+            "NAME",
+            "test.sqlite3",
+        )
+        monkeypatch.setattr(
+            "quickscale_core.dr_engine.orchestration._get_database_server_version",
+            lambda _engine: "3.45.0",
+        )
+
         backup_policy.local_directory = str(local_backup_settings)
         backup_policy.save(update_fields=["local_directory", "updated_at"])
 
@@ -489,7 +510,7 @@ class TestBackupLifecycle:
         local_backup_settings: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        import quickscale_modules_storage.helpers as storage_helpers  # type: ignore[import-untyped]
+        import quickscale_modules_storage.helpers as storage_helpers
 
         backup_policy.local_directory = str(local_backup_settings)
         backup_policy.save(update_fields=["local_directory", "updated_at"])
@@ -2206,7 +2227,21 @@ class TestBackupLifecycle:
     def test_restore_dry_run_rejects_incompatible_engine_and_format(
         self,
         postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        # SA59.2 — test settings now default to PostgreSQL, so explicitly force
+        # a non-matching engine to trigger the artifact compatibility check.
+        monkeypatch.setitem(
+            connections["default"].settings_dict,
+            "ENGINE",
+            "django.db.backends.sqlite3",
+        )
+        monkeypatch.setitem(
+            connections["default"].settings_dict,
+            "NAME",
+            "test.sqlite3",
+        )
+
         with pytest.raises(
             BackupRestoreBlocked,
             match="artifact compatibility validation failed",
@@ -2842,6 +2877,12 @@ class TestBackupLifecycle:
                     "--clean",
                     "--if-exists",
                     "--no-owner",
+                    "--host",
+                    "localhost",
+                    "--port",
+                    "5432",
+                    "--username",
+                    "postgres",
                     "--dbname",
                     "quickscale_test",
                     str(postgresql_artifact_file),
@@ -2853,7 +2894,16 @@ class TestBackupLifecycle:
     def test_restore_file_mode_rejects_non_postgresql_target_runtime(
         self,
         postgresql_artifact_file: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        # SA59.2 — test settings now default to PostgreSQL, so explicitly
+        # set a non-PostgreSQL engine to trigger the target-runtime check.
+        monkeypatch.setitem(
+            connections["default"].settings_dict,
+            "ENGINE",
+            "django.db.backends.sqlite3",
+        )
+
         with pytest.raises(
             BackupRestoreBlocked,
             match="operator-supplied restore files require a PostgreSQL target database",

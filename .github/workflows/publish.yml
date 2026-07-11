@@ -111,6 +111,7 @@ jobs:
             test_quickscale_smoke \
             test_quickscale_analytics \
             test_quickscale_auth \
+            test_quickscale_backups \
             test_quickscale_billing \
             test_quickscale_blog \
             test_quickscale_crm \
@@ -148,18 +149,19 @@ jobs:
           # Grant ownership of all test databases to the restricted role so
           # Django's test runner can create test_* databases from these templates.
           for db in \
-            test_quickscale_analytics \
-            test_quickscale_auth \
-            test_quickscale_billing \
-            test_quickscale_blog \
-            test_quickscale_crm \
-            test_quickscale_forms \
-            test_quickscale_listings \
-            test_quickscale_notifications \
-            test_quickscale_orgs \
-            test_quickscale_social \
-            test_quickscale_storage; do
-            psql -h localhost -U postgres -c "ALTER DATABASE \"$db\" OWNER TO ${ROLE};"
+          test_quickscale_analytics \
+          test_quickscale_auth \
+          test_quickscale_backups \
+          test_quickscale_billing \
+          test_quickscale_blog \
+          test_quickscale_crm \
+          test_quickscale_forms \
+          test_quickscale_listings \
+          test_quickscale_notifications \
+          test_quickscale_orgs \
+          test_quickscale_social \
+          test_quickscale_storage; do
+          psql -h localhost -U postgres -c "ALTER DATABASE \"$db\" OWNER TO ${ROLE};"
             psql -h localhost -U postgres -d "$db" -c "GRANT ALL ON SCHEMA public TO ${ROLE};"
           done
           echo "✓ Database ownership and schema permissions granted to ${ROLE}"
@@ -173,6 +175,7 @@ jobs:
           QUICKSCALE_ALLOW_BYPASSRLS: "0"
           QS_ANALYTICS_DB_USER: quickscale_test_role
           QS_AUTH_DB_USER: quickscale_test_role
+          QS_BACKUPS_DB_USER: quickscale_test_role
           QS_BILLING_DB_USER: quickscale_test_role
           QS_BLOG_DB_USER: quickscale_test_role
           QS_CRM_DB_USER: quickscale_test_role

@@ -10,6 +10,18 @@ jobs:
   backups-validation:
     name: Fail Fast Backups PG18 Contract
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
 
     steps:
     - name: Checkout code
@@ -57,7 +69,19 @@ jobs:
       run: |
         poetry install --with dev
 
+    - name: Create test database for backups module
+      run: |
+        createdb -h localhost -U postgres test_quickscale_backups 2>/dev/null || echo "Database already exists"
+
     - name: Run backups module validation tests
+      env:
+        # SA59.2 — explicitly export QS_BACKUPS_DB_* to runtime-prove the
+        # env-var seam instead of relying on fallback defaults.
+        # Values match the postgres:18 service container config above.
+        QS_BACKUPS_DB_NAME: test_quickscale_backups
+        QS_BACKUPS_DB_USER: postgres
+        QS_BACKUPS_DB_HOST: localhost
+        QS_BACKUPS_DB_PORT: 5432
       run: |
         PYTHONPATH="quickscale_modules/backups:quickscale_modules/backups/src" \
           poetry run pytest quickscale_modules/backups/tests -q --no-cov \
@@ -323,6 +347,7 @@ jobs:
           test_quickscale_smoke \
           test_quickscale_analytics \
           test_quickscale_auth \
+          test_quickscale_backups \
           test_quickscale_billing \
           test_quickscale_blog \
           test_quickscale_crm \
@@ -362,6 +387,7 @@ jobs:
         for db in \
           test_quickscale_analytics \
           test_quickscale_auth \
+          test_quickscale_backups \
           test_quickscale_billing \
           test_quickscale_blog \
           test_quickscale_crm \
@@ -388,6 +414,7 @@ jobs:
         # restricted role so module suites run without BYPASSRLS/SUPERUSER.
         QS_ANALYTICS_DB_USER: quickscale_test_role
         QS_AUTH_DB_USER: quickscale_test_role
+        QS_BACKUPS_DB_USER: quickscale_test_role
         QS_BILLING_DB_USER: quickscale_test_role
         QS_BLOG_DB_USER: quickscale_test_role
         QS_CRM_DB_USER: quickscale_test_role
