@@ -15,9 +15,11 @@
 >
 > **Current state:** Track 1 remains the only repo-local implementation lane with active work
 > (SA59 umbrella still open/blocked, SA60 open, SA70 open). Track 2 is clean after SA73's
-> closeout (see [CHANGELOG.md](../../CHANGELOG.md)). Track 3 is blocked on SA67's external
-> beta-site access requirement; repo-local follow-up through SA68 is already complete and should
-> stay in [CHANGELOG.md](../../CHANGELOG.md), not in the active roadmap. Historical full-pass text
+> closeout (see [CHANGELOG.md](../../CHANGELOG.md)). Track 3 is clean — SA67 closed 2026-07-11
+> (permanently out of scope for repo automation; the outstanding manual check is tracked in
+> [beta-site-migration.md](../planning/beta-site-migration.md#outstanding-maintainer-to-do-sa67-tracked-outside-roadmapmd),
+> not here). The repo-local follow-up through SA68 is already complete (see
+> [CHANGELOG.md](../../CHANGELOG.md)). Historical full-pass text
 > from 2026-07-10 is preserved below unchanged.
 
 ## Autopsy — 2026-07-10 (re-run, delta pass — first run on the V2 prompt)
