@@ -708,6 +708,12 @@ def test_run_in_place_with_continuation_executes_apply_and_verification(
         "export const marker = 'donor-public-social-hook'\n"
     )
 
+    # Create donor start.sh with donor's package reference for SA66
+    # identity-substitution regression coverage
+    (donor / "start.sh").write_text(
+        "#!/usr/bin/env bash\nexec gunicorn fresh_donor.wsgi:application\n"
+    )
+
     _init_clean_git_repo(recipient)
 
     calls = _install_in_place_success_stub(
@@ -748,6 +754,21 @@ def test_run_in_place_with_continuation_executes_apply_and_verification(
     hook_text = (recipient / "frontend" / "src" / "hooks" / "useModules.ts").read_text()
     assert "projectName: 'beta-site'" in hook_text
     assert "donor-hook-marker" in hook_text
+
+    # SA66 regression — start.sh must be identity-substituted during in-place
+    # migration when donor and recipient have different package names.
+    # Without substitution the copied start.sh would retain the donor's
+    # gunicorn package reference.
+    start_sh_text = (recipient / "start.sh").read_text()
+    assert "beta_site" in start_sh_text, (
+        "start.sh must contain recipient package beta_site after identity substitution"
+    )
+    assert "fresh_donor" not in start_sh_text, (
+        "start.sh must not contain donor package fresh_donor after identity substitution"
+    )
+    # Verify the WSGI and Gunicorn module references use the recipient package
+    assert "beta_site.wsgi" in start_sh_text
+    assert "fresh_donor.wsgi" not in start_sh_text
 
     assert (
         "donor-pre-commit-marker" in (recipient / ".pre-commit-config.yaml").read_text()

@@ -210,19 +210,23 @@ _FAILED_STEP = {
 
 
 def _build_quickscale_env() -> dict[str, str]:
-    """Build subprocess env with PYTHONPATH for QuickScale import context.
+    """Build a narrowly-scoped subprocess env with PYTHONPATH for nested
+    ``quickscale_cli.main`` invocations.
 
-    Scans the current ``sys.path`` for directories that contain
-    ``quickscale_core`` or ``quickscale_cli`` — the two packages that
-    child subprocesses (``sys.executable -m quickscale_cli.main``) need
-    to resolve.  When found (e.g. during test or dev with ``src/``-layout
-    paths), the relevant entries are propagated as ``PYTHONPATH`` so
-    child processes see the same QuickScale code as the parent.
+    SA65: This environment is now built on demand and passed **only** to
+    the two ``sys.executable -m quickscale_cli.main`` call sites
+    (``_run_migrations_in_docker_impl`` and ``_start_docker_impl``) so
+    that foreign subprocesses (``poetry``, ``git``, ``docker``, generated-
+    project ``manage.py``) never inherit the CLI's development-context
+    ``PYTHONPATH``.
 
-    In production (packages installed in site-packages) these paths are
-    not present in ``sys.path``, so the returned env is an unmodified
-    copy of the current environment and the subprocess resolves packages
-    normally.
+    Scans ``sys.path`` for directories containing ``quickscale_core`` or
+    ``quickscale_cli`` packages.  When found (e.g. during dev with
+    ``src/``-layout paths), those entries are propagated as ``PYTHONPATH``
+    so the nested CLI child sees the same QuickScale code as the parent.
+    When packages are installed normally (site-packages), these source-
+    tree paths are absent and the returned env is a clean copy of the
+    current environment.
     """
     extra_paths: list[str] = []
     for p in sys.path:
@@ -245,13 +249,6 @@ def _build_quickscale_env() -> dict[str, str]:
         combined = existing + os.pathsep + combined
     env["PYTHONPATH"] = combined
     return env
-
-
-#: Cached subprocess environment that propagates the parent's QuickScale
-#: import context so child processes (``sys.executable -m quickscale_cli.main``)
-#: can resolve ``quickscale_cli`` and ``quickscale_core`` packages from the
-#: same source tree as the parent.
-_QUICKSCALE_SUBPROCESS_ENV: dict[str, str] = _build_quickscale_env()
 
 
 def _is_pre_embed_authoritative_path(path: str) -> bool:
@@ -398,6 +395,7 @@ def _run_command(
     cwd: Path,
     description: str,
     capture: bool = True,
+    env: dict[str, str] | None = None,
 ) -> tuple[bool, str]:
     """Run a shell command with progress output
 
@@ -406,6 +404,9 @@ def _run_command(
         cwd: Working directory
         description: Description for progress output
         capture: Whether to capture output
+        env: Optional environment dict for the subprocess.
+            When ``None`` (default), the subprocess inherits the parent's
+            environment (``os.environ``).
 
     Returns:
         Tuple of (success, output)
@@ -419,7 +420,7 @@ def _run_command(
             capture_output=capture,
             text=True,
             check=False,
-            env=_QUICKSCALE_SUBPROCESS_ENV,
+            env=env,
         )
         if result.returncode == 0:
             click.secho(f"✅ {description}", fg="green")
@@ -569,6 +570,7 @@ def _run_migrations_in_docker_impl(project_path: Path) -> bool:
         [sys.executable, "-m", "quickscale_cli.main", "manage", "migrate"],
         project_path,
         "Running migrations (Docker)",
+        env=_build_quickscale_env(),
     )[0]
 
 
@@ -624,7 +626,7 @@ def _start_docker_impl(
                 cwd=project_path,
                 text=True,
                 check=False,
-                env=_QUICKSCALE_SUBPROCESS_ENV,
+                env=_build_quickscale_env(),
             )
             click.echo("=" * 50)
             if result.returncode == 0:
@@ -645,6 +647,7 @@ def _start_docker_impl(
             project_path,
             "Starting Docker services",
             capture=False,
+            env=_build_quickscale_env(),
         )
         return success
 
