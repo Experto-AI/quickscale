@@ -28,6 +28,7 @@ from quickscale_modules_orgs.constants import (
 )
 from quickscale_modules_orgs.current_org import (
     get_current_org_id,
+    reset_current_org_id,
     set_current_org_id,
 )
 from quickscale_modules_orgs.models import (
@@ -398,11 +399,15 @@ class TestOrgDbContext:
         """Queries executed inside the context should see the scoped org."""
         from quickscale_modules_social.models import SocialLink
 
-        SocialLink.objects.create(
-            title="Test Link",
-            url="https://www.linkedin.com/company/test/",
-            organization=org,
-        )
+        set_current_org_id(org.pk)
+        try:
+            SocialLink.objects.create(
+                title="Test Link",
+                url="https://www.linkedin.com/company/test/",
+                organization=org,
+            )
+        finally:
+            reset_current_org_id()
         request = _request_with_session(rf, **{ACTIVE_ORG_SESSION_KEY: str(org.id)})
         with _org_db_context(request):
             titles = list(SocialLink.objects.all().values_list("title", flat=True))
@@ -472,16 +477,24 @@ class TestTenantModelAdminGetQueryset:
         """TenantModelAdmin.get_queryset returns only items for the validated org."""
         from quickscale_modules_social.models import SocialLink
 
-        SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
-        SocialLink.objects.create(
-            title="Org B Link",
-            url="https://www.linkedin.com/company/org-b/",
-            organization=org_b,
-        )
+        set_current_org_id(org_a.pk)
+        try:
+            SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+        finally:
+            reset_current_org_id()
+        set_current_org_id(org_b.pk)
+        try:
+            SocialLink.objects.create(
+                title="Org B Link",
+                url="https://www.linkedin.com/company/org-b/",
+                organization=org_b,
+            )
+        finally:
+            reset_current_org_id()
 
         request = _request_with_session(rf)
         request._validated_org_id = org_a.id
@@ -497,16 +510,24 @@ class TestTenantModelAdminGetQueryset:
         """Org A's admin must not see Org B's links (cross-org rejection)."""
         from quickscale_modules_social.models import SocialLink
 
-        SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
-        SocialLink.objects.create(
-            title="Org B Link",
-            url="https://www.linkedin.com/company/org-b/",
-            organization=org_b,
-        )
+        set_current_org_id(org_a.pk)
+        try:
+            SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+        finally:
+            reset_current_org_id()
+        set_current_org_id(org_b.pk)
+        try:
+            SocialLink.objects.create(
+                title="Org B Link",
+                url="https://www.linkedin.com/company/org-b/",
+                organization=org_b,
+            )
+        finally:
+            reset_current_org_id()
 
         admin_instance = TenantModelAdmin(SocialLink, AdminSite())
 
@@ -562,16 +583,24 @@ class TestTenantModelAdminEndToEnd:
         """The changelist should show only links for the session org."""
         from quickscale_modules_social.models import SocialLink
 
-        SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
-        SocialLink.objects.create(
-            title="Org B Link",
-            url="https://www.linkedin.com/company/org-b/",
-            organization=org_b,
-        )
+        set_current_org_id(org_a.pk)
+        try:
+            SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+        finally:
+            reset_current_org_id()
+        set_current_org_id(org_b.pk)
+        try:
+            SocialLink.objects.create(
+                title="Org B Link",
+                url="https://www.linkedin.com/company/org-b/",
+                organization=org_b,
+            )
+        finally:
+            reset_current_org_id()
 
         self._set_session_org(admin_client, org_a.id)
         from django.urls import reverse
@@ -590,11 +619,15 @@ class TestTenantModelAdminEndToEnd:
         """The changelist should be empty (fail-closed) when no session org."""
         from quickscale_modules_social.models import SocialLink
 
-        SocialLink.objects.create(
-            title="Some Link",
-            url="https://www.linkedin.com/company/test/",
-            organization=org,
-        )
+        set_current_org_id(org.pk)
+        try:
+            SocialLink.objects.create(
+                title="Some Link",
+                url="https://www.linkedin.com/company/test/",
+                organization=org,
+            )
+        finally:
+            reset_current_org_id()
         self._clear_session_org(admin_client)
         from django.urls import reverse
 
@@ -610,11 +643,15 @@ class TestTenantModelAdminEndToEnd:
         """The change view loads when the object belongs to the session org."""
         from quickscale_modules_social.models import SocialLink
 
-        link = SocialLink.objects.create(
-            title="Test Link",
-            url="https://www.linkedin.com/company/test/",
-            organization=org,
-        )
+        set_current_org_id(org.pk)
+        try:
+            link = SocialLink.objects.create(
+                title="Test Link",
+                url="https://www.linkedin.com/company/test/",
+                organization=org,
+            )
+        finally:
+            reset_current_org_id()
         self._set_session_org(admin_client, org.id)
         from django.urls import reverse
 
@@ -682,11 +719,15 @@ class TestTenantModelAdminViewAsOrgLock:
         """``get_form`` returns change form with disabled org under VIEW-AS."""
         from quickscale_modules_social.models import SocialLink
 
-        link = SocialLink.objects.create(
-            title="Change Test Link",
-            url="https://www.linkedin.com/company/change-test/",
-            organization=org,
-        )
+        set_current_org_id(org.pk)
+        try:
+            link = SocialLink.objects.create(
+                title="Change Test Link",
+                url="https://www.linkedin.com/company/change-test/",
+                organization=org,
+            )
+        finally:
+            reset_current_org_id()
 
         request = self._view_as_request(rf, org.pk)
         admin_instance = TenantModelAdmin(SocialLink, AdminSite())
@@ -757,7 +798,11 @@ class TestTenantModelAdminViewAsOrgLock:
         )
 
         assert form.is_valid(), form.errors
-        instance = form.save()
+        set_current_org_id(org_a.pk)
+        try:
+            instance = form.save()
+        finally:
+            reset_current_org_id()
         assert instance.organization_id == org_a.pk, (
             f"Saved instance should have org_a ({org_a.pk}), "
             f"but got org_id={instance.organization_id}"
@@ -769,11 +814,15 @@ class TestTenantModelAdminViewAsOrgLock:
         """Form from ``get_form`` under VIEW-AS preserves the instance org."""
         from quickscale_modules_social.models import SocialLink
 
-        link = SocialLink.objects.create(
-            title="View As Change Form",
-            url="https://www.linkedin.com/company/view-as-change-form/",
-            organization=org_a,
-        )
+        set_current_org_id(org_a.pk)
+        try:
+            link = SocialLink.objects.create(
+                title="View As Change Form",
+                url="https://www.linkedin.com/company/view-as-change-form/",
+                organization=org_a,
+            )
+        finally:
+            reset_current_org_id()
 
         request = self._view_as_request(rf, org_a.pk)
         admin_instance = TenantModelAdmin(SocialLink, AdminSite())

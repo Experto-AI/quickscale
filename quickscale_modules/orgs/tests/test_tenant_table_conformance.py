@@ -24,6 +24,10 @@ from django.apps import apps
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 
+from quickscale_modules_orgs.current_org import (
+    reset_current_org_id,
+    set_current_org_id,
+)
 from quickscale_modules_orgs.managers import TenantManager
 from quickscale_modules_orgs.tenancy import (
     TENANT_TABLE_REGISTRY,
@@ -753,17 +757,21 @@ class TestNegativeCompositeFkRejectsWrongOrg:
         org_a = Organization.objects.create(name="Org A", slug="neg-org-a")
         org_b = Organization.objects.create(name="Org B", slug="neg-org-b")
 
-        company = Company.all_objects.create(
-            organization=org_a,
-            name="Cross-Org Company",
-        )
-        contact = Contact.all_objects.create(
-            organization=org_a,
-            first_name="Cross-Org",
-            last_name="Contact",
-            email="cross@test.com",
-            company=company,
-        )
+        set_current_org_id(org_a.pk)
+        try:
+            company = Company.all_objects.create(
+                organization=org_a,
+                name="Cross-Org Company",
+            )
+            contact = Contact.all_objects.create(
+                organization=org_a,
+                first_name="Cross-Org",
+                last_name="Contact",
+                email="cross@test.com",
+                company=company,
+            )
+        finally:
+            reset_current_org_id()
 
         # Attempt to create a ContactNote with org_b while the parent
         # contact belongs to org_a. This should fail with a foreign key
@@ -771,11 +779,15 @@ class TestNegativeCompositeFkRejectsWrongOrg:
         #   (contactnote.contact_id, contactnote.organization_id) =
         #   (contact.id, contact.organization_id)
         with pytest.raises(IntegrityError), transaction.atomic():
-            ContactNote.all_objects.create(
-                contact=contact,
-                organization=org_b,
-                text="Wrong org note.",
-            )
+            set_current_org_id(org_b.pk)
+            try:
+                ContactNote.all_objects.create(
+                    contact=contact,
+                    organization=org_b,
+                    text="Wrong org note.",
+                )
+            finally:
+                reset_current_org_id()
 
     def test_dealnote_wrong_org_is_rejected(self) -> None:
         """Creating a DealNote with a deal from org A but
@@ -794,35 +806,43 @@ class TestNegativeCompositeFkRejectsWrongOrg:
         org_a = Organization.objects.create(name="Org A", slug="neg-org-c")
         org_b = Organization.objects.create(name="Org B", slug="neg-org-d")
 
-        company = Company.all_objects.create(
-            organization=org_a,
-            name="Cross-Org Company",
-        )
-        contact = Contact.all_objects.create(
-            organization=org_a,
-            first_name="Cross-Org",
-            last_name="DealOwner",
-            email="cross-deal@test.com",
-            company=company,
-        )
-        stage = Stage.all_objects.create(
-            organization=org_a,
-            name="Cross-Org Stage",
-            order=1,
-        )
-        deal = Deal.all_objects.create(
-            organization=org_a,
-            title="Cross-Org Deal",
-            contact=contact,
-            stage=stage,
-        )
+        set_current_org_id(org_a.pk)
+        try:
+            company = Company.all_objects.create(
+                organization=org_a,
+                name="Cross-Org Company",
+            )
+            contact = Contact.all_objects.create(
+                organization=org_a,
+                first_name="Cross-Org",
+                last_name="DealOwner",
+                email="cross-deal@test.com",
+                company=company,
+            )
+            stage = Stage.all_objects.create(
+                organization=org_a,
+                name="Cross-Org Stage",
+                order=1,
+            )
+            deal = Deal.all_objects.create(
+                organization=org_a,
+                title="Cross-Org Deal",
+                contact=contact,
+                stage=stage,
+            )
+        finally:
+            reset_current_org_id()
 
         with pytest.raises(IntegrityError), transaction.atomic():
-            DealNote.all_objects.create(
-                deal=deal,
-                organization=org_b,
-                text="Wrong org deal note.",
-            )
+            set_current_org_id(org_b.pk)
+            try:
+                DealNote.all_objects.create(
+                    deal=deal,
+                    organization=org_b,
+                    text="Wrong org deal note.",
+                )
+            finally:
+                reset_current_org_id()
 
 
 # ---------------------------------------------------------------------------
@@ -921,6 +941,11 @@ def _ensure_rls_test_role() -> None:
     cannot run inside a Django test transaction.  Idempotent.
     Grants SELECT on every ENROLLED tenant table so the restricted role
     can verify RLS policy enforcement.
+
+    Under SA59.1 restricted-role testing, the connected user may not
+    have ``CREATE ROLE`` or ``GRANT`` privilege.  The role and grants
+    are pre-created by the test harness bootstrap, so silent permission
+    errors are acceptable — the grants are idempotent for existing roles.
     """
     import psycopg2  # type: ignore[import-untyped]
 
@@ -937,23 +962,31 @@ def _ensure_rls_test_role() -> None:
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
-            cur.execute(f"""
-                DO $$
-                BEGIN
-                    CREATE ROLE {_RESTRICTED_ROLE};
-                EXCEPTION WHEN duplicate_object THEN NULL;
-                END $$;
-            """)
-            cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
-            # Grant SELECT on every enrolled tenant table.
+            try:
+                cur.execute(f"""
+                    DO $$
+                    BEGIN
+                        CREATE ROLE {_RESTRICTED_ROLE};
+                    EXCEPTION WHEN duplicate_object THEN NULL;
+                    END $$;
+                """)
+            except Exception:
+                pass
+            try:
+                cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
+            except Exception:
+                pass
             for entry in TENANT_TABLE_REGISTRY:
                 if entry.status == TenantTableStatus.ENROLLED:
                     model = apps.get_model(entry.app_label, entry.model_name)
                     if model is not None:
-                        cur.execute(
-                            f"GRANT SELECT ON {model._meta.db_table} "
-                            f"TO {_RESTRICTED_ROLE}"
-                        )
+                        try:
+                            cur.execute(
+                                f"GRANT SELECT ON {model._meta.db_table} "
+                                f"TO {_RESTRICTED_ROLE}"
+                            )
+                        except Exception:
+                            pass
     finally:
         conn.close()
 
@@ -1063,6 +1096,9 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
     )
 
     # Seed one representative row per enrolled table.
+    # Use org context so FORCE-RLS policies accept the INSERTs under the
+    # restricted role (SA59.1).
+    set_current_org_id(org.pk)
     # -- CRM --
     CrmTag.all_objects.create(organization=org, name="AF11 CRM Tag")
     company = Company.all_objects.create(
@@ -1190,6 +1226,9 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
         title="AF11 YouTube Embed",
         url="https://www.youtube.com/watch?v=af11proof",
     )
+
+    # Restore no-org context before the restricted-role proof window.
+    reset_current_org_id()
 
     # Ensure the restricted PostgreSQL role exists for RLS-boundary verification.
     _ensure_rls_test_role()
@@ -1324,13 +1363,20 @@ def test_af9_listings_restricted_role_cursor_proof() -> None:
         name="AF9 Listings Proof", slug="af9-listings-proof"
     )
 
-    # Pre-seed data via all_objects with NO ContextVar active, so the AF9
-    # execute wrapper passes through and the GUC is NOT pre-primed.
-    Listing.all_objects.create(
-        title="AF9 Listings Proof",
-        slug="af9-listings-proof",
-        organization=org,
-    )
+    # Pre-seed data with ContextVar active so FORCE-RLS allows the INSERT
+    # under the restricted role.  The AF9 wrapper primes the GUC inside a
+    # short atomic block (autocommit path), so the GUC is transaction-scoped
+    # and resets to the session default when the atomic exits — the
+    # soundness guard below still sees the session default.
+    set_current_org_id(org.pk)
+    try:
+        Listing.all_objects.create(
+            title="AF9 Listings Proof",
+            slug="af9-listings-proof",
+            organization=org,
+        )
+    finally:
+        reset_current_org_id()
 
     # Ensure no ambient ContextVar before the proof.
     reset_current_org_id()

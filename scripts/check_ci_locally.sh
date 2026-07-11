@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Local CI check script — THE single pre-push script to verify the same steps
-# as GitHub Actions (install + lint + typecheck + all package tests).
+# Local CI check script — the single pre-push script to verify the primary local
+# development checks (install + lint + typecheck + unit tests + optional
+# integration tests when PostgreSQL is available).
 #
 # Usage:
 #   ./scripts/check_ci_locally.sh          # Standard check (lint + type + unit tests)
@@ -27,7 +28,7 @@ for arg in "$@"; do
             echo "  --e2e     Include E2E tests (slow, requires Docker)"
             echo "  --help    Show this help message"
             echo ""
-echo "This script runs all checks that GitHub Actions CI runs:"
+echo "This script runs the primary local development checks:"
 echo "  1. Install dependencies"
 echo "  2. Lint (ruff check + format)"
 echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
@@ -151,10 +152,28 @@ if command -v pg_isready >/dev/null 2>&1 && pg_isready -h localhost -q 2>/dev/nu
     fi
     echo "✓ Integration tests passed"
 else
-    echo "  ⚠ PostgreSQL not available — integration tests skipped."
-    echo "  (Full CI parity requires PostgreSQL 18 on localhost:5432"
-    echo "   with pre-created module test databases and a"
-    echo "   quickscale_test_role with LOGIN CREATEDB NOBYPASSRLS NOSUPERUSER.)"
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║   ✗ PostgreSQL Not Available                               ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "  Integration tests require PostgreSQL 18 with a LOGIN CREATEDB"
+    echo "  NOINHERIT NOBYPASSRLS NOSUPERUSER role on localhost:5432."
+    echo ""
+    echo "  QuickScale uses a split test model to separate DB-free"
+    echo "  unit tests from PostgreSQL-backed integration tests:"
+    echo ""
+    echo "    make test-unit           DB-free unit tests (core + CLI)"
+    echo "    make test-integration    Integration tests (requires PostgreSQL)"
+    echo ""
+    echo "  To run checks locally without PostgreSQL, use:"
+    echo "    make test-unit"
+    echo ""
+    echo "  To set up PostgreSQL and run the full suite, see"
+    echo "  docs/technical/development.md for setup instructions,"
+    echo "  then run make ci."
+    echo ""
+    exit 1
 fi
 
 # Optional E2E tests

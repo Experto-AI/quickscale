@@ -258,7 +258,7 @@ quickscale/
 │   └── releases/             # Official tagged GitHub release notes
 ├── scripts/                  # Helper scripts
 │   ├── bootstrap.sh          # Development setup
-│   ├── test_unit.sh          # Run unit and integration tests
+│   ├── test_unit.sh          # Run unit tests only
 │   ├── lint.sh               # Run all linters
 │   └── publish_module.sh     # Publish module changes to split branches
 ├── pyproject.toml            # Root config (centralized dev dependencies)
@@ -293,7 +293,8 @@ quickscale/
 **Module Testing Architecture:**
 - Modules use ROOT poetry environment (not their own `.venv`)
 - Module `pyproject.toml` has minimal dev dependencies (only `pytest-django`)
-- `make MODULE=<name> test-unit -- --modules` runs module tests with `PYTHONPATH` set correctly
+- `make MODULE=<name> test -- --modules` runs module tests with `PYTHONPATH` set correctly
+- `make test-integration` runs all module integration suites (requires PostgreSQL)
 - `make lint` lints modules using the ROOT poetry environment
 - See [Module Implementation Checklist](./decisions.md#module-implementation-checklist) for new module setup
 

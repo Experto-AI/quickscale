@@ -14,7 +14,9 @@ from quickscale_modules_orgs.current_org import (
     clear_current_org,
     get_current_org,
     require_current_org,
+    reset_current_org_id,
     set_current_org,
+    set_current_org_id,
 )
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
 from quickscale_modules_orgs.permissions import (
@@ -197,11 +199,15 @@ def _build_feature_request(*, organization: Organization):
 def test_require_org_feature_returns_200_when_feature_is_enabled() -> None:
     organization = Organization.objects.create(name="Acme", slug="acme")
     plan = _create_plan(slug="growth-with-crm", features=["crm", "billing"])
-    Subscription.objects.create(
-        organization=organization,
-        plan=plan,
-        status=Subscription.Status.ACTIVE,
-    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            plan=plan,
+            status=Subscription.Status.ACTIVE,
+        )
+    finally:
+        reset_current_org_id()
     request = _build_feature_request(organization=organization)
 
     @require_org_feature("crm")
@@ -217,11 +223,15 @@ def test_require_org_feature_returns_200_when_feature_is_enabled() -> None:
 def test_require_org_feature_returns_402_without_feature() -> None:
     organization = Organization.objects.create(name="Bravo", slug="bravo")
     plan = _create_plan(slug="growth-without-crm", features=["billing"])
-    Subscription.objects.create(
-        organization=organization,
-        plan=plan,
-        status=Subscription.Status.ACTIVE,
-    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            plan=plan,
+            status=Subscription.Status.ACTIVE,
+        )
+    finally:
+        reset_current_org_id()
     request = _build_feature_request(organization=organization)
 
     @require_org_feature("crm")
@@ -237,11 +247,15 @@ def test_require_org_feature_returns_402_without_feature() -> None:
 def test_require_org_feature_returns_402_without_active_subscription() -> None:
     organization = Organization.objects.create(name="Charlie", slug="charlie")
     plan = _create_plan(slug="growth-trialing-crm", features=["crm"])
-    Subscription.objects.create(
-        organization=organization,
-        plan=plan,
-        status=Subscription.Status.TRIALING,
-    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            plan=plan,
+            status=Subscription.Status.TRIALING,
+        )
+    finally:
+        reset_current_org_id()
     request = _build_feature_request(organization=organization)
 
     @require_org_feature("crm")
@@ -257,11 +271,15 @@ def test_require_org_feature_returns_402_without_active_subscription() -> None:
 def test_require_org_feature_ignores_request_subscription_stub_and_uses_orm() -> None:
     organization = Organization.objects.create(name="Delta", slug="delta")
     plan = _create_plan(slug="growth-delta-billing", features=["billing"])
-    Subscription.objects.create(
-        organization=organization,
-        plan=plan,
-        status=Subscription.Status.ACTIVE,
-    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            plan=plan,
+            status=Subscription.Status.ACTIVE,
+        )
+    finally:
+        reset_current_org_id()
     request = RequestFactory().get("/")
     request.user = get_user_model().objects.create_user(
         username="feature-user-delta",

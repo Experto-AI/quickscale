@@ -11,7 +11,7 @@
 # Prerequisites:
 #   - PostgreSQL 18 running on localhost:5432
 #   - All test databases pre-created (see ci.yml create-test-databases step)
-#   - A NOBYPASSRLS NOINHERIT NOLOGIN role (e.g. quickscale_test_role) with
+#   - A LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER role (e.g. quickscale_test_role) with
 #     ownership + schema grants on all module test databases
 #   - Poetry installed, dependencies installed
 
@@ -128,7 +128,7 @@ show_help() {
   echo "Required environment (PostgreSQL 18):"
   echo "  - PostgreSQL running on localhost:5432"
   echo "  - Module test databases pre-created"
-  echo "  - Restricted role (e.g. quickscale_test_role) with LOGIN CREATEDB NOBYPASSRLS NOSUPERUSER"
+  echo "  - Restricted role (e.g. quickscale_test_role) with LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER"
   echo "  - QS_*_DB_USER env vars set to the restricted role for each module"
 }
 
@@ -324,7 +324,7 @@ run_pytest_stage() {
 }
 
 echo "🧪 Running integration tests (module suites requiring PostgreSQL)..."
-echo "  Required role attributes: LOGIN CREATEDB NOBYPASSRLS NOSUPERUSER"
+echo "  Required role attributes: LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER"
 echo "  (see scripts/test_isolation_conformance.sh for role-creation pattern)"
 echo ""
 if [ "$POETRY_AVAILABLE" = false ] && [ -x "$VENV_BIN/python" ]; then

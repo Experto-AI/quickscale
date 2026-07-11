@@ -38,7 +38,7 @@ merge_strategy: append
 # Quality Gate
 <!-- Add rules for testing, linting, and quality enforcement here -->
 [include](#shared)
-- Each packaged module has its own test suite. Run the module-specific test target (`make MODULE=<name> test-unit -- --modules`) rather than the root test suite for module-scoped work.
+- Each packaged module has its own test suite. Run the module-specific test target (`make MODULE=<name> test -- --modules`) rather than the root test suite for module-scoped work.
 
 # Change Review
 <!-- Add rules for PR review and change management here -->

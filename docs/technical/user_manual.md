@@ -110,8 +110,8 @@ make test
 # Run unit tests only
 make test-unit
 
-# Run unit tests for one module
-make MODULE=blog test-unit -- --modules
+# Run tests for a specific module (unit + integration)
+make MODULE=blog test -- --modules
 ```
 
 For one-off debugging, run pytest directly through Poetry, for example:
