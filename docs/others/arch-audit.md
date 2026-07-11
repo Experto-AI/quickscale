@@ -8,95 +8,89 @@
 
 ---
 
-## Autopsy — 2026-07-11 (documentation reconciliation)
+## Autopsy — 2026-07-11 (re-run, delta pass over the SA65/SA66/SA68/SA73 + SA59.1 checkpoint batch)
 
-> Use this note as the current planning surface. The full 2026-07-10 pass below remains valuable
-> historical detail, but it is no longer the authoritative day-end roadmap snapshot.
->
-> **Current state:** Track 1 remains the only repo-local implementation lane with active work
-> (SA59 umbrella still open/blocked, SA60 open, SA70 open). Track 2 is clean after SA73's
-> closeout (see [CHANGELOG.md](../../CHANGELOG.md)). Track 3 is clean — SA67 closed 2026-07-11
-> (permanently out of scope for repo automation; the outstanding manual check is tracked in
-> [beta-site-migration.md](../planning/beta-site-migration.md#outstanding-maintainer-to-do-sa67-tracked-outside-roadmapmd),
-> not here). The repo-local follow-up through SA68 is already complete (see
-> [CHANGELOG.md](../../CHANGELOG.md)). Historical full-pass text
-> from 2026-07-10 is preserved below unchanged.
-
-## Autopsy — 2026-07-10 (re-run, delta pass — first run on the V2 prompt)
-
-### Orientation (2026-07-10)
+### Orientation (2026-07-11)
 
 QuickScale is a solo-maintained (Experto-AI/Victor Rocco) Python 3.13/3.14 + Poetry monorepo
-(VERSION 0.87.0, integration branch `v87`) that generates user-owned Django 6 SaaS projects.
-Packages: `quickscale_cli` (Click: plan/apply/dr/deploy), `quickscale_core` (Jinja2 generator,
-plan/apply engine, manifest/contracts/derivation stack, DR engine), 13 shipped Django modules
-under `quickscale_modules/` (teams still README-only, re-verified), and — **given first-class
-attention this pass** — `quickscale_devtools` (maintainer-only beta-site migration tooling, one
-2,543-line module). Generated apps: Django 6 + PostgreSQL 18, single-service Railway; tenancy
-enforced twice (fail-closed `TenantManager` + FORCE RLS with the AF9 execute-wrapper), backstopped
-by the boot guard that now rejects `SUPERUSER` as well as `BYPASSRLS` (SA58). **Commit-delta
-classification (V2 §2f)** for `d0f835ea..HEAD`: *closeouts* — SA57 (`04f397bc`), SA58
-(`3645ba9f`), SA61 (`a19cfae6`), SA62 (`6e3dacc7`), SA63 (`e33a30f6`), SA64 (`bae824cb`), all
-verified mapped to scheduled items; *housekeeping* — merges, `4d538a2d`, `1ea8fe85`, `ae8c386e`
-(tech-audit status table only); *unlabeled-behavioral* — **`628c7d28` "fix: some make quality
-issues"**, read in full: it re-homed `ImproperlyConfigured` from Django's class to a new
-first-party exception (`contracts/module_discovery.py:25` — exception *identity* changed for the
-contracts layer; all in-repo catchers verified migrated in the same commit), added an import-time
-sys.path-sniffing subprocess env builder to apply (`apply_command.py:212–254`) and swapped
-`quickscale …` child invocations to `sys.executable -m quickscale_cli.main`, filled the listings
-configurator's `apply` station with a notice-only shim, and bumped auth's manifest to
-`implies: orgs` (uses the pre-existing T2.2 implication resolver — verified not a new mechanism;
-the module.yml copy-pair was paid correctly under the CI byte-identical sync gate). Third
-consecutive delta in which behavioral semantics landed under a housekeeping message. Read fully
-this pass: SA63's three templates + `orgs/apps.py` boot guard, `beta_migration.py`'s file
-taxonomy + TOML helpers, both SA57 sites, `social/admin.py`, `module_dependency_sync.py` splice
-sites, the full `628c7d28` diff, `LEGACY_ALLOWED_IMPORTS`, `runtime/__init__.py`,
-`orchestration.py`'s import block. Sampled: `test_beta_migration.py`,
-`test_generated_project_runtime.py` (new boot smoke tests), planning docs. Skipped — verified
-untouched by git log: `billing/services.py`, orgs middleware/current_org/managers, `tenancy.py`,
-`purge_organization.py`, `apply/`, `project_state.py`. Severity floor unchanged: CLI is
-single-process local; generated apps are single-service WSGI; tenant isolation is the
-highest-blast property. **Growth direction (V2 §2d, from the planning surface):** the roadmap
-holds three open items (SA59, SA60, SA70); the real production pressure is the **beta-site upgrade
-cadence** — `experto-ai-web` and `bap-web` are the only deployed consumers, kept current via the
-`quickscale_devtools` migration playbook (`docs/planning/beta-site-migration.md`). That seam got
-this pass's change-cost probe and produced the new finding.
+(VERSION 0.87.0, integration branch `v87`) that generates user-owned Django 6 SaaS projects:
+`quickscale_cli` (Click: plan/apply/dr/deploy), `quickscale_core` (Jinja2 generator, plan/apply
+engine, manifest/contracts stack, DR engine), 13 shipped Django modules (teams still README-only,
+re-verified), and `quickscale_devtools` (maintainer-only beta-site migration tooling). Generated
+apps: Django 6 + PostgreSQL 18, single-service Railway; tenancy enforced twice (fail-closed
+`TenantManager` + FORCE RLS with the AF9 execute-wrapper), backstopped by the SA58 boot guard
+(rejects `rolsuper` and `rolbypassrls`). **Commit-delta classification (§2f) for
+`ae8c386e..HEAD`** (23 non-merge commits): *closeouts* — SA65 (`0b7d6cd8`), SA66 (`0138db60`),
+SA68 (`52144290`), SA69 (`ff75ed9d`, docs-only), SA73 (`fc3dc00c`), all verified mapped to
+scheduled items and fix-regression-audited below; *housekeeping* — 15 docs commits plus merges;
+*unlabeled-behavioral* — the three **`chore: checkpoint SA59…`** commits (`625626e8`, `6c90d8b9`,
+`2b9afa6b`), which carry the entire CI/publish **unit/integration gate split** (new
+`scripts/test_integration.sh`, restricted `quickscale_test_role` provisioning in both workflows,
+removal of the blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export from the unit path, orgs
+restricted-role test adaptations) — read at full depth this pass. Unlike the side-channel commits
+of prior deltas these are SA-tracked and roadmap-documented, but the `chore:` label still
+understates load-bearing gate-semantics changes; `fc3dc00c` ("SA73: fix quality gate failures")
+also quietly added `ignore_missing_imports = True` for `quickscale_modules_backups.*` to
+`mypy.ini` — a new Finding 1 cycle carrier. Read fully this pass: all four closeout diffs, the
+checkpoint commits' workflow/script/conftest portions, `test_integration.sh` (complete),
+`test_unit.sh` tail + Makefile test targets, `check_ci_locally.sh`, the SA66 conformance test
+(complete), the `production.py.j2` and `orgs/apps.py` diffs, roadmap.md, the two new decisions.md
+sections, tech-audit.md's Structural smells. Sampled: orgs restricted-role test adaptations
+(conftest read in full, sibling test files stat-only), `test_generated_project_runtime.py`
+(grep-level), `generator.py` (structure-level). Verified untouched by git log:
+`billing/services.py`, orgs views/middleware/tenancy/purge, `backups/services.py`, `dr_engine/`
+(except one SA73 comment line). The full first-party source delta is eight files, all read.
+**Growth direction (planning surface):** Track 1 only — SA59.1–SA59.4 (finish the gate split:
+pre-existing restricted-role failures, backups PostgreSQL seam, script/Docker role provisioning,
+docs), SA60 (composite-FK deferability policy), SA70 (Finding 2's `pre_delete` backstop). Tracks
+2 and 3 are clean. Severity floor unchanged: CLI is single-process local; generated apps are
+single-service WSGI; tenant isolation is the highest-blast property.
 
-**Result: three prior findings still-open (two narrowed), one new finding, five prior red flags
-verified fixed, one tracked.** Finding 6 is **closed** (SA68, 2026-07-11) — the migrate path's last
-argv deciders are deleted and the two-signal `QUICKSCALE_PRIVILEGED_COMMAND`/
-`QUICKSCALE_NON_DB_COMMAND` contract replaces the overloaded single-bit hatch; full detail in
-[CHANGELOG.md](../../CHANGELOG.md). **New Finding 7**: generated projects have no file-level ownership
-contract — the beta-migration tool hand-encodes the generator's ownership taxonomy in eight
-unlinked tuple literals, and the gap is live this release (SA63's two changed files each miss one
-of the two migration paths). Finding 1 is unchanged (no new lattice stations this delta — first
-quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams unscheduled).
+**Result: four findings still-open (Finding 7 narrowed), zero new findings.** This pass's value
+is the fix-regression audit of the closeout batch: **SA65 clean** (import-time env snapshot
+deleted; `_run_command` defaults to `env=None`; scoped env passed only to the two nested
+`quickscale_cli.main` call sites — mechanism removed, nothing relocated). **SA68 clean on its
+mechanism** (no argv inspection remains anywhere on the privilege-selection path; Finding 6 stays
+closed) but it minted one small new station — the sanctioned-command set now exists as two
+parallel frozensets on opposite sides of the template/runtime-library boundary
+(`production.py.j2` `_KNOWN_PRIVILEGED_COMMANDS` vs `orgs/apps.py` `_PRIVILEGED_COMMANDS`), both
+fail-closed, with no sync gate — recorded as a watchlist item, not a reopening. **SA66 landed a
+genuine derivation gate** (Finding 7 narrowed: the emitted-file universe is derived from the
+template tree, zero unclassified files, and both of the prior pass's open policy questions are
+answered and test-pinned) but the gate itself minted a hand-synced copy of the generator's
+template→emitted-path routing inside the test — cited in Finding 7's evidence. **The SA59.1
+checkpoint structurally removed the blanket test-path bypass hatch** (enforcement census row 2
+strengthened: CI's integration path now runs module suites under a real
+NOBYPASSRLS/NOSUPERUSER role with the SA58 guard live) at the cost of a currently-red
+integration gate — red-flagged below.
 
-### Enforcement census (V2 §3.4)
+### Enforcement census (§3.4)
 
 | # | Invariant | Enforced by | Class | Trend this pass |
 |---|-----------|-------------|-------|-----------------|
 | 1 | Tenant isolation on reads/writes | fail-closed `TenantManager` + FORCE RLS + AF9 execute-wrapper | structural | stable |
-| 2 | No bypassing DB role at boot | orgs boot guard (`apps.py:78–113`), now `rolbypassrls` **and** `rolsuper` | structural | strengthened (SA58) — but neutralized in the `make test-unit` path (SA59, open) |
-| 3 | Admin org-scoping | `TenantModelAdmin`; tripwire = NOBYPASSRLS test posture (SA14.4) | structural + gated | completed (SA64: last straggler ported); tripwire currently disabled by the SA59 blanket hatch |
-| 4 | DB privilege selection per process | launcher env pair (`RUNTIME_DATABASE_URL=""` + `QUICKSCALE_ALLOW_BYPASSRLS=1`, plus SA68's `QUICKSCALE_PRIVILEGED_COMMAND`/`QUICKSCALE_NON_DB_COMMAND` pair), consumed by production settings + boot guard | structural | completed (SA63+SA68) — Finding 6 closed 2026-07-11; no argv inspection remains |
-| 5 | JSON endpoint idiom | `OrgApiBaseView`/DRF baseline + SA46 csrf-exempt CI gate | structural + gated | stable (Finding 5 closed) |
-| 6 | Core↔module import direction | import linter + `LEGACY_ALLOWED_IMPORTS` (3 modules) | gated, with exceptions | stable this delta — list did not grow (Finding 1) |
-| 7 | Module manifest copy-pairs (module.yml ×2) | CI byte-identical sync gate | gated | exercised correctly (auth bump) |
+| 2 | No bypassing DB role at boot | orgs boot guard (`apps.py`), `rolbypassrls` + `rolsuper` | structural | **strengthened** — the SA59 blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is gone from the unit path; CI/publish integration jobs run module suites under `quickscale_test_role` (NOBYPASSRLS/NOSUPERUSER) with the guard live. Caveats: gate currently red on pre-existing failures (red flag); SQLite suites (backups) outside its reach until SA59.2 |
+| 3 | Admin org-scoping | `TenantModelAdmin`; tripwire = NOBYPASSRLS test posture (SA14.4) | structural + gated | **restored** — with the blanket hatch gone, NOBYPASSRLS-by-default is real again in the integration path |
+| 4 | DB privilege selection per process | launcher env contract (`QUICKSCALE_PRIVILEGED_COMMAND`/`QUICKSCALE_NON_DB_COMMAND` + `RUNTIME_DATABASE_URL=""`), consumed by production settings + boot guard | structural | completed (SA68, re-verified in code this pass — zero argv inspection). New: sanctioned-set frozensets ×2 (template-side + orgs-module-side), both fail closed on unknown values/desync, no sync gate (watchlist) |
+| 5 | JSON endpoint idiom | `OrgApiBaseView`/DRF baseline + SA46 csrf-exempt CI gate | structural + gated | stable |
+| 6 | Core↔module import direction | import linter + `LEGACY_ALLOWED_IMPORTS` (3 modules) | gated, with exceptions | list stable (billing, crm, social — did not grow). New cycle **carrier**: `mypy.ini` `ignore_missing_imports = True` for `quickscale_modules_backups.*` (SA73); linter header/dict drift (docstring says billing+CRM only, dict has social) |
+| 7 | Module manifest copy-pairs (module.yml ×2) | CI byte-identical sync gate | gated | stable |
 | 8 | Tenant-model universe **membership** | SA15.3/SA45/SA49 derivation gates | gated | stable |
-| 9 | Tenant-model purge **order** | hand-ordered `_DELETE_SPECS`, comment-justified | convention | unchanged (Finding 4) |
-| 10 | Deletion invariants at account boundary | one canonical check, invoked per boundary; no `pre_delete` backstop | convention | unchanged (Finding 2; zero receivers re-verified) |
-| 11 | pyproject TOML write safety | `_write_validated_toml` (all 3 CLI splice sites) | structural per package | fixed in-package (SA62) — **copied, not shared, in devtools** (watchlist) |
-| 12 | Generator-owned file taxonomy for upgrades | eight hand tuples in `beta_migration.py:43–115` | convention, ungated | **new — Finding 7** |
-| 13 | Generated-project boot correctness | `test_generated_project_runtime.py` boot smoke tests (no-Redis createcachetable, bypass-hatch path, embedded auth) | gated | **new this delta** — the harness the 2026-07-09 pass asked for landed |
+| 9 | Tenant-model purge **order** | hand-ordered `_DELETE_SPECS`, comment-justified | convention | unchanged (Finding 4; SA60 open) |
+| 10 | Deletion invariants at account boundary | one canonical check, invoked per boundary; no `pre_delete` backstop | convention | unchanged (Finding 2) — first step now **scheduled** (SA70, Track 1) |
+| 11 | pyproject TOML write safety | `_write_validated_toml` (3 CLI splice sites) | structural per package | stable; devtools copy unchanged |
+| 12 | Generator-emitted file ownership for upgrades | SA66 conformance gate: emitted-file universe derived from `generator/templates/`, every file classified, policy pins for `start.sh`/`production.py`, `INTENTIONALLY_UNMANAGED` explicit class | **gated** (was convention, ungated) | **strengthened** (SA66). Residuals: the gate's template→emitted-path mapping is itself a hand-synced copy of generator routing; the "unmanaged entries need a decisions.md rationale" invariant is stated but unenforced (test asserts non-emptiness only) |
+| 13 | Generated-project boot correctness | `test_generated_project_runtime.py` boot smoke harness | gated | strengthened — +284 lines (SA68) covering the privileged-command and bypass-hatch paths end-to-end |
+| 14 | Module suites run under a restricted DB role | ci.yml/publish.yml role provisioning + `QS_*_DB_USER` env wiring | gated | **new this delta** — env lists hand-enumerated ×2 workflows (11 modules each); omission fails **loud** for PostgreSQL modules (module test settings fall back to `USER=postgres`, which the boot guard rejects under `QUICKSCALE_ALLOW_BYPASSRLS=0`); silent only for SQLite suites (SA59.2, tracked); `check_ci_locally.sh` lacks the wiring entirely (SA59.3's shared-provisioning design is the scheduled fix) |
+| 15 | Release-gate test scope | publish.yml `test` job | gated | **new** — publish.yml now runs the same unit + restricted-role integration split as ci.yml (was a single combined unit script) |
 
 ### Summary table
 
 | # | ID | Horizon | Size | One-line problem |
 |---|----|---------|------|------------------|
-| 1 | `dr-engine-module-circular-lattice` | now | M remaining (Option 2) | DR logic lives in core but its state and lifecycle live in the backups module; the cycle is carried by hand-synced symbol stations and a linter exception list — unchanged this delta; persistence port scheduled |
-| 7 | `generated-file-ownership-unmodeled` | now | M (S first step — **done**, SA66) | The generator emits projects with no per-file ownership contract; the beta-site upgrade tool re-encodes that taxonomy by hand in eight unlinked literals — SA66 (2026-07-11) landed the Option 1 conformance gate (zero unclassified gaps); Option 2 (generator-emitted ownership manifest) remains open for a third consumer or a public update command |
-| 2 | `deletion-invariants-per-boundary-reimplementation` | deferred (teams unscheduled) | M remaining | One canonical last-owner check, but no domain-level `pre_delete` backstop — every deletion path other than `AccountDeleteView` enforces nothing |
+| 1 | `dr-engine-module-circular-lattice` | now | M remaining (Option 2) | DR logic lives in core but its state and lifecycle live in the backups module; the cycle is carried by hand-synced symbol stations and a linter exception list — unchanged this delta (second consecutive quiet pass); carrier count grew by one (SA73's mypy `ignore_missing_imports`); persistence port still scheduled |
+| 7 | `generated-file-ownership-unmodeled` | 6–18 months | M remaining (Option 2) | SA66's conformance gate closed the silent-miss class and pinned both ownership policies, but the taxonomy and the gate's emission-path mapping remain hand-synced copies of generator knowledge living in the ungoverned devtools package; Option 2 (generator-emitted ownership manifest) is the mechanism-removing fix |
+| 2 | `deletion-invariants-per-boundary-reimplementation` | deferred (teams unscheduled) | M remaining | One canonical last-owner check, but no domain-level `pre_delete` backstop — first step now scheduled as SA70 (Track 1) |
 | 4 | `org-model-universe-hand-enumerated` | deferred (teams unscheduled) | M remaining (Option 2) | Tenant-model membership is CI-gated against derivations but the purge *order* is hand-written; SA60 (open) owns the missing deferrability/`tenant_excluded` decision records |
 
 ---
@@ -106,8 +100,8 @@ quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams
 - **ID:** `dr-engine-module-circular-lattice`
 - **Rank rationale (blast radius × likelihood):** every DR feature and every new module adapter
   crosses this seam; empirical rate had been ~1 compounding instance per batch for three
-  consecutive batches. This delta is the first quiet pass — no DR feature landed, so no tax was
-  charged, which is absence of trigger, not absence of mechanism.
+  consecutive batches before the current two quiet deltas. Quiet deltas are absence of trigger
+  (no DR work landed), not absence of mechanism.
 - **Horizon & trigger:** `now` — Option 2 (persistence port) is scheduled for the next planning
   cycle per the 2026-07-09 escalation; any DR feature or new module adapter landing before it
   pays the tax.
@@ -122,39 +116,48 @@ quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams
   - Core → module: `dr_engine/orchestration.py:80–84` still imports
     `quickscale_modules_backups.models` at module level.
   - The combined facade's hand-synced literal `__all__` station is intact
-    (`runtime/__init__.py:19–22, 36–43` — "When adding a new public symbol to dr.py or
-    manifest.py, add it here too").
+    (`runtime/__init__.py:36–43` — "When adding a new public symbol to dr.py or manifest.py, add
+    it here too").
   - `LEGACY_ALLOWED_IMPORTS` still carries the social routing exception
-    (`check_module_core_imports.py:61–82`) — **did not grow this delta** (billing, crm, social;
-    same three as 2026-07-09).
-  - Module → core: `backups/services.py` re-export shim unchanged (650 lines, verified
-    untouched by git log since SA54).
-  - SA54's gated copy-pair (stale-restore threshold parameter + signature-pin test) unchanged.
-- **Counter-evidence (V2):** searched the delta for new lazy-table entries, facade `__all__`
-  growth, or new linter exceptions — none landed; searched the roadmap for the persistence port —
-  it is named as scheduled for the next planning cycle (roadmap.md origin note, 2026-07-10).
-  Nothing disproves the mechanism; the quiet delta shows only that no DR work happened.
+    (`check_module_core_imports.py:60–82`) — did not grow this delta (billing, crm, social; same
+    three as 2026-07-09). Drift note: the linter's own docstring (`:8–15`) now claims exceptions
+    are "limited to billing and CRM" while the dict has three keys — the gate's documentation
+    disagrees with its own allowlist.
+  - **New carrier this delta:** `mypy.ini:94–95` gained `ignore_missing_imports = True` for
+    `quickscale_modules_backups.*` (SA73, `fc3dc00c`) — the type-check gate now permanently skips
+    resolving the very import that constitutes the cycle's core→module edge. Per the §5.XII rule,
+    lazy imports, re-export shims, hand-synced `__all__` unions, linter exceptions, *and now a
+    mypy ignore* are cycle carriers, and their count growing is the cycle compounding.
+  - Module → core: `backups/services.py` re-export shim unchanged (650 lines, verified untouched
+    by git log since SA53); SA54's gated copy-pair (threshold parameter + signature-pin test)
+    unchanged.
+- **Counter-evidence:** searched the delta for new lazy-table entries, facade `__all__` growth,
+  or new linter exceptions — none landed; the only dr_engine change was a one-line comment
+  (SA73). Searched the roadmap for the persistence port — still named as scheduled for the next
+  planning cycle. Nothing disproves the mechanism; two quiet deltas show only that no DR work
+  happened.
 - **Why it compounds:** every DR feature touches up to six stations (orchestration function +
   dr.py lazy table + dr.py `__all__` + facade literal `__all__` + services shim + adapter
   signature); every boundary-crossing invariant becomes a gated copy pair; every new module whose
   adapter needs manifest surface either adds a linter exception or pays the cycle. Built on top:
   all backups management commands, admin restore/create/prune, the DR CLI, apply/deploy DR
   integration, the social adapter's import path.
-- **Detection signal:** growth of `_LAZY_*` tables, the facade `__all__`, or
-  `LEGACY_ALLOWED_IMPORTS` in any diff; any diff editing one side of a gated copy pair.
+- **Detection signal:** growth of `_LAZY_*` tables, the facade `__all__`,
+  `LEGACY_ALLOWED_IMPORTS`, or per-package mypy ignores in any diff; any diff editing one side of
+  a gated copy pair.
 - **Steelman:** each mechanism is a standard pattern, all are gated, and generated apps ship
   backups+core together so the cycle never bites end users at runtime. It failed on evidence in
-  three consecutive batches before this quiet one; one quiet delta does not restore it.
+  three consecutive batches before the current quiet stretch; quiet deltas do not restore it.
 - **Correct shape:** imports across the core↔module boundary form a DAG (modules → core only);
   no underscore-private name crosses a package boundary; a boundary-crossing invariant has exactly
   one implementation; adding a module adapter requires zero linter exceptions.
 - **Options:**
   1. ~~Registration-not-import + facade split~~ — **done** (SA44 + the `runtime/` package); it
      clarified the surface but demonstrably did not remove the cycle.
-  2. **Persistence port (the live option, now scheduled).** Core defines protocols for
+  2. **Persistence port (the live option, scheduled).** Core defines protocols for
      artifact/policy persistence; the backups module implements and injects them at app-ready.
-     Kills `orchestration.py:80`, the lazy tables' reason to exist, the SA54 copy-pair class, and
-     adapter deep-import exceptions. M–L effort.
+     Kills `orchestration.py:80`, the lazy tables' reason to exist, the SA54 copy-pair class, the
+     new mypy ignore's reason to exist, and adapter deep-import exceptions. M–L effort.
   3. **Invert ownership.** Move all Django-model-touching orchestration into the backups module;
      core keeps pure primitives. Largest migration; complicates the CLI's non-Django DR paths.
 - **Recommendation:** Option 2, as scheduled — land it before the next DR feature or module
@@ -169,103 +172,99 @@ quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams
 - **ID:** `generated-file-ownership-unmodeled`
 - **Rank rationale (blast radius × likelihood):** blast is the deploy/infra correctness of the
   only two production deployments (`experto-ai-web`, `bap-web`) plus every future generated
-  project's upgrade story; likelihood is ~1 per release — the migration playbook runs on every
-  QuickScale release, and the coverage gap has already opened against this very release's SA63
-  files. Ranked below Finding 1 on confidence (no recorded incident yet vs. three dated
-  instances); it outranks Finding 1 if the beta sites deploy without Redis (see Questions).
-- **Horizon & trigger:** `now` — the SA63 rollout to the beta sites is the live trigger; every
-  subsequent template-surface change re-fires it.
-- **Confidence:** High for the mechanism (lists read in full; absence of derivation/gate verified
-  by search in both the tool and its tests); Medium for the live-impact claim (the playbook's
-  manual steps may compensate — static analysis cannot confirm what the operator does by hand).
+  project's upgrade story; likelihood dropped this pass — the SA66 gate turns the previously
+  silent miss class (a template file no taxonomy covers) into a CI failure, so the live-gap
+  scenario that ranked this `now` is closed.
+- **Horizon & trigger:** `6–18 months` — fires on a third consumer site, a public
+  "update my generated project" command, a new theme, or a new dynamically generated artifact
+  (each stresses the two remaining hand-synced copies described below).
+- **Confidence:** High — the SA66 diff, the full conformance test, and the decisions.md record
+  were read this pass; the residual copies are directly observable.
 - **Context dependence:** wrong-for-now on the **consumer-count** dimension: with one maintainer
-  and two sites, human memory papers over the gap; a third consumer site, a second operator, or a
-  public "update my generated project" command each make it wrong-regardless.
-- **Problem:** the generator has no machine-readable concept of which emitted files are
-  generator-owned (safe to overwrite on upgrade) versus user-owned (seeded once, then the
-  project's) — that taxonomy exists only as eight hand-written tuple literals inside the
-  maintainer migration tool, differently partitioned per migration path, with nothing deriving
-  them from the template tree and no gate detecting drift.
+  and two sites the gate suffices; a third site, a second operator, or a public update command
+  makes the remaining hand-synced knowledge wrong-regardless.
+- **Problem:** the generator still has no machine-readable, generator-owned statement of per-file
+  ownership — the taxonomy lives as hand-written tuples in the maintainer migration tool, and the
+  new conformance gate holds those tuples honest by *re-implementing the generator's
+  template→emitted-path routing inside the test* rather than consuming a mapping the generator
+  exports.
 - **Evidence:**
-  - The taxonomy: `quickscale_devtools/src/quickscale_devtools/beta_migration.py:43–115` —
-    `FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES`, `…_RECIPIENT_PACKAGE_FILES`,
-    `…_IDENTITY_ROOT_FILES`, `…_PROTECTED_PACKAGE_FILES`, `IN_PLACE_INFRASTRUCTURE_TARGETS`,
-    `IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS`, plus per-module React surface maps — eight
-    hand partitions of the generated-file universe.
-  - The source of truth they snapshot: the template tree
-    (`quickscale_core/src/quickscale_core/generator/templates/` — 30+ emitted files including
-    `start.sh.j2`, `railway.json.j2`, `db/init.sql.j2`, `Makefile.j2`, `OPERATIONS.md.j2`,
-    four settings templates).
-  - **The live gap:** `IN_PLACE_INFRASTRUCTURE_TARGETS` (`:96–108`) does **not** include
-    `start.sh` — the file SA63 just changed (`start.sh.j2:59`, the createcachetable env-pair
-    line) — so the in-place path will not deliver the deploy fix. The fresh-first path copies the
-    **donor's** `settings/production.py` onto the fresh scaffold
-    (`FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES`, `:43–48`), so the beta site keeps its old
-    production settings and misses SA63's env-pair bridge (`production.py.j2:172–184`). Each of
-    SA63's two changed files is missed by exactly one of the two paths.
-  - No derivation or cross-check: searched `beta_migration.py` and
-    `quickscale_cli/tests/test_beta_migration.py` for any reference to the generator/template
-    tree — none; the tool's only core imports are `config_schema` and `project_identity`.
-- **Counter-evidence (V2):** searched for a conformance test tying the lists to the template
-  tree (none); for playbook prose naming `start.sh`/`production.py` as manual follow-ups (the
-  playbook keeps env vars, deploy, and smoke checks manual but does not enumerate per-file
-  template deltas); for a generator-side ownership/provenance record (the apply engine tracks
-  module wiring and contract vintage, but nothing marks emitted-file ownership). The strongest
-  disconfirming fact found: `settings/production.py` being donor-owned is arguably *deliberate* —
-  beta sites customize it — which reframes that half of the gap as a policy choice with a missing
-  merge story rather than an omission. That narrows, but does not close, the finding: the policy
-  itself is recorded nowhere and enforced by nothing.
-- **Why it compounds:** every template-surface change now requires a human to remember (a) which
-  of the eight lists, across two paths, classifies the changed file, and (b) whether the playbook's
-  manual steps cover it — for every consumer site, on every release. Cost grows
-  O(template files × migration paths × consumer sites). Built on top: the shipped
-  `make beta-migrate-fresh` / `make beta-migrate-in-place` automation (v0.81.0), its checkpoint
-  and verification sequences, and the two beta sites' release cadence. The devtools package also
-  copies rather than shares the CLI's TOML-splice machinery (`_write_validated_toml` twins at
-  `beta_migration.py:597` / `module_dependency_sync.py:223`) because it deliberately depends only
-  on `quickscale-core` — a second manifestation of the same root: the upgrade tool re-implements
-  product knowledge it cannot import or derive.
-- **Detection signal:** none today — a missed file produces a *silently stale* beta site, not an
-  error. Instrument by diffing a freshly generated scaffold against each beta site's
-  generator-owned files after every migration (the fresh-first path already has both trees on
-  disk at once — the diff is nearly free).
-- **Steelman:** this is maintainer-only tooling, explicitly not a public CLI command; the operator
-  is the same person who wrote SA63 and reviews checkpoint reports before anything applies; file
-  lists change rarely; and hand-curated lists encode judgment (donor-owned production.py) that
-  naive derivation would get wrong. That holds exactly as long as the maintainer's memory is the
-  gate — the moment a release's template delta is rolled by an assistant following the playbook,
-  or a third site joins, the silent-staleness class fires.
+  - **Fix-regression audit of SA66 (`0138db60`):** (i) the silent-miss mechanism is removed —
+    `test_beta_migration_ownership_conformance.py` enumerates every `.j2` template plus non-Jinja
+    theme files and the dynamic `poetry.lock`, resolves emitted paths, and fails on any
+    unclassified file; `start.sh` was added to both in-place tuples (closing the prior pass's
+    live gap) and `INTENTIONALLY_UNMANAGED` (~80 entries) makes "deliberately unmanaged" an
+    explicit class. (ii) Fail direction preserved — unclassified files fail loud. (iii) **New
+    commitments minted:** the test's `_THEME_DEST_MAP`/`_THEME_SUBDIR_MAP`/`_map_theme_template`
+    plus special cases for `project_name/`, `common/`, `github/`, the theme-README skip, and a
+    hand entry for `poetry.lock` are a parallel copy of `generator.py`'s procedural emission
+    routing (verified: the generator exposes no declarative mapping — `_generate_project`/
+    `_generate_react_frontend` compute destinations inline). `_theme_non_jinja_emitted_paths`
+    hardcodes `("showcase_react",)`, so a future theme's non-Jinja files would be silently absent
+    from the enumerated universe — the one residual silent direction.
+  - Both prior open policy questions are now answered and pinned: `settings/production.py` is
+    donor-owned **by policy** and `start.sh` is in-place-managed —
+    `decisions.md §Generated-File Ownership (Beta-Migration Taxonomy)` records both;
+    `test_production_py_is_donor_owned_by_policy` and `test_start_sh_is_in_place_managed`/
+    `…_substituted` pin them.
+  - Gate-integrity gap (§5.XV): decisions.md rule 3 states every `INTENTIONALLY_UNMANAGED` entry
+    "must have a documented exemption rationale in decisions.md," but
+    `test_intentionally_unmanaged_entries_have_documented_rationale` asserts only non-emptiness
+    (its own docstring admits the cross-check is not implemented).
+  - Governance placement: `quickscale_devtools` remains outside the lint/typecheck universe
+    (absent from `ruff.toml`, `mypy.ini`, and Makefile targets; present only as a path dep and on
+    `pythonpath`), yet the conformance test importing it now runs in the **unit gate of ci.yml
+    and publish.yml** — the release pipeline is import-load-bearing on an ungoverned package.
+- **Counter-evidence:** searched for a generator-exported emission mapping the test could consume
+  (none — routing is procedural); for a decisions.md↔tuple cross-check (none; non-emptiness
+  only); for devtools lint/type coverage (none). The strongest disconfirming fact: the gate is
+  real, derivation-based, and CI-enforced — the defect class that made this finding `now`
+  (a template change silently missing the beta sites) genuinely cannot recur for `.j2` files.
+  That narrows the finding to its remaining copies; it does not close it, because the correct
+  shape (generator-owned ownership statement) still exists nowhere.
+- **Why it compounds:** every generator routing change (new theme, new subdir mapping, new
+  dynamic artifact) now requires a matching hand edit inside the conformance test, and every
+  taxonomy judgment stays maintainer-memory encoded in tuples the type checker and linter never
+  see. Cost grows O(themes × dynamic artifacts × consumer sites). Built on top: the shipped
+  `make beta-migrate-*` automation, the two beta sites' release cadence, and now the release
+  gate itself (via the conformance test's devtools import). The devtools TOML-splice copy
+  (`beta_migration.py:597` twin of `module_dependency_sync.py:223`) remains the second
+  manifestation of the same root.
+- **Detection signal:** a conformance-gate failure naming an unclassified path is the loud
+  (good) signal; the silent direction is a new theme or dynamic artifact absent from the test's
+  universe — instrument by asserting the test's enumerated-universe size against the generator's
+  actual output in the boot smoke harness (which already generates full projects).
+- **Steelman:** Option 1 was this audit's own recommendation, explicitly scoped as the interim
+  step; hand-curated tuples encode judgment (donor-owned production.py) that naive derivation
+  would get wrong; the emission-routing copy in the test fails loud in most divergence
+  scenarios; and the maintainer is the only operator. That holds until a third consumer or a
+  public update command — exactly the recorded Option 2 trigger.
 - **Correct shape:** the generator owns a single machine-readable statement of per-file ownership
-  (generator-owned / user-seeded / protected), emitted with each project or derivable from the
-  template tree; any upgrade tooling *consumes* that statement, and a gate fails when a template
-  file exists that no ownership class covers.
+  (generator-owned / user-seeded / protected / unmanaged), emitted with each project or exported
+  as an API derived from its own routing; upgrade tooling and the conformance gate *consume* that
+  statement; no second implementation of the template→emitted-path mapping exists anywhere.
 - **Options:**
-  1. **Derivation gate over the existing lists (recommended now).** A CI test enumerates the
-     template tree's emitted files and asserts every file is classified by each migration path's
-     taxonomy (explicitly, including an "intentionally unmanaged" class), failing on any new or
-     renamed template file until classified. Keeps the hand-curated judgment; makes drift loud.
-     S–M, no behavior change, the house governance-by-gate pattern.
-  2. **Generator-emitted ownership manifest.** The generator writes per-file
-     ownership/provenance (template path + vintage) into the project state it already maintains;
-     `beta_migration` and any future public update command derive their copy/protect sets from
-     it. Removes the parallel taxonomy entirely; M–L, and the natural substrate for a public
-     upgrade story.
+  1. ~~Derivation gate over the existing lists~~ — **done** (SA66); it closed the silent-miss
+     class and is the right interim, at the cost of one new hand-synced mapping copy.
+  2. **Generator-emitted ownership manifest (the live option).** The generator writes per-file
+     ownership/provenance (template path + vintage) into the project state it already maintains,
+     or exports the emission mapping as a function; `beta_migration` and the conformance test
+     derive their sets from it. Removes the parallel taxonomy *and* the test-side routing copy;
+     relocates ownership knowledge from ungoverned devtools into governed core. M, and the
+     natural substrate for a public upgrade story.
   3. **Fold the upgrade path into the product.** Extend `quickscale apply`'s contract-vintage
-     machinery (SA10) to refresh generator-owned infra on existing projects, retiring the
-     separate devtools path. L; only worth it when generated-project upgrades become a public
-     feature.
-- **Recommendation:** Option 1 immediately (it is the same shape as SA15.3/SA45/SA49 — this
-  codebase's most reliable defense), with Option 2 as the recorded direction for when a third
-  consumer or a public update command appears. Also record the "production.py is donor-owned"
-  policy in decisions.md — it is currently an unstated convention inside a tuple literal.
-  · **Size:** M (S for the gate itself) · **First step:** the conformance test deriving the
-  emitted-file universe from `generator/templates/` and asserting complete classification per
-  migration path — it will immediately surface `start.sh` and force the SA63-rollout decision.
+     machinery to refresh generator-owned infra on existing projects, retiring the separate
+     devtools path. L; only worth it when generated-project upgrades become a public feature.
+- **Recommendation:** Option 2 when its trigger fires (third consumer / public update command /
+  second theme); until then the SA66 gate carries the load. Opportunistic hardening if touched
+  sooner: have the boot smoke harness cross-check the conformance test's enumerated universe
+  against a real generated tree, closing the new-theme silent direction cheaply.
+  · **Size:** M remaining · **First step:** export the generator's emission mapping as a
+  function (pure refactor of `_generate_project`'s inline destination logic) and point the
+  conformance test at it — that deletes the test-side routing copy without waiting for the full
+  manifest.
 
 ---
-
-*(Finding 6, `db-privilege-mode-procedural`, closed — see the 2026-07-11 Reconciliation log
-entry below; full prior text preserved in version control.)*
 
 ### Finding 2: Deletion-boundary invariants are re-implemented per boundary with no domain backstop
 
@@ -273,23 +272,25 @@ entry below; full prior text preserved in version control.)*
 - **Rank rationale (blast radius × likelihood):** blast is money and org integrity (orphaned live
   Stripe subscriptions, ownerless shared orgs); likelihood moderate and static while user deletion
   stays single-path and teams stays unscheduled.
-- **Horizon & trigger:** `deferred` — teams is not scheduled (decisions.md §Teams module status,
-  2026-07-10). Live trigger regardless of teams: the first account-deletion path that isn't
-  `AccountDeleteView` (e.g. a GDPR erasure command).
+- **Horizon & trigger:** `deferred` — teams is not scheduled. Live trigger regardless of teams:
+  the first account-deletion path that isn't `AccountDeleteView` (e.g. a GDPR erasure command).
 - **Confidence:** High — re-verified this pass: zero `pre_delete` receivers in orgs, billing, or
-  auth (repo search); the SA47 canonical check and its four callsites verified untouched by
-  git log since the 2026-07-09 read.
+  auth (repo search); none of the finding's files were touched by this delta.
 - **Context dependence:** wrong-for-now → wrong-regardless if/when teams kicks off.
 - **Problem:** org-domain and billing-domain rules for "what must hold when a user disappears"
   are enforced only at boundaries that choose to invoke them — there is no layer every ORM
   deletion path traverses.
-- **Evidence:** unchanged from 2026-07-09 —
-  `OrganizationMembership.is_last_owner_with_members()` (`orgs/models.py:165`) consumed by the
-  lock-guarded `delete()` (`models.py:329`), `AccountDeleteView` (`auth/views.py:114,147–164`),
-  and both orgs view callsites (`orgs/views.py:808,1161`); instance `delete()` overrides don't
-  run under the deletion collector, so a `User` cascade bypasses the model rule.
-- **Counter-evidence (V2):** searched again for receivers, collector hooks, or DB-level
-  ownership constraints added since the last pass — none; the delta touched none of these files.
+- **Evidence:** unchanged — `OrganizationMembership.is_last_owner_with_members()`
+  (`orgs/models.py:165`) consumed by the lock-guarded `delete()` (`models.py:329`),
+  `AccountDeleteView` (`auth/views.py:114,147–164`), and both orgs view callsites
+  (`orgs/views.py:808,1161`); instance `delete()` overrides don't run under the deletion
+  collector, so a `User` cascade bypasses the model rule.
+- **Counter-evidence:** searched again for receivers, collector hooks, or DB-level ownership
+  constraints added since the last pass — none; the delta touched none of these files. One
+  adjacent caution: SA59.1's orgs conftest now globally mutes `organization_created` via an
+  autouse fixture — if SA70's `pre_delete` receiver is tested under a similar muting pattern,
+  the backstop would be untested; SA70's acceptance criteria (direct ORM-delete regression test)
+  already precludes this if followed.
 - **Why it compounds:** cost is N deletion boundaries × M invariants; teams adds M, an erasure
   command adds N.
 - **Detection signal:** none today — instrument by alerting on `Organization` rows with zero
@@ -298,10 +299,9 @@ entry below; full prior text preserved in version control.)*
   while user deletion stays single-path.
 - **Correct shape / Options:** unchanged (orgs-owned deletion service + `pre_delete` receiver
   backstop / signal-only / DB-level constraints — full text in version control).
-- **Recommendation:** the `pre_delete` receiver backstop is small enough to land as a general
-  hardening item without waiting on teams — wire it through the existing `signals.py` seam,
-  with a test that deletes a last-owner `User` directly via the ORM and asserts refusal.
-  · **Size:** M remaining · **First step:** the orgs `pre_delete` receiver calling the SA47 check.
+- **Recommendation:** the `pre_delete` receiver backstop is now **scheduled as SA70 (Track 1)**
+  — land it as specced (receiver calling the SA47 check + a direct-ORM-delete regression test).
+  · **Size:** M remaining (S for SA70) · **First step:** SA70.
 
 ---
 
@@ -311,191 +311,219 @@ entry below; full prior text preserved in version control.)*
 - **Rank rationale (blast radius × likelihood):** the enumerations back the isolation boundary's
   bookkeeping and org-offboarding; likelihood approaches 1 if/when a teams build lands, near-zero
   otherwise except for new models in shipped modules.
-- **Horizon & trigger:** `deferred` — teams unscheduled (decisions.md §Teams module status);
-  fires independently on any new model added to an already-shipped module.
+- **Horizon & trigger:** `deferred` — teams unscheduled; fires independently on any new model
+  added to an already-shipped module.
 - **Confidence:** High — `tenancy.py` and `purge_organization.py` verified untouched by git log
-  since `6ea37301`; the SA15.3/SA45/SA49 gates re-verified landed on the 2026-07-09 pass and
-  none of their files changed this delta.
+  this delta; the SA15.3/SA45/SA49 gates' files unchanged.
 - **Context dependence:** wrong-for-now on the new-domain dimension.
 - **Problem:** knowledge of "which models belong to an organization, and how they die" lives in
   hand-written literals inside orgs; membership is fully CI-gated, purge *order* is not.
 - **Evidence:** unchanged — `TENANT_TABLE_REGISTRY` (`tenancy.py:128`, 49 entries, bidirectionally
   gated); `_DELETE_SPECS` (`purge_organization.py:64`, hand-ordered; the SA45 gate checks
-  membership, not orderability). The 2026-07-09 caution (two derivation-input semantics changed
-  inside housekeeping commits) is now owned by **SA60, open on Track 1** (composite-FK
-  deferrability policy + conformance gate).
-- **Counter-evidence (V2):** checked the delta for changes to the registry, purge specs, or
-  derivation inputs — none; checked decisions.md for the SA60 records — not yet written (SA60
-  open), so the caution stands as tracked rather than resolved.
+  membership, not orderability). The decision-record caution (composite-FK `NOT DEFERRABLE`
+  switch + `tenant_excluded` precedence, both undocumented) is owned by **SA60, open on Track 1**.
+  Related this delta: SA59.1 discovered `forms/migrations/0007` fails composite-FK validation on
+  a fresh restricted-role DB — the deferability divergence SA60 owns is now blocking real work,
+  raising SA60's practical urgency without changing this finding's shape.
+- **Counter-evidence:** checked the delta for changes to the registry, purge specs, or derivation
+  inputs — none; checked decisions.md for the SA60 records — not yet written (SA60 open).
 - **Why it compounds:** every new tenant model requires K coordinated edits (marker + registry
   literal + `_DELETE_SPECS` entry with correct position); purge-order correctness is the one
   property no gate checks, and the `NOT DEFERRABLE` change made it less forgiving.
 - **Detection signal:** `ProtectedError` from `purge_organization` in any environment;
-  `NOT DEFERRABLE` composite-FK violations surfacing mid-purge.
+  `NOT DEFERRABLE` composite-FK violations surfacing mid-purge — and now, concretely, the
+  `forms/0007` failure class on restricted-role databases.
 - **Steelman:** hand-ordered deletion is explicit, reviewable, and encodes FK subtleties naive
   traversal gets wrong; membership gates are complete and derivation-backed.
 - **Correct shape / Options:** unchanged — Option 2 (derive the purge plan topologically from the
   FK graph, `_DELETE_SPECS` reduced to overrides) is the live option, if/when teams' models land.
-- **Recommendation:** Option 2 if/when teams kicks off; meanwhile SA60 closes the
-  decision-record caution. · **Size:** M remaining · **First step:** SA60 (already scheduled);
-  purge-order derivation only when a real second consumer (teams) gives it a test bed.
+- **Recommendation:** SA60 first (it now unblocks SA59.1's forms failure as well as closing the
+  decision-record caution); purge-order derivation only when a real second consumer (teams)
+  gives it a test bed. · **Size:** M remaining · **First step:** SA60 (already scheduled).
 
 ---
 
-### Change-cost probes (V2 §3.6)
+### Change-cost probes (§3.6)
 
-- **Probe A — "a QuickScale release changes a deploy-affecting template; roll it to the two beta
-  sites."** Chosen because it is this exact release's reality (SA63 changed `start.sh.j2` and
-  `production.py.j2`). Measured stations: (1) the template edit; (2) template tests
-  (`test_templates.py`/`test_start_sh_template.py` — gated); (3) the generated-project boot smoke
-  tests (gated, landed this delta); (4) **classification of the changed file in
-  `beta_migration.py`'s eight lists × two paths — ungated, and currently misses both SA63 files
-  (one per path)**; (5) playbook prose (`beta-site-migration.md` — manual); (6) per-site
-  migration run + operator review + manual deploy. Stations 1–3 are gated and healthy; station 4
-  has no gate connecting it to station 1. **Verdict: finding evidence → Finding 7.**
-- **Probe B — "add a new privileged management command to generated apps"** (Finding 6's
-  compounding claim, re-measured post-SA63). Measured stations: one — a start.sh line carrying
-  the env pair; `production.py.j2`'s bridge branch and the boot guard's hatch consume it with no
-  further registration. The 2026-07-09 claim of "up to three places" no longer holds for new
-  commands. **Verdict: seam exonerated for new commands** — Finding 6's residual migrate-path
-  deciders were later deleted by SA68 (2026-07-11), closing the finding.
+- **Probe A — "a 14th module lands in `quickscale_modules/`."** Chosen because module addition is
+  the recurring change shape this repo's gate architecture is built around, and this delta minted
+  new stations for it. Measured stations: (1) module dir + pyproject + module.yml copy-pair —
+  gated (census row 7); (2) manifest adapter registration — one line (or a linter exception if it
+  deep-imports; Finding 1); (3–5) `ci.yml`: createdb list, role-grant DB list, `QS_*_DB_USER` env
+  block — three hand edits; (6–8) `publish.yml`: the same three lists again; (9) the module's own
+  `tests/settings.py` — self-contained. Derived automatically (zero cost): `test_integration.sh`
+  iterates `quickscale_modules/*` dynamically; Makefile typecheck loops modules; orgs
+  conformance-env is SA49-derived. **Six ungated hand stations in workflow files — but omission
+  fails loud for PostgreSQL modules:** the settings fallback is `USER=postgres`
+  (`tests/settings.py` pattern, verified in orgs and billing), and under the integration jobs'
+  `QUICKSCALE_ALLOW_BYPASSRLS=0` the SA58 boot guard rejects `rolsuper`, so a missed env var
+  fails the suite rather than silently running unguarded. Silent only for SQLite-based suites
+  (backups — SA59.2, already tracked). **Verdict: watchlist** (new item below), not a finding —
+  the fail direction is closed where RLS matters; the derivation belongs in SA59.3's shared
+  provisioning script.
+- **Probe B — "add a third sanctioned privileged command to generated apps"** (re-measuring
+  Finding 6's seam post-SA68). Measured stations: (1) the `start.sh.j2` launch line with the env
+  pair; (2) `production.py.j2`'s `_KNOWN_PRIVILEGED_COMMANDS` frozenset; (3) `orgs/apps.py`'s
+  `_PRIVILEGED_COMMANDS` frozenset — plus each side's tests. Three code stations, two of them a
+  copy-pair with no sync gate, split across the template/runtime-library boundary (a generated
+  project's `production.py` is frozen at generation vintage while the orgs module upgrades by
+  dependency bump). Desync fails **closed** at both consumers (unknown value → `ValueError` in
+  settings; guard stays active in orgs). **Verdict: seam exonerated for its fail direction;
+  copy-pair recorded as a watchlist item.** Finding 6 stays closed.
 
 ### Fix order and interactions
 
-1. **Finding 7's first step (the template↔lists conformance gate)** is independent of everything
-   else and should land before the next release's beta migration; the immediate manual action
-   (verify SA63 reached both beta sites) is red-flagged below and shouldn't wait for the gate.
-2. **Finding 1 Option 2 (persistence port)** — scheduled next planning cycle; independent of
-   Findings 2/4/7.
-3. ~~Finding 6's remainder~~ — **closed** (SA68, 2026-07-11): the last argv deciders on the
-   migrate path are deleted and the two-signal `QUICKSCALE_PRIVILEGED_COMMAND`/
-   `QUICKSCALE_NON_DB_COMMAND` contract replaces the overloaded single-bit hatch.
-4. **Findings 2 and 4** stay deferred (teams unscheduled) and independent; Finding 2's receiver
-   backstop is small enough to land as opportunistic hardening.
+1. **SA59.1's remaining blockers** (pre-existing restricted-role failures, red-flagged gate
+   state) come first operationally — while the integration gate is red it cannot catch new
+   module-suite regressions, which weakens every census row that depends on it (2, 3, 14).
+2. **SA60** now unblocks two things at once: Finding 4's decision-record caution and SA59.1's
+   forms/0007 composite-FK failure. Land it early in the SA59 sequence rather than parallel.
+3. **SA70** (Finding 2's first step) is independent and small; land opportunistically.
+4. **Finding 1 Option 2 (persistence port)** — scheduled next planning cycle; independent of
+   everything above.
+5. **Finding 7's remainder (Option 2)** waits on its trigger; the cheap interim (export the
+   generator's emission mapping and point the SA66 test at it) is independent and small.
 
 ### Sound load-bearing decisions (protect these during remediation)
 
-- **Dual-layer tenancy enforcement, strengthened this delta:** fail-closed `TenantManager` +
-  FORCE RLS with the AF9 execute-wrapper, and the boot guard now rejecting `rolsuper` as well as
-  `rolbypassrls` (`orgs/apps.py:99–113`, SA58). Preserve this fail direction in any future
-  privilege-selection work.
-- **SA63/SA68's launcher env-pair contract:** one channel (`RUNTIME_DATABASE_URL=""` +
-  `QUICKSCALE_ALLOW_BYPASSRLS=1`, plus SA68's `QUICKSCALE_PRIVILEGED_COMMAND`/
-  `QUICKSCALE_NON_DB_COMMAND` pair), published by start.sh, consumed by production settings and
-  the boot guard for every privileged command including `migrate` — Finding 6 is closed; don't
-  reintroduce an argv-based decider alongside it.
-- **The generated-project boot smoke harness** (`test_generated_project_runtime.py`, grown +395
-  lines this delta including the no-Redis and bypass-hatch paths): this is the runtime-confirmation
-  layer the last two passes kept asking for — route future template-contract claims through it.
-- **Governance by gate, exercised again:** the manifest byte-identical sync gate absorbed the
-  auth `implies: orgs` bump correctly; the SA46/SA15.3/SA45/SA49 family carried. Finding 7's
-  recommended fix is deliberately the same pattern.
-- **`TenantModelAdmin` as the single admin-scoping seam:** SA64 ported the last straggler
-  (social); every tenant-model admin now inherits the orgs-owned base with VIEW-AS priority and
-  org-field locking.
-- **SA47's canonical last-owner seam:** one implementation, four consumers, lock-guarded —
-  Finding 2's remaining work extends it, not parallels it.
+- **The unit/integration gate split along the DB-need boundary (SA59.1):** DB-free unit gate
+  (core + CLI) plus a PostgreSQL integration gate running module suites under a
+  NOBYPASSRLS/NOSUPERUSER role with the SA58 boot guard live — this is the shape the audit's
+  census row 2 has wanted since SA14.4, and the blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is
+  finally gone from the unit path. Finish it (SA59.1–.4); don't regress the blanket hatch back in
+  to get the gate green.
+- **Dual-layer tenancy enforcement:** fail-closed `TenantManager` + FORCE RLS with the AF9
+  execute-wrapper, boot guard rejecting `rolsuper`/`rolbypassrls` — now exercised in CI against a
+  genuinely restricted role. The `USER=postgres` settings fallback failing loud *because of* the
+  guard (Probe A) is this architecture working as designed.
+- **SA68's launcher env contract:** one channel (`QUICKSCALE_PRIVILEGED_COMMAND`/
+  `QUICKSCALE_NON_DB_COMMAND` + `RUNTIME_DATABASE_URL=""`), published by start.sh/Dockerfile,
+  consumed fail-closed by production settings and the boot guard; verified in code this pass —
+  zero argv inspection anywhere on the privilege path. Keep both consumers fail-closed on unknown
+  values.
+- **Governance by gate, exercised again:** SA66's conformance gate is the house pattern
+  (SA15.3/SA45/SA49 family) applied to the generator's emitted-file universe, and it answered
+  both of the prior pass's open policy questions with pinned tests plus a decisions.md record.
+- **The generated-project boot smoke harness** (`test_generated_project_runtime.py`): grew +284
+  lines this delta covering the SA68 command-contract paths end-to-end — still the
+  runtime-confirmation layer to route template-contract claims through.
+- **`TenantModelAdmin` as the single admin-scoping seam** and **SA47's canonical last-owner
+  check** (one implementation, four consumers, lock-guarded) — carried; SA70 extends the latter,
+  not parallels it.
 
-### Watchlist (every carried item shows this pass's trigger evaluation — V2 §8)
+### Watchlist (every carried item shows this pass's trigger evaluation — §8)
 
 - **Shared module-runtime code has no *written* commons rule.** Trigger ("a new shared concern
-  lands somewhere other than orgs, or teams kickoff"): **not fired** — SA64 *consumed* the
-  commons correctly (social's admin moved onto orgs' base); the SA26 sanitizer remains
-  byte-similar copies in `blog/views.py` + `listings/views.py` (re-verified present). Carry:
-  write the "orgs is the module commons" rule and move the sanitizer in one change.
-- **String-spliced TOML editing.** Trigger ("fourth splice site or corruption incident"):
-  **fired in modified form** — not a fourth CLI site (all three verified through
-  `_write_validated_toml`, SA62), but a *parallel copied implementation* in
-  `quickscale_devtools/beta_migration.py:597` (near-identical body, different exception type),
-  forced by devtools' deliberate core-only dependency. Evaluated for promotion: held — both
-  copies validate before writing, so the defect class is closed; the copy itself is Finding 7's
-  second manifestation and is absorbed there. Retire the standalone item; successor trigger lives
-  in the devtools-governance item below.
-- **`quickscale_devtools` sits outside the governance architecture (new).** Its tests live in
-  `quickscale_cli/tests/`, it appears in no CI gate, linter universe, or the publishing PACKAGES
-  list (deliberate per its pyproject header), and it copies CLI machinery it won't depend on ·
-  doesn't qualify: one tool, maintainer-only, the exemption is documented in its own pyproject ·
-  promotes when a second devtool lands in the package, when its tests gate a release, or when
-  any copied helper drifts from its CLI twin.
+  lands somewhere other than orgs, or teams kickoff"): **not fired** — no new runtime shared
+  concern this delta (`tests_shared/` is test-helper commons, out of the item's scope); the SA26
+  sanitizer remains byte-similar copies in `blog/views.py` + `listings/views.py` (re-verified).
+  Carry: write the "orgs is the module commons" rule and move the sanitizer in one change.
+- **`quickscale_devtools` sits outside the governance architecture.** Trigger ("a second devtool
+  lands, its tests gate a release, or a copied helper drifts"): **fired in modified form** — the
+  SA66 conformance test imports `quickscale_devtools` and runs in the unit gate of ci.yml *and*
+  publish.yml, so the release pipeline is now import-load-bearing on a package outside the
+  lint/typecheck universe (verified absent from ruff.toml/mypy.ini/Makefile targets). Evaluated
+  for promotion: held — absorbed as Finding 7 evidence (the taxonomy's placement is the same
+  root); Option 2 relocates the knowledge into governed core. Carry with the remaining triggers
+  (second devtool; helper drift from its CLI twin).
+- **Module universe hand-enumerated in workflow files (new).** ci.yml and publish.yml each carry
+  three hand lists (createdb, role grants, `QS_*_DB_USER` env) — six stations for every new
+  module · doesn't qualify: omission fails loud for PostgreSQL modules via the SA58 guard
+  (Probe A); population stable at 13 · promotes when a 14th module lands, when SA59.3 implements
+  the shared provisioning script *without* deriving the module list from
+  `quickscale_modules/*/`, or if any suite is found running under the `postgres` fallback
+  without the guard firing.
+- **Sanctioned privileged-command set is a template↔module copy-pair (new, SA68-minted).**
+  `production.py.j2:_KNOWN_PRIVILEGED_COMMANDS` and `orgs/apps.py:_PRIVILEGED_COMMANDS` must
+  agree, with generated-project vintage skew possible against module upgrades · doesn't qualify:
+  both consumers fail closed on desync (loud boot/command failure, not silent privilege); two
+  values, changes rare · promotes when a third sanctioned command lands, a vintage-skew incident
+  fires in a generated project, or a third consumer of the set appears.
 - **Billing webhook concurrent-duplicate window.** Trigger ("non-idempotent side effect in a
   handler"): **not fired** — `billing/services.py` verified untouched since SA41. Carry.
 - **Dual child-table tenancy APIs.** Trigger ("a teams child table lands on the trigger API"):
-  **not fired** — teams unscheduled; SA60 (open) will record the deferrability policy the
-  2026-07-09 pass flagged. Carry.
+  **not fired** — teams unscheduled; SA60 (open) owns the deferrability records; SA59.1's
+  forms/0007 restricted-role failure is adjacent pressure on the same seam. Carry.
 - **Mutating CLI operations have divergent compensation mechanisms.** Trigger ("a new mutating
   command hand-rolls a fifth mechanism, more reconciliation glue, or a crash git couldn't
-  recover"): **fired in modified form** — `beta_migration` is a new mutating tool with its own
-  checkpoint/dry-run/report compensation model. Evaluated: held — it mutates *other projects'*
-  trees (both git repos, operator-reviewed), never the apply ledger's, so no cross-mechanism
-  reconciliation exists; the in-product mechanisms (apply/remove/update) are unchanged. Carry
-  with the trigger unchanged; the devtools half is covered by Finding 7 and the governance item.
+  recover"): **not fired** — no new mutating command this delta (SA65 changed subprocess env
+  scoping only). Carry.
 - **`orgs/views.py` fusion.** Trigger ("teams begins extending org-facing surfaces"): **not
-  fired** — 1,226 lines, unchanged, teams unscheduled. Carry.
-- **Grandfathered option defaults multi-sourced — sixth pass.** Trigger ("a default changes in
-  one station only"): **not fired** — this delta *filled* a station (the listings configurator
-  gained a notice-only `apply` shim, `module_config.py:903–919`) rather than desyncing one;
-  T2.4/T2.5 remain unscheduled. Carry.
-- ~~Deploy-time configuration contract for generated apps~~ — **resolved** (SA68, 2026-07-11):
-  `decisions.md §Launcher One-Shot Command-Env Contract (SA68)` records the
-  `QUICKSCALE_PRIVILEGED_COMMAND`/`QUICKSCALE_NON_DB_COMMAND` contract; the generated-project boot
-  smoke tests remain the runtime-confirmation layer. Retired from the watchlist.
+  fired** — 1,226 lines, verified unchanged, teams unscheduled. Carry.
+- **Grandfathered option defaults multi-sourced — seventh pass.** Trigger ("a default changes in
+  one station only"): **not fired** — `module_config.py` untouched this delta; T2.4/T2.5 remain
+  unscheduled. Carry.
 
 *(Carried unchanged at low priority, unprinted: hardcoded `EXEMPT_PATH_PREFIXES` in
 `orgs/middleware.py`.)*
 
-### Teams landing checklist (carried unchanged from 2026-07-09 — speculative, teams unscheduled)
+### Teams landing checklist (carried unchanged — speculative, teams unscheduled)
 
 > Teams is not scheduled (decisions.md §Teams module status, 2026-07-10). Carried for reference
-> *if* a future scheduling decision lands; see the 2026-07-09 pass text in version control for
-> the full checklist. Additions since remain valid: the teams adapter imports
-> `quickscale_core.runtime.manifest` only; teams data migrations traverse the launcher env-pair
-> contract seam (SA63/SA68) — now the single channel for all privilege selection — and land after
-> the mode contract completes; teams' admin subclasses `TenantModelAdmin`.
+> *if* a future scheduling decision lands; full checklist in the 2026-07-09 pass text in version
+> control. Additions since remain valid: the teams adapter imports
+> `quickscale_core.runtime.manifest` only; teams data migrations traverse the SA68 launcher
+> env contract; teams' admin subclasses `TenantModelAdmin`; **new this pass:** teams' arrival is
+> the promotion trigger for the module-universe workflow-enumeration watchlist item (six hand
+> stations) and must land after SA59.3's shared role-provisioning script, or it inherits the
+> per-module grant duplication SA59.3 exists to remove.
 
 ### Questions that would change the ranking
 
-- **Do the beta sites deploy without Redis?** If yes, SA63's createcachetable fix is
-  load-bearing for their next deploy and Finding 7's live instance becomes urgent enough to
-  outrank Finding 1 — this can no longer be answered from within this repo (see
-  `decisions.md §Beta-Site External Verification Scope`); it's now a standing maintainer
-  to-do in `beta-site-migration.md`, not something a future audit pass can resolve. (Affects
-  Finding 7.)
-- **Is `settings/production.py` being donor-owned in fresh-first migrations a deliberate policy**
-  ("beta sites own their production settings, template changes reach them by hand") **or an
-  accident of the file lists?** If deliberate, Finding 7's fix is a recorded policy + merge
-  story; if accidental, the SA63 env-pair bridge never reaches the beta sites. (Affects
-  Finding 7's first step.)
-- **Was the `NOT DEFERRABLE` composite-FK switch deliberate?** — carried, now owned by SA60
-  (open); the answer lands in decisions.md via that item. (Affects Finding 4's purge-order risk.)
+- **Will SA59.3's shared provisioning script also own the `QS_*_DB_USER` wiring and the workflow
+  DB lists, derived from `quickscale_modules/*/`?** If yes, the module-universe watchlist item
+  dissolves when SA59.3 lands; if the script hand-lists modules again, the item promotes on
+  arrival. (Affects the module-universe watchlist item; worth settling in SA59.3's design before
+  implementation.)
+- **Was the `NOT DEFERRABLE` composite-FK switch deliberate?** — carried, owned by SA60 (open);
+  now also material to SA59.1's forms/0007 blocker. (Affects Finding 4 and the SA59 sequence.)
 
 ### Red flags (out of scope — fix now)
 
-- ~~Verify SA63 actually reaches `experto-ai-web` and `bap-web` this release~~ — **closed as
-  out-of-scope** (SA67, 2026-07-11, `decisions.md §Beta-Site External Verification Scope`):
-  live deployed-state verification for the two beta sites is structurally unreachable from this
-  monorepo and is now a permanent maintainer to-do (`beta-site-migration.md`), not a repo-local
-  red flag. The repo-local half — the in-place path missing `start.sh` and the fresh-first path
-  keeping the donor's `production.py` — was Finding 7's actual defect and was fixed by SA66's
-  conformance gate.
-- ~~`apply`'s subprocess env builder snapshots `sys.path` at import time~~ — **resolved** (SA65,
-  2026-07-10, closing tech-audit.md TA53): the env is now built on-demand and scoped to only the
-  two nested `quickscale_cli.main` invocations; `_run_command` defaults to `env=None` for foreign
-  subprocesses.
+- **The integration gate is red at merge on `v87`.** SA59.1 was merged as a blocked checkpoint
+  with unresolved pre-existing failures (orgs: 3 `test_models.py` + 6 helper-path errors; forms:
+  `0007` composite-FK on restricted-role DBs; notifications: duplicate-db/ownership) and a
+  77.55% mean module coverage against `test_integration.sh`'s 90% threshold — and the script
+  excludes nothing, so the ci.yml/publish.yml integration jobs should currently fail. While red,
+  the gate catches no *new* module-suite regressions, and every day it stays red trains
+  merging-over-red. Tracked (SA59.1 blockers), user-directed stop — but consider quarantining the
+  known failures (xfail-with-ticket per suite) so the gate stays green for everything else while
+  SA59.1 proceeds. *Static-analysis caveat: confirm on the Actions dashboard; `gh` was
+  unavailable this pass.*
+- **`_session_managed_adapters` swallows `ImproperlyConfigured`**
+  (`quickscale_core/tests/test_manifest_entry_point.py`, SA73): a genuinely mis-configured
+  managed adapter now yields skips, not failures, in the unit path — fail-hard-audit class;
+  hand off to tech-audit. Narrow fix: catch only when the module package is absent
+  (`ModuleNotFoundError` cause), re-raise real config errors.
+- **Autouse `organization_created` muting in orgs conftest** (SA59.1, `2b9afa6b`): every orgs
+  test now runs with the signal's `send` patched out, so a broken cross-module receiver (e.g.
+  CRM stage seeding) is invisible to the orgs suite — weakened-test class; hand off to
+  tech-audit. The CRM-side bootstrap tests remain the only coverage of that seam.
 
 Lenses scanned with no qualifying finding this pass: data/state integrity, trust boundaries
-beyond the (now-closed) Finding 6 residual, module cohesion
-beyond Findings 1/7, consistency/failure models, observability, API contracts (no new endpoint
-idiom; Finding 5 spot-verified still closed), testing architecture (the boot smoke harness is the
-right kind; SA59 is its scheduled blind-spot fix), design conflicts beyond the red-flagged
-decision-record drift, concurrency, security architecture, performance. Governance/gate lens
-(V2 §5.XV) produced Finding 7's fix shape and the enforcement census rather than a separate
-finding.
+(SA68 re-verified closed; privilege seam probed and exonerated), module cohesion beyond
+Findings 1/7, consistency/failure models, observability, API contracts, testing architecture
+(the gate split is census-tracked; its soft edges are red-flagged, not finding-grade),
+design conflicts (SA69's exception-identity record landed; linter-docstring drift absorbed into
+Finding 1), concurrency, security architecture, performance. Governance/gate lens (§5.XV)
+produced the census updates, the SA66 gate-integrity residuals (Finding 7), and both probes
+rather than a separate finding.
+
+---
+
+## Autopsy — 2026-07-10 (re-run, delta pass — first run on the V2 prompt)
+
+> Superseded by the 2026-07-11 delta pass above, which re-verified all open findings' evidence
+> anchors, fix-regression-audited the SA65/SA66/SA68/SA73 closeouts and the SA59.1 checkpoint
+> batch, and re-measured both change-cost probes. The 2026-07-10 pass's full text (Finding 7
+> opened, Finding 6 closed via SA68, enforcement census introduced) is preserved in version
+> control. This stub heading is kept so existing links resolve.
 
 ---
 
 ## Autopsy — 2026-07-09 (re-run, delta pass) and module-by-module deep pass
 
-> Superseded by the 2026-07-10 delta pass above, which re-verified all open findings' evidence
+> Superseded by the 2026-07-10 delta pass, which re-verified all open findings' evidence
 > anchors directly, audited the SA57–SA64 closeout batch for fix-regressions, and read the
 > `628c7d28` unlabeled-behavioral commit in full. The 2026-07-09 passes' full text (Finding 6
 > opened, module-by-module verdicts, five held candidates) is preserved in version control. This
@@ -831,3 +859,43 @@ finding.
   Redis?" Question is updated to reflect the same boundary: it cannot be answered by a future
   audit pass and is now a `beta-site-migration.md` maintainer to-do instead. Full detail in
   CHANGELOG.md (SA67 entry) and `docs/technical/roadmap.md` (Track 3, now clean).
+- 2026-07-11 (re-run, delta pass over `ae8c386e..HEAD` — the SA65/SA66/SA68/SA69/SA73 closeouts
+  plus the three SA59.1 checkpoint commits) — **four findings still-open (Finding 7 narrowed),
+  zero new findings.** Fix-regression audits: **SA65 clean** (import-time env snapshot deleted;
+  `env=None` default; scoped env only at the two nested CLI call sites — mechanism removed).
+  **SA68 clean, Finding 6 closure re-verified in code** (zero argv inspection on the privilege
+  path; two-signal contract validated fail-closed at both consumers); one minted station recorded
+  as a new watchlist item — the sanctioned-command frozensets are a template↔module copy-pair
+  with no sync gate, both halves fail-closed. **SA66 audited** (Finding 7 first step): the gate
+  genuinely derives the emitted-file universe from the template tree and pins both ownership
+  policies (`start.sh` in-place + substituted; `production.py` donor-owned by policy, recorded in
+  `decisions.md §Generated-File Ownership`); residuals cited in the updated Finding 7 — the
+  test-side copy of the generator's emission routing (incl. hardcoded `("showcase_react",)` for
+  non-Jinja files), the unenforced decisions-rationale invariant, and devtools' placement outside
+  the lint/typecheck universe while now import-load-bearing for the release gate. **SA73
+  audited**: quality-gate plumbing, but its `mypy.ini` `ignore_missing_imports` for
+  `quickscale_modules_backups.*` is a new Finding 1 cycle carrier (recorded), and its
+  `_session_managed_adapters` fixture swallow is red-flagged. **SA59.1 checkpoint audited**: the
+  blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is verified gone from the unit path; ci.yml and
+  publish.yml both run the split (DB-free unit + restricted-role integration with the SA58 guard
+  live) — census rows 2/3 strengthened/restored, new rows 14/15 added; the currently-red
+  integration gate is red-flagged (tracked, SA59.1 blockers). Probes: A ("14th module") — six
+  ungated hand stations in workflows, fail-loud for PG modules via the guard, verdict watchlist;
+  B ("third privileged command") — three stations, copy-pair fail-closed, verdict watchlist,
+  Finding 6 stays closed. Findings: 1 still-open (second quiet delta; carrier +1); 7 still-open,
+  **narrowed**, horizon now → 6–18 months (silent-miss class closed by the gate); 2 still-open,
+  deferred (zero receivers re-verified; first step scheduled as SA70); 4 still-open, deferred
+  (literals untouched; SA60's urgency raised by the forms/0007 restricted-role failure).
+  Watchlist evaluations: commons — not fired, carried; devtools-governance — fired in modified
+  form (release gate imports devtools), held, absorbed into Finding 7 evidence, carried; billing
+  webhook — not fired, carried; dual child-table API — not fired, carried; CLI compensation —
+  not fired, carried; orgs-views fusion — not fired (1,226 lines), carried; grandfathered
+  defaults — not fired (seventh pass), carried; two new items (module-universe workflow
+  enumeration; privileged-command copy-pair). Prior red flags: both 2026-07-10 flags already
+  closed in the log (SA67 out-of-scope; SA65 resolved — SA65 re-verified in code this pass).
+  Questions: "beta sites without Redis" retired (SA67 scope boundary); "production.py
+  donor-owned deliberate?" **answered by SA66** (deliberate; recorded and test-pinned) — retired;
+  `NOT DEFERRABLE` carried (SA60); one new question (does SA59.3's provisioning script own the
+  module-list derivation?). New red flags: red integration gate at merge; the
+  `ImproperlyConfigured` fixture swallow; autouse `organization_created` muting (both
+  tech-audit hand-offs).
