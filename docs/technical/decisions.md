@@ -1462,6 +1462,50 @@ and asserts every emitted file is classified.
 
 ---
 
+### Beta-Site External Verification Scope {#beta-site-external-verification-scope}
+
+**Decision (2026-07-11):** Verifying the *deployed* state of `experto-ai-web`
+and `bap-web` — confirming a specific commit's generator/template changes
+actually reached those running sites, checking their live Redis
+configuration, or inspecting/patching their donor-owned `settings/production.py`
+— is **permanently out of scope for this monorepo's automated tooling and for
+any coding-agent session operating inside it.** Neither site's repository nor
+its Railway deployment is reachable from here; this is a structural property
+of the two-repo maintainer workflow (`quickscale_devtools/beta_migration.py`,
+[beta-site-migration.md](../planning/beta-site-migration.md)), not a
+credentials gap expected to close.
+
+**Rationale:** the beta sites are external, maintainer-operated repositories
+outside this monorepo by design (see the Split Branch Distribution model
+above and `beta-site-migration.md`'s two-repo migration workflow). No CI job,
+generator run, or agent session in this repo can open a shell in Railway or
+push to those repos. Treating this as a temporary blocker awaiting "access"
+mischaracterizes the boundary — access to another maintainer's private
+deployment infrastructure is not something this repo's tooling can or should
+grant itself.
+
+**What stays in scope (and is not affected by this decision):** everything
+this repo *can* verify mechanically — the generator templates themselves,
+the beta-migration file taxonomy and its conformance gate (SA66, ✅ landed),
+and the launcher env-pair contract's correctness in the templates it emits
+(SA63/SA68, ✅ landed). Those are the actual defect classes; this decision
+only scopes out the one step no in-repo mechanism can perform: confirming a
+human maintainer applied the fix to a live external deployment.
+
+**Standing rule for future findings:** any roadmap item, tech-audit finding,
+or arch-audit red flag whose acceptance criteria requires inspecting or
+patching the live `experto-ai-web`/`bap-web` deployments (not just this
+repo's generator output) is closed on discovery with a pointer to this
+section, rather than left open as a blocked roadmap item. Record the
+manual-verification ask as a maintainer to-do in
+[beta-site-migration.md](../planning/beta-site-migration.md) instead of a
+roadmap.md checklist entry — the roadmap tracks repo-local implementation
+work, not manual maintainer operations against external infrastructure.
+
+**Related docs:** [roadmap.md SA67](./roadmap.md) | [arch-audit.md Red flags](../others/arch-audit.md) | [beta-site-migration.md](../planning/beta-site-migration.md)
+
+---
+
 ## Prohibitions (Critical - DO NOT)
 
 **Database:**

@@ -454,8 +454,10 @@ entry below; full prior text preserved in version control.)*
 
 - **Do the beta sites deploy without Redis?** If yes, SA63's createcachetable fix is
   load-bearing for their next deploy and Finding 7's live instance becomes urgent enough to
-  outrank Finding 1 — verify the rollout manually this release either way (red flag below).
-  (Affects Finding 7.)
+  outrank Finding 1 — this can no longer be answered from within this repo (see
+  `decisions.md §Beta-Site External Verification Scope`); it's now a standing maintainer
+  to-do in `beta-site-migration.md`, not something a future audit pass can resolve. (Affects
+  Finding 7.)
 - **Is `settings/production.py` being donor-owned in fresh-first migrations a deliberate policy**
   ("beta sites own their production settings, template changes reach them by hand") **or an
   accident of the file lists?** If deliberate, Finding 7's fix is a recorded policy + merge
@@ -466,11 +468,13 @@ entry below; full prior text preserved in version control.)*
 
 ### Red flags (out of scope — fix now)
 
-- **Verify SA63 actually reaches `experto-ai-web` and `bap-web` this release** — the in-place
-  migration path does not copy `start.sh` and the fresh-first path keeps the donor's
-  `production.py` (`beta_migration.py:43–48,96–108`), so both SA63 files are missed by one path
-  each; a manual diff/patch of the two files on both sites closes the immediate gap independent
-  of Finding 7's structural fix.
+- ~~Verify SA63 actually reaches `experto-ai-web` and `bap-web` this release~~ — **closed as
+  out-of-scope** (SA67, 2026-07-11, `decisions.md §Beta-Site External Verification Scope`):
+  live deployed-state verification for the two beta sites is structurally unreachable from this
+  monorepo and is now a permanent maintainer to-do (`beta-site-migration.md`), not a repo-local
+  red flag. The repo-local half — the in-place path missing `start.sh` and the fresh-first path
+  keeping the donor's `production.py` — was Finding 7's actual defect and was fixed by SA66's
+  conformance gate.
 - ~~`apply`'s subprocess env builder snapshots `sys.path` at import time~~ — **resolved** (SA65,
   2026-07-10, closing tech-audit.md TA53): the env is now built on-demand and scoped to only the
   two nested `quickscale_cli.main` invocations; `_run_command` defaults to `env=None` for foreign
@@ -813,3 +817,15 @@ finding.
   snapshot is fixed (SA65, closing tech-audit.md TA53) — removed from the Red flags section
   above. Also closed the matching watchlist item (deploy-time configuration contract for
   generated apps) now that `decisions.md` carries the SA68 paragraph.
+- 2026-07-11 (roadmap cleanup) — **Red flag closed as out-of-scope:** "verify SA63 actually
+  reaches `experto-ai-web` and `bap-web`" (SA67) is retired, not resolved by evidence — a new
+  standing scope boundary, `decisions.md §Beta-Site External Verification Scope`, establishes
+  that live deployed-state verification for the two beta sites is structurally unreachable from
+  this monorepo (no repository or deployment access exists or is expected to exist from a
+  coding-agent session or CI job here) and is therefore closed on discovery going forward rather
+  than left open pending access. The repo-local half of the original red flag — the in-place
+  path missing `start.sh`, the fresh-first path keeping the donor's `production.py` — was the
+  actual defect and was already fixed by SA66's conformance gate. The "beta sites deploy without
+  Redis?" Question is updated to reflect the same boundary: it cannot be answered by a future
+  audit pass and is now a `beta-site-migration.md` maintainer to-do instead. Full detail in
+  CHANGELOG.md (SA67 entry) and `docs/technical/roadmap.md` (Track 3, now clean).

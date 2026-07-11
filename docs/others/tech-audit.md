@@ -21,9 +21,11 @@
 
 > **2026-07-11 documentation reconciliation:** For current planning, treat TA49 and TA50 as the
 > still-open fail-hard items routed through the roadmap. SA73 is closed and removed from open work;
-> SA65 is closed and lives in [CHANGELOG.md](../../CHANGELOG.md); SA67 remains a blocked external
-> verification task in the roadmap, not a new repo-local fail-hard implementation item. The full
-> 2026-07-10 audit below remains the detailed historical pass.
+> SA65 is closed and lives in [CHANGELOG.md](../../CHANGELOG.md); SA67 is closed as out-of-scope
+> (`decisions.md §Beta-Site External Verification Scope` — deployed-state verification for the two
+> beta sites is permanently unreachable from this monorepo, not a temporary access gap), with the
+> outstanding manual check tracked in `beta-site-migration.md` rather than as an open repo-local
+> item. The full 2026-07-10 audit below remains the detailed historical pass.
 
 ## Orientation summary
 

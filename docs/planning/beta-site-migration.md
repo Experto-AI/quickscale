@@ -736,6 +736,24 @@ railway redeploy <deployment-id> --service experto-ai-web
 [ ] Production smoke-test passed
 ```
 
+### Outstanding maintainer to-do (SA67, tracked outside roadmap.md)
+
+Per `decisions.md §Beta-Site External Verification Scope`, verifying and
+patching the *live* deployed state of `experto-ai-web`/`bap-web` is out of
+scope for repo automation and any coding-agent session — no repository or
+deployment access to either site exists from within this monorepo. This is a
+manual maintainer action, not a roadmap.md checklist item:
+
+```
+[ ] experto-ai-web: diff deployed start.sh + settings/production.py against
+    current templates; confirm Redis presence; patch/redeploy if SA63/SA68's
+    env-pair bridge is missing (see §Safe rollout ordering above)
+[ ] bap-web: same check
+[ ] Record the outcome here (date, Redis state, whether a patch was needed)
+```
+
+*(Not yet performed — no entry below. Add one after the next manual check.)*
+
 ### Ongoing maintenance checklist
 
 ```
