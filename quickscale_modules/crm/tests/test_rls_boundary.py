@@ -35,10 +35,11 @@ _CRM_TABLES = (
 
 
 def _ensure_rls_test_role() -> None:
-    """Create a non-superuser role for RLS boundary testing.
+    """Assert the pre-provisioned RLS test role exists (SA59.3).
 
-    Connects via psycopg2 directly because ``CREATE ROLE`` is DDL and
-    cannot run inside a Django test transaction.  Idempotent.
+    The role must be pre-created by the test harness
+    (``scripts/provision_test_roles.sh`` or equivalent).  Raises
+    ``RuntimeError`` with setup instructions if missing.
     """
     import psycopg2  # type: ignore[import-untyped]
 
@@ -53,13 +54,16 @@ def _ensure_rls_test_role() -> None:
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
-            cur.execute(f"""
-                DO $$
-                BEGIN
-                    CREATE ROLE {_RESTRICTED_ROLE};
-                EXCEPTION WHEN duplicate_object THEN NULL;
-                END $$;
-            """)
+            cur.execute(
+                "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                [_RESTRICTED_ROLE],
+            )
+            if cur.fetchone() is None:
+                raise RuntimeError(
+                    f"Pre-provisioned role {_RESTRICTED_ROLE} not found. "
+                    f"Run scripts/provision_test_roles.sh to create it before "
+                    f"running RLS boundary tests."
+                )
             cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
             for table in _CRM_TABLES:
                 cur.execute(f"GRANT SELECT ON {table} TO {_RESTRICTED_ROLE}")

@@ -34,10 +34,11 @@ _LISTINGS_TABLES = ("quickscale_modules_listings_listing",)
 
 
 def _ensure_rls_test_role() -> None:
-    """Create a non-superuser role for RLS boundary testing.
+    """Assert the pre-provisioned RLS test role exists (SA59.3).
 
-    Connects via psycopg2 directly because ``CREATE ROLE`` is DDL and
-    cannot run inside a Django test transaction.  Idempotent.
+    The role must be pre-created by the test harness
+    (``scripts/provision_test_roles.sh`` or equivalent).  Raises
+    ``RuntimeError`` with setup instructions if missing.
     """
     import psycopg2  # type: ignore[import-untyped]
 
@@ -52,13 +53,16 @@ def _ensure_rls_test_role() -> None:
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
-            cur.execute(f"""
-                DO $$
-                BEGIN
-                    CREATE ROLE {_RESTRICTED_ROLE};
-                EXCEPTION WHEN duplicate_object THEN NULL;
-                END $$;
-            """)
+            cur.execute(
+                "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                [_RESTRICTED_ROLE],
+            )
+            if cur.fetchone() is None:
+                raise RuntimeError(
+                    f"Pre-provisioned role {_RESTRICTED_ROLE} not found. "
+                    f"Run scripts/provision_test_roles.sh to create it before "
+                    f"running RLS boundary tests."
+                )
             cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
             for table in _LISTINGS_TABLES:
                 cur.execute(f"GRANT SELECT ON {table} TO {_RESTRICTED_ROLE}")
@@ -234,13 +238,13 @@ _ORGS_ANON_TABLES = ("quickscale_modules_orgs_organization",)
 
 
 def _ensure_anon_listings_rls_test_role() -> None:
-    """Create the restricted role with SELECT grants for anonymous listings reads.
+    """Assert the pre-provisioned RLS role exists and issue table grants.
 
-    Grants SELECT on listings tenant tables, auth_user (for author display in
-    templates), orgs tables (for System org resolution), and Django system
-    tables needed for the request pipeline.
-
-    Idempotent — subsequent calls are no-ops.
+    The role must be pre-created by the test harness
+    (``scripts/provision_test_roles.sh`` or equivalent).  Raises
+    ``RuntimeError`` with setup instructions if missing.  Per-table
+    SELECT grants are still issued here (idempotent, requires table
+    existence post-migration).
     """
     import psycopg2
 
@@ -255,13 +259,16 @@ def _ensure_anon_listings_rls_test_role() -> None:
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
-            cur.execute(f"""
-                DO $$
-                BEGIN
-                    CREATE ROLE {_RESTRICTED_ANON_ROLE};
-                EXCEPTION WHEN duplicate_object THEN NULL;
-                END $$;
-            """)
+            cur.execute(
+                "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                [_RESTRICTED_ANON_ROLE],
+            )
+            if cur.fetchone() is None:
+                raise RuntimeError(
+                    f"Pre-provisioned role {_RESTRICTED_ANON_ROLE} not found. "
+                    f"Run scripts/provision_test_roles.sh to create it before "
+                    f"running anonymous-read RLS tests."
+                )
             cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ANON_ROLE}")
             for table in _ANON_LISTINGS_TABLES:
                 cur.execute(f"GRANT SELECT ON {table} TO {_RESTRICTED_ANON_ROLE}")
@@ -310,13 +317,21 @@ class TestListingsRlsAnonymousReadUnderRestrictedRole:
         """
         _ensure_anon_listings_rls_test_role()
 
-        Listing.objects.create(
-            title="Anonymous Can See This Listing",
-            slug="anonymous-can-see-this-listing",
-            description="Public System-org listing for RLS smoke test.",
-            status="published",
-            organization=system_org,
-        )
+        # Prime the org context so FORCE RLS allows the INSERT under the
+        # NOBYPASSRLS restricted role (SA59.3).
+        from quickscale_modules_orgs.current_org import set_current_org_id
+
+        set_current_org_id(system_org.id)
+        try:
+            Listing.objects.create(
+                title="Anonymous Can See This Listing",
+                slug="anonymous-can-see-this-listing",
+                description="Public System-org listing for RLS smoke test.",
+                status="published",
+                organization=system_org,
+            )
+        finally:
+            set_current_org_id(None)
 
         with connection.cursor() as cursor:
             cursor.execute(f"SET ROLE {_RESTRICTED_ANON_ROLE}")
@@ -354,13 +369,21 @@ class TestListingsRlsAnonymousReadUnderRestrictedRole:
         """
         _ensure_anon_listings_rls_test_role()
 
-        listing = Listing.objects.create(
-            title="Anonymous Can See Detail",
-            slug="anonymous-can-see-detail",
-            description="Public System-org listing detail for RLS smoke test.",
-            status="published",
-            organization=system_org,
-        )
+        # Prime the org context so FORCE RLS allows the INSERT under the
+        # NOBYPASSRLS restricted role (SA59.3).
+        from quickscale_modules_orgs.current_org import set_current_org_id
+
+        set_current_org_id(system_org.id)
+        try:
+            listing = Listing.objects.create(
+                title="Anonymous Can See Detail",
+                slug="anonymous-can-see-detail",
+                description="Public System-org listing detail for RLS smoke test.",
+                status="published",
+                organization=system_org,
+            )
+        finally:
+            set_current_org_id(None)
 
         with connection.cursor() as cursor:
             cursor.execute(f"SET ROLE {_RESTRICTED_ANON_ROLE}")

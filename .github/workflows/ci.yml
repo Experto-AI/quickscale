@@ -360,27 +360,11 @@ jobs:
           createdb -h localhost -U postgres "$db" 2>/dev/null || echo "Database $db already exists"
         done
 
-    - name: Create PostgreSQL restricted role for module tests
+    - name: Provision PostgreSQL test roles (SA59.3)
       run: |
-        ROLE="quickscale_test_role"
-        psql -h localhost -U postgres -tc \
-          "SELECT 1 FROM pg_roles WHERE rolname = '${ROLE}'" \
-          | grep -q 1 \
-          || psql -h localhost -U postgres -c \
-            "CREATE ROLE ${ROLE} WITH LOGIN CREATEDB NOBYPASSRLS NOSUPERUSER"
-        echo "✓ ${ROLE} created with NOBYPASSRLS NOSUPERUSER"
+        ./scripts/provision_test_roles.sh
 
-        # Verify the role cannot bypass RLS or act as superuser.
-        for attr in rolbypassrls rolsuper; do
-          val=$(psql -h localhost -U postgres -tc \
-            "SELECT ${attr} FROM pg_roles WHERE rolname = '${ROLE}'" \
-            | tr -d ' ')
-          if [ "$val" != "f" ]; then
-            echo "ERROR: ${ROLE} has ${attr}=${val} — module tests would bypass RLS!"
-            exit 1
-          fi
-          echo "  ${attr}=${val} ✓"
-        done
+        ROLE="quickscale_test_role"
 
         # Grant ownership of all test databases to the restricted role so
         # Django's test runner can create test_* databases from these templates.

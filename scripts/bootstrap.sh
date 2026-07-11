@@ -104,6 +104,7 @@ echo ""
 
 # Check for Docker (required for E2E tests)
 echo "📋 Checking Docker installation (optional, required for E2E)..."
+_DOCKER_AVAILABLE=false
 if ! command -v docker &> /dev/null; then
     echo "⚠️  Docker is not installed."
     echo "   Docker is required for running E2E tests (\`make test-e2e\`)."
@@ -115,6 +116,29 @@ else
         echo "   Please start the Docker daemon to run E2E tests."
     else
         echo "✓ Docker is running"
+        _DOCKER_AVAILABLE=true
+    fi
+fi
+
+# Provision PostgreSQL test roles if Docker is available and a PG container
+# is running (SA59.3).  Handles both CI-local parity and local dev setup.
+if [ "$_DOCKER_AVAILABLE" = true ]; then
+    # Find a running PostgreSQL container
+    PG_CONTAINER=""
+    for candidate in pg18-af10 quickscale-postgres-1 postgres; do
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$candidate"; then
+            PG_CONTAINER="$candidate"
+            break
+        fi
+    done
+    if [ -n "$PG_CONTAINER" ]; then
+        echo "📋 Provisioning PostgreSQL test roles (SA59.3)..."
+        QS_PG_CONTAINER="$PG_CONTAINER" ./scripts/provision_test_roles.sh --docker && \
+            echo "✓ PostgreSQL test roles provisioned" || \
+            echo "⚠️  Could not provision test roles (may need manual setup)"
+    else
+        echo "ℹ️  No PostgreSQL container found — skipping test role provisioning."
+        echo "   Run 'make test-integration' after starting PostgreSQL via Docker Compose."
     fi
 fi
 echo ""
