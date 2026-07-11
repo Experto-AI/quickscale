@@ -1,12 +1,14 @@
 """Django app configuration for QuickScale organizations.
 
-T1.18 / SA2.1 — BYPASSRLS/SUPERUSER boot guard: raises ``ImproperlyConfigured``
-at startup when connected as a PostgreSQL role with the BYPASSRLS
-privilege and/or the SUPERUSER attribute.  The guard has two narrow exemptions:
+SA68 Phase 1 — BYPASSRLS/SUPERUSER boot guard: raises
+``ImproperlyConfigured`` at startup when connected as a PostgreSQL role
+with the BYPASSRLS privilege and/or the SUPERUSER attribute.  The guard
+has two narrow exemptions:
 
-1. ``manage.py migrate`` — ``start.sh`` deliberately unsets
-   ``RUNTIME_DATABASE_URL`` so DDL runs under the superuser
-   ``DATABASE_URL`` with BYPASSRLS.
+1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned privileged
+   DB command (``migrate``, ``createcachetable``) — ``start.sh`` sets
+   this env var alongside ``RUNTIME_DATABASE_URL=""`` so DDL runs under
+   the superuser ``DATABASE_URL`` with BYPASSRLS.
 2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
    intentional single-tenant or development use.
 
@@ -20,7 +22,6 @@ is derived from the ContextVar in the same transaction as tenant SQL.
 """
 
 import os
-import sys
 
 from django.apps import AppConfig
 from django.conf import settings
@@ -29,26 +30,44 @@ from django.db import connection
 from django.db.backends.signals import connection_created
 
 
-def _is_migrate_command() -> bool:
-    """Return ``True`` when Django is running ``manage.py migrate``.
+# Sanctioned privileged DB commands that require the superuser DATABASE_URL.
+# Add new commands here when the generated launcher starts setting
+# QUICKSCALE_PRIVILEGED_COMMAND to additional values.
+_PRIVILEGED_COMMANDS: frozenset[str] = frozenset({"migrate", "createcachetable"})
 
-    Only ``migrate`` is exempt from the BYPASSRLS/SUPERUSER boot guard because
-    the generated ``start.sh`` deliberately unsets
-    ``RUNTIME_DATABASE_URL`` so that schema DDL runs under the
-    superuser ``DATABASE_URL`` with ``BYPASSRLS`` (and thus also
-    ``SUPERUSER``).  All other management commands (notably
-    ``runserver``) and non-manage.py startup (gunicorn, WSGI) must
-    still fail closed — running with BYPASSRLS or SUPERUSER on a
-    runtime server is catastrophic for RLS enforcement.
+
+def _is_privileged_command() -> bool:
+    """Return ``True`` when ``QUICKSCALE_PRIVILEGED_COMMAND`` is set to a
+    sanctioned privileged DB command.
+
+    Sanctioned values (``migrate``, ``createcachetable``) are exempt from
+    the BYPASSRLS/SUPERUSER boot guard because the generated ``start.sh``
+    sets this env var alongside ``RUNTIME_DATABASE_URL=""`` so that
+    database DDL/DML runs under the superuser ``DATABASE_URL`` with
+    ``BYPASSRLS`` (and thus also ``SUPERUSER``).  All other management
+    commands and non-manage.py startup (gunicorn, WSGI) must still fail
+    closed — running with BYPASSRLS or SUPERUSER on a runtime server is
+    catastrophic for RLS enforcement.
+
+    ``_PRIVILEGED_COMMANDS`` is the single source of truth for which
+    values are sanctioned.  If the env var is set to an unrecognised
+    value the guard still fails closed (return ``False``) — it is not a
+    catch-all escape hatch.
+
+    SA68 Phase 1 replaces the old ``sys.argv`` inspection with the
+    explicit env-var contract set by the generated ``start.sh`` and
+    ``Dockerfile`` launchers.
+
+    SA68 CR-SA68-001: widened from a ``== "migrate"`` check to a
+    membership test against ``_PRIVILEGED_COMMANDS`` so that
+    ``createcachetable`` (and future sanctioned values) also skip the
+    boot guard without requiring the ``QUICKSCALE_ALLOW_BYPASSRLS=1``
+    escape hatch.
 
     SA2.1: For the separate ``QUICKSCALE_ALLOW_BYPASSRLS=1`` escape
     hatch see ``_check_rls_role``.
     """
-    return (
-        len(sys.argv) >= 2
-        and sys.argv[0].endswith("manage.py")
-        and sys.argv[1] == "migrate"
-    )
+    return os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND") in _PRIVILEGED_COMMANDS
 
 
 def _check_quickscale_mode() -> None:
@@ -81,10 +100,14 @@ def _check_rls_role() -> None:
     SA2.1: The guard is always active (regardless of ``QUICKSCALE_MODE``
     or ``DEBUG``) with two narrow exemptions:
 
-    1. ``manage.py migrate`` — handled in ``ready()`` before this is
-       called.
+    1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned value
+       (``migrate``, ``createcachetable``) — handled in ``ready()``
+       before this is called.
     2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
        intentional single-tenant or development use.
+
+    The sanctioned command set is defined by ``_PRIVILEGED_COMMANDS``
+    and checked via ``_is_privileged_command()``.
 
     No-op on SQLite (non-PostgreSQL).
     """
@@ -143,16 +166,17 @@ class QuickscaleOrgsConfig(AppConfig):
         # default to solo-mode tenancy when QUICKSCALE_MODE is omitted.
         _check_quickscale_mode()
 
-        # ---- T1.18 / SA2.1 — BYPASSRLS/SUPERUSER boot guard -------------
+        # ---- SA68 Phase 1 — BYPASSRLS/SUPERUSER boot guard -------------
         # Two narrow exemptions:
-        #   1. manage.py migrate — start.sh deliberately unsets
-        #      RUNTIME_DATABASE_URL so DDL runs under the superuser
-        #      DATABASE_URL with BYPASSRLS (and thus SUPERUSER).
+        #   1. QUICKSCALE_PRIVILEGED_COMMAND set to a sanctioned value
+        #      (migrate, createcachetable) — start.sh sets this env var
+        #      alongside RUNTIME_DATABASE_URL="" so DDL/DML runs under
+        #      the superuser DATABASE_URL with BYPASSRLS.
         #   2. QUICKSCALE_ALLOW_BYPASSRLS=1 env-var escape hatch
         #      (checked inside _check_rls_role).
         # All other startup (runserver, gunicorn, WSGI) must still
         # fail closed — regardless of QUICKSCALE_MODE or DEBUG.
-        if _is_migrate_command():
+        if _is_privileged_command():
             return
         _check_rls_role()
 
