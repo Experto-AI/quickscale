@@ -57,15 +57,27 @@ def test_start_sh_has_createcachetable_after_migrate() -> None:
         "createcachetable must run after migrate"
     )
 
-    # RUNTIME_DATABASE_URL must be cleared so the superuser DATABASE_URL
-    # is used (the runtime role cannot run DDL)
+    # QUICKSCALE_PRIVILEGED_COMMAND must be set and RUNTIME_DATABASE_URL
+    # cleared so the superuser DATABASE_URL is used (the runtime role
+    # cannot run DDL)
     createcachetable_line = next(
         line
         for line in output.splitlines()
         if "python manage.py createcachetable" in line
     )
+    assert "QUICKSCALE_PRIVILEGED_COMMAND=createcachetable" in createcachetable_line, (
+        "createcachetable must be invoked with QUICKSCALE_PRIVILEGED_COMMAND=createcachetable"
+    )
     assert 'RUNTIME_DATABASE_URL=""' in createcachetable_line, (
         "createcachetable must be invoked with RUNTIME_DATABASE_URL cleared"
+    )
+
+    # The migrate step must also set QUICKSCALE_PRIVILEGED_COMMAND
+    migrate_line = next(
+        line for line in output.splitlines() if "python manage.py migrate" in line
+    )
+    assert "QUICKSCALE_PRIVILEGED_COMMAND=migrate" in migrate_line, (
+        "migrate must be invoked with QUICKSCALE_PRIVILEGED_COMMAND=migrate"
     )
 
 
@@ -93,10 +105,10 @@ def test_start_sh_createcachetable_conditional_on_redis() -> None:
     )
 
 
-def test_start_sh_createcachetable_sets_quickscale_allow_bypassrls() -> None:
-    """createcachetable must include QUICKSCALE_ALLOW_BYPASSRLS=1 alongside
-    RUNTIME_DATABASE_URL=\"\" so the orgs boot guard does not reject the
-    superuser connection (SA63)."""
+def test_start_sh_createcachetable_sets_privileged_command() -> None:
+    """createcachetable must include QUICKSCALE_PRIVILEGED_COMMAND=createcachetable
+    alongside RUNTIME_DATABASE_URL=\"\" so the production settings seam selects
+    the superuser DATABASE_URL (SA68 Phase 1)."""
     output = _render_start_sh()
 
     createcachetable_line = next(
@@ -104,9 +116,8 @@ def test_start_sh_createcachetable_sets_quickscale_allow_bypassrls() -> None:
         for line in output.splitlines()
         if "python manage.py createcachetable" in line
     )
-    assert "QUICKSCALE_ALLOW_BYPASSRLS=1" in createcachetable_line, (
-        "createcachetable must be invoked with QUICKSCALE_ALLOW_BYPASSRLS=1 "
-        "so the superuser connection passes the boot guard"
+    assert "QUICKSCALE_PRIVILEGED_COMMAND=createcachetable" in createcachetable_line, (
+        "createcachetable must be invoked with QUICKSCALE_PRIVILEGED_COMMAND=createcachetable"
     )
     assert 'RUNTIME_DATABASE_URL=""' in createcachetable_line, (
         "createcachetable must still clear RUNTIME_DATABASE_URL"

@@ -19,10 +19,17 @@ OPTIONAL ENVIRONMENT VARIABLES:
 - REDIS_URL: When set, enables Redis as the shared cache backend (recommended; standard on Railway)
 - USE_X_FORWARDED_FOR: Defaults to ``True`` in production; set to ``False`` for single-host
 - TRUSTED_PROXY_COUNT: Defaults to ``1``; the number of reverse proxies in front of the app
+
+COMMAND-MODE ENVIRONMENT VARIABLES (mutually exclusive, one-shot):
+- QUICKSCALE_PRIVILEGED_COMMAND: Set by start.sh to ``migrate`` or ``createcachetable``
+  to run privileged DB commands with the superuser ``DATABASE_URL``. Requires
+  ``RUNTIME_DATABASE_URL=""`` (explicitly blank).
+- QUICKSCALE_NON_DB_COMMAND: Set by the launcher to ``collectstatic`` or
+  ``compilemessages`` to run DB-free bootstrap commands. Does not require
+  a real database connection.
 """
 
 import os
-import sys
 from typing import cast
 
 import dj_database_url
@@ -160,20 +167,63 @@ REST_FRAMEWORK["NUM_PROXIES"] = TRUSTED_PROXY_COUNT if USE_X_FORWARDED_FOR else 
 # raises a clear error instead of silently falling back to the privileged
 # superuser DATABASE_URL.
 #
-# The migration path is the named exception: start.sh unsets
-# RUNTIME_DATABASE_URL during migrations so the superuser DATABASE_URL
-# is used instead (schema changes require elevated privileges).
-# collectstatic and compilemessages also bypass the check.
+# Privileged DB commands (migrate, createcachetable) are launched by
+# start.sh with QUICKSCALE_PRIVILEGED_COMMAND and RUNTIME_DATABASE_URL=""
+# so the superuser DATABASE_URL is used instead (schema changes require
+# elevated privileges).
+#
+# Non-DB bootstrap commands (collectstatic, compilemessages) are launched
+# with QUICKSCALE_NON_DB_COMMAND when the database is not needed.
+#
+# The explicit dev/test opt-out is QUICKSCALE_ALLOW_BYPASSRLS=1 with
+# RUNTIME_DATABASE_URL="" to bridge to DATABASE_URL.
 _runtime_db_url = config("RUNTIME_DATABASE_URL", default=None)
 database_url = config("DATABASE_URL", default=None)
+_privileged_command = os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")
+_non_db_command = os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")
 
-if _runtime_db_url:
+_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})
+_KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})
+
+# Mutual exclusivity: cannot set both command-mode vars simultaneously.
+if _privileged_command and _non_db_command:
+    raise ValueError(
+        "Both QUICKSCALE_PRIVILEGED_COMMAND and QUICKSCALE_NON_DB_COMMAND "
+        "are set. These modes are mutually exclusive. "
+        "Set only one command-mode variable at a time."
+    )
+
+if _privileged_command:
+    # Privileged DB command: validate and require superuser DATABASE_URL
+    if _privileged_command not in _KNOWN_PRIVILEGED_COMMANDS:
+        raise ValueError(
+            f"Unknown QUICKSCALE_PRIVILEGED_COMMAND value {_privileged_command!r}. "
+            f"Supported values: {', '.join(sorted(_KNOWN_PRIVILEGED_COMMANDS))}."
+        )
+    if _runtime_db_url is None or _runtime_db_url != "":
+        raise ValueError(
+            "RUNTIME_DATABASE_URL must be explicitly blank when "
+            "QUICKSCALE_PRIVILEGED_COMMAND is set. "
+            "Set RUNTIME_DATABASE_URL=\"\" alongside the privileged command."
+        )
+    if not database_url:
+        raise ValueError(
+            "DATABASE_URL is required for privileged database commands. "
+            "Set DATABASE_URL to the superuser connection string."
+        )
+    _db_url = database_url
+elif _non_db_command:
+    # Non-DB bootstrap command: validate, provide dummy URL if needed
+    if _non_db_command not in _KNOWN_NON_DB_COMMANDS:
+        raise ValueError(
+            f"Unknown QUICKSCALE_NON_DB_COMMAND value {_non_db_command!r}. "
+            f"Supported values: {', '.join(sorted(_KNOWN_NON_DB_COMMANDS))}."
+        )
+    _db_url = database_url or "postgresql://dummy:dummy@localhost:5432/dummy"
+elif _runtime_db_url:
     _db_url = _runtime_db_url
 elif _runtime_db_url == "" and os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
-    # Explicit bridge: start.sh sets RUNTIME_DATABASE_URL="" with
-    # QUICKSCALE_ALLOW_BYPASSRLS=1 when spawning privileged launcher
-    # commands (createcachetable, etc.) that need the superuser
-    # DATABASE_URL instead of the restricted runtime role.
+    # Explicit dev/test opt-out: bridge to DATABASE_URL
     if not database_url:
         raise ValueError(
             "DATABASE_URL environment variable is not set or is empty. "
@@ -182,19 +232,6 @@ elif _runtime_db_url == "" and os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "
             "Ensure the database service is linked to your app service."
         )
     _db_url = database_url
-elif "migrate" in sys.argv:
-    # Migration path: require the superuser DATABASE_URL
-    if not database_url:
-        raise ValueError(
-            "DATABASE_URL environment variable is not set or is empty. "
-            "Migrations require the superuser database connection. "
-            "Railway requires DATABASE_URL to connect to PostgreSQL. "
-            "Ensure the database service is linked to your app service in Railway dashboard."
-        )
-    _db_url = database_url
-elif "collectstatic" in sys.argv or "compilemessages" in sys.argv:
-    # Non-DB commands: provide a dummy URL so Django can configure itself
-    _db_url = database_url or "postgresql://dummy:dummy@localhost:5432/dummy"
 else:
     # Runtime serving: fail closed — RUNTIME_DATABASE_URL is required
     raise ValueError(
@@ -203,8 +240,9 @@ else:
         "string must be provided when serving requests. "
         "Set RUNTIME_DATABASE_URL in your environment to the runtime role's "
         "PostgreSQL connection string. "
-        "For migrations, the deployment script (start.sh) automatically "
-        "unsets this variable so the superuser DATABASE_URL is used instead."
+        "For privileged commands, the deployment script (start.sh) "
+        "automatically sets QUICKSCALE_PRIVILEGED_COMMAND and clears "
+        "RUNTIME_DATABASE_URL so the superuser DATABASE_URL is used instead."
     )
 
 DATABASES = {

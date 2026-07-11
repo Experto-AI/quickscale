@@ -84,7 +84,7 @@ def _find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         s.listen(1)
-        port = s.getsockname()[1]
+        port = int(s.getsockname()[1])
     return port
 
 
@@ -222,7 +222,7 @@ def _write_postgres_test_settings(
 
 def _create_test_database() -> None:
     """Create the test database if it does not exist."""
-    import psycopg2
+    import psycopg2  # type: ignore[import-untyped]
 
     db_name = os.environ.get("QS_SMOKE_DB_NAME", "test_quickscale_smoke")
     db_user = os.environ.get("QS_SMOKE_DB_USER", "postgres")
@@ -415,7 +415,10 @@ class TestGeneratedProjectRuntimeSmoke:
         outcome that proves the auth module's URL routing is wired without requiring
         the allauth login template to render successfully.
         """
-        from quickscale_cli.commands.module_config import get_default_auth_config
+        from quickscale_cli.commands.module_config import (
+            get_default_auth_config,
+            get_default_orgs_config,
+        )
         from quickscale_cli.utils.module_dependency_sync import (
             sync_project_module_dependencies,
         )
@@ -432,29 +435,44 @@ class TestGeneratedProjectRuntimeSmoke:
         assert (project_path / "manage.py").exists()
         assert (project_path / "pyproject.toml").exists()
 
-        # Phase 2: Embed the auth module via direct copy (no git subtree needed).
-        embedded_auth_path = project_path / "modules" / "auth"
-        _copytree_for_generated_project_smoke(
-            REPO_ROOT / "quickscale_modules" / "auth",
-            embedded_auth_path,
-        )
-        assert (embedded_auth_path / "module.yml").exists(), (
-            "Auth module manifest missing after embed"
-        )
-        assert (embedded_auth_path / "pyproject.toml").exists(), (
-            "Auth module pyproject.toml missing after embed"
-        )
+        # Phase 2: Embed both auth and orgs modules (auth depends on orgs).
+        for mod_name in ("auth", "orgs"):
+            embedded_path = project_path / "modules" / mod_name
+            _copytree_for_generated_project_smoke(
+                REPO_ROOT / "quickscale_modules" / mod_name,
+                embedded_path,
+            )
+            assert (embedded_path / "module.yml").exists(), (
+                f"{mod_name} module manifest missing after embed"
+            )
+            assert (embedded_path / "pyproject.toml").exists(), (
+                f"{mod_name} module pyproject.toml missing after embed"
+            )
 
         # Phase 3: Write declarative config and sync dependencies.
         auth_options = get_default_auth_config()
-        self._write_quickscale_yml_with_auth(
-            project_path, project_name, "showcase_html", auth_options
+        orgs_options = get_default_orgs_config()
+        self._write_quickscale_yml_with_modules(
+            project_path,
+            project_name,
+            "showcase_html",
+            {"auth": auth_options, "orgs": orgs_options},
         )
 
         sync_result = sync_project_module_dependencies(
-            project_path, {"auth": auth_options}
+            project_path, {"auth": auth_options, "orgs": orgs_options}
         )
-        assert "quickscale-module-auth" in sync_result.added_path_dependencies, (
+        assert any(
+            "quickscale-module-orgs" in dep
+            for dep in sync_result.added_path_dependencies
+        ), (
+            "sync_project_module_dependencies did not register the orgs module "
+            f"as a path dependency: {sync_result}"
+        )
+        assert any(
+            "quickscale-module-auth" in dep
+            for dep in sync_result.added_path_dependencies
+        ), (
             "sync_project_module_dependencies did not register the auth module "
             f"as a path dependency: {sync_result}"
         )
@@ -467,22 +485,36 @@ class TestGeneratedProjectRuntimeSmoke:
         _install_project_dependencies(project_path)
 
         # Phase 6: Write PostgreSQL test settings and run migrations.
+        # Set QUICKSCALE_ALLOW_BYPASSRLS so the orgs boot guard passes with
+        # a superuser PostgreSQL role (common in dev/test environments).
+        # The env var must remain set through Phase 7 (dev server boot)
+        # because Django loads AppConfig.ready() at server startup too.
         _write_postgres_test_settings(project_path, project_name)
-        _run_migrations(project_path, project_name)
-
-        # Phase 7: Boot development server and assert HTTP route.
-        server_port = _find_free_port()
-        server_process = _start_dev_server(project_path, project_name, server_port)
-
+        _allow_bypass_rls = os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS")
+        os.environ["QUICKSCALE_ALLOW_BYPASSRLS"] = "1"
         try:
-            _wait_for_server(
-                f"http://localhost:{server_port}",
-                timeout=30,
-                server_process=server_process,
-            )
-            _assert_url_responds(f"http://localhost:{server_port}/accounts/profile/")
+            _run_migrations(project_path, project_name)
+
+            # Phase 7: Boot development server and assert HTTP route.
+            server_port = _find_free_port()
+            server_process = _start_dev_server(project_path, project_name, server_port)
+
+            try:
+                _wait_for_server(
+                    f"http://localhost:{server_port}",
+                    timeout=30,
+                    server_process=server_process,
+                )
+                _assert_url_responds(
+                    f"http://localhost:{server_port}/accounts/profile/"
+                )
+            finally:
+                _stop_server(server_process)
         finally:
-            _stop_server(server_process)
+            if _allow_bypass_rls is not None:
+                os.environ["QUICKSCALE_ALLOW_BYPASSRLS"] = _allow_bypass_rls
+            else:
+                os.environ.pop("QUICKSCALE_ALLOW_BYPASSRLS", None)
 
     @pytest.mark.e2e
     def test_no_redis_createcachetable_succeeds(self, tmp_path: Path) -> None:
@@ -662,6 +694,194 @@ class TestGeneratedProjectRuntimeSmoke:
         )
         assert "django_cache_table" in result.stdout or not result.stderr, (
             "createcachetable should report success under production settings"
+        )
+
+    @pytest.mark.e2e
+    def test_production_settings_createcachetable_with_orgs_privileged_command(
+        self, tmp_path: Path
+    ) -> None:
+        """Generated project with orgs module must pass createcachetable via
+        the ``QUICKSCALE_PRIVILEGED_COMMAND`` contract (no bypass hatch,
+        CR-SA68-001).
+
+        This e2e test follows the actual generated ``start.sh.j2`` no-Redis
+        path: it sets ``QUICKSCALE_PRIVILEGED_COMMAND=createcachetable``
+        (not the ``QUICKSCALE_ALLOW_BYPASSRLS=1`` escape hatch) alongside
+        ``RUNTIME_DATABASE_URL=""``, proving that the orgs boot guard now
+        recognises ``createcachetable`` as a sanctioned privileged DB
+        command and skips the RLS role check without requiring the escape
+        hatch.
+
+        This matches the start.sh.j2 invocation at lines 59-61:
+        ``QUICKSCALE_PRIVILEGED_COMMAND=createcachetable RUNTIME_DATABASE_URL=""
+        python manage.py createcachetable``
+        """
+        from quickscale_cli.commands.module_config import (
+            get_default_auth_config,
+            get_default_orgs_config,
+        )
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_module_dependencies,
+        )
+        from quickscale_cli.utils.module_wiring_manager import (
+            regenerate_managed_wiring,
+        )
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "runtime_sa68_privcmd"
+        project_path = tmp_path / project_name
+
+        # Phase 1: Generate project scaffold (HTML theme — no frontend build).
+        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        assert (project_path / "manage.py").exists()
+        assert (project_path / "pyproject.toml").exists()
+
+        # Phase 2: Embed both auth and orgs modules (orgs depends on auth).
+        for mod_name in ("auth", "orgs"):
+            embedded_path = project_path / "modules" / mod_name
+            _copytree_for_generated_project_smoke(
+                REPO_ROOT / "quickscale_modules" / mod_name,
+                embedded_path,
+            )
+            assert (embedded_path / "module.yml").exists(), (
+                f"{mod_name} module manifest missing after embed"
+            )
+            assert (embedded_path / "pyproject.toml").exists(), (
+                f"{mod_name} module pyproject.toml missing after embed"
+            )
+
+        # Phase 3: Write declarative config and sync dependencies for both modules.
+        auth_options = get_default_auth_config()
+        orgs_options = get_default_orgs_config()
+        self._write_quickscale_yml_with_modules(
+            project_path,
+            project_name,
+            "showcase_html",
+            {"auth": auth_options, "orgs": orgs_options},
+        )
+
+        sync_result = sync_project_module_dependencies(
+            project_path, {"auth": auth_options, "orgs": orgs_options}
+        )
+        assert any(
+            "quickscale-module-orgs" in dep
+            for dep in sync_result.added_path_dependencies
+        ), (
+            "sync_project_module_dependencies did not register the orgs module "
+            f"as a path dependency: {sync_result}"
+        )
+        assert any(
+            "quickscale-module-auth" in dep
+            for dep in sync_result.added_path_dependencies
+        ), (
+            "sync_project_module_dependencies did not register the auth module "
+            f"as a path dependency: {sync_result}"
+        )
+
+        # Phase 4: Regenerate managed wiring (settings + URLs).
+        success, message = regenerate_managed_wiring(project_path)
+        assert success, f"regenerate_managed_wiring failed: {message}"
+
+        # Phase 5: Install dependencies.
+        _install_project_dependencies(project_path)
+
+        # Phase 6: Create the test database.
+        _create_test_database()
+
+        # Phase 7: Run createcachetable with the actual start.sh.j2
+        # privileged-command bridge — no QUICKSCALE_ALLOW_BYPASSRLS.
+        db_user = os.environ.get("QS_SMOKE_DB_USER", "postgres")
+        db_password = os.environ.get("QS_SMOKE_DB_PASSWORD", "")
+        db_host = os.environ.get("QS_SMOKE_DB_HOST", "localhost")
+        db_port = os.environ.get("QS_SMOKE_DB_PORT", "5432")
+        db_name = os.environ.get("QS_SMOKE_DB_NAME", "test_quickscale_smoke")
+        database_url = (
+            f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        )
+
+        # Build subprocess env from a copy so we can strip ambient REDIS_URL.
+        # The test must prove DatabaseCache/no-Redis path via privileged
+        # command (CR-SA68-001).
+        subprocess_env = {
+            **os.environ,
+            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+            "SECRET_KEY": "qs-sa68-test-production-secret-key-not-for-real-use",
+            "DATABASE_URL": database_url,
+            "RUNTIME_DATABASE_URL": "",
+            "QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable",
+            "ALLOWED_HOSTS": "localhost,127.0.0.1",
+        }
+        subprocess_env.pop("REDIS_URL", None)
+        # No QUICKSCALE_ALLOW_BYPASSRLS — the guard must pass via
+        # _is_privileged_command() recognising createcachetable.
+
+        result = subprocess.run(
+            ["poetry", "run", "python", "manage.py", "createcachetable"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env=subprocess_env,
+        )
+        assert result.returncode == 0, (
+            f"createcachetable under production settings with orgs module "
+            f"via privileged command failed:\nstdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
+        )
+        assert "django_cache_table" in result.stdout or not result.stderr, (
+            "createcachetable should report success via privileged command"
+        )
+
+    @pytest.mark.e2e
+    def test_collectstatic_with_production_settings(self, tmp_path: Path) -> None:
+        """Generated project must run collectstatic with production settings
+        when ``QUICKSCALE_NON_DB_COMMAND=collectstatic`` is set (SA68 Phase 3).
+
+        The non-DB command path must allow collectstatic to run without
+        requiring ``RUNTIME_DATABASE_URL`` or a real database connection.
+        A dummy ``postgresql://`` URL is used when ``DATABASE_URL`` is also
+        unset; Django's ``collectstatic`` does not touch the database, so
+        the dummy URL is never actually connected to.
+
+        This mirrors the same command that runs at Docker build time (see
+        ``Dockerfile.j2``), proving it works through production settings.
+        """
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "runtime_collectstatic"
+        project_path = tmp_path / project_name
+        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+
+        assert (project_path / "manage.py").exists()
+        assert (project_path / "pyproject.toml").exists()
+
+        _install_project_dependencies(project_path)
+
+        # Run collectstatic with production settings and the non-DB command env var.
+        # No DATABASE_URL or RUNTIME_DATABASE_URL is needed — the non-DB path
+        # provides a dummy URL that Django never actually connects to.
+        subprocess_env = {
+            **os.environ,
+            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+            "SECRET_KEY": ("test-secret-key-for-collectstatic-e2e-not-for-real-use"),
+            "QUICKSCALE_NON_DB_COMMAND": "collectstatic",
+            "ALLOWED_HOSTS": "localhost,127.0.0.1",
+        }
+        subprocess_env.pop("REDIS_URL", None)
+
+        result = subprocess.run(
+            ["poetry", "run", "python", "manage.py", "collectstatic", "--noinput"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env=subprocess_env,
+        )
+        assert result.returncode == 0, (
+            f"collectstatic with QUICKSCALE_NON_DB_COMMAND through "
+            f"production settings failed:\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        assert "static files" in result.stdout.lower() or not result.stderr, (
+            "collectstatic should report static files copied"
         )
 
     @staticmethod

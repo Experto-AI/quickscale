@@ -307,7 +307,8 @@ class TestGeneratedProjectSa63RegenerationEvidence:
     def test_emitted_start_sh_has_createcachetable_env_pair(
         self, generated_project_path: Path
     ) -> None:
-        """The emitted start.sh must have QUICKSCALE_ALLOW_BYPASSRLS=1 on createcachetable."""
+        """The emitted start.sh must have QUICKSCALE_PRIVILEGED_COMMAND=createcachetable
+        on createcachetable (SA68 Phase 1)."""
         start_sh = generated_project_path / "start.sh"
         assert start_sh.exists(), "Generated start.sh not found"
 
@@ -318,17 +319,20 @@ class TestGeneratedProjectSa63RegenerationEvidence:
             for line in content.splitlines()
             if "python manage.py createcachetable" in line
         )
-        assert "QUICKSCALE_ALLOW_BYPASSRLS=1" in createcachetable_line, (
-            "start.sh createcachetable must carry QUICKSCALE_ALLOW_BYPASSRLS=1"
+        assert (
+            "QUICKSCALE_PRIVILEGED_COMMAND=createcachetable" in createcachetable_line
+        ), (
+            "start.sh createcachetable must carry QUICKSCALE_PRIVILEGED_COMMAND=createcachetable"
         )
         assert 'RUNTIME_DATABASE_URL=""' in createcachetable_line, (
             "start.sh createcachetable must clear RUNTIME_DATABASE_URL"
         )
 
-    def test_emitted_production_py_has_import_os_and_bridge(
+    def test_emitted_production_py_has_explicit_command_contract(
         self, generated_project_path: Path
     ) -> None:
-        """The emitted production.py must import os and contain the bridge."""
+        """The emitted production.py must import os and contain the SA68 Phase 1
+        command-mode env vars."""
         production_py = (
             generated_project_path / "testproject" / "settings" / "production.py"
         )
@@ -337,18 +341,26 @@ class TestGeneratedProjectSa63RegenerationEvidence:
         content = production_py.read_text()
 
         # Must import os
-        assert "import os" in content, (
-            "production.py must import os for QUICKSCALE_ALLOW_BYPASSRLS check"
+        assert "import os" in content, "production.py must import os for env-var checks"
+
+        # Must reference the privileged command env var
+        assert "QUICKSCALE_PRIVILEGED_COMMAND" in content, (
+            "production.py must reference QUICKSCALE_PRIVILEGED_COMMAND"
         )
 
-        # Must contain the bridge condition
-        assert 'os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1"' in content, (
-            "production.py must check QUICKSCALE_ALLOW_BYPASSRLS env var"
+        # Must reference the non-DB command env var
+        assert "QUICKSCALE_NON_DB_COMMAND" in content, (
+            "production.py must reference QUICKSCALE_NON_DB_COMMAND"
         )
 
-        # Must reference the bypass name
+        # Must still contain the ALLOW_BYPASSRLS bridge as dev/test opt-out
         assert "QUICKSCALE_ALLOW_BYPASSRLS" in content, (
-            "production.py must reference QUICKSCALE_ALLOW_BYPASSRLS"
+            "production.py must still reference QUICKSCALE_ALLOW_BYPASSRLS"
+        )
+
+        # Must NOT contain argv sniffing
+        assert "sys.argv" not in content, (
+            "production.py must not inspect sys.argv after SA68 Phase 1"
         )
 
     def test_emitted_local_py_has_no_argv_inspection(
@@ -363,6 +375,33 @@ class TestGeneratedProjectSa63RegenerationEvidence:
         assert "import sys" not in content, "local.py should not import sys after SA63"
         assert "sys.argv" not in content, (
             "local.py should not inspect sys.argv after SA63"
+        )
+
+    def test_emitted_production_py_has_dummy_url_fallback(
+        self, generated_project_path: Path
+    ) -> None:
+        """The emitted production.py must contain the dummy URL fallback
+        for non-DB commands (SA68 Phase 3 regression)."""
+        production_py = (
+            generated_project_path / "testproject" / "settings" / "production.py"
+        )
+        assert production_py.exists(), "Generated production.py not found"
+
+        content = production_py.read_text()
+
+        # Must have the dummy URL fallback for when DATABASE_URL is unset
+        # during a non-DB command (collectstatic/compilemessages)
+        assert "postgresql://dummy:dummy@localhost:5432/dummy" in content, (
+            "Generated production.py must contain the dummy URL fallback "
+            "for non-DB commands without DATABASE_URL"
+        )
+        # The non-DB command frozenset must be present
+        assert "_KNOWN_NON_DB_COMMANDS" in content, (
+            "Generated production.py must define _KNOWN_NON_DB_COMMANDS"
+        )
+        assert "compilemessages" in content, (
+            "Generated production.py must include compilemessages "
+            "in known non-DB commands"
         )
 
     def test_emitted_production_py_valid_python(

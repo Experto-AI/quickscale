@@ -44,19 +44,21 @@ echo ""
 
 echo "📋 Step 3/7: Database migrations"
 echo "Running migrations..."
-# Unset RUNTIME_DATABASE_URL so migrations use the superuser DATABASE_URL
-# (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
-RUNTIME_DATABASE_URL="" python manage.py migrate --noinput
+# Set QUICKSCALE_PRIVILEGED_COMMAND and clear RUNTIME_DATABASE_URL so
+# migrations use the superuser DATABASE_URL (the runtime role has
+# NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
+QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate --noinput
 echo "✅ Migrations completed successfully"
 echo ""
 
 echo "📋 Step 4/7: Cache table setup"
 # Only needed for DatabaseCache — RedisCache is managed automatically.
-# Unset RUNTIME_DATABASE_URL so createcachetable uses the superuser DATABASE_URL
-# (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
+# Set QUICKSCALE_PRIVILEGED_COMMAND and clear RUNTIME_DATABASE_URL so
+# createcachetable uses the superuser DATABASE_URL (the runtime role has
+# NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
 if [[ -z "${REDIS_URL:-}" ]]; then
     echo "REDIS_URL not set — creating database cache table via superuser DATABASE_URL..."
-    QUICKSCALE_ALLOW_BYPASSRLS=1 RUNTIME_DATABASE_URL="" python manage.py createcachetable
+    QUICKSCALE_PRIVILEGED_COMMAND=createcachetable RUNTIME_DATABASE_URL="" python manage.py createcachetable
     echo "✅ Cache table ready"
 else
     echo "REDIS_URL set — skipping database cache table (using Redis)"

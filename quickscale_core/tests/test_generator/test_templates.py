@@ -1688,8 +1688,6 @@ class TestClientIpAndSharedCache:
         that a generated production deployment resolves the real client
         IP without requiring explicit environment variables.
         """
-        import sys
-
         base_output = _render_template(
             jinja_env, "project_name/settings/base.py.j2", test_context
         )
@@ -1697,9 +1695,9 @@ class TestClientIpAndSharedCache:
             jinja_env, "project_name/settings/production.py.j2", test_context
         )
 
-        # Use the migration path to bypass the RUNTIME_DATABASE_URL
+        # Use the privileged-command path to bypass the RUNTIME_DATABASE_URL
         # check — the proxy settings are resolved before that check.
-        monkeypatch.setattr(sys, "argv", ["manage.py", "migrate"])
+        monkeypatch.setenv("QUICKSCALE_PRIVILEGED_COMMAND", "migrate")
 
         namespace = _execute_rendered_settings(
             monkeypatch=monkeypatch,
@@ -1712,6 +1710,7 @@ class TestClientIpAndSharedCache:
                 "DATABASE_URL": (
                     "postgresql://postgres:postgres@localhost:5432/testproject"
                 ),
+                "RUNTIME_DATABASE_URL": "",  # explicitly blank for privileged command
             },
         )
 
@@ -1755,8 +1754,6 @@ class TestClientIpAndSharedCache:
         Regression for CR-SA21.1-002: the production seam must apply the
         same empty-hop normalization as the base helper.
         """
-        import sys
-
         base_output = _render_template(
             jinja_env, "project_name/settings/base.py.j2", test_context
         )
@@ -1764,7 +1761,7 @@ class TestClientIpAndSharedCache:
             jinja_env, "project_name/settings/production.py.j2", test_context
         )
 
-        monkeypatch.setattr(sys, "argv", ["manage.py", "migrate"])
+        monkeypatch.setenv("QUICKSCALE_PRIVILEGED_COMMAND", "migrate")
 
         namespace = _execute_rendered_settings(
             monkeypatch=monkeypatch,
@@ -1777,6 +1774,7 @@ class TestClientIpAndSharedCache:
                 "DATABASE_URL": (
                     "postgresql://postgres:postgres@localhost:5432/testproject"
                 ),
+                "RUNTIME_DATABASE_URL": "",  # explicitly blank for privileged command
             },
         )
 
@@ -2382,8 +2380,9 @@ class TestProductionSettingsRuntimeDatabaseUrlFailClosed:
         test_context: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When sys.argv contains 'migrate', DATABASE_URL must be used."""
-        monkeypatch.setattr(sys, "argv", ["manage.py", "migrate"])
+        """When QUICKSCALE_PRIVILEGED_COMMAND=migrate and RUNTIME_DATABASE_URL=\"\"
+        are set, DATABASE_URL must be used (SA68 Phase 1)."""
+        monkeypatch.setenv("QUICKSCALE_PRIVILEGED_COMMAND", "migrate")
 
         base_output = _render_template(
             jinja_env,
@@ -2407,6 +2406,7 @@ class TestProductionSettingsRuntimeDatabaseUrlFailClosed:
                 "DATABASE_URL": (
                     "postgresql://postgres:postgres@localhost:5432/testproject"
                 ),
+                "RUNTIME_DATABASE_URL": "",  # explicitly blank for privileged command
             },
         )
 
@@ -2598,21 +2598,20 @@ class TestProductionSettingsRuntimeDatabaseUrlBridge:
                 },
             )
 
-    def test_bridge_does_not_activate_during_migration_with_runtime_blank(
+    def test_bridge_does_not_activate_when_privileged_command_set_with_bypass(
         self,
         jinja_env: Environment,
         test_context: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When `migrate` is in argv, the argv path must be taken, not the bridge."""
-        import sys
+        """When QUICKSCALE_PRIVILEGED_COMMAND is set, it must take priority over
+        the ALLOW_BYPASSRLS bridge (SA68 Phase 1 precedence)."""
 
-        monkeypatch.setattr(sys, "argv", ["manage.py", "migrate"])
-        # Even if the bypass is set, the migrate argv path should win
         base_output, production_output = self._render_production_output(
             jinja_env, test_context
         )
 
+        monkeypatch.setenv("QUICKSCALE_PRIVILEGED_COMMAND", "migrate")
         monkeypatch.setenv("QUICKSCALE_ALLOW_BYPASSRLS", "1")
         db_url = "postgresql://postgres:postgres@localhost:5432/testproject"
 
@@ -2632,7 +2631,7 @@ class TestProductionSettingsRuntimeDatabaseUrlBridge:
         databases = namespace["DATABASES"]
         assert isinstance(databases, dict)
         assert databases["default"]["URL"] == db_url, (
-            "Migration argv path must still select DATABASE_URL"
+            "Privileged command path must select DATABASE_URL over the bridge"
         )
 
     def test_bridge_does_not_affect_normal_runtime_url(
@@ -2667,6 +2666,168 @@ class TestProductionSettingsRuntimeDatabaseUrlBridge:
         assert databases["default"]["URL"] == runtime_url, (
             "Normal RUNTIME_DATABASE_URL must be used when set"
         )
+
+
+class TestNonDbCommandExecution:
+    """Verify production settings non-DB command path (SA68 Phase 3).
+
+    ``QUICKSCALE_NON_DB_COMMAND`` must allow DB-free bootstrap commands
+    (``collectstatic``, ``compilemessages``) to run without
+    ``RUNTIME_DATABASE_URL``, using a dummy URL when ``DATABASE_URL``
+    is also unset. Unknown values and mutual exclusivity violations
+    must fail closed.
+    """
+
+    def _render_production_output(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+    ) -> tuple[str, str]:
+        """Render both base and production templates."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+        production_output = _render_template(
+            jinja_env, "project_name/settings/production.py.j2", test_context
+        )
+        return base_output, production_output
+
+    def test_collectstatic_uses_dummy_url_when_database_url_unset(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``collectstatic`` must use the dummy URL when DATABASE_URL is unset."""
+        monkeypatch.setenv("QUICKSCALE_NON_DB_COMMAND", "collectstatic")
+        base_output, production_output = self._render_production_output(
+            jinja_env, test_context
+        )
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=production_output,
+            target_module_name="production",
+            config_values={
+                "SECRET_KEY": "a-valid-production-secret-key",
+                # No DATABASE_URL — must fall back to dummy URL
+                # No RUNTIME_DATABASE_URL — must not be required
+            },
+        )
+        databases = namespace["DATABASES"]
+        assert isinstance(databases, dict)
+        assert databases["default"]["URL"] == (
+            "postgresql://dummy:dummy@localhost:5432/dummy"
+        ), "collectstatic should use the dummy URL when DATABASE_URL is unset"
+
+    def test_compilemessages_uses_dummy_url_when_database_url_unset(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """``compilemessages`` must use the dummy URL when DATABASE_URL is unset."""
+        monkeypatch.setenv("QUICKSCALE_NON_DB_COMMAND", "compilemessages")
+        base_output, production_output = self._render_production_output(
+            jinja_env, test_context
+        )
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=production_output,
+            target_module_name="production",
+            config_values={
+                "SECRET_KEY": "a-valid-production-secret-key",
+            },
+        )
+        databases = namespace["DATABASES"]
+        assert isinstance(databases, dict)
+        assert databases["default"]["URL"] == (
+            "postgresql://dummy:dummy@localhost:5432/dummy"
+        ), "compilemessages should use the dummy URL when DATABASE_URL is unset"
+
+    def test_non_db_command_uses_database_url_when_set(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Non-DB command must use the real DATABASE_URL when it is set."""
+        monkeypatch.setenv("QUICKSCALE_NON_DB_COMMAND", "collectstatic")
+        base_output, production_output = self._render_production_output(
+            jinja_env, test_context
+        )
+        db_url = "postgresql://postgres:postgres@localhost:5432/testproject"
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=production_output,
+            target_module_name="production",
+            config_values={
+                "SECRET_KEY": "a-valid-production-secret-key",
+                "DATABASE_URL": db_url,
+            },
+        )
+        databases = namespace["DATABASES"]
+        assert isinstance(databases, dict)
+        assert databases["default"]["URL"] == db_url, (
+            "Non-DB command should use DATABASE_URL when it is set"
+        )
+
+    def test_unknown_non_db_command_rejected(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Unknown ``QUICKSCALE_NON_DB_COMMAND`` value must raise ``ValueError``."""
+        monkeypatch.setenv("QUICKSCALE_NON_DB_COMMAND", "invalid_cmd")
+        base_output, production_output = self._render_production_output(
+            jinja_env, test_context
+        )
+        with pytest.raises(ValueError, match="Unknown QUICKSCALE_NON_DB_COMMAND"):
+            _execute_rendered_settings(
+                monkeypatch=monkeypatch,
+                package_name=test_context["package_name"],
+                base_output=base_output,
+                target_output=production_output,
+                target_module_name="production",
+                config_values={
+                    "SECRET_KEY": "a-valid-production-secret-key",
+                },
+            )
+
+    def test_mutual_exclusivity_rejected_at_runtime(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Setting both ``QUICKSCALE_PRIVILEGED_COMMAND`` and
+        ``QUICKSCALE_NON_DB_COMMAND`` must raise ``ValueError`` at runtime."""
+        monkeypatch.setenv("QUICKSCALE_PRIVILEGED_COMMAND", "migrate")
+        monkeypatch.setenv("QUICKSCALE_NON_DB_COMMAND", "collectstatic")
+        base_output, production_output = self._render_production_output(
+            jinja_env, test_context
+        )
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            _execute_rendered_settings(
+                monkeypatch=monkeypatch,
+                package_name=test_context["package_name"],
+                base_output=base_output,
+                target_output=production_output,
+                target_module_name="production",
+                config_values={
+                    "SECRET_KEY": "a-valid-production-secret-key",
+                    "DATABASE_URL": (
+                        "postgresql://postgres:postgres@localhost:5432/testproject"
+                    ),
+                    "RUNTIME_DATABASE_URL": "",
+                },
+            )
 
 
 class TestLocalSettingsRuntimeDatabaseUrl:
@@ -3312,17 +3473,20 @@ class TestDevOpsTemplateRendering:
     def test_readme_production_checklist_migration_clears_runtime_url(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """README production checklist migration command should unset RUNTIME_DATABASE_URL (CR-T14-004).
+        """README production checklist migration command should use the one-shot privileged command pattern (SA68 Phase 2).
 
-        The production checklist must instruct users to unset RUNTIME_DATABASE_URL
-        before running migrations so that production.py falls back to the
-        superuser DATABASE_URL instead of using the restricted runtime role.
+        The production checklist must use QUICKSCALE_PRIVILEGED_COMMAND=migrate
+        with RUNTIME_DATABASE_URL cleared so that production.py uses the
+        superuser DATABASE_URL instead of the restricted runtime role.
         """
         template = jinja_env.get_template("README.md.j2")
         output = template.render(test_context)
 
-        assert "RUNTIME_DATABASE_URL= python manage.py migrate" in output, (
-            "README production checklist migrate should unset RUNTIME_DATABASE_URL"
+        assert "QUICKSCALE_PRIVILEGED_COMMAND=migrate" in output, (
+            "README production checklist migrate should use QUICKSCALE_PRIVILEGED_COMMAND"
+        )
+        assert 'RUNTIME_DATABASE_URL=""' in output, (
+            "README production checklist should show RUNTIME_DATABASE_URL cleared"
         )
         assert "cannot run DDL" in output, (
             "README should explain why RUNTIME_DATABASE_URL must be cleared"
@@ -3776,7 +3940,10 @@ class TestDockerfileContent:
             if "python manage.py collectstatic --noinput" in line
         )
 
-        assert collectstatic_line.startswith('SECRET_KEY="$(python -c')
+        assert "QUICKSCALE_NON_DB_COMMAND=collectstatic" in collectstatic_line, (
+            "Dockerfile collectstatic must include QUICKSCALE_NON_DB_COMMAND (SA68 Phase 1)"
+        )
+        assert 'SECRET_KEY="$(python -c' in collectstatic_line
         assert "token_urlsafe(50)" in collectstatic_line
         assert "ENV SECRET_KEY" not in output
 
@@ -4290,4 +4457,130 @@ class TestSelectedModulesTemplateSafety:
         output_blog = template.render(context_blog)
         assert output_blog.strip() == "", (
             "PublicSocialPages should be empty when social is not selected"
+        )
+
+
+class TestLauncherOneShotCommandContract:
+    """Verify the SA68 one-shot command-mode env var contract in generated artifacts.
+
+    Phase 2 validation: both QUICKSCALE_PRIVILEGED_COMMAND and
+    QUICKSCALE_NON_DB_COMMAND are one-shot inline prefixes only — never
+    exported, never persistent environment configuration.
+    """
+
+    # ── production.py.j2 — known-command sets ─────────────────────────
+
+    def test_privileged_commands_include_migrate(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """production.py must include migrate in _KNOWN_PRIVILEGED_COMMANDS."""
+        output = _render_template(
+            jinja_env, "project_name/settings/production.py.j2", test_context
+        )
+        assert 'frozenset({"migrate", "createcachetable"})' in output or (
+            '"migrate"' in output
+            and '"createcachetable"' in output
+            and "_KNOWN_PRIVILEGED_COMMANDS" in output
+        ), (
+            "production.py must list migrate and createcachetable as known privileged commands"
+        )
+
+    def test_non_db_commands_include_compilemessages(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """production.py must include compilemessages in _KNOWN_NON_DB_COMMANDS."""
+        output = _render_template(
+            jinja_env, "project_name/settings/production.py.j2", test_context
+        )
+        assert 'frozenset({"collectstatic", "compilemessages"})' in output or (
+            '"collectstatic"' in output
+            and '"compilemessages"' in output
+            and "_KNOWN_NON_DB_COMMANDS" in output
+        ), (
+            "production.py must list collectstatic and compilemessages as known non-DB commands"
+        )
+
+    # ── production.py.j2 — mutual exclusivity ─────────────────────────
+
+    def test_privileged_and_non_db_mutually_exclusive(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """production.py must raise ValueError when both command vars are set."""
+        output = _render_template(
+            jinja_env, "project_name/settings/production.py.j2", test_context
+        )
+        assert "mutually exclusive" in output, (
+            "production.py must document that the command vars are mutually exclusive"
+        )
+        assert "_privileged_command and _non_db_command" in output, (
+            "production.py must check for both vars being set simultaneously"
+        )
+        assert (
+            "raise ValueError"
+            in output[output.index("Both QUICKSCALE_PRIVILEGED_COMMAND") :]
+        ), "production.py must raise ValueError when both command vars are set"
+
+    # ── start.sh.j2 — one-shot inline prefix only ────────────────────
+
+    def test_start_sh_does_not_export_privileged_command(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """start.sh must not export QUICKSCALE_PRIVILEGED_COMMAND."""
+        output = _render_template(jinja_env, "start.sh.j2", test_context)
+        for line in output.splitlines():
+            assert "export QUICKSCALE_PRIVILEGED_COMMAND" not in line, (
+                "start.sh must not export QUICKSCALE_PRIVILEGED_COMMAND — "
+                "it must be a one-shot inline prefix only"
+            )
+
+    def test_start_sh_does_not_export_privileged_command_assignment(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """start.sh must not set QUICKSCALE_PRIVILEGED_COMMAND on its own line (export or plain)."""
+        output = _render_template(jinja_env, "start.sh.j2", test_context)
+        for line in output.splitlines():
+            stripped = line.strip()
+            # Allow inline prefix lines (command followed by python manage.py)
+            if "python manage.py" in stripped:
+                continue
+            # Allow comment lines
+            if stripped.startswith("#"):
+                continue
+            # Allow blank lines
+            if not stripped:
+                continue
+            assert "QUICKSCALE_PRIVILEGED_COMMAND" not in stripped, (
+                f"start.sh must only use QUICKSCALE_PRIVILEGED_COMMAND as an inline "
+                f"prefix on the command line, not as a standalone assignment: {stripped!r}"
+            )
+
+    # ── Dockerfile.j2 — one-shot inline prefix only ──────────────────
+
+    def test_dockerfile_does_not_export_non_db_command(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Dockerfile must not ENV QUICKSCALE_NON_DB_COMMAND."""
+        output = _render_template(jinja_env, "Dockerfile.j2", test_context)
+        assert "ENV QUICKSCALE_NON_DB_COMMAND" not in output, (
+            "Dockerfile must not export QUICKSCALE_NON_DB_COMMAND via ENV — "
+            "it must be a one-shot inline prefix only"
+        )
+
+    def test_dockerfile_collectstatic_uses_inline_prefix(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Dockerfile collectstatic must use QUICKSCALE_NON_DB_COMMAND as an inline prefix."""
+        output = _render_template(jinja_env, "Dockerfile.j2", test_context)
+        collectstatic_line = next(
+            line.strip()
+            for line in output.splitlines()
+            if "python manage.py collectstatic --noinput" in line
+        )
+        assert collectstatic_line.startswith(
+            "QUICKSCALE_NON_DB_COMMAND=collectstatic"
+        ), (
+            "QUICKSCALE_NON_DB_COMMAND must be an inline prefix on the collectstatic command"
+        )
+        assert "ENV" not in collectstatic_line, (
+            "The collectstatic command must not have ENV — it's an inline prefix"
         )

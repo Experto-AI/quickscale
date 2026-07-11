@@ -26,8 +26,8 @@ NOCREATEROLE     — cannot create other roles
 
 The generated settings support two database connection URLs:
 
-- **`DATABASE_URL`** — superuser connection (used for migrations). The startup script (`start.sh`) temporarily unsets `RUNTIME_DATABASE_URL` during `migrate` to ensure schema changes use the superuser role.
-- **`RUNTIME_DATABASE_URL`** — restricted runtime role connection (required for runtime serving). When set, the app uses this URL for all runtime queries. If unset during runtime serving, the app raises a clear error instead of falling back to the privileged superuser `DATABASE_URL` (fail-closed). During migrations, the startup script unsets `RUNTIME_DATABASE_URL` so the superuser `DATABASE_URL` is used (schema changes require elevated privileges).
+- **`DATABASE_URL`** — superuser connection (used for migrations). The deployment script (`start.sh`) sets ``QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""`` as a one-shot inline prefix so schema changes use the superuser role.
+- **`RUNTIME_DATABASE_URL`** — restricted runtime role connection (required for runtime serving). When set, the app uses this URL for all runtime queries. If unset during runtime serving, the app raises a clear error instead of falling back to the privileged superuser `DATABASE_URL` (fail-closed). During one-shot privileged commands, `RUNTIME_DATABASE_URL` is cleared so the superuser `DATABASE_URL` is used (schema changes require elevated privileges).
 
 ### Development (Docker Compose)
 
@@ -37,7 +37,9 @@ When you start the project with Docker Compose:
 2. It creates the `{{ runtime_db_role }}` role with `NOSUPERUSER` and `NOBYPASSRLS`.
 3. Both `DATABASE_URL` (superuser) and `RUNTIME_DATABASE_URL` (runtime role) are set in the backend service environment.
 
-Migrations continue to work because the startup script (`start.sh`) temporarily unsets `RUNTIME_DATABASE_URL` during `migrate`.
+Migrations continue to work because the startup script (`start.sh`) sets the
+one-shot ``QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""`` inline
+prefix, so the superuser ``DATABASE_URL`` is used for schema changes.
 
 ### Production (Railway / Manual Deploy)
 
@@ -74,7 +76,7 @@ On Railway, the platform auto-injects `DATABASE_URL` with a superuser connection
    RUNTIME_DATABASE_URL=postgresql://{{ runtime_db_role }}:<password>@<host>:<port>/{{ package_name }}
    ```
 
-4. The app's `start.sh` automatically uses `DATABASE_URL` (superuser) for migrations and the app uses `RUNTIME_DATABASE_URL` for runtime requests.
+4. The app's `start.sh` automatically uses `DATABASE_URL` (superuser) for migrations (with the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""` inline prefix) and the app uses `RUNTIME_DATABASE_URL` for runtime requests.
 
 > **Note:** If you change `RUNTIME_DATABASE_URL` after deploying, restart the app services so the new connection takes effect.
 
@@ -109,9 +111,10 @@ The runtime role needs `USAGE` on `public`. If you revoke and recreate the role,
 
 ### Migrations fail with "permission denied"
 
-Ensure you are running migrations with `DATABASE_URL` (superuser), not `RUNTIME_DATABASE_URL`. The generated `start.sh` handles this automatically. If you run migrations manually:
+Ensure you are running migrations with `DATABASE_URL` (superuser), not `RUNTIME_DATABASE_URL`. The generated `start.sh` handles this automatically with the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate` inline prefix. If you run migrations manually:
 
 ```bash
 # Override the runtime URL to use the superuser connection
-RUNTIME_DATABASE_URL="" python manage.py migrate --noinput
+# (one-shot inline prefix — never persistent configuration)
+QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate --noinput
 ```

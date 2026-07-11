@@ -2,7 +2,13 @@
 
 ## Overview
 
-Railway.app is a modern platform-as-a-service (PaaS) that simplifies deploying Django applications with PostgreSQL databases. QuickScale-generated projects work seamlessly with Railway's infrastructure.
+Railway.app is a modern platform-as-a-service (PaaS) that simplifies deploying Django applications with PostgreSQL databases. QuickScale-generated projects work with Railway's infrastructure.
+
+**Important**: QuickScale's RLS boot guard requires a dedicated PostgreSQL runtime role with
+``NOSUPERUSER``/``NOBYPASSRLS`` for production serving. The ``quickscale deploy railway``
+command provisions the app service and database but does **not** create this runtime role
+or set ``RUNTIME_DATABASE_URL``. Both must be configured manually (see
+[Deployment Checklist](#deployment-checklist) and [Runtime Role Setup](#runtime-role-setup)).
 
 ## Prerequisites
 
@@ -12,8 +18,14 @@ Railway.app is a modern platform-as-a-service (PaaS) that simplifies deploying D
   - Railway CLI v4.0+ is required for multi-service project support
 - QuickScale project generated via `quickscale plan` + `quickscale apply`
 - Git repository for your project (recommended)
+- **PostgreSQL runtime role** with ``NOSUPERUSER``/``NOBYPASSRLS`` created in the
+  Railway PostgreSQL service, and ``RUNTIME_DATABASE_URL`` set as a Railway
+  environment variable pointing to that restricted role
 
-**Automated Setup**: The `quickscale deploy railway` command automatically:
+**Automated Setup**: The `quickscale deploy railway` command automatically handles
+Railway project setup, but does **not** create the PostgreSQL runtime role or set
+``RUNTIME_DATABASE_URL`` — those are manual follow-up steps (see
+[Runtime Role Setup](#runtime-role-setup) below):
 - ✅ Checks if npm is installed (warns if missing)
 - ✅ Installs Railway CLI if not present
 - ✅ Upgrades Railway CLI if version < 4.0.0
@@ -24,7 +36,7 @@ Railway.app is a modern platform-as-a-service (PaaS) that simplifies deploying D
 
 ## Quick Start (CLI Automated)
 
-**Recommended**: Use the QuickScale CLI command for fully automated deployment:
+**Recommended**: Use the QuickScale CLI command for the initial Railway setup:
 
 ```bash
 # 1. Generate QuickScale project
@@ -32,11 +44,15 @@ quickscale plan myapp
 quickscale apply
 cd myapp
 
-# 2. Deploy with one command (everything is automated!)
+# 2. Deploy with one command (handles Railway project setup, PostgreSQL,
+#    env configuration, and deployment)
 quickscale deploy railway
 ```
 
-**That's it!** The command handles everything automatically. You don't need to install Railway CLI, login manually, or configure anything - QuickScale does it all for you.
+The CLI command handles Railway project creation, PostgreSQL provisioning,
+env configuration, and the initial deploy — but you must still configure the
+runtime role and ``RUNTIME_DATABASE_URL`` manually (see
+[Runtime Role Setup](#runtime-role-setup) below).
 
 ### What Gets Automated
 
@@ -66,6 +82,12 @@ The `quickscale deploy railway` command automatically:
 - ✅ **Auto-configures ALLOWED_HOSTS** with detected domain
 - ✅ Deploys using railway.json config (handles migrations + static files automatically)
 - ✅ Provides deployment URL and next steps
+
+**❌ Not automated** — these steps must be completed manually after the automated flow:
+- ❌ PostgreSQL runtime-role creation (``NOSUPERUSER``/``NOBYPASSRLS``)
+- ❌ ``RUNTIME_DATABASE_URL`` environment variable (pointing to the restricted role)
+
+See [Runtime Role Setup](#runtime-role-setup) for instructions.
 
 **Config-First Approach**: QuickScale v0.60.0+ uses Railway's config-as-code (railway.json) for deployment. Generated projects delegate startup to `./start.sh`, which runs migrations at deploy time and then starts Gunicorn; static files are collected during the Docker build.
 
@@ -112,16 +134,15 @@ railway variables --set \
   ALLOWED_HOSTS=myapp.railway.app \
   DEBUG=False \
   DJANGO_SETTINGS_MODULE=myapp.settings.production \
+  RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:password@host:port/db \
   --service myapp
 
-# Alternative (NOT RECOMMENDED - triggers 4 deployments instead of 1):
+# Alternative (NOT RECOMMENDED - triggers multiple deployments):
 # railway variables --set SECRET_KEY=your-secret-key --service myapp
-# railway variables --set ALLOWED_HOSTS=myapp.railway.app --service myapp
-# railway variables --set DEBUG=False --service myapp
-# railway variables --set DJANGO_SETTINGS_MODULE=myapp.settings.production --service myapp
+# etc.
 
 # 7. Run migrations
-railway run --service myapp python manage.py migrate
+railway run --service myapp /bin/bash -c "QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=\"\" python manage.py migrate --noinput"
 ```
 
 ## Configuration
@@ -132,6 +153,7 @@ railway run --service myapp python manage.py migrate
 |----------|-------------|---------|
 | `SECRET_KEY` | Django secret key (generate a secure random string) | `django-insecure-...` |
 | `DATABASE_URL` | PostgreSQL connection (auto-provided by Railway) | `postgresql://...` |
+| `RUNTIME_DATABASE_URL` | PostgreSQL connection for the restricted runtime role (``NOSUPERUSER``/``NOBYPASSRLS``) — the production settings fail closed without this, using the superuser ``DATABASE_URL`` only for privileged one-shot commands | `postgresql://runtime_user:...@.../db` |
 | `ALLOWED_HOSTS` | Comma-separated list of allowed hosts | `myapp.railway.app` |
 | `DEBUG` | Debug mode (always False in production) | `False` |
 | `DJANGO_SETTINGS_MODULE` | Django settings module | `myapp.settings.production` |
@@ -164,10 +186,14 @@ The `quickscale deploy railway` command follows this config-first workflow:
    - ALLOWED_HOSTS (using generated domain)
 7. **Deploy Application**: Deploys using railway.json config via `railway up --service <app-name>`
    - railway.json defines Dockerfile builder
-  - Dockerfile builds the image (collectstatic runs at build time)
-  - railway.json delegates startup to `./start.sh`
-  - `start.sh` runs migrations at runtime (when DATABASE_URL is available) and starts Gunicorn
-  - Gunicorn defaults to 1 worker for the low-cost baseline unless `GUNICORN_WORKERS` or `WEB_CONCURRENCY` is set
+   - Dockerfile builds the image (collectstatic runs at build time via an inline
+     ``QUICKSCALE_NON_DB_COMMAND=collectstatic`` prefix — a one-shot command-mode
+     env var, never persistent environment configuration)
+   - railway.json delegates startup to ``./start.sh``
+   - ``start.sh`` runs migrations at runtime using an inline
+     ``QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""`` prefix
+     (also a one-shot command-mode pattern), then starts Gunicorn
+   - Gunicorn defaults to 1 worker for the low-cost baseline unless ``GUNICORN_WORKERS`` or ``WEB_CONCURRENCY`` is set
    - No separate migration or static file steps needed
 
 **Important Notes**:
@@ -175,9 +201,49 @@ The `quickscale deploy railway` command follows this config-first workflow:
 - **Optimized Variable Setting**: QuickScale sets all environment variables in a single batch command to trigger only ONE deployment instead of multiple deployments.
 - Railway CLI v4+ requires explicit service creation with `railway add --service` before deployment.
 - **Config-as-Code**: railway.json is generated with every `quickscale apply` and handles build/deploy configuration.
-- **Automatic Migrations**: The generated `./start.sh` runs on every deployment via `startCommand`, so migrations happen at runtime with `DATABASE_URL` available.
+- **Automatic Migrations**: The generated `./start.sh` runs on every deployment via `startCommand`, so migrations happen at runtime with `DATABASE_URL` available. Migrations use the one-shot `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=""` inline prefix so the superuser `DATABASE_URL` is used (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
+- **RUNTIME_DATABASE_URL Required**: The automated deploy command does **not** set ``RUNTIME_DATABASE_URL``. You must create a restricted PostgreSQL role and set this variable manually (see [Runtime Role Setup](#runtime-role-setup)). Without it, the server will fail at startup.
 - **DATABASE_URL Validation**: Production settings now validate DATABASE_URL is set and provide clear error messages if missing.
 - **Default Scaling Baseline**: Generated projects start with one Railway replica and one Gunicorn worker. Increase replicas in Railway if you want more containers; set `GUNICORN_WORKERS` or `WEB_CONCURRENCY` if you want more workers inside each container. These controls are independent.
+
+## Runtime Role Setup
+
+QuickScale production settings require two database connections:
+
+1. **``DATABASE_URL``** — the superuser connection (auto-provided by Railway). Used only for one-shot privileged commands (``migrate``, ``createcachetable``) via the ``start.sh`` inline prefix.
+2. **``RUNTIME_DATABASE_URL``** — a restricted runtime role with ``NOSUPERUSER``/``NOBYPASSRLS`` for production serving. This is the connection Django uses for web requests, background workers, and all normal database operations.
+
+The ``quickscale deploy railway`` command does **not** create the restricted runtime role or set ``RUNTIME_DATABASE_URL``. You must do this manually after the automated deploy:
+
+1. Connect to your Railway PostgreSQL service and create the restricted role:
+   ```sql
+   CREATE ROLE quickscale_runtime WITH
+     LOGIN
+     NOSUPERUSER
+     NOBYPASSRLS
+     NOCREATEDB
+     NOCREATEROLE
+     PASSWORD '<strong-password>';
+
+   GRANT CONNECT ON DATABASE "<your-db>" TO quickscale_runtime;
+   GRANT USAGE ON SCHEMA public TO quickscale_runtime;
+   GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO quickscale_runtime;
+   GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO quickscale_runtime;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public
+     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO quickscale_runtime;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public
+     GRANT USAGE ON SEQUENCES TO quickscale_runtime;
+   ```
+2. Set ``RUNTIME_DATABASE_URL`` as a Railway variable:
+   ```bash
+   railway variables --set RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:<password>@<host>:<port>/<db> --service myapp
+   ```
+3. Redeploy after setting the variable:
+   ```bash
+   railway up --service myapp --detach
+   ```
+
+**Why this is necessary**: The RLS boot guard in the orgs module raises ``ImproperlyConfigured`` at startup if the connected role has ``BYPASSRLS`` or ``SUPERUSER`` — both of which the default Railway superuser role has. Setting ``RUNTIME_DATABASE_URL`` to a restricted role satisfies the guard and keeps RLS enforcement active during production serving.
 
 ## Database Setup
 
@@ -544,6 +610,16 @@ railway up --service myapp        # Uses railway.json automatically
 # railway.json startCommand: ./start.sh runs migrations + gunicorn starts
 ```
 
+**Phase 5: Runtime Role Setup (Manual — not automated)**
+```bash
+# Create restricted PostgreSQL role and set RUNTIME_DATABASE_URL.
+# See "Runtime Role Setup" section for detailed instructions.
+railway variables --set \
+  RUNTIME_DATABASE_URL=postgresql://quickscale_runtime:<password>@<host>:<port>/<db> \
+  --service myapp
+railway up --service myapp --detach   # Redeploy with runtime role
+```
+
 **Benefits**:
 - ✅ One command deployment: `quickscale deploy railway`
 - ✅ No manual ALLOWED_HOSTS configuration
@@ -577,7 +653,7 @@ railway up --service myapp        # Uses railway.json automatically
   }
 }
 ```
-Then run: `railway run --service myapp python manage.py migrate`
+Then run: `railway run --service myapp /bin/bash -c "QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=\"\" python manage.py migrate --noinput"`
 - ✅ Can monitor migration output directly
 - ✅ Doesn't block server start
 - ❌ Requires manual CLI command after each deployment
@@ -753,7 +829,9 @@ Wait for deployment to complete, then run migrations in the container:
 railway status --service <app-name>
 
 # Once deployed, run migrations in the Railway container
-railway run --service <app-name> python manage.py migrate
+# Use the one-shot env-pair prefix so the superuser DATABASE_URL is used
+# (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL).
+railway run --service <app-name> /bin/bash -c "QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL=\"\" python manage.py migrate --noinput"
 ```
 
 **Best Practice (QuickScale Default)**:
@@ -827,7 +905,26 @@ Railway requires DATABASE_URL to connect to PostgreSQL.
 
 **Solution**: Follow the steps above to link PostgreSQL service to your app service.
 
-**Note**: `collectstatic` during Docker build doesn't need DATABASE_URL (it uses a dummy connection). The error only occurs when running migrations or starting the server.
+**Note**: ``collectstatic`` during Docker build doesn't need ``DATABASE_URL``. The
+Dockerfile invokes it with ``QUICKSCALE_NON_DB_COMMAND=collectstatic`` (a one-shot
+inline prefix — never persistent environment configuration), and the production
+settings seam supplies a dummy ``postgresql://`` connection when the real
+``DATABASE_URL`` is absent. The ``DATABASE_URL``-required error only occurs when
+running migrations or serving requests.
+
+**Error: `ImproperlyConfigured: The connected PostgreSQL role has BYPASSRLS...`**:
+This error from the RLS boot guard means ``RUNTIME_DATABASE_URL`` is either unset
+or points to a superuser role. The production settings select ``RUNTIME_DATABASE_URL``
+when serving requests; if it is missing or points to the superuser role, the boot
+guard in the orgs module raises ``ImproperlyConfigured``.
+
+**Solution**: Follow the [Runtime Role Setup](#runtime-role-setup) guide to create a
+restricted PostgreSQL role (``NOSUPERUSER``/``NOBYPASSRLS``) and set
+``RUNTIME_DATABASE_URL`` to that role's connection string. The guard has two narrow
+exemptions:
+1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned DB command (``migrate``,
+   ``createcachetable``) — used by ``start.sh`` for one-shot DDL operations.
+2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` — development escape hatch (not for production).
 
 **Other database issues**:
 - Verify `DATABASE_URL` environment variable is set (Railway auto-provides this when linked)
@@ -945,14 +1042,16 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
   - ✅ ALLOWED_HOSTS auto-configured
   - ✅ Deployment via railway.json (migrations + static files run automatically)
 - [ ] Wait for deployment to complete (5-10 minutes for first deploy)
+- [ ] **Set up runtime role** (see [Runtime Role Setup](#runtime-role-setup)):
+  - [ ] Create PostgreSQL role with `NOSUPERUSER`/`NOBYPASSRLS`
+  - [ ] Set `RUNTIME_DATABASE_URL` Railway variable pointing to that role
+  - [ ] Redeploy: `railway up --service myapp --detach`
 - [ ] Create superuser (choose one option):
   - **Automatic (recommended)**: Set `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, `DJANGO_SUPERUSER_PASSWORD` in Railway dashboard variables — start.sh creates it on next deploy
   - **Manual**: `railway run --service myapp python manage.py createsuperuser`
 - [ ] Verify site is accessible at provided URL (should load without errors)
 - [ ] Test all critical functionality
 - [ ] Configure custom domain (optional): Railway dashboard
-
-**That's it!** The entire deployment is automated. No manual ALLOWED_HOSTS setup, no separate migration steps.
 
 ### Manual Method (Advanced Users)
 - [ ] Generate project: `quickscale plan myapp` → `cd myapp` → `quickscale apply` (includes railway.json)
@@ -970,6 +1069,10 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
   - ✅ railway.json delegates runtime startup to `./start.sh` for migrations + gunicorn
   - ✅ Dockerfile handles `collectstatic` during the build
 - [ ] Wait for deployment to complete (5-10 minutes)
+- [ ] **Set up runtime role**:
+  - [ ] Create PostgreSQL role with `NOSUPERUSER`/`NOBYPASSRLS`
+  - [ ] Set `RUNTIME_DATABASE_URL` Railway variable pointing to that role
+  - [ ] Redeploy: `railway up --service myapp --detach`
 - [ ] Create superuser account (choose one option):
   - **Automatic (recommended)**: Set `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, `DJANGO_SUPERUSER_PASSWORD` in Railway dashboard variables — start.sh creates it on next deploy
   - **Manual**: `railway run --service myapp python manage.py createsuperuser`
@@ -977,14 +1080,14 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 - [ ] Test all critical functionality
 - [ ] Configure custom domain (optional): Railway dashboard
 
-**Note**: The automated CLI method is recommended as it eliminates manual steps and potential errors.
+**Note**: The automated CLI method handles the initial Railway setup, but both methods still require the manual runtime-role setup step.
 
 ## Real-World Validation
 
 ✅ **Validated**: Railway deployment with config-first approach tested and validated in v0.60.0.
 
 **Test Results**:
-- ✅ Automated deployment flow works end-to-end
+- ✅ Automated deployment flow works end-to-end (see also runtime-role manual step below)
 - ✅ PostgreSQL 18 provisioning successful
 - ✅ railway.json config-as-code working correctly
 - ✅ Automatic domain generation functional
@@ -995,13 +1098,14 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 - ✅ SSL/HTTPS auto-provisioned by Railway
 - ✅ Deployment completes in ~5-10 minutes for first deploy
 - ✅ Multi-service architecture (PostgreSQL + App) working correctly
+- ❌ PostgreSQL runtime-role creation and ``RUNTIME_DATABASE_URL`` provisioning are **not automated** — these remain manual steps (see [Runtime Role Setup](#runtime-role-setup))
 
 **v0.60.0 Enhancements**:
 - Config-first deployment using railway.json (no manual migration steps)
 - Automatic public domain generation
 - Automatic ALLOWED_HOSTS configuration
 - Eliminates ALLOWED_HOSTS errors completely
-- Streamlined workflow: init → login → deploy → done
+- Streamlined initial setup: project init, PostgreSQL, and env config automated (runtime-role setup still manual)
 
 ## Additional Resources
 
