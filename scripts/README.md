@@ -65,7 +65,7 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 
 ### Test runners
 
-- [test_unit.sh](./test_unit.sh) — runs unit and integration tests (prefer `make test` or `make test-unit`)
+- [test_unit.sh](./test_unit.sh) — runs unit tests only (prefer `make test` or `make test-unit`)
 - [test_e2e.sh](./test_e2e.sh) — runs local end-to-end tests and supporting setup (`make test-e2e`)
 - [test_agentic_flow.sh](./test_agentic_flow.sh) — runs focused agentic-flow adapter tests (`make test-agent`)
 

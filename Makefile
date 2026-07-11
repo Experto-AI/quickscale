@@ -11,10 +11,10 @@
 #   make test                 - Run all tests
 #   make test-unit            - Run unit tests only
 #   make lint -- --modules    - Run lint only for quickscale_modules/*
-#   make test-unit -- -m      - Run unit tests only for quickscale_modules/*
 #   make check -- --core      - Run checks only for quickscale_core
 #   make MODULE=blog test -- --modules - Run tests only for quickscale_modules/blog
-#   make test-unit SECTION=modules - Run unit tests only for quickscale_modules/*
+#   make MODULE=blog test-integration - Run integration tests for quickscale_modules/blog
+#   make test-integration     - Run integration tests for quickscale_modules/*
 #   make check SECTIONS="core modules" - Run checks for multiple sections without `--`
 #   make test-cov             - Run tests with coverage
 #   make test-e2e             - Run E2E tests (needs Docker + Playwright)
@@ -27,7 +27,7 @@
 #   make typecheck            - Run type checking
 #   make format               - Format code with ruff
 #   make quality              - Run full code quality analysis
-#   make ci                   - Run same checks as GitHub Actions CI
+#   make ci                   - Run primary local development checks (lint + typecheck + unit tests; integration when PostgreSQL available)
 #   make ci-e2e               - Run CI checks including E2E tests
 #   make docs                 - Compile contributing docs
 #   make install              - Install QuickScale globally
@@ -65,7 +65,7 @@ PYTHON ?= poetry run python
 RUFF_CACHE_DIR ?= .ruff_cache/make
 
 # Section flags must be passed after `--` so GNU make does not treat them as its
-# own options, e.g. `make lint -- --modules` or `make test-unit -- -m`.
+# own options, e.g. `make lint -- --modules` or `make typecheck -- --core`.
 SECTION_FLAG_ARGS := $(filter --quickscale -q --core -c --cli -l --module --modules -m,$(MAKECMDGOALS))
 ifneq ($(strip $(SECTION_FLAG_ARGS)),)
   $(eval $(SECTION_FLAG_ARGS):;@:)
@@ -103,11 +103,9 @@ help:
 	@echo "Testing:"
 	@echo "  make test                 - Run all tests (unit + integration)"
 	@echo "  make test-unit            - Run DB-free unit tests only (core + CLI)"
-	@echo "  make test-integration     - Run integration tests (modules, requires PostgreSQL"
-	@echo "                               with a NOBYPASSRLS NOINHERIT NOLOGIN role)"
 	@echo "  make test -- --modules    - Run tests only for quickscale_modules/*"
 	@echo "  make test-unit -- --core  - Run unit tests only for quickscale_core"
-	@echo "  make test-unit SECTION=modules - Run unit tests only for quickscale_modules/*"
+	@echo "  make test-integration     - Run integration tests for quickscale_modules/* (requires PostgreSQL)"
 	@echo "  make test-cov             - Run tests with coverage report"
 	@echo "  make test-e2e             - Run E2E tests (needs Docker + Playwright)"
 	@echo "  make test-agent           - Run agentic flow adapter tests"
@@ -122,7 +120,7 @@ help:
 	@echo "  make format               - Format code with ruff"
 	@echo "  make quality              - Full quality analysis (dead code, complexity, duplication)"
 	@echo "  make check                - Run all checks (lint, typecheck, test)"
-	@echo "  make ci                   - Run same checks as GitHub Actions"
+	@echo "  make ci                   - Run primary local CI checks (lint + typecheck + unit tests; integration when PostgreSQL available)"
 	@echo "  make ci-e2e               - Run CI checks including E2E tests"
 	@echo ""
 	@echo "Section Flags:"
@@ -130,7 +128,7 @@ help:
 	@echo "  Examples: make lint -- -m | make typecheck -- --core | make check -- --cli --modules"
 	@echo "  Variable alternative: SECTION=modules or SECTIONS=\"core modules\""
 	@echo "  Optional: MODULE=blog limits the modules scope to one module"
-	@echo "  Example: make MODULE=blog test-unit -- --modules"
+	@echo "  Example: make MODULE=blog test -- --modules"
 	@echo ""
 	@echo "Docs:"
 	@echo "  make docs                 - Compile contributing docs from docs/contrib/"
@@ -308,18 +306,30 @@ test-unit:
 	fi; \
 	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Unit testing quickscale_core..."; \
-		$(PYTHON) -m pytest quickscale_core/tests -q --tb=short -m "not integration and not e2e"; \
+		$(PYTHON) -m pytest quickscale_core/tests -q --tb=short -m "not integration and not e2e" \
+			--cov=quickscale_core --cov-report=xml:quickscale_core/coverage.xml; \
 	fi; \
 	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Unit testing quickscale_cli..."; \
-		$(PYTHON) -m pytest quickscale_cli/tests -q --tb=short -m "not integration and not e2e" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90; \
+		$(PYTHON) -m pytest quickscale_cli/tests -q --tb=short -m "not integration and not e2e" \
+			--cov=quickscale_cli --cov-report=term-missing --cov-report=html \
+			--cov-report=xml:quickscale_cli/coverage.xml --cov-fail-under=90; \
 	fi; \
 	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
-		echo "ℹ️ Module integration tests are available via 'make test-integration' (requires PostgreSQL with a NOBYPASSRLS NOINHERIT NOLOGIN role)."; \
+		echo ""; \
+		echo "❌ Module test suites have moved from test-unit to test-integration."; \
+		echo ""; \
+		echo "   To run module integration tests (requires PostgreSQL), use:"; \
+		echo "     make test-integration"; \
+		echo ""; \
+		echo "   Or use the 'test' target for mixed unit + integration runs:"; \
+		echo "     make MODULE=<name> test -- --modules"; \
+		echo ""; \
+		exit 1; \
 	fi
 
 # Run integration tests (module suites — requires PostgreSQL 18 with a
-# NOBYPASSRLS NOINHERIT NOLOGIN role).  Sets QUICKSCALE_ALLOW_BYPASSRLS=0
+# LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER role).  Sets QUICKSCALE_ALLOW_BYPASSRLS=0
 # by default so the SA58 boot guard stays active against the restricted role.
 # Override explicitly per-suite (SA14.4 hatch) for tests that need BYPASSRLS.
 test-integration:
@@ -587,7 +597,7 @@ check: lint typecheck test check-core-compat check-module-core-imports check-man
 quality:
 	@scripts/check_quality.sh
 
-# Run the same checks as GitHub Actions CI (lint + typecheck + unit tests)
+# Run primary local development checks (lint + typecheck + unit tests; integration when PostgreSQL available)
 ci:
 	@scripts/check_ci_locally.sh
 

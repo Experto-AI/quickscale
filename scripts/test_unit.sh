@@ -359,7 +359,7 @@ echo "    make test-integration"
 echo "  or directly:"
 echo "    ./scripts/test_integration.sh"
 echo ""
-echo "  Requires PostgreSQL 18 with a NOBYPASSRLS NOINHERIT NOLOGIN role."
+echo "  Requires PostgreSQL 18 with a LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER role."
 echo "  Override QUICKSCALE_ALLOW_BYPASSRLS=1 explicitly per-suite for the"
 echo "  SA14.4 BYPASSRLS hatch."
 

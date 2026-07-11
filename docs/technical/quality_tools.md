@@ -164,13 +164,13 @@ The quality analysis script complements existing tools:
 | Command | Purpose | When to Run |
 |---------|---------|-------------|
 | `make lint` | Format + basic linting (ruff) | Before every commit |
-| `make ci` | Full CI checks (lint + type + test) | Before push to GitHub |
+| `make ci` | Primary local development checks (lint + typecheck + unit tests; integration when PostgreSQL available) | Before push to GitHub |
 | `make quality` | Deep quality analysis | Weekly / before major releases |
 
 ## Workflow Recommendations
 
 1. **Daily development:** Use `make lint` for quick fixes
-2. **Before push:** Run `make ci` to ensure CI will pass
+2. **Before push:** Run `make ci` to run primary local development checks before pushing
 3. **Weekly health check:** Run `make quality` to catch technical debt early
 4. **Before releases:** Review quality reports and address critical issues
 

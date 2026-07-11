@@ -15,6 +15,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from quickscale_modules_orgs.current_org import (
+    reset_current_org_id,
+    set_current_org_id,
+)
 from quickscale_modules_orgs.tenancy import (
     CHILD_PARENT_EQUALITY_FUNC_NAME,
     CHILD_PARENT_EQUALITY_TRIGGER_NAME_PREFIX,
@@ -764,37 +768,45 @@ class TestCompositeFkFormFieldValueDeletePath:
             slug="af12-del-proof",
         )
 
-        form = Form.all_objects.create(
-            organization=org,
-            title="Delete Proof Form",
-            slug="del-proof-form",
-        )
-        field = FormField.all_objects.create(
-            organization=org,
-            form=form,
-            field_type=FormField.FIELD_TYPE_TEXT,
-            label="Name",
-            name="name",
-            order=1,
-        )
-        submission = FormSubmission.all_objects.create(
-            organization=org,
-            form=form,
-        )
-        fv = FormFieldValue.all_objects.create(
-            organization=org,
-            submission=submission,
-            field=field,
-            field_name="name",
-            field_label="Name",
-            value="Test Value",
-        )
+        set_current_org_id(org.pk)
+        try:
+            form = Form.all_objects.create(
+                organization=org,
+                title="Delete Proof Form",
+                slug="del-proof-form",
+            )
+            field = FormField.all_objects.create(
+                organization=org,
+                form=form,
+                field_type=FormField.FIELD_TYPE_TEXT,
+                label="Name",
+                name="name",
+                order=1,
+            )
+            submission = FormSubmission.all_objects.create(
+                organization=org,
+                form=form,
+            )
+            fv = FormFieldValue.all_objects.create(
+                organization=org,
+                submission=submission,
+                field=field,
+                field_name="name",
+                field_label="Name",
+                value="Test Value",
+            )
+        finally:
+            reset_current_org_id()
 
         fv_pk = fv.pk
         org_pk = org.pk
 
         # Verify pre-delete state.
-        fv.refresh_from_db()
+        set_current_org_id(org.pk)
+        try:
+            fv.refresh_from_db()
+        finally:
+            reset_current_org_id()
         assert fv.field_id == field.pk
         assert fv.organization_id == org_pk
 
@@ -839,47 +851,51 @@ class TestCompositeFkFormFieldValueDeletePath:
             slug="af12-del-proof-2",
         )
 
-        form = Form.all_objects.create(
-            organization=org,
-            title="Delete Proof Form 2",
-            slug="del-proof-form-2",
-        )
-        field_a = FormField.all_objects.create(
-            organization=org,
-            form=form,
-            field_type=FormField.FIELD_TYPE_TEXT,
-            label="Name",
-            name="name",
-            order=1,
-        )
-        field_b = FormField.all_objects.create(
-            organization=org,
-            form=form,
-            field_type=FormField.FIELD_TYPE_EMAIL,
-            label="Email",
-            name="email",
-            order=2,
-        )
-        submission = FormSubmission.all_objects.create(
-            organization=org,
-            form=form,
-        )
-        fv_a = FormFieldValue.all_objects.create(
-            organization=org,
-            submission=submission,
-            field=field_a,
-            field_name="name",
-            field_label="Name",
-            value="Alice",
-        )
-        fv_b = FormFieldValue.all_objects.create(
-            organization=org,
-            submission=submission,
-            field=field_b,
-            field_name="email",
-            field_label="Email",
-            value="alice@test.com",
-        )
+        set_current_org_id(org.pk)
+        try:
+            form = Form.all_objects.create(
+                organization=org,
+                title="Delete Proof Form 2",
+                slug="del-proof-form-2",
+            )
+            field_a = FormField.all_objects.create(
+                organization=org,
+                form=form,
+                field_type=FormField.FIELD_TYPE_TEXT,
+                label="Name",
+                name="name",
+                order=1,
+            )
+            field_b = FormField.all_objects.create(
+                organization=org,
+                form=form,
+                field_type=FormField.FIELD_TYPE_EMAIL,
+                label="Email",
+                name="email",
+                order=2,
+            )
+            submission = FormSubmission.all_objects.create(
+                organization=org,
+                form=form,
+            )
+            fv_a = FormFieldValue.all_objects.create(
+                organization=org,
+                submission=submission,
+                field=field_a,
+                field_name="name",
+                field_label="Name",
+                value="Alice",
+            )
+            fv_b = FormFieldValue.all_objects.create(
+                organization=org,
+                submission=submission,
+                field=field_b,
+                field_name="email",
+                field_label="Email",
+                value="alice@test.com",
+            )
+        finally:
+            reset_current_org_id()
 
         fv_b_pk = fv_b.pk
 
@@ -891,13 +907,21 @@ class TestCompositeFkFormFieldValueDeletePath:
             )
 
         # fv_a should have field_id = NULL
-        fv_a = FormFieldValue.all_objects.get(pk=fv_a.pk)
+        set_current_org_id(org.pk)
+        try:
+            fv_a = FormFieldValue.all_objects.get(pk=fv_a.pk)
+        finally:
+            reset_current_org_id()
         assert fv_a.field_id is None
         assert fv_a.organization_id == org.pk
         assert fv_a.value == "Alice"
 
         # fv_b should be completely untouched.
-        fv_b = FormFieldValue.all_objects.get(pk=fv_b_pk)
+        set_current_org_id(org.pk)
+        try:
+            fv_b = FormFieldValue.all_objects.get(pk=fv_b_pk)
+        finally:
+            reset_current_org_id()
         assert fv_b.field_id == field_b.pk
         assert fv_b.organization_id == org.pk
         assert fv_b.value == "alice@test.com"
