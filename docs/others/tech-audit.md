@@ -112,9 +112,9 @@ via git — `poetry.lock` untouched since 2026-06-17 (`5ffa8cdc`).
 |----|----------|----------|-------|--------|------------|--------|
 | TA49 | S3 | test-integrity / operability | `make test-unit` + `scripts/test_unit.sh` auto-prime `QUICKSCALE_ALLOW_BYPASSRLS=1`, contradicting the SA14.4 decision; CI's coverage gate inherits it | Small | High | open (SA59, Track 1, scheduled) |
 | TA50 | S3 | data-handling / consistency | Composite-FK helper flipped to `NOT DEFERRABLE` undocumented — diverges from forms' asserted `DEFERRABLE` contract and from every existing database | Small | High (facts) / Medium (impact) | open (SA60, Track 1, scheduled) |
-| TA53 | S3 | resources-I/O / correctness (CLI) | `quickscale apply` injects a cached import-time `PYTHONPATH` env into **every** subprocess — including poetry and the generated project's own Python — and its production-safety docstring claim is false for pip-installed CLIs | Small | High | open (new this pass) — quick win |
+| TA53 | S3 | resources-I/O / correctness (CLI) | `quickscale apply` injects a cached import-time `PYTHONPATH` env into **every** subprocess — including poetry and the generated project's own Python — and its production-safety docstring claim is false for pip-installed CLIs | Small | High | resolved (SA65, 2026-07-10) |
 
-Counts: **S1: 0 · S2: 0 · S3: 3 · S4: 0.** TA49/TA50 scheduled (Track 1, roadmap.md); TA53 new, unscheduled.
+Counts: **S1: 0 · S2: 0 · S3: 2 · S4: 0.** TA49/TA50 scheduled (Track 1, roadmap.md). TA53 resolved this pass.
 Closure verification this pass: TA47 (SA57), TA48 (SA58), TA51 (SA61), TA52 (SA62) — all four confirmed in code.
 
 ---
@@ -154,36 +154,7 @@ Closure verification this pass: TA47 (SA57), TA48 (SA58), TA51 (SA61), TA52 (SA6
   conformance gate. **Fix:** pick one deferability policy in decisions.md, align helper + forms
   SQL + tests, extend the SA35-style conformance gate. Effort: Small. Confidence: High on facts,
   Medium on downstream impact. **Status:** open — scheduled as SA60 (Track 1).
-- **TA53 — `apply-subprocess-env-pythonpath-pollution`** · S3 (deployment reality (b), CLI) ·
-  `quickscale_cli/src/quickscale_cli/commands/apply_command.py:212-254`
-  (`_build_quickscale_env` + module-level `_QUICKSCALE_SUBPROCESS_ENV`), applied at `:422`
-  (`_run_command` — **every** apply subprocess) and `:627` (`_start_docker_impl`).
-  **Defect:** the env — computed once at import time — adds every `sys.path` directory containing
-  a `quickscale_core`/`quickscale_cli` subdirectory to the child `PYTHONPATH`, and `_run_command`
-  passes it to *all* children: not just the two nested `sys.executable -m quickscale_cli.main`
-  invocations it was built for, but also `poetry install`, `poetry lock`,
-  `poetry run python manage.py migrate` (foreign interpreters in the generated project's own
-  venv), `git`, and docker. The docstring's safety claim — "In production (packages installed in
-  site-packages) these paths are not present in `sys.path`" — is **false**: site-packages *is* on
-  `sys.path` and contains `quickscale_core/` after a `pip install quickscale` (a documented
-  install path, README:146); empirically confirmed via a simulated wheel layout. **Failure
-  scenario:** pip-installed CLI runs `quickscale apply` → children get
-  `PYTHONPATH=<CLI venv site-packages>` → since `PYTHONPATH` precedes a venv's own site-packages,
-  the generated project's `manage.py migrate` resolves Django/psycopg/etc. from the **CLI's**
-  venv wherever versions overlap-but-differ, and pipx-installed poetry runs with the CLI's copies
-  of its shared deps — wrong-version migrations and hard-to-diagnose breakage. Secondary angles:
-  the import-time `os.environ.copy()` snapshot drops any later env mutation for all children (no
-  first-party mutator exists today), and the scan is an import-time filesystem side effect.
-  **Refutation attempted:** searched for a layer-up filter (none — `_run_command` applies the env
-  unconditionally); checked whether children need the paths (poetry/git/docker never import
-  quickscale; generated projects contain no `quickscale_core`/`quickscale_cli` imports — template
-  grep clean); checked for a blessing (no test asserts propagation to foreign interpreters, no
-  CHANGELOG/decisions coverage — the docstring itself is the only defense and it is factually
-  wrong). **Fix:** build the env lazily and pass it only to the two nested `quickscale_cli.main`
-  invocations; additionally (or alternatively) skip path entries where the packages are already
-  importable by a bare child (site-packages case). Effort: Small — **quick win**. Confidence:
-  High (mechanism verified empirically; installed layout documented). Age: fresh —
-  `628c7d28`, 2026-07-10, the side-channel commit.
+*(TA53 detail removed after resolution — see the Reconciliation log entry below; full prior text preserved in version control.)*
 
 ---
 
@@ -198,7 +169,7 @@ new findings; this delta pass re-read only what the delta touched (orgs `apps.py
   Reconciliation log and version control for the full per-module rationale).
 - **quickscale_core** — clean; this pass re-verified the DR media seam (SA57) and the generator
   templates (SA63).
-- **quickscale_cli** — clean except TA53 (this pass, `apply_command.py` subprocess env).
+- **quickscale_cli** — clean; TA53 (`apply_command.py` subprocess env) resolved (SA65, 2026-07-10).
 
 ---
 
@@ -307,6 +278,15 @@ the `_sync_module_dependencies` mock, noted below).
   section below is corrected. The lint/naming guard remains an open watch item per the decision
   record, not a defect. `roadmap.md` had left SA63 and SA69's checklist entries in place after
   both closed (already CHANGELOG-documented) — pruned there as part of this pass.
+- 2026-07-11 (roadmap cleanup) — **TA53: resolved** (SA65 — `apply_command.py`'s dev-context
+  `PYTHONPATH` env is now built on-demand via `_build_quickscale_env()` and passed only to the two
+  nested `sys.executable -m quickscale_cli.main` invocations; the module-level
+  `_QUICKSCALE_SUBPROCESS_ENV` import-time cache is removed; `_run_command` defaults to `env=None`
+  so foreign subprocesses — poetry, git, docker, the generated project's own `manage.py` — inherit
+  the parent env unmodified; the docstring's false production-safety claim is corrected).
+  `TestSA65SubprocessEnvScoping` proves the scoping. Findings-table counts updated (S3: 3→2). Full
+  detail in CHANGELOG.md (SA65 entry). This closes the tech-audit hand-off to arch-audit's
+  matching red flag (`apply`'s import-time subprocess-env snapshot), reconciled there too.
 
 ## Notes (not violations, watch items)
 

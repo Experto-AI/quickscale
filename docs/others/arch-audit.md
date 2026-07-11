@@ -65,7 +65,7 @@ quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams
 | 1 | Tenant isolation on reads/writes | fail-closed `TenantManager` + FORCE RLS + AF9 execute-wrapper | structural | stable |
 | 2 | No bypassing DB role at boot | orgs boot guard (`apps.py:78–113`), now `rolbypassrls` **and** `rolsuper` | structural | strengthened (SA58) — but neutralized in the `make test-unit` path (SA59, open) |
 | 3 | Admin org-scoping | `TenantModelAdmin`; tripwire = NOBYPASSRLS test posture (SA14.4) | structural + gated | completed (SA64: last straggler ported); tripwire currently disabled by the SA59 blanket hatch |
-| 4 | DB privilege selection per process | launcher env pair (`RUNTIME_DATABASE_URL=""` + `QUICKSCALE_ALLOW_BYPASSRLS=1`), consumed by production settings + boot guard | mixed | improved (SA63) — argv residues remain for `migrate`/`collectstatic` (Finding 6) |
+| 4 | DB privilege selection per process | launcher env pair (`RUNTIME_DATABASE_URL=""` + `QUICKSCALE_ALLOW_BYPASSRLS=1`, plus SA68's `QUICKSCALE_PRIVILEGED_COMMAND`/`QUICKSCALE_NON_DB_COMMAND` pair), consumed by production settings + boot guard | structural | completed (SA63+SA68) — Finding 6 closed 2026-07-11; no argv inspection remains |
 | 5 | JSON endpoint idiom | `OrgApiBaseView`/DRF baseline + SA46 csrf-exempt CI gate | structural + gated | stable (Finding 5 closed) |
 | 6 | Core↔module import direction | import linter + `LEGACY_ALLOWED_IMPORTS` (3 modules) | gated, with exceptions | stable this delta — list did not grow (Finding 1) |
 | 7 | Module manifest copy-pairs (module.yml ×2) | CI byte-identical sync gate | gated | exercised correctly (auth bump) |
@@ -81,8 +81,7 @@ quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams
 | # | ID | Horizon | Size | One-line problem |
 |---|----|---------|------|------------------|
 | 1 | `dr-engine-module-circular-lattice` | now | M remaining (Option 2) | DR logic lives in core but its state and lifecycle live in the backups module; the cycle is carried by hand-synced symbol stations and a linter exception list — unchanged this delta; persistence port scheduled |
-| 7 | `generated-file-ownership-unmodeled` | now | M (S first step) | The generator emits projects with no per-file ownership contract; the beta-site upgrade tool re-encodes that taxonomy by hand in eight unlinked literals, ungated — and this release's SA63 template fixes each miss one of the two migration paths |
-| 6 | `db-privilege-mode-procedural` | 6–18 months | S–M remaining | SA63's launcher env-pair contract now owns privilege selection for new commands; the `migrate` path still has three deciders (start.sh env-unset, production argv branch, boot-guard positional argv), and the one-bit escape hatch is overloaded across prod sanction / dev opt-out / test harness |
+| 7 | `generated-file-ownership-unmodeled` | now | M (S first step — **done**, SA66) | The generator emits projects with no per-file ownership contract; the beta-site upgrade tool re-encodes that taxonomy by hand in eight unlinked literals — SA66 (2026-07-11) landed the Option 1 conformance gate (zero unclassified gaps); Option 2 (generator-emitted ownership manifest) remains open for a third consumer or a public update command |
 | 2 | `deletion-invariants-per-boundary-reimplementation` | deferred (teams unscheduled) | M remaining | One canonical last-owner check, but no domain-level `pre_delete` backstop — every deletion path other than `AccountDeleteView` enforces nothing |
 | 4 | `org-model-universe-hand-enumerated` | deferred (teams unscheduled) | M remaining (Option 2) | Tenant-model membership is CI-gated against derivations but the purge *order* is hand-written; SA60 (open) owns the missing deferrability/`tenant_excluded` decision records |
 
@@ -251,77 +250,8 @@ quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams
 
 ---
 
-### Finding 6: Database-privilege selection — contract landed, migrate path still has three deciders
-
-- **ID:** `db-privilege-mode-procedural`
-- **Rank rationale (blast radius × likelihood):** blast remains generated-app deploy availability
-  and the legibility of the RLS privilege boundary; likelihood dropped materially this delta —
-  the live collision is fixed and verified by boot smoke tests, and the change-cost probe (below)
-  shows a *new* privileged command now costs one station. What remains is the migrate path's
-  legacy divergence and the escape hatch's overload.
-- **Horizon & trigger:** `6–18 months` (downgraded from `now`) — fires when the migrate path's
-  argv deciders next disagree with a new execution context (DR-spawned `manage.py` subprocesses,
-  cron/workers, a data migration run outside start.sh), or when the deferred remainder is
-  scheduled.
-- **Confidence:** High — all four mechanisms re-read this pass; the fix verified against the new
-  generated-project boot smoke tests (`test_generated_project_runtime.py:488,536`).
-- **Context dependence:** wrong-regardless for the residual divergence; low urgency at current
-  deployment shape.
-- **Problem:** privilege selection now has an owning contract (the launcher env pair) for new
-  privileged commands, but the `migrate` path still spans three independent deciders with three
-  matching idioms, and the single `QUICKSCALE_ALLOW_BYPASSRLS` bit is overloaded across
-  per-command production sanction, per-environment dev opt-out, and blanket test-harness
-  convenience.
-- **Evidence (updated this pass):**
-  - **Landed (SA63):** `start.sh.j2:59` sets the env pair for createcachetable;
-    `production.py.j2:172–184` consumes it as an explicit bridge branch; `local.py.j2:38–43` is
-    now a pure env reader (argv ladder deleted); verified end-to-end by the new boot smoke tests
-    including the no-Redis path.
-  - **Residual mechanism A:** `production.py.j2:185` — `elif "migrate" in sys.argv` (membership,
-    any position) still selects the superuser URL; `:195` — `collectstatic`/`compilemessages`
-    dummy-URL fallback.
-  - **Residual mechanism B:** `orgs/apps.py:32–51` — `_is_migrate_command()` (positional
-    `sys.argv[1] == "migrate"`) remains the boot guard's migrate exemption (`apps.py:155`).
-  - **Hatch overload:** the same flag that sanctions one launcher command
-    (`start.sh.j2:59`) is blanket-exported for entire test suites (`Makefile:325–326`,
-    `scripts/test_unit.sh:365–366` — TA49/SA59, open), meaning CI never demonstrates the boot
-    guard firing; and it is also the documented dev opt-out. One bit, three meanings, no
-    granularity.
-- **Counter-evidence (V2):** the change-cost probe (below) actively tried to show a new
-  privileged command still needs multi-station registration — it doesn't; one start.sh line now
-  suffices. That disconfirms the 2026-07-09 "up to three places" claim for *new* commands and is
-  why this finding narrows rather than carries.
-- **Why it compounds:** the residual cost is confined to the migrate path: any new execution
-  context that runs migrations (or any command matching/failing the two argv idioms differently)
-  re-opens the disagreement class; and every consumer added to the one-bit hatch further blurs
-  what "allowed" means, which is exactly how SA59's CI blind spot happened.
-- **Detection signal:** PostgreSQL permission errors or `ImproperlyConfigured` boot failures on
-  any migration-like command invoked outside start.sh; the SA59 fix landing will itself reveal
-  whether any test actually exercises the guard.
-- **Steelman:** `migrate`-via-argv is a common Django idiom, the fail direction is correct
-  everywhere that matters, and the remainder is explicitly recorded as deferred in the roadmap —
-  this is a scheduled tail, not drift. That mostly holds; what it doesn't cover is the hatch
-  overload, which no scheduled item currently owns beyond SA59's test-path half.
-- **Correct shape:** exactly one component (the launcher) interprets execution context and
-  publishes the privilege decision through one channel; settings and boot guards consume it and
-  never inspect argv; the escape hatch distinguishes "this invocation is sanctioned" from "this
-  environment opts out."
-- **Options:**
-  1. ~~Env-pair contract for privileged launcher commands~~ — **landed** (SA63 first step).
-  2. **Finish Option 1 (the live option):** start.sh adopts the env pair for `migrate` too; delete
-     `production.py.j2`'s argv branches and orgs' `_is_migrate_command()`; local-dev migrate uses
-     the documented wrapper. S–M, mostly template surface, rides on the now-existing boot smoke
-     tests.
-  3. **Generated manage.py wrapper** mapping a privileged-command allowlist to the env pair —
-     preserves bare `manage.py migrate` UX; adds a generated-file surface.
-- **Recommendation:** Option 2 when next touching the templates (bundle with SA59's landing so
-  the guard is demonstrably exercised in CI the same week the last argv decider dies). Consider
-  splitting the hatch (`QUICKSCALE_PRIVILEGED_COMMAND=1` for launcher sanction vs. the existing
-  flag for environment opt-out) as part of it. · **Size:** S–M remaining · **First step:** add
-  the env pair to start.sh's migrate line and delete `_is_migrate_command()` in the same PR — the
-  boot smoke tests catch regressions.
-
----
+*(Finding 6, `db-privilege-mode-procedural`, closed — see the 2026-07-11 Reconciliation log
+entry below; full prior text preserved in version control.)*
 
 ### Finding 2: Deletion-boundary invariants are re-implemented per boundary with no domain backstop
 
@@ -422,10 +352,10 @@ quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams
    else and should land before the next release's beta migration; the immediate manual action
    (verify SA63 reached both beta sites) is red-flagged below and shouldn't wait for the gate.
 2. **Finding 1 Option 2 (persistence port)** — scheduled next planning cycle; independent of
-   Findings 2/4/6/7.
-3. **Finding 6's remainder (S–M)** bundles naturally with **SA59** — kill the last argv deciders
-   and un-blind the boot guard's CI coverage in the same batch, so the guard is demonstrably
-   exercised the week the contract completes.
+   Findings 2/4/7.
+3. ~~Finding 6's remainder~~ — **closed** (SA68, 2026-07-11): the last argv deciders on the
+   migrate path are deleted and the two-signal `QUICKSCALE_PRIVILEGED_COMMAND`/
+   `QUICKSCALE_NON_DB_COMMAND` contract replaces the overloaded single-bit hatch.
 4. **Findings 2 and 4** stay deferred (teams unscheduled) and independent; Finding 2's receiver
    backstop is small enough to land as opportunistic hardening.
 
@@ -433,12 +363,13 @@ quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams
 
 - **Dual-layer tenancy enforcement, strengthened this delta:** fail-closed `TenantManager` +
   FORCE RLS with the AF9 execute-wrapper, and the boot guard now rejecting `rolsuper` as well as
-  `rolbypassrls` (`orgs/apps.py:99–113`, SA58). Finding 6's remaining work must preserve exactly
-  this fail direction.
-- **SA63's launcher env-pair contract:** one channel (`RUNTIME_DATABASE_URL=""` +
-  `QUICKSCALE_ALLOW_BYPASSRLS=1`), published by start.sh, consumed by production settings and the
-  boot guard — Probe B measured a new privileged command at one station. Finish it (Finding 6
-  Option 2); don't parallel it.
+  `rolbypassrls` (`orgs/apps.py:99–113`, SA58). Preserve this fail direction in any future
+  privilege-selection work.
+- **SA63/SA68's launcher env-pair contract:** one channel (`RUNTIME_DATABASE_URL=""` +
+  `QUICKSCALE_ALLOW_BYPASSRLS=1`, plus SA68's `QUICKSCALE_PRIVILEGED_COMMAND`/
+  `QUICKSCALE_NON_DB_COMMAND` pair), published by start.sh, consumed by production settings and
+  the boot guard for every privileged command including `migrate` — Finding 6 is closed; don't
+  reintroduce an argv-based decider alongside it.
 - **The generated-project boot smoke harness** (`test_generated_project_runtime.py`, grown +395
   lines this delta including the no-Redis and bypass-hatch paths): this is the runtime-confirmation
   layer the last two passes kept asking for — route future template-contract claims through it.
@@ -490,11 +421,10 @@ quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams
   one station only"): **not fired** — this delta *filled* a station (the listings configurator
   gained a notice-only `apply` shim, `module_config.py:903–919`) rather than desyncing one;
   T2.4/T2.5 remain unscheduled. Carry.
-- **Deploy-time configuration contract for generated apps — narrowed to doc-only.** Trigger
-  evaluation: the substantive half **landed** — the generated-project boot smoke tests are
-  exactly TA33's asked-for harness. What remains is the one-paragraph decisions.md rule naming
-  the settings-template requirements contract. Carry at low priority; retire when the paragraph
-  is written (natural home: the SA63/Finding 6 closeout).
+- ~~Deploy-time configuration contract for generated apps~~ — **resolved** (SA68, 2026-07-11):
+  `decisions.md §Launcher One-Shot Command-Env Contract (SA68)` records the
+  `QUICKSCALE_PRIVILEGED_COMMAND`/`QUICKSCALE_NON_DB_COMMAND` contract; the generated-project boot
+  smoke tests remain the runtime-confirmation layer. Retired from the watchlist.
 
 *(Carried unchanged at low priority, unprinted: hardcoded `EXEMPT_PATH_PREFIXES` in
 `orgs/middleware.py`.)*
@@ -528,14 +458,13 @@ quiet pass in four; Option 2 scheduled). Findings 2 and 4 remain deferred (teams
   `production.py` (`beta_migration.py:43–48,96–108`), so both SA63 files are missed by one path
   each; a manual diff/patch of the two files on both sites closes the immediate gap independent
   of Finding 7's structural fix.
-- **`apply`'s subprocess env builder snapshots `sys.path` at import time**
-  (`apply_command.py:212–254`, module-level `_QUICKSCALE_SUBPROCESS_ENV`) — dev/test-context
-  plumbing baked into the production command path; inert when installed from site-packages, but
-  the import-time cache means env mutations after import never propagate. Hand off to tech-audit
-  as a hygiene item.
+- ~~`apply`'s subprocess env builder snapshots `sys.path` at import time~~ — **resolved** (SA65,
+  2026-07-10, closing tech-audit.md TA53): the env is now built on-demand and scoped to only the
+  two nested `quickscale_cli.main` invocations; `_run_command` defaults to `env=None` for foreign
+  subprocesses.
 
 Lenses scanned with no qualifying finding this pass: data/state integrity, trust boundaries
-beyond Finding 6's residual (boot guard re-read — fail direction strengthened), module cohesion
+beyond the (now-closed) Finding 6 residual, module cohesion
 beyond Findings 1/7, consistency/failure models, observability, API contracts (no new endpoint
 idiom; Finding 5 spot-verified still closed), testing architecture (the boot smoke harness is the
 right kind; SA59 is its scheduled blind-spot fix), design conflicts beyond the red-flagged
@@ -853,3 +782,21 @@ finding.
   the Red flags section above. The lint/naming guard for the two same-named classes remains an
   open watch item per the decision record (also tracked in tech-audit.md's Notes section), not
   promoted to its own finding.
+- 2026-07-11 (roadmap cleanup) — **Finding 6 (`db-privilege-mode-procedural`): closed.** SA68
+  finished Option 1 (recommended path): `start.sh.j2`'s migrate line now carries the same env
+  pair as its createcachetable line; `production.py.j2`'s `elif "migrate" in sys.argv` branch and
+  `orgs/apps.py`'s `_is_migrate_command()` are both deleted — no argv inspection remains anywhere
+  in the privilege-selection path. The one-bit hatch overload flagged in the recommendation is
+  also resolved: the explicit `QUICKSCALE_PRIVILEGED_COMMAND`/`QUICKSCALE_NON_DB_COMMAND` pair
+  replaces the single `QUICKSCALE_ALLOW_BYPASSRLS` flag for launcher sanction, recorded in
+  `decisions.md §Launcher One-Shot Command-Env Contract (SA68)`. Summary table, enforcement
+  census, fix-order, and sound-decisions sections updated; full Finding 6 narrative removed per
+  this document's own closed-finding convention (prior text in version control). Detail in
+  CHANGELOG.md (SA68 entry). **Finding 7 (`generated-file-ownership-unmodeled`): first step
+  landed (not closed).** SA66 shipped Option 1's conformance gate — the beta-migration file
+  taxonomy is now derived against the template tree with zero unclassified gaps; Option 2
+  (generator-emitted ownership manifest) stays open, to be picked up if a third consumer or a
+  public update command appears. **Red flag resolved:** `apply`'s import-time subprocess-env
+  snapshot is fixed (SA65, closing tech-audit.md TA53) — removed from the Red flags section
+  above. Also closed the matching watchlist item (deploy-time configuration contract for
+  generated apps) now that `decisions.md` carries the SA68 paragraph.
