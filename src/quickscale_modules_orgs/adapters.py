@@ -15,7 +15,7 @@ from .constants import (
 )
 from .models import Organization, OrganizationInvitation, OrganizationMembership
 
-from quickscale_modules_auth.adapters import (  # type: ignore[import-untyped]
+from quickscale_modules_auth.adapters import (
     QuickscaleAccountAdapter as _BaseAccountAdapter,
 )
 
