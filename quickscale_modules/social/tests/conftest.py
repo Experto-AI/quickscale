@@ -205,6 +205,36 @@ def org_context(request: Any, db: None) -> Generator[Organization, None, None]:
     set_current_org_id(None)
 
 
+@pytest.fixture
+def org_a_context(request: Any, db: None) -> Generator[Organization, None, None]:
+    """Set org context to Org A for the test duration.
+
+    ContextVar is set to ``org_a.id`` while the test runs, then reset so
+    other tests are not polluted.
+    """
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
+    org = request.getfixturevalue("org_a")
+    set_current_org_id(org.id)
+    yield org
+    set_current_org_id(None)
+
+
+@pytest.fixture
+def org_b_context(request: Any, db: None) -> Generator[Organization, None, None]:
+    """Set org context to Org B for the test duration.
+
+    ContextVar is set to ``org_b.id`` while the test runs, then reset so
+    other tests are not polluted.
+    """
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
+    org = request.getfixturevalue("org_b")
+    set_current_org_id(org.id)
+    yield org
+    set_current_org_id(None)
+
+
 # ---------------------------------------------------------------------------
 # SA14.4 — bypass_rls marker registration and collection-time opt-in
 # ---------------------------------------------------------------------------

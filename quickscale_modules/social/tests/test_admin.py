@@ -144,9 +144,22 @@ class TestSocialAdminAddViews:
             },
         )
 
-        link = SocialLink.all_objects.get()
+        assert response.status_code == 302, (
+            f"Expected redirect, got {response.status_code}: "
+        )
 
-        assert response.status_code == 302
+        # The _org_db_context wrapper's cleanup resets the DB GUC and the
+        # priming wrapper memo, so we re-prime explicitly before querying.
+        set_current_org_id(org.id)
+        try:
+            from django.db import connection as db_conn
+
+            with db_conn.cursor() as cursor:
+                cursor.execute("SET LOCAL app.current_org_id = %s", [str(org.id)])
+            link = SocialLink.all_objects.get()
+        finally:
+            set_current_org_id(None)
+
         assert link.provider_name == "youtube"
         assert link.normalized_url == "https://www.youtube.com/watch?v=abc123"
 
@@ -168,9 +181,21 @@ class TestSocialAdminAddViews:
             },
         )
 
-        embed = SocialEmbed.all_objects.get()
+        assert response.status_code == 302, (
+            f"Expected redirect, got {response.status_code}: "
+        )
 
-        assert response.status_code == 302
+        # Re-prime DB GUC after _org_db_context cleanup (see link test).
+        set_current_org_id(org.id)
+        try:
+            from django.db import connection as db_conn
+
+            with db_conn.cursor() as cursor:
+                cursor.execute("SET LOCAL app.current_org_id = %s", [str(org.id)])
+            embed = SocialEmbed.all_objects.get()
+        finally:
+            set_current_org_id(None)
+
         assert embed.resolution_status == SOCIAL_EMBED_RESOLUTION_RESOLVED
         assert embed.resolved_embed_url == "https://www.youtube.com/embed/abc123?rel=0"
         assert embed.last_resolution_attempt_at is not None
@@ -371,11 +396,15 @@ class TestPerOrgHelpers:
         self, rf: RequestFactory, org
     ) -> None:
         """Queries executed inside the context should see the scoped org."""
-        SocialLink.objects.create(
-            title="Test Link",
-            url="https://www.linkedin.com/company/test/",
-            organization=org,
-        )
+        set_current_org_id(org.id)
+        try:
+            SocialLink.objects.create(
+                title="Test Link",
+                url="https://www.linkedin.com/company/test/",
+                organization=org,
+            )
+        finally:
+            set_current_org_id(None)
         request = _request_with_session(rf, **{ACTIVE_ORG_SESSION_KEY: str(org.id)})
         with _org_db_context(request):
             titles = list(SocialLink.objects.all().values_list("title", flat=True))
@@ -485,16 +514,24 @@ class TestSocialAdminGetQueryset:
         resolved by ``_org_db_context`` via ``request._validated_org_id``."""
         from quickscale_modules_social.admin import SocialLinkAdmin
 
-        SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
-        SocialLink.objects.create(
-            title="Org B Link",
-            url="https://www.linkedin.com/company/org-b/",
-            organization=org_b,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
+        set_current_org_id(org_b.id)
+        try:
+            SocialLink.objects.create(
+                title="Org B Link",
+                url="https://www.linkedin.com/company/org-b/",
+                organization=org_b,
+            )
+        finally:
+            set_current_org_id(None)
 
         request = _request_with_session(rf)
         request._validated_org_id = org_a.id  # type: ignore[attr-defined]
@@ -511,16 +548,24 @@ class TestSocialAdminGetQueryset:
         resolved by ``_org_db_context`` via ``request._validated_org_id``."""
         from quickscale_modules_social.admin import SocialEmbedAdmin
 
-        SocialEmbed.objects.create(
-            title="Org A Embed",
-            url="https://www.youtube.com/shorts/aaa111",
-            organization=org_a,
-        )
-        SocialEmbed.objects.create(
-            title="Org B Embed",
-            url="https://www.youtube.com/shorts/bbb222",
-            organization=org_b,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            SocialEmbed.objects.create(
+                title="Org A Embed",
+                url="https://www.youtube.com/shorts/aaa111",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
+        set_current_org_id(org_b.id)
+        try:
+            SocialEmbed.objects.create(
+                title="Org B Embed",
+                url="https://www.youtube.com/shorts/bbb222",
+                organization=org_b,
+            )
+        finally:
+            set_current_org_id(None)
 
         request = _request_with_session(rf)
         request._validated_org_id = org_a.id  # type: ignore[attr-defined]
@@ -535,16 +580,24 @@ class TestSocialAdminGetQueryset:
         is known (cross-org rejection)."""
         from quickscale_modules_social.admin import SocialLinkAdmin
 
-        SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
-        SocialLink.objects.create(
-            title="Org B Link",
-            url="https://www.linkedin.com/company/org-b/",
-            organization=org_b,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
+        set_current_org_id(org_b.id)
+        try:
+            SocialLink.objects.create(
+                title="Org B Link",
+                url="https://www.linkedin.com/company/org-b/",
+                organization=org_b,
+            )
+        finally:
+            set_current_org_id(None)
 
         admin_instance = SocialLinkAdmin(SocialLink, AdminSite())
 
@@ -589,11 +642,15 @@ class TestSocialAdminEndToEnd:
     ) -> None:
         """Selecting an org via the list-filter GET parameter persists it
         to the session and limits the changelist accordingly."""
-        SocialLink.objects.create(
-            title="Test Link",
-            url="https://www.linkedin.com/company/test/",
-            organization=org,
-        )
+        set_current_org_id(org.id)
+        try:
+            SocialLink.objects.create(
+                title="Test Link",
+                url="https://www.linkedin.com/company/test/",
+                organization=org,
+            )
+        finally:
+            set_current_org_id(None)
         # No session org before the request.
         _clear_session_org(admin_client)
         url = reverse("admin:quickscale_modules_social_sociallink_changelist")
@@ -609,16 +666,24 @@ class TestSocialAdminEndToEnd:
     ) -> None:
         """Using the list-filter without a pre-existing session org still
         shows only the selected org's items."""
-        SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
-        SocialLink.objects.create(
-            title="Org B Link",
-            url="https://www.linkedin.com/company/org-b/",
-            organization=org_b,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
+        set_current_org_id(org_b.id)
+        try:
+            SocialLink.objects.create(
+                title="Org B Link",
+                url="https://www.linkedin.com/company/org-b/",
+                organization=org_b,
+            )
+        finally:
+            set_current_org_id(None)
         _clear_session_org(admin_client)
         url = reverse("admin:quickscale_modules_social_sociallink_changelist")
         response = admin_client.get(url, {"organization__id__exact": str(org_a.pk)})
@@ -635,16 +700,24 @@ class TestSocialAdminEndToEnd:
     ) -> None:
         """The changelist should show only links belonging to ``org_a`` when
         the session is scoped to ``org_a``."""
-        SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
-        SocialLink.objects.create(
-            title="Org B Link",
-            url="https://www.linkedin.com/company/org-b/",
-            organization=org_b,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
+        set_current_org_id(org_b.id)
+        try:
+            SocialLink.objects.create(
+                title="Org B Link",
+                url="https://www.linkedin.com/company/org-b/",
+                organization=org_b,
+            )
+        finally:
+            set_current_org_id(None)
 
         _set_session_org(admin_client, org_a.id)
         response = admin_client.get(
@@ -660,16 +733,24 @@ class TestSocialAdminEndToEnd:
     ) -> None:
         """The changelist should show only embeds belonging to ``org_a`` when
         the session is scoped to ``org_a``."""
-        SocialEmbed.objects.create(
-            title="Org A Embed",
-            url="https://www.youtube.com/shorts/aaa111",
-            organization=org_a,
-        )
-        SocialEmbed.objects.create(
-            title="Org B Embed",
-            url="https://www.youtube.com/shorts/bbb222",
-            organization=org_b,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            SocialEmbed.objects.create(
+                title="Org A Embed",
+                url="https://www.youtube.com/shorts/aaa111",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
+        set_current_org_id(org_b.id)
+        try:
+            SocialEmbed.objects.create(
+                title="Org B Embed",
+                url="https://www.youtube.com/shorts/bbb222",
+                organization=org_b,
+            )
+        finally:
+            set_current_org_id(None)
 
         _set_session_org(admin_client, org_a.id)
         response = admin_client.get(
@@ -685,11 +766,15 @@ class TestSocialAdminEndToEnd:
     ) -> None:
         """The changelist should be empty (fail-closed) when no session org
         is set."""
-        SocialLink.objects.create(
-            title="Some Link",
-            url="https://www.linkedin.com/company/test/",
-            organization=org,
-        )
+        set_current_org_id(org.id)
+        try:
+            SocialLink.objects.create(
+                title="Some Link",
+                url="https://www.linkedin.com/company/test/",
+                organization=org,
+            )
+        finally:
+            set_current_org_id(None)
         _clear_session_org(admin_client)
         response = admin_client.get(
             reverse("admin:quickscale_modules_social_sociallink_changelist")
@@ -706,11 +791,15 @@ class TestSocialAdminEndToEnd:
     ) -> None:
         """The change view should load successfully when the object belongs
         to the session org."""
-        link = SocialLink.objects.create(
-            title="Test Link",
-            url="https://www.linkedin.com/company/test/",
-            organization=org,
-        )
+        set_current_org_id(org.id)
+        try:
+            link = SocialLink.objects.create(
+                title="Test Link",
+                url="https://www.linkedin.com/company/test/",
+                organization=org,
+            )
+        finally:
+            set_current_org_id(None)
         _set_session_org(admin_client, org.id)
         response = admin_client.get(
             reverse(
@@ -726,11 +815,15 @@ class TestSocialAdminEndToEnd:
     ) -> None:
         """The change view should redirect when the object belongs to a
         different org than the session org."""
-        link = SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            link = SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
         _set_session_org(admin_client, org_b.id)
         response = admin_client.get(
             reverse(
@@ -745,11 +838,15 @@ class TestSocialAdminEndToEnd:
     ) -> None:
         """The delete confirmation view should redirect when the object
         belongs to a different org than the session org."""
-        link = SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            link = SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
         _set_session_org(admin_client, org_b.id)
         response = admin_client.get(
             reverse(
@@ -764,11 +861,15 @@ class TestSocialAdminEndToEnd:
     ) -> None:
         """The history view should redirect when the object belongs to a
         different org than the session org."""
-        link = SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            link = SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
         _set_session_org(admin_client, org_b.id)
         response = admin_client.get(
             reverse(
@@ -782,11 +883,15 @@ class TestSocialAdminEndToEnd:
         self, admin_client: Client, org
     ) -> None:
         """Change view loads with matching session org -> object org."""
-        embed = SocialEmbed.objects.create(
-            title="Test Embed",
-            url="https://www.youtube.com/shorts/test123",
-            organization=org,
-        )
+        set_current_org_id(org.id)
+        try:
+            embed = SocialEmbed.objects.create(
+                title="Test Embed",
+                url="https://www.youtube.com/shorts/test123",
+                organization=org,
+            )
+        finally:
+            set_current_org_id(None)
         _set_session_org(admin_client, org.id)
         response = admin_client.get(
             reverse(
@@ -826,11 +931,15 @@ class TestSocialAdminNonexistentOrg:
         """A syntactically valid UUID that does not resolve to any
         Organization should produce an empty changelist (fail-closed)
         without crashing."""
-        SocialLink.objects.create(
-            title="Test Link",
-            url="https://www.linkedin.com/company/test/",
-            organization=org,
-        )
+        set_current_org_id(org.id)
+        try:
+            SocialLink.objects.create(
+                title="Test Link",
+                url="https://www.linkedin.com/company/test/",
+                organization=org,
+            )
+        finally:
+            set_current_org_id(None)
         _clear_session_org(admin_client)
 
         bogus = uuid.uuid4()
@@ -851,11 +960,15 @@ class TestSocialAdminNonexistentOrg:
         self, admin_client: Client, org
     ) -> None:
         """Same fail-closed proof for the SocialEmbed admin."""
-        SocialEmbed.objects.create(
-            title="Test Embed",
-            url="https://www.youtube.com/shorts/test123",
-            organization=org,
-        )
+        set_current_org_id(org.id)
+        try:
+            SocialEmbed.objects.create(
+                title="Test Embed",
+                url="https://www.youtube.com/shorts/test123",
+                organization=org,
+            )
+        finally:
+            set_current_org_id(None)
         _clear_session_org(admin_client)
 
         bogus = uuid.uuid4()
@@ -878,11 +991,15 @@ class TestSocialAdminNonexistentOrg:
         """After viewing the changelist with a nonexistent org UUID, the
         session value should remain unchanged (the fix ignores but does
         not clear it)."""
-        SocialLink.objects.create(
-            title="Test Link",
-            url="https://www.linkedin.com/company/test/",
-            organization=org,
-        )
+        set_current_org_id(org.id)
+        try:
+            SocialLink.objects.create(
+                title="Test Link",
+                url="https://www.linkedin.com/company/test/",
+                organization=org,
+            )
+        finally:
+            set_current_org_id(None)
         _clear_session_org(admin_client)
 
         bogus = uuid.uuid4()
@@ -1031,11 +1148,15 @@ class TestSocialAdminViewAsOrgLock:
         """``get_form`` returns change form with disabled org under VIEW-AS."""
         from quickscale_modules_social.admin import SocialLinkAdmin
 
-        link = SocialLink.objects.create(
-            title="Change Test Link",
-            url="https://www.linkedin.com/company/change-test/",
-            organization=org,
-        )
+        set_current_org_id(org.id)
+        try:
+            link = SocialLink.objects.create(
+                title="Change Test Link",
+                url="https://www.linkedin.com/company/change-test/",
+                organization=org,
+            )
+        finally:
+            set_current_org_id(None)
 
         request = self._view_as_request(rf, org.pk)
         admin_instance = SocialLinkAdmin(SocialLink, AdminSite())
@@ -1090,7 +1211,15 @@ class TestSocialAdminViewAsOrgLock:
         )
 
         assert form.is_valid(), form.errors
-        instance = form.save()
+        set_current_org_id(org_a.pk)
+        try:
+            from django.db import connection as db_conn
+
+            with db_conn.cursor() as cursor:
+                cursor.execute("SET LOCAL app.current_org_id = %s", [str(org_a.pk)])
+            instance = form.save()
+        finally:
+            set_current_org_id(None)
         assert instance.organization_id == org_a.pk, (
             f"Saved instance should have org_a ({org_a.pk}), "
             f"but got org_id={instance.organization_id}"
@@ -1100,11 +1229,15 @@ class TestSocialAdminViewAsOrgLock:
         """Form from ``get_form`` under VIEW-AS preserves the instance org."""
         from quickscale_modules_social.admin import SocialLinkAdmin
 
-        link = SocialLink.objects.create(
-            title="View As Change Form",
-            url="https://www.linkedin.com/company/view-as-change-form/",
-            organization=org_a,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            link = SocialLink.objects.create(
+                title="View As Change Form",
+                url="https://www.linkedin.com/company/view-as-change-form/",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
 
         request = self._view_as_request(rf, org_a.pk)
         admin_instance = SocialLinkAdmin(SocialLink, AdminSite())
@@ -1155,6 +1288,11 @@ def _ensure_rls_test_role() -> None:
     Uses ``connection.settings_dict`` (the current test database) so the
     ``GRANT SELECT`` targets the same database where the Django ORM
     created the social tables.
+
+    The ``CREATE ROLE`` is wrapped in a catch-all exception handler
+    because the connecting role may not have ``CREATEROLE`` privilege
+    (e.g. ``quickscale_test_role``).  When the role already exists in
+    the cluster, the subsequent ``GRANT`` statements still succeed.
     """
     import psycopg2  # type: ignore[import-untyped]
 
@@ -1173,7 +1311,7 @@ def _ensure_rls_test_role() -> None:
                 DO $$
                 BEGIN
                     CREATE ROLE {_RESTRICTED_ROLE};
-                EXCEPTION WHEN duplicate_object THEN NULL;
+                EXCEPTION WHEN OTHERS THEN NULL;
                 END $$;
             """)
             cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
@@ -1209,16 +1347,20 @@ class TestSocialRlsBoundaryRestrictedRole:
         (fail-closed at the DB level on both social tables)."""
         _ensure_rls_test_role()
 
-        SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
-        SocialEmbed.objects.create(
-            title="Org A Embed",
-            url="https://www.youtube.com/shorts/aaa111",
-            organization=org_a,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+            SocialEmbed.objects.create(
+                title="Org A Embed",
+                url="https://www.youtube.com/shorts/aaa111",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
 
         bogus_org = uuid.uuid4()
         with connection.cursor() as cursor:
@@ -1244,26 +1386,42 @@ class TestSocialRlsBoundaryRestrictedRole:
         see another org's rows (asserts cross-org isolation)."""
         _ensure_rls_test_role()
 
-        SocialLink.objects.create(
-            title="Org A Link",
-            url="https://www.linkedin.com/company/org-a/",
-            organization=org_a,
-        )
-        SocialLink.objects.create(
-            title="Org B Link",
-            url="https://www.linkedin.com/company/org-b/",
-            organization=org_b,
-        )
-        SocialEmbed.objects.create(
-            title="Org A Embed",
-            url="https://www.youtube.com/shorts/aaa111",
-            organization=org_a,
-        )
-        SocialEmbed.objects.create(
-            title="Org B Embed",
-            url="https://www.youtube.com/shorts/bbb222",
-            organization=org_b,
-        )
+        set_current_org_id(org_a.id)
+        try:
+            SocialLink.objects.create(
+                title="Org A Link",
+                url="https://www.linkedin.com/company/org-a/",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
+        set_current_org_id(org_b.id)
+        try:
+            SocialLink.objects.create(
+                title="Org B Link",
+                url="https://www.linkedin.com/company/org-b/",
+                organization=org_b,
+            )
+        finally:
+            set_current_org_id(None)
+        set_current_org_id(org_a.id)
+        try:
+            SocialEmbed.objects.create(
+                title="Org A Embed",
+                url="https://www.youtube.com/shorts/aaa111",
+                organization=org_a,
+            )
+        finally:
+            set_current_org_id(None)
+        set_current_org_id(org_b.id)
+        try:
+            SocialEmbed.objects.create(
+                title="Org B Embed",
+                url="https://www.youtube.com/shorts/bbb222",
+                organization=org_b,
+            )
+        finally:
+            set_current_org_id(None)
 
         with connection.cursor() as cursor:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")

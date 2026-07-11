@@ -28,6 +28,7 @@ from quickscale_modules_billing.models import (
 from django.contrib.auth import get_user_model
 from django.contrib.sessions.middleware import SessionMiddleware
 
+from quickscale_modules_orgs.current_org import org_scope
 from quickscale_modules_orgs.models import Organization
 
 User = get_user_model()
@@ -183,7 +184,7 @@ class TestBillingAdminTenantScopedQueryset:
         qs = admin_instance.get_queryset(request)
         assert qs.count() == 0
 
-    def test_subscription_admin_scopes_to_org(self, organization):
+    def test_subscription_admin_scopes_to_org(self, organization, org_context):
         """SubscriptionAdmin.get_queryset returns only subscriptions from the scoped org."""
         from django.contrib.admin.sites import AdminSite
 
@@ -203,11 +204,12 @@ class TestBillingAdminTenantScopedQueryset:
             plan=plan,
             status=Subscription.Status.ACTIVE,
         )
-        Subscription.all_objects.create(
-            organization=org_b,
-            plan=plan,
-            status=Subscription.Status.ACTIVE,
-        )
+        with org_scope(org_b):
+            Subscription.all_objects.create(
+                organization=org_b,
+                plan=plan,
+                status=Subscription.Status.ACTIVE,
+            )
 
         site = AdminSite()
         admin_instance = SubscriptionAdmin(Subscription, site)

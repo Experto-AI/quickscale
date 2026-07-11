@@ -48,26 +48,29 @@ class TestSocialIsolation:
         2. Set context to Org A, then call ``list_published_social_links()``.
         3. Assert that only Org A's link is returned.
         """
-        SocialLink.objects.create(
-            title="Org A Link",
-            provider_name="",
-            url="https://www.linkedin.com/company/org-a/",
-            description="Org A link",
-            display_order=10,
-            is_published=True,
-            organization=org_a,
-        )
-        SocialLink.objects.create(
-            title="Org B Link",
-            provider_name="",
-            url="https://www.linkedin.com/company/org-b/",
-            description="Org B link",
-            display_order=20,
-            is_published=True,
-            organization=org_b,
-        )
-
         try:
+            _set_org_context(org_a.id)
+            SocialLink.objects.create(
+                title="Org A Link",
+                provider_name="",
+                url="https://www.linkedin.com/company/org-a/",
+                description="Org A link",
+                display_order=10,
+                is_published=True,
+                organization=org_a,
+            )
+
+            _set_org_context(org_b.id)
+            SocialLink.objects.create(
+                title="Org B Link",
+                provider_name="",
+                url="https://www.linkedin.com/company/org-b/",
+                description="Org B link",
+                display_order=20,
+                is_published=True,
+                organization=org_b,
+            )
+
             _set_org_context(org_a.id)
             org_a_links = list_published_social_links()
             org_a_titles = {r.title for r in org_a_links}
@@ -94,26 +97,29 @@ class TestSocialIsolation:
         2. Set context to Org A, then call ``list_published_social_embeds()``.
         3. Assert that only Org A's embed is returned.
         """
-        SocialEmbed.objects.create(
-            title="Org A Embed",
-            provider_name="",
-            url="https://www.youtube.com/shorts/aaa111",
-            description="Org A embed",
-            display_order=10,
-            is_published=True,
-            organization=org_a,
-        )
-        SocialEmbed.objects.create(
-            title="Org B Embed",
-            provider_name="",
-            url="https://www.youtube.com/shorts/bbb222",
-            description="Org B embed",
-            display_order=20,
-            is_published=True,
-            organization=org_b,
-        )
-
         try:
+            _set_org_context(org_a.id)
+            SocialEmbed.objects.create(
+                title="Org A Embed",
+                provider_name="",
+                url="https://www.youtube.com/shorts/aaa111",
+                description="Org A embed",
+                display_order=10,
+                is_published=True,
+                organization=org_a,
+            )
+
+            _set_org_context(org_b.id)
+            SocialEmbed.objects.create(
+                title="Org B Embed",
+                provider_name="",
+                url="https://www.youtube.com/shorts/bbb222",
+                description="Org B embed",
+                display_order=20,
+                is_published=True,
+                organization=org_b,
+            )
+
             _set_org_context(org_a.id)
             org_a_embeds = list_published_social_embeds()
             org_a_titles = {r.title for r in org_a_embeds}
@@ -129,27 +135,40 @@ class TestSocialIsolation:
             _reset_org_context()
 
     def test_operator_manager_escape_hatch(self, org_a, org_b) -> None:
-        """``all_objects`` should return all rows regardless of org.
+        """``all_objects`` with ``operator_access`` should return all rows
+        regardless of org.
 
         The operator escape hatch provides unfiltered cross-tenant access
-        for admin/operator paths.
+        for admin/operator paths.  Under ``NOBYPASSRLS`` the FOR ALL RLS
+        policy restricts cross-org reads; ``operator_access`` extends the
+        FOR SELECT sub-policy (SA14.5) so that ``all_objects`` queries
+        can see rows from any organization.
         """
-        SocialLink.objects.create(
-            title="Org A Link",
-            provider_name="",
-            url="https://www.linkedin.com/company/org-a/",
-            display_order=10,
-            is_published=True,
-            organization=org_a,
-        )
-        SocialLink.objects.create(
-            title="Org B Link",
-            provider_name="",
-            url="https://www.linkedin.com/company/org-b/",
-            display_order=20,
-            is_published=True,
-            organization=org_b,
-        )
+        from quickscale_modules_orgs.current_org import operator_access
 
-        all_rows = SocialLink.all_objects.all()
-        assert all_rows.count() == 2
+        try:
+            _set_org_context(org_a.id)
+            SocialLink.objects.create(
+                title="Org A Link",
+                provider_name="",
+                url="https://www.linkedin.com/company/org-a/",
+                display_order=10,
+                is_published=True,
+                organization=org_a,
+            )
+
+            _set_org_context(org_b.id)
+            SocialLink.objects.create(
+                title="Org B Link",
+                provider_name="",
+                url="https://www.linkedin.com/company/org-b/",
+                display_order=20,
+                is_published=True,
+                organization=org_b,
+            )
+
+            with operator_access(reason="all_objects cross-org read"):
+                all_rows = SocialLink.all_objects.all()
+                assert all_rows.count() == 2
+        finally:
+            _reset_org_context()

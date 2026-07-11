@@ -33,6 +33,7 @@ from quickscale_modules_billing.views import (
     CreateCheckoutSessionView,
     PricingPageView,
 )
+from quickscale_modules_orgs.current_org import org_scope
 from quickscale_modules_orgs.middleware import TenantMiddleware
 from quickscale_modules_orgs.models import Organization
 
@@ -296,6 +297,7 @@ def test_billing_dashboard_view_redirects_anonymous_users_to_login(
 def test_billing_dashboard_view_renders_for_authenticated_users(
     user,
     organization,
+    org_context,
 ) -> None:
     from quickscale_modules_orgs.models import (
         OrgRole,
@@ -630,6 +632,8 @@ def test_billing_portal_session_view_missing_csrf_returns_403_without_calling_se
 def test_credit_balance_view_creates_zero_balance_on_first_use(
     client: Client,
     user,
+    organization,
+    org_context,
     mock_org_resolution,
 ) -> None:
     client.force_login(user)
@@ -646,6 +650,7 @@ def test_credit_balance_view_returns_only_authenticated_users_balance(
     client: Client,
     user,
     organization,
+    org_context,
     django_user_model,
     mock_org_resolution,
 ) -> None:
@@ -656,9 +661,10 @@ def test_credit_balance_view_returns_only_authenticated_users_balance(
     )
     other_org = Organization.objects.create(name="OtherOrg", slug="other-org")
     CreditBalance.all_objects.create(organization=organization, user=user, balance=125)
-    CreditBalance.all_objects.create(
-        organization=other_org, user=other_user, balance=900
-    )
+    with org_scope(other_org):
+        CreditBalance.all_objects.create(
+            organization=other_org, user=other_user, balance=900
+        )
     client.force_login(user)
 
     response = client.get(reverse("quickscale_billing:credit-balance"))
@@ -812,6 +818,7 @@ def test_credit_transactions_view_returns_only_authenticated_users_transactions(
     client: Client,
     user,
     organization,
+    org_context,
     django_user_model,
     mock_org_resolution,
 ) -> None:
@@ -828,13 +835,14 @@ def test_credit_transactions_view_returns_only_authenticated_users_transactions(
         balance_after=125,
         description="Current user purchase",
     )
-    _create_credit_transaction(
-        user=other_user,
-        organization=other_org,
-        amount=900,
-        balance_after=900,
-        description="Other user purchase",
-    )
+    with org_scope(other_org):
+        _create_credit_transaction(
+            user=other_user,
+            organization=other_org,
+            amount=900,
+            balance_after=900,
+            description="Other user purchase",
+        )
     client.force_login(user)
 
     response = client.get(reverse("quickscale_billing:credit-transactions"))
@@ -859,6 +867,7 @@ def test_credit_transactions_view_uses_fixed_page_size_without_client_override(
     client: Client,
     user,
     organization,
+    org_context,
     mock_org_resolution,
 ) -> None:
     for index in range(30):
@@ -892,6 +901,7 @@ def test_credit_transactions_view_breaks_same_timestamp_ties_by_descending_id(
     client: Client,
     user,
     organization,
+    org_context,
     mock_org_resolution,
 ) -> None:
     created_transactions = [
@@ -1077,6 +1087,7 @@ def test_subscription_checkout_view_blocks_while_current_subscription_exists(
     client: Client,
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
     mock_org_resolution,
 ) -> None:
@@ -1208,6 +1219,7 @@ def test_subscription_detail_view_returns_current_subscription(
     client: Client,
     user,
     organization,
+    org_context,
     mock_org_resolution,
 ) -> None:
     plan = _create_recurring_plan(slug="starter-current-detail")
@@ -1247,6 +1259,7 @@ def test_subscription_detail_view_returns_404_when_current_subscription_is_missi
     client: Client,
     user,
     organization,
+    org_context,
     mock_org_resolution,
 ) -> None:
     plan = _create_recurring_plan(slug="starter-missing-detail")

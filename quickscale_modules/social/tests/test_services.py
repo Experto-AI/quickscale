@@ -144,13 +144,17 @@ def test_list_published_social_links_uses_canonical_urls_and_invalidates_cache(
 @django_db
 def test_list_published_social_links_recovers_from_corrupt_cache_payload(org) -> None:
     """Corrupt cached link payloads should be ignored and refreshed from the DB."""
-    SocialLink.objects.create(
-        title="QuickScale on LinkedIn",
-        provider_name="",
-        url="https://www.linkedin.com/company/quickscale/",
-        display_order=10,
-        organization=org,
-    )
+    _activate_org_context(org.id)
+    try:
+        SocialLink.objects.create(
+            title="QuickScale on LinkedIn",
+            provider_name="",
+            url="https://www.linkedin.com/company/quickscale/",
+            display_order=10,
+            organization=org,
+        )
+    finally:
+        _reset_org_context()
 
     # Set a corrupt payload on this org's cache partition, then query.
     org_cache_key = f"{SOCIAL_LINKS_CACHE_KEY}:org:{org.id}"
@@ -280,13 +284,18 @@ def test_list_published_social_embeds_recovers_from_non_list_cache_payload(
     org,
 ) -> None:
     """Non-list embed cache payloads should be ignored and refreshed from the DB."""
-    SocialEmbed.objects.create(
-        title="QuickScale on YouTube",
-        provider_name="",
-        url="https://www.youtube.com/shorts/alpha123",
-        display_order=10,
-        organization=org,
-    )
+    _activate_org_context(org.id)
+    try:
+        SocialEmbed.objects.create(
+            title="QuickScale on YouTube",
+            provider_name="",
+            url="https://www.youtube.com/shorts/alpha123",
+            display_order=10,
+            organization=org,
+        )
+    finally:
+        _reset_org_context()
+
     org_cache_key = f"{SOCIAL_EMBEDS_CACHE_KEY}:org:{org.id}"
     cache.set(org_cache_key, {"broken": True}, timeout=300)
 
@@ -479,21 +488,25 @@ def test_get_social_runtime_settings_rejects_additional_invalid_values(
 @django_db
 def test_social_models_enforce_guardrails_and_invalidate_cache(org) -> None:
     """Social models should validate runtime guardrails and clear their cache keys."""
-    cache.set(SOCIAL_LINKS_CACHE_KEY, ["stale"], timeout=300)
-    link = SocialLink.objects.create(
-        title="QuickScale on YouTube",
-        provider_name="youtube",
-        url="https://youtu.be/abc123?si=share",
-        display_order=10,
-        organization=org,
-    )
+    _activate_org_context(org.id)
+    try:
+        cache.set(SOCIAL_LINKS_CACHE_KEY, ["stale"], timeout=300)
+        link = SocialLink.objects.create(
+            title="QuickScale on YouTube",
+            provider_name="youtube",
+            url="https://youtu.be/abc123?si=share",
+            display_order=10,
+            organization=org,
+        )
 
-    assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
+        assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
 
-    cache.set(SOCIAL_LINKS_CACHE_KEY, ["stale"], timeout=300)
-    link.delete()
+        cache.set(SOCIAL_LINKS_CACHE_KEY, ["stale"], timeout=300)
+        link.delete()
 
-    assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
+        assert cache.get(SOCIAL_LINKS_CACHE_KEY) is None
+    finally:
+        _reset_org_context()
 
     with override_settings(QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST=["youtube"]):
         invalid_link = SocialLink(
@@ -725,24 +738,27 @@ def test_list_published_social_links_scoped_to_org() -> None:
     org_a = Organization.objects.create(name="Org A", slug="org-a")
     org_b = Organization.objects.create(name="Org B", slug="org-b")
 
-    SocialLink.objects.create(
-        title="Org A Link",
-        provider_name="",
-        url="https://www.linkedin.com/company/org-a/",
-        display_order=10,
-        is_published=True,
-        organization=org_a,
-    )
-    SocialLink.objects.create(
-        title="Org B Link",
-        provider_name="",
-        url="https://www.linkedin.com/company/org-b/",
-        display_order=20,
-        is_published=True,
-        organization=org_b,
-    )
-
     try:
+        set_current_org_id(org_a.id)
+        SocialLink.objects.create(
+            title="Org A Link",
+            provider_name="",
+            url="https://www.linkedin.com/company/org-a/",
+            display_order=10,
+            is_published=True,
+            organization=org_a,
+        )
+
+        set_current_org_id(org_b.id)
+        SocialLink.objects.create(
+            title="Org B Link",
+            provider_name="",
+            url="https://www.linkedin.com/company/org-b/",
+            display_order=20,
+            is_published=True,
+            organization=org_b,
+        )
+
         set_current_org_id(org_a.id)
         org_a_links = list_published_social_links()
         assert [r.title for r in org_a_links] == ["Org A Link"]
@@ -772,24 +788,27 @@ def test_social_link_cache_is_partitioned_by_org() -> None:
     org_a = Organization.objects.create(name="Org A", slug="org-a")
     org_b = Organization.objects.create(name="Org B", slug="org-b")
 
-    SocialLink.objects.create(
-        title="Org A Link",
-        provider_name="",
-        url="https://www.linkedin.com/company/org-a/",
-        display_order=10,
-        is_published=True,
-        organization=org_a,
-    )
-    SocialLink.objects.create(
-        title="Org B Link",
-        provider_name="",
-        url="https://www.linkedin.com/company/org-b/",
-        display_order=20,
-        is_published=True,
-        organization=org_b,
-    )
-
     try:
+        set_current_org_id(org_a.id)
+        SocialLink.objects.create(
+            title="Org A Link",
+            provider_name="",
+            url="https://www.linkedin.com/company/org-a/",
+            display_order=10,
+            is_published=True,
+            organization=org_a,
+        )
+
+        set_current_org_id(org_b.id)
+        SocialLink.objects.create(
+            title="Org B Link",
+            provider_name="",
+            url="https://www.linkedin.com/company/org-b/",
+            display_order=20,
+            is_published=True,
+            organization=org_b,
+        )
+
         # Query from Org A — populates org A's cache partition.
         set_current_org_id(org_a.id)
         org_a_links = list_published_social_links()
@@ -812,45 +831,115 @@ def test_social_cache_invalidates_old_org_partition_on_reassignment() -> None:
     Regression for CR-T1-9-001: _keys_to_clear() only cleared the current
     (new) org's partition.  The old org's cached entry for the moved item
     would continue to be served until TTL expiry.
+
+    RLS semantics and ``operator_access``
+    -------------------------------------
+    Under ``NOBYPASSRLS`` the FOR ALL policy requires BOTH
+    ``current_org_id = old organization_id`` (USING) AND
+    ``current_org_id = new organization_id`` (WITH CHECK).  A single
+    UPDATE that changes ``organization_id`` is therefore blocked —
+    no single ``current_org_id`` value can equal both the old and new
+    organisation simultaneously.
+
+    ``operator_access(reason=...)`` (SA14.5) extends only the
+    ``FOR SELECT`` sub-policy — it grants cross-tenant **read**
+    visibility, not write visibility.  It does NOT bypass the FOR ALL
+    policy's USING or WITH CHECK clauses and cannot unblock a
+    cross-org UPDATE.
+
+    The test therefore performs the reassignment as two RLS-compatible
+    operations:
+      1. **Delete** from Org A context — USING matches, triggers
+         ``BaseSocialItem.delete()`` cache invalidation for the old
+         partition.
+      2. **Create** in Org B context — WITH CHECK passes, ``save()``
+         populates the new partition.
+
+    It then uses ``operator_access()`` to demonstrate cross-org **read**
+    capability via ``all_objects``: from Org A's context, where the
+    default ``TenantManager`` would normally restrict the query,
+    ``operator_access`` combined with the super-scope manager allows a
+    cross-tenant read that confirms the link resides in Org B.
     """
-    from quickscale_modules_orgs.current_org import set_current_org_id
+    from quickscale_modules_orgs.current_org import (
+        operator_access,
+        set_current_org_id,
+    )
     from quickscale_modules_orgs.models import Organization
 
     org_a = Organization.objects.create(name="Org A", slug="org-a")
     org_b = Organization.objects.create(name="Org B", slug="org-b")
 
-    # Create a link owned by Org A.
-    link = SocialLink.objects.create(
-        title="Shared Link",
-        provider_name="",
-        url="https://www.linkedin.com/company/quickscale/",
-        display_order=10,
-        is_published=True,
-        organization=org_a,
-    )
-
     try:
-        # Query from Org A — populates org A's cache partition.
         set_current_org_id(org_a.id)
+
+        # Create a link owned by Org A.
+        link = SocialLink.objects.create(
+            title="Shared Link",
+            provider_name="",
+            url="https://www.linkedin.com/company/quickscale/",
+            display_order=10,
+            is_published=True,
+            organization=org_a,
+        )
+
+        # Query from Org A — populates org A's cache partition.
         org_a_links_before = list_published_social_links()
         assert [r.title for r in org_a_links_before] == ["Shared Link"]
 
-        # Move the link to Org B.
-        link.organization = org_b
-        link.save()
+        # ---- Move the link to Org B (RLS-compatible pattern) --------------
+        #
+        # RLS blocks cross-org UPDATE.  Instead, delete from old and create
+        # in new — both operations pass their respective RLS checks, and
+        # each triggers cache invalidation for its org partition.
 
-        # Query from Org A — must no longer see the moved link.
-        # No cache.clear() between steps — this is the regression check.
+        # Step 1: Delete from Org A's context.  FOR ALL USING matches
+        # (current_org_id = org_a), cache is cleared for the old partition.
         set_current_org_id(org_a.id)
+        link.delete()
+
+        # Step 2: Create the link under Org B's context.  INSERT passes
+        # WITH CHECK (current_org_id = org_b), and save() populates the
+        # new org's cache partition.
+        set_current_org_id(org_b.id)
+        SocialLink.objects.create(
+            title="Shared Link",
+            provider_name="",
+            url="https://www.linkedin.com/company/quickscale/",
+            display_order=10,
+            is_published=True,
+            organization=org_b,
+        )
+
+        # ---- Cross-org read verification via operator_access ---------------
+        # operator_access enables cross-tenant SELECT by extending the
+        # FOR SELECT sub-policy.  From Org B's context, the default manager
+        # already finds the link (current_org_id = org_b matches).
+        org_b_links = list_published_social_links()
+        assert [r.title for r in org_b_links] == ["Shared Link"]
+
+        # From Org A's context the default TenantManager filters to org_a.
+        # Without operator_access, all_objects would be blocked by RLS
+        # FOR ALL USING (current_org_id = org_a ≠ org_b).
+        # With operator_access, the _select sub-policy allows the read.
+        set_current_org_id(org_a.id)
+        with operator_access(reason="cross-org read — verify link in Org B"):
+            confirmed = list(
+                SocialLink.all_objects.filter(
+                    title="Shared Link", organization=org_b
+                ).values_list("pk", flat=True)
+            )
+        assert len(confirmed) == 1, (
+            "operator_access must enable cross-org read: Org A context "
+            "should see the link in Org B via all_objects."
+        )
+
+        # Finally, the default-scoped query from Org A returns nothing
+        # (cache was invalidated by delete(); no row in org_a).
         org_a_links_after = list_published_social_links()
         assert org_a_links_after == (), (
             "Org A must not see the link after it was reassigned to Org B."
         )
-
-        # Query from Org B — must see the moved link.
-        set_current_org_id(org_b.id)
-        org_b_links = list_published_social_links()
-        assert [r.title for r in org_b_links] == ["Shared Link"]
     finally:
         set_current_org_id(None)
 
@@ -864,24 +953,27 @@ def test_list_published_social_embeds_scoped_to_org() -> None:
     org_a = Organization.objects.create(name="Org A", slug="org-a")
     org_b = Organization.objects.create(name="Org B", slug="org-b")
 
-    SocialEmbed.objects.create(
-        title="Org A Embed",
-        provider_name="",
-        url="https://www.youtube.com/shorts/aaa111",
-        display_order=10,
-        is_published=True,
-        organization=org_a,
-    )
-    SocialEmbed.objects.create(
-        title="Org B Embed",
-        provider_name="",
-        url="https://www.youtube.com/shorts/bbb222",
-        display_order=20,
-        is_published=True,
-        organization=org_b,
-    )
-
     try:
+        set_current_org_id(org_a.id)
+        SocialEmbed.objects.create(
+            title="Org A Embed",
+            provider_name="",
+            url="https://www.youtube.com/shorts/aaa111",
+            display_order=10,
+            is_published=True,
+            organization=org_a,
+        )
+
+        set_current_org_id(org_b.id)
+        SocialEmbed.objects.create(
+            title="Org B Embed",
+            provider_name="",
+            url="https://www.youtube.com/shorts/bbb222",
+            display_order=20,
+            is_published=True,
+            organization=org_b,
+        )
+
         set_current_org_id(org_a.id)
         org_a_embeds = list_published_social_embeds()
         assert [r.title for r in org_a_embeds] == ["Org A Embed"]
@@ -906,24 +998,27 @@ def test_build_social_link_tree_payload_scoped_to_org() -> None:
     org_a = Organization.objects.create(name="Org A", slug="org-a")
     org_b = Organization.objects.create(name="Org B", slug="org-b")
 
-    SocialLink.objects.create(
-        title="Org A Link",
-        provider_name="",
-        url="https://www.linkedin.com/company/org-a/",
-        display_order=10,
-        is_published=True,
-        organization=org_a,
-    )
-    SocialLink.objects.create(
-        title="Org B Link",
-        provider_name="",
-        url="https://www.linkedin.com/company/org-b/",
-        display_order=20,
-        is_published=True,
-        organization=org_b,
-    )
-
     try:
+        set_current_org_id(org_a.id)
+        SocialLink.objects.create(
+            title="Org A Link",
+            provider_name="",
+            url="https://www.linkedin.com/company/org-a/",
+            display_order=10,
+            is_published=True,
+            organization=org_a,
+        )
+
+        set_current_org_id(org_b.id)
+        SocialLink.objects.create(
+            title="Org B Link",
+            provider_name="",
+            url="https://www.linkedin.com/company/org-b/",
+            display_order=20,
+            is_published=True,
+            organization=org_b,
+        )
+
         # Scope to Org A — only Org A's links should appear in the payload.
         set_current_org_id(org_a.id)
         payload_a = build_social_link_tree_payload()
@@ -950,24 +1045,27 @@ def test_build_social_embeds_payload_scoped_to_org() -> None:
     org_a = Organization.objects.create(name="Org A", slug="org-a")
     org_b = Organization.objects.create(name="Org B", slug="org-b")
 
-    SocialEmbed.objects.create(
-        title="Org A Embed",
-        provider_name="",
-        url="https://www.youtube.com/shorts/aaa111",
-        display_order=10,
-        is_published=True,
-        organization=org_a,
-    )
-    SocialEmbed.objects.create(
-        title="Org B Embed",
-        provider_name="",
-        url="https://www.youtube.com/shorts/bbb222",
-        display_order=20,
-        is_published=True,
-        organization=org_b,
-    )
-
     try:
+        set_current_org_id(org_a.id)
+        SocialEmbed.objects.create(
+            title="Org A Embed",
+            provider_name="",
+            url="https://www.youtube.com/shorts/aaa111",
+            display_order=10,
+            is_published=True,
+            organization=org_a,
+        )
+
+        set_current_org_id(org_b.id)
+        SocialEmbed.objects.create(
+            title="Org B Embed",
+            provider_name="",
+            url="https://www.youtube.com/shorts/bbb222",
+            display_order=20,
+            is_published=True,
+            organization=org_b,
+        )
+
         # Scope to Org A — only Org A's embeds should appear in the payload.
         set_current_org_id(org_a.id)
         payload_a = build_social_embeds_payload()

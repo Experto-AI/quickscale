@@ -45,7 +45,7 @@
 #   make clean                - Remove build artifacts
 
 .PHONY: setup bootstrap install \
-        test test-unit test-cov test-e2e test-agent \
+        test test-unit test-integration test-cov test-e2e test-agent \
 	lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
         quality check ci ci-e2e \
         docs \
@@ -101,8 +101,10 @@ help:
 	@echo "                             Optional: REPORT=/abs/path/report.json"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make test                 - Run all unit + integration tests"
-	@echo "  make test-unit            - Run unit tests only (no integration)"
+	@echo "  make test                 - Run all tests (unit + integration)"
+	@echo "  make test-unit            - Run DB-free unit tests only (core + CLI)"
+	@echo "  make test-integration     - Run integration tests (modules, requires PostgreSQL"
+	@echo "                               with a NOBYPASSRLS NOINHERIT NOLOGIN role)"
 	@echo "  make test -- --modules    - Run tests only for quickscale_modules/*"
 	@echo "  make test-unit -- --core  - Run unit tests only for quickscale_core"
 	@echo "  make test-unit SECTION=modules - Run unit tests only for quickscale_modules/*"
@@ -253,7 +255,7 @@ beta-migrate-in-place:
 test:
 	@set -e; \
 	if [ "$(strip $(ACTIVE_SECTIONS))" = "quickscale core cli modules" ] && [ -z "$(MODULE)" ]; then \
-		./scripts/test_unit.sh; \
+		$(MAKE) test-unit && $(MAKE) test-integration; \
 		exit 0; \
 	fi; \
 	if [ -n "$(filter quickscale,$(ACTIVE_SECTIONS))" ]; then \
@@ -298,7 +300,7 @@ test:
 		fi; \
 	fi
 
-# Run unit tests only (selected sections, no integration)
+# Run DB-free unit tests only (core + CLI, no modules — use test-integration for modules)
 test-unit:
 	@set -e; \
 	if [ -n "$(filter quickscale,$(ACTIVE_SECTIONS))" ]; then \
@@ -313,42 +315,15 @@ test-unit:
 		$(PYTHON) -m pytest quickscale_cli/tests -q --tb=short -m "not integration and not e2e" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90; \
 	fi; \
 	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
-		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
-			echo "Error: MODULE=$(MODULE) does not exist."; \
-			exit 1; \
-		fi; \
-		mod_found=0; \
-		# SA2.1/T1.18: The orgs boot guard raises ImproperlyConfigured when the \
-		# PostgreSQL role has BYPASSRLS privilege.  Set the documented test/dev \
-		# escape hatch so module suites that depend on orgs can run.  Preserve any \
-		# explicit user setting (e.g. to skip BYPASSRLS-dependent tests). \
-		if [ -z "$${QUICKSCALE_ALLOW_BYPASSRLS:-}" ]; then \
-			export QUICKSCALE_ALLOW_BYPASSRLS=1; \
-		fi; \
-		for mod in $(MODULE_DIRS); do \
-			if [ -d "$$mod/tests" ]; then \
-				mod_found=1; \
-				mod_name=$$(basename "$$mod"); \
-				echo "📦 Unit testing module: $$mod_name..."; \
-				module_pythonpath="$$mod:."; \
-				if [ -d "$$mod/src" ]; then \
-					module_pythonpath="$$module_pythonpath:$$mod/src"; \
-				fi; \
-				for sibling in quickscale_modules/*; do \
-					if [ "$$sibling" != "$$mod" ] && [ -d "$$sibling/src" ]; then \
-						module_pythonpath="$$module_pythonpath:$$sibling/src"; \
-					fi; \
-				done; \
-				if [ -n "$$PYTHONPATH" ]; then \
-					module_pythonpath="$$module_pythonpath:$$PYTHONPATH"; \
-				fi; \
-				PYTHONPATH="$$module_pythonpath" $(PYTHON) -m pytest "$$mod/tests/" -q --tb=short -o "addopts=" -m "not integration and not e2e" -p pytest_django --ds=tests.settings; \
-			fi; \
-		done; \
-		if [ "$$mod_found" -eq 0 ]; then \
-			echo "ℹ️ No module test suites matched the current filters."; \
-		fi; \
+		echo "ℹ️ Module integration tests are available via 'make test-integration' (requires PostgreSQL with a NOBYPASSRLS NOINHERIT NOLOGIN role)."; \
 	fi
+
+# Run integration tests (module suites — requires PostgreSQL 18 with a
+# NOBYPASSRLS NOINHERIT NOLOGIN role).  Sets QUICKSCALE_ALLOW_BYPASSRLS=0
+# by default so the SA58 boot guard stays active against the restricted role.
+# Override explicitly per-suite (SA14.4 hatch) for tests that need BYPASSRLS.
+test-integration:
+	@scripts/test_integration.sh
 
 # Run E2E tests (starts PostgreSQL container, installs Playwright browsers)
 test-e2e:
