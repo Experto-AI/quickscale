@@ -483,7 +483,19 @@ typecheck:
 				mod_found=1; \
 				mod_name=$$(basename "$$mod"); \
 				echo "📦 Type checking module: $$mod_name..."; \
-				$(PYTHON) -m mypy "$$mod/src" --show-error-codes; \
+				module_mypypath="$$mod:."; \
+				if [ -d "$$mod/src" ]; then \
+					module_mypypath="$$module_mypypath:$$mod/src"; \
+				fi; \
+				for sibling in quickscale_modules/*; do \
+					if [ "$$sibling" != "$$mod" ] && [ -d "$$sibling/src" ]; then \
+						module_mypypath="$$module_mypypath:$$sibling/src"; \
+					fi; \
+				done; \
+				if [ -n "$$MYPYPATH" ]; then \
+					module_mypypath="$$module_mypypath:$$MYPYPATH"; \
+				fi; \
+				MYPYPATH="$$module_mypypath" $(PYTHON) -m mypy "$$mod/src" --show-error-codes; \
 			fi; \
 		done; \
 		if [ "$$mod_found" -eq 0 ]; then \

@@ -643,7 +643,7 @@ def _get_authoritative_snapshot_for_artifact(
 ) -> BackupSnapshot | None:
     """Return the linked snapshot for a dump artifact if one exists."""
     try:
-        return cast("BackupSnapshot", artifact.authoritative_snapshot)  # type: ignore[attr-defined]
+        return cast("BackupSnapshot", artifact.authoritative_snapshot)  # type: ignore[attr-defined]  # django-stubs not enabled — reverse relation
     except BackupSnapshot.DoesNotExist:
         return None
 
