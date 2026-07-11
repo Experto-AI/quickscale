@@ -16,7 +16,7 @@ Key rules:
 - `showcase_html` remains the secondary starter option.
 - Fresh generations include a root `Makefile` with generic `setup`, `lint`, `format`, `test`, `check`, and `ci` entrypoints; frontend-only targets guard on `frontend/package.json` and skip cleanly for `showcase_html`.
 - Fresh generations also ship `scripts/lint.sh` as the shared helper surface behind `make lint` and `make check`.
-- Fresh `showcase_react` generations auto-scaffold Django-owned public `/social` and `/social/embeds` pages; `showcase_html` does not scaffold those public pages in v0.83.0.
+- Fresh `showcase_react` generations auto-scaffold Django-owned public `/social` and `/social/embeds` pages; `showcase_html` does not scaffold those public pages.
 - Generated starter output surfaces billing as a module flag only (`modules.billing`); the generated SPA does not currently include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards/links, module paths for billing, or full-document links into billing Django pages — the D1 org-switch blocker is now resolved; see `docs/technical/decisions.md` §D1. Teams placeholder routes, navigation, cards, and flags remain excluded.
 - Modules embed into the generated project and can later be updated through the documented git-subtree workflow.
 - QuickScale does not generate a maintainer-style `quickscale_modules/` workspace inside client projects.
@@ -194,7 +194,7 @@ myapp/
 ```
 
 Notes:
-- Fresh `showcase_html` generations do not scaffold Django-owned public `/social` or `/social/embeds` pages in v0.83.0.
+- Fresh `showcase_html` generations do not scaffold Django-owned public `/social` or `/social/embeds` pages.
 - Fresh `showcase_html` generations surface billing as server-rendered cards and navigation links into the billing module's Django-owned `/billing/pricing/` and `/billing/dashboard/` pages.
 - Enabling the `social` module still wires the backend-managed transport surface, but non-React themes must manually adopt any public page surface they want.
 

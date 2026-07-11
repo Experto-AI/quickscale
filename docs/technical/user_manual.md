@@ -220,7 +220,7 @@ quickscale plan myapp
 ```
 
 **Available themes**:
-- `showcase_html` - Pure HTML + CSS; fresh v0.83.0 starter output does not scaffold public `/social` or `/social/embeds` pages
+- `showcase_html` - Pure HTML + CSS; fresh starter output does not scaffold public `/social` or `/social/embeds` pages
 - `showcase_react` - React + TypeScript SPA (default); fresh generations auto-generate Django-owned public `/social` and `/social/embeds` pages
 
 **Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization. The backend-managed social transport remains theme-agnostic, but only fresh `showcase_react` auto-generates the public page files; existing projects and non-React themes must adopt those public pages manually if they want them.
@@ -238,9 +238,9 @@ poetry run python manage.py runserver
 
 The generated project is meant to be fully owned by the user — templates and guidance are in `scaffolding.md` and generated README files.
 
-### 4.1) Development Commands (Shipped in v0.59.0)
+### 4.1) Development Commands
 
-> **Status**: ✅ Available (shipped in v0.59.0)
+> **Status**: ✅ Available
 >
 > The following commands simplify Docker and Django operations, eliminating the need to remember complex `docker compose` and `docker exec` syntax.
 
@@ -321,7 +321,7 @@ See [roadmap.md](./roadmap.md) for historical implementation context and follow-
 
 ### 4.2) Module Management Commands
 
-> **Status**: ✅ Available — `quickscale update` / `quickscale push --module <name>` shipped in v0.62.0, `quickscale status` in v0.70.0, and `quickscale remove <module>` in v0.71.0+
+> **Status**: ✅ Available — `quickscale update`, `quickscale push --module <name>`, `quickscale status`, and `quickscale remove <module>`
 >
 > These commands manage installed modules while keeping manual `git subtree` flows available for advanced recovery scenarios.
 
@@ -343,9 +343,9 @@ quickscale push --module blog
 
 See [decisions.md: CLI Command Matrix](./decisions.md#cli-command-matrix) for the authoritative command list.
 
-### 4.3) Plan/Apply Commands (Shipped in v0.68.0)
+### 4.3) Plan/Apply Commands
 
-> **Status**: ✅ Available (shipped in v0.68.0)
+> **Status**: ✅ Available
 >
 > These commands provide a Terraform-style declarative workflow for project generation, replacing the imperative `init` command.
 
@@ -363,7 +363,7 @@ quickscale plan myapp --overwrite
 ```
 
 The wizard guides you through:
-1. **Theme selection**: Choose from available themes (showcase_html, showcase_react). Fresh `showcase_react` generations scaffold Django-owned public `/social` and `/social/embeds` pages; `showcase_html` does not scaffold those public pages in v0.83.0.
+1. **Theme selection**: Choose from available themes (showcase_html, showcase_react). Fresh `showcase_react` generations scaffold Django-owned public `/social` and `/social/embeds` pages; `showcase_html` does not scaffold those public pages.
 2. **Module selection**: Select optional modules to include. In the current implementation line, implemented first-party modules include analytics, auth, backups, billing, blog, crm, forms, listings, notifications, social, and storage. Billing now participates in public `quickscale plan`, `quickscale.yml`, and `quickscale apply` flows, and fresh starter output links into the billing module's Django-owned `/billing/pricing/` (public) and `/billing/dashboard/` (authenticated) pages without generating a starter-owned billing React page. `quickscale apply` requires `auth` whenever billing is selected. The `teams` directory remains placeholder inventory only.
 3. **Docker configuration**: Configure Docker build/start options and optional first-start superuser creation
 
@@ -415,7 +415,7 @@ JSON artifacts remain export-only, not restore inputs. Existing generated projec
 
 ### 4.4) Disaster Recovery and Environment Promotion Commands
 
-> **Status**: ✅ Released in v0.82.0
+> **Status**: ✅ Available
 >
 > QuickScale uses one `quickscale dr` command group for two related but separate operator jobs:
 > - **Environment promotion** moves a validated source environment forward, such as local → Railway develop or Railway develop → Railway production.

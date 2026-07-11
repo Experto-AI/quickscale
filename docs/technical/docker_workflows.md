@@ -480,6 +480,3 @@ docker run -d \
 - [Railway Deployment](../deployment/railway.md) - Production deployment
 
 ---
-
-**Last Updated**: 2026-05-03
-**QuickScale Version**: current published v0.83.0 release line

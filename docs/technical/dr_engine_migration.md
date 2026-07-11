@@ -49,7 +49,7 @@ The CLI no longer uses:
 - `_is_manual_only_restore_gate`
 - The `_TARGET_ENV_PREFIX` env-var protocol
 
-## Architecture Overview (Post-F5.4)
+## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -171,7 +171,3 @@ After migration:
 - [CHANGELOG.md](../../CHANGELOG.md) — per-phase implementation summaries
 - `quickscale_core/src/quickscale_core/dr_engine/` — current DR engine source
 - `quickscale_modules/backups/src/quickscale_modules_backups/services.py` — retained module orchestration
-
----
-
-*Document updated: 2026-06-22 — Final phase F5.4 of M10 (Track 2).*

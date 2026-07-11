@@ -37,7 +37,7 @@ When a project adopts a project-owned extension app, it is the canonical place f
 
 This pattern is the preferred home for project-specific backend customization when a module needs project-owned glue, but QuickScale does not require every module or milestone to generate or depend on it.
 
-Analytics v0.80.0 is the current example of the narrower service-style contract:
+Analytics is the current example of the narrower service-style contract:
 - QuickScale owns flat `QUICKSCALE_ANALYTICS_*` settings and analytics service APIs
 - forms integration uses a guarded direct optional import rather than generated extension-app glue
 - social click tracking is limited to QuickScale-owned generated public pages/templates
@@ -142,7 +142,7 @@ Every module README should include a required section using this taxonomy:
 | `forms` | Keep admin/data-driven configuration and documented public/admin endpoints as the primary model; document signals/service hooks for custom submission workflows |
 | `storage` | Keep helper/service API and settings contract; do not force inheritance |
 | `backups` | Keep operational settings and commands; document service layer and explicit non-goals for subclassing |
-| `analytics` | Service-style integration module: flat settings plus helper/service APIs; no generated extension-app requirement for v0.80.0; forms use a guarded optional import and social click tracking stays limited to QuickScale-owned generated public pages/templates |
+| `analytics` | Service-style integration module: flat settings plus helper/service APIs; no generated extension-app requirement; forms use a guarded optional import and social click tracking stays limited to QuickScale-owned generated public pages/templates |
 | `notifications` | Promote `send_notification`-style service contract, template override paths, and the documented webhook endpoint; document stable versus internal APIs |
 | `social` | Define the extension contract before the full runtime implementation ships |
 

@@ -5,7 +5,6 @@
 
 **Target**: New contributor can clone repository and run tests successfully in <15 minutes.
 
-**Last Updated**: March 21, 2026
 **Tested On**: Ubuntu 22.04, Python 3.13
 
 ---

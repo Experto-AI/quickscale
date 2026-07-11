@@ -69,7 +69,7 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 <a id="billing-module-contract"></a>
 ## Billing Module Contract
 
-`quickscale_modules.billing` is part of the current shipped module line in v0.85.0.
+`quickscale_modules.billing` is part of the current shipped module line.
 
 Billing contract rules:
 - `quickscale.yml` is the authoritative desired-state source for billing configuration, including the env-var names that planner/apply write into generated settings.
@@ -94,16 +94,16 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 | Feature / Area | Current Status | Notes / Decision Reference |
 |---|---:|---|
 | **CORE CLI & SCAFFOLDING** |
-| `quickscale plan <project>` and `quickscale apply` | IN (v0.68.0+) | Primary workflow. Terraform-style declarative configuration. Creates `quickscale.yml`, then executes it. |
+| `quickscale plan <project>` and `quickscale apply` | IN | Primary workflow. Terraform-style declarative configuration. Creates `quickscale.yml`, then executes it. |
 | Generate Django starter (manage.py, settings.py, urls.py, wsgi/asgi, templates, pyproject.toml) | IN | Starter uses `pyproject.toml` (Poetry). Generated projects include a `pyproject.toml` and `poetry.lock` by default; `requirements.txt` is not generated. |
 | `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in the current implementation (explicit `__init__.py`). |
-| `quickscale_core.runtime` public facade | IN (SA9.3+SA9.4, v0.87.0+) | Additive pure re-export seam for module-facing core symbols (DR adapter surface, manifest/resolver types, social-manifest surface). Backups' deep `dr_engine` imports now route through the facade (SA9.4); the facade carries the DR orchestration, primitives, recovery, and verification compatibility surface (backups-module-internal) via lazy `__getattr__` loading, while the public DR adapter and social-manifest symbols are eagerly available. SA9.5 (social deep-import migration) completed; SA9.6 (CI import-linter gate) completed with per-module legacy exceptions for billing/crm adapter seams only. |
+| `quickscale_core.runtime` public facade | IN (SA9.3+SA9.4) | Additive pure re-export seam for module-facing core symbols (DR adapter surface, manifest/resolver types, social-manifest surface). Backups' deep `dr_engine` imports now route through the facade (SA9.4); the facade carries the DR orchestration, primitives, recovery, and verification compatibility surface (backups-module-internal) via lazy `__getattr__` loading, while the public DR adapter and social-manifest symbols are eagerly available. SA9.5 (social deep-import migration) is complete; SA9.6 (CI import-linter gate) is complete with per-module legacy exceptions for billing/crm adapter seams only. |
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
-| CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN (v0.59.0) | User-friendly wrappers for Docker and Django operations. |
-| CLI module management commands (`update`, `push`) | IN (v0.62.0) | Module update and push via split branches. Module embedding now happens through `quickscale apply`. |
-| Module configuration (plan/apply + declarative options) | IN (v0.63.0+) | Modules are configured through `quickscale plan` and `quickscale.yml`, then materialized by `quickscale apply`. See [Module Configuration Strategy](#module-configuration-strategy). |
-| Module manifests (`module.yml`) with mutable/immutable config | IN (v0.71.0+) | Each module includes `module.yml` declaring mutable and immutable config. See [Module Manifest Contract](#module-manifest-architecture). |
-| `quickscale remove <module>` command | IN (v0.71.0+) | Removes embedded modules with cleanup and explicit data-loss guidance. |
+| CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN | User-friendly wrappers for Docker and Django operations. |
+| CLI module management commands (`update`, `push`) | IN | Module update and push via split branches. Module embedding now happens through `quickscale apply`. |
+| Module configuration (plan/apply + declarative options) | IN | Modules are configured through `quickscale plan` and `quickscale.yml`, then materialized by `quickscale apply`. See [Module Configuration Strategy](#module-configuration-strategy). |
+| Module manifests (`module.yml`) with mutable/immutable config | IN | Each module includes `module.yml` declaring mutable and immutable config. See [Module Manifest Contract](#module-manifest-architecture). |
+| `quickscale remove <module>` command | IN | Removes embedded modules with cleanup and explicit data-loss guidance. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If the user explicitly embeds `quickscale_core`, manual settings inheritance may be documented separately. |
 | **PRODUCTION-READY FOUNDATIONS** |
 | Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile plus local dev docker-compose with PostgreSQL and Redis services. |
@@ -117,12 +117,12 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 | Pre-commit hooks (ruff) | IN | `.pre-commit-config.yaml` remains part of the shipped quality baseline. |
 | Comprehensive README with setup instructions | IN | Generated README content remains part of the starter output. |
 | **MODULES & DISTRIBUTION** |
-| `quickscale_modules/` (split branch distribution) | IN (v0.62.0+) | Modules distribute via git subtree split branches. Embed via `quickscale plan --add <name>` plus `quickscale apply`. |
-| Billing module (`quickscale_modules.billing`) | IN (v0.85.0) | Desired-state config lives in `quickscale.yml`; Stripe secrets remain env-only; billing ships module-owned pricing/dashboard routes and uses `debit_user` plus `WebhookEvent` as the stable credit-consumption and webhook gates. |
-| Themes (React default + HTML secondary option) | IN (v0.61.0+) | `showcase_react` and `showcase_html` ship as generator templates with one-time copy during apply. |
+| `quickscale_modules/` (split branch distribution) | IN | Modules distribute via git subtree split branches. Embed via `quickscale plan --add <name>` plus `quickscale apply`. |
+| Billing module (`quickscale_modules.billing`) | IN | Desired-state config lives in `quickscale.yml`; Stripe secrets remain env-only; billing ships module-owned pricing/dashboard routes and uses `debit_user` plus `WebhookEvent` as the stable credit-consumption and webhook gates. |
+| Themes (React default + HTML secondary option) | IN | `showcase_react` and `showcase_html` ship as generator templates with one-time copy during apply. |
 | `quickscale_themes/` packaged themes | NOT CURRENT | Theme package distribution is out of contract unless a later release documents it explicitly. |
-| YAML declarative configuration (`quickscale.yml`) | IN (v0.68.0+) | Shipped as part of the plan/apply system. |
-| State tracking (`.quickscale/state.yml`) | IN (v0.69.0+; consolidated Phase 2 / M2) | Sole authoritative applied-state store with consolidated sub-sections for module-tracking metadata and managed-file drift records. Advisory lock serializes concurrent `apply`. `quickscale status` reports drift and compatibility diagnostics. |
+| YAML declarative configuration (`quickscale.yml`) | IN | Shipped as part of the plan/apply system. |
+| State tracking (`.quickscale/state.yml`) | IN (consolidated Phase 2 / M2) | Sole authoritative applied-state store with consolidated sub-sections for module-tracking metadata and managed-file drift records. Advisory lock serializes concurrent `apply`. `quickscale status` reports drift and compatibility diagnostics. |
 | PyPI / private-registry distribution for commercial modules | NOT CURRENT | Commercial distribution is not part of the current shipped contract. |
 
 **Notes:**
@@ -132,7 +132,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 <a id="cli-command-matrix"></a>
 ## CLI Commands
 
-**Primary Workflow (v0.72.0+):**
+**Primary Workflow:**
 - `quickscale plan <project>` - Create configuration interactively.
 - `quickscale apply [config.yml]` - Execute configuration to generate or update the project.
 
@@ -211,7 +211,7 @@ class OrderProcessor:
 
 ### Manifest Adapter Architecture (AF7)
 
-Starting v0.87.0, manifest adapters follow a **hybrid discovery contract**:
+Manifest adapters follow a **hybrid discovery contract**:
 
 1. **Module-owned adapters** are the primary path for monorepo and embedded
    ``modules/<name>`` contexts. Each module package (``quickscale_modules/{name}/``)
@@ -239,7 +239,7 @@ Currently managed adapters: social, billing, CRM. Remaining modules
 storage) are still registered at import time in ``entry_point.py`` and may be
 migrated in future phases.
 
-> **AF7 status — partial (blocked by AF7-CR-003).** The module-owned primary
+> **AF7 status — partial.** The module-owned primary
 > adapters and infrastructure seam have landed (managed-origin tracking,
 > provenance tests, refresh coordination). However, the bundled/installed core
 > fallback adapters for social, billing, and CRM are currently too thin and no

@@ -2,9 +2,7 @@
 
 **Technical Specification for Terraform-style Project Configuration**
 
-**Version**: 1.0
 **Status**: Current shipped contract
-**Last Updated**: 2026-04-08
 
 ---
 
@@ -33,7 +31,7 @@ QuickScale implements a Terraform-style plan/apply workflow for project configur
 
 ## Complete Command Structure
 
-After v0.71.0, QuickScale uses a clean command structure:
+QuickScale uses a clean command structure:
 
 ```
 quickscale
@@ -276,5 +274,5 @@ When `quickscale apply` runs on a new project:
 ## References
 
 - **Decisions**: [decisions.md](./decisions.md)
-- **Roadmap**: [roadmap.md](./roadmap.md) (v0.68.0-v0.71.0)
+- **Roadmap**: [roadmap.md](./roadmap.md)
 - **User Manual**: [user_manual.md](./user_manual.md)

@@ -80,7 +80,7 @@ Before trimming, swapping, or widening any role input in [adaptive.rules.md](../
 | `change-review` | `adaptive` baseline plus evidence expectations, authority order, scope protection, and regression-review discipline. |
 
 <a id="post-refactor-validation-snapshot"></a>
-## Post-Refactor Validation Snapshot (2026-05-01; refreshed 2026-06-16 for Phase 2 / M2)
+## Post-Refactor Validation Snapshot (Phase 2 / M2)
 
 Hydration status was `configured` and `ready` before the metrics capture below. Metrics were captured by re-running MCP hydration against the current graph for every major role. The table measures expanded hydrated content only; docs-local "Important context (always read)" pointers such as [docs/index.md](../index.md) are metadata surfaced alongside the payload, not expanded content counted in these totals.
 
@@ -97,7 +97,7 @@ Hydration status was `configured` and `ready` before the metrics capture below. 
 All role payloads are now below both their line and size targets.
 
 <a id="m2-hydration-edit-rationale"></a>
-### Phase 2 / M2 Hydration-Edit Rationale (2026-06-16)
+### Phase 2 / M2 Hydration-Edit Rationale
 
 [docs/technical/ai_context.md](./ai_context.md) was updated to reflect the M2 consolidated-state contract: `.quickscale/state.yml` is now described as the sole authoritative applied-state store with consolidated sub-sections for module-tracking metadata and managed-file drift records; legacy `config.yml` and `file_hashes.yml` are described as compatibility inputs only; advisory locking and `quickscale status` drift diagnostics are noted. [docs/technical/generated_project_structure.md](./generated_project_structure.md) was updated in the same change to align the State and Module Metadata section and the Crosswalk table with the M2 contract. No role include graph edges changed — only the content of two already-included files grew by a few lines each. The include topology, role-to-input inventory, must-have facts checklist, and rollback notes are unchanged.
 

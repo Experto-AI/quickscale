@@ -5,11 +5,11 @@
 
 ## Purpose and Scope
 
-The organizations module enables a QuickScale-generated app to be sold as a SaaS product to multiple paying clients. Each client is an **organization** — an isolated workspace with its own data, its own member roster, and its own role-based access control. The operator deploys a single Railway project, clients self-serve signup, subscribe, and invite their colleagues. This is the SaaS-parity milestone that completes the auth → billing → organizations foundation started in v0.84.0–v0.85.0.
+The organizations module enables a QuickScale-generated app to be sold as a SaaS product to multiple paying clients. Each client is an **organization** — an isolated workspace with its own data, its own member roster, and its own role-based access control. The operator deploys a single Railway project, clients self-serve signup, subscribe, and invite their colleagues. This is the SaaS-parity milestone that completes the auth → billing → organizations foundation.
 
 QuickScale supports two deployment modes — **Solo** and **SaaS** — resolved at runtime via a single settings flag. Both modes use the same schema and codebase. Solo mode is a constrained configuration of the organization system, not a separate architecture.
 
-**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes after T1.10, migration/promote commands, and ORM-backed plan feature gating), and fresh `showcase_react` org pages for generated projects. The shipped tenant-table surface is registry-backed: **21 ENROLLED models** across CRM (7), Forms (4), Billing (3), Blog (4), Listings (1), and Social (2) each carry a direct `organization_id`, use the shared `TenantManager` / `TenantManager(super_scope=True)` contract, and ship with live FORCE-RLS policies. `TenantMiddleware` plus the AF9 execute-wrapper derive `app.current_org_id` from the request/session ContextVar path so tenant-scoped ORM and PostgreSQL enforcement stay aligned. Reviewed exclusions (org control-plane models, `Plan`, `WebhookEvent`, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract by design. The authoritative human-readable overview of the shipped tenant-table surface is the marker-based derived registry view (:func:`get_derived_registry_overview` in ``quickscale_modules_orgs.tenancy``). The derived view is purely marker-driven — every excluded concrete model carries an explicit ``tenant_excluded`` class attribute (SA15.3 follow-up). The literal ``TENANT_TABLE_REGISTRY`` is retained as a cross-check target for CI parity assertions.
+**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes, migration/promote commands, and ORM-backed plan feature gating), and fresh `showcase_react` org pages for generated projects. The shipped tenant-table surface is registry-backed: **21 ENROLLED models** across CRM (7), Forms (4), Billing (3), Blog (4), Listings (1), and Social (2) each carry a direct `organization_id`, use the shared `TenantManager` / `TenantManager(super_scope=True)` contract, and ship with live FORCE-RLS policies. `TenantMiddleware` plus the AF9 execute-wrapper derive `app.current_org_id` from the request/session ContextVar path so tenant-scoped ORM and PostgreSQL enforcement stay aligned. Reviewed exclusions (org control-plane models, `Plan`, `WebhookEvent`, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract by design. The authoritative human-readable overview of the shipped tenant-table surface is the marker-based derived registry view (:func:`get_derived_registry_overview` in ``quickscale_modules_orgs.tenancy``). The derived view is purely marker-driven — every excluded concrete model carries an explicit ``tenant_excluded`` class attribute (SA15.3 follow-up). The literal ``TENANT_TABLE_REGISTRY`` is retained as a cross-check target for CI parity assertions.
 
 ---
 
@@ -326,7 +326,7 @@ The shipped repo-enrolled surface currently covers CRM, blog, forms, listings, b
 
 ### The Gap
 
-The v0.85.0 billing module binds subscriptions and credit balances to individual users:
+The billing module binds subscriptions and credit balances to individual users:
 
 ```
 Subscription.user  → FK → User
@@ -371,7 +371,7 @@ QuickScale currently combines the credit-pool model (QuickScale's core mechanic)
 | Growth    | 2 000           | All modules | 10 |
 | Pro       | Unlimited       | All modules | Unlimited |
 
-Seat limits and module gates are advisory in v0.86.0 — enforced in the UI and API, but not at the database layer. Hard enforcement (database constraints on membership count) is deferred.
+Seat limits and module gates are advisory — enforced in the UI and API, but not at the database layer. Hard enforcement (database constraints on membership count) is deferred.
 
 ### Plan Feature Gate Implementation
 
@@ -397,9 +397,9 @@ def crm_index(request):
 
 This decorator resolves the current organization's active subscription through the billing ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It returns HTTP 402 when the org has no active subscription or when the feature key is absent.
 
-### Migration Path from v0.85.0
+### Migration Path from User-Scoped Billing
 
-For deployments already using v0.85.0 user-scoped billing, `migrate_billing_to_orgs` ships as the idempotent bridge command. It reuses a sole existing organization when one is already resolvable for the billing user; otherwise it creates a personal org via the standard helper, migrates authoritative `Subscription`, `CreditBalance`, and `CreditTransaction` ownership to that organization, syncs a sole Stripe customer id when safe, and aborts ambiguous cases instead of guessing. Run it once after deploying the organizations module.
+For deployments already using user-scoped billing, `migrate_billing_to_orgs` ships as the idempotent bridge command. It reuses a sole existing organization when one is already resolvable for the billing user; otherwise it creates a personal org via the standard helper, migrates authoritative `Subscription`, `CreditBalance`, and `CreditTransaction` ownership to that organization, syncs a sole Stripe customer id when safe, and aborts ambiguous cases instead of guessing. Run it once after deploying the organizations module.
 
 ---
 
@@ -490,9 +490,9 @@ Path routing (not subdomain). The org slug is part of the org-management surface
 /billing/dashboard/                        # Authenticated billing dashboard
 /billing/pricing/                          # Public pricing
 
-**Note (T1.10)**: The billing module uses flat routes exclusively in both modes (`/billing/dashboard/`, `/billing/pricing/`, `/api/billing/...`). No org-scoped billing URL tree exists after T1.10 — the org is resolved from `request.org` (set by middleware from session or personal-org fallback), not from a URL slug.
+**Note**: The billing module uses flat routes exclusively in both modes (`/billing/dashboard/`, `/billing/pricing/`, `/api/billing/...`). No org-scoped billing URL tree exists — the org is resolved from `request.org` (set by middleware from session or personal-org fallback), not from a URL slug.
 
-**Note (T1.5 / T1.6 / T1.7 / T1.8 / T1.10)**: CRM, blog, forms, listings, and billing all use flat server routes in the shipped contract. The active organization is resolved from `request.org` / the current-org ContextVar, not from a URL slug.
+**Note (T1.5 / T1.6 / T1.7 / T1.8)**: CRM, blog, forms, listings, and billing all use flat server routes in the shipped contract. The active organization is resolved from `request.org` / the current-org ContextVar, not from a URL slug.
 ```
 
 ### Solo Mode
@@ -545,7 +545,7 @@ No `OrgLayout` or org switcher is rendered. Billing remains Django-page navigati
 
 ### Subdomain Routing (Future-Ready)
 
-Subdomain routing (`acme.myapp.com`) is not in v0.86.0 scope, but the architecture is designed to support it with no changes to views or models.
+Subdomain routing (`acme.myapp.com`) is not in scope, but the architecture is designed to support it with no changes to views or models.
 
 `TenantMiddleware` currently resolves the org from the session (`ACTIVE_ORG_SESSION_KEY`) in SaaS mode and from the authenticated user's personal org in Solo mode; the shipped middleware no longer carries content-route slug fallback. To support subdomains, only the initial SaaS resolution step changes — instead of reading the session first, the middleware would read the subdomain from `request.get_host()`:
 
@@ -643,13 +643,13 @@ All open questions from the original design were resolved before implementation 
 | Active org routing? | **Session-based in SaaS; personal-org resolution in Solo** | Org-management pages stay under `/orgs/...`; shipped server content routes are flat for CRM, blog, forms, listings, and billing; fresh `showcase_react` SaaS pages keep org-slug blog/listings routes with flat redirect shims. Solo mode resolves the personal org transparently. |
 | Post-signup flow? | **SaaS: force `/orgs/new/`. Solo: auto-create personal org** | SaaS users must name their workspace; solo users should not see org concepts |
 | Module access per plan? | **Feature gates + credits** | Credits for consumption metering; feature gates for upsell leverage; no per-org custom flags |
-| Seat pricing? | **Optional, designed in** | Operator-configurable; enforced at UI/API layer in v0.86.0; hard DB enforcement deferred |
+| Seat pricing? | **Optional, designed in** | Operator-configurable; enforced at UI/API layer; hard DB enforcement deferred |
 | Subdomain routing? | **Future-ready** | Middleware decoupled from org source (session today); subdomain support swaps the session read for a host-based lookup, everything downstream unchanged |
 | Org provisioning? | **Self-service** | Customer signs up, creates org, pays Stripe — no manual platform owner action required |
 
 ---
 
-## v0.86.0 Implementation Scope
+## Current Implementation Scope
 
 This section records the current repository slice, not the eventual end-state design.
 
