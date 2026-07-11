@@ -96,9 +96,8 @@ class TestProductionSettingsValidation:
                 template_content = f.read()
 
             # Verify template has logic to allow collectstatic without DATABASE_URL
+            assert "QUICKSCALE_NON_DB_COMMAND" in template_content
             assert "collectstatic" in template_content
-            # The template should check sys.argv for collectstatic
-            assert "sys.argv" in template_content
 
     def test_template_provides_dummy_url_for_collectstatic(self) -> None:
         """Test that template provides dummy DATABASE_URL for collectstatic."""
@@ -170,8 +169,8 @@ class TestProductionSettingsValidation:
             assert (
                 "NOSUPERUSER" in template_content or "NOBYPASSRLS" in template_content
             )
-            # The migration exception must be documented
-            assert "migrate" in template_content
+            # The privileged command path must be documented
+            assert "QUICKSCALE_PRIVILEGED_COMMAND" in template_content
 
     def test_migration_exception_preserved(self) -> None:
         """Test template preserves the migration path with DATABASE_URL."""
@@ -190,8 +189,9 @@ class TestProductionSettingsValidation:
             with open(template_path) as f:
                 template_content = f.read()
 
-            # Migration path must still use DATABASE_URL (the named exception)
-            assert '"migrate" in sys.argv' in template_content
+            # Migration path must use QUICKSCALE_PRIVILEGED_COMMAND
+            assert "QUICKSCALE_PRIVILEGED_COMMAND" in template_content
+            assert "migrate" in template_content
             assert "DATABASE_URL" in template_content
-            # Railway guidance should still be present in the DATABASE_URL error
-            assert "Railway" in template_content
+            # DATABASE_URL error message should still be present
+            assert "DATABASE_URL is required for privileged" in template_content

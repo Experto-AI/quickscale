@@ -238,8 +238,9 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/{{ package_name }}
 
 # Runtime database role (required for production)
 # Restricted NOSUPERUSER/NOBYPASSRLS role connection for runtime queries.
-# The startup script unsets this during migrations so the superuser
-# DATABASE_URL is used for schema changes.
+# The deployment script (start.sh) sets QUICKSCALE_PRIVILEGED_COMMAND=migrate
+# and clears RUNTIME_DATABASE_URL as a one-shot inline prefix for migrations,
+# so the superuser DATABASE_URL is used for schema changes.
 # RUNTIME_DATABASE_URL=postgresql://runtime_user:password@host:5432/{{ package_name }}
 
 # Optional: Sentry error tracking
@@ -306,8 +307,8 @@ Before deploying to production:
 - [ ] Review security settings in `settings/production.py`
 - [ ] Configure email backend for production
 - [ ] Set up error monitoring (e.g., Sentry)
-- [ ] Run migrations: `RUNTIME_DATABASE_URL= python manage.py migrate` (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL)
-- [ ] Collect static files: `python manage.py collectstatic`
+- [ ] Run migrations: `QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate` (the runtime role has NOSUPERUSER/NOBYPASSRLS and cannot run DDL; the command-mode env var is a one-shot inline prefix only, never persistent configuration)
+- [ ] Collect static files: `QUICKSCALE_NON_DB_COMMAND=collectstatic python manage.py collectstatic` (one-shot inline prefix; supplies a dummy `DATABASE_URL` when the real one is absent)
 
 ### Docker Deployment
 

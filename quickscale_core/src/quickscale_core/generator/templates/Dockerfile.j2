@@ -148,8 +148,9 @@ USER django
 # Collect static files (safe to run at build time, doesn't need DATABASE_URL).
 # Use an ephemeral build-time SECRET_KEY so runtime startup still requires
 # a real non-default secret from the deployment environment.
+# QUICKSCALE_NON_DB_COMMAND signals to production.py that no DB is needed.
 RUN echo "📦 Collecting static files..." && \
-    SECRET_KEY="$(python -c 'from secrets import token_urlsafe; print(token_urlsafe(50))')" python manage.py collectstatic --noinput && \
+    QUICKSCALE_NON_DB_COMMAND=collectstatic SECRET_KEY="$(python -c 'from secrets import token_urlsafe; print(token_urlsafe(50))')" python manage.py collectstatic --noinput && \
     echo "✅ Static files collected: $(ls -lh /app/staticfiles | wc -l) files"
 
 # Expose port

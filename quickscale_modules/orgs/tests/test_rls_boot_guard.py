@@ -1,4 +1,4 @@
-"""T1.18 / SA2.1+SA58 — RLS boot guard unit tests.
+"""SA68 Phase 1 — RLS boot guard unit tests.
 
 Tests for ``quickscale_modules_orgs.apps._check_rls_role`` — the
 standalone function called by ``QuickscaleOrgsConfig.ready()`` that
@@ -8,30 +8,37 @@ BYPASSRLS or SUPERUSER (either alone suffices to fail the guard).
 The guard is always active (regardless of ``QUICKSCALE_MODE`` or
 ``DEBUG``) with two narrow exemptions:
 
-1. ``manage.py migrate`` — ``start.sh`` deliberately unsets
-   ``RUNTIME_DATABASE_URL`` so DDL runs under the superuser
-   ``DATABASE_URL``.
+1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned privileged
+   DB command (``migrate``, ``createcachetable``) — ``start.sh`` sets
+   this env var alongside ``RUNTIME_DATABASE_URL=""`` so DDL/DML runs
+   under the superuser ``DATABASE_URL``.
 2. ``QUICKSCALE_ALLOW_BYPASSRLS=1`` env-var escape hatch — for
    intentional single-tenant or development use.
 
+The sanctioned command set is defined by ``_PRIVILEGED_COMMANDS`` and
+checked via ``_is_privileged_command()`` (formerly ``_is_migrate_command()``,
+widened in CR-SA68-001).
+
 ``manage.py runserver``, gunicorn, and WSGI startup must all still
-fail closed under BYPASSRLS or SUPERUSER.
+fail closed under BYPASSRLS or SUPERUSER.  The old ``sys.argv``-based
+``_is_migrate_command`` has been replaced by the explicit env-var
+contract (SA68 Phase 1).
 """
 
 from __future__ import annotations
 
 import os
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 
 import quickscale_modules_orgs
-
 from quickscale_modules_orgs.apps import (
     QuickscaleOrgsConfig,
     _check_rls_role,
-    _is_migrate_command,
+    _is_privileged_command,
 )
 
 
@@ -69,7 +76,7 @@ def _mock_postgres_connection(rolbypassrls: bool, rolsuper: bool = False) -> Mag
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_raises_for_bypassrls_role(settings) -> None:
+def test_rls_guard_raises_for_bypassrls_role(settings: Any) -> None:
     """Saas + DEBUG=False + PostgreSQL + BYPASSRLS role raises."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
@@ -88,7 +95,7 @@ def test_rls_guard_raises_for_bypassrls_role(settings) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_passes_for_nobypassrls_role(settings) -> None:
+def test_rls_guard_passes_for_nobypassrls_role(settings: Any) -> None:
     """Saas + DEBUG=False + PostgreSQL + NOBYPASSRLS role passes."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
@@ -103,7 +110,7 @@ def test_rls_guard_passes_for_nobypassrls_role(settings) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_raises_for_superuser_role(settings) -> None:
+def test_rls_guard_raises_for_superuser_role(settings: Any) -> None:
     """SUPERUSER role without BYPASSRLS must also raise."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
@@ -122,7 +129,7 @@ def test_rls_guard_raises_for_superuser_role(settings) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_raises_in_solo_mode(settings) -> None:
+def test_rls_guard_raises_in_solo_mode(settings: Any) -> None:
     """Solo mode must now raise with a BYPASSRLS role."""
     settings.QUICKSCALE_MODE = "solo"
     settings.DEBUG = False
@@ -142,7 +149,7 @@ def test_rls_guard_raises_in_solo_mode(settings) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_raises_when_debug_true(settings) -> None:
+def test_rls_guard_raises_when_debug_true(settings: Any) -> None:
     """DEBUG=True must now raise with a BYPASSRLS role."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = True
@@ -162,7 +169,7 @@ def test_rls_guard_raises_when_debug_true(settings) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_noop_on_sqlite(settings) -> None:
+def test_rls_guard_noop_on_sqlite(settings: Any) -> None:
     """Non-PostgreSQL vendor must skip the check entirely."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
@@ -179,7 +186,7 @@ def test_rls_guard_noop_on_sqlite(settings) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_escape_hatch_bypasses_in_saas_prod(settings) -> None:
+def test_rls_guard_escape_hatch_bypasses_in_saas_prod(settings: Any) -> None:
     """Escape hatch ``QUICKSCALE_ALLOW_BYPASSRLS=1`` bypasses the guard."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
@@ -191,7 +198,7 @@ def test_rls_guard_escape_hatch_bypasses_in_saas_prod(settings) -> None:
             _check_rls_role()  # must not raise
 
 
-def test_rls_guard_escape_hatch_bypasses_in_solo(settings) -> None:
+def test_rls_guard_escape_hatch_bypasses_in_solo(settings: Any) -> None:
     """Escape hatch also bypasses in solo mode."""
     settings.QUICKSCALE_MODE = "solo"
     settings.DEBUG = False
@@ -203,7 +210,7 @@ def test_rls_guard_escape_hatch_bypasses_in_solo(settings) -> None:
             _check_rls_role()  # must not raise
 
 
-def test_rls_guard_escape_hatch_bypasses_with_debug(settings) -> None:
+def test_rls_guard_escape_hatch_bypasses_with_debug(settings: Any) -> None:
     """Escape hatch also bypasses when DEBUG=True."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = True
@@ -215,7 +222,7 @@ def test_rls_guard_escape_hatch_bypasses_with_debug(settings) -> None:
             _check_rls_role()  # must not raise
 
 
-def test_rls_guard_escape_hatch_exact_value(settings) -> None:
+def test_rls_guard_escape_hatch_exact_value(settings: Any) -> None:
     """Only the exact value ``\"1\"`` triggers the escape hatch."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
@@ -231,7 +238,7 @@ def test_rls_guard_escape_hatch_exact_value(settings) -> None:
     assert "BYPASSRLS" in str(exc_info.value)
 
 
-def test_rls_guard_escape_hatch_empty_value_does_not_bypass(settings) -> None:
+def test_rls_guard_escape_hatch_empty_value_does_not_bypass(settings: Any) -> None:
     """Empty string must NOT bypass the guard."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
@@ -251,7 +258,7 @@ def test_rls_guard_escape_hatch_empty_value_does_not_bypass(settings) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_raises_when_mode_unset(settings) -> None:
+def test_rls_guard_raises_when_mode_unset(settings: Any) -> None:
     """Unset QUICKSCALE_MODE must now raise with a BYPASSRLS role."""
     settings.DEBUG = False
 
@@ -266,70 +273,87 @@ def test_rls_guard_raises_when_mode_unset(settings) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _is_migrate_command: only manage.py migrate is exempt
+# _is_privileged_command: sanctioned QUICKSCALE_PRIVILEGED_COMMAND values
+# are exempt; unrecognised, empty, and non-DB vars are not
 # ---------------------------------------------------------------------------
 
 
-def test_is_migrate_command_true_for_migrate() -> None:
-    """``manage.py migrate`` is detected as the exempt command."""
-    with patch("quickscale_modules_orgs.apps.sys.argv", ["manage.py", "migrate"]):
-        assert _is_migrate_command() is True
-
-
-def test_is_migrate_command_true_for_migrate_with_flags() -> None:
-    """``manage.py migrate --noinput`` is also detected."""
-    with patch(
-        "quickscale_modules_orgs.apps.sys.argv",
-        ["manage.py", "migrate", "--noinput"],
+def test_is_privileged_command_true_for_migrate() -> None:
+    """``QUICKSCALE_PRIVILEGED_COMMAND=migrate`` is a sanctioned value."""
+    with patch.dict(
+        os.environ,
+        {"QUICKSCALE_PRIVILEGED_COMMAND": "migrate"},
+        clear=True,
     ):
-        assert _is_migrate_command() is True
+        assert _is_privileged_command() is True
 
 
-def test_is_migrate_command_false_for_runserver() -> None:
-    """``manage.py runserver`` must NOT be detected — still catastrophic."""
-    with patch("quickscale_modules_orgs.apps.sys.argv", ["manage.py", "runserver"]):
-        assert _is_migrate_command() is False
-
-
-def test_is_migrate_command_false_for_other_management_commands() -> None:
-    """Other management commands (collectstatic, shell, etc.) must NOT be exempt."""
-    with patch(
-        "quickscale_modules_orgs.apps.sys.argv",
-        ["manage.py", "collectstatic", "--noinput"],
+def test_is_privileged_command_true_for_createcachetable() -> None:
+    """``QUICKSCALE_PRIVILEGED_COMMAND=createcachetable`` is now sanctioned
+    (CR-SA68-001)."""
+    with patch.dict(
+        os.environ,
+        {"QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable"},
+        clear=True,
     ):
-        assert _is_migrate_command() is False
+        assert _is_privileged_command() is True
 
 
-def test_is_migrate_command_false_for_gunicorn() -> None:
-    """Gunicorn WSGI startup is NOT a management command."""
-    with patch(
-        "quickscale_modules_orgs.apps.sys.argv",
-        ["/usr/local/bin/gunicorn", "myapp.wsgi:application"],
+def test_is_privileged_command_false_when_privileged_command_unset() -> None:
+    """No env var set must NOT be detected — still catastrophic."""
+    with patch.dict(os.environ, {}, clear=True):
+        assert _is_privileged_command() is False
+
+
+def test_is_privileged_command_false_for_non_db_command() -> None:
+    """Non-DB command env vars must NOT be exempt."""
+    with patch.dict(
+        os.environ,
+        {"QUICKSCALE_NON_DB_COMMAND": "collectstatic"},
+        clear=True,
     ):
-        assert _is_migrate_command() is False
+        assert _is_privileged_command() is False
 
 
-def test_is_migrate_command_false_for_bare_python() -> None:
-    """Bare python invocation (no argv command) is not a management command."""
-    with patch("quickscale_modules_orgs.apps.sys.argv", ["script.py"]):
-        assert _is_migrate_command() is False
+def test_is_privileged_command_false_for_empty_privileged_command() -> None:
+    """Empty string value must NOT be exempt."""
+    with patch.dict(
+        os.environ,
+        {"QUICKSCALE_PRIVILEGED_COMMAND": ""},
+        clear=True,
+    ):
+        assert _is_privileged_command() is False
+
+
+def test_is_privileged_command_false_for_unrecognised_value() -> None:
+    """Unrecognised ``QUICKSCALE_PRIVILEGED_COMMAND`` values must NOT be
+    exempt — the set is not a catch-all escape hatch."""
+    with patch.dict(
+        os.environ,
+        {"QUICKSCALE_PRIVILEGED_COMMAND": "unknown_value"},
+        clear=True,
+    ):
+        assert _is_privileged_command() is False
 
 
 # ---------------------------------------------------------------------------
-# ready() lifecycle seam: only migrate exempt; runserver + gunicorn fail-closed
+# ready() lifecycle seam: sanctioned QUICKSCALE_PRIVILEGED_COMMAND values
+# are exempt; all other commands fail-closed
 # ---------------------------------------------------------------------------
 
 
-def test_ready_skips_check_for_migration_command(settings) -> None:
-    """``ready()`` must NOT raise for ``manage.py migrate`` even with BYPASSRLS."""
+def test_ready_skips_check_for_migration_command(settings: Any) -> None:
+    """``ready()`` must NOT raise for ``QUICKSCALE_PRIVILEGED_COMMAND=migrate``
+    even with BYPASSRLS."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
     with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        with patch(
-            "quickscale_modules_orgs.apps.sys.argv",
-            ["manage.py", "migrate", "--noinput"],
+        with patch.dict(
+            os.environ,
+            {"QUICKSCALE_PRIVILEGED_COMMAND": "migrate"},
+            clear=True,
         ):
             config = QuickscaleOrgsConfig(
                 "quickscale_modules_orgs", quickscale_modules_orgs
@@ -337,17 +361,34 @@ def test_ready_skips_check_for_migration_command(settings) -> None:
             config.ready()  # must not raise
 
 
-def test_ready_raises_for_runserver_command(settings) -> None:
+def test_ready_skips_check_for_createcachetable_command(settings: Any) -> None:
+    """``ready()`` must NOT raise for
+    ``QUICKSCALE_PRIVILEGED_COMMAND=createcachetable`` even with BYPASSRLS
+    (CR-SA68-001)."""
+    settings.QUICKSCALE_MODE = "saas"
+    settings.DEBUG = False
+    mock_conn = _mock_postgres_connection(rolbypassrls=True)
+
+    with patch("quickscale_modules_orgs.apps.connection", mock_conn):
+        with patch.dict(
+            os.environ,
+            {"QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable"},
+            clear=True,
+        ):
+            config = QuickscaleOrgsConfig(
+                "quickscale_modules_orgs", quickscale_modules_orgs
+            )
+            config.ready()  # must not raise
+
+
+def test_ready_raises_for_runserver_command(settings: Any) -> None:
     """``ready()`` MUST raise for ``manage.py runserver`` with BYPASSRLS."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
     with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        with patch(
-            "quickscale_modules_orgs.apps.sys.argv",
-            ["manage.py", "runserver", "0.0.0.0:8000"],
-        ):
+        with patch.dict(os.environ, {}, clear=True):
             config = QuickscaleOrgsConfig(
                 "quickscale_modules_orgs", quickscale_modules_orgs
             )
@@ -358,17 +399,14 @@ def test_ready_raises_for_runserver_command(settings) -> None:
     assert "NOBYPASSRLS" in str(exc_info.value)
 
 
-def test_ready_raises_for_collectstatic_command(settings) -> None:
-    """``ready()`` MUST raise for non-migrate management commands with BYPASSRLS."""
+def test_ready_raises_for_collectstatic_command(settings: Any) -> None:
+    """``ready()`` MUST raise for non-DB management commands with BYPASSRLS."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
     with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        with patch(
-            "quickscale_modules_orgs.apps.sys.argv",
-            ["manage.py", "collectstatic", "--noinput"],
-        ):
+        with patch.dict(os.environ, {}, clear=True):
             config = QuickscaleOrgsConfig(
                 "quickscale_modules_orgs", quickscale_modules_orgs
             )
@@ -379,17 +417,14 @@ def test_ready_raises_for_collectstatic_command(settings) -> None:
     assert "NOBYPASSRLS" in str(exc_info.value)
 
 
-def test_ready_raises_for_gunicorn_startup(settings) -> None:
+def test_ready_raises_for_gunicorn_startup(settings: Any) -> None:
     """``ready()`` must STILL raise for gunicorn WSGI startup with BYPASSRLS."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False
     mock_conn = _mock_postgres_connection(rolbypassrls=True)
 
     with patch("quickscale_modules_orgs.apps.connection", mock_conn):
-        with patch(
-            "quickscale_modules_orgs.apps.sys.argv",
-            ["/usr/local/bin/gunicorn", "myapp.wsgi:application"],
-        ):
+        with patch.dict(os.environ, {}, clear=True):
             config = QuickscaleOrgsConfig(
                 "quickscale_modules_orgs", quickscale_modules_orgs
             )
@@ -405,7 +440,7 @@ def test_ready_raises_for_gunicorn_startup(settings) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rls_guard_noop_when_query_returns_none(settings) -> None:
+def test_rls_guard_noop_when_query_returns_none(settings: Any) -> None:
     """Defensive: no rows returned should not raise."""
     settings.QUICKSCALE_MODE = "saas"
     settings.DEBUG = False

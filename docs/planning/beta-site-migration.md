@@ -748,6 +748,49 @@ railway redeploy <deployment-id> --service experto-ai-web
 [ ] Merged to main; Railway deployment confirmed
 ```
 
+## SA68 rollout closeout notes
+
+Findings from the completed SA68 work (the migrate-path launcher env-pair contract, completing Finding 6's Option 1).
+
+### Delivered contract
+
+The final design uses two explicit one-shot command env vars — `QUICKSCALE_PRIVILEGED_COMMAND` and `QUICKSCALE_NON_DB_COMMAND` — instead of the earlier single-flag/argv-sniffing idiom. All three argv deciders (`start.sh.j2`'s migrate-line env gap, `production.py.j2`'s `elif "migrate" in sys.argv` branch, `orgs/apps.py`'s `_is_migrate_command()`) are deleted. Every launcher command now routes through the same env-pair bridge.
+
+### Safe rollout ordering
+
+The compatibility of new launchers/docs with an older donor-owned `settings/production.py`
+depends on whether Redis is present:
+
+- **If Redis is present** (``REDIS_URL`` is set): ``start.sh`` skips the
+  ``createcachetable`` step entirely (line 64-65). Only ``migrate`` runs, and
+  the older ``settings/production.py`` still handles it via the pre-SA68
+  ``elif "migrate" in sys.argv`` branch. **Safe** — new launchers may coexist
+  with older ``settings/production.py`` when Redis is configured.
+
+- **If Redis is absent** (``REDIS_URL`` is not set): ``start.sh`` also runs
+  ``createcachetable`` using the env-pair signal
+  (``QUICKSCALE_PRIVILEGED_COMMAND=createcachetable``). An older
+  ``settings/production.py`` that predates the full env-pair bridge will
+  **not** recognise this signal and will fail closed or select the wrong
+  connection. **Unsafe** — do NOT rely on coexistence when Redis is absent
+  unless the older ``settings/production.py`` already has the SA63+ env-pair
+  bridge for ``createcachetable``.
+
+Manually transplanting the new ``settings/production.py`` without paired
+launcher/doc updates is unsafe in all cases — the new settings expect the
+env-pair signal and fail closed without it.
+
+**Recommended order for beta-site upgrades:** launcher (``start.sh.j2``),
+docs/operator contracts, then proceed with ``settings/production.py`` last
+**only after verifying** the Redis state on the target site. When Redis is
+absent, deploy the launcher + docs first, then confirm ``createcachetable``
+runs correctly before deploying the new ``settings/production.py``.
+
+### Non-blocking validation findings preserved
+
+- **Orgs module test context:** Orgs module tests require module-local pytest context for direct module runs (not triggered from the root `pytest`). This is a test-tooling affordance, not a gap.
+- **Runtime smoke e2e:** The runtime smoke e2e tests remain explicitly marked (`pytest -m e2e`) and opt-in. They are not part of the default `make test` run.
+
 ## AI assistant continuation guide
 
 Use this when the maintainer tool is only partially implemented or stops intentionally at a review checkpoint.

@@ -1054,6 +1054,59 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 
 ---
 
+### Launcher One-Shot Command-Env Contract (SA68) {#launcher-one-shot-command-env-contract-sa68}
+
+**Decision (2026-07-11, SA68 Phase 1/2):** Generated project startup scripts
+and settings use two mutually exclusive one-shot environment variables to
+select the database connection and bootstrap mode. These variables are always
+set as inline command prefixes — never as persistent environment configuration.
+
+**Design:**
+
+1. **``QUICKSCALE_PRIVILEGED_COMMAND``** — Privileged DB operations that
+   require the superuser ``DATABASE_URL`` (``migrate``, ``createcachetable``).
+   The launcher sets this as an inline prefix *and* blanks
+   ``RUNTIME_DATABASE_URL=""`` so the superuser role is used for schema
+   changes (the runtime role has ``NOSUPERUSER``/``NOBYPASSRLS`` and cannot
+   run DDL).
+
+2. **``QUICKSCALE_NON_DB_COMMAND``** — DB-free bootstrap operations
+   (``collectstatic``, ``compilemessages``) that do not need a live
+   ``DATABASE_URL``. ``production.py`` supplies a dummy ``postgresql://``
+   URL when ``DATABASE_URL`` is unset, keeping the process importable
+   without a real database connection.
+
+**Rules:**
+
+- ✅ Both variables are one-shot inline prefixes only (e.g.,
+  ``QUICKSCALE_PRIVILEGED_COMMAND=migrate RUNTIME_DATABASE_URL="" python manage.py migrate``).
+  They are never exported, never set in ``.env``, never written to
+  ``docker-compose.yml`` ``environment:`` blocks, never documented as
+  persistent configuration, and never checked into version control.
+- ✅ They are mutually exclusive — the ``production.py`` seam raises
+  ``ValueError`` if both are set simultaneously.
+- ✅ ``QUICKSCALE_PRIVILEGED_COMMAND`` requires ``RUNTIME_DATABASE_URL=""``
+  (explicitly blank); omitting it raises ``ValueError``.
+- ✅ ``QUICKSCALE_NON_DB_COMMAND`` does not require a real ``DATABASE_URL``;
+  a dummy URL is substituted when ``DATABASE_URL`` is absent.
+- ✅ The default serving path (neither command var set) uses
+  ``RUNTIME_DATABASE_URL`` when present, or raises ``ValueError`` (fail-closed).
+
+**Implementation surface:**
+
+| Variable | Values | Set by | Connection selected |
+|---|---|---|---|
+| ``QUICKSCALE_PRIVILEGED_COMMAND`` | ``migrate``, ``createcachetable`` | ``start.sh`` (inline prefix) | ``DATABASE_URL`` (superuser) |
+| ``QUICKSCALE_NON_DB_COMMAND`` | ``collectstatic``, ``compilemessages`` | ``Dockerfile`` build step (inline prefix) | Dummy ``postgresql://`` URL |
+
+**Related:** [Fail-Hard Principle](#fail-hard-principle) (the mutual-exclusion
+check and missing-arg validation follow fail-hard); [Multi-tenant SaaS
+§RLS enforcement rule](#multitenant-saas-architecture) (the runtime role's
+``NOSUPERUSER``/``NOBYPASSRLS`` is the reason privileged commands need the
+superuser ``DATABASE_URL``).
+
+---
+
 ### ImproperlyConfigured Exception Identity {#improperlyconfigured-exception-identity}
 
 **Decision (2026-07-10, SA69):** QuickScale's shared contract layer
@@ -1154,13 +1207,13 @@ The SA46 CI gate continues to enforce the pairing requirement across all `csrf_e
 - ✅ Users may belong to multiple organizations; org-switcher in the React UI
 - ✅ Module access is differentiated by credits plus ORM-backed `Plan.features` gates
 
-**RLS enforcement rule (critical, updated by SA2.1 + SA2.2):**
+**RLS enforcement rule (critical, updated by SA2.1 + SA2.2 + CR-SA68-001):**
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
-- Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named migration path intentionally uses the superuser `DATABASE_URL`
-- **Always-on boot guard (SA2.1):** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every non-`migrate` boot — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
-  1. `manage.py migrate` — the deployment `start.sh` unsets `RUNTIME_DATABASE_URL` so migrations run under the superuser role (correct and deliberate).
+- Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named privileged command paths intentionally use the superuser `DATABASE_URL`
+- **Always-on boot guard (SA2.1, CR-SA68-001):** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
+  1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate`, `createcachetable`) — the deployment `start.sh` unsets `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The sanctioned command set is defined by `_PRIVILEGED_COMMANDS` in `apps.py`; every new sanctioned command is added there.
   2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — environment-variable escape hatch for intentional single-tenant or development use.
-- `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate`; `runserver`/`gunicorn` must still use the restricted runtime role
+- `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` and `createcachetable`; `runserver`/`gunicorn` must still use the restricted runtime role
 
 **Isolation architecture rules (permanent):**
 - Registry authority: the marker-based derived registry overview (:func:`get_derived_registry_overview`) is the authoritative human-readable view of the shipped tenant-table surface. The derived view is purely marker-driven (``tenant_excluded`` attributes, ``TenantManager``/``TenantModel`` detection, and implicit M2M through inference) with no fallback to the literal ``TENANT_TABLE_REGISTRY`` (SA15.3 follow-up). The literal ``TENANT_TABLE_REGISTRY`` remains in place as a cross-check target so CI can confirm the two views stay in agreement. Its 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) each carry a direct ``organization_id``, ``objects = TenantManager()``, ``all_objects = TenantManager(super_scope=True)``, and a live FORCE-RLS policy.
