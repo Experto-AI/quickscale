@@ -8,6 +8,18 @@
 
 ---
 
+## Autopsy — 2026-07-11 (documentation reconciliation)
+
+> Use this note as the current planning surface. The full 2026-07-10 pass below remains valuable
+> historical detail, but it is no longer the authoritative day-end roadmap snapshot.
+>
+> **Current state:** Track 1 remains the only repo-local implementation lane with active work
+> (SA59 umbrella still open/blocked, SA60 open, SA70 open). Track 2 is clean after SA73's
+> closeout (see [CHANGELOG.md](../../CHANGELOG.md)). Track 3 is blocked on SA67's external
+> beta-site access requirement; repo-local follow-up through SA68 is already complete and should
+> stay in [CHANGELOG.md](../../CHANGELOG.md), not in the active roadmap. Historical full-pass text
+> from 2026-07-10 is preserved below unchanged.
+
 ## Autopsy — 2026-07-10 (re-run, delta pass — first run on the V2 prompt)
 
 ### Orientation (2026-07-10)
@@ -43,16 +55,16 @@ untouched by git log: `billing/services.py`, orgs middleware/current_org/manager
 `purge_organization.py`, `apply/`, `project_state.py`. Severity floor unchanged: CLI is
 single-process local; generated apps are single-service WSGI; tenant isolation is the
 highest-blast property. **Growth direction (V2 §2d, from the planning surface):** the roadmap
-holds two open items (SA59, SA60); the real production pressure is the **beta-site upgrade
+holds three open items (SA59, SA60, SA70); the real production pressure is the **beta-site upgrade
 cadence** — `experto-ai-web` and `bap-web` are the only deployed consumers, kept current via the
 `quickscale_devtools` migration playbook (`docs/planning/beta-site-migration.md`). That seam got
 this pass's change-cost probe and produced the new finding.
 
-**Result: four prior findings still-open (two narrowed), one new finding, five prior red flags
-verified fixed, one tracked.** Finding 6 is *substantially narrowed* — SA63 landed the launcher
-env-pair contract, deleted local's argv ladder, fixed the createcachetable collision, and the fix
-is verified by new generated-project boot smoke tests; the residual is the migrate path's
-three-decider legacy. **New Finding 7**: generated projects have no file-level ownership
+**Result: three prior findings still-open (two narrowed), one new finding, five prior red flags
+verified fixed, one tracked.** Finding 6 is **closed** (SA68, 2026-07-11) — the migrate path's last
+argv deciders are deleted and the two-signal `QUICKSCALE_PRIVILEGED_COMMAND`/
+`QUICKSCALE_NON_DB_COMMAND` contract replaces the overloaded single-bit hatch; full detail in
+[CHANGELOG.md](../../CHANGELOG.md). **New Finding 7**: generated projects have no file-level ownership
 contract — the beta-migration tool hand-encodes the generator's ownership taxonomy in eight
 unlinked tuple literals, and the gap is live this release (SA63's two changed files each miss one
 of the two migration paths). Finding 1 is unchanged (no new lattice stations this delta — first
@@ -343,8 +355,8 @@ entry below; full prior text preserved in version control.)*
   compounding claim, re-measured post-SA63). Measured stations: one — a start.sh line carrying
   the env pair; `production.py.j2`'s bridge branch and the boot guard's hatch consume it with no
   further registration. The 2026-07-09 claim of "up to three places" no longer holds for new
-  commands. **Verdict: seam exonerated for new commands; Finding 6 narrowed accordingly** (the
-  migrate path's legacy deciders remain its residual scope).
+  commands. **Verdict: seam exonerated for new commands** — Finding 6's residual migrate-path
+  deciders were later deleted by SA68 (2026-07-11), closing the finding.
 
 ### Fix order and interactions
 
@@ -434,15 +446,16 @@ entry below; full prior text preserved in version control.)*
 > Teams is not scheduled (decisions.md §Teams module status, 2026-07-10). Carried for reference
 > *if* a future scheduling decision lands; see the 2026-07-09 pass text in version control for
 > the full checklist. Additions since remain valid: the teams adapter imports
-> `quickscale_core.runtime.manifest` only; teams data migrations traverse Finding 6's seam and
-> land after the mode contract completes; teams' admin subclasses `TenantModelAdmin`.
+> `quickscale_core.runtime.manifest` only; teams data migrations traverse the launcher env-pair
+> contract seam (SA63/SA68) — now the single channel for all privilege selection — and land after
+> the mode contract completes; teams' admin subclasses `TenantModelAdmin`.
 
 ### Questions that would change the ranking
 
 - **Do the beta sites deploy without Redis?** If yes, SA63's createcachetable fix is
   load-bearing for their next deploy and Finding 7's live instance becomes urgent enough to
   outrank Finding 1 — verify the rollout manually this release either way (red flag below).
-  (Affects Findings 7 and 6.)
+  (Affects Finding 7.)
 - **Is `settings/production.py` being donor-owned in fresh-first migrations a deliberate policy**
   ("beta sites own their production settings, template changes reach them by hand") **or an
   accident of the file lists?** If deliberate, Finding 7's fix is a recorded policy + merge
