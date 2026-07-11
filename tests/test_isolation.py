@@ -65,7 +65,13 @@ _ORGS_TABLES = (
 
 
 def _ensure_rls_test_role_with_grants() -> None:
-    """Create the restricted test role and grant privileges on needed tables.
+    """Assert the pre-provisioned RLS test role exists and issue grants (SA59.3).
+
+    The role must be pre-created by the test harness
+    (``scripts/provision_test_roles.sh`` or equivalent).  Raises
+    ``RuntimeError`` with setup instructions if missing.  Per-table
+    grants are still issued here (idempotent, requires table existence
+    post-migration).
 
     This is a broader version of the per-module ``_ensure_rls_test_role``
     helpers — it grants ALL on CRM tenant tables and orgs infrastructure
@@ -73,8 +79,6 @@ def _ensure_rls_test_role_with_grants() -> None:
     seeding), and SELECT on system Django tables (auth, sessions, content
     types), so that the full Django request pipeline passes under
     ``SET ROLE``.
-
-    Idempotent.
     """
     import psycopg2
 
@@ -89,13 +93,16 @@ def _ensure_rls_test_role_with_grants() -> None:
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
-            cur.execute(f"""
-                DO $$
-                BEGIN
-                    CREATE ROLE {_RESTRICTED_ROLE};
-                EXCEPTION WHEN duplicate_object THEN NULL;
-                END $$;
-            """)
+            cur.execute(
+                "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                [_RESTRICTED_ROLE],
+            )
+            if cur.fetchone() is None:
+                raise RuntimeError(
+                    f"Pre-provisioned role {_RESTRICTED_ROLE} not found. "
+                    f"Run scripts/provision_test_roles.sh to create it before "
+                    f"running isolation-conformance tests."
+                )
             cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
             for table in _CRM_TABLES:
                 cur.execute(f"GRANT ALL ON {table} TO {_RESTRICTED_ROLE}")
@@ -139,10 +146,17 @@ class TestCRMCrossTenantIsolation:
         a request-path or auth regression — not the cross-tenant leak.
         """
         from quickscale_modules_crm.models import Company
+        from quickscale_modules_orgs.current_org import set_current_org_id
 
-        Company.objects.create(
-            name="Org A Corp", industry="Technology", organization=org_a
-        )
+        # Prime the org context so FORCE RLS allows the INSERT under the
+        # NOBYPASSRLS restricted role (SA59.3).
+        set_current_org_id(org_a.id)
+        try:
+            Company.objects.create(
+                name="Org A Corp", industry="Technology", organization=org_a
+            )
+        finally:
+            set_current_org_id(None)
 
         client.force_login(org_a_admin)
         _activate_org_in_session(client, org_a)
@@ -176,13 +190,24 @@ class TestCRMCrossTenantIsolation:
         ``test_org_a_request_returns_200`` and fail normally.
         """
         from quickscale_modules_crm.models import Company
+        from quickscale_modules_orgs.current_org import set_current_org_id
 
-        Company.objects.create(
-            name="Org A Corp", industry="Technology", organization=org_a
-        )
-        Company.objects.create(
-            name="Org B Corp", industry="Finance", organization=org_b
-        )
+        # Prime the org context so FORCE RLS allows INSERTs under the
+        # NOBYPASSRLS restricted role (SA59.3).
+        set_current_org_id(org_a.id)
+        try:
+            Company.objects.create(
+                name="Org A Corp", industry="Technology", organization=org_a
+            )
+        finally:
+            set_current_org_id(None)
+        set_current_org_id(org_b.id)
+        try:
+            Company.objects.create(
+                name="Org B Corp", industry="Finance", organization=org_b
+            )
+        finally:
+            set_current_org_id(None)
 
         client.force_login(org_a_admin)
         _activate_org_in_session(client, org_a)
@@ -213,22 +238,31 @@ class TestCRMCrossTenantIsolation:
         """
         from quickscale_modules_crm.models import Company
         from quickscale_modules_crm.services import ensure_org_default_stages
+        from quickscale_modules_orgs.current_org import set_current_org_id
         from django.db import connection
 
         _ensure_rls_test_role_with_grants()
 
-        Company.objects.create(
-            name="Org A Corp", industry="Technology", organization=org_a
-        )
+        # Prime the org context so FORCE RLS allows INSERTs under the
+        # NOBYPASSRLS restricted role (SA59.3).
+        set_current_org_id(org_a.id)
+        try:
+            Company.objects.create(
+                name="Org A Corp", industry="Technology", organization=org_a
+            )
+        finally:
+            set_current_org_id(None)
 
         client.force_login(org_a_admin)
         _activate_org_in_session(client, org_a)
 
-        # Seed default stages before SET ROLE (superuser connection) so
-        # they exist in the database.  Under the restricted role without
-        # the AF9 execute_wrapper, every RLS-gated query returns zero
-        # rows, keeping this test RED until AF9 lands.
-        ensure_org_default_stages(org_a)
+        # Seed default stages before SET ROLE.  Prime the org context so
+        # FORCE RLS allows the INSERT under the NOBYPASSRLS role (SA59.3).
+        set_current_org_id(org_a.id)
+        try:
+            ensure_org_default_stages(org_a)
+        finally:
+            set_current_org_id(None)
 
         with connection.cursor() as cursor:
             cursor.execute(f"SET ROLE {_RESTRICTED_ROLE}")
