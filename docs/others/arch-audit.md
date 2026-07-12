@@ -396,7 +396,9 @@ untouched by this update.
 > reasoning trail; only items 4–5 remain live.
 
 1. ~~SA59.1's remaining blockers (red-flagged gate state)~~ — **done**: SA76's quarantine
-   mechanism turned the gate green; SA77 (orgs) and SA79 (forms backfill) continue as tracked,
+   mechanism turned the gate green; SA77 (orgs, root cause established and code fix landed
+   2026-07-12; final restricted-role verification blocked on SA79) and SA79 (forms backfill,
+   reopened/blocked on CR-PLAN-SA79-004 and CR-PLAN-SA79-005) continue as tracked,
    non-blocking roadmap follow-ups rather than gate-red blockers.
 2. ~~SA60~~ — **done**: unblocked Finding 4's decision-record caution and SA59.1's forms/0007
    composite-FK failure together, as planned.
@@ -508,6 +510,8 @@ untouched by this update.
 > - ~~The integration gate is red at merge on `v87`~~ — **resolved (SA76):** a ticketed quarantine
 >   mechanism absorbs the known failures (orgs → SA77, notifications → SA78) so the gate is green
 >   for everything else; forms `0007`'s composite-FK piece needed no quarantine (resolved by SA60).
+>   SA77 root cause since established and code fix landed (2026-07-12); final restricted-role
+>   confirmation remains blocked on SA79 closeout.
 > - ~~`_session_managed_adapters` swallows `ImproperlyConfigured`~~ — **resolved (SA75):** narrowed
 >   to re-raise unless the missing import is the managed-package root itself; CI additionally
 >   asserts the full adapter registry.

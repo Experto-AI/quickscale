@@ -299,9 +299,10 @@ docs updated in the same delta).
   inlined SQL and its test were aligned to match, and a new cross-module conformance gate checks
   all six known composite FKs). Findings-table counts updated (S1 1→0, S3 4→0, total 5→0 — **zero
   open findings**). Two non-blocking follow-ups spawned by SA76's quarantine removal remain open on
-  `roadmap.md`, not here: **SA77** (orgs' 9 restricted-role failures, root cause not yet
-  established) and **SA79** (forms `0007` backfill data mismatch, distinct from the deferability
-  contract SA60 already fixed).
+   `roadmap.md`, not here: **SA77** (orgs' 9 restricted-role failures, root cause established and
+   code fix landed 2026-07-12; final restricted-role verification blocked on SA79) and **SA79**
+   (forms `0007` backfill data mismatch, distinct from the deferability contract SA60 already
+   fixed; reopened/blocked on CR-PLAN-SA79-004 and CR-PLAN-SA79-005).
 
 ## Notes (not violations, watch items)
 
@@ -343,5 +344,6 @@ docs updated in the same delta).
 - **SA59.1 restricted-role known failures — mostly resolved (2026-07-12):** forms `0007`'s
   composite-FK contract issue closed via SA60 (TA50); notifications' duplicate-db issue closed via
   SA78; the residual forms backfill bug is SA79 (open, Track 2); orgs' 9 restricted-role failures
-  are SA77 (open, Track 1, root cause not yet established). TA57's gate-red consequence closed via
+  are SA77 (open, Track 1, root cause established and code fix landed 2026-07-12; final
+  verification blocked on SA79). TA57's gate-red consequence closed via
   SA76's quarantine mechanism. See `roadmap.md` for SA77/SA79 tracking.
