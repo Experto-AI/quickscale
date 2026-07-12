@@ -428,13 +428,18 @@ class Command(BaseCommand):
                 # Cross-module owned rows (FK-safe delete order).
                 self._delete_owned_rows(organization)
 
-                # Org-level rows.
+                # Org-level rows — use _raw_delete to bypass model delete()
+                # and signal receivers (notably the SA70 pre_delete backstop
+                # on OrganizationMembership).  The purge is intentionally
+                # destroying the org and all its rows; individual row-level
+                # protections are irrelevant here.  This is consistent with
+                # how the Organization row itself is deleted below.
                 OrganizationInvitation.objects.filter(
                     organization=organization
-                ).delete()
+                )._raw_delete(OrganizationInvitation.objects.db)
                 OrganizationMembership.objects.filter(
                     organization=organization
-                ).delete()
+                )._raw_delete(OrganizationMembership.objects.db)
 
                 # Org row — use _raw_delete to bypass Django's cascade
                 # collector, which queries all FK-referencing model tables

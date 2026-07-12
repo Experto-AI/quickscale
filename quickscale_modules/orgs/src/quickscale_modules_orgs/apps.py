@@ -191,6 +191,22 @@ class QuickscaleOrgsConfig(AppConfig):
             install_priming_wrapper(conn)
         connection_created.connect(_install_priming_on_connection)
 
+        # ---- SA70 — pre_delete receiver backstop for last-owner invariant -
+        # Connects the backstop receiver defined in signals.py so that
+        # cascade-driven membership deletions (e.g. user.delete()) also
+        # enforce the last-owner invariant.
+        from django.db.models.signals import pre_delete
+
+        from quickscale_modules_orgs.models import OrganizationMembership
+        from quickscale_modules_orgs.signals import (
+            _protect_last_owner_on_membership_delete,
+        )
+
+        pre_delete.connect(
+            _protect_last_owner_on_membership_delete,
+            sender=OrganizationMembership,
+        )
+
         # ---- SA1.3 — tenant-isolation system check -----------------------
         # Import checks.py to register the check_tenant_isolation system
         # check.  The @register decorator runs at import time, so importing

@@ -1115,6 +1115,67 @@ def test_purge_organization_deletes_memberships_and_invitations() -> None:
     assert OrganizationInvitation.objects.filter(organization_id=org_id).count() == 0
 
 
+@pytest.mark.django_db
+def test_purge_organization_one_owner_multi_member_succeeds() -> None:
+    """purge_organization must succeed for a one-owner/multi-member org.
+
+    Regression for CR-SA70-001: the SA70 pre_delete backstop on
+    OrganizationMembership must not block org-wide purge when the owner
+    is the sole owner but other members exist.
+    """
+    owner = get_user_model().objects.create_user(
+        username="sa70-regression-owner",
+        email="sa70-regression-owner@example.com",
+        password="secret123",
+    )
+    member_a = get_user_model().objects.create_user(
+        username="sa70-regression-member-a",
+        email="sa70-regression-member-a@example.com",
+        password="secret123",
+    )
+    member_b = get_user_model().objects.create_user(
+        username="sa70-regression-member-b",
+        email="sa70-regression-member-b@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name="SA70 Regression Test",
+        slug="sa70-regression",
+    )
+    OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=member_a,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    OrganizationMembership.objects.create(
+        user=member_b,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+    org_id = organization.pk
+
+    stdout = StringIO()
+    call_command(
+        "purge_organization",
+        organization_id=str(org_id),
+        stdout=stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+
+    output = stdout.getvalue()
+    assert "has been purged" in output
+    assert "Organization memberships: 3" in output
+    assert not Organization.objects.filter(pk=org_id).exists()
+    assert OrganizationMembership.objects.filter(organization_id=org_id).count() == 0
+    assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
+
+
 # ---------------------------------------------------------------------------
 # T1.17 Phase 2 — cross-module purge, rollback, and slug-reuse tests
 # ---------------------------------------------------------------------------

@@ -174,6 +174,63 @@ def test_last_owner_removal_allowed_when_sole_member() -> None:
     assert not OrganizationMembership.objects.filter(pk=membership_pk).exists()
 
 
+@pytest.mark.django_db(transaction=True)
+def test_user_delete_of_last_owner_in_multi_member_org_is_refused() -> None:
+    """Direct ORM user.delete() on a sole owner of a multi-member org
+    should be refused (SA70 pre_delete backstop).
+
+    The model-level ``delete()`` override on OrganizationMembership
+    (SA47) enforces the last-owner invariant when a membership is
+    removed through the model.  However, Django's deletion collector
+    can cascade-delete via ``user.delete()`` without calling the
+    membership model's ``delete()`` — this test proves the SA70
+    ``pre_delete`` signal receiver closes that gap.
+
+    The deliberate sole-member self-removal path is not affected —
+    ``is_last_owner_with_members`` returns False when no other members
+    exist.
+    """
+
+    owner = _create_user(
+        username="sa70_owner",
+        email="sa70_owner@example.com",
+        password="Sa70Owner1!",
+    )
+    other_member = _create_user(
+        username="sa70_member",
+        email="sa70_member@example.com",
+        password="Sa70Member1!",
+    )
+    organization = Organization.objects.create(
+        name="SA70 Refusal Org",
+        slug="sa70-refusal-org",
+    )
+    owner_membership = OrganizationMembership.objects.create(
+        user=owner,
+        organization=organization,
+        role=OrgRole.OWNER,
+    )
+    OrganizationMembership.objects.create(
+        user=other_member,
+        organization=organization,
+        role=OrgRole.MEMBER,
+    )
+
+    owner_pk = owner.pk
+    membership_pk = owner_membership.pk
+
+    with pytest.raises(ValidationError) as exc_info:
+        owner.delete()
+
+    assert exc_info.value.messages == [
+        OrganizationMembership.LAST_OWNER_REMOVAL_MESSAGE
+    ]
+
+    # The cascade was rolled back — user and membership survive.
+    assert get_user_model().objects.filter(pk=owner_pk).exists()
+    assert OrganizationMembership.objects.filter(pk=membership_pk).exists()
+
+
 @pytest.mark.django_db
 def test_last_owner_save_uses_locked_persisted_role_for_stale_instances() -> None:
     """Stale membership saves should validate against the locked persisted role."""
