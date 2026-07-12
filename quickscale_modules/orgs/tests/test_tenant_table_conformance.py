@@ -17,6 +17,7 @@ PostgreSQL-only RLS assertions are gated behind
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from typing import Any
 
 import pytest
@@ -935,57 +936,55 @@ _RESTRICTED_ROLE = "quickscale_rls_test_role"
 
 
 def _ensure_rls_test_role() -> None:
-    """Assert the pre-provisioned RLS test role exists (SA59.3).
+    """Assert the pre-provisioned RLS test role exists (SA59.3, SA77).
 
     The role must be pre-created by the test harness
     (``scripts/provision_test_roles.sh`` or equivalent).  Raises
     ``RuntimeError`` with setup instructions if missing.
     Grants SELECT on every ENROLLED tenant table so the restricted role
     can verify RLS policy enforcement.
+
+    SA77: converted from ``psycopg2`` direct connection to Django's
+    managed ``connection.cursor()`` so the helper works under restricted-role
+    (NOBYPASSRLS) environments where a separate psycopg2 connection may
+    fail or misbehave.  Best-effort GRANTs are wrapped in savepoints
+    (``transaction.atomic()``) so permission-denied failures under a
+    non-owner database role do not abort the outer test transaction.
     """
-    import psycopg2  # type: ignore[import-untyped]
+    from django.db import connection, transaction
 
-    from django.db import connection
-
-    db = connection.settings_dict
-    conn = psycopg2.connect(
-        dbname=db["NAME"],
-        user=db["USER"],
-        password=db["PASSWORD"],
-        host=db.get("HOST", "localhost"),
-        port=db.get("PORT", "5432"),
-    )
-    conn.autocommit = True
-    try:
-        with conn.cursor() as cur:
-            # SA59.3: assert the role is pre-provisioned instead of CREATE ROLE.
-            cur.execute(
-                "SELECT 1 FROM pg_roles WHERE rolname = %s",
-                [_RESTRICTED_ROLE],
+    with connection.cursor() as cur:
+        # SA59.3: assert the role is pre-provisioned instead of CREATE ROLE.
+        cur.execute(
+            "SELECT 1 FROM pg_roles WHERE rolname = %s",
+            [_RESTRICTED_ROLE],
+        )
+        if cur.fetchone() is None:
+            raise RuntimeError(
+                f"Pre-provisioned role {_RESTRICTED_ROLE} not found. "
+                f"Run scripts/provision_test_roles.sh to create it before "
+                f"running tenant-table conformance tests."
             )
-            if cur.fetchone() is None:
-                raise RuntimeError(
-                    f"Pre-provisioned role {_RESTRICTED_ROLE} not found. "
-                    f"Run scripts/provision_test_roles.sh to create it before "
-                    f"running tenant-table conformance tests."
-                )
-            try:
+        # Best-effort grants: each is wrapped in a savepoint so
+        # a permission-denied failure under NOBYPASSRLS does not
+        # abort the outer test transaction (SA77).
+        try:
+            with transaction.atomic():
                 cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
-            except Exception:
-                pass
-            for entry in TENANT_TABLE_REGISTRY:
-                if entry.status == TenantTableStatus.ENROLLED:
-                    model = apps.get_model(entry.app_label, entry.model_name)
-                    if model is not None:
-                        try:
+        except Exception:
+            pass
+        for entry in TENANT_TABLE_REGISTRY:
+            if entry.status == TenantTableStatus.ENROLLED:
+                model = apps.get_model(entry.app_label, entry.model_name)
+                if model is not None:
+                    try:
+                        with transaction.atomic():
                             cur.execute(
                                 f"GRANT SELECT ON {model._meta.db_table} "
                                 f"TO {_RESTRICTED_ROLE}"
                             )
-                        except Exception:
-                            pass
-    finally:
-        conn.close()
+                    except Exception:
+                        pass
 
 
 # ---------------------------------------------------------------------------
@@ -1080,7 +1079,7 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
         is_system=False,
         is_personal=False,
     )
-    user = UserModel.objects.create_user(
+    user = UserModel.objects.create_user(  # type: ignore[attr-defined]
         username="af11_proof_user",
         password="af11_proof_pass",
     )
@@ -1307,8 +1306,9 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
 
 
 @pytest.fixture(autouse=True)
-def _close_connection() -> None:
+def _close_connection() -> Generator[None, None, None]:
     """Close the shared connection after each test.
+
 
     Django reopens it lazily on the next ``cursor()`` access, creating a
     fresh PostgreSQL session where ``app.current_org_id`` is in the NULL
