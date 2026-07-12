@@ -47,10 +47,10 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78, SA79) were pruned from this section on 2026-07-12 — their full implementation detail lives in CHANGELOG.md; SA59.1 was also closed (via SA76's quarantine) and pruned.
+> Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78, SA79) were pruned from this section on 2026-07-12 — their full implementation detail lives in CHANGELOG.md; SA59.1 was also closed (via SA76's quarantine) and pruned. SA59.4 was not pruned — it is a blocked checkpoint (see Track 1 below), not a complete close.
 >
-> **Track readiness (2026-07-12):** all three tracks are clean to continue — no blocked work, no decision needed.
-> - **Track 1** — SA59 (umbrella) open, blocked only on SA59.4. SA59.4 and SA77 are both open and unblocked, available to start now.
+> **Track readiness (2026-07-12):** Track 1 has a blocked checkpoint (SA59.4 — review finding CR-SA59.4-001 unresolved). Track 2 is complete with no open items. Track 3 remains clean to continue.
+> - **Track 1** — SA59 (umbrella) blocked checkpoint via SA59.4 (blocked: CR-SA59.4-001). SA77 remains open and unblocked, available to start now.
 > - **Track 2** — SA79 complete (2026-07-12). No open items; fully available for new work.
 > - **Track 3** — no open items; fully available for new work.
 
@@ -70,20 +70,7 @@ SA59.4 and SA77 (Track 1) touch disjoint files (docs/decisions.md vs. orgs test 
 
 ### Track 1 — Tenant-context surface
 
-SA59 (umbrella) remains open via SA59.4 only — SA59.1–SA59.3 are complete and SA59.1 closed via SA76's quarantine (2026-07-12, see CHANGELOG.md). SA77 is open and unblocked.
-
-#### Finding — `test-tooling-auto-primes-bypassrls-hatch` (`why →` [tech-audit.md TA49](../others/tech-audit.md))
-
-- [ ] **SA59 (umbrella) — Stop auto-priming `QUICKSCALE_ALLOW_BYPASSRLS=1` in the test-unit path — open via SA59.4 only.** `Tier 2 → split · Track 1 · deps: SA59.4`
-  Split into SA59.1–SA59.4 per roadmap policy (Tier 3 → four Tier 1–2 sub-slices). SA59.1 (validation harness + coverage plumbing), SA59.2 (backups PostgreSQL/RLS seam), and SA59.3 (retained-role contract conversion) are complete — see CHANGELOG.md. Only **SA59.4** (docs + final closeout) remains.
-
-  - [ ] **SA59.4 — Docs + final closeout — unblocked.** `Tier 1 · Track 1 · deps: SA59.1 (closed), SA76 (closed), SA59.2 (complete), SA59.3 (complete)`
-    Correct documentation to match the adopted role shape, record the gate-split decision in decisions.md, and produce the final closeout checkpoint. Inherits two documentation fixes:
-    - **F-SA59-DOC-002 / F-SA59-CMD-010** — Direct-connection role uses `LOGIN`, not `NOLOGIN`; correct matching docs and command matrix. Role descriptions in `Makefile` (help text) and scripts (`test_unit.sh`, `test_integration.sh`) still use `NOLOGIN`, but the CI `quickscale_test_role` requires `LOGIN` to establish test-database connections. All documentation and the command matrix must reflect `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` consistently.
-    - **Advisory: agent-handback provenance discrepancy (user accepted).** A previous implementation handback omitted `decisions.md` and `scripts/test_integration.sh` from its changed-files listing. Include these files in the closeout manifest.
-    *Target files:* `docs/technical/decisions.md` (record the unit/integration gate split); role-description prose in scripts, workflow docs, CHANGELOG, and the test-command reference matrix.
-    *Acceptance:* the blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is removed from the unit-only path (done); the integration path runs module suites against a NOBYPASSRLS role in both `ci.yml` and `publish.yml` (done); developers set the SA14.4 hatch explicitly per-suite when they need it; `make test-unit` (and the new integration target) documents the split in its help text; decisions.md records the split.
-  *(why →* [tech-audit.md TA49](../others/tech-audit.md)*)*
+SA59 (umbrella) blocked checkpoint via SA59.4 (2026-07-12) — see CHANGELOG.md. SA59.1–SA59.3 complete; SA59.4 landed checkpoint but remains open/blocked on CR-SA59.4-001 (medium, blocking, correctness: `docs/technical/validation_policy.md` quarantine-removal wording must match the live gate contract — each quarantine entry is removed independently as its owning ticket lands/completes). SA77 is open and unblocked.
 
 #### Finding — `test-tooling-auto-primes-bypassrls-hatch`, orgs restricted-role residual (`why →` [tech-audit.md TA49](../others/tech-audit.md); split from SA59.1 per the 2026-07-12 closeout-path decision)
 

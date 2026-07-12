@@ -42,8 +42,8 @@ FILE_COVERAGE_THRESHOLD=80
 declare -A QUARANTINE_TICKETS
 # Orgs: restricted-role CREATE ROLE failures (3 test_models + 6 helper-path)
 QUARANTINE_TICKETS[orgs]="SA77"
-# Notifications: duplicate-db/ownership failures on restricted-role reruns
-QUARANTINE_TICKETS[notifications]="SA78"
+# Notifications: forms 0007 FK constraint errors surfaced after SA78's duplicate-db fix (SA78 resolved the DB-lifecycle crash; remaining FK errors tracked as SA79)
+QUARANTINE_TICKETS[notifications]="SA79"
 
 is_quarantined() {
   local mod_name="$1"
