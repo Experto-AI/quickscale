@@ -22,6 +22,7 @@ where both packages are on sys.path.
 from __future__ import annotations
 
 import inspect
+import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -47,26 +48,343 @@ from quickscale_core.module_wiring import ModuleWiringSpec
 
 # SA44 Phase 1: managed adapters (social, billing, CRM) are NOT registered
 # at import time.  ``refresh_managed_adapters()`` is called by the
-# session-scoped autouse fixture below, which safely handles
-# ImproperlyConfigured when a managed module package is not importable
-# in the current environment.
+# session-scoped autouse fixture below, which only tolerates the
+# genuine "managed package not installed" case outside CI. Broken adapter
+# imports still fail the unit gate.
+
+_REGISTERED_ADAPTERS = [
+    "analytics",
+    "auth",
+    "backups",
+    "billing",
+    "blog",
+    "crm",
+    "forms",
+    "listings",
+    "notifications",
+    "orgs",
+    "social",
+    "storage",
+]
+
+
+def _is_missing_managed_package_root(exc: Exception, module_name: str) -> bool:
+    """Return True only for the current module's missing package root.
+
+    A real missing managed package raises ``ModuleNotFoundError`` with the
+    managed package root (for example ``quickscale_modules_billing``) as the
+    missing import target. Broken adapters should propagate instead of being
+    converted into session-wide skips.
+    """
+
+    target_package = f"quickscale_modules_{module_name}"
+
+    # The root package may be reported as the exception itself (direct
+    # ModuleNotFoundError) or as its cause (chained ImportError → ...
+    # → ModuleNotFoundError).  Check both.
+    candidate = exc if isinstance(exc, ModuleNotFoundError) else exc.__cause__
+    if not isinstance(candidate, ModuleNotFoundError):
+        return False
+
+    missing_module = getattr(candidate, "name", None)
+    return missing_module == target_package
+
+
+def _assert_full_adapter_registry_present() -> None:
+    """Fail fast in CI when any expected adapter failed to register."""
+
+    missing = [
+        name for name in _REGISTERED_ADAPTERS if name not in MANIFEST_ADAPTER_REGISTRY
+    ]
+    assert not missing, (
+        "CI environment missing expected manifest adapters after session refresh: "
+        + ", ".join(sorted(missing))
+    )
+
+
+def _refresh_session_managed_adapters() -> None:
+    """Refresh managed adapters per module with deterministic ordering.
+
+    Processes each managed module independently so that a tolerated
+    absence case (module not shipped at the active base path, or a
+    shipped manifest whose managed package root is genuinely absent)
+    does not prevent later modules from being refreshed. Non-tolerated
+    adapter failures still propagate.
+    """
+    import importlib  # noqa: PLC0415
+
+    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        ImproperlyConfigured,
+        discover_shipped_module_names,
+    )
+
+    shipped_at_base = set(discover_shipped_module_names())
+    origins = sorted(MANAGED_ADAPTER_ORIGINS)
+
+    for module_name in origins:
+        if module_name not in shipped_at_base:
+            # Module not present at the active base path — remove any
+            # stale registry entry and move on.
+            MANIFEST_ADAPTER_REGISTRY.pop(module_name, None)
+            continue
+
+        # Module has a manifest at the active base path — the
+        # module-owned adapter MUST be importable.
+        try:
+            adapter_module = importlib.import_module(
+                f"quickscale_modules_{module_name}.adapter"
+            )
+        except ImportError as exc:
+            if not _is_missing_managed_package_root(exc, module_name):
+                raise ImproperlyConfigured(
+                    f"Managed adapter for '{module_name}' not importable: "
+                    f"quickscale_modules_{module_name}.adapter could not "
+                    f"be loaded. The module package must be installed and "
+                    f"importable."
+                ) from exc
+            # Root package genuinely absent — tolerate and continue.
+            continue
+
+        sentinel = getattr(adapter_module, "get_manifest_adapter", None)
+        if sentinel is not None:
+            MANIFEST_ADAPTER_REGISTRY[module_name] = sentinel()
+            continue
+
+        raise ImproperlyConfigured(
+            f"Managed adapter for '{module_name}' not importable: "
+            f"quickscale_modules_{module_name}.adapter has no "
+            f"get_manifest_adapter function."
+        )
+
+    if os.environ.get("CI"):
+        _assert_full_adapter_registry_present()
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _session_managed_adapters() -> None:
     """Refresh managed adapters once per test session.
 
-    Safely handles ImproperlyConfigured when a managed module's Python
-    adapter package is not importable in the current test environment
-    (e.g. during unit-only runs where some module packages are not
-    installed).  Catches the exception so test collection does not fail.
+    Tolerates only the genuine "managed package not installed" case in
+    nongated environments. Broken managed-adapter imports keep failing
+    closed, and CI additionally asserts that every expected adapter is
+    present after the refresh.
     """
-    from quickscale_core.contracts.module_discovery import ImproperlyConfigured
 
-    try:
-        refresh_managed_adapters()
-    except ImproperlyConfigured:
-        pass
+    _refresh_session_managed_adapters()
+
+
+class TestSessionManagedAdaptersFixtureGuard:
+    """Regression coverage for SA75's narrowed session-fixture behavior."""
+
+    def test_missing_managed_package_is_tolerated_outside_ci(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A genuinely absent managed package still passes without error outside CI."""
+
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            discover_shipped_module_names,
+        )
+
+        monkeypatch.delenv("CI", raising=False)
+
+        # Simulate billing not being shipped at the active base path.
+        def _discover_no_billing() -> list[str]:
+            return [n for n in discover_shipped_module_names() if n != "billing"]
+
+        monkeypatch.setattr(
+            discover_shipped_module_names.__module__ + ".discover_shipped_module_names",
+            _discover_no_billing,
+        )
+
+        _refresh_session_managed_adapters()
+        assert "billing" not in MANIFEST_ADAPTER_REGISTRY, (
+            "billing should not be registered when absent from shipped set"
+        )
+
+    def test_broken_managed_adapter_import_is_not_swallowed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-package import failures still fail the unit gate."""
+
+        import importlib as _importlib_mod  # noqa: PLC0415
+
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            ImproperlyConfigured,
+        )
+
+        monkeypatch.delenv("CI", raising=False)
+
+        _orig_import = _importlib_mod.import_module
+
+        def _raise_broken_import(name: str, *args: object, **kwargs: object) -> object:
+            if name == "quickscale_modules_billing.adapter":
+                raise ImportError("broken managed adapter") from (
+                    ModuleNotFoundError(
+                        "No module named 'stripe'",
+                        name="stripe",
+                    )
+                )
+            return _orig_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(
+            _importlib_mod,
+            "import_module",
+            _raise_broken_import,
+        )
+
+        with pytest.raises(ImproperlyConfigured, match="not importable") as exc_info:
+            _refresh_session_managed_adapters()
+
+        # The ImproperlyConfigured is raised ``from exc`` (the caught
+        # ImportError), preserving the full cause chain.
+        assert isinstance(exc_info.value.__cause__, ImportError)
+        assert isinstance(exc_info.value.__cause__.__cause__, ModuleNotFoundError)
+        assert exc_info.value.__cause__.__cause__.name == "stripe"
+
+    def test_ci_requires_full_adapter_registry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """CI fails fast if the session refresh leaves any expected adapter missing."""
+
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            discover_shipped_module_names,
+        )
+
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        monkeypatch.setenv("CI", "1")
+
+        # No managed modules are shipped — the refresh will skip them,
+        # leaving only the explicitly-registered analytics adapter.
+        monkeypatch.setattr(
+            discover_shipped_module_names.__module__ + ".discover_shipped_module_names",
+            lambda: [],
+        )
+
+        try:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY["analytics"] = lambda opts, **kw: (
+                ModuleWiringSpec()
+            )
+
+            with pytest.raises(
+                AssertionError,
+                match="missing expected manifest adapters after session refresh",
+            ):
+                _refresh_session_managed_adapters()
+        finally:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+
+
+# ---------------------------------------------------------------------------
+# CR-SA75-REV-001 regression: one missing managed package coexisting
+# with a later managed adapter that is broken or available must not
+# suppress failures or prevent the healthy adapter's refresh.
+# ---------------------------------------------------------------------------
+
+
+class TestSA75CoexistenceRegression:
+    """Regression coverage for CR-SA75-REV-001.
+
+    Verifies that a genuinely missing managed module (not shipped at the
+    active base path) does not prevent later managed adapters from being
+    refreshed, and that a shipped module with a broken adapter still
+    surfaces its failure.
+
+    Follow-up (CR-SA75-REV-002): corrected the root-package-missing
+    detection to check the exception itself (direct ModuleNotFoundError)
+    in addition to its cause, so a shipped module whose Python package
+    root is genuinely absent is tolerated as a nongated skip.
+    """
+
+    def test_missing_package_root_is_tolerated(self, tmp_path: Path) -> None:
+        """A shipped module whose Python package root is missing is
+        tolerated (skipped) without raising ImproperlyConfigured."""
+
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        _orig_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        _orig_origins = set(MANAGED_ADAPTER_ORIGINS)
+        _orig_base = get_modules_base_path()
+
+        try:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(
+                {"_test_missing_mod", "_test_absent_pkg_mod"}
+            )
+
+            # _test_absent_pkg_mod has a module.yml at the temp base
+            # path but its Python package root is missing — must be
+            # tolerated as a nongated skip.  _test_missing_mod is
+            # genuinely absent from the shipped set.
+            modules_dir = tmp_path / "modules"
+            (modules_dir / "_test_absent_pkg_mod").mkdir(parents=True)
+            (modules_dir / "_test_absent_pkg_mod" / "module.yml").write_text(
+                "version: '1'\nname: _test_absent_pkg_mod\n"
+            )
+
+            set_modules_base_path(modules_dir)
+
+            # Previously this raised ImproperlyConfigured because the
+            # handler only checked exc.__cause__ for ModuleNotFoundError;
+            # a direct ModuleNotFoundError (missing package root) was
+            # not recognised as the tolerated case.  CR-SA75-REV-002
+            # corrected the check to also inspect exc itself.
+            _refresh_session_managed_adapters()
+
+            # Neither module's adapter is registrable.
+            assert "_test_absent_pkg_mod" not in MANIFEST_ADAPTER_REGISTRY
+            assert "_test_missing_mod" not in MANIFEST_ADAPTER_REGISTRY
+        finally:
+            set_modules_base_path(_orig_base)
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(_orig_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(_orig_origins)
+
+    def test_missing_package_plus_healthy_adapter_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing module is tolerated and a healthy module gets
+        registered when both coexist during refresh."""
+
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            discover_shipped_module_names,
+        )
+
+        # Patch shipped set so only social (which has no RLS
+        # dependency in unit tests) is considered shipped.
+        def _discover_just_social() -> list[str]:
+            return [n for n in discover_shipped_module_names() if n == "social"]
+
+        monkeypatch.setattr(
+            discover_shipped_module_names.__module__ + ".discover_shipped_module_names",
+            _discover_just_social,
+        )
+
+        _orig_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        _orig_origins = set(MANAGED_ADAPTER_ORIGINS)
+
+        try:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update({"_test_missing_mod", "social"})
+
+            _refresh_session_managed_adapters()
+
+            # _test_missing_mod was not shipped → absent from registry.
+            assert "_test_missing_mod" not in MANIFEST_ADAPTER_REGISTRY
+            # social WAS shipped and its adapter imports fine.
+            assert "social" in MANIFEST_ADAPTER_REGISTRY
+        finally:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(_orig_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(_orig_origins)
 
 
 # ---------------------------------------------------------------------------
@@ -271,25 +589,6 @@ class TestCustomAdapterRegistration:
 # Adapter-path coverage: exercise each registered adapter through
 # build_manifest_wiring_spec and verify the returned ModuleWiringSpec.
 # ---------------------------------------------------------------------------
-
-# All catalog adapters expected in the registry.  Inline-registered modules
-# (analytics, auth, blog, …) are set at module load time.  Managed modules
-# (billing, crm, social) are registered by the session-scoped
-# ``_session_managed_adapters`` fixture in this module (SA44 Phase 1).
-_REGISTERED_ADAPTERS = [
-    "analytics",
-    "auth",
-    "backups",
-    "billing",
-    "blog",
-    "crm",
-    "forms",
-    "listings",
-    "notifications",
-    "orgs",
-    "social",
-    "storage",
-]
 
 # Adapters that require project_package to build a spec.
 _ADAPTERS_REQUIRING_PROJECT_PACKAGE = frozenset({"social"})
