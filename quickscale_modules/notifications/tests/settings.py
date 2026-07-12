@@ -82,6 +82,13 @@ DATABASES = {
         "PASSWORD": os.environ.get("QS_NOTIFICATIONS_DB_PASSWORD", ""),
         "HOST": os.environ.get("QS_NOTIFICATIONS_DB_HOST", "localhost"),
         "PORT": os.environ.get("QS_NOTIFICATIONS_DB_PORT", "5432"),
+        # SA78: Use a fixed test database name instead of the default
+        # test_test_quickscale_notifications.  Together with reuse_db
+        # in conftest.py this avoids ownership/duplicate-database
+        # failures on rerun under a restricted role.
+        "TEST": {
+            "NAME": "qs_notifications_test",
+        },
     }
 }
 
