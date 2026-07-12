@@ -204,7 +204,7 @@ if _privileged_command:
         raise ValueError(
             "RUNTIME_DATABASE_URL must be explicitly blank when "
             "QUICKSCALE_PRIVILEGED_COMMAND is set. "
-            "Set RUNTIME_DATABASE_URL=\"\" alongside the privileged command."
+            'Set RUNTIME_DATABASE_URL="" alongside the privileged command.'
         )
     if not database_url:
         raise ValueError(

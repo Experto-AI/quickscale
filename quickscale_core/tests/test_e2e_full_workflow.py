@@ -1358,17 +1358,34 @@ LOGGING = {{
         )
         assert result.returncode == 0, f"Django checks failed: {result.stderr}"
 
-    def _run_migrations(self, project_path: Path):
-        """Run database migrations."""
+    def _run_migrations(
+        self,
+        project_path: Path,
+        env_overrides: dict[str, str] | None = None,
+    ):
+        """Run database migrations.
+
+        Args:
+        ----
+            project_path: Path to the generated project.
+            env_overrides: Optional additional env vars merged into the
+                subprocess environment. These override any existing
+                environment variables with the same key.
+
+        """
+        env = {
+            **os.environ,
+            "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
+        }
+        if env_overrides:
+            env.update(env_overrides)
+
         result = subprocess.run(
             ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
             cwd=project_path,
             capture_output=True,
             text=True,
-            env={
-                **os.environ,
-                "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
-            },
+            env=env,
         )
         assert result.returncode == 0, f"Migrations failed: {result.stderr}"
 
@@ -1781,13 +1798,17 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
             self._build_react_frontend(project_path)
 
         self._configure_test_database(project_path, project_name, postgres_url)
-        self._run_migrations(project_path)
-
-        server_port = self._find_free_port()
         # The generated-project test PostgreSQL role is a bootstrap superuser
         # with BYPASSRLS, so ``quickscale_modules_orgs.apps._check_rls_role()``
         # aborts unless QUICKSCALE_ALLOW_BYPASSRLS is set. Pass the escape-hatch
-        # env var only to this dev-server subprocess to keep the override scoped.
+        # env var to both the migration and dev-server subprocesses, scoped
+        # per-call so no ambient env leakage occurs.
+        self._run_migrations(
+            project_path,
+            env_overrides={"QUICKSCALE_ALLOW_BYPASSRLS": "1"},
+        )
+
+        server_port = self._find_free_port()
         server_process = self._start_dev_server(
             project_path,
             port=server_port,
