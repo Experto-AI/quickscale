@@ -79,6 +79,24 @@ def _backfill_formfield_org(apps: Any, schema_editor: Any) -> None:
     Form also has no organization (e.g. seed data created before the
     organization column existed in migration 0004) still receive a valid
     org ID — matching the ``assign_system_org`` pattern from 0005.
+
+    SA79 (CR-SA79-001 RESOLVED): Sets the ``app.operator_access`` GUC
+    before the backfill so the correlated subquery on Form is not blocked
+    by FORCE RLS (enabled in 0006) when the connected role has NOBYPASSRLS.
+    Unlike the first-pass fix that pinned ``app.current_org_id`` to the
+    System org (which only made System-org Form rows visible), using
+    ``app.operator_access`` enables the read-only OR clause in the Form
+    RLS policy (``FOR SELECT``), making **all** Form rows visible
+    regardless of their organization — so non-system tenant data is
+    correctly backfilled with the parent Form's real org.
+
+    The ``operator_access`` GUC is scoped to ``SET LOCAL``, so it only
+    applies within the current transaction and is cleaned up automatically
+    on commit/rollback.  Because Django wraps the entire migration in an
+    ``atomic()`` block on PostgreSQL, the same ``operator_access`` elevation
+    also covers ``_backfill_formsubmission_org`` and
+    ``_backfill_formfieldvalue_org`` later in this migration (they share
+    the same transaction).
     """
     Organization = apps.get_model("quickscale_modules_orgs", "Organization")
     try:
@@ -90,6 +108,14 @@ def _backfill_formfield_org(apps: Any, schema_editor: Any) -> None:
             is_system=True,
             is_personal=False,
         )
+
+    # SA79: Elevate to operator_access so the correlated subquery can
+    # read Form rows across all organizations (not just the System org).
+    # ``SET LOCAL`` is scoped to the current transaction and cleaned up
+    # automatically when the migration transaction commits or rolls back.
+    schema_editor.execute(
+        "SET LOCAL app.operator_access = 'on'",
+    )
 
     # Ensure Form itself is backfilled (defensive — 0005 covers this
     # but the migration executor may process app migrations in an
@@ -103,6 +129,8 @@ def _backfill_formfield_org(apps: Any, schema_editor: Any) -> None:
 
     # Copy org from the parent Form, falling back to System org for
     # any rows whose parent Form was seeded before the org column existed.
+    # With ``operator_access`` active, the subquery sees ALL Form rows,
+    # so non-system tenant data is correctly backfilled.
     schema_editor.execute(
         "UPDATE quickscale_modules_forms_formfield "
         "SET organization_id = COALESCE("

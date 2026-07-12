@@ -47,11 +47,11 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78) were pruned from this section on 2026-07-12 — their full implementation detail lives in CHANGELOG.md; SA59.1 was also closed (via SA76's quarantine) and pruned.
+> Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78, SA79) were pruned from this section on 2026-07-12 — their full implementation detail lives in CHANGELOG.md; SA59.1 was also closed (via SA76's quarantine) and pruned.
 >
 > **Track readiness (2026-07-12):** all three tracks are clean to continue — no blocked work, no decision needed.
 > - **Track 1** — SA59 (umbrella) open, blocked only on SA59.4. SA59.4 and SA77 are both open and unblocked, available to start now.
-> - **Track 2** — SA79 open and unblocked, available to start now.
+> - **Track 2** — SA79 complete (2026-07-12). No open items; fully available for new work.
 > - **Track 3** — no open items; fully available for new work.
 
 ### Dependency & parallelization overview
@@ -59,14 +59,14 @@ git merge --no-ff wt-track{N}
 ```
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
-SA59 — drop bypassrls auto-prime       SA79 — fix forms 0007 backfill            (no open items)
-  (umbrella, open via SA59.4)            data mismatch
+SA59 — drop bypassrls auto-prime       SA79 — complete (2026-07-12)               (no open items)
+  (umbrella, open via SA59.4)
 SA59.4 — docs + final closeout
 SA77 — fix orgs restricted-role
   CREATE ROLE failures
 ```
 
-SA59.4 and SA77 (Track 1) touch disjoint files (docs/decisions.md vs. orgs test files) and share only the shared-closeout-files exception (`CHANGELOG.md`/`roadmap.md`). SA79 (Track 2) is fully independent of Track 1. Track 3 has no open work and is available for new items.
+SA59.4 and SA77 (Track 1) touch disjoint files (docs/decisions.md vs. orgs test files) and share only the shared-closeout-files exception (`CHANGELOG.md`/`roadmap.md`). SA79 (Track 2) is complete. Track 3 has no open work and is available for new items.
 
 ### Track 1 — Tenant-context surface
 
@@ -95,15 +95,7 @@ SA59 (umbrella) remains open via SA59.4 only — SA59.1–SA59.3 are complete an
 
 ### Track 2 — Module contracts & settings
 
-Available for new work; SA79 is open and unblocked.
-
-#### Finding — `forms-0007-backfill-data-mismatch` (`why →` SA78 findings, notifications test suite)
-
-- [ ] **SA79 — Fix forms migration 0007 backfill logic so seeded FormField rows match their parent Form's organization before VALIDATE CONSTRAINT.** `Tier 1 · Track 2 · deps: none`
-  Migration `0007_new_organization_ownership` adds a composite FK `forms_formfield_form_org_fk` and runs `VALIDATE CONSTRAINT` against existing rows. The seeded FormField rows (from migration `0002_seed_forms`) do not have their `organization_id` correctly populated to match the parent Form's `organization_id`, causing the VALIDATE to reject the `(form_id, organization_id)` pairs. This pre-existing bug was surfaced when SA78's duplicate-database fix allowed the notifications test suite to progress past the DB lifecycle stage, revealing 26 FK validation failures across the notifications, forms, and social suites. Root cause: the backfill step in `0007_new_organization_ownership` needs to update orphaned FormField rows to reference the correct organization before VALIDATE CONSTRAINT runs.
-  *Files:* `quickscale_modules/forms/migrations/0007_new_organization_ownership.py`
-  *Acceptance:* a fresh test-database creation under the restricted role runs the notifications, forms, and social suites with 0 FK validation errors attributable to the forms 0007 backfill; SA76's quarantine entry for forms (if any) can be removed.
-  *(why →* SA78 Findings/blockers discovered, notifications test suite*)*
+SA79 complete as of 2026-07-12. No open items; fully available for new work.
 
 ### Track 3 — Core/CLI plumbing
 
