@@ -40,7 +40,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - 90% overall mean coverage plus 80% minimum per file for `quickscale_core`, `quickscale_cli`, modules, and themes.
 - CI fails if overall mean drops below 90% or any file falls below 80%.
 - Coverage reports run on every CI build.
-- Thresholds are enforced across both unit and integration gates — `make test-unit` (via `scripts/test_unit.sh`) covers core and CLI code, while `make test-integration` (via `scripts/test_integration.sh`) covers module suites. Non-quarantined integration suites enforce the normal dual overall and per-file thresholds, while quarantined suites are excluded from gate failure and from the overall mean until their owning ticket closes.
+- Thresholds are enforced across both unit and integration gates — `make test-unit` (via `scripts/test_unit.sh`) covers core and CLI code, while `make test-integration` (via `scripts/test_integration.sh`) covers module suites. Non-quarantined integration suites enforce the normal dual overall and per-file thresholds. Quarantined suites are excluded from gate failure and from the overall mean; each quarantine entry is removed independently as its own owning ticket lands/completes — quarantine is per-entry, not held for a single simultaneous closeout across all entries.
 
 **Test Requirements:**
 - New features require tests.

@@ -47,10 +47,10 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78) were pruned from this section on 2026-07-12 — their full implementation detail lives in CHANGELOG.md; SA59.1 was also closed (via SA76's quarantine) and pruned. SA59.4 was not pruned — it is a blocked checkpoint (see Track 1 below), not a complete close.
+> Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78, SA59 umbrella including SA59.4) were pruned from this section — their full implementation detail lives in CHANGELOG.md.
 >
-> **Track readiness (2026-07-12):** Track 1 has a blocked checkpoint (SA59.4 — review finding CR-SA59.4-001 unresolved). Tracks 2–3 remain clean to continue.
-> - **Track 1** — SA59 (umbrella) blocked checkpoint via SA59.4 (blocked: CR-SA59.4-001). SA77 remains open and unblocked, available to start now.
+> **Track readiness (2026-07-12):** All three tracks are clean to continue — no blocked checkpoints.
+> - **Track 1** — SA77 open and unblocked, available to start now.
 > - **Track 2** — SA79 open and unblocked, available to start now.
 > - **Track 3** — no open items; fully available for new work.
 
@@ -67,7 +67,7 @@ SA77 (Track 1) and SA79 (Track 2) are fully independent and touch disjoint files
 
 ### Track 1 — Tenant-context surface
 
-SA59 (umbrella) blocked checkpoint via SA59.4 (2026-07-12) — see CHANGELOG.md. SA59.1–SA59.3 complete; SA59.4 landed checkpoint but remains open/blocked on CR-SA59.4-001 (medium, blocking, correctness: `docs/technical/validation_policy.md` quarantine-removal wording must match the live gate contract — each quarantine entry is removed independently as its owning ticket lands/completes). SA77 is open and unblocked.
+SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 is open and unblocked.
 
 #### Finding — `test-tooling-auto-primes-bypassrls-hatch`, orgs restricted-role residual (`why →` [tech-audit.md TA49](../others/tech-audit.md); split from SA59.1 per the 2026-07-12 closeout-path decision)
 
