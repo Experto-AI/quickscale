@@ -612,13 +612,20 @@ def test_account_deletion_and_membership_remove_no_deadlock() -> None:
     org_pk = org.pk
 
     def _account_delete_worker() -> dict[str, object]:
+        from django.core.exceptions import ValidationError
+
         close_old_connections()
         with transaction.atomic():
             # Simulate AccountDeleteView lock order: lock org first.
             Organization.objects.select_for_update().get(pk=org_pk)
-            # Delete user — cascades to the membership row.
-            User.objects.filter(pk=owner_pk).delete()
-            return {"ok": True, "stage": "account-deleted"}
+            try:
+                # Delete user — cascades to the membership row.
+                # SA70 pre_delete backstop may block this if the user is
+                # the sole owner with other members.
+                User.objects.filter(pk=owner_pk).delete()
+                return {"ok": True, "stage": "account-deleted"}
+            except ValidationError:
+                return {"ok": True, "stage": "blocked-last-owner"}
 
     def _membership_remove_worker() -> dict[str, object]:
         close_old_connections()
@@ -648,4 +655,11 @@ def test_account_deletion_and_membership_remove_no_deadlock() -> None:
     # At most one thread succeeded in removing the membership.
     # (The account deletion cascades; the membership.remove is
     #  expected to be blocked if the account deletion didn't race.)
-    assert r_m.get("deleted") is not True or r_a["stage"] == "account-deleted"
+    # SA70: the account deletion backstop may block the cascade when
+    # the user is the sole owner; the remove thread may then delete
+    # the surviving membership row.
+    assert (
+        r_m.get("deleted") is not True
+        or r_a["stage"] == "account-deleted"
+        or r_a["stage"] == "blocked-last-owner"
+    )
