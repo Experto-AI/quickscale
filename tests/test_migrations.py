@@ -1104,8 +1104,9 @@ class TestCrmParentOrgMutationRejection:
         # → (contact.id, contact.organization_id) should reject this because
         # the ContactNote still references (contact.id, org_a).
         #
-        # The composite FK is DEFERRABLE INITIALLY DEFERRED, so force it to
-        # IMMEDIATE inside the atomic block to catch the violation inline.
+        # The composite FK is NOT DEFERRABLE (SA60 uniform policy), so the
+        # constraint is checked immediately — SET CONSTRAINTS below is a
+        # harmless no-op retained for backward compatibility.
         with pytest.raises(IntegrityError), transaction.atomic():
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -1155,8 +1156,9 @@ class TestCrmParentOrgMutationRejection:
             created_by=user,
         )
 
-        # The composite FK is DEFERRABLE INITIALLY DEFERRED, so force it to
-        # IMMEDIATE inside the atomic block to catch the violation inline.
+        # The composite FK is NOT DEFERRABLE (SA60 uniform policy), so the
+        # constraint is checked immediately — SET CONSTRAINTS below is a
+        # harmless no-op retained for backward compatibility.
         with pytest.raises(IntegrityError), transaction.atomic():
             with connection.cursor() as cursor:
                 cursor.execute("SET CONSTRAINTS crm_dealnote_deal_org_fk IMMEDIATE")
