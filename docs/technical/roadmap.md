@@ -50,8 +50,8 @@ git merge --no-ff wt-track{N}
 > Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here.
 >
 > **Track readiness (2026-07-12):**
-> - **Track 1** — mixed. SA59.4 remains **BLOCKED** on unresolved SA59.1 failures (orgs, forms migration 0007, notifications) — SA59.1 is still open (parked at a prior user-directed stop). Everything else on Track 1 is **unblocked and ready to start**: SA60 and SA70's pending decisions were both ratified 2026-07-12 (NOT DEFERRABLE composite-FK policy; raise-not-return-early refusal mechanism — see `decisions.md §Multi-tenant SaaS Architecture`), and two new items were added from tech-audit.md's 2026-07-11 pass that had never been roadmapped: SA74 (TA54, **S1 production defect** — org creation fails under the restricted runtime role when CRM is installed; fix this first, it's independent of the SA59.1 blockers) and SA76 (TA57 — quarantine the known integration-gate failures so the gate goes green while SA59.1 proceeds).
-> - **Track 2** — clean. No open items remain after SA73's closeout.
+> - **Track 1** — mixed. SA59.4 remains **BLOCKED** on unresolved SA59.1 failures (orgs, forms migration 0007, notifications) — SA59.1 is still open (parked at a prior user-directed stop). SA70, SA74, and SA76 are **unblocked and ready to start**: SA70's pending decision was ratified 2026-07-12 (raise-not-return-early refusal mechanism — see `decisions.md §Multi-tenant SaaS Architecture`); SA74 (TA54, **S1 production defect** — org creation fails under the restricted runtime role when CRM is installed) and SA76 (TA57 — quarantine the known integration-gate failures) are new items added this pass from tech-audit.md's 2026-07-11 findings, which had never been roadmapped.
+> - **Track 2** — one open item, moved from Track 1 this pass: SA60 (composite-FK deferability policy). Its pending decision was ratified 2026-07-12 (NOT DEFERRABLE) — unblocked and ready to start; fits Track 2's "module contracts" charter better than Track 1's "tenant-context surface" one, and has no file overlap with anything on Track 1/3.
 > - **Track 3** — one open item, newly assigned: SA75 (TA56 — narrow a test fixture's overly-broad exception catch). Unblocked, parallel-safe, unrelated to the SA67 beta-site closeout (which itself remains closed; the outstanding manual check is tracked in `beta-site-migration.md`, not here).
 
 ### Dependency & parallelization overview
@@ -59,10 +59,8 @@ git merge --no-ff wt-track{N}
 ```
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
-SA59 — drop bypassrls auto-prime       — clean / no open items —                 SA75 — narrow adapter-fixture
-  (umbrella, split → SA59.1–SA59.4)                                                exception catch (TA56)
-SA60 — composite-FK deferability
-  policy + conformance gate
+SA59 — drop bypassrls auto-prime       SA60 — composite-FK deferability          SA75 — narrow adapter-fixture
+  (umbrella, split → SA59.1–SA59.4)      policy + conformance gate                 exception catch (TA56)
 SA70 — orgs pre_delete receiver
   backstop (Finding 2 first step)
 SA74 — prime CRM org-creation
@@ -71,11 +69,11 @@ SA76 — quarantine known
   integration-gate failures (TA57)
 ```
 
-Track 2 is clean; Track 3 now carries one small, independent item (SA75). Track 1 carries the bulk of open work; within it, SA59.1, SA59.4, SA60, SA70, SA74, and SA76 touch disjoint files (SA59.1: `Makefile` + `scripts/test_unit.sh` + `ci.yml` + `publish.yml`; SA59.4: `docs/technical/decisions.md` + role reference docs; SA60: `orgs/tenancy.py` + forms migrations; SA70: `orgs/signals.py` + a new receiver test; SA74: `crm/services.py` + `orgs/tests/conftest.py`; SA76: `scripts/test_integration.sh`) and share only `decisions.md` (additive sections, not a real conflict — see the shared-closeout-files note below). SA59.2 and SA59.3 are complete (see CHANGELOG.md); SA59.4 depends on SA59.1, SA59.2, and SA59.3 (the latter two already satisfied). SA76's file overlaps SA59.1's territory in spirit (both touch the integration gate's failure set) but not in practice — coordinate manually if both are in flight. SA75 (Track 3) is fully independent of every Track 1 item. The shared closeout files `CHANGELOG.md` and `docs/technical/roadmap.md` remain the one universal merge-conflict exception across tracks.
+Track 2 carries one item moved from Track 1 this pass (SA60); Track 3 carries one small, independent item (SA75). Track 1 still carries the bulk of open work; within it, SA59.1, SA59.4, SA70, SA74, and SA76 touch disjoint files (SA59.1: `Makefile` + `scripts/test_unit.sh` + `ci.yml` + `publish.yml`; SA59.4: `docs/technical/decisions.md` + role reference docs; SA70: `orgs/signals.py` + a new receiver test; SA74: `crm/services.py` + `orgs/tests/conftest.py`; SA76: `scripts/test_integration.sh`) and share only `decisions.md` (additive sections, not a real conflict — see the shared-closeout-files note below). SA59.2 and SA59.3 are complete (see CHANGELOG.md); SA59.4 depends on SA59.1, SA59.2, and SA59.3 (the latter two already satisfied). SA76's file overlaps SA59.1's territory in spirit (both touch the integration gate's failure set) but not in practice — coordinate manually if both are in flight. SA60 (Track 2) and SA75 (Track 3) are both fully independent of every Track 1 item and of each other. The shared closeout files `CHANGELOG.md` and `docs/technical/roadmap.md` remain the one universal merge-conflict exception across tracks.
 
 ### Track 1 — Tenant-context surface
 
-Open items below. SA59 (umbrella) remains blocked/open via SA59.1–SA59.4; SA60 and SA70 remain active Track 1 work, both unblocked since their pending decisions were ratified 2026-07-12. SA74 and SA76 are new items added this pass from tech-audit.md's 2026-07-11 findings.
+Open items below. SA59 (umbrella) remains blocked/open via SA59.1–SA59.4; SA70 remains active Track 1 work, unblocked since its pending decision was ratified 2026-07-12. SA74 and SA76 are new items added this pass from tech-audit.md's 2026-07-11 findings. SA60 moved to Track 2 this pass — see there.
 
 #### Finding — `test-tooling-auto-primes-bypassrls-hatch` (`why →` [tech-audit.md TA49](../others/tech-audit.md))
 
@@ -93,7 +91,7 @@ Open items below. SA59 (umbrella) remains blocked/open via SA59.1–SA59.4; SA60
 
     **Remaining blockers (SA59.1 not complete — must be resolved before closeout):**
     - **Orgs pre-existing failures (refined).** 3 `test_models.py` failures + 6 helper-path errors in `test_tenant_table_conformance.py`/`test_operator_access.py` persist. These depend on restricted-role `CREATE ROLE` behavior (SA59.3-style territory) and are not resolved by the Phase 3 test-only adaptations.
-    - **Forms migration failure (newly discovered).** `quickscale_modules/forms/migrations/0007_new_organization_ownership.py` fails composite-FK validation on a fresh restricted-role DB. Discovered during this session's integration gate walk.
+    - **Forms migration failure (newly discovered).** `quickscale_modules/forms/migrations/0007_new_organization_ownership.py` fails composite-FK validation on a fresh restricted-role DB. Discovered during this session's integration gate walk. **Expected to resolve via SA60** (Track 2, unblocked 2026-07-12) — the failure traces to `forms/0007`'s `DEFERRABLE` SQL diverging from the ratified `NOT DEFERRABLE` policy; aligning it is SA60's own acceptance criteria.
     - **Notifications duplicate-db issues (newly discovered).** Reruns hit `test_test_quickscale_notifications` ownership/duplicate-db problems. Discovered during this session's integration gate walk.
     - **Validated green:** billing (216 passed, 1 explicit bypass skip) was green on clean restricted-role rerun. Social (106/108 passed, 2 remaining boundary tests) ran clean but is not fully closed.
 
@@ -108,15 +106,6 @@ Open items below. SA59 (umbrella) remains blocked/open via SA59.1–SA59.4; SA60
   - **Stop-state (2026-07-12):** SA59.4 is the next ordered Track 1 task but remains blocked on the unresolved SA59.1 failures above. SA60's and SA70's pending decisions were ratified 2026-07-12 (see their entries below); both are now unblocked and available to work in parallel with SA59.1's resolution. SA74 (S1) and SA76 are also unblocked and available.
   - **Continuation note (2026-07-11):** Billing's canonical restricted-role suite is green (216 passed, 1 explicit bypass skip). Social test context work is unreviewed and incomplete (106/108 passed in the last restricted-role run); two social restricted-role boundary tests still need the direct-role adaptation pattern. The true cross-organization UPDATE test awaits an explicit decision between a single bypass-RLS mark, a production RLS-write expansion, or accepting a delete/create approximation.
   *(why →* [tech-audit.md TA49](../others/tech-audit.md)*)*
-
-#### Finding — `composite-fk-deferability-contract-diverged` (`why →` [tech-audit.md TA50](../others/tech-audit.md), [arch-audit.md Finding 4](../others/arch-audit.md) caution + Questions)
-
-- [ ] **SA60 — Pick and enforce one composite-FK deferability policy.** `Tier 2 · Track 1 · deps: none`
-  `6ea37301` silently flipped the Option C composite-FK helper (`orgs/tenancy.py:903`, `_ADD_COMPOSITE_FK_SQL`) from `DEFERRABLE INITIALLY DEFERRED` to `NOT DEFERRABLE`, with no decisions.md record and no test asserting the new behavior. This diverges from `forms/0007`'s own inlined `DEFERRABLE INITIALLY DEFERRED` SQL (and its `test_migrations.py:457-505` assertion) and from every *existing* database (fresh installs get `NOT DEFERRABLE`, existing ones keep `DEFERRABLE` — fleet drift with no aligning migration). Empirically verified this pass (PostgreSQL 18): `SET CONSTRAINTS <name> IMMEDIATE` on a `NOT DEFERRABLE` FK is a no-op, so `NOT DEFERRABLE` is defensible on fail-fast grounds — but it needs to be the *documented*, uniformly-applied policy, not a one-module drift. Bundle in the second, cheaper doc gap arch-audit flagged in the same commit: `is_tenant_model()`'s `tenant_excluded`-marker-beats-manager/base-class precedence change (`tenancy.py:1548+`) also has no decision record.
-  *Files:* `docs/technical/decisions.md` (two new entries: composite-FK deferability policy under the Option C child-table section; `tenant_excluded` precedence rule); `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py:903` (helper SQL, if the decision changes it back) and `:1548+` (precedence — doc-only, no code change expected); `quickscale_modules/forms/src/quickscale_modules_forms/migrations/0007*.py` (align to the chosen policy); `quickscale_modules/forms/tests/test_migrations.py:457-505` and `quickscale_modules/crm/tests/test_migrations.py:1107,1158` (update assertions/stale comments to match); extend the SA35-style cross-module conformance gate to assert one deferability policy for all Option C composite FKs.
-  *Acceptance:* decisions.md states the deferability policy (recommend keeping `NOT DEFERRABLE` given the empirical fail-fast verification, but ratify explicitly) and the `tenant_excluded` precedence rule; `forms/0007` and the `tenancy.py` helper emit the same deferability clause; a new conformance test fails if any Option C composite FK diverges; the two now-stale test comments (`crm/tests/test_migrations.py:1107,1158`) are corrected to reflect the no-op-on-NOT-DEFERRABLE behavior.
-  **Decision ratified (2026-07-12):** NOT DEFERRABLE is the uniform policy for all Option C composite FKs — recorded in `decisions.md §Multi-tenant SaaS Architecture`. SA60 is unblocked; implementation (align `forms/0007` + its test assertions, correct the stale `crm` test comments, add the conformance test) can proceed.
-  *(why →* [tech-audit.md TA50](../others/tech-audit.md)*,* [arch-audit.md Finding 4](../others/arch-audit.md)*)*
 
 #### Finding — `deletion-invariants-per-boundary-reimplementation`, first step (`why →` [arch-audit.md Finding 2](../others/arch-audit.md))
 
@@ -145,7 +134,16 @@ Open items below. SA59 (umbrella) remains blocked/open via SA59.1–SA59.4; SA60
 
 ### Track 2 — Module contracts & settings
 
-**No open items.** Track 2 is clean — completed work lives in [CHANGELOG.md](../../CHANGELOG.md).
+One open item below, moved from Track 1 (2026-07-12) — it has no dependency on any tenant-context (ContextVar/`org_scope`/RLS-policy) machinery, and is fundamentally a cross-module FK contract question (forms' migration SQL vs. orgs' helper SQL must agree), so it fits this track's "module contracts" charter better than Track 1's "tenant-context surface" one. No file overlap with anything on Track 1 or Track 3.
+
+#### Finding — `composite-fk-deferability-contract-diverged` (`why →` [tech-audit.md TA50](../others/tech-audit.md), [arch-audit.md Finding 4](../others/arch-audit.md) caution + Questions)
+
+- [ ] **SA60 — Pick and enforce one composite-FK deferability policy.** `Tier 2 · Track 2 · deps: none`
+  `6ea37301` silently flipped the Option C composite-FK helper (`orgs/tenancy.py:903`, `_ADD_COMPOSITE_FK_SQL`) from `DEFERRABLE INITIALLY DEFERRED` to `NOT DEFERRABLE`, with no decisions.md record and no test asserting the new behavior. This diverges from `forms/0007`'s own inlined `DEFERRABLE INITIALLY DEFERRED` SQL (and its `test_migrations.py:457-505` assertion) and from every *existing* database (fresh installs get `NOT DEFERRABLE`, existing ones keep `DEFERRABLE` — fleet drift with no aligning migration). Empirically verified this pass (PostgreSQL 18): `SET CONSTRAINTS <name> IMMEDIATE` on a `NOT DEFERRABLE` FK is a no-op, so `NOT DEFERRABLE` is defensible on fail-fast grounds — but it needs to be the *documented*, uniformly-applied policy, not a one-module drift. Bundle in the second, cheaper doc gap arch-audit flagged in the same commit: `is_tenant_model()`'s `tenant_excluded`-marker-beats-manager/base-class precedence change (`tenancy.py:1548+`) also has no decision record.
+  *Files:* `docs/technical/decisions.md` (two new entries: composite-FK deferability policy under the Option C child-table section; `tenant_excluded` precedence rule); `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py:903` (helper SQL, if the decision changes it back) and `:1548+` (precedence — doc-only, no code change expected); `quickscale_modules/forms/src/quickscale_modules_forms/migrations/0007*.py` (align to the chosen policy); `quickscale_modules/forms/tests/test_migrations.py:457-505` and `quickscale_modules/crm/tests/test_migrations.py:1107,1158` (update assertions/stale comments to match); extend the SA35-style cross-module conformance gate to assert one deferability policy for all Option C composite FKs.
+  *Acceptance:* decisions.md states the deferability policy (recommend keeping `NOT DEFERRABLE` given the empirical fail-fast verification, but ratify explicitly) and the `tenant_excluded` precedence rule; `forms/0007` and the `tenancy.py` helper emit the same deferability clause; a new conformance test fails if any Option C composite FK diverges; the two now-stale test comments (`crm/tests/test_migrations.py:1107,1158`) are corrected to reflect the no-op-on-NOT-DEFERRABLE behavior.
+  **Decision ratified (2026-07-12):** NOT DEFERRABLE is the uniform policy for all Option C composite FKs — recorded in `decisions.md §Multi-tenant SaaS Architecture`. SA60 is unblocked; implementation (align `forms/0007` + its test assertions, correct the stale `crm` test comments, add the conformance test) can proceed. **This also directly addresses one of SA59.1's three remaining blockers** (forms `0007` fails composite-FK validation on a fresh restricted-role DB) — see the SA59.1 blocker note on Track 1.
+  *(why →* [tech-audit.md TA50](../others/tech-audit.md)*,* [arch-audit.md Finding 4](../others/arch-audit.md)*)*
 
 ### Track 3 — Core/CLI plumbing
 
