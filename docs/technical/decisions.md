@@ -1003,6 +1003,26 @@ implicit env-var/stdout-JSON coupling.
 
 **Rule:** Update the narrow owner first when changing its slice. Update decisions.md in the same change when the repository-wide ownership map, policy, or tie-breakers change.
 
+## Unit/Integration Gate Split (SA59.4)
+
+**Decision (SA59.4, ratified 2026-07-12):** The test suite is split into two independent gates — a DB-free unit gate and a PostgreSQL 18 integration gate. This split ensures fast, environment-independent feedback for core/CLI unit tests while module integration tests run against a restricted `NOBYPASSRLS` role for tenant-isolation coverage.
+
+**Gate responsibilities:**
+
+| Gate | Make target | Scope | Database | Role |
+|------|-------------|-------|----------|------|
+| Unit | `make test-unit` | `quickscale_core/tests`, `quickscale_cli/tests` (DB-free, marked `not integration and not e2e`) | None | N/A |
+| Integration | `make test-integration` | `quickscale_modules/*/tests` (PostgreSQL-required, marked `not e2e`) | PostgreSQL 18 per-module test DB | `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` |
+
+**Key properties:**
+
+- The unit gate (`make test-unit`) is DB-free and runs core + CLI tests only. It requires no PostgreSQL and no special database role. The blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is removed from the unit-only path.
+- The integration gate (`make test-integration`) runs module suites against a `NOBYPASSRLS` role in both `ci.yml` and `publish.yml`. The SA58 boot guard (RLS role check) stays active. Developers set the SA14.4 hatch (`QUICKSCALE_ALLOW_BYPASSRLS=1`) explicitly per-suite when BYPASSRLS-dependent tests need to run.
+- Non-quarantined module-suite regressions fail the gate. Known restricted-role failures are tracked individually (SA77 for orgs) with a ticketed quarantine mechanism (SA76) that excludes quarantined entries from the exit code and coverage mean.
+- `make test` runs both gates sequentially as a combined check.
+
+**Related docs:** [validation_policy.md](./validation_policy.md) | [roadmap.md §Track 1](./roadmap.md)
+
 ## Testing Standards
 
 The authoritative validation rules, coverage expectations, and E2E policy now live in [validation_policy.md](./validation_policy.md#testing-standards). Keep this section as a compatibility hub for older links.
