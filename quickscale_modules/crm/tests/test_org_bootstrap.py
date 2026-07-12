@@ -195,6 +195,14 @@ def test_new_org_form_flow_seeds_stages_without_crm_endpoint(
 
     # Direct DB check — no CRM API access. If the signal/receiver wiring
     # is working through normal app startup, stages are seeded at creation.
+    # Prime the org context so FORCE RLS allows the read-back
+    # (CR-SA74-001: GUC no longer leaks from ensure_org_default_stages).
+    from quickscale_modules_orgs.current_org import (
+        set_current_org_id,
+        reset_current_org_id,
+    )
+
+    set_current_org_id(organization.pk)
     stages = list(
         Stage.all_objects.filter(organization=organization).order_by("order", "id")
     )
@@ -206,6 +214,7 @@ def test_new_org_form_flow_seeds_stages_without_crm_endpoint(
         "Closed-Lost",
     ]
     assert all(stage.terminal_semantic is None for stage in stages)
+    reset_current_org_id()
 
 
 @pytest.mark.django_db
@@ -258,20 +267,33 @@ def test_migrated_partial_preseed_org_is_left_unchanged(client, staff_user) -> N
         organization=organization,
         role=OrgRole.OWNER,
     )
-    existing_stage = Stage.all_objects.create(
-        name="Custom Existing",
-        order=99,
-        organization=organization,
+    # Prime org context so FORCE RLS allows the INSERT under restricted role.
+    from quickscale_modules_orgs.current_org import (
+        reset_current_org_id,
+        set_current_org_id,
     )
+
+    set_current_org_id(organization.pk)
+    try:
+        existing_stage = Stage.all_objects.create(
+            name="Custom Existing",
+            order=99,
+            organization=organization,
+        )
+    finally:
+        reset_current_org_id()
     client.force_login(staff_user)
     _activate_org_in_session(client, organization)
 
     response = client.get("/crm/api/stages/")
 
     assert response.status_code == 200
+    # Prime org context so RLS allows the read-back.
+    set_current_org_id(organization.pk)
     local_stages = list(
         Stage.all_objects.filter(organization=organization).order_by("id")
     )
+    reset_current_org_id()
     assert [(stage.id, stage.name, stage.order) for stage in local_stages] == [
         (existing_stage.id, "Custom Existing", 99)
     ]
