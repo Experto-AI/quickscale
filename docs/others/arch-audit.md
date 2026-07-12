@@ -61,23 +61,29 @@ answered and test-pinned) but the gate itself minted a hand-synced copy of the g
 template→emitted-path routing inside the test — cited in Finding 7's evidence. **The SA59.1
 checkpoint structurally removed the blanket test-path bypass hatch** (enforcement census row 2
 strengthened: CI's integration path now runs module suites under a real
-NOBYPASSRLS/NOSUPERUSER role with the SA58 guard live) at the cost of a currently-red
-integration gate — red-flagged below.
+NOBYPASSRLS/NOSUPERUSER role with the SA58 guard live) — the resulting red integration gate was
+resolved 2026-07-12 by SA76's quarantine mechanism; see the Reconciliation log and the (now empty)
+Red flags section.
+
+**Update (2026-07-12, roadmap closeout pass):** all three Red flags from this pass are resolved
+(SA74/SA75/SA76); Finding 2's first step (SA70) and Finding 4's decision-record caution (SA60)
+have also landed — see their entries above and the Reconciliation log. Findings 1 and 7 are
+untouched by this update.
 
 ### Enforcement census (§3.4)
 
 | # | Invariant | Enforced by | Class | Trend this pass |
 |---|-----------|-------------|-------|-----------------|
 | 1 | Tenant isolation on reads/writes | fail-closed `TenantManager` + FORCE RLS + AF9 execute-wrapper | structural | stable |
-| 2 | No bypassing DB role at boot | orgs boot guard (`apps.py`), `rolbypassrls` + `rolsuper` | structural | **strengthened** — the SA59 blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is gone from the unit path; CI/publish integration jobs run module suites under `quickscale_test_role` (NOBYPASSRLS/NOSUPERUSER) with the guard live. Caveats: gate currently red on pre-existing failures (red flag); SQLite suites (backups) outside its reach until SA59.2 |
+| 2 | No bypassing DB role at boot | orgs boot guard (`apps.py`), `rolbypassrls` + `rolsuper` | structural | **strengthened** — the SA59 blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is gone from the unit path; CI/publish integration jobs run module suites under `quickscale_test_role` (NOBYPASSRLS/NOSUPERUSER) with the guard live. Gate is green again (SA76 quarantine, 2026-07-12; was red on pre-existing failures); SQLite suites (backups) outside its reach until SA59.2 |
 | 3 | Admin org-scoping | `TenantModelAdmin`; tripwire = NOBYPASSRLS test posture (SA14.4) | structural + gated | **restored** — with the blanket hatch gone, NOBYPASSRLS-by-default is real again in the integration path |
 | 4 | DB privilege selection per process | launcher env contract (`QUICKSCALE_PRIVILEGED_COMMAND`/`QUICKSCALE_NON_DB_COMMAND` + `RUNTIME_DATABASE_URL=""`), consumed by production settings + boot guard | structural | completed (SA68, re-verified in code this pass — zero argv inspection). New: sanctioned-set frozensets ×2 (template-side + orgs-module-side), both fail closed on unknown values/desync, no sync gate (watchlist) |
 | 5 | JSON endpoint idiom | `OrgApiBaseView`/DRF baseline + SA46 csrf-exempt CI gate | structural + gated | stable |
 | 6 | Core↔module import direction | import linter + `LEGACY_ALLOWED_IMPORTS` (3 modules) | gated, with exceptions | list stable (billing, crm, social — did not grow). New cycle **carrier**: `mypy.ini` `ignore_missing_imports = True` for `quickscale_modules_backups.*` (SA73); linter header/dict drift (docstring says billing+CRM only, dict has social) |
 | 7 | Module manifest copy-pairs (module.yml ×2) | CI byte-identical sync gate | gated | stable |
 | 8 | Tenant-model universe **membership** | SA15.3/SA45/SA49 derivation gates | gated | stable |
-| 9 | Tenant-model purge **order** | hand-ordered `_DELETE_SPECS`, comment-justified | convention | unchanged (Finding 4; SA60 open) |
-| 10 | Deletion invariants at account boundary | one canonical check, invoked per boundary; no `pre_delete` backstop | convention | unchanged (Finding 2) — first step now **scheduled** (SA70, Track 1) |
+| 9 | Tenant-model purge **order** | hand-ordered `_DELETE_SPECS`, comment-justified | convention | unchanged (Finding 4) — decision-record caution resolved (**SA60, 2026-07-12**); purge-order derivation itself still deferred to teams |
+| 10 | Deletion invariants at account boundary | one canonical check + `pre_delete` backstop for the last-owner invariant | convention + backstop | **strengthened** — Finding 2's first step (**SA70, 2026-07-12**) landed: `pre_delete` receiver on `OrganizationMembership` catches cascade-driven deletions the model `delete()` override can't reach |
 | 11 | pyproject TOML write safety | `_write_validated_toml` (3 CLI splice sites) | structural per package | stable; devtools copy unchanged |
 | 12 | Generator-emitted file ownership for upgrades | SA66 conformance gate: emitted-file universe derived from `generator/templates/`, every file classified, policy pins for `start.sh`/`production.py`, `INTENTIONALLY_UNMANAGED` explicit class | **gated** (was convention, ungated) | **strengthened** (SA66). Residuals: the gate's template→emitted-path mapping is itself a hand-synced copy of generator routing; the "unmanaged entries need a decisions.md rationale" invariant is stated but unenforced (test asserts non-emptiness only) |
 | 13 | Generated-project boot correctness | `test_generated_project_runtime.py` boot smoke harness | gated | strengthened — +284 lines (SA68) covering the privileged-command and bypass-hatch paths end-to-end |
@@ -90,8 +96,8 @@ integration gate — red-flagged below.
 |---|----|---------|------|------------------|
 | 1 | `dr-engine-module-circular-lattice` | now | M remaining (Option 2) | DR logic lives in core but its state and lifecycle live in the backups module; the cycle is carried by hand-synced symbol stations and a linter exception list — unchanged this delta (second consecutive quiet pass); carrier count grew by one (SA73's mypy `ignore_missing_imports`); persistence port still scheduled |
 | 7 | `generated-file-ownership-unmodeled` | 6–18 months | M remaining (Option 2) | SA66's conformance gate closed the silent-miss class and pinned both ownership policies, but the taxonomy and the gate's emission-path mapping remain hand-synced copies of generator knowledge living in the ungoverned devtools package; Option 2 (generator-emitted ownership manifest) is the mechanism-removing fix |
-| 2 | `deletion-invariants-per-boundary-reimplementation` | deferred (teams unscheduled) | M remaining | One canonical last-owner check, but no domain-level `pre_delete` backstop — first step now scheduled as SA70 (Track 1) |
-| 4 | `org-model-universe-hand-enumerated` | deferred (teams unscheduled) | M remaining (Option 2) | Tenant-model membership is CI-gated against derivations but the purge *order* is hand-written; SA60 (open) owns the missing deferrability/`tenant_excluded` decision records |
+| 2 | `deletion-invariants-per-boundary-reimplementation` | deferred (teams unscheduled) | S remaining | One canonical last-owner check now has a `pre_delete` backstop (SA70, 2026-07-12); no domain-owned deletion *service* consolidating other boundaries' invariants (e.g. billing) |
+| 4 | `org-model-universe-hand-enumerated` | deferred (teams unscheduled) | M remaining (Option 2) | Tenant-model membership is CI-gated against derivations but the purge *order* is hand-written; the deferrability/`tenant_excluded` decision records are now ratified (SA60, 2026-07-12) |
 
 ---
 
@@ -286,11 +292,11 @@ integration gate — red-flagged below.
   (`orgs/views.py:808,1161`); instance `delete()` overrides don't run under the deletion
   collector, so a `User` cascade bypasses the model rule.
 - **Counter-evidence:** searched again for receivers, collector hooks, or DB-level ownership
-  constraints added since the last pass — none; the delta touched none of these files. One
-  adjacent caution: SA59.1's orgs conftest now globally mutes `organization_created` via an
-  autouse fixture — if SA70's `pre_delete` receiver is tested under a similar muting pattern,
-  the backstop would be untested; SA70's acceptance criteria (direct ORM-delete regression test)
-  already precludes this if followed.
+  constraints added since the last pass — none pre-SA70; the delta touched none of these files at
+  that time. The adjacent caution about SA59.1's autouse `organization_created` muting infecting
+  SA70's test is now moot — SA70 landed with a direct `user.delete()` regression test
+  (`test_user_delete_of_last_owner_in_multi_member_org_is_refused`), untouched by that muting
+  fixture (which only patched the *creation* signal, not membership deletion).
 - **Why it compounds:** cost is N deletion boundaries × M invariants; teams adds M, an erasure
   command adds N.
 - **Detection signal:** none today — instrument by alerting on `Organization` rows with zero
@@ -299,9 +305,19 @@ integration gate — red-flagged below.
   while user deletion stays single-path.
 - **Correct shape / Options:** unchanged (orgs-owned deletion service + `pre_delete` receiver
   backstop / signal-only / DB-level constraints — full text in version control).
-- **Recommendation:** the `pre_delete` receiver backstop is now **scheduled as SA70 (Track 1)**
-  — land it as specced (receiver calling the SA47 check + a direct-ORM-delete regression test).
-  · **Size:** M remaining (S for SA70) · **First step:** SA70.
+- **Status (2026-07-12): first step landed, finding stays open.** **SA70** added
+  `_protect_last_owner_on_membership_delete`, a `pre_delete` receiver on `OrganizationMembership`
+  wired in `QuickscaleOrgsConfig.ready()`, calling the existing `is_last_owner_with_members()`
+  check on every deletion path including cascade-driven ones (e.g. `user.delete()`). This closes
+  the concrete gap this finding named (a `User` cascade bypassing the model-level rule) for the
+  last-owner invariant specifically. The finding stays open at reduced urgency: the receiver does
+  not acquire `select_for_update` (accepted as a backstop, not a parallel to the model `delete()`
+  override's locking), and the broader shape — no domain-owned deletion *service* consolidating
+  every boundary's invariants, and billing's active-subscription-on-ownerless-org invariant has no
+  equivalent backstop — remains unaddressed. Recommendation unchanged for the remainder: land a
+  `pre_delete`/service backstop for the billing side if/when teams or an erasure command creates a
+  second deletion path. **Size:** S remaining (was M) · **Next step:** none scheduled; deferred
+  with teams.
 
 ---
 
@@ -318,28 +334,31 @@ integration gate — red-flagged below.
 - **Context dependence:** wrong-for-now on the new-domain dimension.
 - **Problem:** knowledge of "which models belong to an organization, and how they die" lives in
   hand-written literals inside orgs; membership is fully CI-gated, purge *order* is not.
-- **Evidence:** unchanged — `TENANT_TABLE_REGISTRY` (`tenancy.py:128`, 49 entries, bidirectionally
+- **Evidence:** `TENANT_TABLE_REGISTRY` (`tenancy.py:128`, 49 entries, bidirectionally
   gated); `_DELETE_SPECS` (`purge_organization.py:64`, hand-ordered; the SA45 gate checks
-  membership, not orderability). The decision-record caution (composite-FK `NOT DEFERRABLE`
-  switch + `tenant_excluded` precedence, both undocumented) is owned by **SA60, open on Track 1**.
-  Related this delta: SA59.1 discovered `forms/migrations/0007` fails composite-FK validation on
-  a fresh restricted-role DB — the deferability divergence SA60 owns is now blocking real work,
-  raising SA60's practical urgency without changing this finding's shape.
-- **Counter-evidence:** checked the delta for changes to the registry, purge specs, or derivation
-  inputs — none; checked decisions.md for the SA60 records — not yet written (SA60 open).
+  membership, not orderability) — both unchanged. **The decision-record caution is resolved
+  (2026-07-12):** **SA60** ratified the `NOT DEFERRABLE` composite-FK policy in decisions.md (every
+  Option C composite FK is `NOT DEFERRABLE`, aligning `orgs/tenancy.py`'s helper with `forms/0007`'s
+  previously-diverged inline SQL) and added a cross-module conformance gate checking all six known
+  composite FKs; the `tenant_excluded` precedence rule was already a doc-only ratification needing
+  no code change. This also unblocked SA59.1's `forms/0007` restricted-role failure (the contract
+  side; the remaining data-backfill bug in the same migration is tracked separately as **SA79**).
+- **Counter-evidence:** checked the delta for changes to the registry or purge specs — none; the
+  purge-*order* half of this finding (Option 2, topological derivation) is untouched by SA60, which
+  addressed only the deferability/precedence decision-record gap.
 - **Why it compounds:** every new tenant model requires K coordinated edits (marker + registry
   literal + `_DELETE_SPECS` entry with correct position); purge-order correctness is the one
-  property no gate checks, and the `NOT DEFERRABLE` change made it less forgiving.
+  property no gate checks — now on a uniformly `NOT DEFERRABLE` foundation, which is *less*
+  forgiving of an ordering mistake at delete time than a deferred constraint would have been.
 - **Detection signal:** `ProtectedError` from `purge_organization` in any environment;
-  `NOT DEFERRABLE` composite-FK violations surfacing mid-purge — and now, concretely, the
-  `forms/0007` failure class on restricted-role databases.
+  `NOT DEFERRABLE` composite-FK violations surfacing mid-purge.
 - **Steelman:** hand-ordered deletion is explicit, reviewable, and encodes FK subtleties naive
   traversal gets wrong; membership gates are complete and derivation-backed.
 - **Correct shape / Options:** unchanged — Option 2 (derive the purge plan topologically from the
   FK graph, `_DELETE_SPECS` reduced to overrides) is the live option, if/when teams' models land.
-- **Recommendation:** SA60 first (it now unblocks SA59.1's forms failure as well as closing the
-  decision-record caution); purge-order derivation only when a real second consumer (teams)
-  gives it a test bed. · **Size:** M remaining · **First step:** SA60 (already scheduled).
+- **Recommendation:** decision-record gap closed (SA60); purge-order derivation only when a real
+  second consumer (teams) gives it a test bed. · **Size:** M remaining (decision-record portion
+  done) · **First step:** none scheduled; deferred with teams.
 
 ---
 
@@ -373,12 +392,15 @@ integration gate — red-flagged below.
 
 ### Fix order and interactions
 
-1. **SA59.1's remaining blockers** (pre-existing restricted-role failures, red-flagged gate
-   state) come first operationally — while the integration gate is red it cannot catch new
-   module-suite regressions, which weakens every census row that depends on it (2, 3, 14).
-2. **SA60** now unblocks two things at once: Finding 4's decision-record caution and SA59.1's
-   forms/0007 composite-FK failure. Land it early in the SA59 sequence rather than parallel.
-3. **SA70** (Finding 2's first step) is independent and small; land opportunistically.
+> Items 1–3 below are complete as of 2026-07-12 (SA76/SA60/SA70) — kept for the historical
+> reasoning trail; only items 4–5 remain live.
+
+1. ~~SA59.1's remaining blockers (red-flagged gate state)~~ — **done**: SA76's quarantine
+   mechanism turned the gate green; SA77 (orgs) and SA79 (forms backfill) continue as tracked,
+   non-blocking roadmap follow-ups rather than gate-red blockers.
+2. ~~SA60~~ — **done**: unblocked Finding 4's decision-record caution and SA59.1's forms/0007
+   composite-FK failure together, as planned.
+3. ~~SA70 (Finding 2's first step)~~ — **done**.
 4. **Finding 1 Option 2 (persistence port)** — scheduled next planning cycle; independent of
    everything above.
 5. **Finding 7's remainder (Option 2)** waits on its trigger; the cheap interim (export the
@@ -480,25 +502,18 @@ integration gate — red-flagged below.
 
 ### Red flags (out of scope — fix now)
 
-- **The integration gate is red at merge on `v87`.** SA59.1 was merged as a blocked checkpoint
-  with unresolved pre-existing failures (orgs: 3 `test_models.py` + 6 helper-path errors; forms:
-  `0007` composite-FK on restricted-role DBs; notifications: duplicate-db/ownership) and a
-  77.55% mean module coverage against `test_integration.sh`'s 90% threshold — and the script
-  excludes nothing, so the ci.yml/publish.yml integration jobs should currently fail. While red,
-  the gate catches no *new* module-suite regressions, and every day it stays red trains
-  merging-over-red. Tracked (SA59.1 blockers), user-directed stop — but consider quarantining the
-  known failures (xfail-with-ticket per suite) so the gate stays green for everything else while
-  SA59.1 proceeds. *Static-analysis caveat: confirm on the Actions dashboard; `gh` was
-  unavailable this pass.*
-- **`_session_managed_adapters` swallows `ImproperlyConfigured`**
-  (`quickscale_core/tests/test_manifest_entry_point.py`, SA73): a genuinely mis-configured
-  managed adapter now yields skips, not failures, in the unit path — fail-hard-audit class;
-  hand off to tech-audit. Narrow fix: catch only when the module package is absent
-  (`ModuleNotFoundError` cause), re-raise real config errors.
-- **Autouse `organization_created` muting in orgs conftest** (SA59.1, `2b9afa6b`): every orgs
-  test now runs with the signal's `send` patched out, so a broken cross-module receiver (e.g.
-  CRM stage seeding) is invisible to the orgs suite — weakened-test class; hand off to
-  tech-audit. The CRM-side bootstrap tests remain the only coverage of that seam.
+> All three red flags opened in the 2026-07-11 pass are resolved as of 2026-07-12 — see the
+> Reconciliation log. None remain open this pass.
+>
+> - ~~The integration gate is red at merge on `v87`~~ — **resolved (SA76):** a ticketed quarantine
+>   mechanism absorbs the known failures (orgs → SA77, notifications → SA78) so the gate is green
+>   for everything else; forms `0007`'s composite-FK piece needed no quarantine (resolved by SA60).
+> - ~~`_session_managed_adapters` swallows `ImproperlyConfigured`~~ — **resolved (SA75):** narrowed
+>   to re-raise unless the missing import is the managed-package root itself; CI additionally
+>   asserts the full adapter registry.
+> - ~~Autouse `organization_created` muting in orgs conftest~~ — **resolved (SA74):** the autouse
+>   fixture is removed and replaced with a non-autouse opt-in `mock_org_created_signal`; the
+>   underlying production defect the muting was covering for (TA54 in tech-audit.md) is also fixed.
 
 Lenses scanned with no qualifying finding this pass: data/state integrity, trust boundaries
 (SA68 re-verified closed; privilege seam probed and exonerated), module cohesion beyond
@@ -899,3 +914,16 @@ rather than a separate finding.
   module-list derivation?). New red flags: red integration gate at merge; the
   `ImproperlyConfigured` fixture swallow; autouse `organization_created` muting (both
   tech-audit hand-offs).
+- 2026-07-12 (roadmap closeout pass) — **all three 2026-07-11 red flags resolved:** integration
+  gate red at merge → **SA76** (ticketed quarantine mechanism, gate green); `_session_managed_adapters`
+  `ImproperlyConfigured` swallow → **SA75** (narrowed to genuine missing-package-root only, CI
+  registry assertion added); autouse `organization_created` muting → **SA74** (removed, replaced
+  with opt-in fixture; the production defect it was concealing, tech-audit's TA54, is also fixed).
+  **Finding 2's first step landed: SA70** (orgs `pre_delete` receiver backstop for the last-owner
+  invariant on cascade-driven deletions) — finding stays open at reduced size (S remaining) pending
+  a domain-owned deletion service for other boundaries (e.g. billing), deferred with teams.
+  **Finding 4's decision-record caution resolved: SA60** (composite-FK `NOT DEFERRABLE` policy
+  ratified in decisions.md, cross-module conformance gate added) — finding stays open pending the
+  purge-order derivation (Option 2), deferred with teams. Findings 1 and 7 untouched this pass.
+  Enforcement census rows 2, 9, 10 updated to reflect the above. This was a docs-hygiene/roadmap
+  reconciliation pass, not a fresh code-reading autopsy — no new findings sought or opened.

@@ -14,13 +14,16 @@
 > document states **present reality for planning** — closed findings live only in the
 > Reconciliation log at the bottom. Structural findings live in [arch-audit.md](arch-audit.md);
 > fail-hard policy SSOT is [decisions.md §fail-hard-principle](../technical/decisions.md#fail-hard-principle).
-> **Headline this pass:** the restricted-role integration gate (SA59.1) is doing its job — it
-> exposed a **production-path defect**: organization creation on a generated project with the CRM
-> module installed fails under the mandated NOBYPASSRLS runtime role, because nothing primes the
-> new org's tenant context before the CRM receiver's FORCE-RLS-protected INSERTs (**TA54, S1**).
-> The response so far has treated it as a test problem (the orgs conftest now mutes the signal
-> globally — TA55), and the red integration gate (TA57) plus that muting jointly keep TA54
-> invisible to CI. Fix TA54 first; TA55/TA57 are its cover.
+>
+> **Update (2026-07-12, roadmap closeout pass):** all five open findings from this pass are now
+> resolved and reconciled below — **TA54** (org-creation-under-RLS production defect) by SA74,
+> **TA55** (autouse signal muting) by SA74, **TA56** (`_session_managed_adapters` swallow) by SA75,
+> **TA57** (integration gate red at merge) by SA76's quarantine mechanism, and **TA50**
+> (composite-FK deferability divergence) by SA60. Zero findings remain open as of this pass; see
+> the Reconciliation log for verification detail. Full implementation detail for each fix is in
+> [CHANGELOG.md](../../CHANGELOG.md); remaining non-blocking follow-ups spawned by these fixes
+> (SA77 orgs restricted-role residual, SA79 forms backfill bug) are tracked in
+> [roadmap.md](../technical/roadmap.md), not here.
 
 ## Orientation summary
 
@@ -108,147 +111,34 @@ still untouched since 2026-06-17.
 
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |----|----------|----------|-------|--------|------------|--------|
-| TA54 | S1 | correctness / multi-tenant SaaS | Org creation with CRM installed fails under the production runtime role — `organization_created` seeding writes tenant rows with no org context under FORCE-RLS | Small | High (mechanism) / needs runtime confirm | open — **new** |
-| TA50 | S3 | data-handling / consistency | Composite-FK helper flipped to `NOT DEFERRABLE` undocumented — diverges from forms' asserted `DEFERRABLE` contract and from every existing database | Small | High (facts) / Medium (impact) | open (SA60, Track 1, scheduled) |
-| TA55 | S3 | test-integrity (weakened tests) | Autouse `organization_created.send` muting in orgs conftest — every orgs test now runs with the org-creation seam disconnected | Small | High | open — **new** (chains with TA54) |
-| TA56 | S3 | test-integrity / fail-hard policy | `_session_managed_adapters` swallows `ImproperlyConfigured` — a genuinely broken managed adapter now yields skips, not failures, in the unit gate | Small | High | open — **new** |
-| TA57 | S3 | operability / test-integrity | Integration gate merged red on `v87` — while red it catches no new module-suite regressions; known failures are unquarantined | Small (quarantine) | Medium | open — **new** (tracked, SA59.1; user-directed stop) |
+| TA54 | S1 | correctness / multi-tenant SaaS | Org creation with CRM installed fails under the production runtime role — `organization_created` seeding writes tenant rows with no org context under FORCE-RLS | Small | High (mechanism) / needs runtime confirm | **resolved (SA74, 2026-07-12)** |
+| TA50 | S3 | data-handling / consistency | Composite-FK helper flipped to `NOT DEFERRABLE` undocumented — diverges from forms' asserted `DEFERRABLE` contract and from every existing database | Small | High (facts) / Medium (impact) | **resolved (SA60, 2026-07-12)** |
+| TA55 | S3 | test-integrity (weakened tests) | Autouse `organization_created.send` muting in orgs conftest — every orgs test now runs with the org-creation seam disconnected | Small | High | **resolved (SA74, 2026-07-12)** |
+| TA56 | S3 | test-integrity / fail-hard policy | `_session_managed_adapters` swallows `ImproperlyConfigured` — a genuinely broken managed adapter now yields skips, not failures, in the unit gate | Small | High | **resolved (SA75, 2026-07-12)** |
+| TA57 | S3 | operability / test-integrity | Integration gate merged red on `v87` — while red it catches no new module-suite regressions; known failures are unquarantined | Small (quarantine) | Medium | **resolved (SA76, 2026-07-12)** |
 
-Counts: **S1: 1 · S2: 0 · S3: 4 · S4: 0.** Quick win: TA57 (xfail-with-ticket quarantine).
-Closure verification this pass: TA53 (SA65) — confirmed in code. TA49 — resolved (SA59.1, verified in code; residual red-gate state opened separately as TA57).
-**Chain (§3.9):** TA55 + TA57 → TA54 concealment — the orgs suite mutes the signal and the red
-gate strips meaning from CRM-suite failures, so the one production-path S1 in this repo currently
-has *zero* surviving automated signal. Rank and fix TA54 first; removing TA55's muting is its
-regression test.
+Counts: **S1: 0 · S2: 0 · S3: 0 · S4: 0 — zero open findings this pass.**
+Closure verification this pass: TA53 (SA65) — confirmed in code. TA49 — resolved (SA59.1, verified in code; residual red-gate state opened separately as TA57, now itself resolved).
+**Chain (§3.9), now broken:** TA55 + TA57 previously concealed TA54 (the orgs suite muted the
+signal and the red gate stripped meaning from CRM-suite failures). SA74 fixed TA54 at the root
+(primed tenant context in `ensure_org_default_stages`) and replaced the TA55 autouse muting with
+an opt-in fixture, restoring the org-creation seam to real test coverage; SA76's quarantine
+mechanism resolved TA57's red-gate state. The chain no longer applies — see Reconciliation log.
 
 ---
 
 ## Findings detail
 
-### Finding 1: Org creation with CRM installed fails under the production runtime role
+> All findings opened in the 2026-07-11 pass (TA54–TA57) and the carried TA50 are now resolved —
+> see the Reconciliation log at the bottom for closure verification. Full defect/fix detail is
+> preserved in version control history of this file and in [CHANGELOG.md](../../CHANGELOG.md)
+> (SA60, SA74, SA75, SA76 entries); it is not repeated here per this document's own convention that
+> closed findings live only in the Reconciliation log.
 
-- **ID:** `org-creation-crm-seeding-fails-under-force-rls` (TA54)
-- **Severity:** S1 — correctness bug on a main path (signup, `/orgs/new/`, and lazy personal-org
-  creation in middleware) in deployment reality (a), in the configuration cell *orgs + crm
-  installed, runtime role active* — which is the mandated production shape (the SA58 boot guard
-  *requires* the serving role to be NOBYPASSRLS). Violates the Option C RLS oracle from the other
-  side: the write policy is correct; the writer is context-less.
-- **Category:** §I correctness / §4.X multi-tenant SaaS (tenant-context carrier not established on
-  one path).
-- **Confidence:** High on the mechanism (verified statically end-to-end; the team's own conftest
-  docstring states the observed failure: "Without a primed ``app.current_org_id``, those writes
-  fail" — `orgs/tests/conftest.py:53-58`). Runtime confirmation still owed (no PostgreSQL
-  available this pass): boot a generated orgs+crm project under `RUNTIME_DATABASE_URL` and sign up.
-- **Location:** `quickscale_modules/crm/src/quickscale_modules_crm/services.py:39-85`
-  (`ensure_org_default_stages` → `_seed_default_stages`), reached from
-  `crm/signals.py:16` (`seed_crm_default_stages_on_org_created`), dispatched by
-  `orgs/managers.py:207` (`create_personal_for` → `_send_org_created`) and
-  `orgs/forms.py:117` (`OrgCreateForm.save`).
-- **Defect:** `_seed_default_stages` INSERTs `Stage` rows for the *new* organization, but
-  `quickscale_modules_crm_stage` is under FORCE RLS with
-  `WITH CHECK (NULLIF(current_setting('app.current_org_id', true), '')::uuid = organization_id)`
-  (`orgs/tenancy.py:506-516`, applied by crm `0008_enable_rls`/`0010`). Neither dispatch site nor
-  the receiver primes the new org's context; the AF9 execute wrapper passes through when the
-  ContextVar is `None` (`current_org.py:481-482`) and primes the *old* org when one is set.
-- **Failure scenario:** Generated project, orgs+crm, production serving under the NOBYPASSRLS
-  runtime role. (1) A new user signs up → allauth adapter (`orgs/adapters.py:65,87`) or
-  `TenantMiddleware` (`middleware.py:177`) calls `create_personal_for` → signal → Stage INSERT
-  with GUC unset → PostgreSQL rejects the row (RLS violation, 42501-class error) → the atomic
-  block aborts → signup/request 500s. (2) A member of Org A submits `/orgs/new/` for Org B →
-  request context primes GUC to A → WITH CHECK against B fails → same outcome. Every org-creation
-  path on such a deployment is broken.
-- **Evidence:** `Stage.objects.create(..., organization=organization)`
-  (`crm/services.py:79-83`); policy SQL at `orgs/tenancy.py:513-515`; pass-through at
-  `current_org.py:481-482` (`if org_id is None: return execute(...)`); no `org_scope`/
-  `_tenant_context`/`_set_current_org_for_context` call anywhere on the dispatch→receiver path
-  (repo-wide search). The smoking gun is the SA59.1 test response: the orgs conftest now patches
-  `organization_created.send` out globally *because* these writes fail under the restricted role
-  (`orgs/tests/conftest.py:50-72`, commit `2b9afa6b`).
-- **Refutation:** attempted, none survived. (1) Layer-up search: AF9 wrapper primes only from the
-  ContextVar — it cannot know the new org; TenantMiddleware primes the *request's* resolved org,
-  never the newly created one; `org_scope` exists but has no caller on this path. (2) Line-by-line
-  walk of both dispatch sites confirms no priming between `Organization.objects.create` and the
-  receiver's INSERTs. (3) Blessing search: CHANGELOG records the muting as a "test-only
-  adaptation" (SA59.1 Phase 3) — the production implication is recorded nowhere; CRM's own e2e
-  tests (`test_org_bootstrap.py`) assert the seeding *works*, i.e. the intended behavior is
-  seeding-succeeds, not seeding-fails. (4) Strongest counter: "the beta sites work" —
-  unverifiable by design (decisions.md §Beta-Site External Verification Scope) and their module
-  sets are unknown; historically all test environments ran with BYPASSRLS-capable roles
-  (pre-SA59.1 TA49 state), which is exactly why this never fired before.
-- **Fix:** in the receiver path, establish the new org's context around the seeding writes —
-  wrap `ensure_org_default_stages`'s transaction body in
-  `org_scope(organization)` (or `_tenant_context(organization.pk)` inside its existing atomic
-  block). CRM owns the seam, so the fix lives in `crm/services.py`; alternatively prime at the
-  dispatch sites if the project prefers "dispatcher guarantees context" as the documented receiver
-  contract — either is one contained PR. **Effort:** Small.
-- **Verification:** (1) new regression test in the CRM suite: create an org via
-  `create_personal_for` with the ContextVar unset, under the restricted role, assert 4 stages
-  exist; (2) remove the TA55 muting and re-run the orgs suite under `test_integration.sh`;
-  (3) manual: sign up on a freshly generated orgs+crm project running under
-  `RUNTIME_DATABASE_URL`.
-- **Deliberate?** No sign the production behavior is chosen — the muting commit treats it purely
-  as a test obstacle; no decisions.md/CHANGELOG entry acknowledges the production path.
-- **Age:** latent since crm FORCE-RLS landed (`edac4431`, 2026-06-27) against seeding logic that
-  predates it (signal form since `cb655312`, 2026-07-02; seeding older); *exposed* 2026-07-11 by
-  the SA59.1 restricted-role gate. Not a fresh regression — a forward fix, not a revert.
-
-### S3 — compact
-
-- **TA50 — `composite-fk-deferability-contract-diverged`** · S3 ·
-  `orgs/tenancy.py:900-906` (`_ADD_COMPOSITE_FK_SQL`, re-verified byte-identical this pass).
-  Helper emits `NOT DEFERRABLE` while `forms/0007` inlines `DEFERRABLE INITIALLY DEFERRED` and
-  `forms/tests/test_migrations.py` asserts DEFERRABLE as "the contract"; fresh and existing
-  databases now disagree (fleet drift, no aligning migration); `SET CONSTRAINTS ALL DEFERRED`
-  (loaddata/fixture restore) no longer covers helper-created FKs. Empirically verified 2026-07-10
-  (PostgreSQL 18): `SET CONSTRAINTS <name> IMMEDIATE` on a NOT DEFERRABLE FK is a no-op, so crm's
-  tests still pass with stale comments. **Fix:** ratify one deferability policy in decisions.md,
-  align helper + forms SQL + tests, extend the SA35-style conformance gate. Effort: Small.
-  Confidence: High (facts) / Medium (impact). Introduced `6ea37301`. **Status:** open — scheduled
-  as SA60 (Track 1). Also on SA59.1's blocker list: forms `0007` fails composite-FK validation on
-  fresh restricted-role DBs — resolve together.
-- **TA55 — `orgs-conftest-autouse-signal-muting`** · S3 · `orgs/tests/conftest.py:50-72`
-  (`_mock_org_created_signal`, autouse, commit `2b9afa6b`). Every orgs test now runs with
-  `organization_created.send` patched out — the org-creation seam (and any *future* receiver) is
-  structurally invisible to the orgs suite, and orgs' "org creation succeeds" tests no longer
-  exercise the production flow. This is TA54's concealment artifact, and it survives a TA54 fix
-  unless deliberately removed. Refutation folded in: blessed in CHANGELOG as a Phase 3 "test-only
-  adaptation" — but a blessing of the *test change*, not of the production behavior it papers
-  over; its docstring also cites a nonexistent `test_crm_bootstrap.py` (the real coverage is
-  `crm/tests/test_org_bootstrap.py`, a different suite whose own restricted-role status is
-  unreported). **Fix:** after TA54, delete the autouse fixture (or invert it to an opt-in
-  `mute_org_signals` fixture for the handful of tests that need isolation from CRM). Effort:
-  Small. Confidence: High. **Status:** open — new (arch-audit red-flag hand-off, verified).
-- **TA56 — `session-adapter-fixture-swallows-improperlyconfigured`** · S3 ·
-  `quickscale_core/tests/test_manifest_entry_point.py:55-69` (`_session_managed_adapters`,
-  commit `fc3dc00c`), plus the eight `pytest.skip("... not registered ...")` guards and the
-  `_available_adapters()` filter it feeds. `refresh_managed_adapters` raises `ImproperlyConfigured`
-  **only** when a module's manifest is present but its adapter is unimportable/malformed
-  (`entry_point.py:230-262` — a truly absent module is silently deregistered, no raise), i.e.
-  exactly the AF7 fail-hard condition. The fixture's `except ImproperlyConfigured: pass` therefore
-  converts only *genuine breakage* into session-wide skips: break `quickscale_modules_billing.adapter`
-  and the unit gate goes green with skips (`test_all_expected_adapters_registered` passes
-  trivially via `_available_adapters()`). In the monorepo/CI environment all module packages are
-  always installed, so the "unit-only runs where packages are not installed" case the docstring
-  defends does not exist in any gated environment. Refutation folded in: SA-tagged commit, but no
-  decisions.md amendment to AF7 — a quality-gate workaround, not a ratified exception. **Fix:**
-  catch narrowly — re-raise unless `isinstance(exc.__cause__, ModuleNotFoundError)` *and* the
-  missing module is the managed package itself; in CI, additionally assert the full registry.
-  Effort: Small. Confidence: High. **Status:** open — new (arch-audit red-flag hand-off, verified).
-- **TA57 — `integration-gate-red-at-merge`** · S3 ·
-  `.github/workflows/ci.yml` (integration step) / `scripts/test_integration.sh` (excludes
-  nothing; 90% mean-coverage check at `:379`). SA59.1 merged to `v87` with known failures (orgs:
-  3 `test_models.py` + 6 helper-path errors; forms `0007`; notifications duplicate-db) and a
-  77.55% mean vs the 90% threshold — so the ci.yml/publish.yml integration jobs should fail on
-  every run. While red, the gate catches no *new* module-suite regressions (it is precisely what
-  would surface TA54 in the CRM suite), and every red day trains merging-over-red. Severity held
-  at S3 rather than S2 because the state is a tracked, user-directed stop at a scope boundary
-  (SA59.1 blockers, roadmap.md) — the defect this finding names is the *ungated red period*, not
-  the failures themselves. **Fix (quick win):** quarantine the enumerated known failures
-  (xfail-with-ticket per suite, or a temporary per-suite allowlist in `test_integration.sh`) so
-  the gate is green for everything else while SA59.1–SA59.3 proceed; remove the quarantine at
-  SA59.4. Effort: Small. Confidence: Medium — static + testimony (roadmap/arch-audit/CHANGELOG);
-  `gh` unavailable, confirm on the Actions dashboard. **Status:** open — new (arch-audit red-flag
-  hand-off, verified statically).
+*(Full finding-detail prose for TA50/TA54/TA55/TA56/TA57 — location, defect, failure scenario,
+evidence, fix — is preserved in this file's git history at the 2026-07-11 revision and in
+[CHANGELOG.md](../../CHANGELOG.md)'s SA60/SA74/SA75/SA76 entries. Not repeated here now that all
+five are closed.)*
 
 ---
 
@@ -257,12 +147,12 @@ regression test.
 Module interiors unchanged since the 2026-07-10 deep pass; verdicts carried except where this
 delta touched them:
 
-- **crm** — **TA54** (production seeding path; module source unchanged this delta — the finding
-  is newly *recognized*, not newly introduced). Tests unchanged this delta.
-- **orgs** — production source clean this delta (`apps.py` SA68 rewrite verified sound); tests
-  produced **TA55**; SA59.1 blockers (3+6 restricted-role failures) remain open under SA59.3.
-- **quickscale_core** — production clean this delta (templates verified, SA68); tests produced
-  **TA56**.
+- **crm** — **TA54 resolved (SA74, 2026-07-12)**: `ensure_org_default_stages` now primes tenant
+  context itself; production seeding path clean.
+- **orgs** — production source clean (`apps.py` SA68 rewrite verified sound); **TA55 resolved
+  (SA74)** — autouse signal muting replaced with an opt-in fixture. SA59.1's 3+6 restricted-role
+  failures are now tracked as **SA77** (open, Track 1).
+- **quickscale_core** — production clean (templates verified, SA68); **TA56 resolved (SA75)**.
 - **quickscale_cli** — clean; TA53 resolved and verified (SA65); SA66 gate added.
 - **quickscale_devtools** — clean (taxonomy data + `start.sh` added to in-place targets, gated by
   SA66's conformance test).
@@ -390,6 +280,28 @@ docs updated in the same delta).
   pulling the thread behind TA55's docstring. Fix-regression pass run over SA65/SA66/SA68/SA69:
   clean (SA68's persistent-env cell recorded as a watch item, not a regression). First pass run
   under tech-audit-prompt V3.
+- 2026-07-12 (roadmap closeout pass) — **TA54: resolved** (SA74 — `ensure_org_default_stages`
+  primes tenant ContextVar across the helper scope and wraps `_seed_default_stages`'s INSERTs in
+  `org_scope(organization)`, so the CRM receiver establishes its own tenant context regardless of
+  caller; new regression test `test_seeds_without_ambient_org_context` proves seeding succeeds
+  with zero ambient context under the restricted role). **TA55: resolved** (also SA74 — the orgs
+  conftest's autouse `_mock_org_created_signal` fixture is removed and replaced with a non-autouse
+  opt-in `mock_org_created_signal`, restoring the org-creation seam to real coverage in the orgs
+  suite). **TA56: resolved** (SA75 — `_session_managed_adapters` now swallows only a genuine
+  missing managed-package-root import and re-raises broken-adapter import failures, with the full
+  adapter registry asserted in CI; two follow-up review passes, CR-SA75-REV-001/002, hardened the
+  root-package-missing detection further). **TA57: resolved** (SA76 — a ticketed quarantine
+  mechanism in `scripts/test_integration.sh` absorbs the two remaining known restricted-role
+  failures (orgs → SA77, notifications → SA78, both resolved/tracked separately) so the
+  integration gate is green for everything else; forms `0007`'s composite-FK piece was already
+  resolved by SA60, so it needed no quarantine entry). **TA50: resolved** (SA60 — the composite-FK
+  helper's `NOT DEFERRABLE` emission is now the ratified project-wide policy; `forms/0007`'s
+  inlined SQL and its test were aligned to match, and a new cross-module conformance gate checks
+  all six known composite FKs). Findings-table counts updated (S1 1→0, S3 4→0, total 5→0 — **zero
+  open findings**). Two non-blocking follow-ups spawned by SA76's quarantine removal remain open on
+  `roadmap.md`, not here: **SA77** (orgs' 9 restricted-role failures, root cause not yet
+  established) and **SA79** (forms `0007` backfill data mismatch, distinct from the deferability
+  contract SA60 already fixed).
 
 ## Notes (not violations, watch items)
 
@@ -428,6 +340,8 @@ docs updated in the same delta).
 - `subprocess.Popen` in the dispatchers is never `wait()`ed — carried; at most one transient
   zombie per dispatch.
 - Malformed staff-authored validation rules surface as field-level 400s (SA40) — carried.
-- **SA59.1 restricted-role known failures** (orgs 3+6, forms 0007, notifications duplicate-db):
-  tracked roadmap blockers with a user-directed stop — not re-opened as findings here; TA57 covers
-  the gate-state consequence, TA50/SA60 overlaps the forms 0007 item.
+- **SA59.1 restricted-role known failures — mostly resolved (2026-07-12):** forms `0007`'s
+  composite-FK contract issue closed via SA60 (TA50); notifications' duplicate-db issue closed via
+  SA78; the residual forms backfill bug is SA79 (open, Track 2); orgs' 9 restricted-role failures
+  are SA77 (open, Track 1, root cause not yet established). TA57's gate-red consequence closed via
+  SA76's quarantine mechanism. See `roadmap.md` for SA77/SA79 tracking.
