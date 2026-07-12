@@ -214,7 +214,7 @@ def _install_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
             f"FOREIGN KEY ({child_fk_column}, organization_id) "
             f"REFERENCES {parent_table}(id, organization_id) "
             f"ON DELETE {on_delete} "
-            f"DEFERRABLE INITIALLY DEFERRED "
+            f"NOT DEFERRABLE "
             f"NOT VALID"
         )
 
