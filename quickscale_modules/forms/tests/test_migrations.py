@@ -453,13 +453,15 @@ class TestFormsMigration0007CompositeFK:
         not _FORMS_IS_POSTGRES,
         reason="Deferrability check requires PostgreSQL pg_constraint.",
     )
-    def test_0007_composite_fks_are_deferrable_initially_deferred(self) -> None:
-        """Each composite FK created by 0007 is DEFERRABLE INITIALLY DEFERRED.
+    def test_0007_composite_fks_are_not_deferrable(self) -> None:
+        """Each composite FK created by 0007 is NOT DEFERRABLE.
 
-        Regression for CR-AF12-005: the AF12 shared contract requires
-        that composite FKs carry the ``DEFERRABLE INITIALLY DEFERRED``
-        property so that bulk operations (data migrations, backfills)
-        can temporarily defer FK checking when needed.
+        SA60 ratifies NOT DEFERRABLE as the uniform policy for all
+        Option C composite FKs (fail-fast on FK violations — no
+        ``SET CONSTRAINTS DEFERRED`` carve-out needed for fixture
+        restores).  The inlined ``DEFERRABLE INITIALLY DEFERRED``
+        SQL was the outlier; now aligned with the shared helper
+        in ``orgs/tenancy.py:_ADD_COMPOSITE_FK_SQL``.
         """
         from django.db import connection
         from django.db.migrations.executor import MigrationExecutor
@@ -501,13 +503,13 @@ class TestFormsMigration0007CompositeFK:
                     f"Composite FK '{constraint_name}' on {child_table} not found."
                 )
                 condeferrable, condeferred = row
-                assert condeferrable is True, (
-                    f"'{constraint_name}' on {child_table} must be DEFERRABLE, "
+                assert condeferrable is False, (
+                    f"'{constraint_name}' on {child_table} must be NOT DEFERRABLE, "
                     f"got condeferrable={condeferrable}"
                 )
-                assert condeferred is True, (
-                    f"'{constraint_name}' on {child_table} must be INITIALLY DEFERRED, "
-                    f"got condeferred={condeferred}"
+                assert condeferred is False, (
+                    f"'{constraint_name}' on {child_table} must NOT be "
+                    f"INITIALLY DEFERRED, got condeferred={condeferred}"
                 )
 
     def test_0007_to_0008_migration_chain(self) -> None:
@@ -592,8 +594,8 @@ class TestFormsParentOrgMutationRejection:
         # The composite FK (formfield.form_id, formfield.organization_id)
         # → (form.id, form.organization_id) should reject this.
         #
-        # The composite FK is DEFERRABLE INITIALLY DEFERRED, so force it to
-        # IMMEDIATE inside the atomic block to catch the violation inline.
+        # The composite FK is NOT DEFERRABLE, so the SET CONSTRAINTS ...
+        # IMMEDIATE call below is a harmless no-op retained for clarity.
         with pytest.raises(IntegrityError), transaction.atomic():
             with connection.cursor() as cursor:
                 cursor.execute("SET CONSTRAINTS forms_formfield_form_org_fk IMMEDIATE")
@@ -631,8 +633,8 @@ class TestFormsParentOrgMutationRejection:
             value="test@test.com",
         )
 
-        # The composite FK is DEFERRABLE INITIALLY DEFERRED, so force it to
-        # IMMEDIATE inside the atomic block to catch the violation inline.
+        # The composite FK is NOT DEFERRABLE, so the SET CONSTRAINTS ...
+        # IMMEDIATE call below is a harmless no-op retained for clarity.
         with pytest.raises(IntegrityError), transaction.atomic():
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -687,8 +689,8 @@ class TestFormsParentOrgMutationRejection:
             value="Locked value",
         )
 
-        # The composite FK is DEFERRABLE INITIALLY DEFERRED, so force it to
-        # IMMEDIATE inside the atomic block to catch the violation inline.
+        # The composite FK is NOT DEFERRABLE, so the SET CONSTRAINTS ...
+        # IMMEDIATE call below is a harmless no-op retained for clarity.
         with pytest.raises(IntegrityError), transaction.atomic():
             with connection.cursor() as cursor:
                 cursor.execute(
