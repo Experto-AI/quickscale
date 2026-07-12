@@ -117,13 +117,20 @@ def delivery_for_webhook(db, notification_settings_row):
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Register the bypass_rls marker to prevent PytestUnknownMarkWarning."""
+    """Register the bypass_rls marker and enable reuse-db by default."""
     config.addinivalue_line(
         "markers",
         "bypass_rls: test requires BYPASSRLS database privilege "
         "(superuser / migration DDL). Skipped when QUICKSCALE_ALLOW_BYPASSRLS "
         "is not set.",
     )
+    # SA78: Enable reuse-db so the test database persists between
+    # runs instead of being dropped and recreated.  Under a restricted
+    # role (quickscale_test_role) a leftover test database may be
+    # owned by postgres and cannot be dropped — with reuse_db enabled
+    # no DROP DATABASE is attempted, avoiding the ownership/
+    # duplicate-database failure on rerun.
+    config.option.reuse_db = True
 
 
 def pytest_collection_modifyitems(
