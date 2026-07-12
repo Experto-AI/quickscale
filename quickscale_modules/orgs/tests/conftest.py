@@ -47,23 +47,18 @@ def _reset_test_state() -> Iterator[None]:
     cache.clear()
 
 
-@pytest.fixture(autouse=True)
-def _mock_org_created_signal() -> Iterator[None]:
-    """Prevent CRM receiver from firing during org creation in non-CRM tests.
+@pytest.fixture
+def mock_org_created_signal() -> Iterator[None]:
+    """Opt-in fixture: prevent CRM receiver from firing during org creation.
 
-    Under SA59.1 restricted-role testing, ``Organization.objects.create()``
-    and similar paths that dispatch ``organization_created`` trigger
-    the CRM receiver (``seed_crm_default_stages_on_org_created``), which
-    writes to tenant-scoped CRM tables under FORCE-RLS.  Without a primed
-    ``app.current_org_id``, those writes fail.
+    SA74 fixed the CRM receiver (``seed_crm_default_stages_on_org_created``)
+    to use ``org_scope`` internally, so the receiver no longer needs a
+    pre-primed ``app.current_org_id`` to write safely under FORCE RLS.
+    The old autouse ``_mock_org_created_signal`` fixture has been removed.
 
-    This fixture patches the signal's ``send`` method globally so that
-    receivers are never invoked during org creation in tests that are not
-    specifically testing CRM bootstrap behavior.
-
-    Tests that verify signal dispatch (``test_crm_bootstrap.py``) use their
-    own explicit ``patch.object(organization_created, "send")``, which
-    temporarily overrides this fixture's mock and restores it on exit.
+    This opt-in replacement is retained for the narrow case where a test
+    needs to suppress the signal entirely (e.g. isolating org-creation
+    behavior from any CRM side effects).  Most tests should not need it.
     """
     from unittest.mock import patch
 
