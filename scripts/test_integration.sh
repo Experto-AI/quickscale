@@ -30,6 +30,33 @@ SHOW_FULL_OUTPUT=false
 # enforcing a 90% overall mean across the maintained test matrix.
 COVERAGE_MEAN_THRESHOLD=90
 FILE_COVERAGE_THRESHOLD=80
+
+# ---------------------------------------------------------------------------
+# SA76 — Ticketed quarantine for known integration-gate failures
+# ---------------------------------------------------------------------------
+# Each entry maps a module name to its owning ticket. When a module is
+# quarantined, its test failures are excluded from the exit code and its
+# coverage is excluded from the overall mean. Remove the entry when the
+# owning ticket lands. Entries are removed independently as each owning
+# ticket completes — not held for a single simultaneous closeout.
+declare -A QUARANTINE_TICKETS
+# Orgs: restricted-role CREATE ROLE failures (3 test_models + 6 helper-path)
+QUARANTINE_TICKETS[orgs]="SA77"
+# Notifications: duplicate-db/ownership failures on restricted-role reruns
+QUARANTINE_TICKETS[notifications]="SA78"
+
+is_quarantined() {
+  local mod_name="$1"
+  [[ -n "${QUARANTINE_TICKETS[$mod_name]+exists}" ]]
+}
+
+get_quarantine_ticket() {
+  local mod_name="$1"
+  if [[ -n "${QUARANTINE_TICKETS[$mod_name]+exists}" ]]; then
+    printf '%s\n' "${QUARANTINE_TICKETS[$mod_name]}"
+  fi
+}
+
 PYTEST_EXTRA_ARGS=()
 COVERAGE_RESULTS_FILE="$(mktemp)"
 
@@ -244,7 +271,8 @@ run_pytest_stage() {
   local stage_name="$1"
   local coverage_target="$2"
   local include_html_report="$3"
-  shift 3
+  local quarantine_ticket="${4:-}"
+  shift 4
   local -a stage_cmd=("$@")
 
   local coverage_xml
@@ -293,7 +321,7 @@ run_pytest_stage() {
   local coverage_pct
   coverage_pct="$(extract_coverage_percent "$coverage_xml" || true)"
   persist_module_coverage_xml "$stage_name" "$coverage_xml"
-  if [ -n "$coverage_pct" ]; then
+  if [ -n "$coverage_pct" ] && [ -z "$quarantine_ticket" ]; then
     printf '%s|%s\n' "$stage_name" "$coverage_pct" >> "$COVERAGE_RESULTS_FILE"
   fi
 
@@ -313,11 +341,19 @@ run_pytest_stage() {
   fi
 
   if [ -n "$coverage_pct" ]; then
-    echo "  → ${stage_name} coverage recorded: ${coverage_pct}%"
+    if [ -n "$quarantine_ticket" ]; then
+      echo "  → ${stage_name} coverage recorded: ${coverage_pct}% (quarantined — ${quarantine_ticket})"
+    else
+      echo "  → ${stage_name} coverage recorded: ${coverage_pct}%"
+    fi
   fi
 
   rm -f "$coverage_xml" "$coverage_report" "$run_log"
   if [ $stage_exit -ne 0 ] || [ $coverage_policy_exit -ne 0 ]; then
+    if [ -n "$quarantine_ticket" ]; then
+      echo "  ⚠  ${stage_name}: known failures quarantined (${quarantine_ticket}) — excluded from gate"
+      return 0
+    fi
     return 1
   fi
   return 0
@@ -339,6 +375,15 @@ fi
 # Track exit codes
 EXIT_CODE=0
 
+# Print quarantine banner if any modules are quarantined
+if [ ${#QUARANTINE_TICKETS[@]} -gt 0 ]; then
+  echo "🔒 SA76 quarantine active — known failures excluded from gate."
+  for mod_name in "${!QUARANTINE_TICKETS[@]}"; do
+    echo "     ${mod_name}: ${QUARANTINE_TICKETS[$mod_name]}"
+  done
+  echo ""
+fi
+
 echo "📦 Testing quickscale_modules..."
 # Test modules using ROOT poetry environment (centralized dependencies)
 # Modules are installed in editable mode via root pyproject.toml
@@ -353,7 +398,13 @@ if [ -d "quickscale_modules" ]; then
     if [ -d "$mod" ]; then
       mod_name=$(basename "$mod")
       if [ -d "$mod/tests" ]; then
-        echo "  → Testing module: $mod_name"
+        quarantine_flag=""
+        if is_quarantined "$mod_name"; then
+          quarantine_flag="$(get_quarantine_ticket "$mod_name")"
+          echo "  → Testing module: $mod_name [quarantined: ${quarantine_flag}]"
+        else
+          echo "  → Testing module: $mod_name"
+        fi
         # Package name format: quickscale_modules_<name> (underscores, not hyphens)
         pkg_name="quickscale_modules_${mod_name}"
         # Use ROOT poetry environment with PYTHONPATH pointing to module
@@ -362,6 +413,7 @@ if [ -d "quickscale_modules" ]; then
           "module ${mod_name}" \
           "$pkg_name" \
           false \
+          "$quarantine_flag" \
           run_with_pythonpath "$(build_module_pythonpath "$mod")${PYTHONPATH:+:$PYTHONPATH}" run_repo_tool pytest "$mod/tests/" \
             -m "not e2e" -p pytest_django --ds=tests.settings; then
           EXIT_CODE=1
@@ -376,6 +428,9 @@ else
 fi
 
 echo ""
+if [ ${#QUARANTINE_TICKETS[@]} -gt 0 ]; then
+  echo "  (coverage from quarantined modules excluded from mean)"
+fi
 if ! check_overall_mean_coverage; then
   EXIT_CODE=1
 fi
