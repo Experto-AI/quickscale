@@ -19,6 +19,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make format` - Shared formatting entrypoint.
 - `make test` - Shared unit and integration test entrypoint.
 - `make test-unit` - Shared unit-only entrypoint with section and module scoping.
+- `make test-integration` - Shared integration-test entrypoint for module suites against a NOBYPASSRLS PostgreSQL 18 role.
 - `make test-e2e` - End-to-end validation with PostgreSQL and browser automation.
 - `make ci-e2e` - CI-parity release-gate validation including E2E.
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
@@ -39,7 +40,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - 90% overall mean coverage plus 80% minimum per file for `quickscale_core`, `quickscale_cli`, modules, and themes.
 - CI fails if overall mean drops below 90% or any file falls below 80%.
 - Coverage reports run on every CI build.
-- Thresholds apply to unit tests only; enforcement remains dual overall and per-file.
+- Thresholds are enforced across both unit and integration gates — `make test-unit` (via `scripts/test_unit.sh`) covers core and CLI code, while `make test-integration` (via `scripts/test_integration.sh`) covers module suites. Non-quarantined integration suites enforce the normal dual overall and per-file thresholds, while quarantined suites are excluded from gate failure and from the overall mean until their owning ticket closes.
 
 **Test Requirements:**
 - New features require tests.
