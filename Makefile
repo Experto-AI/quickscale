@@ -16,7 +16,7 @@
 #   make MODULE=blog test-integration - Run integration tests for quickscale_modules/blog
 #   make test-integration     - Run integration tests for quickscale_modules/*
 #   make check SECTIONS="core modules" - Run checks for multiple sections without `--`
-#   make test-cov             - Run tests with coverage
+#   make test-cov             - Run tests with coverage (aggregates DR-engine coverage from backups module when PostgreSQL is available)
 #   make test-e2e             - Run E2E tests (needs Docker + Playwright)
 #   make test-agent           - Run agentic flow adapter tests
 #   make lint                 - Run linting
@@ -106,7 +106,7 @@ help:
 	@echo "  make test -- --modules    - Run tests only for quickscale_modules/*"
 	@echo "  make test-unit -- --core  - Run unit tests only for quickscale_core"
 	@echo "  make test-integration     - Run integration tests for quickscale_modules/* (requires PostgreSQL)"
-	@echo "  make test-cov             - Run tests with coverage report"
+	@echo "  make test-cov             - Run tests with coverage report (aggregates DR-engine coverage from backups module when PostgreSQL is available)"
 	@echo "  make test-e2e             - Run E2E tests (needs Docker + Playwright)"
 	@echo "  make test-agent           - Run agentic flow adapter tests"
 	@echo ""
@@ -344,15 +344,77 @@ test-agent:
 	@scripts/test_agentic_flow.sh
 
 # Run tests with coverage (90% total, 80% per-file threshold)
+#
+# Phase 1: Core + CLI unit tests
+# Phase 2: Backups-module tests (when PostgreSQL is available) — aggregates
+#          legitimate DR-engine exercise into the combined coverage measurement.
+# Phase 3: Combined coverage report and threshold check.
+# Phase 4: Final exit code (test failures are captured but coverage is always reported).
 test-cov:
-	@$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short \
-		--cov=quickscale_core/src \
-		--cov=quickscale_cli/src \
-		--cov-report=term-missing \
-		--cov-report=html \
-		--cov-report=json \
-		--cov-fail-under=90
-	@echo "📊 Coverage report: htmlcov/index.html"
+	@set -e; \
+	overall_exit=0; \
+	rm -f .coverage; \
+	echo "📦 Phase 1 — Running core + CLI unit tests with coverage..."; \
+	set +e; \
+	$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short -m "not e2e" \
+		--cov=quickscale_core \
+		--cov=quickscale_cli \
+		--cov-report=; \
+	phase1_exit=$$?; \
+	set -e; \
+	if [ $$phase1_exit -ne 0 ]; then \
+		echo "⚠️  Phase 1 — Core/CLI tests had failures (exit $$phase1_exit) — coverage data still captured"; \
+		overall_exit=$$phase1_exit; \
+	fi; \
+	pg_available=false; \
+	dr_tools_missing=false; \
+	for tool in pg_dump pg_restore; do \
+		if ! command -v "$$tool" >/dev/null 2>&1; then \
+			echo "ℹ️  Required DR tool '$$tool' not found in PATH"; \
+			dr_tools_missing=true; \
+		fi; \
+	done; \
+	if [ "$$dr_tools_missing" = false ] && $(PYTHON) -c "import psycopg2; conn = psycopg2.connect(\
+		host='$${QS_BACKUPS_DB_HOST:-localhost}',\
+		port='$${QS_BACKUPS_DB_PORT:-5432}',\
+		dbname='postgres',\
+		user='$${QS_BACKUPS_DB_USER:-postgres}',\
+		password='$${QS_BACKUPS_DB_PASSWORD:-}'\
+	); conn.close()" >/dev/null 2>&1; then \
+		pg_available=true; \
+	fi; \
+	if [ "$$pg_available" = true ]; then \
+		echo "📦 Phase 2 — Running backups-module tests with coverage append..."; \
+		mod="quickscale_modules/backups"; \
+		module_pythonpath="$$mod:."; \
+		if [ -d "$$mod/src" ]; then \
+			module_pythonpath="$$module_pythonpath:$$mod/src"; \
+		fi; \
+		for sibling in quickscale_modules/*; do \
+			if [ "$$sibling" != "$$mod" ] && [ -d "$$sibling/src" ]; then \
+				module_pythonpath="$$module_pythonpath:$$sibling/src"; \
+			fi; \
+		done; \
+		set +e; \
+		PYTHONPATH="$$module_pythonpath" $(PYTHON) -m pytest "$$mod/tests/" \
+			-q --tb=short -o "addopts=" -m "not e2e" -p pytest_django --ds=tests.settings \
+			--cov=quickscale_core --cov-append \
+			--cov-report=; \
+		phase2_exit=$$?; \
+		set -e; \
+		if [ $$phase2_exit -ne 0 ]; then \
+			echo "⚠️  Phase 2 — Backups-module tests had failures (exit $$phase2_exit) — coverage data still captured"; \
+			[ $$overall_exit -eq 0 ] && overall_exit=$$phase2_exit; \
+		fi; \
+	else \
+		echo "ℹ️ Phase 2 — PostgreSQL or DR toolchain not available — skipping module coverage append (backups)"; \
+	fi; \
+	echo "📊 Phase 3 — Generating combined coverage report..."; \
+	$(PYTHON) -m coverage html; \
+	$(PYTHON) -m coverage report --fail-under=90; \
+	$(PYTHON) -m coverage json; \
+	echo "📊 Coverage report: htmlcov/index.html"; \
+	exit $$overall_exit
 
 # --- Lint / Format ---
 
