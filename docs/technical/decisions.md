@@ -1018,7 +1018,7 @@ implicit env-var/stdout-JSON coupling.
 
 - The unit gate (`make test-unit`) is DB-free and runs core + CLI tests only. It requires no PostgreSQL and no special database role. The blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is removed from the unit-only path.
 - The integration gate (`make test-integration`) runs module suites against a `NOBYPASSRLS` role in both `ci.yml` and `publish.yml`. The SA58 boot guard (RLS role check) stays active. Developers set the SA14.4 hatch (`QUICKSCALE_ALLOW_BYPASSRLS=1`) explicitly per-suite when BYPASSRLS-dependent tests need to run.
-- Non-quarantined module-suite regressions fail the gate. Known restricted-role failures are tracked individually (SA77 for orgs) with a ticketed quarantine mechanism (SA76) that excludes quarantined entries from the exit code and coverage mean.
+- Non-quarantined module-suite regressions fail the gate. Known restricted-role failures are tracked individually (SA77 for orgs, SA79 for notifications) with a ticketed quarantine mechanism (SA76) that excludes quarantined entries from the exit code and coverage mean.
 - `make test` runs both gates sequentially as a combined check.
 
 **Related docs:** [validation_policy.md](./validation_policy.md) | [roadmap.md §Track 1](./roadmap.md)

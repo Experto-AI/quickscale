@@ -49,9 +49,9 @@ git merge --no-ff wt-track{N}
 
 > Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78, SA59 umbrella including SA59.1–SA59.4) were pruned from this section — their full implementation detail lives in CHANGELOG.md. **SA79 is reopened/blocked (see Track 2 below).**
 >
-> **Track readiness (2026-07-12, corrected):** Track 2 is blocked (SA79 closeout verification findings pending) and Track 1 is blocked behind it.
-> - **Track 1** — SA77 open but blocked — the Track 2 SA79 handoff is not yet truthful enough to call complete (restricted-role rerun aborts in forms 0007 FK validation before reaching the orgs seam).
-> - **Track 2** — SA79 reopened/blocked — closeout verification findings CR-PLAN-SA79-004 and CR-PLAN-SA79-005 must be resolved before Track 2 can honestly close.
+> **Track readiness (2026-07-12, corrected; decoupled 2026-07-12):** Track 2 is blocked (SA79 closeout verification pending). Track 1 is unblocked for root-cause investigation — SA77's code-level investigation does not require the SA79 handoff, only its final restricted-role verification does.
+> - **Track 1** — SA77 open, **decoupled from Track 2**: root-cause investigation (code/test-helper reading, no DB rerun required) can start now. Final verification (all 9 tests passing under the restricted role) stays blocked until the Track 2 SA79 handoff is truthful enough to call complete — the restricted-role rerun currently aborts in forms 0007 FK validation before reaching the orgs seam.
+> - **Track 2** — SA79 reopened/blocked — CR-PLAN-SA79-005 resolved 2026-07-12 (decisions.md:1021 now names both SA77 and SA79 in the quarantine-tracking sentence, matching `test_integration.sh`'s live quarantine list). CR-PLAN-SA79-004 remains: the exact retained-role execution shape must be exercised in an actual `make test-integration` rerun before SA79 can honestly close.
 > - **Track 3** — no open items; fully available for new work.
 
 ### Dependency & parallelization overview
@@ -60,11 +60,12 @@ git merge --no-ff wt-track{N}
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
 SA77 — fix orgs restricted-role        SA79 — reopened/blocked                    (no open items)
-  CREATE ROLE failures                   (closeout verification findings
-  ⬤ blocked behind Track 2 handoff       CR-PLAN-SA79-004, CR-PLAN-SA79-005)
+  CREATE ROLE failures                   (CR-PLAN-SA79-004: retained-role
+  ◐ investigation unblocked;             rerun still owed)
+    verification blocked on Track 2
 ```
 
-SA77 (Track 1) is blocked behind SA79 closeout verification/reconciliation — the current restricted-role rerun aborts in forms 0007 FK validation before reaching the orgs seam. SA79 (Track 2) is reopened with pending blockers. Track 3 has no open work and is available for new items.
+SA77 (Track 1) is decoupled from SA79: root-cause investigation can proceed now via code/test-helper reading (no DB rerun required); only the final restricted-role verification step stays blocked behind SA79's closeout. SA79 (Track 2) is reopened with one remaining blocker (CR-PLAN-SA79-004 — CR-PLAN-SA79-005 resolved). Track 3 has no open work and is available for new items.
 
 ### Track 1 — Tenant-context surface
 
@@ -72,11 +73,11 @@ SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 is
 
 #### Finding — `test-tooling-auto-primes-bypassrls-hatch`, orgs restricted-role residual (`why →` [tech-audit.md TA49](../others/tech-audit.md); split from SA59.1 per the 2026-07-12 closeout-path decision)
 
-- [ ] **SA77 — Root-cause and fix orgs' restricted-role `CREATE ROLE`-dependent test failures.** `Tier 1 · Track 1 · deps: SA79 (blocked)`
+- [ ] **SA77 — Root-cause and fix orgs' restricted-role `CREATE ROLE`-dependent test failures.** `Tier 1 · Track 1 · deps: investigation unblocked; final verification depends on SA79 (blocked)`
   3 `test_models.py` failures + 6 helper-path errors in `test_tenant_table_conformance.py`/`test_operator_access.py` persist under the NOBYPASSRLS integration role. These depend on restricted-role `CREATE ROLE` behavior (SA59.3-style territory) and were not resolved by SA59.1's Phase 3 test-only adaptations or by SA59.3's create-then-use → assert-then-use conversion. Root cause not yet established — investigate whether these tests still attempt a `CREATE ROLE` call SA59.3 didn't cover, or exercise a role capability the shared `quickscale_test_role`/`quickscale_rls_test_role` contract doesn't grant.
   *Files:* `quickscale_modules/orgs/tests/test_tenant_table_conformance.py`, `quickscale_modules/orgs/tests/test_operator_access.py`, `quickscale_modules/orgs/tests/test_models.py` — plus `scripts/provision_test_roles.sh` if the fix is a role-contract gap rather than a test-helper gap.
   *Acceptance:* all 9 failing tests pass under the restricted `quickscale_test_role`/`quickscale_rls_test_role` roles; the corresponding `scripts/test_integration.sh` quarantine entry (from SA76) is removed.
-  **Blocker:** The restricted-role rerun aborts in forms 0007 FK validation before reaching the orgs seam — SA79 handoff is not yet truthful enough to call complete. SA77 verification is blocked until Track 2 SA79 closeout verification is resolved. (See pending blockers CR-PLAN-SA79-004, CR-PLAN-SA79-005 below.)
+  **Decoupled from Track 2 (2026-07-12):** root-cause investigation (reading the three test files and `provision_test_roles.sh` to identify the specific `CREATE ROLE` gap) does not require a database rerun and can proceed now. Only the final acceptance step — confirming all 9 tests pass under a live restricted-role rerun — stays blocked, because the current restricted-role rerun aborts in forms 0007 FK validation before reaching the orgs seam (Track 2's CR-PLAN-SA79-004).
   *(why →* [tech-audit.md TA49](../others/tech-audit.md)*)*
 
 ### Track 2 — Module contracts & settings
@@ -86,11 +87,11 @@ SA79 is reopened/blocked — the closeout verification revealed that the current
 #### Finding — SA79 closeout verification and reconciliation (`why →` closeout-review cap; CR-PLAN-SA79-004, CR-PLAN-SA79-005)
 
 - [ ] **SA79 — Closeout verification/reconciliation.** `Tier 1 · Track 2 · deps: none`
-  Direct forms 0007 proof must be rerun under the exact retained-role environment (full `QS_*_DB_USER=quickscale_test_role` set, BYPASSRLS hatch closed). Notifications suite must pass unquarantined (no forms 0007 FK errors) before SA79 can honestly close. Same-fact status docs and audit docs must be refreshed together — current-state audit docs still assert SA79/SA77 remain open.
+  Direct forms 0007 proof must be rerun under the exact retained-role environment (full `QS_*_DB_USER=quickscale_test_role` set, BYPASSRLS hatch closed). Notifications suite must pass unquarantined (no forms 0007 FK errors) before SA79 can honestly close.
 
   **Pending blockers/decisions:**
-  - **CR-PLAN-SA79-004 (high/blocking):** Exact retained-role execution shape must be explicit for SA79 proof and `make test-integration` (`QS_FORMS_DB_USER=quickscale_test_role`, full `QS_*_DB_USER=quickscale_test_role` set for the integration gate, BYPASSRLS hatch closed).
-  - **CR-PLAN-SA79-005 (medium/blocking):** Same-fact status refresh must include current-state audit docs that still assert SA79/SA77 remain open.
+  - **CR-PLAN-SA79-004 (high/blocking):** Exact retained-role execution shape must be explicit for SA79 proof and `make test-integration` (`QS_FORMS_DB_USER=quickscale_test_role`, full `QS_*_DB_USER=quickscale_test_role` set for the integration gate, BYPASSRLS hatch closed) — must be exercised in an actual rerun, not just documented.
+  - ~~CR-PLAN-SA79-005 (medium/blocking): Same-fact status refresh must include current-state audit docs that still assert SA79/SA77 remain open.~~ **Resolved (2026-07-12):** tech-audit.md and arch-audit.md already correctly stated SA77/SA79 open; the actual gap was `decisions.md:1021`, which named only SA77 in the quarantine-tracking sentence. Corrected to name both SA77 (orgs) and SA79 (notifications), matching `test_integration.sh`'s live `QUARANTINE_TICKETS` list.
 
   *Acceptance:* forms 0007 backfill passes under full retained-role env; notifications suite runs clean (unquarantined); audit/status docs reflect current state.
 
