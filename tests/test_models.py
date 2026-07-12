@@ -852,6 +852,7 @@ def _tenant_resource_db() -> Generator[None, None, None]:
         schema_editor.delete_model(ConcreteTenantResource)
 
 
+@pytest.mark.bypass_rls
 @pytest.mark.usefixtures("_tenant_resource_db")
 @pytest.mark.django_db(transaction=True)
 def test_tenant_manager_auto_scopes_to_current_org() -> None:
@@ -881,6 +882,7 @@ def test_tenant_manager_auto_scopes_to_current_org() -> None:
         reset_current_org_id()
 
 
+@pytest.mark.bypass_rls
 @pytest.mark.usefixtures("_tenant_resource_db")
 @pytest.mark.django_db(transaction=True)
 def test_tenant_manager_fail_closed_when_unset() -> None:
@@ -902,6 +904,7 @@ def test_tenant_manager_fail_closed_when_unset() -> None:
     assert list(ConcreteTenantResource.objects.all()) == []
 
 
+@pytest.mark.bypass_rls
 @pytest.mark.usefixtures("_tenant_resource_db")
 @pytest.mark.django_db(transaction=True)
 def test_tenant_manager_all_objects_bypasses_scope() -> None:
@@ -922,6 +925,7 @@ def test_tenant_manager_all_objects_bypasses_scope() -> None:
     assert r2.pk in pks
 
 
+@pytest.mark.bypass_rls
 @pytest.mark.usefixtures("_tenant_resource_db")
 @pytest.mark.django_db(transaction=True)
 def test_tenant_manager_cross_org_isolation() -> None:
@@ -960,6 +964,7 @@ def test_tenant_manager_cross_org_isolation() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.bypass_rls
 @pytest.mark.usefixtures("_tenant_resource_db")
 @pytest.mark.django_db(transaction=True)
 def test_refresh_from_db_without_org_context() -> None:
@@ -992,6 +997,7 @@ def test_refresh_from_db_without_org_context() -> None:
     assert resource.name == "updated"
 
 
+@pytest.mark.bypass_rls
 @pytest.mark.usefixtures("_tenant_resource_db")
 @pytest.mark.django_db(transaction=True)
 def test_forward_fk_traversal_without_org_context() -> None:

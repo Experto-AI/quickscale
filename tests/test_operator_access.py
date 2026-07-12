@@ -554,55 +554,53 @@ class TestOperatorAccessCrossTenantReadOnly:
         creating it at runtime.  Raises ``RuntimeError`` with setup
         instructions if missing.  Per-table grants are still issued here
         (idempotent, requires table existence post-migration).
+
+        SA77: converted from ``psycopg2`` direct connection to Django's
+        managed ``connection.cursor()`` so the helper works under
+        restricted-role (NOBYPASSRLS) environments.  Best-effort GRANTs
+        are wrapped in savepoints (``transaction.atomic()``) so
+        permission-denied failures under a non-owner database role do
+        not abort the outer test transaction.
         """
-        import psycopg2  # type: ignore[import-untyped]
+        from django.db import connection, transaction
 
-        from django.db import connection
-
-        db = connection.settings_dict
-        conn = psycopg2.connect(
-            dbname=db["NAME"],
-            user=db["USER"],
-            password=db["PASSWORD"],
-            host=db.get("HOST", "localhost"),
-            port=db.get("PORT", "5432"),
-        )
-        conn.autocommit = True
-        try:
-            with conn.cursor() as cur:
-                # SA59.3: assert the role is pre-provisioned instead of CREATE ROLE.
-                cur.execute(
-                    "SELECT 1 FROM pg_roles WHERE rolname = %s",
-                    [TestOperatorAccessCrossTenantReadOnly._RESTRICTED_ROLE],
+        with connection.cursor() as cur:
+            # SA59.3: assert the role is pre-provisioned instead of CREATE ROLE.
+            cur.execute(
+                "SELECT 1 FROM pg_roles WHERE rolname = %s",
+                [TestOperatorAccessCrossTenantReadOnly._RESTRICTED_ROLE],
+            )
+            if cur.fetchone() is None:
+                raise RuntimeError(
+                    f"Pre-provisioned role "
+                    f"{TestOperatorAccessCrossTenantReadOnly._RESTRICTED_ROLE} "
+                    f"not found. Run scripts/provision_test_roles.sh to "
+                    f"create it before running operator-access tests."
                 )
-                if cur.fetchone() is None:
-                    raise RuntimeError(
-                        f"Pre-provisioned role "
-                        f"{TestOperatorAccessCrossTenantReadOnly._RESTRICTED_ROLE} "
-                        f"not found. Run scripts/provision_test_roles.sh to "
-                        f"create it before running operator-access tests."
-                    )
-                try:
+            # Best-effort grants wrapped in savepoints so permission-denied
+            # failures under NOBYPASSRLS do not abort the outer test
+            # transaction (SA77).
+            try:
+                with transaction.atomic():
                     cur.execute(
                         f"GRANT USAGE ON SCHEMA public TO "
                         f"{TestOperatorAccessCrossTenantReadOnly._RESTRICTED_ROLE}"
                     )
-                except Exception:
-                    pass
-                for table in (
-                    "quickscale_modules_forms_form",
-                    "quickscale_modules_forms_formsubmission",
-                    "quickscale_modules_orgs_organization",
-                ):
-                    try:
+            except Exception:
+                pass
+            for table in (
+                "quickscale_modules_forms_form",
+                "quickscale_modules_forms_formsubmission",
+                "quickscale_modules_orgs_organization",
+            ):
+                try:
+                    with transaction.atomic():
                         cur.execute(
                             f"GRANT SELECT, DELETE, UPDATE ON {table} TO "
                             f"{TestOperatorAccessCrossTenantReadOnly._RESTRICTED_ROLE}"
                         )
-                    except Exception:
-                        pass
-        finally:
-            conn.close()
+                except Exception:
+                    pass
 
     def test_operator_access_can_read_across_tenants(self) -> None:
         """With operator_access enabled under a restricted role, a query
