@@ -530,6 +530,279 @@ class TestFormsMigration0007CompositeFK:
 
 
 # ---------------------------------------------------------------------------
+# SA79 — Regression proof: 0007 backfill works under NOBYPASSRLS
+# ---------------------------------------------------------------------------
+# These tests prove that the 0007 migration's backfill correctly populates
+# FormField.organization_id from the parent Form even when FORCE RLS is
+# active on the Form table (enabled in 0006).  The fix sets the
+# ``app.operator_access`` GUC before the backfill so the correlated
+# subquery on Form is not blocked by RLS.
+#
+# Unlike the ``TestFormsMigration0007CompositeFK`` class above, these
+# tests do NOT use ``@pytest.mark.bypass_rls`` — they are designed to pass
+# under a NOBYPASSRLS database role, proving the SA79 fix works in the
+# restricted-role CI context.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestFormsMigration0007BackfillSA79:
+    """Regression proof that 0007 backfill populates FormField.org
+    correctly under NOBYPASSRLS (SA79)."""
+
+    APP_LABEL = "quickscale_modules_forms"
+    MIG_0006 = "0006_enable_rls"
+    MIG_0007 = "0007_new_organization_ownership"
+
+    def test_backfill_matches_form_org_after_0007(self) -> None:
+        """Migrate 0006→0007 and verify every seeded FormField row has
+        the same organization_id as its parent Form — proving the
+        backfill correctly propagates org under active FORCE RLS."""
+        from django.db import connection
+        from django.db.migrations.executor import MigrationExecutor
+
+        executor = MigrationExecutor(connection)
+
+        executor.migrate([(self.APP_LABEL, self.MIG_0006)])
+        executor.loader.build_graph()
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([(self.APP_LABEL, self.MIG_0007)])
+
+        # Read state at 0007 — historical model proxy.
+        state = executor.loader.project_state([(self.APP_LABEL, self.MIG_0007)])
+        HistoricalFormField = state.apps.get_model(self.APP_LABEL, "FormField")
+
+        # Verify every FormField row has a non-null org.
+        null_org_count = HistoricalFormField.objects.filter(
+            organization__isnull=True
+        ).count()
+        assert null_org_count == 0, (
+            f"{null_org_count} FormField rows still have NULL organization_id "
+            "after 0007 backfill"
+        )
+
+        # Verify every FormField's org matches its parent Form's org.
+        for ff in HistoricalFormField.objects.select_related("form").all():
+            assert ff.organization_id == ff.form.organization_id, (
+                f"FormField id={ff.pk} (form_id={ff.form_id}) has "
+                f"organization_id={ff.organization_id} but parent Form "
+                f"id={ff.form_id} has organization_id={ff.form.organization_id}"
+            )
+
+    # CR-SA79-002 RESOLVED: non-system tenant data proof
+    def test_operator_access_allows_cross_org_read_under_rls(self) -> None:
+        """Prove that setting ``app.operator_access = 'on'`` allows
+        reading Form rows across org boundaries under FORCE RLS with
+        NOBYPASSRLS — the core mechanism behind the CR-SA79-001 fix.
+
+        Under the ``quickscale_test_role`` (NOBYPASSRLS), the Form RLS
+        policy blocks SELECT for rows whose ``organization_id`` does not
+        match ``app.current_org_id``.  With ``app.operator_access = 'on'``,
+        the policy's ``FOR SELECT`` OR clause allows cross-tenant reads.
+
+        This proves the 0007 backfill can correctly read any parent
+        Form's ``organization_id`` regardless of the row's org — including
+        non-system tenant data.
+        """
+        from uuid import uuid4
+
+        from django.db import connection, transaction
+
+        from quickscale_modules_forms.models import Form, FormField
+        from quickscale_modules_orgs.current_org import (
+            _set_db_current_org_id,
+            _set_operator_access,
+            get_current_org_id,
+            reset_current_org_id,
+            set_current_org_id,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        prior_org_id = get_current_org_id()
+
+        # All GUC-sensitive operations must run inside an explicit
+        # transaction.atomic() block so that SET LOCAL works.
+        with transaction.atomic():
+            try:
+                # Create a non-system organization (control-plane model;
+                # no RLS, no all_objects, use default objects).
+                org_b = Organization.objects.create(
+                    name="Non-System SA79 Operator Test",
+                    slug=f"sa79-op-{uuid4().hex[:8]}",
+                )
+
+                # Create a non-system Form under org_b.
+                set_current_org_id(org_b.pk)
+                _set_db_current_org_id(org_b.pk)
+
+                ns_form = Form.all_objects.create(
+                    title="Non-System Operator Form",
+                    slug=f"ns-op-form-{uuid4().hex[:8]}",
+                    organization=org_b,
+                )
+                ns_form_id = ns_form.pk
+
+                # Create a non-system FormField linked to the non-system Form.
+                FormField.all_objects.create(
+                    form=ns_form,
+                    organization=org_b,
+                    field_type=FormField.FIELD_TYPE_TEXT,
+                    label="Name",
+                    name="name",
+                    order=1,
+                )
+
+                # Verify the non-system Form IS visible when querying
+                # with the matching org context.
+                set_current_org_id(org_b.pk)
+                _set_db_current_org_id(org_b.pk)
+                found_form = Form.objects.get(pk=ns_form_id)
+                assert found_form is not None
+
+                # Verify the non-system Form is NOT visible when querying
+                # under a different org context (System org).
+                system_org = Organization.objects.get_system_org()
+                set_current_org_id(system_org.pk)
+                _set_db_current_org_id(system_org.pk)
+                with pytest.raises(Form.DoesNotExist):
+                    Form.objects.get(pk=ns_form_id)
+
+                # CR-SA79-001 PROOF: With ``app.operator_access = 'on'``,
+                # the non-system Form IS readable despite being under a
+                # different org context.
+                _set_operator_access("on")
+
+                with connection.cursor() as cur:
+                    cur.execute(
+                        "SELECT id FROM quickscale_modules_forms_form WHERE id = %s",
+                        [ns_form_id],
+                    )
+                    row = cur.fetchone()
+
+                assert row is not None, (
+                    f"Form id={ns_form_id} not readable with "
+                    f"operator_access='on' under system org context."
+                )
+                assert row[0] == ns_form_id
+
+            finally:
+                # Restore org context within the atomic block.
+                if prior_org_id:
+                    set_current_org_id(prior_org_id)
+                    _set_db_current_org_id(prior_org_id)
+                else:
+                    reset_current_org_id()
+
+    # CR-SA79-002 RESOLVED: direct MigrationExecutor 0006→0007 proof
+    def test_backfill_preserves_non_system_org_after_0007(self) -> None:
+        """Seed non-system tenant rows between 0006 and 0007, then verify
+        that 0007 backfill correctly assigns the real non-system org from
+        the parent Form — not the System org fallback.
+
+        Unlike ``test_operator_access_allows_cross_org_read_under_rls``
+        (which proves the operator_access mechanism), this test actually
+        runs the 0006→0007 migration with pre-existing non-system tenant
+        data and verifies the backfill results — proving the migration
+        works end-to-end for cross-org real data under NOBYPASSRLS.
+        """
+        from uuid import uuid4
+
+        from django.db import connection
+        from django.db.migrations.executor import MigrationExecutor
+
+        from quickscale_modules_forms.models import Form
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            reset_current_org_id,
+            set_current_org_id,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        app_label = self.APP_LABEL
+
+        # Create the non-system organization at the full migration state
+        # (control-plane model — no RLS).
+        ns_org = Organization.objects.create(
+            name="Non-System SA79 Backfill Test",
+            slug=f"sa79-bf-{uuid4().hex[:8]}",
+        )
+
+        prior_org_id = get_current_org_id()
+
+        # Create the non-system Form at the full DB state with proper org
+        # context so FORCE RLS on Form (enabled in 0006) does not block
+        # the INSERT.
+        set_current_org_id(ns_org.pk)
+        ns_form = Form.all_objects.create(
+            title="Non-System Backfill Form",
+            slug=f"ns-bf-form-{uuid4().hex[:8]}",
+            organization=ns_org,
+        )
+        ns_form_id = ns_form.pk
+
+        # Restore prior org context.
+        if prior_org_id:
+            set_current_org_id(prior_org_id)
+        else:
+            reset_current_org_id()
+
+        executor = MigrationExecutor(connection)
+
+        # Roll back to 0006 so we can insert pre-backfill FormField rows
+        # without the organization column (added in 0007 Step 1).
+        # The Form row created above survives (Form is not touched by 0007).
+        executor.migrate([(app_label, self.MIG_0006)])
+        executor.loader.build_graph()
+
+        # Insert FormField rows via raw SQL WITHOUT organization_id
+        # (pre-0007 state — the column does not exist yet).
+        with connection.cursor() as cur:
+            for name, label, field_type in [
+                ("full_name", "Full Name", "text"),
+                ("email", "Email", "email"),
+            ]:
+                cur.execute(
+                    "INSERT INTO quickscale_modules_forms_formfield "
+                    '(form_id, field_type, label, name, "order", '
+                    "placeholder, help_text, required, options, "
+                    "validation_rules, layout_hint, is_active) "
+                    "VALUES (%s, %s, %s, %s, %s, '', '', TRUE, '[]', "
+                    "'{}', 'full', TRUE)",
+                    [ns_form_id, field_type, label, name, 1],
+                )
+
+        # Migrate forward to 0007 — the backfill should copy the
+        # non-system org from the parent Form.
+        executor = MigrationExecutor(connection)
+        executor.migrate([(app_label, self.MIG_0007)])
+
+        # Read state at 0007 via historical model proxy.
+        state = executor.loader.project_state([(app_label, self.MIG_0007)])
+        HistoricalFormField = state.apps.get_model(app_label, "FormField")
+
+        # Verify the non-system FormField rows have the correct non-system org.
+        for ff in HistoricalFormField.objects.filter(form_id=ns_form_id):
+            assert ff.organization_id == ns_org.pk, (
+                f"FormField id={ff.pk} for non-system Form "
+                f"(form_id={ns_form_id}) has "
+                f"organization_id={ff.organization_id}, "
+                f"expected {ns_org.pk} (non-system org). "
+                "The 0007 backfill fell back to the System org instead of "
+                "using the parent Form's real organization."
+            )
+
+        # Verify no FormField rows have NULL org after backfill.
+        null_org_count = HistoricalFormField.objects.filter(
+            organization__isnull=True
+        ).count()
+        assert null_org_count == 0, (
+            f"{null_org_count} FormField rows still have NULL "
+            "organization_id after 0007 backfill"
+        )
+
+
+# ---------------------------------------------------------------------------
 # AF12 Phase 2 — direct parent-organization mutation rejection proofs
 # (CR-AF12-001 resolution)
 # ---------------------------------------------------------------------------

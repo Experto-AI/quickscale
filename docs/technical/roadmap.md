@@ -47,11 +47,11 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78, SA59 umbrella including SA59.4) were pruned from this section — their full implementation detail lives in CHANGELOG.md.
+> Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78, SA59 umbrella including SA59.1–SA59.4, SA79) were pruned from this section — their full implementation detail lives in CHANGELOG.md.
 >
 > **Track readiness (2026-07-12):** All three tracks are clean to continue — no blocked checkpoints.
 > - **Track 1** — SA77 open and unblocked, available to start now.
-> - **Track 2** — SA79 open and unblocked, available to start now.
+> - **Track 2** — SA79 complete (2026-07-12). No open items; fully available for new work.
 > - **Track 3** — no open items; fully available for new work.
 
 ### Dependency & parallelization overview
@@ -59,11 +59,11 @@ git merge --no-ff wt-track{N}
 ```
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
-SA77 — fix orgs restricted-role         SA79 — fix forms 0007 backfill            (no open items)
-  CREATE ROLE failures                    data mismatch
+SA77 — fix orgs restricted-role        SA79 — complete (2026-07-12)               (no open items)
+  CREATE ROLE failures
 ```
 
-SA77 (Track 1) and SA79 (Track 2) are fully independent and touch disjoint files. Track 3 has no open work and is available for new items.
+SA77 (Track 1) is a standalone finding touching orgs test files and scripts/provision_test_roles.sh. SA79 (Track 2) is complete. Track 3 has no open work and is available for new items.
 
 ### Track 1 — Tenant-context surface
 
@@ -79,15 +79,7 @@ SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 is
 
 ### Track 2 — Module contracts & settings
 
-Available for new work; SA79 is open and unblocked.
-
-#### Finding — `forms-0007-backfill-data-mismatch` (`why →` SA78 findings, notifications test suite)
-
-- [ ] **SA79 — Fix forms migration 0007 backfill logic so seeded FormField rows match their parent Form's organization before VALIDATE CONSTRAINT.** `Tier 1 · Track 2 · deps: none`
-  Migration `0007_new_organization_ownership` adds a composite FK `forms_formfield_form_org_fk` and runs `VALIDATE CONSTRAINT` against existing rows. The seeded FormField rows (from migration `0002_seed_forms`) do not have their `organization_id` correctly populated to match the parent Form's `organization_id`, causing the VALIDATE to reject the `(form_id, organization_id)` pairs. This pre-existing bug was surfaced when SA78's duplicate-database fix allowed the notifications test suite to progress past the DB lifecycle stage, revealing 26 FK validation failures across the notifications, forms, and social suites. Root cause: the backfill step in `0007_new_organization_ownership` needs to update orphaned FormField rows to reference the correct organization before VALIDATE CONSTRAINT runs.
-  *Files:* `quickscale_modules/forms/migrations/0007_new_organization_ownership.py`
-  *Acceptance:* a fresh test-database creation under the restricted role runs the notifications, forms, and social suites with 0 FK validation errors attributable to the forms 0007 backfill; SA76's quarantine entry for forms (if any) can be removed.
-  *(why →* SA78 Findings/blockers discovered, notifications test suite*)*
+SA79 complete as of 2026-07-12. No open items; fully available for new work.
 
 ### Track 3 — Core/CLI plumbing
 
