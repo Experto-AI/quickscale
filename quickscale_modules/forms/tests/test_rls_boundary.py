@@ -32,42 +32,49 @@ _FORMS_TABLES = (
 
 
 def _ensure_rls_test_role() -> None:
-    """Assert the pre-provisioned RLS test role exists (SA59.3).
+    """Assert the pre-provisioned RLS test role exists (SA59.3, SA77).
 
     The role must be pre-created by the test harness
     (``scripts/provision_test_roles.sh`` or equivalent).  Raises
     ``RuntimeError`` with setup instructions if missing.  Per-table
     SELECT grants are still issued here (idempotent, requires table
     existence post-migration).
-    """
-    import psycopg2  # type: ignore[import-untyped]
 
-    db = connection.settings_dict
-    conn = psycopg2.connect(
-        dbname=db["NAME"],
-        user=db["USER"],
-        password=db["PASSWORD"],
-        host=db.get("HOST", "localhost"),
-        port=db.get("PORT", "5432"),
-    )
-    conn.autocommit = True
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT 1 FROM pg_roles WHERE rolname = %s",
-                [_RESTRICTED_ROLE],
+    SA77: converted from ``psycopg2`` direct connection to Django's
+    managed ``connection.cursor()`` so the helper works under
+    restricted-role (NOBYPASSRLS) environments where a separate
+    psycopg2 connection may fail or misbehave.  Best-effort GRANTs
+    are wrapped in savepoints (``transaction.atomic()``) so
+    permission-denied failures under a non-owner database role do
+    not abort the outer test transaction.
+    """
+    from django.db import connection, transaction
+
+    with connection.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM pg_roles WHERE rolname = %s",
+            [_RESTRICTED_ROLE],
+        )
+        if cur.fetchone() is None:
+            raise RuntimeError(
+                f"Pre-provisioned role {_RESTRICTED_ROLE} not found. "
+                f"Run scripts/provision_test_roles.sh to create it before "
+                f"running RLS boundary tests."
             )
-            if cur.fetchone() is None:
-                raise RuntimeError(
-                    f"Pre-provisioned role {_RESTRICTED_ROLE} not found. "
-                    f"Run scripts/provision_test_roles.sh to create it before "
-                    f"running RLS boundary tests."
-                )
-            cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
-            for table in _FORMS_TABLES:
-                cur.execute(f"GRANT SELECT ON {table} TO {_RESTRICTED_ROLE}")
-    finally:
-        conn.close()
+        # Best-effort grants wrapped in savepoints so permission-denied
+        # failures under NOBYPASSRLS do not abort the outer test
+        # transaction (SA77).
+        try:
+            with transaction.atomic():
+                cur.execute(f"GRANT USAGE ON SCHEMA public TO {_RESTRICTED_ROLE}")
+        except Exception:
+            pass
+        for table in _FORMS_TABLES:
+            try:
+                with transaction.atomic():
+                    cur.execute(f"GRANT SELECT ON {table} TO {_RESTRICTED_ROLE}")
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +128,8 @@ class TestFormsRlsBoundaryRestrictedRole:
                 )
             finally:
                 cursor.execute("RESET ROLE")
+                cursor.execute("RESET app.current_org_id")
+                cursor.execute("RESET app.operator_access")
 
     def test_restricted_role_sees_only_own_org_forms(self, org_a, org_b) -> None:
         """With ``app.current_org_id`` set, a restricted role sees only the
@@ -171,6 +180,8 @@ class TestFormsRlsBoundaryRestrictedRole:
                 )
             finally:
                 cursor.execute("RESET ROLE")
+                cursor.execute("RESET app.current_org_id")
+                cursor.execute("RESET app.operator_access")
 
     def test_unset_org_context_returns_zero_rows(self, org_a) -> None:
         """With no ``app.current_org_id`` set (NULL from current_setting), RLS
@@ -200,3 +211,5 @@ class TestFormsRlsBoundaryRestrictedRole:
                 )
             finally:
                 cursor.execute("RESET ROLE")
+                cursor.execute("RESET app.current_org_id")
+                cursor.execute("RESET app.operator_access")

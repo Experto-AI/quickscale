@@ -17,8 +17,11 @@ class TestFormsSeedPresets:
 
     def test_seed_presets_creates_four_forms(self):
         """Command creates all four preset forms"""
+        from quickscale_modules_orgs.current_org import operator_access
+
         call_command("forms_seed_presets", verbosity=0)
-        slugs = list(Form.all_objects.values_list("slug", flat=True))
+        with operator_access(reason="test: verify all four presets created"):
+            slugs = list(Form.all_objects.values_list("slug", flat=True))
         assert "contact" in slugs
         assert "newsletter" in slugs
         assert "feedback" in slugs
@@ -26,13 +29,18 @@ class TestFormsSeedPresets:
 
     def test_contact_preset_has_correct_fields(self):
         """Contact preset has the five standard fields"""
-        from quickscale_modules_orgs.current_org import set_current_org_id
+        from quickscale_modules_orgs.current_org import (
+            operator_access,
+            org_scope,
+        )
 
         call_command("forms_seed_presets", verbosity=0)
-        form = Form.all_objects.get(slug="contact")
-        # Set the org context so that scoped form.fields works.
-        set_current_org_id(form.organization_id)
-        field_names = list(form.fields.values_list("name", flat=True))
+        with operator_access(reason="test: lookup preset form"):
+            form = Form.all_objects.get(slug="contact")
+        # Enter org scope so that form.fields (via all_objects base
+        # manager) sees the correct app.current_org_id GUC.
+        with org_scope(form.organization):
+            field_names = list(form.fields.values_list("name", flat=True))
         assert "full_name" in field_names
         assert "email" in field_names
         assert "company" in field_names
@@ -41,59 +49,96 @@ class TestFormsSeedPresets:
 
     def test_newsletter_preset_has_two_fields(self):
         """Newsletter preset has exactly two fields"""
-        from quickscale_modules_orgs.current_org import set_current_org_id
+        from quickscale_modules_orgs.current_org import (
+            operator_access,
+            org_scope,
+        )
 
         call_command("forms_seed_presets", verbosity=0)
-        form = Form.all_objects.get(slug="newsletter")
-        # Set the org context so that scoped form.fields works.
-        set_current_org_id(form.organization_id)
-        assert form.fields.count() == 2
+        with operator_access(reason="test: lookup preset form"):
+            form = Form.all_objects.get(slug="newsletter")
+        # Enter org scope so that form.fields (via all_objects base
+        # manager) sees the correct app.current_org_id GUC.
+        with org_scope(form.organization):
+            assert form.fields.count() == 2
 
     def test_seed_presets_is_idempotent(self):
         """Running the command twice does not create duplicate forms"""
+        from quickscale_modules_orgs.current_org import operator_access
+
         call_command("forms_seed_presets", verbosity=0)
         call_command("forms_seed_presets", verbosity=0)
-        assert Form.all_objects.filter(slug="contact").count() == 1
+        with operator_access(reason="test: verify idempotent count"):
+            assert Form.all_objects.filter(slug="contact").count() == 1
 
     @override_settings(FORMS_DATA_RETENTION_DAYS=730)
     def test_seed_presets_use_settings_backed_data_retention_default(self):
         """Preset-created forms should inherit the configured retention default."""
-        Form.all_objects.all().delete()
+        from quickscale_modules_orgs.current_org import (
+            operator_access,
+            org_scope,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        system_org = Organization.objects.get_system_org()
+        with org_scope(system_org):
+            Form.objects.all().delete()
 
         call_command("forms_seed_presets", verbosity=0)
 
-        assert set(Form.all_objects.values_list("data_retention_days", flat=True)) == {
-            730
-        }
+        # Scope the assertion to System org — pre-existing forms in other
+        # orgs (e.g. from other test modules) must not affect the check.
+        with operator_access(reason="test: verify retention days default"):
+            assert set(
+                Form.all_objects.filter(organization=system_org).values_list(
+                    "data_retention_days", flat=True
+                )
+            ) == {730}
 
     @override_settings(FORMS_DATA_RETENTION_DAYS=730)
     def test_seed_presets_preserve_existing_form_data_retention_days(self):
         """Existing forms should keep their stored retention days when presets rerun."""
+        from quickscale_modules_orgs.current_org import (
+            operator_access,
+            org_scope,
+        )
+
         call_command("forms_seed_presets", verbosity=0)
-        form = Form.all_objects.get(slug="contact")
+        with operator_access(reason="test: lookup form to customise retention"):
+            form = Form.all_objects.get(slug="contact")
         form.data_retention_days = 14
-        form.save(update_fields=["data_retention_days"])
+        with org_scope(form.organization):
+            form.save(update_fields=["data_retention_days"])
 
         call_command("forms_seed_presets", verbosity=0)
 
-        assert Form.all_objects.get(slug="contact").data_retention_days == 14
+        with operator_access(reason="test: verify retention days preserved"):
+            assert Form.all_objects.get(slug="contact").data_retention_days == 14
 
     def test_feedback_preset_has_select_field(self):
         """Feedback preset has a select field named 'rating'"""
-        from quickscale_modules_orgs.current_org import set_current_org_id
+        from quickscale_modules_orgs.current_org import (
+            operator_access,
+            org_scope,
+        )
 
         call_command("forms_seed_presets", verbosity=0)
-        form = Form.all_objects.get(slug="feedback")
-        # Set the org context so that scoped form.fields works.
-        set_current_org_id(form.organization_id)
-        assert form.fields.filter(field_type=FormField.FIELD_TYPE_SELECT).exists()
+        with operator_access(reason="test: lookup feedback form"):
+            form = Form.all_objects.get(slug="feedback")
+        # Enter org scope so that form.fields (via all_objects base
+        # manager) sees the correct app.current_org_id GUC.
+        with org_scope(form.organization):
+            assert form.fields.filter(field_type=FormField.FIELD_TYPE_SELECT).exists()
 
     def test_support_preset_has_priority_select(self):
         """Support preset has a priority select field with three options"""
+        from quickscale_modules_orgs.current_org import operator_access
+
         call_command("forms_seed_presets", verbosity=0)
-        priority_field = FormField.all_objects.get(
-            form__slug="support", name="priority"
-        )
+        with operator_access(reason="test: lookup priority field"):
+            priority_field = FormField.all_objects.get(
+                form__slug="support", name="priority"
+            )
         assert priority_field.field_type == FormField.FIELD_TYPE_SELECT
         assert len(priority_field.options) == 3
 
@@ -104,6 +149,10 @@ class TestFormsSeedPresets:
         with the same slug as a preset. The seed command must scope its
         lookup to the System org and create the preset there.
         """
+        from quickscale_modules_orgs.current_org import (
+            operator_access,
+            org_scope,
+        )
         from quickscale_modules_orgs.models import Organization
 
         system_org = Organization.objects.get_system_org()
@@ -112,26 +161,35 @@ class TestFormsSeedPresets:
         )
 
         # Tenant creates a form with slug="contact" (conflicts with preset).
-        tenant_form = Form.objects.create(
-            title="Tenant Contact",
-            slug="contact",
-            organization=tenant_org,
-        )
+        with org_scope(tenant_org):
+            tenant_form = Form.objects.create(
+                title="Tenant Contact",
+                slug="contact",
+                organization=tenant_org,
+            )
 
         # Run seed — should NOT reuse the tenant row.
         call_command("forms_seed_presets", verbosity=0)
 
         # The System org should now have a "contact" preset.
-        system_contact = Form.all_objects.get(slug="contact", organization=system_org)
+        with operator_access(reason="test: lookup system contact"):
+            system_contact = Form.all_objects.get(
+                slug="contact", organization=system_org
+            )
         assert system_contact.title == "Contact"
         assert system_contact.pk != tenant_form.pk
 
         # The tenant's form must remain unchanged.
-        tenant_form.refresh_from_db()
+        with org_scope(tenant_org):
+            tenant_form.refresh_from_db()
         assert tenant_form.title == "Tenant Contact"
 
     def test_seed_idempotent_with_conflicting_tenant_slug(self):
         """Seed must stay idempotent after a tenant-owned same-slug row exists."""
+        from quickscale_modules_orgs.current_org import (
+            operator_access,
+            org_scope,
+        )
         from quickscale_modules_orgs.models import Organization
 
         system_org = Organization.objects.get_system_org()
@@ -139,26 +197,29 @@ class TestFormsSeedPresets:
             name="Tenant", slug="tenant-org-2", is_personal=False
         )
 
-        Form.objects.create(
-            title="Tenant Contact",
-            slug="contact",
-            organization=tenant_org,
-        )
+        with org_scope(tenant_org):
+            Form.objects.create(
+                title="Tenant Contact",
+                slug="contact",
+                organization=tenant_org,
+            )
 
         # Run seed twice.
         call_command("forms_seed_presets", verbosity=0)
         call_command("forms_seed_presets", verbosity=0)
 
         # System-org presets must exist exactly once.
-        assert (
-            Form.all_objects.filter(slug="contact", organization=system_org).count()
-            == 1
-        )
+        with operator_access(reason="test: verify system contact count"):
+            assert (
+                Form.all_objects.filter(slug="contact", organization=system_org).count()
+                == 1
+            )
         # Tenant's form still exists independently.
-        assert (
-            Form.all_objects.filter(slug="contact", organization=tenant_org).count()
-            == 1
-        )
+        with operator_access(reason="test: verify tenant contact count"):
+            assert (
+                Form.all_objects.filter(slug="contact", organization=tenant_org).count()
+                == 1
+            )
 
 
 @pytest.mark.django_db
@@ -167,57 +228,70 @@ class TestFormsAnonymizeSubmissions:
 
     def test_anonymize_does_not_touch_recent_submissions(self, form):
         """Submissions newer than data_retention_days are not anonymized"""
-        sub = FormSubmission.all_objects.create(
-            form=form,
-            organization=form.organization,
-            ip_address="192.168.1.1",
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            sub = FormSubmission.objects.create(
+                form=form,
+                organization=form.organization,
+                ip_address="192.168.1.1",
+            )
         call_command("forms_anonymize_submissions", verbosity=0)
-        sub.refresh_from_db()
+        with org_scope(form.organization):
+            sub.refresh_from_db()
         assert sub.ip_address == "192.168.1.1"
 
     def test_anonymize_clears_ip_of_old_submissions(self, form):
         """Submissions older than data_retention_days have ip_address set to None"""
         from datetime import timedelta
 
-        sub = FormSubmission.all_objects.create(
-            form=form,
-            organization=form.organization,
-            ip_address="10.0.0.1",
-            user_agent="OldBrowser/1.0",
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            sub = FormSubmission.objects.create(
+                form=form,
+                organization=form.organization,
+                ip_address="10.0.0.1",
+                user_agent="OldBrowser/1.0",
+            )
         # Force submitted_at to be past the retention window
         cutoff = timezone.now() - timedelta(days=form.data_retention_days + 1)
-        FormSubmission.all_objects.filter(pk=sub.pk).update(submitted_at=cutoff)
+        with org_scope(form.organization):
+            FormSubmission.objects.filter(pk=sub.pk).update(submitted_at=cutoff)
 
         call_command("forms_anonymize_submissions", verbosity=0)
-        sub.refresh_from_db()
+        with org_scope(form.organization):
+            sub.refresh_from_db()
         assert sub.ip_address is None
         assert sub.user_agent == ""
 
     def test_anonymize_skips_forms_with_zero_retention_days(self):
         """Forms with data_retention_days=0 (keep forever) are skipped"""
+        from datetime import timedelta
+
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
         system_org = Organization.objects.get_system_org()
-        form = Form.objects.create(
-            title="Zero Retention",
-            slug="zero-retention",
-            data_retention_days=0,
-            organization=system_org,
-        )
-        sub = FormSubmission.all_objects.create(
-            form=form,
-            organization=form.organization,
-            ip_address="1.2.3.4",
-        )
+        with org_scope(system_org):
+            form = Form.objects.create(
+                title="Zero Retention",
+                slug="zero-retention",
+                data_retention_days=0,
+                organization=system_org,
+            )
+            sub = FormSubmission.objects.create(
+                form=form,
+                organization=form.organization,
+                ip_address="1.2.3.4",
+            )
         # Force the submission to be very old
-        from datetime import timedelta
-
         cutoff = timezone.now() - timedelta(days=9999)
-        FormSubmission.all_objects.filter(pk=sub.pk).update(submitted_at=cutoff)
+        with org_scope(system_org):
+            FormSubmission.objects.filter(pk=sub.pk).update(submitted_at=cutoff)
         call_command("forms_anonymize_submissions", verbosity=0)
-        sub.refresh_from_db()
+        with org_scope(system_org):
+            sub.refresh_from_db()
         # ip_address must NOT be nulled because retention_days=0 means keep forever
         assert sub.ip_address == "1.2.3.4"
 
@@ -225,14 +299,18 @@ class TestFormsAnonymizeSubmissions:
         """Submissions already anonymized (ip=None) are not double-processed"""
         from datetime import timedelta
 
-        sub = FormSubmission.all_objects.create(
-            form=form, organization=form.organization, ip_address=None
-        )
-        cutoff = timezone.now() - timedelta(days=form.data_retention_days + 1)
-        FormSubmission.all_objects.filter(pk=sub.pk).update(submitted_at=cutoff)
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            sub = FormSubmission.objects.create(
+                form=form, organization=form.organization, ip_address=None
+            )
+            cutoff = timezone.now() - timedelta(days=form.data_retention_days + 1)
+            FormSubmission.objects.filter(pk=sub.pk).update(submitted_at=cutoff)
         # Should not raise
         call_command("forms_anonymize_submissions", verbosity=0)
-        sub.refresh_from_db()
+        with org_scope(form.organization):
+            sub.refresh_from_db()
         assert sub.ip_address is None
 
 
@@ -244,27 +322,30 @@ class TestFormsAnonymizeSubmissionsOperatorPath:
         """Command uses all_objects so it visits all forms including System-org."""
         from datetime import timedelta
 
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
         system_org = Organization.objects.get_system_org()
 
-        form = Form.objects.create(
-            title="System Org Form",
-            slug="system-org-form",
-            data_retention_days=30,
-            organization=system_org,
-        )
-        sub = FormSubmission.all_objects.create(
-            form=form,
-            organization=form.organization,
-            ip_address="10.0.0.1",
-            user_agent="OldBrowser/1.0",
-        )
-        cutoff = timezone.now() - timedelta(days=31)
-        FormSubmission.all_objects.filter(pk=sub.pk).update(submitted_at=cutoff)
+        with org_scope(system_org):
+            form = Form.objects.create(
+                title="System Org Form",
+                slug="system-org-form",
+                data_retention_days=30,
+                organization=system_org,
+            )
+            sub = FormSubmission.objects.create(
+                form=form,
+                organization=form.organization,
+                ip_address="10.0.0.1",
+                user_agent="OldBrowser/1.0",
+            )
+            cutoff = timezone.now() - timedelta(days=31)
+            FormSubmission.objects.filter(pk=sub.pk).update(submitted_at=cutoff)
 
         call_command("forms_anonymize_submissions", verbosity=0)
-        sub.refresh_from_db()
+        with org_scope(system_org):
+            sub.refresh_from_db()
         assert sub.ip_address is None
         assert sub.user_agent == ""
 
@@ -274,6 +355,97 @@ class TestFormsAnonymizeSubmissionsOperatorPath:
             mock_mgr.all.return_value = Form.objects.none()
             call_command("forms_anonymize_submissions", verbosity=0)
             mock_mgr.all.assert_called_once()
+
+    # CR-SA85-REV-006: two-org repeated anonymization test.
+    def test_two_org_repeated_anonymization(self):
+        """Repeated anonymization across two orgs is idempotent and
+        correctly clears IP/user_agent for both orgs' old submissions
+        while preserving recent ones.
+
+        Creates old submissions under org_a and org_b, runs anonymize
+        twice, and verifies both orgs' old submissions are anonymized
+        while recent ones are preserved.
+        """
+        from datetime import timedelta
+
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            org_scope,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        org_a = Organization.objects.create(
+            name="Anon Two-Org A", slug="anon-two-org-a"
+        )
+        org_b = Organization.objects.create(
+            name="Anon Two-Org B", slug="anon-two-org-b"
+        )
+
+        # Create old submissions under both orgs (past retention window).
+        with org_scope(org_a):
+            old_a = FormSubmission.objects.create(
+                form=Form.objects.create(
+                    title="Anon Form A",
+                    slug="anon-form-a",
+                    organization=org_a,
+                    data_retention_days=30,
+                ),
+                organization=org_a,
+                ip_address="10.0.0.1",
+                user_agent="OldAgentA/1.0",
+            )
+            cutoff = timezone.now() - timedelta(days=31)
+            FormSubmission.objects.filter(pk=old_a.pk).update(submitted_at=cutoff)
+
+        with org_scope(org_b):
+            old_b = FormSubmission.objects.create(
+                form=Form.objects.create(
+                    title="Anon Form B",
+                    slug="anon-form-b",
+                    organization=org_b,
+                    data_retention_days=30,
+                ),
+                organization=org_b,
+                ip_address="10.0.0.2",
+                user_agent="OldAgentB/1.0",
+            )
+            cutoff = timezone.now() - timedelta(days=31)
+            FormSubmission.objects.filter(pk=old_b.pk).update(submitted_at=cutoff)
+
+        # Recent submission (within retention window).
+        with org_scope(org_a):
+            recent = FormSubmission.objects.create(
+                form=Form.all_objects.get(slug="anon-form-a"),
+                organization=org_a,
+                ip_address="10.0.0.3",
+                user_agent="RecentAgent/1.0",
+            )
+
+        # Run anonymize twice.
+        call_command("forms_anonymize_submissions", verbosity=0)
+        call_command("forms_anonymize_submissions", verbosity=0)
+
+        # Verify old submissions are anonymized in both orgs.
+        with org_scope(org_a):
+            old_a.refresh_from_db()
+        assert old_a.ip_address is None, "Org A old submission must be anonymized"
+        assert old_a.user_agent == "", "Org A old submission user_agent must be cleared"
+
+        with org_scope(org_b):
+            old_b.refresh_from_db()
+        assert old_b.ip_address is None, "Org B old submission must be anonymized"
+        assert old_b.user_agent == "", "Org B old submission user_agent must be cleared"
+
+        # Recent submission must be preserved.
+        with org_scope(org_a):
+            recent.refresh_from_db()
+        assert recent.ip_address == "10.0.0.3", "Recent submission must keep its IP"
+        assert recent.user_agent == "RecentAgent/1.0", (
+            "Recent submission must keep its user_agent"
+        )
+
+        # Verify no context leak.
+        assert get_current_org_id() is None, "anonymize must not leak org context"
 
 
 # ---------------------------------------------------------------------------
@@ -289,8 +461,14 @@ class TestPurgeOrganization:
         """Form and FormSubmission rows are deleted by purge_organization."""
         from io import StringIO
 
+        from quickscale_modules_orgs.current_org import (
+            operator_access,
+            org_scope,
+        )
+
         org = Organization.objects.create(name="Purgeable Org", slug="purgeable")
-        Form.objects.create(organization=org, title="Purge Me", slug="purge-me")
+        with org_scope(org):
+            Form.objects.create(organization=org, title="Purge Me", slug="purge-me")
         org_id = org.pk
 
         call_command(
@@ -302,5 +480,6 @@ class TestPurgeOrganization:
         )
 
         assert not Organization.objects.filter(pk=org_id).exists()
-        assert Form.all_objects.filter(organization_id=org_id).count() == 0
+        with operator_access(reason="test: verify forms purged"):
+            assert Form.all_objects.filter(organization_id=org_id).count() == 0
         assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
