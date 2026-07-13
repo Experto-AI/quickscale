@@ -47,26 +47,26 @@ git merge --no-ff wt-track{N}
 
 ## Open work
 
-> Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78, SA59 umbrella including SA59.1–SA59.4) were pruned from this section — their full implementation detail lives in CHANGELOG.md. **SA79 is reopened/blocked (see Track 2 below).**
+> Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78, SA80, SA59 umbrella including SA59.1–SA59.4) were pruned from this section — their full implementation detail lives in CHANGELOG.md. **SA79 is reopened/blocked (see Track 2 below).**
 >
-> **Track readiness (2026-07-13, updated after the CR-PLAN-SA79-004 rerun attempt):** Track 1 and Track 2 are both blocked, and the 2026-07-13 rerun changed *why*. The maintainer ran `make test-integration` against the local retained-role environment; it did not reach a state where SA77's or SA79's specific hypotheses could be confirmed or denied — it was blocked earlier by (1) a stale, non-editable local `quickscale-core` venv install missing the `quickscale_core.runtime` package, which broke orgs' test collection with an unrelated `ModuleNotFoundError`, and (2) incomplete local retained-role env wiring for 7 of 13 modules (billing, blog, crm, forms, listings, social, notifications), which fail immediately on `ImproperlyConfigured: role has BYPASSRLS/SUPERUSER` before reaching any SA77/SA79-relevant code path. Both failures were silently absorbed by the SA76 quarantine (which matches on module name only, not failure signature) under the SA77/SA79 tickets respectively, even though neither matches those tickets' described root causes. Full detail: [CHANGELOG.md](../../CHANGELOG.md)'s "CR-PLAN-SA79-004 rerun attempted, blocked checkpoint (2026-07-13)" entry. CR-PLAN-SA79-005 (status-ledger harmonization) is resolved as of the prior pass — roadmap.md, CHANGELOG.md, tech-audit.md, and arch-audit.md agree on SA77/SA79's open state.
-> - **Track 1** — blocked. SA77 code fix implemented 2026-07-12. Whether the fix is actually correct under a real restricted-role rerun is still unconfirmed — the 2026-07-13 rerun never reached orgs' RLS-relevant tests due to the venv staleness issue above. Nothing further to do on Track 1 until SA80 (Track 3) lands and SA79 unblocks.
-> - **Track 2** — blocked. SA79's own quarantined suite (notifications) also never reached its described forms-0007 code path in the 2026-07-13 rerun — it crashed earlier on the same role-wiring gap affecting 6 other modules. CR-PLAN-SA79-004 cannot be meaningfully re-attempted until SA80 (Track 3) lands.
-> - **Track 3** — **SA80 implementation verified** (SA80.1 + SA80.2 + verified 2026-07-13). `scripts/test_integration.sh` now exports the same `QS_*_DB_USER=quickscale_test_role` vars that CI does, and the local `quickscale_core` venv has been re-provisioned to pick up the `runtime` package. Verified rerun: orgs (847 passed, 11 BYPASSRLS-skips) and notifications (39 passed) now reach their intended code paths instead of crashing at app-ready. SA80.3 (pg_dump) remains a non-blocking follow-up. SA80 is independent of Track 1/2 — its completion unblocks them for verification.
+> **Track readiness (2026-07-13):** Track 1 and Track 2 remain blocked despite SA80 (Track 3) landing and verifying clean — SA80's rerun used direct pytest invocations against the retained-role env, not a full `make test-integration` gate run with the SA76 quarantine entries for `orgs`/`notifications` removed. That numeric result (orgs 847 passed/11 BYPASSRLS-skips; notifications 39 passed) is suggestive but not the same proof standard this project has required at prior SA79 checkpoints (see the corrected-fix episode, CR-SA79-001/002) — a partial/direct-invocation pass has previously masked unrelated failures under quarantine (see CHANGELOG's 2026-07-13 CR-PLAN-SA79-004 entry). **Next concrete step to unblock both tracks:** remove the `orgs` and `notifications` entries from `scripts/test_integration.sh`'s `QUARANTINE_TICKETS` and rerun the full `make test-integration` gate — a clean run there is the acceptance bar for both SA77 and SA79.
+> - **Track 1** — blocked on SA79 (shared gate rerun above). SA77's code fix landed 2026-07-12; unconfirmed under the full gate.
+> - **Track 2** — blocked on the same gate rerun. SA79's acceptance (forms 0007 backfill + unquarantined notifications) is not yet confirmed under `make test-integration` itself.
+> - **Track 3** — clean. SA80 (venv + retained-role env wiring) is done; only SA80.3 (pg_dump, non-blocking) remains open, alongside new item SA81.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
-SA77 — fix orgs restricted-role        SA79 — reopened/blocked                    SA80 — re-provision local
-  test failures                          (CR-PLAN-SA79-004: retained-role           dev env (venv + role wiring)
-  ◐ code fix landed 2026-07-12;          rerun still owed — sole remaining          ✓ SA80.1+SA80.2 done; verified
-    verification blocked on SA80          blocker; CR-PLAN-SA79-005 resolved)          2026-07-13: orgs/notifications
-    (Track 3) + Track 2                                                              reach real code paths
+SA77 — fix orgs restricted-role        SA79 — reopened/blocked                    SA80 — done (2026-07-13)
+  test failures                          (needs a clean full                       SA80.3 (pg_dump) open,
+  ◐ code fix landed 2026-07-12;          make test-integration gate                non-blocking
+    unconfirmed under the full             rerun, quarantine removed)              SA81 — open, no deps
+    gate rerun
 ```
 
-SA77 (Track 1) code fix landed 2026-07-12; full detail in CHANGELOG.md. SA80 (Track 3) implementation and verification is now complete — SA80.1 (quickscale_core venv re-provision) and SA80.2 (retained-role env wiring in scripts/test_integration.sh) are both done and verified. The 2026-07-13 live rerun confirms both SA77 and SA79 tests reach their intended code paths. SA80 had no dependencies and was a clean hand-off candidate.
+SA77 (Track 1) code fix landed 2026-07-12; full detail in CHANGELOG.md. SA80 (Track 3) is complete and verified (CHANGELOG.md). Track 1 and Track 2 both wait on the same next step: a full `make test-integration` gate rerun with the `orgs`/`notifications` quarantine entries removed.
 
 ### Track 1 — Tenant-context surface
 
@@ -74,12 +74,11 @@ SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 co
 
 #### Finding — `test-tooling-auto-primes-bypassrls-hatch`, orgs restricted-role residual (`why →` [tech-audit.md TA49](../others/tech-audit.md); split from SA59.1 per the 2026-07-12 closeout-path decision)
 
-- [ ] **SA77 — Root-cause and fix orgs' restricted-role test failures.** `Tier 1 · Track 1 · deps: code fix landed 2026-07-12; final verification depends on SA79 (blocked)`
+- [ ] **SA77 — Root-cause and fix orgs' restricted-role test failures.** `Tier 1 · Track 1 · deps: code fix landed 2026-07-12; final verification depends on SA79`
   Code fix landed 2026-07-12 — full root-cause and fix detail (psycopg2→`connection.cursor()` conversion in two test helpers; 6 dynamic-DDL tests marked `@pytest.mark.bypass_rls`) is in [CHANGELOG.md](../../CHANGELOG.md)'s SA77 entry, not repeated here.
 
-  *Acceptance:* the 3 helper-path restricted-role tests pass under the restricted `quickscale_test_role`/`quickscale_rls_test_role` roles; the 6 dynamic-DDL tests skip in restricted mode and pass only when `QUICKSCALE_ALLOW_BYPASSRLS` is explicitly enabled. The corresponding `scripts/test_integration.sh` quarantine entry (from SA76) is removed.
-  **Blocked:** the restricted-role rerun currently aborts in forms 0007 FK validation before reaching the orgs seam (Track 2 SA79, CR-PLAN-SA79-004). Full acceptance cannot be confirmed until SA79 unblocks and the orgs suite passes under the retained-role environment (direct pytest commands or full `make test-integration`).
-  **2026-07-13 rerun note:** the attempted verification didn't reach this code path either — orgs' local suite instead hit an unrelated `ModuleNotFoundError` from a stale local `quickscale-core` venv install (environment-only, not a code defect), which the SA76 quarantine absorbed under this ticket anyway. Full detail in [CHANGELOG.md](../../CHANGELOG.md). **SA80 (Track 3, completed 2026-07-13)** resolved both the stale venv issue (SA80.1) and the retained-role env wiring gap (SA80.2) — the local environment blocker is no longer present. The remaining blocker is SA79's forms 0007 FK validation path, which must be resolved before a live SA77 rerun can produce real signal.
+  *Acceptance:* the 3 helper-path restricted-role tests pass under the restricted `quickscale_test_role`/`quickscale_rls_test_role` roles; the 6 dynamic-DDL tests skip in restricted mode. The `scripts/test_integration.sh` quarantine entry (from SA76) is removed.
+  **Blocked:** SA80's direct-pytest rerun (2026-07-13) showed orgs reaching this code path clean (847 passed, 11 BYPASSRLS-skips), but that is not yet a full `make test-integration` gate rerun with the quarantine entry removed — see the Track readiness note above for why that distinction matters here. Next step is shared with SA79 (Track 2): drop the quarantine entries and rerun the full gate.
   *(why →* [tech-audit.md TA49](../others/tech-audit.md)*)*
 
 ### Track 2 — Module contracts & settings
@@ -88,34 +87,21 @@ SA79 is reopened/blocked — the closeout verification revealed that the current
 
 #### Finding — SA79 closeout verification and reconciliation (`why →` closeout-review cap; CR-PLAN-SA79-004, CR-PLAN-SA79-005)
 
-- [ ] **SA79 — Closeout verification/reconciliation.** `Tier 1 · Track 2 · deps: none`
-  Direct forms 0007 proof must be rerun under the exact retained-role environment (full `QS_*_DB_USER=quickscale_test_role` set, BYPASSRLS hatch closed). Notifications suite must pass unquarantined (no forms 0007 FK errors) before SA79 can honestly close.
+- [ ] **SA79 — Closeout verification/reconciliation.** `Tier 1 · Track 2 · deps: shared gate rerun with SA77`
+  Direct forms 0007 proof must be rerun under the exact retained-role environment (full `QS_*_DB_USER=quickscale_test_role` set, BYPASSRLS hatch closed). Notifications suite must pass unquarantined before SA79 can honestly close.
 
-  **Pending blockers/decisions:**
-  - **CR-PLAN-SA79-004 (high/blocking, rerun attempted 2026-07-13 — see below):** Exact retained-role execution shape must be explicit for SA79 proof and `make test-integration` (`QS_FORMS_DB_USER=quickscale_test_role`, full `QS_*_DB_USER=quickscale_test_role` set for the integration gate, BYPASSRLS hatch closed) — must be exercised in an actual rerun, not just documented. The 2026-07-13 rerun ran but did not reach the forms-0007 code path for notifications; still open. **Sole remaining blocker.**
-  - **CR-PLAN-SA79-005 (resolved 2026-07-13):** Status ledger is now fully harmonized — roadmap.md, CHANGELOG.md, tech-audit.md, and arch-audit.md all agree that SA77/SA79 remain open with the same blockers.
+  SA80 (Track 3, done 2026-07-13) resolved the local env gaps that previously blocked any rerun from reaching this code path, and its direct-pytest verification already shows notifications at 39 passed/0 failed. Per the Track readiness note above, that's not yet the same proof standard as a clean `make test-integration` gate run with the quarantine entries removed — **CR-PLAN-SA79-004 remains the sole blocker**, now reduced to: drop `orgs`/`notifications` from `scripts/test_integration.sh`'s `QUARANTINE_TICKETS` and rerun the full gate. Full history of the 2026-07-13 rerun attempt is in [CHANGELOG.md](../../CHANGELOG.md).
 
-  **2026-07-13 rerun result (full detail in [CHANGELOG.md](../../CHANGELOG.md)):** the maintainer ran `make test-integration` against the local retained-role environment. It did not confirm or deny SA79's forms-0007 hypothesis — the notifications suite (quarantined under SA79) crashed earlier, at Django app-ready, with the same `ImproperlyConfigured: role has BYPASSRLS/SUPERUSER` error that also hit billing/blog/crm/forms/listings/social (6 of 13 modules besides notifications). `storage`/`analytics` passed clean under the retained role, so the mechanism itself works — the gap is in local role/env provisioning coverage for these 7 modules specifically. Separately, `backups` failed 23/299 tests on a missing `pg_dump` binary (environment tooling gap, unrelated to SA79), and orgs' SA77 quarantine absorbed an unrelated `ModuleNotFoundError` caused by a stale non-editable `quickscale-core` venv install (also environment-only, not a code defect). No code was changed in response to these findings per instruction — this entry records them for the next verification attempt.
-
-  **SA80 (Track 3, completed 2026-07-13):** The local env re-provisioning that CR-PLAN-SA79-004's next step described is now done — `quickscale_core` has been editable-reinstalled (SA80.1, operational fix) and `scripts/test_integration.sh` now exports the full `QS_*_DB_USER=quickscale_test_role` set matching CI (SA80.2). **Verified 2026-07-13:** Notifications (39 passed, 0 failed) reaches the forms-0007 code path and passes clean under retained-role env. CR-PLAN-SA79-004 can now produce real SA79-relevant signal (notifications' quarantine entry is SA79's own forms-0007 FK path that passes under retained-role env).
-
-  *Acceptance:* forms 0007 backfill passes under full retained-role env; notifications suite runs clean (unquarantined); audit/status docs reflect current state.
+  *Acceptance:* forms 0007 backfill passes under full retained-role env; notifications suite runs clean (unquarantined) under a full `make test-integration` gate run; audit/status docs reflect current state.
 
 ### Track 3 — Core/CLI plumbing
 
-SA80 implementation verified (SA80.1 + SA80.2, verified 2026-07-13). Orgs (847 passed, 11 BYPASSRLS-skips) and notifications (39 passed) now reach real code paths instead of crashing at app-ready. SA80.3 (pg_dump) remains as non-blocking follow-up. Track 3 is otherwise available for new work.
+SA80 closed 2026-07-13 (venv re-provision + retained-role env wiring) — see CHANGELOG.md. Track 3 is clean; SA80.3 and SA81 below are both open with no dependencies.
 
-#### Finding — Local dev environment gaps blocking the SA79 retained-role rerun (`why →` [CHANGELOG.md](../../CHANGELOG.md)'s "CR-PLAN-SA79-004 rerun attempted, blocked checkpoint (2026-07-13)" entry)
+#### Finding — PostgreSQL client tools missing locally (`why →` [CHANGELOG.md](../../CHANGELOG.md)'s SA80 entry)
 
-- [x] **SA80 — Re-provision the local dev environment so a retained-role `make test-integration` rerun produces real signal for SA77/SA79.** `Tier 1 · Track 3 · deps: none`
-  The 2026-07-13 rerun attempt was blocked by two environment gaps before it reached either SA77's or SA79's actual code paths. This ticket had no dependencies on Track 1 or Track 2 — closing it is what lets *them* produce real verification signal. Implementation complete (SA80.1+SA80.2) and verified (2026-07-13): orgs (847 passed, 11 BYPASSRLS-skips) and notifications (39 passed) now reach real code paths.
-
-  - [x] **SA80.1 — Editable-reinstall `quickscale_core`.** The local `.venv` had `quickscale-core` installed non-editable at a stale `0.86.0` build, missing the `runtime` package added by SA9.3. Fixed operationally in this session via `poetry install` from repo root. Confirmed: `poetry run pip show quickscale-core` reports version `0.87.0` with editable project location, and `poetry run python -c "import quickscale_core.runtime"` succeeds.
-  - [x] **SA80.2 — Fix retained-role env wiring for 7 modules locally.** `scripts/test_integration.sh` now exports all 12 `QS_*_DB_USER` vars defaulting to `quickscale_test_role`, matching `.github/workflows/ci.yml` (lines 399-410) and `publish.yml` (160-171). Each var uses `${VAR:-quickscale_test_role}` so callers can pre-export to override individual modules. The fix is in the script itself, so both direct invocation and callers like `scripts/check_ci_locally.sh` inherit the correct environment. No changes needed to `scripts/check_ci_locally.sh`, `Makefile`, or `scripts/provision_test_roles.sh`.
-  - [ ] **SA80.3 — (lower priority, unrelated to SA77/SA79) Install PostgreSQL 18 client tools locally.** `backups` fails 23/299 tests locally on a missing `pg_dump` binary. Install `postgresql-client-18` (PGDG apt repo), matching the guidance already printed in the `BackupError` message this raises. Not a blocker for SA77/SA79 — only needed for a fully green local `make test-integration` run.
-
-  *Acceptance:* the orgs and notifications suites reach — and produce real pass/fail signal for — their respective SA77 and SA79 acceptance criteria, instead of crashing earlier on environment issues. Verified via direct retained-role pytest commands: orgs 847 passed / 11 BYPASSRLS-skips / 93.04% coverage; notifications 39 passed / 91.76% coverage. SA80 itself closes on SA80.1+SA80.2 (SA80.3 is a nice-to-have, trackable independently).
-  *(why →* [CHANGELOG.md](../../CHANGELOG.md)'s 2026-07-13 CR-PLAN-SA79-004 rerun checkpoint*)*
+- [ ] **SA80.3 — Install PostgreSQL 18 client tools locally.** `Tier 1 · Track 3 · deps: none`
+  `backups` fails 23/299 tests locally on a missing `pg_dump` binary. Install `postgresql-client-18` (PGDG apt repo), matching the guidance already printed in the `BackupError` message this raises. Not a blocker for SA77/SA79 or the shared gate rerun — only needed for a fully green local `make test-integration` run.
 
 #### Finding — Dead per-module `poetry.lock`/sibling-version constraints (`why →` discovered 2026-07-13 during a routine dependency-update pass)
 
