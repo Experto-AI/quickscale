@@ -70,12 +70,32 @@ New `Form` rows created at runtime after migrations complete — including those
 |--------|------|------|-------------|
 | `GET` | `/api/forms/{slug}/` | Public | Fetch form schema |
 | `POST` | `/api/forms/{slug}/submit/` | Public | Submit form data |
-| `GET` | `/api/admin/forms/` | Staff | List forms with submission counts |
-| `GET` | `/api/admin/forms/{id}/submissions/` | Staff | List submissions |
-| `GET/PATCH` | `/api/admin/forms/{id}/submissions/{sub_id}/` | Staff | Submission detail/update |
-| `GET` | `/api/admin/forms/{id}/submissions/export/` | Staff | Download CSV |
+| `GET` | `/api/admin/forms/` | Staff+ | List forms with submission counts |
+| `GET` | `/api/admin/forms/{id}/submissions/` | Staff+ | List submissions |
+| `GET/PATCH` | `/api/admin/forms/{id}/submissions/{sub_id}/` | Staff+ | Submission detail/update |
+| `GET` | `/api/admin/forms/{id}/submissions/export/` | Staff+ | Download CSV |
 
 The staff endpoints above are controlled by `FORMS_SUBMISSIONS_API`. The public schema and submit endpoints remain available regardless of that setting.
+
+### Retained-Role Contract (SA85 Phase 4)
+
+Staff-level access (`/api/admin/forms/*`) follows a retained-role model.
+**Active-org selection is required** for regular staff to see any data.
+
+| Role | Org Context | Behavior |
+|------|-------------|----------|
+| **Superuser** | After org selection | Cross-tenant SELECT via `operator_access` (audited). All `GET`/list operations are wrapped in `operator_access` which is gated to superusers and logged at `INFO` level. `PATCH` saves inside the target submission's `org_scope`. Without an active org selected, the middleware redirects to `/orgs/` — same as regular staff. |
+| **Regular staff** | Active org selected | Data is scoped via RLS to the request's active organization. Only records belonging to that org are visible. |
+| **Regular staff** | None (no org selected) | **Fail-closed**: TenantMiddleware redirects to `/orgs/` before view execution (302). View-unit tests without middleware show empty list / 404 (fail-closed). No data is leaked. |
+| **Anonymous** | N/A | Denied (`403 Forbidden`) by `IsAdminUser`. |
+
+**Active-org selection**: Regular staff must have an active organization selected (set in the session via `ACTIVE_ORG_SESSION_KEY`) for data to be visible. Without one, the TenantMiddleware redirects to `/orgs/` (302) before the view executes — the path is non-exempt. View-unit tests that bypass the middleware (force_authenticate) show empty list / 404 as a defense-in-depth fallback.
+
+**No-org redirect before view**: When a regular-staff or superuser has no active org selected, the TenantMiddleware redirects to `/orgs/` (HTTP 302) before any view code executes. This redirect applies to the Forms admin API at `/api/admin/forms/*` — it is **not** middleware-exempt (the path starts with `/api/`, not `/admin/`), so TenantMiddleware runs and redirects unauthenticated-org users before the view executes.
+
+**Superuser after org selection**: A superuser who selects an active org still sees all data across tenants via the `operator_access` bypass. The active org's primary effect on superusers is write-scoping (`PATCH` saves inside the target record's `org_scope`). Before org selection, the middleware redirects to `/orgs/` — superusers must also select an active org to reach `/api/admin/forms/`, which is non-exempt and org-dependent.
+
+Superuser access is the only path that returns data across organizations, and it is always audit-logged (`operator_access`). All writes (PATCH) save inside the target record's `org_scope` regardless of how the record was read. The `FORMS_SUBMISSIONS_API=False` setting is checked on every admin request before any role-specific logic — a disabled API returns 404 for both superuser and regular staff.
 
 ## Built-in Form Presets
 

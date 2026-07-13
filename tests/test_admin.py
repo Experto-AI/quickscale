@@ -66,6 +66,8 @@ class TestFormAdminActions:
 
     def test_mark_inactive_action_updates_is_active(self, form):
         """mark_inactive bulk action sets is_active=False on all selected forms"""
+        from quickscale_modules_orgs.current_org import org_scope
+
         form_admin_instance = admin.site._registry[Form]
         rf = RequestFactory()
         request = rf.get("/admin/")
@@ -73,14 +75,19 @@ class TestFormAdminActions:
             "admin", "admin@example.com", "adminpass"
         )
         queryset = Form.all_objects.filter(pk=form.pk)
-        form_admin_instance.mark_inactive(request, queryset)
-        form.refresh_from_db()
+        with org_scope(form.organization):
+            form_admin_instance.mark_inactive(request, queryset)
+        with org_scope(form.organization):
+            form.refresh_from_db()
         assert form.is_active is False
 
     def test_mark_active_action_updates_is_active(self, form):
         """mark_active bulk action sets is_active=True on all selected forms"""
+        from quickscale_modules_orgs.current_org import org_scope
+
         form.is_active = False
-        form.save()
+        with org_scope(form.organization):
+            form.save()
         form_admin_instance = admin.site._registry[Form]
         rf = RequestFactory()
         request = rf.get("/admin/")
@@ -88,8 +95,10 @@ class TestFormAdminActions:
             "superadmin", "super@example.com", "adminpass"
         )
         queryset = Form.all_objects.filter(pk=form.pk)
-        form_admin_instance.mark_active(request, queryset)
-        form.refresh_from_db()
+        with org_scope(form.organization):
+            form_admin_instance.mark_active(request, queryset)
+        with org_scope(form.organization):
+            form.refresh_from_db()
         assert form.is_active is True
 
 
@@ -99,6 +108,9 @@ class TestFormAdminSaveModel:
 
     def test_save_model_sets_created_by_on_creation(self, form):
         """save_model sets created_by to the request user when creating a new form"""
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import Organization
+
         user = User.objects.create_superuser(
             "savemodel_admin", "save@example.com", "adminpass"
         )
@@ -107,12 +119,11 @@ class TestFormAdminSaveModel:
         request = rf.get("/admin/")
         request.user = user
 
-        from quickscale_modules_orgs.models import Organization
-
         system_org = Organization.objects.get_system_org()
         new_form = Form(title="New Form", slug="new-form-test", organization=system_org)
         # Simulate Django admin save on a new object
-        form_admin_instance.save_model(request, new_form, form=None, change=False)
+        with org_scope(system_org):
+            form_admin_instance.save_model(request, new_form, form=None, change=False)
         assert new_form.created_by == user
 
 
@@ -122,6 +133,8 @@ class TestFormSubmissionAdminActions:
 
     def test_mark_as_spam_action(self, submission):
         """mark_as_spam action sets is_spam=True"""
+        from quickscale_modules_orgs.current_org import org_scope
+
         sub_admin_instance = admin.site._registry[FormSubmission]
         rf = RequestFactory()
         request = rf.get("/admin/")
@@ -129,12 +142,16 @@ class TestFormSubmissionAdminActions:
             "spamadmin", "spam@example.com", "adminpass"
         )
         queryset = FormSubmission.all_objects.filter(pk=submission.pk)
-        sub_admin_instance.mark_as_spam(request, queryset)
-        submission.refresh_from_db()
+        with org_scope(submission.organization):
+            sub_admin_instance.mark_as_spam(request, queryset)
+        with org_scope(submission.organization):
+            submission.refresh_from_db()
         assert submission.is_spam is True
 
     def test_mark_as_read_action(self, submission):
         """mark_as_read action sets status to 'read'"""
+        from quickscale_modules_orgs.current_org import org_scope
+
         sub_admin_instance = admin.site._registry[FormSubmission]
         rf = RequestFactory()
         request = rf.get("/admin/")
@@ -142,8 +159,10 @@ class TestFormSubmissionAdminActions:
             "readadmin", "read@example.com", "adminpass"
         )
         queryset = FormSubmission.all_objects.filter(pk=submission.pk)
-        sub_admin_instance.mark_as_read(request, queryset)
-        submission.refresh_from_db()
+        with org_scope(submission.organization):
+            sub_admin_instance.mark_as_read(request, queryset)
+        with org_scope(submission.organization):
+            submission.refresh_from_db()
         assert submission.status == FormSubmission.STATUS_READ
 
 
@@ -152,13 +171,13 @@ class TestAdminCsvExportCoverage:
     """Tests for CSV export endpoint coverage in admin-focused test module"""
 
     def test_csv_export_sets_attachment_filename(
-        self, staff_client, form, submission, field_value
+        self, superuser_client, form, submission, field_value
     ):
         """CSV export response includes attachment content disposition"""
         url = reverse(
             "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
 
         assert response.status_code == 200
         assert "attachment; filename=" in response["Content-Disposition"]
@@ -166,13 +185,13 @@ class TestAdminCsvExportCoverage:
         assert response["Content-Disposition"].endswith('.csv"')
 
     def test_csv_export_contains_expected_header_columns(
-        self, staff_client, form, submission, field_value
+        self, superuser_client, form, submission, field_value
     ):
         """CSV export contains base columns and dynamic field columns"""
         url = reverse(
             "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
 
         assert response.status_code == 200
         rows = list(csv.reader(response.content.decode().splitlines()))
@@ -220,11 +239,16 @@ class TestFormAdminTenantScopedQueryset:
 
     def test_form_admin_scoped_queryset_returns_only_same_org(self, org_b):
         """FormAdmin.get_queryset returns only forms from the scoped org."""
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
         system_org = Organization.objects.get_system_org()
-        Form.all_objects.create(title="Form A", slug="form-a", organization=system_org)
-        Form.all_objects.create(title="Form B", slug="form-b", organization=org_b)
+        with org_scope(system_org):
+            Form.all_objects.create(
+                title="Form A", slug="form-a", organization=system_org
+            )
+        with org_scope(org_b):
+            Form.all_objects.create(title="Form B", slug="form-b", organization=org_b)
 
         site = AdminSite()
         admin_instance = FormAdmin(Form, site)
@@ -285,14 +309,14 @@ class TestAdminSubmissionAPIPrefetch:
         )
 
     def test_admin_submission_detail_prefetch_uses_all_objects(
-        self, staff_client, form, submission, field_value
+        self, superuser_client, form, submission, field_value
     ):
         """Verify admin submission detail returns values (proves prefetch works)."""
         url = reverse(
             "quickscale_forms:admin-submission-detail",
             kwargs={"pk": form.pk, "sub_pk": submission.pk},
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         assert response.status_code == 200
         assert "values" in response.data, (
             "Response must include values through the all_objects-backed prefetch"
@@ -310,13 +334,13 @@ class TestAdminSubmissionExportViewAllObjects:
     """AF1-CR-002: AdminSubmissionExportView must use all_objects for child field values."""
 
     def test_export_uses_all_objects_for_field_values(
-        self, staff_client, form, submission, field_value
+        self, superuser_client, form, submission, field_value
     ):
         """Export view builds CSV field values via all_objects (proven by cross-org access)."""
         url = reverse(
             "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         assert response.status_code == 200
         content = response.content.decode()
         # The field value fixture uses all_objects and explicit org assignment.
@@ -331,7 +355,7 @@ class TestAdminSubmissionExportViewAllObjects:
             "Field value must appear in CSV data — proves all_objects path"
         )
 
-    def test_export_cross_org_field_values(self, staff_client, org_a, org_b):
+    def test_export_cross_org_field_values(self, superuser_client, org_a, org_b):
         """Export includes field values from submissions across orgs (all_objects path).
 
         Each submission now belongs to the same org as its parent form, respecting
@@ -344,66 +368,69 @@ class TestAdminSubmissionExportViewAllObjects:
             FormFieldValue,
             FormSubmission,
         )
+        from quickscale_modules_orgs.current_org import org_scope
 
         # Form + submission under org_a
-        form_a = Form.all_objects.create(
-            title="Form A",
-            slug="cross-org-form-a",
-            organization=org_a,
-            notify_emails="admin@example.com",
-        )
-        field_a = FormField.all_objects.create(
-            form=form_a,
-            organization=org_a,
-            field_type=FormField.FIELD_TYPE_TEXT,
-            label="Department",
-            name="department",
-            order=1,
-        )
-        sub_a = FormSubmission.all_objects.create(
-            form=form_a, organization=org_a, ip_address="10.0.0.1"
-        )
-        FormFieldValue.all_objects.create(
-            submission=sub_a,
-            organization=org_a,
-            field=field_a,
-            field_name="department",
-            field_label="Department",
-            value="Engineering",
-        )
+        with org_scope(org_a):
+            form_a = Form.all_objects.create(
+                title="Form A",
+                slug="cross-org-form-a",
+                organization=org_a,
+                notify_emails="admin@example.com",
+            )
+            field_a = FormField.all_objects.create(
+                form=form_a,
+                organization=org_a,
+                field_type=FormField.FIELD_TYPE_TEXT,
+                label="Department",
+                name="department",
+                order=1,
+            )
+            sub_a = FormSubmission.all_objects.create(
+                form=form_a, organization=org_a, ip_address="10.0.0.1"
+            )
+            FormFieldValue.all_objects.create(
+                submission=sub_a,
+                organization=org_a,
+                field=field_a,
+                field_name="department",
+                field_label="Department",
+                value="Engineering",
+            )
 
         # Form + submission under org_b
-        form_b = Form.all_objects.create(
-            title="Form B",
-            slug="cross-org-form-b",
-            organization=org_b,
-            notify_emails="admin@example.com",
-        )
-        field_b = FormField.all_objects.create(
-            form=form_b,
-            organization=org_b,
-            field_type=FormField.FIELD_TYPE_TEXT,
-            label="Department",
-            name="department",
-            order=1,
-        )
-        sub_b = FormSubmission.all_objects.create(
-            form=form_b, organization=org_b, ip_address="10.0.0.2"
-        )
-        FormFieldValue.all_objects.create(
-            submission=sub_b,
-            organization=org_b,
-            field=field_b,
-            field_name="department",
-            field_label="Department",
-            value="Marketing",
-        )
+        with org_scope(org_b):
+            form_b = Form.all_objects.create(
+                title="Form B",
+                slug="cross-org-form-b",
+                organization=org_b,
+                notify_emails="admin@example.com",
+            )
+            field_b = FormField.all_objects.create(
+                form=form_b,
+                organization=org_b,
+                field_type=FormField.FIELD_TYPE_TEXT,
+                label="Department",
+                name="department",
+                order=1,
+            )
+            sub_b = FormSubmission.all_objects.create(
+                form=form_b, organization=org_b, ip_address="10.0.0.2"
+            )
+            FormFieldValue.all_objects.create(
+                submission=sub_b,
+                organization=org_b,
+                field=field_b,
+                field_name="department",
+                field_label="Department",
+                value="Marketing",
+            )
 
         # Export form_a — should see Engineering
         url = reverse(
             "quickscale_forms:admin-submission-export", kwargs={"pk": form_a.pk}
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         assert response.status_code == 200
         content = response.content.decode()
         assert "Engineering" in content, (
@@ -414,7 +441,7 @@ class TestAdminSubmissionExportViewAllObjects:
         url = reverse(
             "quickscale_forms:admin-submission-export", kwargs={"pk": form_b.pk}
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         assert response.status_code == 200
         content = response.content.decode()
         assert "Marketing" in content, (
@@ -422,46 +449,49 @@ class TestAdminSubmissionExportViewAllObjects:
         )
 
     def test_csv_export_column_order_matches_form_field_order(
-        self, staff_client, form, form_field, email_field, optional_field
+        self, superuser_client, form, form_field, email_field, optional_field
     ):
         """CSV column order follows form field definition order (AF1-CR-REV-001)."""
-        submission = FormSubmission.all_objects.create(
-            form=form,
-            organization=form.organization,
-            ip_address="127.0.0.1",
-        )
+        from quickscale_modules_orgs.current_org import org_scope
 
-        # Form field order: full_name(1), email(2), company(3)
-        # Alphabetical would be: company, email, full_name
-        FormFieldValue.all_objects.create(
-            submission=submission,
-            organization=submission.organization,
-            field=form_field,
-            field_name="full_name",
-            field_label="Name",
-            value="Alice",
-        )
-        FormFieldValue.all_objects.create(
-            submission=submission,
-            organization=submission.organization,
-            field=email_field,
-            field_name="email",
-            field_label="Email",
-            value="alice@example.com",
-        )
-        FormFieldValue.all_objects.create(
-            submission=submission,
-            organization=submission.organization,
-            field=optional_field,
-            field_name="company",
-            field_label="Company",
-            value="Acme Corp",
-        )
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.create(
+                form=form,
+                organization=form.organization,
+                ip_address="127.0.0.1",
+            )
+
+            # Form field order: full_name(1), email(2), company(3)
+            # Alphabetical would be: company, email, full_name
+            FormFieldValue.all_objects.create(
+                submission=submission,
+                organization=submission.organization,
+                field=form_field,
+                field_name="full_name",
+                field_label="Name",
+                value="Alice",
+            )
+            FormFieldValue.all_objects.create(
+                submission=submission,
+                organization=submission.organization,
+                field=email_field,
+                field_name="email",
+                field_label="Email",
+                value="alice@example.com",
+            )
+            FormFieldValue.all_objects.create(
+                submission=submission,
+                organization=submission.organization,
+                field=optional_field,
+                field_name="company",
+                field_label="Company",
+                value="Acme Corp",
+            )
 
         url = reverse(
             "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         assert response.status_code == 200, "CSV export should return 200"
 
         rows = list(csv.reader(response.content.decode().splitlines()))
@@ -495,7 +525,7 @@ class TestAdminSubmissionExportViewAllObjects:
         assert header[5:] != alphabetical, "Columns must NOT be in alphabetical order"
 
     def test_csv_export_column_order_no_org_context(
-        self, staff_client, form, form_field, email_field, optional_field
+        self, superuser_client, form, form_field, email_field, optional_field
     ):
         """Operator path preserves column order when no current org context is set.
 
@@ -508,6 +538,7 @@ class TestAdminSubmissionExportViewAllObjects:
         """
         from quickscale_modules_orgs.current_org import (
             get_current_org_id,
+            org_scope,
             set_current_org_id,
         )
 
@@ -515,40 +546,41 @@ class TestAdminSubmissionExportViewAllObjects:
         prev_org_id = get_current_org_id()
         set_current_org_id(None)
 
-        submission = FormSubmission.all_objects.create(
-            form=form,
-            organization=form.organization,
-            ip_address="127.0.0.1",
-        )
-        FormFieldValue.all_objects.create(
-            submission=submission,
-            organization=form.organization,
-            field=form_field,
-            field_name="full_name",
-            field_label="Name",
-            value="Alice",
-        )
-        FormFieldValue.all_objects.create(
-            submission=submission,
-            organization=form.organization,
-            field=email_field,
-            field_name="email",
-            field_label="Email",
-            value="alice@example.com",
-        )
-        FormFieldValue.all_objects.create(
-            submission=submission,
-            organization=form.organization,
-            field=optional_field,
-            field_name="company",
-            field_label="Company",
-            value="Acme Corp",
-        )
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.create(
+                form=form,
+                organization=form.organization,
+                ip_address="127.0.0.1",
+            )
+            FormFieldValue.all_objects.create(
+                submission=submission,
+                organization=form.organization,
+                field=form_field,
+                field_name="full_name",
+                field_label="Name",
+                value="Alice",
+            )
+            FormFieldValue.all_objects.create(
+                submission=submission,
+                organization=form.organization,
+                field=email_field,
+                field_name="email",
+                field_label="Email",
+                value="alice@example.com",
+            )
+            FormFieldValue.all_objects.create(
+                submission=submission,
+                organization=form.organization,
+                field=optional_field,
+                field_name="company",
+                field_label="Company",
+                value="Acme Corp",
+            )
 
         url = reverse(
             "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         # Restore org context before assertions so failure diagnostics
         # are not masked by a stale None context in later test cleanup.
         set_current_org_id(prev_org_id)
@@ -576,8 +608,8 @@ class TestAdminSubmissionExportViewAllObjects:
 
     def test_csv_export_column_order_mismatched_org_context(
         self,
-        staff_client,
-        staff_user,
+        superuser_client,
+        superuser,
         form,
         form_field,
         email_field,
@@ -606,84 +638,88 @@ class TestAdminSubmissionExportViewAllObjects:
         from django.urls import reverse
 
         from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import (
             OrgRole,
             OrganizationMembership,
         )
 
-        # Make staff_user a member of org_b so that TenantMiddleware does
-        # not reject the mismatched-org session context with a 403.
+        # SA85 Phase 4: This test verifies the export column-order invariant
+        # via the superuser operator path (cross-tenant read).  The superuser
+        # uses ``all_objects`` regardless of org context, so the mismatched
+        # session org is irrelevant for the data path — but the test proves
+        # ``FormField.all_objects`` is used for column ordering (the invariant
+        # from AF1-CR-REV-001).  Set up the session for a complete audit trail.
         OrganizationMembership.objects.create(
-            user=staff_user,
+            user=superuser,
             organization=org_b,
             role=OrgRole.ADMIN,
         )
 
-        # Use session-based login so the user is authenticated at the
-        # middleware level (force_authenticate bypasses middleware auth
-        # checks, which would cause TenantMiddleware to skip org resolution).
-        staff_client.force_login(user=staff_user)
+        # Use session-based login so middleware-level auth resolves correctly.
+        superuser_client.force_login(user=superuser)
 
         # Set the active org to org_b in the session so TenantMiddleware
         # resolves it and populates the ContextVar with org_b.pk.
-        session = staff_client.session
+        session = superuser_client.session
         session[ACTIVE_ORG_SESSION_KEY] = str(org_b.pk)
         session.save()
 
         # Create an active field with no submitted value — can only appear in
         # header via FormField.all_objects, never via extra_field_names fallback.
-        _phone_field = FormField.all_objects.create(
-            form=form,
-            organization=form.organization,
-            field_type=FormField.FIELD_TYPE_TEXT,
-            label="Phone",
-            name="phone",
-            required=False,
-            order=4,
-            is_active=True,
-        )
+        with org_scope(form.organization):
+            _phone_field = FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type=FormField.FIELD_TYPE_TEXT,
+                label="Phone",
+                name="phone",
+                required=False,
+                order=4,
+                is_active=True,
+            )
 
-        submission = FormSubmission.all_objects.create(
-            form=form,
-            organization=form.organization,
-            ip_address="127.0.0.1",
-        )
+            submission = FormSubmission.all_objects.create(
+                form=form,
+                organization=form.organization,
+                ip_address="127.0.0.1",
+            )
 
-        # Create FormFieldValues in deliberately different order than designer
-        # field order.  If the export view falls back to extra_field_names
-        # (because RLS-filtered form.fields returns empty), the header would
-        # mirror this creation order instead of the designer order, causing the
-        # assertion below to fail.  Only the FormField.all_objects query can
-        # produce the correct designer ordering.
-        FormFieldValue.all_objects.create(
-            submission=submission,
-            organization=form.organization,
-            field=optional_field,
-            field_name="company",
-            field_label="Company",
-            value="Acme Corp",
-        )
-        FormFieldValue.all_objects.create(
-            submission=submission,
-            organization=form.organization,
-            field=email_field,
-            field_name="email",
-            field_label="Email",
-            value="alice@example.com",
-        )
-        FormFieldValue.all_objects.create(
-            submission=submission,
-            organization=form.organization,
-            field=form_field,
-            field_name="full_name",
-            field_label="Name",
-            value="Alice",
-        )
+            # Create FormFieldValues in deliberately different order than designer
+            # field order.  If the export view falls back to extra_field_names
+            # (because RLS-filtered form.fields returns empty), the header would
+            # mirror this creation order instead of the designer order, causing the
+            # assertion below to fail.  Only the FormField.all_objects query can
+            # produce the correct designer ordering.
+            FormFieldValue.all_objects.create(
+                submission=submission,
+                organization=form.organization,
+                field=optional_field,
+                field_name="company",
+                field_label="Company",
+                value="Acme Corp",
+            )
+            FormFieldValue.all_objects.create(
+                submission=submission,
+                organization=form.organization,
+                field=email_field,
+                field_name="email",
+                field_label="Email",
+                value="alice@example.com",
+            )
+            FormFieldValue.all_objects.create(
+                submission=submission,
+                organization=form.organization,
+                field=form_field,
+                field_name="full_name",
+                field_label="Name",
+                value="Alice",
+            )
 
         url = reverse(
             "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
 
         assert response.status_code == 200, (
             "CSV export should return 200 even with mismatched org"

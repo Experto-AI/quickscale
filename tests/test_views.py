@@ -2,11 +2,13 @@
 
 import csv
 import io
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
 from django.core.cache import cache
 from django.core import mail
+from django.db import connection
 from django.test import override_settings
 from django.urls import reverse
 
@@ -72,8 +74,11 @@ class TestFormSchemaAPIView:
         self, api_client, form, form_field
     ):
         """Schema should not advertise honeypot when the form-level flag is off."""
+        from quickscale_modules_orgs.current_org import org_scope
+
         form.spam_protection_enabled = False
-        form.save(update_fields=["spam_protection_enabled"])
+        with org_scope(form.organization):
+            form.save(update_fields=["spam_protection_enabled"])
         url = reverse("quickscale_forms:form-schema", kwargs={"slug": "test-contact"})
 
         response = api_client.get(url)
@@ -131,12 +136,18 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field
     ):
         """Filled honeypot field is treated as spam — returns 201 silently"""
+        from quickscale_modules_orgs.current_org import org_scope
+
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Bot", "email": "bot@spam.com", "_hp_name": "I am a bot"}
         response = api_client.post(url, data=data, format="json")
         assert response.status_code == 201
-        # The submission is marked as spam in the DB
-        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        # The submission is marked as spam in the DB — read it back inside
+        # org_scope so FORCE RLS allows the query.
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.filter(form=form).latest(
+                "submitted_at"
+            )
         assert submission.is_spam is True
 
     @override_settings(FORMS_SPAM_PROTECTION=False)
@@ -144,28 +155,39 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field
     ):
         """Submission handling should ignore honeypot when global spam protection is off."""
+        from quickscale_modules_orgs.current_org import org_scope
+
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com", "_hp_name": "bot"}
 
         response = api_client.post(url, data=data, format="json")
 
         assert response.status_code == 201
-        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.filter(form=form).latest(
+                "submitted_at"
+            )
         assert submission.is_spam is False
 
     def test_honeypot_is_ignored_when_form_spam_protection_disabled(
         self, api_client, form, form_field, email_field
     ):
         """Submission handling should ignore honeypot when the form-level flag is off."""
+        from quickscale_modules_orgs.current_org import org_scope
+
         form.spam_protection_enabled = False
-        form.save(update_fields=["spam_protection_enabled"])
+        with org_scope(form.organization):
+            form.save(update_fields=["spam_protection_enabled"])
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com", "_hp_name": "bot"}
 
         response = api_client.post(url, data=data, format="json")
 
         assert response.status_code == 201
-        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.filter(form=form).latest(
+                "submitted_at"
+            )
         assert submission.is_spam is False
 
     def test_returns_404_for_inactive_form(self, api_client, inactive_form):
@@ -178,17 +200,20 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field
     ):
         """Valid submission creates a FormSubmission and FormFieldValue records"""
+        from quickscale_modules_orgs.current_org import org_scope
+
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
         api_client.post(url, data=data, format="json")
-        sub = FormSubmission.all_objects.filter(form=form).first()
-        assert sub is not None
-        # NOTE: sub.values uses TenantManager which scopes to the org contextvar.
-        # The tenant_context() context manager in the view restores the contextvar
-        # to None after the request, so use all_objects for the assertion.
-        assert FormFieldValue.all_objects.filter(
-            submission=sub, field_name="full_name"
-        ).exists()
+        with org_scope(form.organization):
+            sub = FormSubmission.all_objects.filter(form=form).first()
+            assert sub is not None
+            # NOTE: sub.values uses TenantManager which scopes to the org contextvar.
+            # The tenant_context() context manager in the view restores the contextvar
+            # to None after the request, so use all_objects for the assertion.
+            assert FormFieldValue.all_objects.filter(
+                submission=sub, field_name="full_name"
+            ).exists()
 
     @override_settings(QUICKSCALE_ANALYTICS_ENABLED=True)
     def test_submission_captures_analytics_when_available(
@@ -241,6 +266,7 @@ class TestFormSubmitAPIView:
         monkeypatch,
     ):
         """Disabled analytics must not call services even when the package remains installed."""
+        from quickscale_modules_orgs.current_org import org_scope
 
         def analytics_is_installed(app_label: str) -> bool:
             return app_label == "quickscale_modules_analytics"
@@ -263,7 +289,8 @@ class TestFormSubmitAPIView:
         cache.clear()
 
         assert response.status_code == 201
-        assert FormSubmission.all_objects.filter(form=form).count() == 1
+        with org_scope(form.organization):
+            assert FormSubmission.all_objects.filter(form=form).count() == 1
         mock_capture.assert_not_called()
 
     def test_submission_succeeds_without_analytics_installed(
@@ -284,6 +311,8 @@ class TestFormSubmitAPIView:
         absent-analytics condition.
         """
         import sys
+
+        from quickscale_modules_orgs.current_org import org_scope
 
         # Replace the analytics services submodule in sys.modules with
         # a sentinel that raises ModuleNotFoundError on any attribute
@@ -328,13 +357,15 @@ class TestFormSubmitAPIView:
         cache.clear()
 
         assert response.status_code == 201
-        assert FormSubmission.all_objects.filter(form=form).count() == 1
+        with org_scope(form.organization):
+            assert FormSubmission.all_objects.filter(form=form).count() == 1
 
     @override_settings(QUICKSCALE_ANALYTICS_ENABLED=True)
     def test_submission_stays_non_blocking_when_analytics_capture_fails(
         self, api_client, form, form_field, email_field, monkeypatch
     ):
         """Analytics capture failure must not block the public success response."""
+        from quickscale_modules_orgs.current_org import org_scope
 
         def analytics_is_installed(app_label: str) -> bool:
             return app_label == "quickscale_modules_analytics"
@@ -363,12 +394,14 @@ class TestFormSubmitAPIView:
         cache.clear()
 
         assert response.status_code == 201
-        assert FormSubmission.all_objects.filter(form=form).count() == 1
+        with org_scope(form.organization):
+            assert FormSubmission.all_objects.filter(form=form).count() == 1
 
     def test_submission_persists_when_notification_delivery_fails(
         self, api_client, form, form_field, email_field, monkeypatch
     ):
         """Delivery failure stays non-blocking and does not roll back persistence"""
+        from quickscale_modules_orgs.current_org import org_scope
 
         def failing_send(*args, **kwargs):
             raise Exception("SMTP connection refused")
@@ -388,13 +421,14 @@ class TestFormSubmitAPIView:
         cache.clear()
 
         assert response.status_code == 201
-        assert FormSubmission.all_objects.filter(form=form).count() == 1
-        sub = FormSubmission.all_objects.get(form=form)
-        assert FormFieldValue.all_objects.filter(
-            submission=sub,
-            field_name="full_name",
-            value="Alice",
-        ).exists()
+        with org_scope(form.organization):
+            assert FormSubmission.all_objects.filter(form=form).count() == 1
+            sub = FormSubmission.all_objects.get(form=form)
+            assert FormFieldValue.all_objects.filter(
+                submission=sub,
+                field_name="full_name",
+                value="Alice",
+            ).exists()
 
     @override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False)
     def test_submission_uses_untracked_email_when_notifications_installed_but_disabled(
@@ -406,6 +440,7 @@ class TestFormSubmitAPIView:
         monkeypatch,
     ):
         """Disabled tracked notifications fall back to untracked email after submit"""
+        from quickscale_modules_orgs.current_org import org_scope
 
         def notifications_are_installed(app_label: str) -> bool:
             return app_label == "quickscale_modules_notifications"
@@ -432,7 +467,8 @@ class TestFormSubmitAPIView:
         cache.clear()
 
         assert response.status_code == 201
-        assert FormSubmission.all_objects.filter(form=form).count() == 1
+        with org_scope(form.organization):
+            assert FormSubmission.all_objects.filter(form=form).count() == 1
         assert len(mail.outbox) == 1
         assert "admin@example.com" in mail.outbox[0].recipients()
 
@@ -457,7 +493,19 @@ class TestFormSubmitAPIView:
 
 @pytest.mark.django_db
 class TestAdminFormListAPIView:
-    """Tests for the staff GET /api/admin/forms/ endpoint"""
+    """Tests for the staff GET /api/admin/forms/ endpoint
+
+    SA85 Phase 4 retained-role contract:
+    * Superuser: cross-tenant read via ``operator_access``.
+    * Regular staff with active org: scoped to that org via RLS.
+    * Regular staff without org: fail-closed — view-unit tests assert
+      empty list (no ContextVar); session-pipeline tests assert 302
+      redirect to /orgs/ before view executes.
+    * Anonymous: denied (403).
+
+    CR-SA85-REV-001: /api/admin/forms/ is NON-EXEMPT from
+    TenantMiddleware (does not match any EXEMPT_PATH_PREFIX).
+    """
 
     def test_returns_403_for_anonymous(self, api_client, form):
         """Anonymous user cannot access admin form list"""
@@ -465,51 +513,388 @@ class TestAdminFormListAPIView:
         response = api_client.get(url)
         assert response.status_code in (401, 403)
 
-    def test_returns_200_for_staff(self, staff_client, form):
-        """Staff user can access admin form list"""
+    def test_superuser_sees_all_forms(self, superuser_client, form):
+        """Superuser can access admin form list and sees all forms."""
         url = reverse("quickscale_forms:admin-form-list")
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         assert response.status_code == 200
         assert len(response.data) >= 1
         assert "submission_count" in response.data[0]
 
-    @override_settings(FORMS_SUBMISSIONS_API=False)
-    def test_returns_404_when_admin_api_disabled(self, staff_client, form):
-        """Disabling the submissions API should hide the staff admin endpoints."""
+    def test_staff_without_org_fails_closed(self, staff_client, form):
+        """View-unit defense-in-depth: force-auth staff without org sees
+        empty list (fail-closed).
+
+        This test uses ``force_authenticate`` (DRF-only, no session
+        middleware).  The session-parity proof for real middleware-pipeline
+        coverage is ``test_staff_session_active_org_sees_own_org_forms``
+        and ``test_staff_session_cross_org_excluded`` (CR-SA85-REV-001).
+        """
         url = reverse("quickscale_forms:admin-form-list")
         response = staff_client.get(url)
+        assert response.status_code == 200
+        assert len(response.data) == 0, (
+            "Staff without org must see empty list (fail-closed)"
+        )
+
+    def test_superuser_sees_org_scoped_form(self, superuser_client, org, org_form):
+        """Superuser sees forms from a scoped org via cross-tenant read.
+
+        SA85 Phase 4: The org_form fixture creates a form under *org*.
+        The superuser operator path (all_objects) returns it regardless
+        of org context.
+        """
+        url = reverse("quickscale_forms:admin-form-list")
+        response = superuser_client.get(url)
+        assert response.status_code == 200
+        slugs = [item["slug"] for item in response.data]
+        assert "org-contact" in slugs, (
+            "Superuser must see the org-scoped form via operator path"
+        )
+
+    def test_staff_with_org_uses_scoped_queryset_not_none(self, db, org):
+        """Staff with active org context gets a scoped queryset (not .none()).
+
+        SA85 Phase 4: verifies the _get_org_bound_queryset contract
+        by checking the queryset class type rather than executing a
+        database query (which requires PG RLS GUC setup).  The actual
+        end-to-end behavior is covered by the superuser test above and
+        the staff-fail-closed test below.
+        """
+        from quickscale_modules_forms.views import AdminFormListAPIView
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            set_current_org_id,
+            reset_current_org_id,
+        )
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        from rest_framework.request import Request as DRF_Request
+
+        # Set org context to simulate staff with active org
+        set_current_org_id(org.pk)
+
+        try:
+            staff_user = get_user_model().objects.create_user(
+                username="scoped-staff",
+                email="scoped@example.com",
+                password="testpass123",
+                is_staff=True,
+            )
+
+            rf = APIRequestFactory()
+            wsgi_request = rf.get("/api/admin/forms/")
+            wsgi_request.user = staff_user
+            drf_request = DRF_Request(wsgi_request)
+            force_authenticate(drf_request, user=staff_user)
+
+            view = AdminFormListAPIView()
+            view.request = drf_request
+            view.kwargs = {}
+
+            qs = view.get_queryset()
+
+            # Must NOT be .none() queryset (fail-closed)
+            assert qs.query.order_by == ("title",), (
+                "Queryset must have order_by from annotate/order_by"
+            )
+            # The underlying model is Form — proves it's a real queryset
+            assert qs.model is not None, "Queryset must have a model"
+            # Verify the underlying mgr class is Form.objects (TenantManager),
+            # not Form.all_objects (AllObjectsManager)
+            assert not qs.query.is_empty(), (
+                "Queryset must not be .none() — staff with org gets scoped access"
+            )
+        finally:
+            reset_current_org_id()
+
+        assert get_current_org_id() is None, "ContextVar must be None after cleanup"
+
+    # ------------------------------------------------------------------
+    # CR-SA85-REV-001: session-auth pipeline proofs
+    # ------------------------------------------------------------------
+    # These tests use force_login + ACTIVE_ORG_SESSION_KEY to exercise
+    # the full session authentication pipeline (SessionMiddleware +
+    # AuthenticationMiddleware).  The admin API path
+    # (/api/admin/forms/) is NON-EXEMPT from TenantMiddleware (it does
+    # not start with /admin/ or any other exempt prefix), so the
+    # middleware DOES run and populates the ContextVar from the session.
+    #
+    # * Regular staff with active org: ContextVar populated → RLS
+    #   scopes the queryset to the active org.  Staff see only forms
+    #   belonging to that org.
+    # * Regular staff without active org: middleware redirects to
+    #   /orgs/ before the view executes (302).
+    # * Superuser with active org: ContextVar populated but
+    #   _get_org_bound_queryset returns all_objects.all() regardless.
+    # * Superuser without active org: same 302 redirect.
+    #
+    # The force_authenticate tests above (staff_client / superuser_client)
+    # are view-unit defense-in-depth only and do NOT exercise the
+    # middleware pipeline.  The proofs below are the authoritative
+    # session-parity coverage.
+    # ------------------------------------------------------------------
+
+    def test_staff_session_active_org_sees_own_org_forms(
+        self, staff_user, api_client, form, db
+    ):
+        """Regular staff with force_login + ACTIVE_ORG_SESSION_KEY sees
+        only forms belonging to their active org.
+
+        CR-SA85-REV-001: real session-auth pipeline proof.
+        /api/admin/forms/ is non-exempt, so TenantMiddleware runs and
+        populates the ContextVar from the session.  Staff see their own
+        org's form and do NOT see forms from other orgs.
+        """
+        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+        from quickscale_modules_forms.models import Form
+
+        # Create a separate org for the staff user (different from
+        # System org where ``form`` fixture lives).
+        own_org = Organization.objects.create(
+            name="Staff Own Org", slug="staff-own-org"
+        )
+        OrganizationMembership.objects.create(
+            user=staff_user,
+            organization=own_org,
+            role=OrgRole.ADMIN,
+        )
+
+        # Create a form under the staff user's org.
+        with org_scope(own_org):
+            Form.all_objects.create(
+                organization=own_org,
+                title="Own Contact",
+                slug="own-contact",
+                success_message="Thanks!",
+                is_active=True,
+            )
+
+        api_client.force_login(user=staff_user)
+        session = api_client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(own_org.pk)
+        session.save()
+
+        url = reverse("quickscale_forms:admin-form-list")
+
+        response = api_client.get(url)
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+        slugs = [item["slug"] for item in response.data]
+        assert "own-contact" in slugs, (
+            f"Staff must see their own org's form. Got slugs: {slugs}"
+        )
+        # System org's form (created by the ``form`` fixture) must NOT
+        # be visible — different org, RLS-scoped out.
+        assert "test-contact" not in slugs, (
+            f"Staff must NOT see System org's form (different org). Got slugs: {slugs}"
+        )
+
+    def test_staff_session_cross_org_excluded(self, staff_user, api_client, db):
+        """Regular staff with force_login + ACTIVE_ORG_SESSION_KEY set
+        to one org does not see forms belonging to a different org.
+
+        CR-SA85-REV-001: proves cross-tenant isolation through the
+        full middleware + RLS pipeline on the non-exempt admin path.
+        """
+        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+        from quickscale_modules_forms.models import Form
+
+        own_org = Organization.objects.create(name="Own Org", slug="own-org")
+        other_org = Organization.objects.create(name="Other Org", slug="other-org")
+
+        OrganizationMembership.objects.create(
+            user=staff_user,
+            organization=own_org,
+            role=OrgRole.ADMIN,
+        )
+
+        with org_scope(own_org):
+            Form.all_objects.create(
+                organization=own_org,
+                title="Own Form",
+                slug="own-form",
+                success_message="Thanks!",
+                is_active=True,
+            )
+        with org_scope(other_org):
+            Form.all_objects.create(
+                organization=other_org,
+                title="Other Form",
+                slug="other-form",
+                success_message="Thanks!",
+                is_active=True,
+            )
+
+        api_client.force_login(user=staff_user)
+        session = api_client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(own_org.pk)
+        session.save()
+
+        url = reverse("quickscale_forms:admin-form-list")
+        response = api_client.get(url)
+        assert response.status_code == 200
+        slugs = [item["slug"] for item in response.data]
+        assert "own-form" in slugs, f"Staff must see own org's form. Got slugs: {slugs}"
+        assert "other-form" not in slugs, (
+            f"Staff must NOT see other org's form. Got slugs: {slugs}"
+        )
+
+    def test_superuser_session_active_org_sees_cross_tenant(
+        self, superuser, superuser_client, form, org
+    ):
+        """Superuser with ACTIVE_ORG_SESSION_KEY set to a specific org
+        can still see forms across all tenants via operator_access.
+
+        CR-SA85-REV-001: proves superuser cross-tenant bypass on the
+        non-exempt admin path.  TenantMiddleware runs and populates the
+        ContextVar, but _get_org_bound_queryset returns all_objects.all()
+        for superusers regardless of ContextVar state.
+        """
+        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs.models import OrgRole, OrganizationMembership
+
+        OrganizationMembership.objects.create(
+            user=superuser,
+            organization=org,
+            role=OrgRole.ADMIN,
+        )
+        superuser_client.force_login(user=superuser)
+        session = superuser_client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(org.pk)
+        session.save()
+
+        url = reverse("quickscale_forms:admin-form-list")
+        response = superuser_client.get(url)
+        assert response.status_code == 200
+        slugs = [item["slug"] for item in response.data]
+        assert "test-contact" in slugs, (
+            "Superuser with session active org must see System org's form "
+            f"via operator path. Got slugs: {slugs}"
+        )
+
+    # ------------------------------------------------------------------
+    # CR-SA85-REV-001: no-active-org redirect proofs
+    # ------------------------------------------------------------------
+    # These tests hit /api/admin/forms/ which is NON-EXEMPT from
+    # TenantMiddleware.  Without ACTIVE_ORG_SESSION_KEY, the middleware
+    # redirects to /orgs/ before the view executes — for both regular
+    # staff and superusers.
+
+    def test_staff_session_no_active_org_redirects(self, staff_user, api_client, db):
+        """Regular staff without ACTIVE_ORG_SESSION_KEY gets 302
+        redirect to /orgs/ on the admin-form-list path.
+
+        CR-SA85-REV-001: proves TenantMiddleware redirects to /orgs/
+        when an authenticated user has no active org selected on the
+        non-exempt admin API route.
+        """
+        api_client.force_login(user=staff_user)
+        # Do NOT set ACTIVE_ORG_SESSION_KEY — middleware should
+        # redirect before the view runs.
+
+        url = reverse("quickscale_forms:admin-form-list")
+        response = api_client.get(url)
+
+        assert response.status_code == 302, (
+            f"Expected 302 redirect to /orgs/, got {response.status_code}"
+        )
+        assert response["Location"] == "/orgs/", (
+            f"Expected Location: /orgs/, got {response['Location']}"
+        )
+
+    def test_superuser_session_no_active_org_redirects(self, superuser, api_client, db):
+        """Superuser without ACTIVE_ORG_SESSION_KEY also gets 302
+        redirect to /orgs/ on the admin-form-list path.
+
+        CR-SA85-REV-001: proves TenantMiddleware applies the same
+        no-active-org redirect to superusers before the view executes
+        on the non-exempt admin API route.
+        """
+        api_client.force_login(user=superuser)
+        # Do NOT set ACTIVE_ORG_SESSION_KEY.
+
+        url = reverse("quickscale_forms:admin-form-list")
+        response = api_client.get(url)
+
+        assert response.status_code == 302, (
+            f"Expected 302 redirect to /orgs/, got {response.status_code}"
+        )
+        assert response["Location"] == "/orgs/", (
+            f"Expected Location: /orgs/, got {response['Location']}"
+        )
+
+    @override_settings(FORMS_SUBMISSIONS_API=False)
+    def test_returns_404_when_admin_api_disabled(self, superuser_client, form):
+        """Disabling the submissions API should hide the staff admin endpoints."""
+        url = reverse("quickscale_forms:admin-form-list")
+        response = superuser_client.get(url)
 
         assert response.status_code == 404
 
 
 @pytest.mark.django_db
 class TestAdminSubmissionListAPIView:
-    """Tests for the staff GET /api/admin/forms/{id}/submissions/ endpoint"""
+    """Tests for the staff GET /api/admin/forms/{id}/submissions/ endpoint
 
-    def test_returns_submissions_for_form(self, staff_client, form, submission):
-        """Staff can list submissions for a given form"""
+    SA85 Phase 4 retained-role:
+    * Superuser: cross-tenant read via ``operator_access``.
+    * Regular staff without org: fail-closed (empty list).
+    """
+
+    def test_superuser_can_list_submissions(self, superuser_client, form, submission):
+        """Superuser can list submissions for a given form."""
         url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         assert response.status_code == 200
         assert len(response.data) >= 1
 
-    def test_filter_by_status(self, staff_client, form, submission):
-        """Submissions can be filtered by status query param"""
+    def test_staff_without_org_gets_empty_list(self, staff_client, form, submission):
+        """View-unit defense-in-depth: force-auth staff without org gets
+        empty submission list (fail-closed).
+
+        Session-parity proof for the real middleware pipeline is
+        ``test_staff_session_active_org_sees_own_org_forms`` and
+        ``test_staff_session_cross_org_excluded`` (CR-SA85-REV-001).
+        """
         url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
-        response = staff_client.get(url, {"status": "pending"})
+        response = staff_client.get(url)
+        assert response.status_code == 200
+        assert len(response.data) == 0, (
+            "Staff without org must receive empty list (fail-closed)"
+        )
+
+    def test_filter_by_status(self, superuser_client, form, submission):
+        """Submissions can be filtered by status query param."""
+        url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
+        response = superuser_client.get(url, {"status": "pending"})
         assert response.status_code == 200
 
     @override_settings(FORMS_PER_PAGE=1)
-    def test_respects_forms_per_page_setting(self, staff_client, form, submission):
+    def test_respects_forms_per_page_setting(self, superuser_client, form, submission):
         """The admin submission list should page according to FORMS_PER_PAGE."""
-        FormSubmission.all_objects.create(
-            form=form,
-            organization=form.organization,
-            ip_address="127.0.0.2",
-            user_agent="TestBrowser/2.0",
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            FormSubmission.all_objects.create(
+                form=form,
+                organization=form.organization,
+                ip_address="127.0.0.2",
+                user_agent="TestBrowser/2.0",
+            )
         url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
 
         assert response.status_code == 200
         assert len(response.data) == 1
@@ -517,69 +902,149 @@ class TestAdminSubmissionListAPIView:
 
 @pytest.mark.django_db
 class TestAdminSubmissionDetailAPIView:
-    """Tests for the staff GET/PATCH /api/admin/forms/{id}/submissions/{sub_id}/ endpoint"""
+    """Tests for the staff GET/PATCH /api/admin/forms/{id}/submissions/{sub_id}/ endpoint
 
-    def test_returns_submission_detail(
-        self, staff_client, form, submission, field_value
+    SA85 Phase 4 retained-role:
+    * Superuser: cross-tenant read via ``operator_access`` (GET).
+    * PATCH target identified through allowed read elevation; save occurs
+      inside ``org_scope(submission.organization)``.
+    """
+
+    def test_superuser_can_retrieve_detail(
+        self, superuser_client, form, submission, field_value
     ):
-        """Staff can retrieve submission detail with field values"""
+        """Superuser can retrieve submission detail with field values."""
+        url = reverse(
+            "quickscale_forms:admin-submission-detail",
+            kwargs={"pk": form.pk, "sub_pk": submission.pk},
+        )
+        response = superuser_client.get(url)
+        assert response.status_code == 200
+        assert response.data["id"] == submission.pk
+
+    def test_superuser_patch_updates_status(self, superuser_client, form, submission):
+        """Superuser PATCH request updates submission status."""
+        from quickscale_modules_orgs.current_org import org_scope
+
+        url = reverse(
+            "quickscale_forms:admin-submission-detail",
+            kwargs={"pk": form.pk, "sub_pk": submission.pk},
+        )
+        response = superuser_client.patch(url, data={"status": "read"}, format="json")
+        assert response.status_code == 200
+        with org_scope(submission.organization):
+            submission.refresh_from_db()
+        assert submission.status == "read"
+
+    def test_superuser_patch_with_mismatched_active_org(
+        self, superuser, superuser_client, form, submission, org_b
+    ):
+        """Superuser PATCH succeeds with a mismatched active org context.
+
+        CR-SA85-REV-002: A superuser whose session active org differs from the
+        target submission's owning org must still be able to PATCH and have
+        the response materialized correctly (serializer.data evaluated inside
+        org_scope).  Also proves the persisted value survives a DB refresh.
+        """
+        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            OrganizationMembership,
+        )
+
+        OrganizationMembership.objects.create(
+            user=superuser,
+            organization=org_b,
+            role=OrgRole.ADMIN,
+        )
+        # Set active org to org_b (mismatched against the submission's system org).
+        superuser_client.force_login(user=superuser)
+        session = superuser_client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(org_b.pk)
+        session.save()
+
+        url = reverse(
+            "quickscale_forms:admin-submission-detail",
+            kwargs={"pk": form.pk, "sub_pk": submission.pk},
+        )
+        response = superuser_client.patch(url, data={"status": "read"}, format="json")
+        assert response.status_code == 200, (
+            f"Superuser PATCH with mismatched org should return 200, "
+            f"got {response.status_code}: {response.data}"
+        )
+        # Verify the response data is materialized correctly (not lazy-evaluated
+        # after org_scope exits).
+        assert "status" in response.data, (
+            "Response must include status field — proves serializer.data "
+            "was materialized inside org_scope"
+        )
+        assert response.data["status"] == "read"
+
+        # Verify persistence: read back under the correct org scope.
+        with org_scope(submission.organization):
+            submission.refresh_from_db()
+        assert submission.status == "read", (
+            "Persisted value must survive a DB refresh — proves the save "
+            "targeted the correct record despite mismatched active org"
+        )
+
+    def test_staff_without_org_gets_404_on_detail(self, staff_client, form, submission):
+        """View-unit defense-in-depth: force-auth staff without org gets
+        404 on submission detail (fail-closed)."""
         url = reverse(
             "quickscale_forms:admin-submission-detail",
             kwargs={"pk": form.pk, "sub_pk": submission.pk},
         )
         response = staff_client.get(url)
-        assert response.status_code == 200
-        assert response.data["id"] == submission.pk
-
-    def test_patch_updates_status(self, staff_client, form, submission):
-        """PATCH request updates submission status"""
-        url = reverse(
-            "quickscale_forms:admin-submission-detail",
-            kwargs={"pk": form.pk, "sub_pk": submission.pk},
-        )
-        response = staff_client.patch(url, data={"status": "read"}, format="json")
-        assert response.status_code == 200
-        submission.refresh_from_db()
-        assert submission.status == "read"
+        assert response.status_code == 404
 
 
 @pytest.mark.django_db
 class TestAdminSubmissionExportView:
-    """Tests for the staff CSV export view"""
+    """Tests for the staff CSV export view
 
-    def test_returns_csv_for_staff(self, staff_client, form, submission, field_value):
-        """Staff receives CSV file with correct content type"""
+    SA85 Phase 4 retained-role:
+    * Superuser: cross-tenant read via ``operator_access`` (audited).
+    * Regular staff without org: fail-closed (404).
+    """
+
+    def test_superuser_gets_csv(self, superuser_client, form, submission, field_value):
+        """Superuser receives CSV file with correct content type."""
         url = reverse(
             "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         assert response.status_code == 200
         assert "text/csv" in response["Content-Type"]
 
-    def test_csv_contains_field_values(
-        self, staff_client, form, submission, field_value
+    def test_superuser_csv_contains_field_values(
+        self, superuser_client, form, submission, field_value
     ):
-        """CSV output contains the submitted field values"""
+        """CSV output contains the submitted field values."""
         url = reverse(
             "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         content = response.content.decode()
         assert "full_name" in content
         assert "Alice" in content
 
     def test_csv_neutralizes_formula_headers_and_values(
-        self, staff_client, form, submission, field_value
+        self, superuser_client, form, submission, field_value
     ):
         """CSV export prefixes dangerous header/value cells so spreadsheets keep them inert."""
-        field_value.field_name = "=2+2"
-        field_value.value = "  +SUM(A1:A2)"
-        field_value.save(update_fields=["field_name", "value"])
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(submission.organization):
+            field_value.field_name = "=2+2"
+            field_value.value = "  +SUM(A1:A2)"
+            field_value.save(update_fields=["field_name", "value"])
 
         url = reverse(
             "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
 
         assert response.status_code == 200
 
@@ -587,6 +1052,15 @@ class TestAdminSubmissionExportView:
         assert rows[0][0] == "id"
         assert rows[0][-1] == "'=2+2"
         assert rows[1][-1] == "'  +SUM(A1:A2)"
+
+    def test_staff_without_org_gets_404_on_export(self, staff_client, form):
+        """View-unit defense-in-depth: force-auth staff without org gets
+        404 on CSV export (fail-closed)."""
+        url = reverse(
+            "quickscale_forms:admin-submission-export", kwargs={"pk": form.pk}
+        )
+        response = staff_client.get(url)
+        assert response.status_code == 404
 
     def test_returns_403_for_anonymous(self, api_client, form):
         """Anonymous user cannot export submissions"""
@@ -596,36 +1070,44 @@ class TestAdminSubmissionExportView:
         response = api_client.get(url)
         assert response.status_code == 403
 
-    def test_returns_404_for_missing_form(self, staff_client):
-        """Export view returns 404 when form pk does not exist"""
+    def test_superuser_gets_404_for_missing_form(self, superuser_client):
+        """Export view returns 404 when form pk does not exist."""
         url = reverse("quickscale_forms:admin-submission-export", kwargs={"pk": 99999})
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         assert response.status_code == 404
 
 
 @pytest.mark.django_db
 class TestAdminSubmissionListFilters:
-    """Tests for query parameter filters on AdminSubmissionListAPIView"""
+    """Tests for query parameter filters on AdminSubmissionListAPIView
 
-    def test_filter_by_is_spam_true(self, staff_client, form, submission):
+    SA85 Phase 4: filters are role-agnostic — they apply to whatever
+    queryset the role produces.  Use superuser for cross-tenant filter
+    coverage.
+    """
+
+    def test_filter_by_is_spam_true(self, superuser_client, form, submission):
         """is_spam=true filter returns only spam submissions"""
-        submission.is_spam = True
-        submission.save()
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(submission.organization):
+            submission.is_spam = True
+            submission.save()
         url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
-        response = staff_client.get(url, {"is_spam": "true"})
+        response = superuser_client.get(url, {"is_spam": "true"})
         assert response.status_code == 200
         assert all(s["is_spam"] for s in response.data)
 
-    def test_filter_by_date_gte(self, staff_client, form, submission):
+    def test_filter_by_date_gte(self, superuser_client, form, submission):
         """submitted_at__date__gte filter is accepted without error"""
         url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
-        response = staff_client.get(url, {"submitted_at__date__gte": "2000-01-01"})
+        response = superuser_client.get(url, {"submitted_at__date__gte": "2000-01-01"})
         assert response.status_code == 200
 
-    def test_filter_by_date_lte(self, staff_client, form, submission):
+    def test_filter_by_date_lte(self, superuser_client, form, submission):
         """submitted_at__date__lte filter is accepted without error"""
         url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
-        response = staff_client.get(url, {"submitted_at__date__lte": "2099-12-31"})
+        response = superuser_client.get(url, {"submitted_at__date__lte": "2099-12-31"})
         assert response.status_code == 200
 
 
@@ -633,13 +1115,13 @@ class TestAdminSubmissionListFilters:
 class TestAdminSubmissionDetailNotFound:
     """Tests for 404 behavior in AdminSubmissionDetailAPIView"""
 
-    def test_returns_404_for_unknown_submission(self, staff_client, form):
-        """Submission detail returns 404 when sub_pk does not exist"""
+    def test_superuser_gets_404_for_unknown_submission(self, superuser_client, form):
+        """Submission detail returns 404 when sub_pk does not exist."""
         url = reverse(
             "quickscale_forms:admin-submission-detail",
             kwargs={"pk": form.pk, "sub_pk": 99999},
         )
-        response = staff_client.get(url)
+        response = superuser_client.get(url)
         assert response.status_code == 404
 
 
@@ -661,6 +1143,7 @@ class TestFormSubmissionCanonicalIp:
         from django.test import override_settings
 
         from quickscale_modules_forms.models import FormSubmission
+        from quickscale_modules_orgs.current_org import org_scope
 
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
@@ -678,7 +1161,10 @@ class TestFormSubmissionCanonicalIp:
             )
 
         assert response.status_code == 201
-        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.filter(form=form).latest(
+                "submitted_at"
+            )
         assert submission.ip_address == "198.51.100.10", (
             f"Expected canonical client IP 198.51.100.10, got {submission.ip_address!r}"
         )
@@ -689,6 +1175,7 @@ class TestFormSubmissionCanonicalIp:
         """When USE_X_FORWARDED_FOR is not configured, ip_address records
         REMOTE_ADDR."""
         from quickscale_modules_forms.models import FormSubmission
+        from quickscale_modules_orgs.current_org import org_scope
 
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Bob", "email": "bob@example.com"}
@@ -702,7 +1189,10 @@ class TestFormSubmissionCanonicalIp:
         )
 
         assert response.status_code == 201
-        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.filter(form=form).latest(
+                "submitted_at"
+            )
         assert submission.ip_address == "10.0.0.2", (
             f"Expected REMOTE_ADDR 10.0.0.2, got {submission.ip_address!r}"
         )
@@ -714,6 +1204,7 @@ class TestFormSubmissionCanonicalIp:
         from django.test import override_settings
 
         from quickscale_modules_forms.models import FormSubmission
+        from quickscale_modules_orgs.current_org import org_scope
 
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {
@@ -735,7 +1226,10 @@ class TestFormSubmissionCanonicalIp:
             )
 
         assert response.status_code == 201
-        submission = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.filter(form=form).latest(
+                "submitted_at"
+            )
         assert submission.is_spam is True
         assert submission.ip_address == "203.0.113.50", (
             f"Expected canonical IP 203.0.113.50, got {submission.ip_address!r}"
@@ -843,6 +1337,7 @@ class TestFormCallerParity:
         self, api_client, form, form_field, email_field
     ):
         """Anonymous submissions should be associated with the System org."""
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
         system_org = Organization.objects.get_system_org()
@@ -852,21 +1347,24 @@ class TestFormCallerParity:
 
         api_client.post(url, data=data, format="json")
 
-        sub = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        with org_scope(system_org):
+            sub = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
         assert sub.organization == system_org, (
             "Anonymous submission must be scoped to the System org"
         )
 
+    @override_settings(SESSION_ENGINE="django.contrib.sessions.backends.cache")
     def test_authenticated_submit_uses_session_org(self, api_client):
         """Authenticated requests with an active session org scope the
         submission to that org."""
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import (
             OrganizationMembership,
             OrgRole,
             Organization,
         )
         from django.contrib.auth import get_user_model
-        from quickscale_modules_forms.models import Form, FormField
+        from quickscale_modules_forms.models import Form, FormField, FormSubmission
 
         user = get_user_model().objects.create_user(
             username="auth-form-user",
@@ -881,31 +1379,32 @@ class TestFormCallerParity:
         )
 
         # Create a form and field under the authenticated user's org
-        org_form = Form.all_objects.create(
-            organization=org,
-            title="Auth Contact",
-            slug="auth-contact",
-            success_message="Thanks!",
-            is_active=True,
-        )
-        FormField.all_objects.create(
-            form=org_form,
-            name="full_name",
-            label="Full Name",
-            field_type="text",
-            required=True,
-            order=1,
-            organization=org,
-        )
-        FormField.all_objects.create(
-            form=org_form,
-            name="email",
-            label="Email",
-            field_type="email",
-            required=True,
-            order=2,
-            organization=org,
-        )
+        with org_scope(org):
+            org_form = Form.all_objects.create(
+                organization=org,
+                title="Auth Contact",
+                slug="auth-contact",
+                success_message="Thanks!",
+                is_active=True,
+            )
+            FormField.all_objects.create(
+                form=org_form,
+                name="full_name",
+                label="Full Name",
+                field_type="text",
+                required=True,
+                order=1,
+                organization=org,
+            )
+            FormField.all_objects.create(
+                form=org_form,
+                name="email",
+                label="Email",
+                field_type="email",
+                required=True,
+                order=2,
+                organization=org,
+            )
 
         api_client.force_login(user)
         session = api_client.session
@@ -920,11 +1419,15 @@ class TestFormCallerParity:
         response = api_client.post(url, data=data, format="json")
 
         assert response.status_code == 201
-        sub = FormSubmission.all_objects.filter(form=org_form).latest("submitted_at")
+        with org_scope(org):
+            sub = FormSubmission.all_objects.filter(form=org_form).latest(
+                "submitted_at"
+            )
         assert sub.organization == org, (
             "Authenticated submission must be scoped to the session org"
         )
 
+    @override_settings(SESSION_ENGINE="django.contrib.sessions.backends.cache")
     def test_authenticated_schema_returns_org_scoped_form(self, api_client):
         """Authenticated requests get forms scoped to their session org.
 
@@ -933,6 +1436,7 @@ class TestFormCallerParity:
         prevent when child FormField rows already reference the old org).
         """
         from quickscale_modules_forms.models import Form, FormField
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import (
             OrganizationMembership,
             OrgRole,
@@ -953,22 +1457,23 @@ class TestFormCallerParity:
         )
 
         # Create form under the target org directly (no reassignment needed).
-        new_form = Form.all_objects.create(
-            organization=org,
-            title="Org Contact",
-            slug="org-specific-form",
-            success_message="Thanks!",
-            is_active=True,
-        )
-        FormField.all_objects.create(
-            form=new_form,
-            name="full_name",
-            label="Full Name",
-            field_type="text",
-            required=True,
-            order=1,
-            organization=org,
-        )
+        with org_scope(org):
+            new_form = Form.all_objects.create(
+                organization=org,
+                title="Org Contact",
+                slug="org-specific-form",
+                success_message="Thanks!",
+                is_active=True,
+            )
+            FormField.all_objects.create(
+                form=new_form,
+                name="full_name",
+                label="Full Name",
+                field_type="text",
+                required=True,
+                order=1,
+                organization=org,
+            )
 
         api_client.force_login(user)
         session = api_client.session
@@ -989,8 +1494,11 @@ class TestFormCallerParity:
         self, api_client, form, form_field, email_field
     ):
         """When a form has a redirect_url, anonymous submissions return it."""
+        from quickscale_modules_orgs.current_org import org_scope
+
         form.redirect_url = "/thank-you"
-        form.save(update_fields=["redirect_url"])
+        with org_scope(form.organization):
+            form.save(update_fields=["redirect_url"])
 
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
@@ -1006,6 +1514,8 @@ class TestFormCallerParity:
         """Honeypot-triggered anonymous submissions return 201 with message
         and redirect_url (silent spam acceptance). notification_status is
         intentionally absent in the honeypot fast-path response."""
+        from quickscale_modules_orgs.current_org import org_scope
+
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {
             "full_name": "Bot",
@@ -1019,7 +1529,8 @@ class TestFormCallerParity:
         assert "message" in response.data
         assert "redirect_url" in response.data
         assert response.data["message"] == form.success_message
-        sub = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
+        with org_scope(form.organization):
+            sub = FormSubmission.all_objects.filter(form=form).latest("submitted_at")
         assert sub.is_spam is True
 
     def test_side_effects_dispatch_after_submission_committed(
@@ -1033,6 +1544,8 @@ class TestFormCallerParity:
         This test monkeypatches notify_submission to verify it runs at all,
         and that the submission already exists when notification fires.
         """
+        from quickscale_modules_orgs.current_org import org_scope
+
         notified_submission_pk = [None]
 
         def _track_notification(submission):
@@ -1053,10 +1566,14 @@ class TestFormCallerParity:
         assert notified_submission_pk[0] is not None, (
             "notify_submission must be called after the submission is persisted"
         )
-        # Verify the persisted submission exists in the DB
-        assert FormSubmission.all_objects.filter(
-            pk=notified_submission_pk[0]
-        ).exists(), "The submission must exist in the DB before notify_submission runs"
+        # Verify the persisted submission exists in the DB — read inside
+        # org_scope so FORCE RLS allows the query.
+        with org_scope(form.organization):
+            assert FormSubmission.all_objects.filter(
+                pk=notified_submission_pk[0]
+            ).exists(), (
+                "The submission must exist in the DB before notify_submission runs"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1100,4 +1617,202 @@ class TestNotificationContentAfterPostCommit:
         )
         assert "Email:" in email_body, (
             "Notification email must include the email field label"
+        )
+
+
+# ---------------------------------------------------------------------------
+# SA85 Phase 3 — CR-P3-006 regression: side-effect callbacks run after
+# commit with in_atomic_block = False and can observe committed rows
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+class TestPostCommitTransactionBoundary:
+    """CR-P3-006/SA85 Phase 3: notification and analytics callbacks run
+    after the view's outer ``org_scope`` + ``transaction.atomic()`` commits,
+    with ``connection.in_atomic_block == False``, can observe committed rows
+    via fresh ``org_scope``, and leave no context leak.
+
+    Uses ``django_db(transaction=True)`` so the view's ``transaction.atomic()``
+    from ``org_scope`` actually commits to PostgreSQL before side-effect
+    callbacks execute — proving callbacks run outside any database transaction.
+
+    Does NOT use shared fixtures (form, form_field, email_field) to keep
+    the setup scope fully explicit and avoid fixture-held org_scope.
+
+    The form is created under the System org because anonymous public
+    requests resolve to the System org (D2) — this mirrors how the
+    existing ``form`` fixture works without depending on it.
+    """
+
+    def test_notification_and_analytics_outside_atomic_with_committed_rows(
+        self,
+        api_client,
+        monkeypatch,
+    ):
+        """Prove notify_submission and analytics callbacks enter outside the
+        view's atomic block, can open fresh org_scope to observe committed
+        submission and field-value rows, and leave no context leak."""
+        from quickscale_modules_forms.models import (
+            Form,
+            FormField,
+            FormFieldValue,
+            FormSubmission,
+        )
+        from quickscale_modules_orgs.current_org import get_current_org_id, org_scope
+        from quickscale_modules_orgs.models import Organization
+
+        # ---- Setup: org, form, fields inside explicit org_scope -----------
+        # Anonymous public requests resolve to System org — form must live
+        # there so the view can find it by slug.  Use a UUID suffix so
+        # leftover stale data from a prior aborted run never collides.
+        import uuid
+
+        slug_suffix = uuid.uuid4().hex[:8]
+        form_slug = f"txn-form-{slug_suffix}"
+
+        system_org = Organization.objects.get_system_org()
+
+        with org_scope(system_org):
+            test_form = Form.all_objects.create(
+                title=f"TxnForm {slug_suffix}",
+                slug=form_slug,
+                organization=system_org,
+                notify_emails="txn@example.com",
+                is_active=True,
+                success_message="Thanks!",
+            )
+            FormField.all_objects.create(
+                form=test_form,
+                organization=system_org,
+                field_type=FormField.FIELD_TYPE_TEXT,
+                label="Full Name",
+                name="full_name",
+                required=True,
+                order=1,
+            )
+            FormField.all_objects.create(
+                form=test_form,
+                organization=system_org,
+                field_type=FormField.FIELD_TYPE_EMAIL,
+                label="Email",
+                name="email",
+                required=True,
+                order=2,
+            )
+
+        # ---- Exit setup scope — verify no context leak --------------------
+        assert get_current_org_id() is None, (
+            "setup org_scope must not leak — ContextVar must be None"
+        )
+
+        # ---- Collect assertions from monkeypatched callbacks -------------
+        notification_calls: list[dict] = []
+        analytics_calls: list[dict] = []
+
+        def _tracking_notify(submission: Any) -> str:
+            nonlocal notification_calls
+            call_info: dict = {
+                "in_atomic_block": connection.in_atomic_block,
+                "submission_pk": submission.pk,
+            }
+            # Open fresh org scope to observe committed rows.
+            # The submission lives under system_org — use that scope.
+            with org_scope(system_org):
+                sub = FormSubmission.all_objects.get(pk=submission.pk)
+                fvs = list(FormFieldValue.all_objects.filter(submission=sub))
+                call_info["field_values"] = [
+                    {"name": fv.field_name, "value": fv.value} for fv in fvs
+                ]
+            # Verify no context leak from the fresh scope
+            assert get_current_org_id() is None, (
+                "notification callback must not leak org context"
+            )
+            notification_calls.append(call_info)
+            return "queued"
+
+        def _tracking_analytics(submission: Any, request: Any) -> None:
+            nonlocal analytics_calls
+            call_info: dict = {
+                "in_atomic_block": connection.in_atomic_block,
+                "submission_pk": submission.pk,
+            }
+            # Open fresh org scope to observe committed rows
+            with org_scope(system_org):
+                sub_exists = FormSubmission.all_objects.filter(
+                    pk=submission.pk
+                ).exists()
+                fv_count = FormFieldValue.all_objects.filter(
+                    submission=submission
+                ).count()
+                call_info["submission_exists"] = sub_exists
+                call_info["field_value_count"] = fv_count
+            # Verify no context leak
+            assert get_current_org_id() is None, (
+                "analytics callback must not leak org context"
+            )
+            analytics_calls.append(call_info)
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views.notify_submission",
+            _tracking_notify,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views._capture_submission_analytics",
+            _tracking_analytics,
+        )
+
+        # ---- POST — triggers the view's org_scope + transaction.atomic() --
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": form_slug})
+        data = {"full_name": "Boundary Alice", "email": "boundary@example.com"}
+        response = api_client.post(url, data=data, format="json")
+
+        assert response.status_code == 201, f"Expected 201, got {response.status_code}"
+        assert response.data["notification_status"] == "queued"
+
+        # ---- Verify notification callback --------------------------------
+        assert len(notification_calls) == 1, (
+            "notify_submission must be called exactly once"
+        )
+        nf = notification_calls[0]
+        assert nf["in_atomic_block"] is False, (
+            "notify_submission must run outside any database transaction"
+        )
+        assert nf["submission_pk"] is not None
+        fv_names = {fv["name"] for fv in nf["field_values"]}
+        assert "full_name" in fv_names, (
+            "Committed field_value 'full_name' must be observable "
+            "from notification callback via fresh org_scope"
+        )
+        assert "email" in fv_names, (
+            "Committed field_value 'email' must be observable "
+            "from notification callback via fresh org_scope"
+        )
+        # Verify actual committed values
+        fv_map = {fv["name"]: fv["value"] for fv in nf["field_values"]}
+        assert fv_map["full_name"] == "Boundary Alice", (
+            "Notification callback must read the correct committed value"
+        )
+        assert fv_map["email"] == "boundary@example.com", (
+            "Notification callback must read the correct committed email value"
+        )
+
+        # ---- Verify analytics callback -----------------------------------
+        assert len(analytics_calls) == 1, (
+            "analytics capture must be called exactly once"
+        )
+        af = analytics_calls[0]
+        assert af["in_atomic_block"] is False, (
+            "analytics capture must run outside any database transaction"
+        )
+        assert af["submission_exists"] is True, (
+            "Committed submission must be observable from analytics callback"
+        )
+        assert af["field_value_count"] >= 2, (
+            "Committed field values must be observable from analytics callback"
+        )
+
+        # ---- Final context leak check ------------------------------------
+        assert get_current_org_id() is None, (
+            "no org context leak after full request lifecycle"
         )

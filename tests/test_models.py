@@ -20,43 +20,81 @@ class TestFormModel:
 
     def test_form_str_returns_title(self, _system_org):
         """__str__ returns the form title"""
-        form = Form.objects.create(
-            title="Test Contact", slug="test-contact", organization=_system_org
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(_system_org):
+            form = Form.objects.create(
+                title="Test Contact", slug="test-contact", organization=_system_org
+            )
         assert str(form) == "Test Contact"
 
     def test_form_slug_uniqueness_per_org(self):
         """Form slug must be unique within an organization"""
+        from django.db import transaction
+
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            org_scope,
+            reset_current_org_id,
+            set_current_org_id,
+            set_db_current_org_id,
+        )
         from quickscale_modules_orgs.models import Organization
 
         org = Organization.objects.create(name="Test Org", slug="test-org")
-        Form.objects.create(title="First", slug="unique-slug", organization=org)
-        with pytest.raises(IntegrityError):
-            Form.objects.create(title="Second", slug="unique-slug", organization=org)
+        with org_scope(org):
+            Form.objects.create(title="First", slug="unique-slug", organization=org)
+
+        prior_org_id = get_current_org_id()
+        try:
+            set_current_org_id(org.pk)
+            set_db_current_org_id(org.pk)
+            # Savepoint atomic wraps the actual IntegrityError trigger so the
+            # outer transaction remains usable (CR-SA85-REV-006).
+            with transaction.atomic():
+                with pytest.raises(IntegrityError):
+                    Form.objects.create(
+                        title="Second", slug="unique-slug", organization=org
+                    )
+        finally:
+            if prior_org_id:
+                set_current_org_id(prior_org_id)
+            else:
+                reset_current_org_id()
 
     def test_form_slug_can_duplicate_across_orgs(self):
         """Same slug is allowed in different organizations"""
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
-        org_a = Organization.objects.create(name="Org A", slug="org-a")
-        org_b = Organization.objects.create(name="Org B", slug="org-b")
-        Form.objects.create(title="First", slug="same-slug", organization=org_a)
-        # Should not raise — different orgs
-        Form.objects.create(title="Second", slug="same-slug", organization=org_b)
+        org_a = Organization.objects.create(name="Org A Dup", slug="dup-org-a")
+        org_b = Organization.objects.create(name="Org B Dup", slug="dup-org-b")
+        with org_scope(org_a):
+            Form.objects.create(title="First", slug="same-slug", organization=org_a)
+        with org_scope(org_b):
+            Form.objects.create(title="Second", slug="same-slug", organization=org_b)
 
     def test_form_data_retention_days_default_is_365(self, _system_org):
         """data_retention_days defaults to 365"""
-        form = Form.objects.create(
-            title="Test", slug="test-retention", organization=_system_org
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(_system_org):
+            form = Form.objects.create(
+                title="Test", slug="test-retention", organization=_system_org
+            )
         assert form.data_retention_days == 365
 
     @override_settings(FORMS_DATA_RETENTION_DAYS=730)
     def test_form_data_retention_days_default_comes_from_setting(self, _system_org):
         """New forms should inherit the settings-backed retention default."""
-        form = Form.objects.create(
-            title="Configured", slug="configured-retention", organization=_system_org
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(_system_org):
+            form = Form.objects.create(
+                title="Configured",
+                slug="configured-retention",
+                organization=_system_org,
+            )
 
         assert form.data_retention_days == 730
 
@@ -65,34 +103,46 @@ class TestFormModel:
         self, _system_org
     ):
         """Explicit per-form retention must win over the global default."""
-        form = Form.objects.create(
-            title="Explicit",
-            slug="explicit-retention",
-            data_retention_days=14,
-            organization=_system_org,
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(_system_org):
+            form = Form.objects.create(
+                title="Explicit",
+                slug="explicit-retention",
+                data_retention_days=14,
+                organization=_system_org,
+            )
 
         assert form.data_retention_days == 14
 
     def test_form_is_active_defaults_to_true(self, _system_org):
         """is_active defaults to True"""
-        form = Form.objects.create(
-            title="Test", slug="test-active", organization=_system_org
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(_system_org):
+            form = Form.objects.create(
+                title="Test", slug="test-active", organization=_system_org
+            )
         assert form.is_active is True
 
     def test_form_spam_protection_defaults_to_true(self, _system_org):
         """spam_protection_enabled defaults to True"""
-        form = Form.objects.create(
-            title="Test", slug="test-spam", organization=_system_org
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(_system_org):
+            form = Form.objects.create(
+                title="Test", slug="test-spam", organization=_system_org
+            )
         assert form.spam_protection_enabled is True
 
     def test_form_success_message_default(self, _system_org):
         """success_message has a sensible default value"""
-        form = Form.objects.create(
-            title="Test", slug="test-msg", organization=_system_org
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(_system_org):
+            form = Form.objects.create(
+                title="Test", slug="test-msg", organization=_system_org
+            )
         assert "Thank you" in form.success_message
 
 
@@ -102,44 +152,71 @@ class TestFormFieldModel:
 
     def test_formfield_ordering_by_order(self, form):
         """Fields are ordered by the 'order' field"""
-        FormField.all_objects.create(
-            form=form,
-            organization=form.organization,
-            field_type="text",
-            label="B",
-            name="field_b",
-            order=2,
-        )
-        FormField.all_objects.create(
-            form=form,
-            organization=form.organization,
-            field_type="text",
-            label="A",
-            name="field_a",
-            order=1,
-        )
-        names = list(form.fields.values_list("name", flat=True))
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type="text",
+                label="B",
+                name="field_b",
+                order=2,
+            )
+            FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type="text",
+                label="A",
+                name="field_a",
+                order=1,
+            )
+            names = list(form.fields.values_list("name", flat=True))
         assert names == ["field_a", "field_b"]
 
     def test_formfield_unique_together_form_and_name(self, form):
         """Two fields on the same form cannot share the same name"""
-        FormField.all_objects.create(
-            form=form,
-            organization=form.organization,
-            field_type="text",
-            label="First",
-            name="dup",
-            order=1,
+        from django.db import transaction
+
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            org_scope,
+            reset_current_org_id,
+            set_current_org_id,
+            set_db_current_org_id,
         )
-        with pytest.raises(IntegrityError):
+
+        with org_scope(form.organization):
             FormField.all_objects.create(
                 form=form,
                 organization=form.organization,
-                field_type="email",
-                label="Second",
+                field_type="text",
+                label="First",
                 name="dup",
-                order=2,
+                order=1,
             )
+
+        prior_org_id = get_current_org_id()
+        try:
+            set_current_org_id(form.organization.pk)
+            set_db_current_org_id(form.organization.pk)
+            # Savepoint atomic wraps the actual IntegrityError trigger so the
+            # outer transaction remains usable (CR-SA85-REV-006).
+            with transaction.atomic():
+                with pytest.raises(IntegrityError):
+                    FormField.all_objects.create(
+                        form=form,
+                        organization=form.organization,
+                        field_type="email",
+                        label="Second",
+                        name="dup",
+                        order=2,
+                    )
+        finally:
+            if prior_org_id:
+                set_current_org_id(prior_org_id)
+            else:
+                reset_current_org_id()
 
     def test_formfield_str(self, form, form_field):
         """__str__ returns form title and field label"""
@@ -148,14 +225,17 @@ class TestFormFieldModel:
 
     def test_formfield_is_active_defaults_to_true(self, form):
         """is_active defaults to True"""
-        field = FormField.all_objects.create(
-            form=form,
-            organization=form.organization,
-            field_type="text",
-            label="X",
-            name="x_field",
-            order=1,
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            field = FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type="text",
+                label="X",
+                name="x_field",
+                order=1,
+            )
         assert field.is_active is True
 
 
@@ -165,16 +245,22 @@ class TestFormSubmissionModel:
 
     def test_formsubmission_default_status_is_pending(self, form):
         """status defaults to 'pending'"""
-        submission = FormSubmission.all_objects.create(
-            form=form, organization=form.organization
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.create(
+                form=form, organization=form.organization
+            )
         assert submission.status == FormSubmission.STATUS_PENDING
 
     def test_formsubmission_is_spam_defaults_to_false(self, form):
         """is_spam defaults to False"""
-        submission = FormSubmission.all_objects.create(
-            form=form, organization=form.organization
-        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            submission = FormSubmission.all_objects.create(
+                form=form, organization=form.organization
+            )
         assert submission.is_spam is False
 
     def test_formsubmission_str(self, submission):
@@ -191,9 +277,12 @@ class TestFormFieldValueModel:
         self, submission, form_field, field_value
     ):
         """When a FormField is deleted, FormFieldValue.field becomes NULL but field_name is preserved"""
-        field_name_snapshot = field_value.field_name
-        form_field.delete()
-        field_value.refresh_from_db()
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form_field.organization):
+            field_name_snapshot = field_value.field_name
+            form_field.delete()
+            field_value.refresh_from_db()
         assert field_value.field is None
         assert field_value.field_name == field_name_snapshot
 
