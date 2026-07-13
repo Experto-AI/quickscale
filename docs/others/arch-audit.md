@@ -75,7 +75,7 @@ untouched by this update.
 | # | Invariant | Enforced by | Class | Trend this pass |
 |---|-----------|-------------|-------|-----------------|
 | 1 | Tenant isolation on reads/writes | fail-closed `TenantManager` + FORCE RLS + AF9 execute-wrapper | structural | stable |
-| 2 | No bypassing DB role at boot | orgs boot guard (`apps.py`), `rolbypassrls` + `rolsuper` | structural | **strengthened** — the SA59 blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is gone from the unit path; CI/publish integration jobs run module suites under `quickscale_test_role` (NOBYPASSRLS/NOSUPERUSER) with the guard live. Gate is green again (SA76 quarantine, 2026-07-12; was red on pre-existing failures); SQLite suites (backups) outside its reach until SA59.2 |
+| 2 | No bypassing DB role at boot | orgs boot guard (`apps.py`), `rolbypassrls` + `rolsuper` | structural | **strengthened** — the SA59 blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is gone from the unit path; CI/publish integration jobs run module suites under `quickscale_test_role` (NOBYPASSRLS/NOSUPERUSER) with the guard live. Gate was green during SA76 quarantine (2026-07-12 snapshot). Post-SA82 quarantine removal, the gate is red (expected — SA80.3, SA83–SA86 open; SA82 target acceptance passed independently; see roadmap Track readiness). Backups now runs against PostgreSQL (no longer an SQLite-excluded suite since SA82 rerun). |
 | 3 | Admin org-scoping | `TenantModelAdmin`; tripwire = NOBYPASSRLS test posture (SA14.4) | structural + gated | **restored** — with the blanket hatch gone, NOBYPASSRLS-by-default is real again in the integration path |
 | 4 | DB privilege selection per process | launcher env contract (`QUICKSCALE_PRIVILEGED_COMMAND`/`QUICKSCALE_NON_DB_COMMAND` + `RUNTIME_DATABASE_URL=""`), consumed by production settings + boot guard | structural | completed (SA68, re-verified in code this pass — zero argv inspection). New: sanctioned-set frozensets ×2 (template-side + orgs-module-side), both fail closed on unknown values/desync, no sync gate (watchlist) |
 | 5 | JSON endpoint idiom | `OrgApiBaseView`/DRF baseline + SA46 csrf-exempt CI gate | structural + gated | stable |
@@ -87,7 +87,7 @@ untouched by this update.
 | 11 | pyproject TOML write safety | `_write_validated_toml` (3 CLI splice sites) | structural per package | stable; devtools copy unchanged |
 | 12 | Generator-emitted file ownership for upgrades | SA66 conformance gate: emitted-file universe derived from `generator/templates/`, every file classified, policy pins for `start.sh`/`production.py`, `INTENTIONALLY_UNMANAGED` explicit class | **gated** (was convention, ungated) | **strengthened** (SA66). Residuals: the gate's template→emitted-path mapping is itself a hand-synced copy of generator routing; the "unmanaged entries need a decisions.md rationale" invariant is stated but unenforced (test asserts non-emptiness only) |
 | 13 | Generated-project boot correctness | `test_generated_project_runtime.py` boot smoke harness | gated | strengthened — +284 lines (SA68) covering the privileged-command and bypass-hatch paths end-to-end |
-| 14 | Module suites run under a restricted DB role | ci.yml/publish.yml role provisioning + `QS_*_DB_USER` env wiring | gated | **new this delta** — env lists hand-enumerated ×2 workflows (11 modules each); omission fails **loud** for PostgreSQL modules (module test settings fall back to `USER=postgres`, which the boot guard rejects under `QUICKSCALE_ALLOW_BYPASSRLS=0`); silent only for SQLite suites (SA59.2, tracked); `check_ci_locally.sh` lacks the wiring entirely (SA59.3's shared-provisioning design is the scheduled fix) |
+| 14 | Module suites run under a restricted DB role | ci.yml/publish.yml role provisioning + `QS_*_DB_USER` env wiring | gated | **new this delta (2026-07-11 snapshot)** — env lists hand-enumerated ×2 workflows (11 modules each); omission fails **loud** for PostgreSQL modules (module test settings fall back to `USER=postgres`, which the boot guard rejects under `QUICKSCALE_ALLOW_BYPASSRLS=0`); silent only for SQLite suites (was SA59.2, tracked at that time — backups now uses PostgreSQL as of SA82 rerun, so this silent-edge case is eliminated); `check_ci_locally.sh` lacks the wiring entirely (SA59.3's shared-provisioning design is the scheduled fix) |
 | 15 | Release-gate test scope | publish.yml `test` job | gated | **new** — publish.yml now runs the same unit + restricted-role integration split as ci.yml (was a single combined unit script) |
 
 ### Summary table
@@ -342,7 +342,7 @@ untouched by this update.
   previously-diverged inline SQL) and added a cross-module conformance gate checking all six known
   composite FKs; the `tenant_excluded` precedence rule was already a doc-only ratification needing
   no code change. This also unblocked SA59.1's `forms/0007` restricted-role failure (the contract
-  side; the remaining data-backfill bug in the same migration is tracked separately as **SA79**).
+  side; the remaining data-backfill bug was tracked separately as **SA79** (closed 2026-07-13 by SA82)).
 - **Counter-evidence:** checked the delta for changes to the registry or purge specs — none; the
   purge-*order* half of this finding (Option 2, topological derivation) is untouched by SA60, which
   addressed only the deferability/precedence decision-record gap.
@@ -396,10 +396,12 @@ untouched by this update.
 > reasoning trail; only items 4–5 remain live.
 
 1. ~~SA59.1's remaining blockers (red-flagged gate state)~~ — **done**: SA76's quarantine
-   mechanism turned the gate green; SA77 (orgs, root cause established and code fix landed
-   2026-07-12; final restricted-role verification blocked on SA79) and SA79 (forms backfill,
-   reopened/blocked on CR-PLAN-SA79-004 and CR-PLAN-SA79-005) continue as tracked,
-   non-blocking roadmap follow-ups rather than gate-red blockers.
+   mechanism turned the gate green. **SA77 and SA79 since closed (2026-07-13 by SA82)** — the
+   full `make test-integration` gate rerun with quarantine entries removed confirmed orgs
+   (847 passed/11 BYPASSRLS-skips/0 failed) and notifications (39 passed/0 failed) clean, closing
+   both roadmap follow-ups. Four independent restricted-role findings (blog → SA83, CRM → SA84,
+   forms residual → SA85, listings → SA86) surfaced by the quarantine removal are now tracked on
+   the roadmap as open Track 1 items.
 2. ~~SA60~~ — **done**: unblocked Finding 4's decision-record caution and SA59.1's forms/0007
    composite-FK failure together, as planned.
 3. ~~SA70 (Finding 2's first step)~~ — **done**.

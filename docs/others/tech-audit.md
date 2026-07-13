@@ -24,6 +24,16 @@
 > [CHANGELOG.md](../../CHANGELOG.md); remaining non-blocking follow-ups spawned by these fixes
 > (SA77 orgs restricted-role residual, SA79 forms backfill bug) are tracked in
 > [roadmap.md](../technical/roadmap.md), not here.
+>
+> **Update (2026-07-13, SA82 completed):** SA82 (Track 3) removed the SA76 quarantine entries and
+> ran the full `make test-integration` gate end-to-end — orgs 847 passed/11 BYPASSRLS-skips/0 failed
+> (93.04% coverage), notifications 39 passed/0 failed (91.76% coverage), overall mean 92.95% passed.
+> **SA77 and SA79 are closed** by this result — their acceptance conditions are met under the full
+> unquarantined gate. The repository integration gate remains red due to four independent
+> restricted-role findings (blog → SA83, CRM → SA84, forms residual → SA85, listings → SA86) now
+> tracked on the roadmap Track 1, plus the existing SA80.3 (backups pg_dump). SA81 unchanged. This
+> document's reconciled status is unchanged — SA77/SA79 were tracked on the roadmap, not as
+> tech-audit findings; their closure is recorded here for status accuracy.
 
 ## Orientation summary
 
@@ -151,7 +161,7 @@ delta touched them:
   context itself; production seeding path clean.
 - **orgs** — production source clean (`apps.py` SA68 rewrite verified sound); **TA55 resolved
   (SA74)** — autouse signal muting replaced with an opt-in fixture. SA59.1's 3+6 restricted-role
-  failures are now tracked as **SA77** (open, Track 1).
+  failures were tracked as **SA77** (closed 2026-07-13 by SA82 — full gate confirmed clean).
 - **quickscale_core** — production clean (templates verified, SA68); **TA56 resolved (SA75)**.
 - **quickscale_cli** — clean; TA53 resolved and verified (SA65); SA66 gate added.
 - **quickscale_devtools** — clean (taxonomy data + `start.sh` added to in-place targets, gated by
@@ -302,7 +312,8 @@ docs updated in the same delta).
    `roadmap.md`, not here: **SA77** (orgs' 9 restricted-role failures, root cause established and
    code fix landed 2026-07-12; final restricted-role verification blocked on SA79) and **SA79**
    (forms `0007` backfill data mismatch, distinct from the deferability contract SA60 already
-   fixed; reopened/blocked on CR-PLAN-SA79-004 and CR-PLAN-SA79-005).
+    fixed; reopened/blocked on CR-PLAN-SA79-004 and CR-PLAN-SA79-005).
+- 2026-07-13 (SA82 completed) — **SA77 and SA79: resolved.** SA82 removed the SA76 quarantine entries and ran the full `make test-integration` gate end-to-end. Orgs 847 passed/11 BYPASSRLS-skips/0 failed (93.04% coverage), notifications 39 passed/0 failed (91.76% coverage), overall mean coverage 92.95% passed. SA77's code fix (2026-07-12) verified live under the unquarantined gate; SA79's forms 0007 backfill and notifications acceptance confirmed under the full gate. Both are closed. Four new independent restricted-role findings surfaced by the quarantine removal are tracked on `roadmap.md` §Track 1 as **SA83** (blog, 86 RLS failures), **SA84** (CRM, 67 RLS failures/20 skipped), **SA85** (forms residual, 33 RLS failures/8 skipped/10 errors), and **SA86** (listings, 6 RLS failures) — not tech-audit findings, per this document's convention that roadmap-tracked work is not duplicated here. SA80.3 (backups pg_dump) remains open. See CHANGELOG.md's SA82 entry for detail.
 
 ## Notes (not violations, watch items)
 
@@ -343,7 +354,6 @@ docs updated in the same delta).
 - Malformed staff-authored validation rules surface as field-level 400s (SA40) — carried.
 - **SA59.1 restricted-role known failures — mostly resolved (2026-07-12):** forms `0007`'s
   composite-FK contract issue closed via SA60 (TA50); notifications' duplicate-db issue closed via
-  SA78; the residual forms backfill bug is SA79 (open, Track 2); orgs' 9 restricted-role failures
-  are SA77 (open, Track 1, root cause established and code fix landed 2026-07-12; final
-  verification blocked on SA79). TA57's gate-red consequence closed via
-  SA76's quarantine mechanism. See `roadmap.md` for SA77/SA79 tracking.
+  SA78; the residual forms backfill bug was SA79 (closed 2026-07-13 by SA82); orgs' 9 restricted-role failures
+  were SA77 (closed 2026-07-13 by SA82 — code fix verified live under the full unquarantined gate). TA57's gate-red consequence closed via
+  SA76's quarantine mechanism. See `roadmap.md` for SA83–SA86 open tracking.

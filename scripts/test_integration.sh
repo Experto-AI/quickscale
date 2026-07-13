@@ -40,10 +40,6 @@ FILE_COVERAGE_THRESHOLD=80
 # owning ticket lands. Entries are removed independently as each owning
 # ticket completes — not held for a single simultaneous closeout.
 declare -A QUARANTINE_TICKETS
-# Orgs: restricted-role CREATE ROLE failures (3 test_models + 6 helper-path)
-QUARANTINE_TICKETS[orgs]="SA77"
-# Notifications: forms 0007 FK constraint errors surfaced after SA78's duplicate-db fix (SA78 resolved the DB-lifecycle crash; remaining FK errors tracked as SA79)
-QUARANTINE_TICKETS[notifications]="SA79"
 
 is_quarantined() {
   local mod_name="$1"
