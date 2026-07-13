@@ -62,6 +62,7 @@ from quickscale_cli.commands.apply_command import (
     _provenance_repair_might_be_needed,
     _refresh_context_after_lock,
     _render_billing_env_example_block,
+    _isolated_poetry_env,
     _run_command,
     _run_migrations,
     _run_migrations_in_docker,
@@ -559,6 +560,40 @@ class TestPostGenerationHelpers:
         """Test poetry lock wrapper"""
         mock_run.return_value = (True, "")
         assert _run_poetry_lock(Path("/tmp/proj")) is True
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    def test_poetry_install_uses_isolated_env(self, mock_run):
+        """poetry install must not inherit an ambient VIRTUAL_ENV."""
+        mock_run.return_value = (True, "")
+        _run_poetry_install(Path("/tmp/proj"))
+        passed_env = mock_run.call_args.kwargs["env"]
+        assert "VIRTUAL_ENV" not in passed_env
+        assert passed_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    def test_poetry_lock_uses_isolated_env(self, mock_run):
+        """poetry lock must not inherit an ambient VIRTUAL_ENV."""
+        mock_run.return_value = (True, "")
+        _run_poetry_lock(Path("/tmp/proj"))
+        passed_env = mock_run.call_args.kwargs["env"]
+        assert "VIRTUAL_ENV" not in passed_env
+        assert passed_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
+
+    def test_isolated_poetry_env_strips_active_venv(self, monkeypatch):
+        """Simulate a developer shell with a venv activated: VIRTUAL_ENV/
+        POETRY_ACTIVE and the venv's bin dir must be scrubbed from the
+        subprocess environment so Poetry can't install into it."""
+        fake_venv = "/home/victor/code/quickscale/.venv"
+        monkeypatch.setenv("VIRTUAL_ENV", fake_venv)
+        monkeypatch.setenv("POETRY_ACTIVE", "1")
+        monkeypatch.setenv("PATH", f"{fake_venv}/bin:/usr/bin:/bin")
+
+        env = _isolated_poetry_env()
+
+        assert "VIRTUAL_ENV" not in env
+        assert "POETRY_ACTIVE" not in env
+        assert f"{fake_venv}/bin" not in env["PATH"].split(":")
+        assert env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
 
     @patch("quickscale_cli.commands.apply_command._run_command")
     def test_migrations(self, mock_run):
