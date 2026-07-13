@@ -34,12 +34,12 @@
 > (93.04% coverage), notifications 39 passed/0 failed (91.76% coverage), overall mean 92.95% passed.
 > **SA77 and SA79 are closed** by this result — their acceptance conditions are met under the full
 > unquarantined gate. The repository integration gate remains red due to four independent
-> restricted-role findings (blog → SA83, CRM → SA84, forms residual → SA85 impl/validation-complete/blocked-on-CR-SA85-REV-001, listings → SA86) now
+> restricted-role findings (CRM → SA84, forms residual → SA85 impl/validation-complete/blocked-on-CR-SA85-REV-001, listings → SA86; blog → SA83 since closed after independent review) now
 > tracked on the roadmap Track 1, plus the existing SA80.3 (backups pg_dump). SA81 unchanged. This
 > document's reconciled status is unchanged — SA77/SA79 were tracked on the roadmap, not as
 > tech-audit findings; their closure is recorded here for status accuracy.
 >
-> **Update (2026-07-13, SA80.3b/SA87 reconciliation, revised):** SA80.3b rerun confirmed 0 missing-`pg_dump`/`pg_restore` failures (retained-role: 298 passed/1 failed/2 skipped; default-user: 299 passed/2 skipped). SA80.3/SA80.3b fully resolved. The 1 retained-role failure was **SA87** (backups retained-role assertion, Track 3) — completed 2026-07-13 per change review; see [roadmap.md §Track 3](../technical/roadmap.md). The current open restricted-role findings keeping the integration gate red are **SA83** (Track 1 blog), **SA84** (Track 1 CRM), **SA85** (Track 2 forms, impl/validation-complete/blocked-on-CR-SA85-REV-001), and **SA86** (Track 2 listings). SA87 is no longer an open finding. SA81 (per-module lockfiles, no deps) is unrelated cleanup and does not affect the gate. SA80.3b evidence retained: retained-role run 298 passed/1 failed/2 skipped, default-user run 299 passed/2 skipped, zero missing-tool failures in both.
+> **Update (2026-07-13, SA80.3b/SA87 reconciliation, revised):** SA80.3b rerun confirmed 0 missing-`pg_dump`/`pg_restore` failures (retained-role: 298 passed/1 failed/2 skipped; default-user: 299 passed/2 skipped). SA80.3/SA80.3b fully resolved. The 1 retained-role failure was **SA87** (backups retained-role assertion, Track 3) — completed 2026-07-13 per change review; see [roadmap.md §Track 3](../technical/roadmap.md). The current open restricted-role findings keeping the integration gate red are **SA84** (Track 1 CRM), **SA85** (Track 2 forms, impl/validation-complete/blocked-on-CR-SA85-REV-001), and **SA86** (Track 2 listings); **SA83** (Track 1 blog) closed after independent review. SA87 is no longer an open finding. SA81 (per-module lockfiles, no deps) is unrelated cleanup and does not affect the gate. SA80.3b evidence retained: retained-role run 298 passed/1 failed/2 skipped, default-user run 299 passed/2 skipped, zero missing-tool failures in both.
 >
 > **Update (2026-07-13, V3 delta re-run — HEAD `41689be7`, prior `53a657d6`):** full delta sweep
 > over the `53a657d6..HEAD` production diff (SA60/SA70/SA74/SA75/SA76/SA77/SA78/SA79/SA80/SA82/SA87
@@ -52,9 +52,9 @@
 > strengthenings or SA59.2 PostgreSQL-seam adaptations (the TA55 autouse muting is now removed and
 > replaced with an opt-in fixture; backups moved to the PG seam with SQLite paths explicitly
 > `monkeypatch`-forced; notifications `reuse_db` is an operational rerun fix) — **no weakened or
-> flipped tests**. All prior findings remain resolved; no closures regressed. The four restricted-role
-> RLS failures keeping the integration gate red (**SA83** blog / **SA84** CRM / **SA85** forms /
-> **SA86** listings) plus **SA80.3**/**SA81** remain **roadmap-tracked**, with their structural root
+> flipped tests**. All prior findings remain resolved; no closures regressed. The three restricted-role
+> RLS failures keeping the integration gate red (**SA84** CRM / **SA85** forms / **SA86** listings;
+> **SA83** blog closed after independent review, **SA80.3** and **SA81** since resolved/closed) remain **roadmap-tracked**, with their structural root
 > owned by [arch-audit.md Finding 8](arch-audit.md) (`module-rls-context-procedural`); not promoted
 > here per this document's convention that roadmap-tracked work is not duplicated. `psql`/`pg_isready`
 > clients are now installed on the machine (they were absent last pass) but **no PostgreSQL server is

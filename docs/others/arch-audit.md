@@ -45,11 +45,13 @@ log this delta (open-finding seams): `dr_engine/`, `quickscale_core/runtime/`,
 `quickscale_devtools/beta_migration.py`.
 
 **Growth direction (planning surface, roadmap.md 2026-07-13).** SA59 umbrella closed; SA77/SA79
-closed by the SA82 full-gate rerun. The **integration gate is red** on four independent, still-open,
+closed by the SA82 full-gate rerun. The **integration gate is red** on three independent, still-open,
 "unknown-root-cause" restricted-role residuals surfaced *by* removing the BYPASSRLS quarantine:
-SA83 (blog, 86 RLS failures), SA84 (crm, 67 failures/20 skipped), SA85 (forms, 33 failures/8
-skipped/10 errors), SA86 (listings, 6 failures). Also open: SA81 (per-module lockfile cleanup,
-unrelated) and Finding 1's persistence port (scheduled next planning cycle).
+SA84 (crm, 67 failures/20 skipped), SA85 (forms, 33 failures/8 skipped/10 errors), SA86 (listings,
+6 failures). The fourth, SA83 (blog, 86 RLS failures), has since closed after independent review —
+its shared `_clear_priming_memo` fix (`orgs/current_org.py`) hardened tenant-context invariants for
+all modules. Also: SA81 (per-module lockfile cleanup, unrelated) closed 2026-07-13, and Finding 1's
+persistence port scheduled next planning cycle.
 
 **Result: one new finding, four findings still-open (all quiet — no open-finding file touched in
 the code delta; anchors re-resolved and, where the code moved, corrected for freshness).** The new
@@ -140,9 +142,10 @@ number rather than derived) — held on fail-loud, third station recorded.
     `schema_editor.execute("SET LOCAL app.operator_access = 'on'")`
     (`0007_new_organization_ownership.py:113–116`) so a correlated subquery over `Form` could read
     across orgs under FORCE RLS — the per-callsite fix the remaining three modules have not made.
-  - The roadmap (`roadmap.md:90–132`) tracks the four as SA83–SA86, each "root cause
-    unknown/unconfirmed … RLS policy violations under `quickscale_test_role`," reassigned across two
-    tracks to parallelize — i.e. treated as four independent problems.
+  - The roadmap (§Open work) tracks these as SA84–SA86 (SA83 closed after independent review), each
+    "root cause unknown/unconfirmed … RLS policy violations under `quickscale_test_role`," split across
+    two tracks to parallelize — i.e. treated as independent problems, which the roadmap's Cross-cutting
+    decision now flags for a shared-helper-vs-per-ticket choice (this finding's Option 1 vs 2).
 - **Counter-evidence:** searched for a shared migration/context helper modules could route through
   (none — `operator_access` is set inline where used); searched for a gate that would have caught an
   RLS-context omission earlier (none — the blanket bypass export *was* the reason the gate stayed
