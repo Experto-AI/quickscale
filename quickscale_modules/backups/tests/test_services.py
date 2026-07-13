@@ -2882,7 +2882,7 @@ class TestBackupLifecycle:
                     "--port",
                     "5432",
                     "--username",
-                    "postgres",
+                    connections["default"].settings_dict["USER"],
                     "--dbname",
                     "quickscale_test",
                     str(postgresql_artifact_file),
