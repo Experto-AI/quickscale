@@ -279,7 +279,7 @@ quickscale/
 
 **Monorepo Virtual Environment Architecture:**
 - **Single venv at root**: All packages share the root `.venv/` directory
-- **Sub-packages MUST NOT have their own `.venv`**: Each sub-package has a `poetry.toml` with `virtualenvs.create = false`
+- **Sub-packages MUST NOT have their own `.venv`**: Sub-packages that could be independently invoked have a `poetry.toml` with `virtualenvs.create = false`; the root Poetry configuration also prevents accidental venv creation elsewhere
 - **Why?** Prevents version drift (e.g., `pytest-cov 4.x` vs `6.x`) that causes cryptic errors like `TempliteSyntaxError: Don't understand tag`
 - **CI enforces this**: The CI workflow fails if any sub-package `.venv` is detected
 - **If you see stale `.venv` errors**: Delete all sub-package `.venv` directories:
@@ -316,7 +316,7 @@ cd /path/to/quickscale  # repository root
 poetry install
 ```
 
-**Prevention**: Each sub-package has `poetry.toml` with `virtualenvs.create = false` to prevent this. The CI will fail if stale venvs are detected.
+**Prevention**: Sub-packages that could be independently invoked have `poetry.toml` with `virtualenvs.create = false` to prevent accidental local venvs. The CI will fail if stale sub-package `.venv` directories are detected.
 
 ---
 

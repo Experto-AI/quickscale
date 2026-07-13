@@ -102,13 +102,11 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-poetry-e2e-
 
-    - name: Install dependencies (quickscale_core)
-      working-directory: ./quickscale_core
+    - name: Install dependencies
       run: |
         poetry install --with dev
 
     - name: Install Playwright browsers
-      working-directory: ./quickscale_core
       run: |
         poetry run playwright install --with-deps chromium
 
@@ -117,17 +115,16 @@ jobs:
         PGPASSWORD=test_password psql -h localhost -U test_user -d test_db -c "SELECT version();"
 
     - name: Run E2E tests
-      working-directory: ./quickscale_core
       env:
         # Playwright configuration
         PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
       run: |
-        poetry run pytest -m e2e \
+        poetry run pytest quickscale_core/tests/ -m e2e \
           --verbose \
           --tb=short \
           --maxfail=3 \
           --cov=quickscale_core \
-          --cov-report=xml \
+          --cov-report=xml:quickscale_core/coverage.xml \
           --cov-report=term-missing
 
     - name: Upload E2E test screenshots
@@ -178,16 +175,15 @@ jobs:
       uses: snok/install-poetry@v1
 
     - name: Install QuickScale
-      working-directory: ./quickscale_cli
       run: |
         poetry install
 
     - name: Generate test project
       run: |
         cd /tmp
-        printf '\n2\n\ny\ny\nn\ny\n' | poetry -C $GITHUB_WORKSPACE/quickscale_cli run quickscale plan test_docker_project
+        printf '\n2\n\ny\ny\nn\ny\n' | poetry -P $GITHUB_WORKSPACE run quickscale plan test_docker_project
         cd /tmp/test_docker_project
-        printf 'y\n' | poetry -C $GITHUB_WORKSPACE/quickscale_cli run quickscale apply quickscale.yml --no-docker
+        printf 'y\n' | poetry -P $GITHUB_WORKSPACE run quickscale apply quickscale.yml --no-docker
 
     - name: Verify Dockerfile exists
       run: |
