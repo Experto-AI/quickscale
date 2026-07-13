@@ -50,9 +50,9 @@ git merge --no-ff wt-track{N}
 > Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). This section retains checked closeout entries for completed items as evidence of acceptance (their full implementation detail lives in CHANGELOG.md). Active and blocked work stays open below.
 >
 > **Track readiness (2026-07-13, updated):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed, notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. The repository integration gate remains red due to separate independent findings (SA80.3, SA83–SA86) that do not affect SA77/SA79 closure.
-> - **Track 1** — unblocked from SA82 (SA77 closed); open findings SA83 (blog, 86 RLS failures), SA84 (CRM, 67 RLS failures/20 skipped), SA85 (forms, 33 RLS failures/8 skipped/10 errors), and SA86 (listings, 6 RLS failures) recorded below — each is a separate restricted-role residual, not a blocker for SA77 closure.
-> - **Track 2** — unblocked from SA82 (SA79 closed); no further open items. Its acceptance conditions (forms 0007 backfill + unquarantined notifications under the full gate) are satisfied.
-> - **Track 3** — SA80 (venv + retained-role env wiring) done; SA82 (gate rerun) completed; open work SA80.3 (pg_dump, non-blocking) and SA81 remain, both with no dependencies.
+> - **Track 1** — unblocked from SA82 (SA77 closed); open findings SA83 (blog, 86 RLS failures) and SA84 (CRM, 67 RLS failures/20 skipped) recorded below — each is a separate restricted-role residual, not a blocker for SA77 closure.
+> - **Track 2** — unblocked from SA82 (SA79 closed); its own acceptance conditions (forms 0007 backfill + unquarantined notifications under the full gate) are satisfied. Reassigned 2026-07-13 from Track 1 (parallelization): SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures), both open, no deps.
+> - **Track 3** — SA80 (venv + retained-role env wiring) done; SA82 (gate rerun) completed; SA80.3a (pg_dump install) done 2026-07-13; open work SA80.3b (backups suite rerun, depends on SA80.3a, non-blocking) and SA81 (no deps) remain.
 
 ### Dependency & parallelization overview
 
@@ -61,25 +61,24 @@ Track 1 (tenant-context surface)        Track 2 (module contracts & settings)   
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
 SA77 — done (SA82, 2026-07-13)         SA79 — done (SA82, 2026-07-13)            SA80 — done (2026-07-13)
   orgs 847p/11 BYPASSRLS-skips/0f        notifications 39p/0f;                     SA82 — done (2026-07-13)
-  code fix verified live under gate      forms 0007 acceptance verified            SA80.3 (pg_dump) open,
-SA83 — blog (86 RLS failures) open,                                                non-blocking
-  no deps, unknown root cause                                                      SA81 — open, no deps
-SA84 — CRM (67 RLS failures/20
-  skipped) open, no deps, unknown
-  root cause
-SA85 — forms residual (33 RLS
-  failures/8 skipped/10 errors)
-  open, no deps, unknown root cause
-SA86 — listings (6 RLS failures)
-  open, no deps, unknown root cause
+  code fix verified live under gate      forms 0007 acceptance verified            SA80.3a — done (2026-07-13)
+SA83 — blog (86 RLS failures) open,      SA85 — forms residual (33 RLS             SA80.3b (backups rerun)
+  no deps, unknown root cause              failures/8 skipped/10 errors)             open, non-blocking
+SA84 — CRM (67 RLS failures/20             open, no deps, unknown root             SA81 — open, no deps
+  skipped) open, no deps, unknown          cause (reassigned from Track 1,
+  root cause                               2026-07-13)
+                                          SA86 — listings (6 RLS failures)
+                                            open, no deps, unknown root
+                                            cause (reassigned from Track 1,
+                                            2026-07-13)
 ```
 
 
-SA82 (Track 3) completed 2026-07-13 — the `orgs`/`notifications` quarantine entries are removed; the full gate rerun confirmed orgs (847 passed/11 BYPASSRLS-skips/0 failed) and notifications (39 passed/0 failed) clean. SA77 and SA79 are closed by this result. Track 1 is unblocked from SA82 with SA83–SA86 open; Track 2 is unblocked from SA82 with no further open items. The integration gate remains red due to separate independent findings (SA80.3, SA83–SA86) recorded below.
+SA82 (Track 3) completed 2026-07-13 — the `orgs`/`notifications` quarantine entries are removed; the full gate rerun confirmed orgs (847 passed/11 BYPASSRLS-skips/0 failed) and notifications (39 passed/0 failed) clean. SA77 and SA79 are closed by this result. Track 1 is unblocked from SA82 with SA83–SA84 open; Track 2 is unblocked from SA82 with SA85–SA86 open (reassigned from Track 1, 2026-07-13, to parallelize the four independent restricted-role residuals). The integration gate remains red due to separate independent findings (SA80.3b, SA81, SA83–SA86) recorded below.
 
 ### Track 1 — Tenant-context surface
 
-SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 closed 2026-07-13 by SA82 — see below and CHANGELOG.md. Four independent restricted-role residuals in blog, CRM, forms, and listings are recorded as SA83–SA86 below.
+SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 closed 2026-07-13 by SA82 — see below and CHANGELOG.md. Two independent restricted-role residuals in blog and CRM are recorded as SA83–SA84 below; the forms and listings residuals (SA85–SA86) were reassigned to Track 2 on 2026-07-13 to parallelize the four findings across both tracks.
 
 - [x] **SA77 — Root-cause and fix orgs' restricted-role test failures.** `Tier 1 · Track 1 · deps: none → closed 2026-07-13`
   Code fix landed 2026-07-12 — full root-cause and fix detail (psycopg2→`connection.cursor()` conversion in two test helpers; 6 dynamic-DDL tests marked `@pytest.mark.bypass_rls`) is in [CHANGELOG.md](../../CHANGELOG.md)'s SA77 entry, not repeated here.
@@ -103,25 +102,9 @@ SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 cl
   *Acceptance:* CRM's restricted-role suite passes clean (0 failures) under `make test-integration` with no quarantine entry.
   *(why →* CR-SA82-NT-003*)*
 
-#### Finding — Forms residual restricted-role test failures (`why →` CR-SA82-NT-004; discovered during SA82 full-gate rerun)
-
-- [ ] **SA85 — Investigate and fix forms' residual restricted-role test failures.** `Tier 1 · Track 1 · deps: none`
-  Under the SA82 full `make test-integration` gate run, forms' restricted-role suite showed 140 passed, 33 RLS failures, 8 skipped, 10 errors. Root cause is unknown/unconfirmed — RLS policy violations and test-structural errors under `quickscale_test_role`.
-
-  *Acceptance:* forms' restricted-role suite passes clean (0 failures, 0 errors) under `make test-integration` with no quarantine entry.
-  *(why →* CR-SA82-NT-004*)*
-
-#### Finding — Listings restricted-role RLS failures (`why →` CR-SA82-NT-005; discovered during SA82 full-gate rerun)
-
-- [ ] **SA86 — Investigate and fix listings' 6 restricted-role RLS failures.** `Tier 1 · Track 1 · deps: none`
-  Under the SA82 full `make test-integration` gate run, listings' restricted-role suite showed 128 passed, 6 RLS failures. Root cause is unknown/unconfirmed — RLS policy violations under `quickscale_test_role`.
-
-  *Acceptance:* listings' restricted-role suite passes clean (0 failures) under `make test-integration` with no quarantine entry.
-  *(why →* CR-SA82-NT-005*)*
-
 ### Track 2 — Module contracts & settings
 
-SA79 closed 2026-07-13 by SA82 — see below and CHANGELOG.md.
+SA79 closed 2026-07-13 by SA82 — see below and CHANGELOG.md. SA85 and SA86 reassigned here from Track 1 on 2026-07-13 to parallelize the four independent restricted-role residuals surfaced by SA82.
 
 - [x] **SA79 — Closeout verification/reconciliation.** `Tier 1 · Track 2 · deps: none → closed 2026-07-13`
 
@@ -131,23 +114,47 @@ SA79 closed 2026-07-13 by SA82 — see below and CHANGELOG.md.
 
   *Acceptance:* forms 0007 backfill passes under full retained-role env; notifications suite runs clean (unquarantined) under a full `make test-integration` gate run; audit/status docs reflect current state. **Achieved.** SA79 closed.
 
+#### Finding — Forms residual restricted-role test failures (`why →` CR-SA82-NT-004; discovered during SA82 full-gate rerun)
+
+- [ ] **SA85 — Investigate and fix forms' residual restricted-role test failures.** `Tier 1 · Track 2 · deps: none` *(reassigned from Track 1, 2026-07-13)*
+  Under the SA82 full `make test-integration` gate run, forms' restricted-role suite showed 140 passed, 33 RLS failures, 8 skipped, 10 errors. Root cause is unknown/unconfirmed — RLS policy violations and test-structural errors under `quickscale_test_role`.
+
+  *Acceptance:* forms' restricted-role suite passes clean (0 failures, 0 errors) under `make test-integration` with no quarantine entry.
+  *(why →* CR-SA82-NT-004*)*
+
+#### Finding — Listings restricted-role RLS failures (`why →` CR-SA82-NT-005; discovered during SA82 full-gate rerun)
+
+- [ ] **SA86 — Investigate and fix listings' 6 restricted-role RLS failures.** `Tier 1 · Track 2 · deps: none` *(reassigned from Track 1, 2026-07-13)*
+  Under the SA82 full `make test-integration` gate run, listings' restricted-role suite showed 128 passed, 6 RLS failures. Root cause is unknown/unconfirmed — RLS policy violations under `quickscale_test_role`.
+
+  *Acceptance:* listings' restricted-role suite passes clean (0 failures) under `make test-integration` with no quarantine entry.
+  *(why →* CR-SA82-NT-005*)*
+
 ### Track 3 — Core/CLI plumbing
 
-SA80 closed 2026-07-13 (venv re-provision + retained-role env wiring) — see CHANGELOG.md. SA82 completed 2026-07-13. SA80.3 and SA81 are open with no dependencies.
+SA80 closed 2026-07-13 (venv re-provision + retained-role env wiring) — see CHANGELOG.md. SA82 completed 2026-07-13. SA80.3a closed 2026-07-13. SA80.3b (depends on SA80.3a) and SA81 (no deps) are open.
 
 - [x] **SA82 — Remove the SA76 `orgs`/`notifications` quarantine entries and rerun the full `make test-integration` gate to prove SA77/SA79 clean.** `Tier 1 · Track 3 · deps: none → completed 2026-07-13`
 
   Removed `orgs` and `notifications` from `QUARANTINE_TICKETS` in `scripts/test_integration.sh` (passed `bash -n` syntax check). Ran `make test-integration` end-to-end — exit 1 (expected: separate findings remain). Target evidence: orgs 847 passed/11 BYPASSRLS-skips/0 failed, 93.04% coverage; notifications 39 passed/0 failed, 91.76% coverage. Overall mean coverage 92.95% passed.
 
-  SA77 closed and SA79 closed by this result — their acceptance conditions are met under the full unquarantined gate. The four independent restricted-role findings surfaced by removing the quarantine are recorded as SA83 (blog, 86 RLS failures), SA84 (CRM, 67 RLS failures/20 skipped), SA85 (forms, 33 RLS failures/8 skipped/10 errors), and SA86 (listings, 6 RLS failures) — each open with no deps and unknown root cause in Track 1 above. Backups 275 passed/24 missing-`pg_dump` failures/2 skipped remain tracked by SA80.3 (non-blocking, existing).
+  SA77 closed and SA79 closed by this result — their acceptance conditions are met under the full unquarantined gate. The four independent restricted-role findings surfaced by removing the quarantine are recorded as SA83 (blog, 86 RLS failures) and SA84 (CRM, 67 RLS failures/20 skipped) in Track 1 above, and SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures) in Track 2 (reassigned 2026-07-13 to parallelize) — each open with no deps and unknown root cause. Backups 275 passed/24 missing-`pg_dump` failures/2 skipped remain tracked by SA80.3b (non-blocking, existing).
 
   *Acceptance:* orgs and notifications both pass clean under the full unquarantined gate. **Achieved.** SA77 and SA79 closed.
   *(why →* 2026-07-13 roadmap closeout checkpoint, [CHANGELOG.md](../../CHANGELOG.md)*)*
 
 #### Finding — PostgreSQL client tools missing locally (`why →` CR-SA82-NT-001; discovered during SA82 full-gate rerun)
 
-- [ ] **SA80.3 — Install PostgreSQL 18 client tools locally.** `Tier 1 · Track 3 · deps: none`
-  `backups` fails 24/301 tests locally on a missing `pg_dump` binary (275 passed, 24 failed, 2 skipped; all 24 failures due missing `pg_dump`). Install `postgresql-client-18` (PGDG apt repo), matching the guidance already printed in the `BackupError` message this raises. Not a blocker for SA77/SA79 or the shared gate rerun — only needed for a fully green local `make test-integration` run.
+SA80.3 split 2026-07-13 into SA80.3a (done) and SA80.3b (open) — the local install landed but the `backups` suite rerun that proves the 24 failures are gone hasn't been executed yet.
+
+- [x] **SA80.3a — Install PostgreSQL 18 client tools locally.** `Tier 1 · Track 3 · deps: none → completed 2026-07-13`
+  Added the PGDG apt repository (signed-by keyring at `/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg`, source list `/etc/apt/sources.list.d/pgdg.list` pointing at `noble-pgdg main`) and installed `postgresql-client-18` via `apt-get`, matching the guidance already printed in the `BackupError` message (`quickscale_core/src/quickscale_core/dr_engine/primitives.py::_postgresql_18_client_tooling_guidance`). Verified: `pg_dump --version` → `pg_dump (PostgreSQL) 18.4 (Ubuntu 18.4-1.pgdg24.04+1)`.
+  *Acceptance:* `pg_dump`/`pg_restore` 18.x resolve on `PATH` locally. **Achieved.**
+
+- [ ] **SA80.3b — Rerun the `backups` suite (or full `make test-integration`) to confirm the 24 missing-`pg_dump` failures are resolved.** `Tier 1 · Track 3 · deps: SA80.3a (done)`
+  Prior to SA80.3a, `backups` showed 275 passed/24 failed/2 skipped, all 24 failures attributed to the missing `pg_dump` binary. With `pg_dump` now installed (SA80.3a), the suite needs to be rerun to confirm 0 `pg_dump`-related failures remain and update the SA82 evidence block accordingly.
+  *Acceptance:* `backups` module suite (or the full unquarantined gate) shows 0 failures attributable to missing `pg_dump`/`pg_restore`.
+  *(why →* CR-SA82-NT-001, SA80.3a follow-up*)*
 
 #### Finding — Dead per-module `poetry.lock`/sibling-version constraints (`why →` discovered 2026-07-13 during a routine dependency-update pass)
 
