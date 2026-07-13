@@ -14,7 +14,7 @@ packages = [{include = "quickscale_modules_analytics", from = "src"}]
 [tool.poetry.dependencies]
 python = ">=3.13,<3.15"
 Django = ">=6.0.5,<6.1.0"
-posthog = ">=3.7.4,<4.0.0"
+posthog = ">=7.22.1,<8.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest-django = "^4.11.1"
