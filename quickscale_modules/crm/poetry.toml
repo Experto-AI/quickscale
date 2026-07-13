@@ -1,3 +1,6 @@
+# Poetry local configuration for quickscale-module-crm
+# Standalone lock/install is unsupported — use root monorepo venv instead.
+# See docs/technical/development.md for architecture details.
+
 [virtualenvs]
-in-project = true
 create = false

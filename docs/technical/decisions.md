@@ -823,7 +823,7 @@ Keep this anchor in place for compatibility. Update the companion doc when the s
 
 **Packaging (All QuickScale Packages):**
 - ✅ Poetry package manager
-- ✅ pyproject.toml + poetry.lock (required)
+- ✅ Root-level pyproject.toml + poetry.lock (required); per-module `poetry.lock` files are not supported (monorepo root is the single resolution source)
 - ✅ src/ layout (prevents accidental imports)
 - ✅ Use ./scripts/install_global.sh for Poetry-built user installs
 - ❌ NO requirements.txt generation

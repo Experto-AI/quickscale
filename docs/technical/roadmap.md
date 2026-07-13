@@ -52,7 +52,7 @@ git merge --no-ff wt-track{N}
 > **Track readiness (2026-07-13, updated):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed, notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. The repository integration gate remains red due to separate independent restricted-role findings (SA83–SA86) that do not affect SA77/SA79 closure.
 > - **Track 1** — unblocked from SA82 (SA77 closed); open findings SA83 (blog, 86 RLS failures) and SA84 (CRM, 67 RLS failures/20 skipped) recorded below — each is a separate restricted-role residual, not a blocker for SA77 closure.
 > - **Track 2** — unblocked from SA82 (SA79 closed); its own acceptance conditions (forms 0007 backfill + unquarantined notifications under the full gate) are satisfied. Reassigned 2026-07-13 from Track 1 (parallelization): SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures), both open, no deps.
-> - **Track 3** — SA80 (venv + retained-role env wiring) done; SA82 (gate rerun) completed; SA80.3a (pg_dump install) done 2026-07-13; SA80.3b (backups suite rerun) completed 2026-07-13; SA81 (no deps) remains open; SA87 (username-independent restore test) completed 2026-07-13.
+> - **Track 3** — SA80 (venv + retained-role env wiring) done; SA82 (gate rerun) completed; SA80.3a (pg_dump install) done 2026-07-13; SA80.3b (backups suite rerun) completed 2026-07-13; SA81 (no deps) completed 2026-07-13; SA87 (username-independent restore test) completed 2026-07-13.
 
 ### Dependency & parallelization overview
 
@@ -64,7 +64,7 @@ SA77 — done (SA82, 2026-07-13)         SA79 — done (SA82, 2026-07-13)       
   code fix verified live under gate      forms 0007 acceptance verified            SA80.3a — done (2026-07-13)
 SA83 — blog (86 RLS failures) open,      SA85 — forms residual (33 RLS             SA80.3b (backups rerun)
   no deps, unknown root cause              failures/8 skipped/10 errors)             done (2026-07-13)
-SA84 — CRM (67 RLS failures/20             open, no deps, unknown root             SA81 — open, no deps
+SA84 — CRM (67 RLS failures/20             open, no deps, unknown root             SA81 — done (2026-07-13)
   skipped) open, no deps, unknown          cause (reassigned from Track 1,          SA87 — username-independent
   root cause                               2026-07-13)                                restore test
                                                                                        done (2026-07-13)
@@ -133,7 +133,7 @@ SA79 closed 2026-07-13 by SA82 — see below and CHANGELOG.md. SA85 and SA86 rea
 
 ### Track 3 — Core/CLI plumbing
 
-SA80 closed 2026-07-13 (venv re-provision + retained-role env wiring) — see CHANGELOG.md. SA82 completed 2026-07-13. SA80.3a closed 2026-07-13. SA80.3b completed 2026-07-13. SA81 (no deps) is open. SA87 (username-independent restore test) completed 2026-07-13.
+SA80 closed 2026-07-13 (venv re-provision + retained-role env wiring) — see CHANGELOG.md. SA82 completed 2026-07-13. SA80.3a closed 2026-07-13. SA80.3b completed 2026-07-13. SA81 (no deps) completed 2026-07-13. SA87 (username-independent restore test) completed 2026-07-13.
 
 - [x] **SA82 — Remove the SA76 `orgs`/`notifications` quarantine entries and rerun the full `make test-integration` gate to prove SA77/SA79 clean.** `Tier 1 · Track 3 · deps: none → completed 2026-07-13`
 
@@ -168,14 +168,26 @@ When running the `backups` suite with `QS_BACKUPS_DB_USER=quickscale_test_role`,
 
 #### Finding — Dead per-module `poetry.lock`/sibling-version constraints (`why →` discovered 2026-07-13 during a routine dependency-update pass)
 
-- [ ] **SA81 — Remove the 8 unused per-module `poetry.lock` files and the sibling-module version-range constraints that never resolve standalone.** `Tier 1 · Track 3 · deps: none`
-  While updating dependencies to their latest stable versions (2026-07-13), found that `quickscale_core`, `quickscale_cli`, and 8 of the 12 `quickscale_modules/*` packages (`auth`, `billing`, `blog`, `crm`, `forms`, `listings`, `orgs`, `storage`) each carry their own `poetry.lock`, alongside the root monorepo `poetry.lock` that every `make`/CI target actually installs from (root `pyproject.toml` wires every module in as `path = "...", develop = true`). Confirmed with the maintainer: standalone installation of an individual module outside the `quickscale` bundle is **not a supported use case** — modules are only meant to run interconnected via the `quickscale` CLI's bundle generation. That means these per-module lockfiles serve no purpose today:
-  - 6 of the 8 (`auth`, `billing`, `blog`, `crm`, `listings`, `orgs`) can't even be re-locked standalone — their `pyproject.toml` declares sibling deps like `quickscale-module-orgs = ">=0.86.0,<0.87.0"` as plain version ranges with no `path =`, so `poetry lock` run from inside the module directory fails immediately with "doesn't match any versions" (there's nowhere to fetch an unpublished sibling package from). Their existing committed lockfiles don't even list those sibling packages, confirming this has been broken for a while, silently.
-  - The other 4 modules (`notifications`, `analytics`, `backups`, `social`) never had a standalone lockfile at all — already inconsistent with the other 8, further evidence this was never a maintained/tested path.
-  - Nothing in `.github/workflows/*.yml` or the `Makefile` ever `cd`s into a module directory and runs `poetry install`/`poetry lock` there — CI and `make test`/`make test-integration` install everything from the root lockfile only.
+- [x] **SA81 — Remove stale per-module `poetry.lock` files and sibling-module version-range constraints that never resolve standalone.** `Tier 1 · Track 3 · deps: none → completed 2026-07-13`
+  2026-07-13 implementation: Cross-checked the per-module `poetry.lock` inventory against the current worktree (branch `wt-track3`, HEAD 41689be7). **4** non-root lock artifacts were present (all already gitignored): `quickscale_core/poetry.lock`, `quickscale_cli/poetry.lock`, `quickscale_modules/orgs/poetry.lock`, `quickscale_modules/backups/poetry.lock`. The original discovery named 11 possible lockfile locations across core, CLI, and all modules; the remaining 7 (`auth`, `billing`, `blog`, `crm`, `forms`, `listings`, `storage`) were already absent from the worktree — previously deleted or never present in this track; the `.gitignore` patterns `quickscale_core/poetry.lock`, `quickscale_cli/poetry.lock`, and `quickscale_modules/*/poetry.lock` (lines 38–40) already cover all non-root lockfile locations. All 4 present lock artifacts deleted. Root `poetry.lock` preserved.
 
-  *Acceptance:* delete the 8 per-module `poetry.lock` files (`quickscale_core`, `quickscale_cli`, `quickscale_modules/{auth,billing,blog,crm,forms,listings,orgs,storage}`); remove the sibling-module version-range dependency declarations from the 6 modules' `pyproject.toml` `[tool.poetry.dependencies]` that never resolve standalone (the real inter-module relationship is already expressed via the root `pyproject.toml` path deps and `quickscale_core`'s manifest/module-catalog system, so nothing else needs to encode it); confirm `make test`/`make test-integration`/CI are unaffected (they don't touch these files); note in each affected module's `poetry.toml` comment (already states "use root monorepo venv instead") that standalone lock/install is explicitly unsupported, to prevent the drift from recurring.
-  *(why →* discovered while updating `mypy`, `posthog`, `django-anymail`, `django-filter` to latest stable in the root lockfile; maintainer confirmed standalone module installation is out of scope for this project*)*
+  Sibling-constraint inventory verified against all 12 `quickscale_modules/*/pyproject.toml`: **7** plain version-range sibling dependencies existed and were removed from `[tool.poetry.dependencies]`:
+  - `auth` → `quickscale-module-orgs = ">=0.86.0,<0.87.0"`
+  - `billing` → `quickscale-module-orgs = ">=0.86.0,<0.87.0"`
+  - `blog` → `quickscale-module-orgs = ">=0.86.0,<0.87.0"`
+  - `crm` → `quickscale-module-orgs = ">=0.86.0,<0.87.0"`
+  - `listings` → `quickscale-module-orgs = ">=0.86.0,<0.87.0"`
+  - `orgs` → `quickscale-module-auth = ">=0.71.0,<0.87.0"`
+  - `social` → `quickscale-module-orgs = ">=0.86.0,<0.87.0"`
+
+  Poetry local-guidance audit: 5 modules had existing `poetry.toml` files (`auth`, `blog`, `crm`, `forms`, `listings`); 2 of those (`crm`, `forms`) lacked the monorepo-venv comment. Created or updated `poetry.toml` for all 8 modules affected by this cleanup (`auth`, `backups`, `billing`, `blog`, `crm`, `listings`, `orgs`, `social`) to explicitly state that standalone lock/install is unsupported and the root monorepo environment must be used. 5 modules (`backups`, `billing`, `crm`, `orgs`, `social`) had their `poetry.toml` created or rewritten from scratch; 3 modules (`auth`, `blog`, `listings`) had existing but less explicit virtualenv-only guidance updated to the same standalone-unsupported wording. `forms` has a `poetry.toml` but was not directly affected by this cleanup (no lock deleted, no constraint removed); its guidance was not updated — it remains as-is, using a terser `[virtualenvs] in-project = true; create = false` form. `analytics`, `notifications`, `storage`, and `teams` never had locks or sibling constraints and were not affected.
+
+  Validation: `poetry check --lock` returns `All set!`; `make test-unit` passes. CI workflows never `cd` into module directories for `poetry install`/`poetry lock` — no CI impact.
+
+  **Review findings (CR-SA81-REV-001–004):** The implementation pass correctly deleted the 4 present lockfiles and removed the 7 sibling constraints from pyproject.toml files, but review identified four follow‑up items: (1) the root `poetry.lock` still carried the seven sibling dependency edges and needed regeneration; (2) exact test coverage for two required‑modules relationships (auth→orgs, orgs→auth) and lock‑level assertions was missing; (3) roadmap status, lock‑count wording, and CHANGELOG track ownership were inconsistent; (4) `decisions.md` and `development.md` contained contradictory package‑lock and poetry.toml inventory claims. All four are addressed in the SA81 follow‑up pass.
+
+  *Acceptance:* 4 present ignored locks deleted; 7 sibling version constraints removed; `poetry.toml` guidance for affected modules states standalone lock/install is unsupported; `poetry check --lock && make test-unit` pass. **Achieved.** SA81 closed.
+  *(why →* discovered 2026-07-13 during a routine dependency-update pass; [CHANGELOG.md](../../CHANGELOG.md)*)*
 
 SA67 closed 2026-07-11: `decisions.md §Beta-Site External Verification Scope` establishes that verifying/patching the *deployed* state of `experto-ai-web`/`bap-web` is permanently out of scope for this monorepo's automation — neither site's repository nor its Railway deployment is reachable from here, and this is a structural property of the two-repo maintainer workflow, not a temporary access gap. The repo-local follow-up (SA66's file-taxonomy conformance gate, SA68's launcher-contract completion and Redis-dependent rollout guidance) was already complete. The outstanding manual verification is tracked as a standing maintainer to-do in [beta-site-migration.md](../planning/beta-site-migration.md#outstanding-maintainer-to-do-sa67-tracked-outside-roadmapmd), not here — future findings of this shape (requiring live inspection of the two external sites) close the same way rather than sitting open pending access that structurally cannot arrive. Completed Track 3 work (SA75, SA76) lives in [CHANGELOG.md](../../CHANGELOG.md).
 

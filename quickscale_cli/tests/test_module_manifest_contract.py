@@ -19,7 +19,10 @@ from quickscale_cli.commands.module_config import (
     get_default_storage_config,
 )
 from quickscale_core.contracts.module_catalog import get_discovered_module_entries
-from quickscale_core.manifest.entry_point import MANIFEST_ADAPTER_REGISTRY
+from quickscale_core.manifest.entry_point import (
+    MANIFEST_ADAPTER_REGISTRY,
+    refresh_managed_adapters,
+)
 from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.manifest.required_modules import (
     parse_required_module_entry,
@@ -248,20 +251,25 @@ def test_ready_packaged_module_dependency_names_match_pyproject_runtime_dependen
         )
 
 
-def test_ready_packaged_module_required_modules_match_pyproject_first_party_dependencies() -> (
-    None
-):
-    """Required module metadata must align with first-party package dependencies."""
-    for entry in get_discovered_module_entries():
-        module_name = entry.name
-        required_module_packages = _required_module_package_names(module_name)
-        runtime_module_dependencies = _runtime_module_dependency_names(module_name)
+def test_ready_packaged_module_has_no_sibling_pyproject_dependencies() -> None:
+    """No module pyproject.toml should declare sibling `quickscale-module-*` dependencies.
 
-        assert required_module_packages == runtime_module_dependencies, (
-            f"{module_name} required_modules should match first-party package dependencies: "
-            f"manifest={sorted(required_module_packages)} "
-            f"pyproject={sorted(runtime_module_dependencies)}"
-        )
+    SA81 removed the seven standalone version-range constraints that could never resolve.
+    Sibling module relationships are expressed only via module.yml `required_modules`
+    (apply-time wiring) and the root pyproject.toml path deps (runtime installation).
+    Module-level pyproject.toml must not carry `quickscale-module-*` in
+    `[tool.poetry.dependencies]`.
+    """
+    violations: list[str] = []
+    for entry in get_discovered_module_entries():
+        runtime_module_dependencies = _runtime_module_dependency_names(entry.name)
+        if runtime_module_dependencies:
+            violations.append(f"{entry.name}: {sorted(runtime_module_dependencies)}")
+    assert not violations, (
+        "Modules must not declare quickscale-module-* in [tool.poetry.dependencies] "
+        "(SA81 policy). Remove these declarations from the listed modules' "
+        "pyproject.toml:\n" + "\n".join(violations)
+    )
 
 
 def test_storage_cloud_dependencies_are_optional_and_exposed_via_cloud_extra() -> None:
@@ -309,6 +317,7 @@ def test_all_catalog_modules_have_manifest_adapter() -> None:
     When adding a new module: register a manifest adapter in
     ``MANIFEST_ADAPTER_REGISTRY`` via ``quickscale_core.manifest.entry_point``.
     """
+    refresh_managed_adapters()
     unwired = [
         entry.name
         for entry in get_discovered_module_entries()
@@ -556,4 +565,82 @@ def test_listings_required_modules_has_orgs_version_floor() -> None:
     assert version is not None, "Expected a version floor"
     assert Version(version) >= Version("0.86.0"), (
         f"Expected floor >= 0.86.0, got {version}"
+    )
+
+
+def test_auth_required_modules_has_orgs_version_floor() -> None:
+    """Auth module requires orgs with a >=0.86.0 version floor (SA81)."""
+    manifest = load_manifest_from_path(_manifest_path("auth"))
+    assert len(manifest.required_modules) == 1
+    name, version = parse_required_module_entry(manifest.required_modules[0])
+    assert name == "orgs"
+    assert version is not None, "Expected a version floor"
+    assert Version(version) >= Version("0.86.0"), (
+        f"Expected floor >= 0.86.0, got {version}"
+    )
+
+
+def test_orgs_required_modules_has_auth() -> None:
+    """Orgs module requires auth (without a version floor, SA81)."""
+    manifest = load_manifest_from_path(_manifest_path("orgs"))
+    assert len(manifest.required_modules) == 1
+    name, version = parse_required_module_entry(manifest.required_modules[0])
+    assert name == "auth"
+    # orgs/module.yml declares `- auth` with no version constraint
+    assert version is None, f"Expected no version floor for orgs->auth, got {version}"
+
+
+def test_root_lock_has_no_sibling_module_dependency_edges() -> None:
+    """Root poetry.lock path entries must not retain quickscale-module-* deps.
+
+    SA81 removed the seven sibling-version constraints from the module
+    pyproject.toml files.  The lock file must not carry stale inter-module
+    dependency edges inside path-package entries.
+    """
+    lock_path = REPO_ROOT / "poetry.lock"
+    lock_data = tomllib.loads(lock_path.read_text())
+    violations: list[str] = []
+
+    for pkg in lock_data.get("package", []):
+        pkg_name: str = pkg["name"]
+        if not pkg_name.startswith("quickscale-module-"):
+            continue
+        deps = pkg.get("dependencies", {})
+        sibling_deps = [
+            dep_name
+            for dep_name in deps
+            if dep_name.lower().startswith("quickscale-module-")
+        ]
+        if sibling_deps:
+            violations.append(f"{pkg_name}: {sorted(sibling_deps)}")
+
+    assert not violations, (
+        "Root poetry.lock must not contain quickscale-module-* dependency "
+        "edges.  These were removed by SA81 from pyproject.toml but still "
+        "appear in the lock file:\n" + "\n".join(violations)
+    )
+
+
+def test_required_module_paths_are_available() -> None:
+    """Every manifest required_modules entry must map to an existing directory.
+
+    After SA81, sibling relationships are expressed only via module.yml
+    ``required_modules``.  This test verifies the target module directory
+    exists for every declared dependency across all seven affected modules.
+    """
+    affected_modules = {"auth", "billing", "blog", "crm", "listings", "orgs", "social"}
+    missing: list[str] = []
+
+    for module_name in sorted(affected_modules):
+        manifest = load_manifest_from_path(_manifest_path(module_name))
+        for entry in manifest.required_modules:
+            dep_name, _version = parse_required_module_entry(entry)
+            dep_path = MODULES_ROOT / dep_name
+            if not dep_path.is_dir():
+                missing.append(
+                    f"{module_name} -> {dep_name}: {dep_path} does not exist"
+                )
+
+    assert not missing, (
+        "The following required module paths are missing:\n" + "\n".join(missing)
     )

@@ -1802,7 +1802,6 @@ develop = true
 [package.dependencies]
 Django = ">=6.0.5,<6.1.0"
 django-allauth = ">=65.14.1,<66.0.0"
-quickscale-module-orgs = ">=0.86.0,<0.87.0"
 
 [package.source]
 type = "directory"
@@ -1841,7 +1840,6 @@ develop = true
 [package.dependencies]
 Django = ">=6.0.5,<6.1.0"
 djangorestframework = "^3.16.1"
-quickscale-module-orgs = ">=0.86.0,<0.87.0"
 stripe = ">=15.0.0,<16.0.0"
 
 [package.source]
@@ -1862,7 +1860,6 @@ develop = true
 Django = ">=6.0.5,<6.1.0"
 django-markdownx = "^4.0.9"
 Pillow = ">=12.2.0,<13.0.0"
-quickscale-module-orgs = ">=0.86.0,<0.87.0"
 
 [package.source]
 type = "directory"
@@ -1882,7 +1879,6 @@ develop = true
 Django = ">=6.0.5,<6.1.0"
 django-filter = "^26.1"
 djangorestframework = "^3.16.1"
-quickscale-module-orgs = ">=0.86.0,<0.87.0"
 
 [package.source]
 type = "directory"
@@ -1922,7 +1918,6 @@ Django = ">=6.0.5,<6.1.0"
 django-filter = "^26.1"
 django-markdownx = "^4.0.9"
 Pillow = ">=12.2.0,<13.0.0"
-quickscale-module-orgs = ">=0.86.0,<0.87.0"
 
 [package.source]
 type = "directory"
@@ -1959,7 +1954,6 @@ develop = true
 [package.dependencies]
 Django = ">=6.0.5,<6.1.0"
 django-allauth = ">=65.14.1,<66.0.0"
-quickscale-module-auth = ">=0.71.0,<0.87.0"
 
 [package.source]
 type = "directory"
@@ -1977,7 +1971,6 @@ develop = true
 
 [package.dependencies]
 Django = ">=6.0.5,<6.1.0"
-quickscale-module-orgs = ">=0.86.0,<0.87.0"
 
 [package.source]
 type = "directory"
