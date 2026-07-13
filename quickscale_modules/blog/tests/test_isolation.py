@@ -23,6 +23,7 @@ def test_org_a_cannot_see_org_b_posts(
     org_a,
     org_b,
     org_a_admin,
+    blog_org_scope,
 ):
     """Org A must not be able to read Org B's blog posts via TenantManager scoping.
 
@@ -30,69 +31,83 @@ def test_org_a_cannot_see_org_b_posts(
     setting the contextvar to Org A's ID should only return Org A's
     posts.  Org B's posts must be invisible.
     """
-    from quickscale_modules_orgs.current_org import (
-        reset_current_org_id,
-        set_current_org_id,
-    )
-
-    Post.objects.create(
-        title="Org A Post",
-        slug="org-a-post",
-        author=org_a_admin,
-        content="Org A content",
-        status="published",
-        organization=org_a,
-    )
-    Post.objects.create(
-        title="Org B Post",
-        slug="org-b-post",
-        author=org_a_admin,
-        content="Org B content",
-        status="published",
-        organization=org_b,
-    )
+    with blog_org_scope(org_a):
+        Post.objects.create(
+            title="Org A Post",
+            slug="org-a-post",
+            author=org_a_admin,
+            content="Org A content",
+            status="published",
+            organization=org_a,
+        )
+    with blog_org_scope(org_b):
+        Post.objects.create(
+            title="Org B Post",
+            slug="org-b-post",
+            author=org_a_admin,
+            content="Org B content",
+            status="published",
+            organization=org_b,
+        )
 
     # Scope to Org A — only Org A's post should be visible.
-    set_current_org_id(org_a.pk)
-    try:
+    with blog_org_scope(org_a):
         posts = list(
             Post.objects.filter(status="published").values_list("title", flat=True)
         )
-        assert "Org A Post" in posts
-        assert "Org B Post" not in posts, (
-            "Org B's post must not be visible when scoped to Org A"
-        )
-    finally:
-        reset_current_org_id()
+    assert "Org A Post" in posts
+    assert "Org B Post" not in posts, (
+        "Org B's post must not be visible when scoped to Org A"
+    )
 
 
 @pytest.mark.isolation
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_operator_bypass_returns_all_orgs_posts(
     org_a,
     org_b,
     org_a_admin,
+    blog_org_scope,
 ):
-    """The operator escape hatch (all_objects) must return posts from all orgs."""
-    Post.objects.create(
-        title="Org A Post",
-        slug="org-a-post-operator",
-        author=org_a_admin,
-        content="Org A content",
-        status="published",
-        organization=org_a,
-    )
-    Post.objects.create(
-        title="Org B Post",
-        slug="org-b-post-operator",
-        author=org_a_admin,
-        content="Org B content",
-        status="published",
-        organization=org_b,
-    )
+    """``all_objects`` returns rows from all organisations when the
+    cross-tenant SELECT is elevated via ``operator_access()``.
 
-    titles = list(
-        Post.all_objects.filter(status="published").values_list("title", flat=True)
-    )
+    ``all_objects`` (``super_scope=True``) bypasses the ORM-level
+    ``TenantManager`` filtering but does NOT bypass PostgreSQL
+    FORCE RLS.  ``operator_access()`` inside ``transaction.atomic()``
+    authorises the DB-level SELECT so rows from multiple organisations
+    are visible.  No writes occur inside the operator block.
+    """
+    from quickscale_modules_orgs.current_org import operator_access
+    from django.db import transaction
+
+    with transaction.atomic():
+        with blog_org_scope(org_a):
+            Post.objects.create(
+                title="Org A Post",
+                slug="org-a-post-operator",
+                author=org_a_admin,
+                content="Org A content",
+                status="published",
+                organization=org_a,
+            )
+        with blog_org_scope(org_b):
+            Post.objects.create(
+                title="Org B Post",
+                slug="org-b-post-operator",
+                author=org_a_admin,
+                content="Org B content",
+                status="published",
+                organization=org_b,
+            )
+
+        with operator_access(
+            reason="SA83 blog restricted-role cross-tenant SELECT proof"
+        ):
+            titles = list(
+                Post.all_objects.filter(status="published").values_list(
+                    "title", flat=True
+                )
+            )
     assert "Org A Post" in titles
     assert "Org B Post" in titles

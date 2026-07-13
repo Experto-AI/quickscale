@@ -347,6 +347,7 @@ class TestBlogRlsAnonymousReadUnderRestrictedRole:
         system_org: Any,
         author_user: Any,
         client: Any,
+        blog_org_scope: Any,
     ) -> None:
         """Anonymous /blog/ returns System-org content under restricted role.
 
@@ -357,12 +358,11 @@ class TestBlogRlsAnonymousReadUnderRestrictedRole:
         """
         _ensure_anon_blog_rls_test_role()
 
-        # Prime the org context so FORCE RLS allows the INSERT under the
-        # NOBYPASSRLS restricted role (SA59.3).
-        from quickscale_modules_orgs.current_org import set_current_org_id
-
-        set_current_org_id(system_org.id)
-        try:
+        # Create System-org blog data inside a well-scoped org context,
+        # then explicitly exit before SET ROLE so the GUC is restored
+        # to its default ('' — fail-closed) and cannot leak into the
+        # restricted-role request phase (SA83).
+        with blog_org_scope(system_org):
             Post.objects.create(
                 title="Anonymous Can See This",
                 author=author_user,
@@ -370,14 +370,17 @@ class TestBlogRlsAnonymousReadUnderRestrictedRole:
                 status="published",
                 organization=system_org,
             )
-        finally:
-            set_current_org_id(None)
 
         with connection.cursor() as cursor:
             cursor.execute(f"SET ROLE {_RESTRICTED_ANON_ROLE}")
 
         try:
-            response = client.get(reverse("quickscale_blog:post_list"))
+            # Wrap the anonymous request in blog_org_scope(None) so the
+            # GUC is explicitly cleared before the view pipeline runs,
+            # preventing the view's own org_scope(None) from seeing any
+            # stale context left by the data-setup transaction (SA83).
+            with blog_org_scope(None):
+                response = client.get(reverse("quickscale_blog:post_list"))
         finally:
             with connection.cursor() as cursor:
                 cursor.execute("RESET ROLE")
@@ -398,6 +401,7 @@ class TestBlogRlsAnonymousReadUnderRestrictedRole:
         system_org: Any,
         author_user: Any,
         client: Any,
+        blog_org_scope: Any,
     ) -> None:
         """Anonymous /blog/feed/ returns System-org content under restricted role.
 
@@ -408,12 +412,11 @@ class TestBlogRlsAnonymousReadUnderRestrictedRole:
         """
         _ensure_anon_blog_rls_test_role()
 
-        # Prime the org context so FORCE RLS allows the INSERT under the
-        # NOBYPASSRLS restricted role (SA59.3).
-        from quickscale_modules_orgs.current_org import set_current_org_id
-
-        set_current_org_id(system_org.id)
-        try:
+        # Create System-org blog data (with category and tags) inside a
+        # well-scoped org context, then explicitly exit before SET ROLE
+        # so the GUC is restored to its default ('' — fail-closed) and
+        # cannot leak into the restricted-role request phase (SA83).
+        with blog_org_scope(system_org):
             category = Category.objects.create(
                 name="Feed Category",
                 organization=system_org,
@@ -431,14 +434,18 @@ class TestBlogRlsAnonymousReadUnderRestrictedRole:
                 organization=system_org,
             )
             post.tags.add(tag)
-        finally:
-            set_current_org_id(None)
 
         with connection.cursor() as cursor:
             cursor.execute(f"SET ROLE {_RESTRICTED_ANON_ROLE}")
 
         try:
-            response = client.get(reverse("quickscale_blog:feed"))
+            # Wrap the anonymous request in blog_org_scope(None) so the
+            # GUC is explicitly cleared before the feed view pipeline
+            # runs, preventing the view's own org_scope(None) from
+            # seeing any stale context left by the data-setup phase
+            # (SA83).
+            with blog_org_scope(None):
+                response = client.get(reverse("quickscale_blog:feed"))
         finally:
             with connection.cursor() as cursor:
                 cursor.execute("RESET ROLE")

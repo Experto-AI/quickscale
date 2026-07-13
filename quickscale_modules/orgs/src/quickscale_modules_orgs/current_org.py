@@ -132,8 +132,11 @@ def _set_db_current_org_id(org_id: uuid.UUID | str) -> None:
 
     if connection.vendor != "postgresql":
         return
-    with connection.cursor() as cursor:
-        cursor.execute("SET LOCAL app.current_org_id = %s", [str(org_id)])
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SET LOCAL app.current_org_id = %s", [str(org_id)])
+    finally:
+        _clear_priming_memo(connection)
 
 
 def reset_db_current_org_id() -> None:
@@ -152,8 +155,11 @@ def reset_db_current_org_id() -> None:
 
     if connection.vendor != "postgresql":
         return
-    with connection.cursor() as cursor:
-        cursor.execute("RESET app.current_org_id")
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("RESET app.current_org_id")
+    finally:
+        _clear_priming_memo(connection)
 
 
 # ---------------------------------------------------------------------------
@@ -204,11 +210,14 @@ def _restore_current_org_id(prior: uuid.UUID | None) -> None:
 
     if connection.vendor != "postgresql":
         return
-    with connection.cursor() as cursor:
-        if prior is None:
-            cursor.execute("SET LOCAL app.current_org_id = ''")
-        else:
-            cursor.execute("SET LOCAL app.current_org_id = %s", [str(prior)])
+    try:
+        with connection.cursor() as cursor:
+            if prior is None:
+                cursor.execute("SET LOCAL app.current_org_id = ''")
+            else:
+                cursor.execute("SET LOCAL app.current_org_id = %s", [str(prior)])
+    finally:
+        _clear_priming_memo(connection)
 
 
 @contextlib.contextmanager
@@ -394,6 +403,26 @@ Set ``True`` while the wrapper issues ``SET LOCAL`` so that the nested
 
 _INSTALLED_MARKER = "_af9_priming_installed"
 """Connection attribute name for idempotent-install detection."""
+
+_PRIMED_FOR_TXN = "_af9_primed_for_txn"
+"""Connection attribute name for the per-transaction priming memo value."""
+
+_PRIMED_ATOMIC = "_af9_primed_atomic"
+"""Connection attribute name for the per-transaction priming memo outer Atomic ref."""
+
+
+def _clear_priming_memo(connection: Any) -> None:
+    """Clear the per-transaction priming memo on *connection*.
+
+    Must be called whenever the GUC is modified outside the priming
+    execute wrapper so that the next wrapped statement re-primes
+    unconditionally (SA83).  Idempotent — safe to call when the memo
+    is already absent.
+    """
+    if hasattr(connection, _PRIMED_FOR_TXN):
+        delattr(connection, _PRIMED_FOR_TXN)
+    if hasattr(connection, _PRIMED_ATOMIC):
+        delattr(connection, _PRIMED_ATOMIC)
 
 
 def _issue_set_local(connection: Any, org_id: str) -> None:

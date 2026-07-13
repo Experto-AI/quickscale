@@ -48,6 +48,15 @@ git merge --no-ff wt-track{N}
 ## Open work
 
 > Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). This section retains checked closeout entries for completed items as evidence of acceptance (their full implementation detail lives in CHANGELOG.md). Active and blocked work stays open below.
+
+### Track 1 closeout (SA83)
+
+SA83 implementation and closure is the sole Track 1 work delivered in this cycle. Three security-boundary root causes were identified and fixed across 6 implementation phases, followed by a user-approved post-cap closure cycle:
+
+- **Done:** SA83 — blog restricted-role RLS failures (86 failures, 3 root causes, fixed and closed after independent review). Blog 211/0, API 57/57, admin 33/33, managers 5/5, isolation 2/2. Shared AF9 memo fix (`_clear_priming_memo` in `current_org.py`) hardened tenant-context invariants for all modules.
+- **Pending/blocking within Track 1:** SA84 (CRM) — 195p/67f/20s restricted-role failures, root cause unknown, no deps.
+- **Pending on other tracks:** SA85 (forms, Track 2), SA86 (listings, Track 2). CR-TRACK3-MERGE-002 (medium/blocking/open accepted merge checkpoint from Track 3 — audit-prose overstatement of Finding 8/`operator_access` causality across SA84–SA86). SA81 (Track 3) completed alongside this merge. SA84–SA86 remain the only `make test-integration` gate red causes.
+
 >
 > **Track readiness (2026-07-13, updated):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed, notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. SA85 (Track 2) blocked — forms restricted-role implementation/validation complete (196p/8s/12d/0f/0e; E2E 12p; intermediate 186p/0f/0e, 95.70%; QG2 gate 93.00% mean, exit 1 solely from other findings); independent review blocked on CR-SA85-REV-001 (high/blocking — admin-route/session parity contract remains incomplete in tests/README). CR-SA85-REV-002 through CR-SA85-REV-007 resolved. User directed stop, commit, merge blocked checkpoint. The repository integration gate remains red due to separate independent restricted-role findings (SA83, SA84, SA86) that do not affect SA77/SA79 closure.
 > - **Track 1** — unblocked from SA82 (SA77 closed); open findings SA83 (blog, 86 RLS failures) and SA84 (CRM, 67 RLS failures/20 skipped) recorded below — each is a separate restricted-role residual, not a blocker for SA77/SA85 closure. SA83 is **root-caused (AF9 priming-memo staleness) with an in-progress uncommitted fix in wt-track1** — blog now 211 passed/0 failures in isolation under the restricted role; still to commit, merge v87, and confirm under the full gate.
@@ -69,7 +78,7 @@ git merge --no-ff wt-track{N}
 >
 > | Dimension | Current incoming prose | Evidence-calibrated statement | Decision |
 > |-----------|-----------------------|------------------------------|----------|
-> | SA83 root cause | Bundled under Finding 8 shared diagnosis | **AF9 priming-memo staleness only** — 211 passed/0 failed in isolation, fix WIP in wt-track1. Blog's own `operator_access` migration gap is a separate latent concern, not the cause of SA83's 86 gate failures. | Accept SA83 as independent; do not fold into Finding 8 shared diagnosis. |
+> | SA83 root cause | Bundled under Finding 8 shared diagnosis | **AF9 priming-memo staleness only** — confirmed and resolved. SA83 implementation/validation complete 2026-07-13; closed after independent review. Blog 211p/0f coverage 91.62%. Blog's own `operator_access` migration gap remains a separate latent concern. | **Accepted:** SA83 confirmed independent of Finding 8. Finding 8 scope narrowed to SA84–SA86. |
 > | SA84–SA86 relationship | Described as one shared structural root | **Separately bucketed** — SA84 (CRM, `operator_access` candidate), SA85 (forms, `operator_access` already present via SA79, root unknown), SA86 (listings, `operator_access` candidate). No evidence they share one root. | Treat each as independent investigation with its own diagnosis step. |
 > | `operator_access` as Finding 8 remedy | Described as the implied shared fix | `operator_access` is a candidate hypothesis for SA84/SA86 only (not SA85, which already has it). Not a shared diagnosis or fix for all four. | Confirm per-module before prescribing a shared mechanism. |
 > | Finding 8 scope | Described as an active gate diagnosis | Finding 8 is a **latent census concern** (procedural RLS-context acquisition) unless bucket-triaging confirms a runtime read path that would bite production. Currently it describes the structural pattern, not a confirmed defect class for any specific module. | Maintain Finding 8 as structural observation only; promote if bucket-3 evidence emerges. |
@@ -110,7 +119,7 @@ SA82 (Track 3) completed 2026-07-13 — the `orgs`/`notifications` quarantine en
 
 ### Track 1 — Tenant-context surface
 
-SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 closed 2026-07-13 by SA82 — see below and CHANGELOG.md. Two independent restricted-role residuals in blog and CRM are recorded as SA83–SA84 below; the forms and listings residuals (SA85–SA86) were reassigned to Track 2 on 2026-07-13 to parallelize the four findings across both tracks.
+SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 closed 2026-07-13 by SA82 — see below and CHANGELOG.md. SA83 (blog) implementation/validation complete; closed after independent review; SA84 (CRM) remains open. The forms and listings residuals (SA85–SA86) were reassigned to Track 2 on 2026-07-13 to parallelize the four findings across both tracks.
 
 - [x] **SA77 — Root-cause and fix orgs' restricted-role test failures.** `Tier 1 · Track 1 · deps: none → closed 2026-07-13`
   Code fix landed 2026-07-12 — full root-cause and fix detail (psycopg2→`connection.cursor()` conversion in two test helpers; 6 dynamic-DDL tests marked `@pytest.mark.bypass_rls`) is in [CHANGELOG.md](../../CHANGELOG.md)'s SA77 entry, not repeated here.
@@ -120,18 +129,13 @@ SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 cl
 
 #### Finding — Blog restricted-role RLS failures (`why →` CR-SA82-NT-002; discovered during SA82 full-gate rerun)
 
-- [ ] **SA83 — Investigate and fix blog's 86 restricted-role RLS failures.** `Tier 1 · Track 1 · deps: none → root-caused; fix in progress (uncommitted) in wt-track1, 2026-07-13`
-  Under the SA82 full `make test-integration` gate run with quarantine entries removed, blog's restricted-role suite showed 121 passed, 86 RLS failures.
+- [x] **SA83 — Investigate and fix blog's 86 restricted-role RLS failures.** `Tier 1 · Track 1 · deps: none → implementation/validation complete 2026-07-13; closed after independent review`
+  Under the SA82 full `make test-integration` gate run with quarantine entries removed, blog's restricted-role suite showed 121 passed, 86 RLS failures. Three root causes were identified and fixed across 6 phases (detailed implementation in [CHANGELOG.md](../../CHANGELOG.md)):
+  1. **Unscoped blog test setup** — test modules created Category/Tag/Post/BlogMediaAsset rows under `quickscale_test_role` (NOBYPASSRLS) without setting the PostgreSQL GUC `app.current_org_id`, causing FORCE RLS policy violations on every INSERT. Fixed by scoping every tenant write/read inside `blog_org_scope(org)`.
+  2. **Missing `_resolve_api_org` context priming** — the blog publish/upload API view helper resolved the organization but did not set the ContextVar or GUC before ORM operations. Token-authenticated requests (which bypass TenantMiddleware) hit RLS policy violations. Fixed by converging three resolution branches to one local `org` variable, calling `set_current_org_id(org.pk)` once, and documenting the side effect. Both API callers (`upload_media_api`, `publish_post_api`) now capture `prior=get_current_org_id()`, wrap all post-resolution returns in `try`, and restore prior in `finally`.
+  3. **Stale AF9 priming memo on GUC reset** — `org_scope()` exit resets the GUC via `RESET app.current_org_id` but does not clear the per-transaction priming memo (`_af9_primed_for_txn`/`_af9_primed_atomic`). When the same org is resolved again (e.g. by session middleware), the priming wrapper sees the stale memo and skips `SET LOCAL`, leaving the GUC empty for subsequent queries. Fixed by adding `_clear_priming_memo(connection)` and calling it from all three direct GUC mutators (`_set_db_current_org_id`, `reset_db_current_org_id`, `_restore_current_org_id`). Three regressions prove each mutator triggers a fresh SET LOCAL on the next wrapped query.
 
-  **Root cause identified (2026-07-13):** AF9 priming-**memo staleness**. The AF9 execute wrapper (`orgs/current_org.py`) primes `app.current_org_id` from the ContextVar and memoizes the primed value per transaction (`_af9_primed_for_txn`) to skip redundant `SET LOCAL`s. When a direct GUC mutator (`_set_db_current_org_id`, `reset_db_current_org_id`, `_restore_current_org_id`) changed the GUC out-of-band while the ContextVar was unchanged, the stale memo made the wrapper *skip* re-priming — leaving the DB GUC desynchronized from the ContextVar, so the next tenant query ran under the wrong (or empty) org context and tripped FORCE-RLS.
-
-  **Fix in progress (uncommitted, wt-track1):** added `_clear_priming_memo(connection)` and call it from all three direct GUC mutators so the next wrapped statement re-primes unconditionally; added 3 orgs regression tests (`test_direct_set_b_clears_memo`, `test_reset_clears_memo`, `test_restore_b_clears_memo` in `test_af9_priming.py`) plus blog test/view updates.
-
-  **Verification so far:** blog's restricted-role suite runs clean in isolation — `QS_BLOG_DB_USER=quickscale_test_role QUICKSCALE_ALLOW_BYPASSRLS=0 make MODULE=blog test -- --modules` → **211 passed, 0 failures** (was 121 passed / 86 failures). `quickscale_test_role` confirmed `NOBYPASSRLS`, so this is a true restricted-role pass.
-
-  **Remaining to close:** commit the wt-track1 work, `git merge v87`, confirm the orgs `test_af9_priming.py` regression tests pass under the restricted role, then confirm blog clean under the full `make test-integration` gate, and merge back to v87.
-
-  *Acceptance:* blog's restricted-role suite passes clean (0 failures) under `make test-integration` with no quarantine entry.
+  *Outcome:* blog 211 passed/0 failed, coverage 91.62%, no quarantine entry. Full module suite: API 57/57, admin 33/33, managers 5/5, isolation 2/2. Orgs shared fix verified under full orgs suite (850 passed/11 BYPASSRLS-skips/0 failed, coverage 93.08%). Overall mean coverage 93.55%, every module ≥80%. Repository remains red (SA84–SA86 open; SA81 is unrelated cleanup and does not affect the gate).
   *(why →* CR-SA82-NT-002*)*
 
 #### Finding — CRM restricted-role RLS failures (`why →` CR-SA82-NT-003; discovered during SA82 full-gate rerun)
@@ -220,6 +224,7 @@ SA80 closed 2026-07-13 (venv re-provision + retained-role env wiring) — see CH
 
 SA80.3 split 2026-07-13 into SA80.3a (done) and SA80.3b (done) — the local pg_dump/pg_restore 18.4 install resolved the tooling gap; the rerun confirmed 0 missing-`pg_dump`/`pg_restore` failures (retained-role: 298 passed/1 failed/2 skipped; default-user: 299 passed/2 skipped). The 1 retained-role failure was a pre-existing test expectation mismatch tracked as SA87 (resolved 2026-07-13).
 
+
 - [x] **SA80.3a — Install PostgreSQL 18 client tools locally.** `Tier 1 · Track 3 · deps: none → completed 2026-07-13`
   Added the PGDG apt repository (signed-by keyring at `/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg`, source list `/etc/apt/sources.list.d/pgdg.list` pointing at `noble-pgdg main`) and installed `postgresql-client-18` via `apt-get`, matching the guidance already printed in the `BackupError` message (`quickscale_core/src/quickscale_core/dr_engine/primitives.py::_postgresql_18_client_tooling_guidance`). Verified: `pg_dump --version` → `pg_dump (PostgreSQL) 18.4 (Ubuntu 18.4-1.pgdg24.04+1)`.
   *Acceptance:* `pg_dump`/`pg_restore` 18.x resolve on `PATH` locally. **Achieved.**
@@ -227,6 +232,7 @@ SA80.3 split 2026-07-13 into SA80.3a (done) and SA80.3b (done) — the local pg_
 - [x] **SA80.3b — Rerun the `backups` suite to confirm the 24 missing-`pg_dump` failures are resolved.** `Tier 1 · Track 3 · deps: SA80.3a (done) → completed 2026-07-13`
   0 missing-`pg_dump`/`pg_restore` failures remain. pg_dump and pg_restore 18.4 confirmed on PATH. Ran `QS_BACKUPS_DB_USER=quickscale_test_role make MODULE=backups test -- --modules`: 298 passed, 1 failed, 2 skipped in 55.98s. The 1 failure (`test_restore_file_mode_executes_pg_restore_for_operator_dump`) is a pre-existing test expectation mismatch — it hardcodes `--username postgres` but the retained-role env uses `quickscale_test_role`. Without the env var (default `postgres` user): 299 passed, 2 skipped in 55.61s — 0 failures. All 24 original missing-`pg_dump` failures resolved. Updated SA82 evidence block and Track 3 summary. See CHANGELOG.md for full detail.
   *Acceptance:* 0 failures attributable to missing `pg_dump`/`pg_restore`. **Achieved.**
+
   *(why →* CR-SA82-NT-001, SA80.3a follow-up*)*
 
 #### Finding — Pre-existing test expectation mismatch for operator-restore username under retained role (`why →` SA80.3b discovery)

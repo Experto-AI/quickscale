@@ -71,7 +71,7 @@ number rather than derived) — held on fail-loud, third station recorded.
 | # | Invariant | Enforced by | Class | Trend this pass |
 |---|-----------|-------------|-------|-----------------|
 | 1 | Tenant isolation on reads/writes | fail-closed `TenantManager` + FORCE RLS + AF9 execute-wrapper | structural | stable |
-| 2 | No bypassing DB role at boot | orgs boot guard (`apps.py`), `rolbypassrls` + `rolsuper` | structural | stable — the SA59 blanket export is gone; the restricted-role integration gate is now genuinely load-bearing. **Gate is red** post-SA82 (expected: SA83–SA86 open; backups now clean under PostgreSQL via SA80.3b/SA87). The red gate is **Finding 8**, not a red flag |
+| 2 | No bypassing DB role at boot | orgs boot guard (`apps.py`), `rolbypassrls` + `rolsuper` | structural | stable — the SA59 blanket export is gone; the restricted-role integration gate is now genuinely load-bearing. **Gate is red** post-SA82 (expected: SA84–SA86 open; SA83 closed after independent review; SA87 resolved; backups clean via SA80.3b/SA87). The red gate is **Finding 8**, not a red flag |
 | 3 | Admin org-scoping | `TenantModelAdmin`; tripwire = NOBYPASSRLS test posture (SA14.4) | structural + gated | stable — NOBYPASSRLS-by-default is real in the integration path |
 | 4 | DB privilege selection per process | launcher env contract (`QUICKSCALE_PRIVILEGED_COMMAND`/`QUICKSCALE_NON_DB_COMMAND` + `RUNTIME_DATABASE_URL=""`) | structural | stable (SA68). Sanctioned-set frozensets ×2 (template + orgs), both fail-closed, no sync gate (watchlist); `production.py.j2` took only a cosmetic quote fix this delta |
 | 5 | JSON endpoint idiom | `OrgApiBaseView`/DRF baseline + SA46 csrf-exempt CI gate | structural + gated | stable |
@@ -430,10 +430,23 @@ number rather than derived) — held on fail-loud, third station recorded.
 
 ### Fix order and interactions
 
-1. **Finding 8 Option 1 (shared RLS-context migration helper)** — highest-value now; sequence it
-   *ahead of or alongside* SA83–SA86 so the four tickets share one diagnosis and seam instead of
-   minting three inline `operator_access` copies. Independent of Findings 1/2/4/7.
-2. **Finding 1 Option 2 (persistence port)** — scheduled next planning cycle; independent of
+> Items 1–3 below are complete as of 2026-07-13 (SA76/SA60/SA70/SA83) — kept for the historical
+> reasoning trail; only items 4–5 remain live.
+
+1. ~~SA59.1's remaining blockers (red-flagged gate state)~~ — **done**: SA76's quarantine
+   mechanism turned the gate green. **SA77 and SA79 since closed (2026-07-13 by SA82)** — the
+   full `make test-integration` gate rerun with quarantine entries removed confirmed orgs
+   (847 passed/11 BYPASSRLS-skips/0 failed) and notifications (39 passed/0 failed) clean, closing
+   both roadmap follow-ups. Three independent restricted-role findings (CRM → SA84, forms residual → SA85,
+   listings → SA86) surfaced by the quarantine removal remain open on the roadmap. SA83 (blog,
+   implementation/validation complete 2026-07-13) closed after independent review.
+2. ~~SA60~~ — **done**: unblocked Finding 4's decision-record caution and SA59.1's forms/0007
+   composite-FK failure together, as planned.
+3. ~~SA70 (Finding 2's first step)~~ — **done**.
+4. **Finding 8 Option 1 (shared RLS-context migration helper)** — highest-value now; sequence it
+   *ahead of or alongside* SA84–SA86 so the remaining three tickets share one diagnosis and seam instead of
+   minting inline `operator_access` copies (SA83 already resolved). Independent of Findings 1/2/4/7.
+5. **Finding 1 Option 2 (persistence port)** — scheduled next planning cycle; independent of
    everything above.
 3. **Finding 7's remainder (Option 2)** waits on its trigger; the cheap interim (export the
    generator's emission mapping, point the SA66 test at it) is independent and small.

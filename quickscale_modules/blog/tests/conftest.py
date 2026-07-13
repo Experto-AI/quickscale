@@ -170,6 +170,50 @@ def org_b_admin(db, org_b):
 
 
 # ---------------------------------------------------------------------------
+# SA83 — blog test context lifecycle fixtures for restricted-role tests
+# ---------------------------------------------------------------------------
+# These fixtures protect restricted-role anonymous list/feed request
+# sequences from stale PostgreSQL GUC state by:
+#
+# 1. Resetting the ``app.current_org_id`` ContextVar before and after
+#    every test so no stale tenant context leaks between test functions.
+# 2. Providing ``blog_org_scope`` — a thin wrapper around the unified
+#    ``org_scope()`` context manager — so tests can explicitly scope
+#    data creation and request execution without GUC leakage across
+#    ``SET ROLE`` / ``RESET ROLE`` boundaries.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_current_org_context():
+    """Reset the current org ContextVar before and after each test.
+
+    Prevents stale ``app.current_org_id`` GUC state from leaking between
+    tests when the connection-layer priming wrapper (AF9) is active.
+    """
+    from quickscale_modules_orgs.current_org import reset_current_org_id
+
+    reset_current_org_id()
+    yield
+    reset_current_org_id()
+
+
+@pytest.fixture
+def blog_org_scope():
+    """Expose ``org_scope()`` for blog test use as a context manager.
+
+    Wraps the unified ``org_scope()`` entry point from
+    ``quickscale_modules_orgs.current_org`` so blog tests can scope
+    data creation and request execution under an explicit org context
+    without leaking ``app.current_org_id`` GUC state across role
+    boundaries (SA83).
+    """
+    from quickscale_modules_orgs.current_org import org_scope
+
+    return org_scope
+
+
+# ---------------------------------------------------------------------------
 # SA14.4 — bypass_rls marker registration and collection-time opt-in
 # ---------------------------------------------------------------------------
 

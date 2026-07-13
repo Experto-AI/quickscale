@@ -23,7 +23,7 @@ User = get_user_model()
 class TestPostAdmin:
     """Tests for PostAdmin save_model behavior"""
 
-    def test_save_model_keeps_authorless_on_create(self, system_org):
+    def test_save_model_keeps_authorless_on_create(self, system_org, blog_org_scope):
         """Test that save_model does not force an author when explicitly omitted"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -43,12 +43,13 @@ class TestPostAdmin:
         )
 
         # Simulate creating a new post (change=False) without author
-        admin.save_model(request, post, form=None, change=False)
+        with blog_org_scope(system_org):
+            admin.save_model(request, post, form=None, change=False)
 
         assert post.pk is not None
         assert post.author is None
 
-    def test_save_model_preserves_author_on_edit(self, system_org):
+    def test_save_model_preserves_author_on_edit(self, system_org, blog_org_scope):
         """Test that save_model preserves existing author on edit"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -65,23 +66,28 @@ class TestPostAdmin:
             password="pass123",
         )
 
-        post = Post.objects.create(
-            title="Existing Post",
-            author=original_author,
-            content="Content",
-            organization=system_org,
-        )
+        with blog_org_scope(system_org):
+            post = Post.objects.create(
+                title="Existing Post",
+                author=original_author,
+                content="Content",
+                organization=system_org,
+            )
 
         request = factory.post("/admin/")
         request.user = editing_user
 
         # Simulate editing an existing post (change=True)
-        admin.save_model(request, post, form=None, change=True)
+        with blog_org_scope(system_org):
+            admin.save_model(request, post, form=None, change=True)
 
-        post.refresh_from_db()
+        with blog_org_scope(system_org):
+            post.refresh_from_db()
         assert post.author == original_author
 
-    def test_save_model_keeps_explicit_author_on_create(self, system_org):
+    def test_save_model_keeps_explicit_author_on_create(
+        self, system_org, blog_org_scope
+    ):
         """Test that save_model keeps explicitly set author on new posts"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -109,11 +115,14 @@ class TestPostAdmin:
         )
 
         # When author is already set, save_model should keep it
-        admin.save_model(request, post, form=None, change=False)
+        with blog_org_scope(system_org):
+            admin.save_model(request, post, form=None, change=False)
 
         assert post.author == explicit_author
 
-    def test_save_model_explicit_blank_author_remains_none(self, system_org):
+    def test_save_model_explicit_blank_author_remains_none(
+        self, system_org, blog_org_scope
+    ):
         """Test that explicitly selecting blank author yields an authorless post"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -136,7 +145,8 @@ class TestPostAdmin:
 
         explicit_none_form = SimpleNamespace(cleaned_data={"author": None})
 
-        admin.save_model(request, post, form=explicit_none_form, change=False)
+        with blog_org_scope(system_org):
+            admin.save_model(request, post, form=explicit_none_form, change=False)
 
         assert post.author is None
 
@@ -184,7 +194,9 @@ class TestPostAdmin:
 
         assert form_field.required is False
 
-    def test_formfield_for_foreignkey_edit_includes_all_users(self, system_org):
+    def test_formfield_for_foreignkey_edit_includes_all_users(
+        self, system_org, blog_org_scope
+    ):
         """Test author dropdown keeps all user options on edit"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -200,20 +212,22 @@ class TestPostAdmin:
             email="editor_user@example.com",
             password="pass123",
         )
-        post = Post.objects.create(
-            title="Post With Existing Author",
-            author=existing_author,
-            content="Content",
-            organization=system_org,
-        )
+        with blog_org_scope(system_org):
+            post = Post.objects.create(
+                title="Post With Existing Author",
+                author=existing_author,
+                content="Content",
+                organization=system_org,
+            )
 
         request = factory.get(f"/admin/{post.pk}/change/")
         request.user = editor
         request.resolver_match = SimpleNamespace(kwargs={"object_id": str(post.pk)})
 
-        form_field = admin.formfield_for_foreignkey(
-            Post._meta.get_field("author"), request
-        )
+        with blog_org_scope(system_org):
+            form_field = admin.formfield_for_foreignkey(
+                Post._meta.get_field("author"), request
+            )
 
         assert set(form_field.queryset.values_list("pk", flat=True)) == {
             editor.pk,
@@ -280,7 +294,9 @@ class TestPostAdmin:
         assert "Select a valid choice" in response.content.decode()
 
     @override_settings(ALLOWED_HOSTS=["testserver"])
-    def test_admin_add_view_explicit_blank_author_omits_author(self, client):
+    def test_admin_add_view_explicit_blank_author_omits_author(
+        self, client, blog_org_scope
+    ):
         """Test posting admin add form with blank author leaves it None."""
         from quickscale_modules_orgs.models import Organization
 
@@ -292,29 +308,31 @@ class TestPostAdmin:
         org = Organization.objects.create(name="Test Org", slug="test-org")
 
         client.force_login(admin_user)
-        response = client.post(
-            "/admin/quickscale_modules_blog/post/add/",
-            data={
-                "title": "Admin Blank Author Post",
-                "slug": "",
-                "author": "",
-                "content": "Content",
-                "excerpt": "",
-                "featured_image": "",
-                "featured_image_alt": "",
-                "status": "draft",
-                "category": "",
-                "tags": [],
-                "organization": str(org.pk),
-                "published_date_0": "",
-                "published_date_1": "",
-                "_save": "Save",
-            },
-        )
+        with blog_org_scope(org):
+            response = client.post(
+                "/admin/quickscale_modules_blog/post/add/",
+                data={
+                    "title": "Admin Blank Author Post",
+                    "slug": "",
+                    "author": "",
+                    "content": "Content",
+                    "excerpt": "",
+                    "featured_image": "",
+                    "featured_image_alt": "",
+                    "status": "draft",
+                    "category": "",
+                    "tags": [],
+                    "organization": str(org.pk),
+                    "published_date_0": "",
+                    "published_date_1": "",
+                    "_save": "Save",
+                },
+            )
 
         assert response.status_code == 302
-        post = Post.all_objects.get(title="Admin Blank Author Post")
-        assert post.author is None
+        with blog_org_scope(org):
+            post = Post.all_objects.get(title="Admin Blank Author Post")
+            assert post.author is None
 
     def test_get_form_submission_blank_author_is_valid_on_create(self):
         """Test full admin form submission accepts blank author on create"""
@@ -357,7 +375,7 @@ class TestPostAdmin:
         assert form.cleaned_data["author"] is None
 
     def test_get_form_submission_blank_author_preserves_existing_author_on_edit(
-        self, system_org
+        self, system_org, blog_org_scope
     ):
         """Test full admin form submission keeps existing author on edit"""
         site = AdminSite()
@@ -374,13 +392,14 @@ class TestPostAdmin:
             email="form_submit_editor@example.com",
             password="pass123",
         )
-        post = Post.objects.create(
-            title="Blank Author Edit",
-            author=existing_author,
-            content="Content",
-            status="draft",
-            organization=system_org,
-        )
+        with blog_org_scope(system_org):
+            post = Post.objects.create(
+                title="Blank Author Edit",
+                author=existing_author,
+                content="Content",
+                status="draft",
+                organization=system_org,
+            )
 
         request = factory.post(f"/admin/{post.pk}/change/")
         request.user = editor
@@ -475,14 +494,19 @@ class TestBlogAdminTenantScopedQueryset:
         qs = admin_instance.get_queryset(request)
         assert qs.count() == 0
 
-    def test_post_admin_scopes_to_org(self, system_org, org_b):
+    def test_post_admin_scopes_to_org(self, system_org, org_b, blog_org_scope):
         """PostAdmin.get_queryset returns only posts from the scoped org."""
-        Post.all_objects.create(
-            title="System Post", content="A", organization=system_org, status="draft"
-        )
-        Post.all_objects.create(
-            title="Org B Post", content="B", organization=org_b, status="draft"
-        )
+        with blog_org_scope(system_org):
+            Post.all_objects.create(
+                title="System Post",
+                content="A",
+                organization=system_org,
+                status="draft",
+            )
+        with blog_org_scope(org_b):
+            Post.all_objects.create(
+                title="Org B Post", content="B", organization=org_b, status="draft"
+            )
 
         site = AdminSite()
         admin_instance = PostAdmin(Post, site)
@@ -523,16 +547,20 @@ class TestBlogAdminOrgAwareMixin:
         assert "organization" in form_class.base_fields
         assert form_class.base_fields["organization"].required is True
 
-    def test_post_admin_org_readonly_on_change_form(self, system_org):
+    def test_post_admin_org_readonly_on_change_form(self, system_org, blog_org_scope):
         """PostAdmin change form shows organization as read-only."""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
         request = factory.get("/admin/")
 
-        post = Post.objects.create(
-            title="Change Org", content="...", status="draft", organization=system_org
-        )
+        with blog_org_scope(system_org):
+            post = Post.objects.create(
+                title="Change Org",
+                content="...",
+                status="draft",
+                organization=system_org,
+            )
         readonly = admin.get_readonly_fields(request, obj=post)
         assert "organization" in readonly
 
@@ -561,16 +589,19 @@ class TestBlogAdminOrgAwareMixin:
         assert "organization" in form_class.base_fields
         assert form_class.base_fields["organization"].required is True
 
-    def test_category_admin_org_readonly_on_change_form(self, system_org):
+    def test_category_admin_org_readonly_on_change_form(
+        self, system_org, blog_org_scope
+    ):
         """CategoryAdmin change form shows organization as read-only."""
         site = AdminSite()
         admin = CategoryAdmin(Category, site)
         factory = RequestFactory()
         request = factory.get("/admin/")
 
-        cat = Category.objects.create(
-            name="ReadOnly Cat", slug="readonly-cat", organization=system_org
-        )
+        with blog_org_scope(system_org):
+            cat = Category.objects.create(
+                name="ReadOnly Cat", slug="readonly-cat", organization=system_org
+            )
         readonly = admin.get_readonly_fields(request, obj=cat)
         assert "organization" in readonly
 
@@ -599,16 +630,17 @@ class TestBlogAdminOrgAwareMixin:
         assert "organization" in form_class.base_fields
         assert form_class.base_fields["organization"].required is True
 
-    def test_tag_admin_org_readonly_on_change_form(self, system_org):
+    def test_tag_admin_org_readonly_on_change_form(self, system_org, blog_org_scope):
         """TagAdmin change form shows organization as read-only."""
         site = AdminSite()
         admin = TagAdmin(Tag, site)
         factory = RequestFactory()
         request = factory.get("/admin/")
 
-        tag = Tag.objects.create(
-            name="ReadOnly Tag", slug="readonly-tag", organization=system_org
-        )
+        with blog_org_scope(system_org):
+            tag = Tag.objects.create(
+                name="ReadOnly Tag", slug="readonly-tag", organization=system_org
+            )
         readonly = admin.get_readonly_fields(request, obj=tag)
         assert "organization" in readonly
 
@@ -627,7 +659,9 @@ class TestBlogAdminOrgAwareMixin:
         assert "organization" in form_class.base_fields
         assert form_class.base_fields["organization"].required is True
 
-    def test_media_asset_admin_org_readonly_on_change_form(self, system_org):
+    def test_media_asset_admin_org_readonly_on_change_form(
+        self, system_org, blog_org_scope
+    ):
         """BlogMediaAssetAdmin change form shows organization as read-only."""
         site = AdminSite()
         admin = BlogMediaAssetAdmin(BlogMediaAsset, site)
@@ -637,11 +671,12 @@ class TestBlogAdminOrgAwareMixin:
         import io
         from django.core.files.uploadedfile import SimpleUploadedFile
 
-        asset = BlogMediaAsset.objects.create(
-            original_filename="test.png",
-            file=SimpleUploadedFile("test.png", io.BytesIO(b"dummy").read()),
-            organization=system_org,
-        )
+        with blog_org_scope(system_org):
+            asset = BlogMediaAsset.objects.create(
+                original_filename="test.png",
+                file=SimpleUploadedFile("test.png", io.BytesIO(b"dummy").read()),
+                organization=system_org,
+            )
         readonly = admin.get_readonly_fields(request, obj=asset)
         assert "organization" in readonly
 
@@ -649,7 +684,9 @@ class TestBlogAdminOrgAwareMixin:
     # PostAdmin same-org validation for category (FK) and tags (M2M)
     # ------------------------------------------------------------------
 
-    def test_post_admin_add_rejects_cross_org_category(self, org_a, org_b):
+    def test_post_admin_add_rejects_cross_org_category(
+        self, org_a, org_b, blog_org_scope
+    ):
         """PostAdmin add form rejects category from a different org."""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -661,28 +698,29 @@ class TestBlogAdminOrgAwareMixin:
             password="pass123",
         )
 
-        cat_a = Category.objects.create(name="Cat A", slug="cat-a", organization=org_a)
+        with blog_org_scope(org_a):
+            cat_a = Category.objects.create(
+                name="Cat A", slug="cat-a", organization=org_a
+            )
 
-        form_class = admin.get_form(request, obj=None, change=False)
-        form = form_class(
-            data={
-                "title": "Cross-Org Post",
-                "content": "Content",
-                "status": "draft",
-                "organization": str(org_b.pk),
-                "category": str(cat_a.pk),
-                "tags": [],
-            }
-        )
+        with blog_org_scope(org_a):
+            form_class = admin.get_form(request, obj=None, change=False)
+            form = form_class(
+                data={
+                    "title": "Cross-Org Post",
+                    "content": "Content",
+                    "status": "draft",
+                    "organization": str(org_b.pk),
+                    "category": str(cat_a.pk),
+                    "tags": [],
+                }
+            )
 
         assert not form.is_valid()
         assert "category" in form.errors
 
-    def test_post_admin_add_accepts_same_org_category(self, org_a):
+    def test_post_admin_add_accepts_same_org_category(self, org_a, blog_org_scope):
         """PostAdmin add form accepts category from the same org."""
-        from quickscale_modules_orgs.current_org import set_current_org_id
-
-        set_current_org_id(org_a.pk)
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -693,25 +731,26 @@ class TestBlogAdminOrgAwareMixin:
             password="pass123",
         )
 
-        cat = Category.objects.create(
-            name="Cat Same", slug="cat-same", organization=org_a
-        )
+        with blog_org_scope(org_a):
+            cat = Category.objects.create(
+                name="Cat Same", slug="cat-same", organization=org_a
+            )
 
-        form_class = admin.get_form(request, obj=None, change=False)
-        form = form_class(
-            data={
-                "title": "Same-Org Post",
-                "content": "Content",
-                "status": "draft",
-                "organization": str(org_a.pk),
-                "category": str(cat.pk),
-                "tags": [],
-            }
-        )
+        with blog_org_scope(org_a):
+            form_class = admin.get_form(request, obj=None, change=False)
+            form = form_class(
+                data={
+                    "title": "Same-Org Post",
+                    "content": "Content",
+                    "status": "draft",
+                    "organization": str(org_a.pk),
+                    "category": str(cat.pk),
+                    "tags": [],
+                }
+            )
+            assert form.is_valid(), form.errors.as_text()
 
-        assert form.is_valid(), form.errors.as_text()
-
-    def test_post_admin_add_rejects_cross_org_tag(self, org_a, org_b):
+    def test_post_admin_add_rejects_cross_org_tag(self, org_a, org_b, blog_org_scope):
         """PostAdmin add form rejects tag from a different org."""
         site = AdminSite()
         admin = PostAdmin(Post, site)
@@ -723,28 +762,27 @@ class TestBlogAdminOrgAwareMixin:
             password="pass123",
         )
 
-        tag_b = Tag.objects.create(name="Tag B", slug="tag-b", organization=org_b)
+        with blog_org_scope(org_b):
+            tag_b = Tag.objects.create(name="Tag B", slug="tag-b", organization=org_b)
 
-        form_class = admin.get_form(request, obj=None, change=False)
-        form = form_class(
-            data={
-                "title": "Cross-Org Tag Post",
-                "content": "Content",
-                "status": "draft",
-                "organization": str(org_a.pk),
-                "category": "",
-                "tags": [str(tag_b.pk)],
-            }
-        )
+        with blog_org_scope(org_b):
+            form_class = admin.get_form(request, obj=None, change=False)
+            form = form_class(
+                data={
+                    "title": "Cross-Org Tag Post",
+                    "content": "Content",
+                    "status": "draft",
+                    "organization": str(org_a.pk),
+                    "category": "",
+                    "tags": [str(tag_b.pk)],
+                }
+            )
 
         assert not form.is_valid()
         assert "tags" in form.errors
 
-    def test_post_admin_add_accepts_same_org_tag(self, org_a):
+    def test_post_admin_add_accepts_same_org_tag(self, org_a, blog_org_scope):
         """PostAdmin add form accepts tag from the same org."""
-        from quickscale_modules_orgs.current_org import set_current_org_id
-
-        set_current_org_id(org_a.pk)
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -755,21 +793,24 @@ class TestBlogAdminOrgAwareMixin:
             password="pass123",
         )
 
-        tag = Tag.objects.create(name="Tag Same", slug="tag-same", organization=org_a)
+        with blog_org_scope(org_a):
+            tag = Tag.objects.create(
+                name="Tag Same", slug="tag-same", organization=org_a
+            )
 
-        form_class = admin.get_form(request, obj=None, change=False)
-        form = form_class(
-            data={
-                "title": "Same-Org Tag Post",
-                "content": "Content",
-                "status": "draft",
-                "organization": str(org_a.pk),
-                "category": "",
-                "tags": [str(tag.pk)],
-            }
-        )
-
-        assert form.is_valid(), form.errors.as_text()
+        with blog_org_scope(org_a):
+            form_class = admin.get_form(request, obj=None, change=False)
+            form = form_class(
+                data={
+                    "title": "Same-Org Tag Post",
+                    "content": "Content",
+                    "status": "draft",
+                    "organization": str(org_a.pk),
+                    "category": "",
+                    "tags": [str(tag.pk)],
+                }
+            )
+            assert form.is_valid(), form.errors.as_text()
 
     def test_post_admin_add_rejects_same_org_category_missing_in_form(self, org_a):
         """PostAdmin add form requires selecting a valid category."""
