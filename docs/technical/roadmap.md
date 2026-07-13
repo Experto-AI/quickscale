@@ -50,22 +50,23 @@ git merge --no-ff wt-track{N}
 > Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78, SA59 umbrella including SA59.1–SA59.4) were pruned from this section — their full implementation detail lives in CHANGELOG.md. **SA79 is reopened/blocked (see Track 2 below).**
 >
 > **Track readiness (2026-07-13, updated after the CR-PLAN-SA79-004 rerun attempt):** Track 1 and Track 2 are both blocked, and the 2026-07-13 rerun changed *why*. The maintainer ran `make test-integration` against the local retained-role environment; it did not reach a state where SA77's or SA79's specific hypotheses could be confirmed or denied — it was blocked earlier by (1) a stale, non-editable local `quickscale-core` venv install missing the `quickscale_core.runtime` package, which broke orgs' test collection with an unrelated `ModuleNotFoundError`, and (2) incomplete local retained-role env wiring for 7 of 13 modules (billing, blog, crm, forms, listings, social, notifications), which fail immediately on `ImproperlyConfigured: role has BYPASSRLS/SUPERUSER` before reaching any SA77/SA79-relevant code path. Both failures were silently absorbed by the SA76 quarantine (which matches on module name only, not failure signature) under the SA77/SA79 tickets respectively, even though neither matches those tickets' described root causes. Full detail: [CHANGELOG.md](../../CHANGELOG.md)'s "CR-PLAN-SA79-004 rerun attempted, blocked checkpoint (2026-07-13)" entry. CR-PLAN-SA79-005 (status-ledger harmonization) is resolved as of the prior pass — roadmap.md, CHANGELOG.md, tech-audit.md, and arch-audit.md agree on SA77/SA79's open state.
-> - **Track 1** — blocked. SA77 code fix implemented 2026-07-12. Whether the fix is actually correct under a real restricted-role rerun is still unconfirmed — the 2026-07-13 rerun never reached orgs' RLS-relevant tests due to the venv staleness issue above. Nothing further to do on Track 1 until the environment is re-provisioned and SA79 unblocks.
-> - **Track 2** — blocked. SA79's own quarantined suite (notifications) also never reached its described forms-0007 code path in the 2026-07-13 rerun — it crashed earlier on the same role-wiring gap affecting 6 other modules. CR-PLAN-SA79-004 cannot be meaningfully re-attempted until that gap is closed; see below.
-> - **Track 3** — no open items; fully available for new work.
+> - **Track 1** — blocked. SA77 code fix implemented 2026-07-12. Whether the fix is actually correct under a real restricted-role rerun is still unconfirmed — the 2026-07-13 rerun never reached orgs' RLS-relevant tests due to the venv staleness issue above. Nothing further to do on Track 1 until SA80 (Track 3) lands and SA79 unblocks.
+> - **Track 2** — blocked. SA79's own quarantined suite (notifications) also never reached its described forms-0007 code path in the 2026-07-13 rerun — it crashed earlier on the same role-wiring gap affecting 6 other modules. CR-PLAN-SA79-004 cannot be meaningfully re-attempted until SA80 (Track 3) lands.
+> - **Track 3** — **new open item: SA80** (local dev environment re-provisioning). Independent of Track 1/2's own blockers — doesn't need anything from them — but closing it is the prerequisite for Track 1 and Track 2 to produce real verification signal. Good hand-off candidate.
 
 ### Dependency & parallelization overview
 
 ```
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
-SA77 — fix orgs restricted-role        SA79 — reopened/blocked                    (no open items)
-  test failures                          (CR-PLAN-SA79-004: retained-role
-  ◐ code fix landed 2026-07-12;          rerun still owed — sole remaining
-    verification blocked on Track 2       blocker; CR-PLAN-SA79-005 resolved)
+SA77 — fix orgs restricted-role        SA79 — reopened/blocked                    SA80 — re-provision local
+  test failures                          (CR-PLAN-SA79-004: retained-role           dev env (venv + role wiring)
+  ◐ code fix landed 2026-07-12;          rerun still owed — sole remaining          ◻ no deps; unblocks Track 1 & 2
+    verification blocked on SA80          blocker; CR-PLAN-SA79-005 resolved)        (see SA80 below)
+    (Track 3) + Track 2
 ```
 
-SA77 (Track 1) code fix landed 2026-07-12; full detail in CHANGELOG.md. Only the final restricted-role verification step stays blocked behind SA79's closeout, because the current rerun aborts in forms 0007 before reaching the orgs seam. SA79 (Track 2) is reopened with one remaining blocker, CR-PLAN-SA79-004 (CR-PLAN-SA79-005 resolved this pass). Track 3 has no open work and is available for new items.
+SA77 (Track 1) code fix landed 2026-07-12; full detail in CHANGELOG.md. Its final restricted-role verification, and SA79's (Track 2) CR-PLAN-SA79-004 rerun, both stay blocked until SA80 (Track 3) lands — the 2026-07-13 rerun attempt showed neither can produce real signal against the current local environment. SA80 itself has no dependencies and is a clean hand-off candidate.
 
 ### Track 1 — Tenant-context surface
 
@@ -102,7 +103,19 @@ SA79 is reopened/blocked — the closeout verification revealed that the current
 
 ### Track 3 — Core/CLI plumbing
 
-No open items. Fully available for new work.
+One open item (SA80, new 2026-07-13). Otherwise available for new work.
+
+#### Finding — Local dev environment gaps blocking the SA79 retained-role rerun (`why →` [CHANGELOG.md](../../CHANGELOG.md)'s "CR-PLAN-SA79-004 rerun attempted, blocked checkpoint (2026-07-13)" entry)
+
+- [ ] **SA80 — Re-provision the local dev environment so a retained-role `make test-integration` rerun produces real signal for SA77/SA79.** `Tier 1 · Track 3 · deps: none`
+  The 2026-07-13 rerun attempt was blocked by two environment gaps before it reached either SA77's or SA79's actual code paths. This ticket has no dependencies on Track 1 or Track 2 — closing it is what lets *them* produce real verification signal. Good hand-off candidate; self-contained.
+
+  - [ ] **SA80.1 — Editable-reinstall `quickscale_core`.** The local `.venv` has `quickscale-core` installed non-editable at a stale `0.86.0` build (confirmed via `pip show quickscale-core` — no `Location`/editable path, unlike `quickscale`/`quickscale-cli`/`quickscale-devtools`), missing the `runtime` package added by SA9.3. This breaks orgs' test collection with `ModuleNotFoundError: No module named 'quickscale_core.runtime'` (via `backups/admin.py`'s import chain during Django admin autodiscover). Fix: `poetry install` from repo root (or `pip install -e ./quickscale_core` inside `.venv`). Verify with `.venv/bin/python -c "import quickscale_core.runtime"`.
+  - [ ] **SA80.2 — Fix retained-role env wiring for 7 modules locally.** billing, blog, crm, forms, listings, social, and notifications all fail immediately at Django app-ready with `ImproperlyConfigured: role has BYPASSRLS/SUPERUSER` under local `make test-integration` — meaning `QS_<MODULE>_DB_USER=quickscale_test_role` (and the underlying role/grants) isn't actually applied for these 7 modules locally, unlike `storage`/`analytics`, which pass clean under the same command. Fix: diff local wiring (`scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, `scripts/check_ci_locally.sh`, `Makefile`) against `ci.yml`/`publish.yml`'s per-module `QS_*_DB_USER` exports and role-grant lists (arch-audit.md census row 14), and correct the divergence so local matches CI.
+  - [ ] **SA80.3 — (lower priority, unrelated to SA77/SA79) Install PostgreSQL 18 client tools locally.** `backups` fails 23/299 tests locally on a missing `pg_dump` binary. Install `postgresql-client-18` (PGDG apt repo), matching the guidance already printed in the `BackupError` message this raises. Not a blocker for SA77/SA79 — only needed for a fully green local `make test-integration` run.
+
+  *Acceptance:* a full `make test-integration` run reaches — and produces real pass/fail signal for — orgs' SA77 acceptance criteria and notifications' SA79 forms-0007 acceptance criteria, instead of crashing earlier on environment issues. SA80 itself closes on SA80.1+SA80.2 (SA80.3 is a nice-to-have, trackable independently).
+  *(why →* [CHANGELOG.md](../../CHANGELOG.md)'s 2026-07-13 CR-PLAN-SA79-004 rerun checkpoint*)*
 
 SA67 closed 2026-07-11: `decisions.md §Beta-Site External Verification Scope` establishes that verifying/patching the *deployed* state of `experto-ai-web`/`bap-web` is permanently out of scope for this monorepo's automation — neither site's repository nor its Railway deployment is reachable from here, and this is a structural property of the two-repo maintainer workflow, not a temporary access gap. The repo-local follow-up (SA66's file-taxonomy conformance gate, SA68's launcher-contract completion and Redis-dependent rollout guidance) was already complete. The outstanding manual verification is tracked as a standing maintainer to-do in [beta-site-migration.md](../planning/beta-site-migration.md#outstanding-maintainer-to-do-sa67-tracked-outside-roadmapmd), not here — future findings of this shape (requiring live inspection of the two external sites) close the same way rather than sitting open pending access that structurally cannot arrive. Completed Track 3 work (SA75, SA76) lives in [CHANGELOG.md](../../CHANGELOG.md).
 
