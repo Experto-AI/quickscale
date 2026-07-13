@@ -1,4 +1,4 @@
-# Poetry local configuration for quickscale-module-auth
+# Poetry local configuration for quickscale-module-backups
 # Standalone lock/install is unsupported — use root monorepo venv instead.
 # See docs/technical/development.md for architecture details.
 

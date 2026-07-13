@@ -430,14 +430,15 @@ BLOG_THUMBNAIL_SIZES = {
 Run module tests:
 
 ```bash
-cd modules/blog
-pytest
+# From repository root
+make MODULE=blog test -- --modules
 ```
 
 With coverage:
 
 ```bash
-pytest --cov=src/quickscale_modules_blog --cov-report=html
+# From repository root
+poetry run pytest quickscale_modules/blog/tests/ --cov=quickscale_modules_blog --cov-report=html
 ```
 
 ## Troubleshooting
@@ -490,22 +491,21 @@ pip install Pillow
 ### Running Tests Locally
 
 ```bash
-cd quickscale_modules/blog
-poetry install
-PYTHONPATH=. poetry run pytest
+# From repository root
+make MODULE=blog test -- --modules
 ```
 
 ### Code Quality
 
 ```bash
 # Format code
-poetry run ruff format src/ tests/
+poetry run ruff format quickscale_modules/blog/src/ quickscale_modules/blog/tests/
 
 # Check code
-poetry run ruff check src/ tests/
+poetry run ruff check quickscale_modules/blog/src/ quickscale_modules/blog/tests/
 
 # Type check
-poetry run mypy src/
+poetry run mypy quickscale_modules/blog/src/
 ```
 
 ## Dependencies

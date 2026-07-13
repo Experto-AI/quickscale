@@ -625,6 +625,6 @@ Frontend runtime wiring:
 
 ## Distribution Notes
 
-Billing ships through the standard QuickScale module packaging and split-branch workflow. The module manifest declares `required_modules: [orgs]`, and the package metadata declares `quickscale-module-orgs` so standalone package consumers and QuickScale planner/apply flows advertise the same dependency contract. Follow-on roadmap work may tighten release evidence or adjacent docs, but this README describes the current shipped module contract.
+Billing ships through the standard QuickScale module packaging and split-branch workflow. The module manifest declares `required_modules: [orgs]` for planner/apply dependency enforcement; sibling-module package version constraints were removed in SA81 since modules never resolve standalone outside the monorepo. Follow-on roadmap work may tighten release evidence or adjacent docs, but this README describes the current shipped module contract.
 
 See [Technical Roadmap](../../docs/technical/roadmap.md) for the full v0.85.0 implementation plan.
