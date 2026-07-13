@@ -128,22 +128,42 @@ def _resolve_api_org(request: HttpRequest, author: Any) -> Any:
     Session-authenticated requests use ``request.org`` from middleware.
     Token-authenticated requests resolve the user's personal org, falling
     back to the System org.
-    """
-    org = getattr(request, "org", None)
-    if org is not None:
-        return org
-    # Token auth path — resolve user's personal org.
-    from quickscale_modules_orgs.models import (
-        Organization,
-        OrganizationMembership,
-    )
 
-    membership = OrganizationMembership.objects.filter(
-        user=author, organization__is_personal=True
-    ).first()
-    if membership is not None:
-        return membership.organization
-    return Organization.objects.get_system_org()
+    .. caution::
+       As a side effect this function calls
+       ``set_current_org_id(org.pk)`` so that tenant-scoped managers
+       and the GUC priming wrapper see the correct org for subsequent
+       ORM operations.  Callers **must** capture
+       ``get_current_org_id()`` beforehand and restore the Python
+       ContextVar with ``set_current_org_id(prior)`` afterward.  When
+       PostgreSQL is the database backend **and** the caller is inside
+       an active ``transaction.atomic()`` block, callers **must** also
+       restore the DB GUC and clear the per-transaction priming memo
+       by calling ``_restore_current_org_id(prior)`` **after**
+       ``set_current_org_id(prior)`` (Python ContextVar first, then
+       DB GUC).
+    """
+    from quickscale_modules_orgs.current_org import set_current_org_id
+
+    org = getattr(request, "org", None)
+    if org is None:
+        # Token auth path — resolve user's personal org.
+        from quickscale_modules_orgs.models import (
+            Organization,
+            OrganizationMembership,
+        )
+
+        membership = OrganizationMembership.objects.filter(
+            user=author, organization__is_personal=True
+        ).first()
+        org = (
+            membership.organization
+            if membership is not None
+            else Organization.objects.get_system_org()
+        )
+
+    set_current_org_id(org.pk)
+    return org
 
 
 ViewFunc = TypeVar("ViewFunc", bound=Callable[..., Any])
@@ -678,6 +698,13 @@ def upload_media_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
 
     The media asset is stamped with the active organization from
     ``request.org`` (session auth) or the user's personal org (token auth).
+
+    On exit the Python ContextVar is always restored to the prior value.
+    The PostgreSQL ``app.current_org_id`` GUC is restored via
+    ``_restore_current_org_id(prior)`` inside an active
+    ``transaction.atomic()`` block, which also clears the AF9
+    per-transaction priming memo.  Outside an atomic block the DB GUC
+    is automatically cleaned up at transaction end.
     """
     if request.method != "POST":
         return JsonResponse(
@@ -693,28 +720,41 @@ def upload_media_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
     if throttle_error is not None:
         return throttle_error
 
-    # Resolve org: session auth uses request.org from middleware;
-    # token auth resolves the user's personal org.
-    organization = _resolve_api_org(request, author)
+    from quickscale_modules_orgs.current_org import (
+        _restore_current_org_id,
+        get_current_org_id,
+        set_current_org_id,
+    )
 
+    prior = get_current_org_id()
+    organization = _resolve_api_org(request, author)
     try:
         asset = create_blog_media_asset_from_request(
             request, author, organization=organization
         )
+        return JsonResponse(
+            {
+                "id": asset.pk,
+                "url": _build_media_response_url(request, asset.file.name or ""),
+                "alt": asset.alt,
+                "kind": asset.kind,
+                "width": asset.width,
+                "height": asset.height,
+            },
+            status=201,
+        )
     except BlogMediaUploadValidationError as exc:
         return JsonResponse({"errors": exc.errors}, status=400)
+    finally:
+        set_current_org_id(prior)
+        # SA83/CR-SA74-001: GUC restoration is guarded by
+        # connection.vendor + in_atomic_block because SET LOCAL
+        # requires an active transaction.  Outside an atomic block
+        # the GUC is automatically cleaned up at transaction end.
+        from django.db import connection
 
-    return JsonResponse(
-        {
-            "id": asset.pk,
-            "url": _build_media_response_url(request, asset.file.name or ""),
-            "alt": asset.alt,
-            "kind": asset.kind,
-            "width": asset.width,
-            "height": asset.height,
-        },
-        status=201,
-    )
+        if connection.vendor == "postgresql" and connection.in_atomic_block:
+            _restore_current_org_id(prior)
 
 
 @_typed_csrf_exempt
@@ -725,6 +765,13 @@ def publish_post_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
     (session auth) or the user's personal org (token auth). Referenced
     resources (category, tags, media asset) are validated to belong to
     the same organization.
+
+    On exit the Python ContextVar is always restored to the prior value.
+    The PostgreSQL ``app.current_org_id`` GUC is restored via
+    ``_restore_current_org_id(prior)`` inside an active
+    ``transaction.atomic()`` block, which also clears the AF9
+    per-transaction priming memo.  Outside an atomic block the DB GUC
+    is automatically cleaned up at transaction end.
     """
     if request.method != "POST":
         return JsonResponse(
@@ -750,13 +797,26 @@ def publish_post_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
     if not isinstance(payload, dict):
         return JsonResponse({"error": "JSON object payload expected"}, status=400)
 
-    # Resolve org: session auth uses request.org from middleware;
-    # token auth resolves the user's personal org.
-    organization = _resolve_api_org(request, author)
+    from quickscale_modules_orgs.current_org import (
+        _restore_current_org_id,
+        get_current_org_id,
+        set_current_org_id,
+    )
 
+    prior = get_current_org_id()
+    organization = _resolve_api_org(request, author)
     try:
         post = create_published_post_from_payload(
             payload, author, organization=organization
+        )
+        return JsonResponse(
+            {
+                "id": post.pk,
+                "slug": post.slug,
+                "url": post.get_absolute_url(),
+                "status": post.status,
+            },
+            status=201,
         )
     except BlogPublishValidationError as exc:
         return JsonResponse({"errors": exc.errors}, status=400)
@@ -768,16 +828,16 @@ def publish_post_api(request: HttpRequest, **kwargs: Any) -> HttpResponse:
             {"error": "Unable to publish post"},
             status=500,
         )
+    finally:
+        set_current_org_id(prior)
+        # SA83/CR-SA74-001: GUC restoration is guarded by
+        # connection.vendor + in_atomic_block because SET LOCAL
+        # requires an active transaction.  Outside an atomic block
+        # the GUC is automatically cleaned up at transaction end.
+        from django.db import connection
 
-    return JsonResponse(
-        {
-            "id": post.pk,
-            "slug": post.slug,
-            "url": post.get_absolute_url(),
-            "status": post.status,
-        },
-        status=201,
-    )
+        if connection.vendor == "postgresql" and connection.in_atomic_block:
+            _restore_current_org_id(prior)
 
 
 class BlogPublicReadMixin(PublicSystemOrgReadMixin):

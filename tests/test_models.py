@@ -104,25 +104,28 @@ class TestModelHelpers:
 class TestCategory:
     """Tests for Category model"""
 
-    def test_category_creation(self, org):
+    def test_category_creation(self, org, blog_org_scope):
         """Test creating a category"""
-        category = Category.objects.create(
-            name="Technology",
-            description="Tech posts",
-            organization=org,
-        )
+        with blog_org_scope(org):
+            category = Category.objects.create(
+                name="Technology",
+                description="Tech posts",
+                organization=org,
+            )
         assert category.name == "Technology"
         assert category.slug == "technology"
         assert str(category) == "Technology"
 
-    def test_category_auto_slug(self, org):
+    def test_category_auto_slug(self, org, blog_org_scope):
         """Test automatic slug generation"""
-        category = Category.objects.create(name="Web Development", organization=org)
+        with blog_org_scope(org):
+            category = Category.objects.create(name="Web Development", organization=org)
         assert category.slug == "web-development"
 
-    def test_category_get_absolute_url(self, org):
+    def test_category_get_absolute_url(self, org, blog_org_scope):
         """Test category URL generation returns flat route"""
-        category = Category.objects.create(name="Python", organization=org)
+        with blog_org_scope(org):
+            category = Category.objects.create(name="Python", organization=org)
         url = category.get_absolute_url()
         assert url == "/blog/category/python/"
         assert "org" not in url
@@ -132,21 +135,24 @@ class TestCategory:
 class TestTag:
     """Tests for Tag model"""
 
-    def test_tag_creation(self, org):
+    def test_tag_creation(self, org, blog_org_scope):
         """Test creating a tag"""
-        tag = Tag.objects.create(name="Django", organization=org)
+        with blog_org_scope(org):
+            tag = Tag.objects.create(name="Django", organization=org)
         assert tag.name == "Django"
         assert tag.slug == "django"
         assert str(tag) == "Django"
 
-    def test_tag_auto_slug(self, org):
+    def test_tag_auto_slug(self, org, blog_org_scope):
         """Test automatic slug generation"""
-        tag = Tag.objects.create(name="Machine Learning", organization=org)
+        with blog_org_scope(org):
+            tag = Tag.objects.create(name="Machine Learning", organization=org)
         assert tag.slug == "machine-learning"
 
-    def test_tag_get_absolute_url(self, org):
+    def test_tag_get_absolute_url(self, org, blog_org_scope):
         """Test tag URL generation returns flat route"""
-        tag = Tag.objects.create(name="Python", organization=org)
+        with blog_org_scope(org):
+            tag = Tag.objects.create(name="Python", organization=org)
         url = tag.get_absolute_url()
         assert url == "/blog/tag/python/"
         assert "org" not in url
@@ -195,78 +201,78 @@ class TestAuthorProfile:
 class TestPost:
     """Tests for Post model"""
 
-    def test_post_creation(self, author_user, org):
+    def test_post_creation(self, author_user, org, blog_org_scope):
         """Test creating a blog post"""
-        post = Post.objects.create(
-            title="Test Post",
-            author=author_user,
-            content="# Test Content\n\nThis is a test post.",
-            status="draft",
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Test Post",
+                author=author_user,
+                content="# Test Content\n\nThis is a test post.",
+                status="draft",
+                organization=org,
+            )
         assert post.title == "Test Post"
         assert post.slug == "test-post"
         assert post.author == author_user
         assert post.status == "draft"
         assert str(post) == "Test Post"
 
-    def test_post_auto_slug(self, author_user, org):
+    def test_post_auto_slug(self, author_user, org, blog_org_scope):
         """Test automatic slug generation"""
-        post = Post.objects.create(
-            title="My Awesome Blog Post",
-            author=author_user,
-            content="Content here",
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="My Awesome Blog Post",
+                author=author_user,
+                content="Content here",
+                organization=org,
+            )
         assert post.slug == "my-awesome-blog-post"
 
-    def test_post_auto_excerpt(self, author_user, org):
+    def test_post_auto_excerpt(self, author_user, org, blog_org_scope):
         """Test automatic excerpt generation"""
         long_content = "A" * 500  # 500 characters
-        post = Post.objects.create(
-            title="Test",
-            author=author_user,
-            content=long_content,
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Test",
+                author=author_user,
+                content=long_content,
+                organization=org,
+            )
         assert len(post.excerpt) <= 303  # 300 + "..."
         assert post.excerpt.endswith("...")
 
-    def test_post_manual_excerpt(self, author_user, org):
+    def test_post_manual_excerpt(self, author_user, org, blog_org_scope):
         """Test manual excerpt"""
-        post = Post.objects.create(
-            title="Test",
-            author=author_user,
-            content="Long content here",
-            excerpt="Custom excerpt",
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Test",
+                author=author_user,
+                content="Long content here",
+                excerpt="Custom excerpt",
+                organization=org,
+            )
         assert post.excerpt == "Custom excerpt"
 
-    def test_post_published_date_auto_set(self, author_user, org):
+    def test_post_published_date_auto_set(self, author_user, org, blog_org_scope):
         """Test published_date is set when status changes to published"""
-        post = Post.objects.create(
-            title="Test",
-            author=author_user,
-            content="Content",
-            status="draft",
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Test",
+                author=author_user,
+                content="Content",
+                status="draft",
+                organization=org,
+            )
         assert post.published_date is None
 
-        post.status = "published"
-        post.save()
+        with blog_org_scope(org):
+            post.status = "published"
+            post.save()
         assert post.published_date is not None
 
-    def test_post_with_category_and_tags(self, author_user, org):
+    def test_post_with_category_and_tags(self, author_user, org, blog_org_scope):
         """Test post with category and tags"""
-        from quickscale_modules_orgs.current_org import (
-            reset_current_org_id,
-            set_current_org_id,
-        )
-
-        set_current_org_id(org.pk)
-        try:
+        with blog_org_scope(org):
             category = Category.objects.create(name="Tech", organization=org)
             tag1 = Tag.objects.create(name="Python", organization=org)
             tag2 = Tag.objects.create(name="Django", organization=org)
@@ -284,33 +290,35 @@ class TestPost:
             assert post.tags.count() == 2
             assert tag1 in post.tags.all()
             assert tag2 in post.tags.all()
-        finally:
-            reset_current_org_id()
 
-    def test_post_get_absolute_url(self, author_user, org):
+    def test_post_get_absolute_url(self, author_user, org, blog_org_scope):
         """Test post URL generation returns flat route"""
-        post = Post.objects.create(
-            title="Test Post",
-            author=author_user,
-            content="Content",
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Test Post",
+                author=author_user,
+                content="Content",
+                organization=org,
+            )
         url = post.get_absolute_url()
         assert url == "/blog/post/test-post/"
         assert "org" not in url
 
-    def test_post_short_content_no_ellipsis(self, author_user, org):
+    def test_post_short_content_no_ellipsis(self, author_user, org, blog_org_scope):
         """Test excerpt for short content has no ellipsis"""
-        post = Post.objects.create(
-            title="Short",
-            author=author_user,
-            content="Short content",
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Short",
+                author=author_user,
+                content="Short content",
+                organization=org,
+            )
         assert post.excerpt == "Short content"
         assert not post.excerpt.endswith("...")
 
-    def test_post_save_with_featured_image(self, author_user, org, tmp_path, settings):
+    def test_post_save_with_featured_image(
+        self, author_user, org, tmp_path, settings, blog_org_scope
+    ):
         """Test saving a post with a featured image triggers thumbnail generation"""
         settings.MEDIA_ROOT = str(tmp_path)
 
@@ -326,13 +334,14 @@ class TestPost:
             image_file = SimpleUploadedFile(
                 "test.jpg", f.read(), content_type="image/jpeg"
             )
-        post = Post.objects.create(
-            title="Image Post",
-            author=author_user,
-            content="Content with image",
-            featured_image=image_file,
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Image Post",
+                author=author_user,
+                content="Content with image",
+                featured_image=image_file,
+                organization=org,
+            )
 
         # Verify thumbnails were generated
         image_dir = os.path.dirname(post.featured_image.path)
@@ -343,7 +352,9 @@ class TestPost:
         assert any("small" in f for f in os.listdir(thumb_dir))
         assert any("medium" in f for f in os.listdir(thumb_dir))
 
-    def test_get_thumbnail_url_with_image(self, author_user, org, tmp_path, settings):
+    def test_get_thumbnail_url_with_image(
+        self, author_user, org, tmp_path, settings, blog_org_scope
+    ):
         """Test get_thumbnail_url returns correct URL when image exists"""
         settings.MEDIA_ROOT = str(tmp_path)
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
@@ -358,13 +369,14 @@ class TestPost:
             image_file = SimpleUploadedFile(
                 "thumb_test.jpg", f.read(), content_type="image/jpeg"
             )
-        post = Post.objects.create(
-            title="Thumbnail Post",
-            author=author_user,
-            content="Content",
-            featured_image=image_file,
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Thumbnail Post",
+                author=author_user,
+                content="Content",
+                featured_image=image_file,
+                organization=org,
+            )
 
         medium_url = post.get_thumbnail_url("medium")
         assert medium_url.startswith("https://cdn.example.com/media/")
@@ -376,14 +388,15 @@ class TestPost:
         assert "thumbnails" in small_url
         assert "small" in small_url
 
-    def test_get_thumbnail_url_without_image(self, author_user, org):
+    def test_get_thumbnail_url_without_image(self, author_user, org, blog_org_scope):
         """Test get_thumbnail_url returns empty string when no image"""
-        post = Post.objects.create(
-            title="No Image Post",
-            author=author_user,
-            content="Content",
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="No Image Post",
+                author=author_user,
+                content="Content",
+                organization=org,
+            )
         assert post.get_thumbnail_url() == ""
         assert post.get_thumbnail_url("small") == ""
 
@@ -393,6 +406,7 @@ class TestPost:
         org,
         tmp_path,
         settings,
+        blog_org_scope,
     ):
         """Test thumbnail URL falls back to the original image when variant is absent."""
         settings.MEDIA_ROOT = str(tmp_path)
@@ -407,13 +421,14 @@ class TestPost:
             image_file = SimpleUploadedFile(
                 "fallback.jpg", f.read(), content_type="image/jpeg"
             )
-        post = Post.objects.create(
-            title="Fallback Post",
-            author=author_user,
-            content="Content",
-            featured_image=image_file,
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Fallback Post",
+                author=author_user,
+                content="Content",
+                featured_image=image_file,
+                organization=org,
+            )
 
         assert post.get_thumbnail_url("large") == post.featured_image.url
 
@@ -423,6 +438,7 @@ class TestPost:
         org,
         tmp_path,
         settings,
+        blog_org_scope,
     ):
         """Featured image public URL should be helper-backed when configured."""
         settings.MEDIA_ROOT = str(tmp_path)
@@ -439,13 +455,14 @@ class TestPost:
                 content_type="image/png",
             )
 
-        post = Post.objects.create(
-            title="Helper Image Post",
-            author=author_user,
-            content="Content",
-            featured_image=uploaded_file,
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Helper Image Post",
+                author=author_user,
+                content="Content",
+                featured_image=uploaded_file,
+                organization=org,
+            )
 
         assert post.get_featured_image_url().startswith(
             "https://cdn.example.com/media/blog/images/"
@@ -458,6 +475,7 @@ class TestPost:
         tmp_path,
         settings,
         monkeypatch,
+        blog_org_scope,
     ):
         """Test thumbnail generation exits cleanly when storage cannot open the source image."""
         settings.MEDIA_ROOT = str(tmp_path)
@@ -470,13 +488,14 @@ class TestPost:
             content_type="image/jpeg",
         )
 
-        post = Post.objects.create(
-            title="Remote Storage Post",
-            author=author_user,
-            content="Content",
-            featured_image=image_file,
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Remote Storage Post",
+                author=author_user,
+                content="Content",
+                featured_image=image_file,
+                organization=org,
+            )
 
         def _raise_not_implemented(*_args, **_kwargs):
             raise NotImplementedError
@@ -491,6 +510,7 @@ class TestPost:
         tmp_path,
         settings,
         monkeypatch,
+        blog_org_scope,
     ):
         """Thumbnail generation should work via storage I/O without relying on `.path`."""
         settings.MEDIA_ROOT = str(tmp_path)
@@ -507,13 +527,14 @@ class TestPost:
             content_type="image/jpeg",
         )
 
-        post = Post.objects.create(
-            title="Remote Thumbnail Post",
-            author=author_user,
-            content="Content",
-            featured_image=image_file,
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Remote Thumbnail Post",
+                author=author_user,
+                content="Content",
+                featured_image=image_file,
+                organization=org,
+            )
 
         original_bytes = post.featured_image.read()
         stored_files: dict[str, bytes] = {post.featured_image.name: original_bytes}
@@ -553,6 +574,7 @@ class TestPost:
         org,
         tmp_path,
         settings,
+        blog_org_scope,
     ):
         """Thumbnail generation should swallow decompression-bomb image failures."""
         settings.MEDIA_ROOT = str(tmp_path)
@@ -572,13 +594,14 @@ class TestPost:
             "quickscale_modules_blog.models.Image.open",
             side_effect=Image.DecompressionBombError("too many pixels"),
         ):
-            post = Post.objects.create(
-                title="Bomb Post",
-                author=author_user,
-                content="Content",
-                featured_image=uploaded_file,
-                organization=org,
-            )
+            with blog_org_scope(org):
+                post = Post.objects.create(
+                    title="Bomb Post",
+                    author=author_user,
+                    content="Content",
+                    featured_image=uploaded_file,
+                    organization=org,
+                )
 
         assert post.featured_image.name.endswith("bomb.jpg")
         assert not os.path.exists(
@@ -591,6 +614,7 @@ class TestPost:
         org,
         tmp_path,
         settings,
+        blog_org_scope,
     ):
         """Thumbnail generation should treat warning-level decompression bombs as fatal."""
         settings.MEDIA_ROOT = str(tmp_path)
@@ -620,13 +644,14 @@ class TestPost:
             "quickscale_modules_blog.models.Image.open",
             side_effect=_warn_then_open,
         ):
-            post = Post.objects.create(
-                title="Warning Bomb Post",
-                author=author_user,
-                content="Content",
-                featured_image=uploaded_file,
-                organization=org,
-            )
+            with blog_org_scope(org):
+                post = Post.objects.create(
+                    title="Warning Bomb Post",
+                    author=author_user,
+                    content="Content",
+                    featured_image=uploaded_file,
+                    organization=org,
+                )
 
         assert post.featured_image.name.endswith("warning-bomb.jpg")
         assert not os.path.exists(
@@ -639,6 +664,7 @@ class TestPost:
         org,
         tmp_path,
         settings,
+        blog_org_scope,
     ):
         """Public featured/thumbnail URLs should not call storage `.url` when helper-backed."""
         settings.MEDIA_ROOT = str(tmp_path)
@@ -655,13 +681,14 @@ class TestPost:
                 content_type="image/jpeg",
             )
 
-        post = Post.objects.create(
-            title="Helper Only URLs",
-            author=author_user,
-            content="Content",
-            featured_image=uploaded_file,
-            organization=org,
-        )
+        with blog_org_scope(org):
+            post = Post.objects.create(
+                title="Helper Only URLs",
+                author=author_user,
+                content="Content",
+                featured_image=uploaded_file,
+                organization=org,
+            )
 
         with patch.object(
             post.featured_image.storage, "url", side_effect=AssertionError
@@ -678,7 +705,9 @@ class TestPost:
 class TestBlogMediaAsset:
     """Tests for BlogMediaAsset model."""
 
-    def test_blog_media_asset_creation(self, author_user, org, tmp_path, settings):
+    def test_blog_media_asset_creation(
+        self, author_user, org, tmp_path, settings, blog_org_scope
+    ):
         """Test creating a blog media asset stores metadata."""
         settings.MEDIA_ROOT = str(tmp_path)
 
@@ -693,16 +722,17 @@ class TestBlogMediaAsset:
                 content_type="image/png",
             )
 
-        asset = BlogMediaAsset.objects.create(
-            file=uploaded_file,
-            alt="Diagram",
-            kind=BlogMediaAsset.Kind.INLINE,
-            original_filename="asset.png",
-            width=640,
-            height=360,
-            uploaded_by=author_user,
-            organization=org,
-        )
+        with blog_org_scope(org):
+            asset = BlogMediaAsset.objects.create(
+                file=uploaded_file,
+                alt="Diagram",
+                kind=BlogMediaAsset.Kind.INLINE,
+                original_filename="asset.png",
+                width=640,
+                height=360,
+                uploaded_by=author_user,
+                organization=org,
+            )
 
         assert asset.alt == "Diagram"
         assert asset.kind == BlogMediaAsset.Kind.INLINE
