@@ -1,7 +1,11 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Audit date:** 2026-07-11 (re-run, delta pass — first run on the V3 prompt) ·
-> **Branch:** `v87` (HEAD `53a657d6`) · **Prompt:** tech-audit-prompt (V3 — first run)
+> **Latest re-run:** 2026-07-13 (V3 delta pass) · **Branch:** `v87` (HEAD `41689be7`, prior
+> `53a657d6`) · **Result: zero open findings, zero new findings — clean pass.** History of prior
+> passes preserved in the update block and Reconciliation log below.
+>
+> **Original masthead:** audit date 2026-07-11 (re-run, delta pass — first run on the V3 prompt) ·
+> **Branch:** `v87` (HEAD `53a657d6`) · **Prompt:** tech-audit-prompt (V3)
 > **Mode:** re-run against the SA65/SA66/SA68/SA69/SA73 + SA59.1-checkpoint delta
 > (`ae8c386e..53a657d6`, 51 non-doc files, +4328/−1476). The full first-party production diff was
 > read; the SA59.1 "chore: checkpoint" commits (`625626e8`, `6c90d8b9`, `2b9afa6b`) and the
@@ -35,6 +39,28 @@
 > implementation/validation complete; closed after independent review. SA81 unchanged. This
 > document's reconciled status is unchanged — SA77/SA79 were tracked on the roadmap, not as
 > tech-audit findings; their closure is recorded here for status accuracy.
+>
+> **Update (2026-07-13, SA80.3b/SA87 reconciliation, revised):** SA80.3b rerun confirmed 0 missing-`pg_dump`/`pg_restore` failures (retained-role: 298 passed/1 failed/2 skipped; default-user: 299 passed/2 skipped). SA80.3/SA80.3b fully resolved. The 1 retained-role failure was **SA87** (backups retained-role assertion, Track 3) — completed 2026-07-13 per change review; see [roadmap.md §Track 3](../technical/roadmap.md). The current open restricted-role findings keeping the integration gate red are **SA83** (Track 1 blog), **SA84** (Track 1 CRM), **SA85** (Track 2 forms), and **SA86** (Track 2 listings). SA87 is no longer an open finding. SA81 (per-module lockfiles, no deps) is unrelated cleanup and does not affect the gate. SA80.3b evidence retained: retained-role run 298 passed/1 failed/2 skipped, default-user run 299 passed/2 skipped, zero missing-tool failures in both.
+>
+> **Update (2026-07-13, V3 delta re-run — HEAD `41689be7`, prior `53a657d6`):** full delta sweep
+> over the `53a657d6..HEAD` production diff (SA60/SA70/SA74/SA75/SA76/SA77/SA78/SA79/SA80/SA82/SA87
+> remediation + test/docs). **Zero new findings — clean pass.** Production code touched this delta:
+> `crm/services.py` (SA74 seeding fix), `orgs/signals.py`+`apps.py` (SA70 last-owner `pre_delete`
+> backstop), `orgs/.../purge_organization.py` (SA70-aware `_raw_delete`), `forms/0007` migration
+> (SA79 `operator_access` + SA60 `NOT DEFERRABLE`), `apply_command.py` (SA80 Poetry env isolation),
+> `production.py.j2` (cosmetic quote fix) — each read in full and verified sound (see Clean sweeps
+> and Per-module verdicts). Test-integrity diff (§3.7) run across every changed test file: all are
+> strengthenings or SA59.2 PostgreSQL-seam adaptations (the TA55 autouse muting is now removed and
+> replaced with an opt-in fixture; backups moved to the PG seam with SQLite paths explicitly
+> `monkeypatch`-forced; notifications `reuse_db` is an operational rerun fix) — **no weakened or
+> flipped tests**. All prior findings remain resolved; no closures regressed. The four restricted-role
+> RLS failures keeping the integration gate red (**SA83** blog / **SA84** CRM / **SA85** forms /
+> **SA86** listings) plus **SA80.3**/**SA81** remain **roadmap-tracked**, with their structural root
+> owned by [arch-audit.md Finding 8](arch-audit.md) (`module-rls-context-procedural`); not promoted
+> here per this document's convention that roadmap-tracked work is not duplicated. `psql`/`pg_isready`
+> clients are now installed on the machine (they were absent last pass) but **no PostgreSQL server is
+> running**, so the runtime-read-path triage of SA83–SA86 (arch-audit's "bucket 3") remains a named
+> verification step, not an empirical result.
 
 ## Orientation summary
 
@@ -84,7 +110,51 @@ so TA54's runtime confirmation and TA57's Actions-dashboard confirmation are nam
 verification steps instead. Audit tools run: none available (installs prohibited); `poetry.lock`
 still untouched since 2026-06-17.
 
-**Clean sweeps worth recording (this pass):**
+**Coverage (2026-07-13 V3 delta re-run, HEAD `41689be7`):** read in full — the entire first-party
+production diff `53a657d6..HEAD`: `crm/services.py` (SA74), `orgs/signals.py` + `orgs/apps.py`
+(SA70 `pre_delete` backstop wiring), `orgs/.../purge_organization.py` (`_raw_delete` switch),
+`forms/.../0007_new_organization_ownership.py` (SA79/SA60), `apply_command.py` (SA80
+`_isolated_poetry_env`), `production.py.j2` (cosmetic). Beyond the diff, read for verification:
+`orgs/current_org.py` (AF9 execute-wrapper 461–529, `_restore_current_org_id`, `_tenant_context`,
+`org_scope` — confirms SA74's `_af9_primed_for_txn`/`_af9_primed_atomic` cleanup names match the
+real wrapper attributes and the GUC-leak logic is sound), `orgs/models.py` last-owner helpers,
+`auth/views.py:140–242` (`AccountDeleteView` pre-check that guards the `user.delete()` cascade path
+against the SA70 backstop), the CRM `organization_created` receiver census. Test-integrity diff
+(§3.7) run over every changed test file (backups PG-seam adaptation, orgs conftest autouse→opt-in,
+notifications `reuse_db`, crm/forms/blog/listings/social RLS-boundary adaptations) — no weakenings.
+Sampled — CHANGELOG/roadmap deltas for blessing checks, `scripts/provision_test_roles.sh` (new),
+`scripts/bootstrap.sh`. Skipped — module interiors unchanged since the 2026-07-10 deep pass
+(verdicts carried), `htmlcov/`, `graphify-out/`, `poetry.lock` (dependency bump; no manifest CVE
+signal without a scanner). **Empirical checks:** none possible — `psql`/`pg_isready` clients now
+present but no PostgreSQL server is running, and installs are prohibited; SA83–SA86 runtime-read
+triage named as the verification step. Audit tools run: none available (`bandit`/`pip-audit`/
+`semgrep` absent, installs prohibited).
+
+**Clean sweeps worth recording (2026-07-13 V3 delta re-run):**
+
+- **SA74 (crm seeding) fix-regression pass — sound and complete:** `ensure_org_default_stages`
+  saves/sets/restores the tenant ContextVar across its whole scope, `_seed_default_stages` wraps
+  INSERTs in `org_scope(organization)`, and the `finally` block's CR-SA74-001 GUC-leak cleanup uses
+  the *real* AF9 attribute names (`_af9_primed_for_txn`/`_af9_primed_atomic`, verified against
+  `current_org.py:503–522`) and correctly guards on `connection.in_atomic_block` so no stale
+  `app.current_org_id` GUC leaks to later no-context queries in an enclosing transaction. Sibling
+  check: CRM is the **only** `organization_created` receiver (census run) — no other module carries
+  the TA54 class.
+- **SA70 last-owner `pre_delete` backstop — no cascade-path regression:** the receiver raises only
+  for a sole-owner-with-other-members membership; `AccountDeleteView._get_blocking_orgs_for_deletion`
+  pre-checks and blocks that exact case before `user.delete()`, so the guarded account-deletion path
+  never trips it; no ORM `organization.delete()` cascade path exists (grep-confirmed), and the org
+  purge command switched org-level deletes to `_raw_delete` to bypass the receiver deliberately.
+- **SA79/SA60 forms `0007` — correct fix:** `SET LOCAL app.operator_access = 'on'` enables the Form
+  RLS `FOR SELECT` sub-policy so the cross-org backfill subquery reads all orgs under FORCE RLS
+  (transaction-scoped, auto-cleaned); the composite FK is now `NOT DEFERRABLE` matching the ratified
+  SA60 project-wide policy and the cross-module conformance gate.
+- **SA80 `_isolated_poetry_env` (CLI) — sound:** copies the env, drops `VIRTUAL_ENV`/`POETRY_ACTIVE`
+  and the venv `bin` from `PATH`, sets `POETRY_VIRTUALENVS_IN_PROJECT=true`, and is passed only to
+  the two `poetry install`/`poetry lock` call sites via the SA65 per-call `env=` seam — foreign
+  subprocesses still inherit the parent env unmodified.
+
+**Clean sweeps worth recording (2026-07-11 pass):**
 
 - **TA53/SA65 closure verified (§2f.3):** `_QUICKSCALE_SUBPROCESS_ENV` module-level cache deleted;
   `_run_command` defaults `env=None`; `_build_quickscale_env()` built on demand and passed only to
@@ -158,11 +228,15 @@ five are closed.)*
 Module interiors unchanged since the 2026-07-10 deep pass; verdicts carried except where this
 delta touched them:
 
-- **crm** — **TA54 resolved (SA74, 2026-07-12)**: `ensure_org_default_stages` now primes tenant
-  context itself; production seeding path clean.
-- **orgs** — production source clean (`apps.py` SA68 rewrite verified sound); **TA55 resolved
-  (SA74)** — autouse signal muting replaced with an opt-in fixture. SA59.1's 3+6 restricted-role
-  failures were tracked as **SA77** (closed 2026-07-13 by SA82 — full gate confirmed clean).
+- **crm** — **TA54 resolved (SA74, 2026-07-12; fix re-verified 2026-07-13)**:
+  `ensure_org_default_stages` primes tenant context across its scope, seeds under `org_scope`, and
+  cleans up the AF9 GUC on exit (verified against `current_org.py`); production seeding path clean.
+  CRM is the only `organization_created` receiver — no sibling carries the TA54 class.
+- **orgs** — production source clean; **TA55 resolved (SA74)** — autouse signal muting replaced with
+  an opt-in fixture. **SA70 last-owner `pre_delete` backstop (`signals.py`/`apps.py`) verified sound
+  this delta** — no cascade path it wrongly blocks; purge switched to `_raw_delete` to bypass it
+  intentionally. SA59.1's restricted-role failures were tracked as **SA77** (closed 2026-07-13 by
+  SA82 — full gate confirmed clean).
 - **quickscale_core** — production clean (templates verified, SA68); **TA56 resolved (SA75)**.
 - **quickscale_cli** — clean; TA53 resolved and verified (SA65); SA66 gate added.
 - **quickscale_devtools** — clean (taxonomy data + `start.sh` added to in-place targets, gated by
@@ -314,7 +388,24 @@ docs updated in the same delta).
    code fix landed 2026-07-12; final restricted-role verification blocked on SA79) and **SA79**
    (forms `0007` backfill data mismatch, distinct from the deferability contract SA60 already
     fixed; reopened/blocked on CR-PLAN-SA79-004 and CR-PLAN-SA79-005).
-- 2026-07-13 (SA82 completed) — **SA77 and SA79: resolved.** SA82 removed the SA76 quarantine entries and ran the full `make test-integration` gate end-to-end. Orgs 847 passed/11 BYPASSRLS-skips/0 failed (93.04% coverage), notifications 39 passed/0 failed (91.76% coverage), overall mean coverage 92.95% passed. SA77's code fix (2026-07-12) verified live under the unquarantined gate; SA79's forms 0007 backfill and notifications acceptance confirmed under the full gate. Both are closed. Three independent restricted-role findings surfaced by the quarantine removal remain open on `roadmap.md` — **SA84** (CRM, 67 RLS failures/20 skipped) on Track 1, **SA85** (forms residual, 33 RLS failures/8 skipped/10 errors) and **SA86** (listings, 6 RLS failures) on Track 2 — not tech-audit findings, per this document's convention that roadmap-tracked work is not duplicated here. **SA83** (blog, 86 RLS failures) implementation/validation complete; closed after independent review. SA80.3b (Track 3, backups: one independent failure; 24 missing-pg_dump failures resolved) remains open. See CHANGELOG.md's SA82 entry for detail.
+- 2026-07-13 (SA82 completed) — **SA77 and SA79: resolved.** SA82 removed the SA76 quarantine entries and ran the full `make test-integration` gate end-to-end. Orgs 847 passed/11 BYPASSRLS-skips/0 failed (93.04% coverage), notifications 39 passed/0 failed (91.76% coverage), overall mean coverage 92.95% passed. SA77's code fix (2026-07-12) verified live under the unquarantined gate; SA79's forms 0007 backfill and notifications acceptance confirmed under the full gate. Both are closed. Three independent restricted-role findings surfaced by the quarantine removal remain open on `roadmap.md` — **SA84** (CRM, 67 RLS failures/20 skipped) on Track 1, **SA85** (forms residual, 33 RLS failures/8 skipped/10 errors) and **SA86** (listings, 6 RLS failures) on Track 2 — not tech-audit findings, per this document's convention that roadmap-tracked work is not duplicated here. **SA83** (blog, 86 RLS failures) implementation/validation complete; closed after independent review. SA80.3b (backups rerun) resolved — see SA80.3b/SA87 reconciliation entry below. See CHANGELOG.md's SA82 entry for detail.
+- 2026-07-13 (SA80.3b/SA87 reconciliation): SA80.3b rerun completed — 0 missing-`pg_dump`/`pg_restore` failures remain (retained-role: 298 passed/1 failed/2 skipped; default-user: 299 passed/2 skipped). SA80.3/SA80.3b resolved — no longer an open gate failure. The 1 retained-role residual is tracked as SA87 on roadmap.md §Track 3. Current open restricted-role findings keeping the integration gate red: SA84–SA86. SA83 closed after independent review. SA81 (per-module lockfiles, no deps) is unrelated cleanup; does not affect the gate. See roadmap.md for current status.
+- 2026-07-13 (V3-prompt delta re-run, HEAD `41689be7`, prior `53a657d6`) — **zero new findings.**
+  Full first-party production diff `53a657d6..HEAD` read (SA60/SA70/SA74/SA75/SA76/SA77/SA78/SA79/
+  SA80/SA82/SA87 remediation + test/docs). **No prior findings to re-verify** — all TA IDs were
+  already reconciled resolved as of the 2026-07-12 pass; none regressed (spot-checked SA74's
+  `ensure_org_default_stages` and SA60's `NOT DEFERRABLE` emission still present in code).
+  Fix-regression pass (§3.6): SA74 verified sound and complete (ContextVar + `org_scope` + AF9
+  GUC-leak cleanup with correct attribute names; CRM is the sole `organization_created` receiver, so
+  no sibling carries the TA54 class); SA70 `pre_delete` backstop verified to break no legitimate
+  cascade path (account-deletion pre-check guards `user.delete()`; purge uses `_raw_delete`; no ORM
+  `organization.delete()` cascade path exists); SA79/SA60 forms `0007` and SA80 CLI Poetry-env
+  isolation verified sound. Test-integrity diff (§3.7): all delta test changes are strengthenings or
+  SA59.2 PostgreSQL-seam adaptations — no weakened/flipped tests (the TA55 autouse muting removal is
+  a strengthening). Chain pass (§3.9): no new chains. SA83–SA86 (restricted-role RLS failures),
+  SA80.3, SA81 remain roadmap-tracked; structural root owned by arch-audit Finding 8
+  (`module-rls-context-procedural`); not promoted here per convention. Empirical checks: still none
+  possible — `psql`/`pg_isready` clients now installed but no PostgreSQL server running.
 
 ## Notes (not violations, watch items)
 
@@ -357,6 +448,17 @@ docs updated in the same delta).
   composite-FK contract issue closed via SA60 (TA50); notifications' duplicate-db issue closed via
   SA78; the residual forms backfill bug was SA79 (closed 2026-07-13 by SA82); orgs' 9 restricted-role failures
   were SA77 (closed 2026-07-13 by SA82 — code fix verified live under the full unquarantined gate). TA57's gate-red consequence closed via
-   SA76's quarantine mechanism.
-
-- **SA83 (blog restricted-role, 86 RLS failures) — implementation/validation complete 2026-07-13; closed after independent review.** Three root causes: (1) unscoped blog test setup across nine blog test files — every tenant INSERT/read needed matching `blog_org_scope(org)` for FORCE RLS compliance; (2) missing `_resolve_api_org` context priming — token-auth blog API paths didn't set the ContextVar before ORM ops; (3) stale AF9 priming memo on GUC reset — `org_scope()` exit reset the GUC but left the per-transaction memo, preventing re-priming when the same org was re-resolved. Phase 4 shared orgs fix (`_clear_priming_memo` in `current_org.py`) applies to all modules, not just blog. Outcome: blog 211 passed/0 failed, coverage 91.57%, no quarantine. Orgs 850 passed/11 BYPASSRLS-skips/0 failed, 93.08% coverage. Overall mean 93.54%. Exit 1 from `make test-integration` reflects only independent residuals (SA80.3b, SA84–SA86). SA83 closed after independent review. See CHANGELOG.md v0.87.0 SA83 entry for full detail.
+  SA76's quarantine mechanism. See `roadmap.md` for SA83–SA86 tracking.
+- **SA83 (blog restricted-role, 86 RLS failures) — implementation/validation complete 2026-07-13; closed after independent review.** Three root causes: (1) unscoped blog test setup across nine blog test files — every tenant INSERT/read needed matching `blog_org_scope(org)` for FORCE RLS compliance; (2) missing `_resolve_api_org` context priming — token-auth blog API paths didn't set the ContextVar before ORM ops; (3) stale AF9 priming memo on GUC reset — `org_scope()` exit reset the GUC but left the per-transaction memo, preventing re-priming when the same org was re-resolved. Phase 4 shared orgs fix (`_clear_priming_memo` in `current_org.py`) applies to all modules, not just blog. Outcome: blog 211 passed/0 failed, coverage 91.57%, no quarantine. Orgs 850 passed/11 BYPASSRLS-skips/0 failed, 93.08% coverage. Overall mean 93.54%. Exit 1 from `make test-integration` reflects only independent residuals (SA84–SA86). SA83 closed after independent review. See CHANGELOG.md v0.87.0 SA83 entry for full detail.
+- **SA84–SA86 restricted-role RLS failures keep the integration gate red — roadmap-tracked, not a
+  tech-audit finding (carried 2026-07-13):** CRM/forms/listings cross-org data migrations and
+  fixtures acquire no `operator_access` context, so they fail under `quickscale_test_role`
+  (NOBYPASSRLS). arch-audit Finding 8 (`module-rls-context-procedural`) owns the structural root.
+  Per arch-audit's analysis these are predominantly **test-posture** (production `migrate` runs under
+  the SA68 privileged one-shot superuser-class role, so backfills succeed in prod). **The one open
+  question that could become a tech finding** is arch-audit's "bucket 3": whether any *runtime* read
+  path that also runs NOBYPASSRLS in production is missing its RLS context. Verification step (now
+  that a `psql` client exists, once a PG server is available): run one module's restricted-role suite
+  (`QS_BLOG_DB_USER=quickscale_test_role … pytest quickscale_modules/blog`) and bucket the failures
+  into migration-time / fixture-time / runtime-query — only the third is production-severity and, if
+  found, is promoted to a new TA ID. Watch, don't duplicate the roadmap tickets.

@@ -49,10 +49,10 @@ git merge --no-ff wt-track{N}
 
 > Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). This section retains checked closeout entries for completed items as evidence of acceptance (their full implementation detail lives in CHANGELOG.md). Active and blocked work stays open below.
 >
-> **Track readiness (2026-07-13, updated):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed — SA82-era historical counts only; notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. The repository integration gate remains red due to separate independent findings that do not affect SA77/SA79 closure — exit 1 reflects only the independent residuals listed below.
-> - **Track 1** — SA83 (blog) implementation/validation complete; closed after independent review; SA84 (CRM, 30 RLS failures) open, no deps.
-> - **Track 2** — unblocked from SA82 (SA79 closed); SA85 (forms, 125 passed/50 RLS failures/8 skipped) and SA86 (listings, 128 passed/6 RLS failures), both open, no deps.
-> - **Track 3** — SA80 (venv + retained-role env wiring) done; SA82 (gate rerun) completed; SA80.3a (pg_dump install) done 2026-07-13; SA80.3b (backups rerun completed — removed 24 missing-`pg_dump` failures; current 298 passed/1 failure/2 skipped, remaining failure tracked as open follow-up, non-blocking); SA81 (no deps, not a gate-failure cause) remains open.
+> **Track readiness (2026-07-13, updated):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed, notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. The repository integration gate remains red due to separate independent restricted-role findings that do not affect SA77/SA79 closure — exit 1 reflects only the independent residuals listed below.
+> - **Track 1** — SA83 (blog) implementation/validation complete 2026-07-13; closed after independent review. SA84 (CRM, 67 RLS failures/20 skipped) open, no deps.
+> - **Track 2** — unblocked from SA82 (SA79 closed); SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures), both open, no deps (reassigned from Track 1, 2026-07-13).
+> - **Track 3** — SA80 (venv + retained-role env wiring) done; SA82 (gate rerun) completed; SA80.3a (pg_dump install) done 2026-07-13; SA80.3b (backups suite rerun) completed 2026-07-13; SA81 (no deps) remains open; SA87 (username-independent restore test) completed 2026-07-13.
 
 ### Dependency & parallelization overview
 
@@ -62,7 +62,7 @@ Track 1 (tenant-context surface)        Track 2 (module contracts & settings)   
 SA77 — done (SA82, 2026-07-13)         SA79 — done (SA82, 2026-07-13)            SA80 — done (2026-07-13)
   orgs 847p/11 BYPASSRLS-skips/0f        notifications 39p/0f;                     SA82 — done (2026-07-13)
   (SA82-era historical counts)           forms 0007 acceptance verified            SA80.3a — done (2026-07-13)
-SA83 — blog (86 RLS failures)            SA85 — forms residual (33 RLS             SA80.3b — backups rerun
+SA83 — blog: impl/validation              SA85 — forms residual (33 RLS             SA80.3b (backups rerun)
   impl/validation complete;               failures at SA82; current                  done; 298p/1f/2s
   closed after independent review         125p/50f/8s) open, no deps               one remaining failure
   blog 211p/0f, API 57p/0f,               (reassigned from Track 1,                 open follow-up
@@ -75,6 +75,22 @@ SA84 — CRM (30 RLS failures)               open, no deps, unknown root        
 
 
 SA82 (Track 3) completed 2026-07-13 — the `orgs`/`notifications` quarantine entries are removed; the full gate rerun confirmed orgs (847 passed/11 BYPASSRLS-skips/0 failed — SA82-era historical counts only) and notifications (39 passed/0 failed) clean. SA77 and SA79 are closed by this result. SA83 (blog) implementation/validation complete; closed after independent review; SA84 open; Track 2 is unblocked from SA82 with SA85–SA86 open (reassigned from Track 1, 2026-07-13, to parallelize the independent restricted-role residuals). The integration gate remains red due to separate independent findings (SA80.3b, SA84–SA86) recorded below. (SA81 is unrelated cleanup — per-module lockfile removal — and does not affect the gate.)
+
+SA83 — blog: root-caused; fix WIP        SA85 — forms residual (33 RLS             SA80.3b (backups rerun)
+  in wt-track1: 211p/0f in isolation       failures/8 skipped/10 errors)             done (2026-07-13)
+SA84 — CRM (67 RLS failures/20             open, no deps, unknown root             SA81 — open, no deps
+  skipped) open, no deps, unknown          cause (reassigned from Track 1,          SA87 — username-independent
+  root cause                               2026-07-13)                                restore test
+                                                                                       done (2026-07-13)
+                                           SA86 — listings (6 RLS failures)
+                                             open, no deps, unknown root
+                                             cause (reassigned from Track 1,
+                                             2026-07-13)
+```
+
+
+SA82 (Track 3) completed 2026-07-13 — the `orgs`/`notifications` quarantine entries are removed; the full gate rerun confirmed orgs (847 passed/11 BYPASSRLS-skips/0 failed) and notifications (39 passed/0 failed) clean. SA77 and SA79 are closed by this result. Track 1 is unblocked from SA82 with SA83–SA84 open; Track 2 is unblocked from SA82 with SA85–SA86 open (reassigned from Track 1, 2026-07-13, to parallelize the four independent restricted-role residuals). The integration gate remains red due to separate independent restricted-role findings (SA83–SA86) recorded below. (SA81 is unrelated cleanup — per-module lockfile removal — and does not affect the gate.)
+
 
 ### Track 1 — Tenant-context surface
 
@@ -135,29 +151,42 @@ SA79 closed 2026-07-13 by SA82 — see below and CHANGELOG.md. SA85 and SA86 rea
 
 ### Track 3 — Core/CLI plumbing
 
-SA80 closed 2026-07-13 (venv re-provision + retained-role env wiring) — see CHANGELOG.md. SA82 completed 2026-07-13. SA80.3a closed 2026-07-13. SA80.3b rerun completed — current 298 passed/1 failure/2 skipped, remaining failure open follow-up; SA81 (no deps) remains open.
+SA80 closed 2026-07-13 (venv re-provision + retained-role env wiring) — see CHANGELOG.md. SA82 completed 2026-07-13. SA80.3a closed 2026-07-13. SA80.3b completed 2026-07-13 (298 passed/1 failure/2 skipped; the 1 pre-existing test expectation mismatch tracked as SA87, resolved). SA81 (no deps) remains open. SA87 (username-independent restore test) completed 2026-07-13.
+
 
 - [x] **SA82 — Remove the SA76 `orgs`/`notifications` quarantine entries and rerun the full `make test-integration` gate to prove SA77/SA79 clean.** `Tier 1 · Track 3 · deps: none → completed 2026-07-13`
 
   Removed `orgs` and `notifications` from `QUARANTINE_TICKETS` in `scripts/test_integration.sh` (passed `bash -n` syntax check). Ran `make test-integration` end-to-end — exit 1 (expected: separate findings remain). Target evidence: orgs 847 passed/11 BYPASSRLS-skips/0 failed, 93.04% coverage; notifications 39 passed/0 failed, 91.76% coverage. Overall mean coverage 92.95% passed.
 
-  SA77 closed and SA79 closed by this result — their acceptance conditions are met under the full unquarantined gate. Four independent restricted-role findings surfaced by removing the quarantine, of which three remain open: SA84 (CRM, 67 RLS failures/20 skipped, current 30 failures) in Track 1, SA85 (forms, 33 RLS failures/8 skipped/10 errors, current 125 passed/50 failures/8 skipped) and SA86 (listings, 6 RLS failures, current 128 passed/6 failures) in Track 2 (reassigned 2026-07-13 to parallelize). SA83 (blog, 86 RLS failures) resolved; closed after independent review. Backups 275 passed/24 missing-`pg_dump` failures/2 skipped at the time; rerun completed — current 298 passed/1 failure/2 skipped, remaining failure tracked as open follow-up.
+  SA77 closed and SA79 closed by this result — their acceptance conditions are met under the full unquarantined gate. Three independent restricted-role findings surfaced by removing the quarantine remain open: SA84 (CRM, 67 RLS failures/20 skipped) in Track 1, SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures) in Track 2 (reassigned 2026-07-13 to parallelize). SA83 (blog, 86 RLS failures) resolved; closed after independent review. Backups (SA80.3b) resolved 2026-07-13 (see below).
+
 
   *Acceptance:* orgs and notifications both pass clean under the full unquarantined gate. **Achieved.** SA77 and SA79 closed.
   *(why →* 2026-07-13 roadmap closeout checkpoint, [CHANGELOG.md](../../CHANGELOG.md)*)*
 
 #### Finding — PostgreSQL client tools missing locally (`why →` CR-SA82-NT-001; discovered during SA82 full-gate rerun)
 
-SA80.3 split 2026-07-13 into SA80.3a (done) and SA80.3b (open) — the local install landed and the `backups` suite rerun has been executed, removing all 24 missing-`pg_dump` failures; current result is 298 passed/1 failure/2 skipped, one independent failure remains as an open follow-up.
+SA80.3 split 2026-07-13 into SA80.3a (done) and SA80.3b (done) — the local pg_dump/pg_restore 18.4 install resolved the tooling gap; the rerun confirmed 0 missing-`pg_dump`/`pg_restore` failures (retained-role: 298 passed/1 failed/2 skipped; default-user: 299 passed/2 skipped). The 1 retained-role failure was a pre-existing test expectation mismatch tracked as SA87 (resolved 2026-07-13).
+
 
 - [x] **SA80.3a — Install PostgreSQL 18 client tools locally.** `Tier 1 · Track 3 · deps: none → completed 2026-07-13`
   Added the PGDG apt repository (signed-by keyring at `/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg`, source list `/etc/apt/sources.list.d/pgdg.list` pointing at `noble-pgdg main`) and installed `postgresql-client-18` via `apt-get`, matching the guidance already printed in the `BackupError` message (`quickscale_core/src/quickscale_core/dr_engine/primitives.py::_postgresql_18_client_tooling_guidance`). Verified: `pg_dump --version` → `pg_dump (PostgreSQL) 18.4 (Ubuntu 18.4-1.pgdg24.04+1)`.
   *Acceptance:* `pg_dump`/`pg_restore` 18.x resolve on `PATH` locally. **Achieved.**
 
-- [ ] **SA80.3b — Rerun the `backups` suite (or full `make test-integration`) to resolve the one remaining failure.** `Tier 1 · Track 3 · deps: SA80.3a (done)`
-  The rerun confirmed the 24 missing-`pg_dump` failures are resolved — `backups` now shows 298 passed/1 failure/2 skipped. The remaining failure is tracked as an open follow-up; the original acceptance target (0 `pg_dump`-related failures) is met.
-  *Acceptance:* `backups` module suite shows 0 failures attributable to missing `pg_dump`/`pg_restore`. **Achieved** (rerun completed; 1 independent remaining failure tracked as follow-up).
+- [x] **SA80.3b — Rerun the `backups` suite to confirm the 24 missing-`pg_dump` failures are resolved.** `Tier 1 · Track 3 · deps: SA80.3a (done) → completed 2026-07-13`
+  0 missing-`pg_dump`/`pg_restore` failures remain. pg_dump and pg_restore 18.4 confirmed on PATH. Ran `QS_BACKUPS_DB_USER=quickscale_test_role make MODULE=backups test -- --modules`: 298 passed, 1 failed, 2 skipped in 55.98s. The 1 failure (`test_restore_file_mode_executes_pg_restore_for_operator_dump`) is a pre-existing test expectation mismatch — it hardcodes `--username postgres` but the retained-role env uses `quickscale_test_role`. Without the env var (default `postgres` user): 299 passed, 2 skipped in 55.61s — 0 failures. All 24 original missing-`pg_dump` failures resolved. Updated SA82 evidence block and Track 3 summary. See CHANGELOG.md for full detail.
+  *Acceptance:* 0 failures attributable to missing `pg_dump`/`pg_restore`. **Achieved.**
+
   *(why →* CR-SA82-NT-001, SA80.3a follow-up*)*
+
+#### Finding — Pre-existing test expectation mismatch for operator-restore username under retained role (`why →` SA80.3b discovery)
+When running the `backups` suite with `QS_BACKUPS_DB_USER=quickscale_test_role`, test `test_restore_file_mode_executes_pg_restore_for_operator_dump` (`test_services.py:2869`) fails because it hardcodes `--username postgres` in the expected `pg_restore` command, but `_build_pg_restore_command` reads the Django `DATABASES['default']['USER']` (which picks up the `QS_BACKUPS_DB_USER` env var). Under the default (`postgres`), the test passes. The test tolerates the default because `_set_postgresql_default_connection` does not monkeypatch USER. This is a minor test-isolation issue — the test should either set the expected username from env or mock the USER field to make the assertion env-independent. Not a regression from SA80.3 — `make test-integration` has the same env setting and would hit the same failure. Low severity; does not affect SA80.3b acceptance.
+
+- [x] **SA87 — Make `test_restore_file_mode_executes_pg_restore_for_operator_dump` username-independent.** `Tier 1 · Track 3 · deps: none → completed 2026-07-13`
+  Replaced the hardcoded `--username postgres` expectation with `connections["default"].settings_dict["USER"]`, so the assertion dynamically derives the expected database user from the active connection settings. Both suites confirmed: default-user mode 299 passed/2 skipped (0 failures); retained-role (`QS_BACKUPS_DB_USER=quickscale_test_role`) mode 299 passed/2 skipped (0 failures). The 2 skips are pre-existing and unchanged. Production behavior was already correct under both paths — this was purely a test-isolation fix. No blockers were found. The SA87 code change passed review with no code findings. Closes SA87.
+
+  **CR-SA87-REV-001 (consistency finding):** Two stale audit current-status references were discovered during review — `tech-audit.md` §current-status still listed SA87 among open findings, and `arch-audit.md` enforcement-census row 2 still included SA87 in the open range SA83–SA87. Both were synchronized to reflect SA87 completion while preserving the historical SA87 entries at `tech-audit.md:319` (Reconciliation log) and `arch-audit.md:395–406` (Fix order and interactions). No blockers remain.
+  *(why →* SA80.3b discovery, [CHANGELOG.md](../../CHANGELOG.md)*)*
 
 #### Finding — Dead per-module `poetry.lock`/sibling-version constraints (`why →` discovered 2026-07-13 during a routine dependency-update pass)
 
