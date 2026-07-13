@@ -15,7 +15,7 @@ packages = [{include = "quickscale_modules_forms", from = "src"}]
 python = ">=3.13,<3.15"
 Django = ">=6.0.5,<6.1.0"
 djangorestframework = "^3.16.1"
-django-filter = "^25.2"
+django-filter = "^26.1"
 
 [tool.poetry.group.dev.dependencies]
 # Minimal dev dependencies for standalone testing
