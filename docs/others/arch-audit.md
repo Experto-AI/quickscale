@@ -75,7 +75,7 @@ untouched by this update.
 | # | Invariant | Enforced by | Class | Trend this pass |
 |---|-----------|-------------|-------|-----------------|
 | 1 | Tenant isolation on reads/writes | fail-closed `TenantManager` + FORCE RLS + AF9 execute-wrapper | structural | stable |
-| 2 | No bypassing DB role at boot | orgs boot guard (`apps.py`), `rolbypassrls` + `rolsuper` | structural | **strengthened** — the SA59 blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is gone from the unit path; CI/publish integration jobs run module suites under `quickscale_test_role` (NOBYPASSRLS/NOSUPERUSER) with the guard live. Gate was green during SA76 quarantine (2026-07-12 snapshot). Post-SA82 quarantine removal, the gate is red (expected — SA80.3, SA83–SA86 open; SA82 target acceptance passed independently; see roadmap Track readiness). Backups now runs against PostgreSQL (no longer an SQLite-excluded suite since SA82 rerun). |
+| 2 | No bypassing DB role at boot | orgs boot guard (`apps.py`), `rolbypassrls` + `rolsuper` | structural | **strengthened** — the SA59 blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is gone from the unit path; CI/publish integration jobs run module suites under `quickscale_test_role` (NOBYPASSRLS/NOSUPERUSER) with the guard live. Gate was green during SA76 quarantine (2026-07-12 snapshot). Post-SA82 quarantine removal, the gate is red (expected — SA83–SA87 open; SA82 target acceptance passed independently; see roadmap Track readiness). Backups now runs against PostgreSQL (no longer an SQLite-excluded suite since SA82 rerun). |
 | 3 | Admin org-scoping | `TenantModelAdmin`; tripwire = NOBYPASSRLS test posture (SA14.4) | structural + gated | **restored** — with the blanket hatch gone, NOBYPASSRLS-by-default is real again in the integration path |
 | 4 | DB privilege selection per process | launcher env contract (`QUICKSCALE_PRIVILEGED_COMMAND`/`QUICKSCALE_NON_DB_COMMAND` + `RUNTIME_DATABASE_URL=""`), consumed by production settings + boot guard | structural | completed (SA68, re-verified in code this pass — zero argv inspection). New: sanctioned-set frozensets ×2 (template-side + orgs-module-side), both fail closed on unknown values/desync, no sync gate (watchlist) |
 | 5 | JSON endpoint idiom | `OrgApiBaseView`/DRF baseline + SA46 csrf-exempt CI gate | structural + gated | stable |
@@ -400,8 +400,10 @@ untouched by this update.
    full `make test-integration` gate rerun with quarantine entries removed confirmed orgs
    (847 passed/11 BYPASSRLS-skips/0 failed) and notifications (39 passed/0 failed) clean, closing
    both roadmap follow-ups. Four independent restricted-role findings (blog → SA83, CRM → SA84,
-   forms residual → SA85, listings → SA86) surfaced by the quarantine removal are now tracked on
-   the roadmap as open Track 1 items.
+   forms residual → SA85, listings → SA86) surfaced by the quarantine removal are tracked on
+   the roadmap (SA83–SA84 in Track 1; SA85–SA86 reassigned to Track 2).
+   A subsequent retained-role assertion mismatch (SA87, Track 3 backups) was discovered during
+   SA80.3b and is tracked separately on the roadmap.
 2. ~~SA60~~ — **done**: unblocked Finding 4's decision-record caution and SA59.1's forms/0007
    composite-FK failure together, as planned.
 3. ~~SA70 (Finding 2's first step)~~ — **done**.
