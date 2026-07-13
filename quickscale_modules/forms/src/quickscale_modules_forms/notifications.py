@@ -47,19 +47,34 @@ def _enqueue_notification(submission: "FormSubmission") -> str:
     if submission.is_spam:
         return "skipped_spam"
 
-    form = submission.form
+    # CR-SA85-REV-007: dereference submission.form inside org_scope so
+    # that lazy FK traversal finds the related Form under the correct
+    # RLS context.  Extract the fields we need before the scope exits.
+    from quickscale_modules_orgs.current_org import org_scope
+
+    with org_scope(submission.organization):
+        form = submission.form
+        notify_emails_raw = form.notify_emails if form else ""
+        form_slug = form.slug if form else "unknown"
+        form_pk = form.pk if form else None
+
     recipients = [
-        email.strip() for email in form.notify_emails.split(",") if email.strip()
+        email.strip() for email in notify_emails_raw.split(",") if email.strip()
     ]
     if not recipients:
         logger.warning(
             "No notify_emails configured for form '%s' (pk=%s) — notification skipped",
-            form.slug,
-            form.pk,
+            form_slug,
+            form_pk,
         )
         return "no_recipients"
 
-    notification_content = _build_submission_notification_content(submission)
+    # CR-P3-006: materialize notification content inside a short org scope
+    # so FORCE RLS allows reading committed FormFieldValue rows via the
+    # DB-level app.current_org_id GUC.  The scope exits before the actual
+    # email delivery so we never hold a live transaction for remote calls.
+    with org_scope(submission.organization):
+        notification_content = _build_submission_notification_content(submission)
 
     tracked_sender = _load_tracked_notification_sender()
 
@@ -86,14 +101,14 @@ def _enqueue_notification(submission: "FormSubmission") -> str:
             logger.warning(
                 "Failed to send notification email for submission #%s (form: %s)",
                 submission.pk,
-                form.slug,
+                form_slug,
                 exc_info=True,
             )
 
     logger.warning(
         "Sending notification for submission #%s (form: %s) to %s",
         submission.pk,
-        form.slug,
+        form_slug,
         recipients,
     )
     if tracked_sender is not None or _should_send_untracked_inline():

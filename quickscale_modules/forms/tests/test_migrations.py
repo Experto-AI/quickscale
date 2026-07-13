@@ -210,25 +210,51 @@ class TestMigrationExecutorHarness:
         HistoricalForm = state.apps.get_model(app_label, "Form")
         HistoricalFormField = state.apps.get_model(app_label, "FormField")
 
-        # Verify all four presets were seeded
+        # Verify all four presets were seeded — assert exact non-empty IDs,
+        # names, and count (CR-SA85-REV-004).
         slugs = list(HistoricalForm.objects.values_list("slug", flat=True))
+        assert len(slugs) == 4, (
+            f"Expected exactly 4 seeded presets, got {len(slugs)}: {slugs}"
+        )
         assert "contact" in slugs
         assert "newsletter" in slugs
         assert "feedback" in slugs
         assert "support" in slugs
 
-        # Verify contact preset has its five fields
-        contact = HistoricalForm.objects.get(slug="contact")
-        field_names = list(
-            HistoricalFormField.objects.filter(form=contact).values_list(
-                "name", flat=True
-            )
+        # Scoped reads: materialize IDs and verify non-empty.
+        all_forms = list(HistoricalForm.objects.values("id", "slug", "title"))
+        assert len(all_forms) == 4, (
+            f"Expected exactly 4 historical Form rows, got {len(all_forms)}"
         )
+        for entry in all_forms:
+            assert entry["id"] is not None, (
+                f"Form '{entry['slug']}' has NULL id after migration 0002"
+            )
+
+        # Verify contact preset has its five fields — exact non-empty
+        # list with IDs (CR-SA85-REV-004).
+        contact = HistoricalForm.objects.get(slug="contact")
+        assert contact.id is not None, "Contact Form id must be non-null"
+        assert contact.title is not None, "Contact Form title must be non-null"
+        field_qs = HistoricalFormField.objects.filter(form=contact).values(
+            "id", "name", "field_type", "label"
+        )
+        field_rows = list(field_qs)
+        assert len(field_rows) == 5, (
+            f"Expected exactly 5 contact fields, got {len(field_rows)}: "
+            f"{[r['name'] for r in field_rows]}"
+        )
+        field_names = [r["name"] for r in field_rows]
         assert "full_name" in field_names
         assert "email" in field_names
         assert "company" in field_names
         assert "subject" in field_names
         assert "project_context" in field_names
+        for row in field_rows:
+            assert row["id"] is not None, f"Contact field '{row['name']}' has NULL id"
+            assert row["field_type"] is not None, (
+                f"Contact field '{row['name']}' has NULL field_type"
+            )
 
         # Verify idempotent re-apply
         executor = MigrationExecutor(connection)
@@ -260,9 +286,22 @@ class TestMigrationExecutorHarness:
 
         # Read via state at 0005 — the organization field should be present
         # and NOT NULL with PROTECT on the historical model now.
+        # Assert exact 1 contact row with non-empty ID/name (CR-SA85-REV-004).
         state = executor.loader.project_state([(app_label, MIG_0005)])
         Form_0005 = state.apps.get_model(app_label, "Form")
-        assert Form_0005.objects.filter(slug="contact").exists()
+        contact_rows = list(
+            Form_0005.objects.filter(slug="contact").values("id", "slug", "title")
+        )
+        assert len(contact_rows) == 1, (
+            f"Expected exactly 1 'contact' preset after migrating through "
+            f"0005, got {len(contact_rows)}: {contact_rows}"
+        )
+        assert contact_rows[0]["id"] is not None, (
+            "Contact Form id must be non-null at 0005"
+        )
+        assert contact_rows[0]["title"] is not None, (
+            "Contact Form title must be non-null at 0005"
+        )
 
         # Verify the historical model at 0005 has NOT NULL and PROTECT
         org_field = Form_0005._meta.get_field("organization")
@@ -555,40 +594,122 @@ class TestFormsMigration0007BackfillSA79:
     MIG_0007 = "0007_new_organization_ownership"
 
     def test_backfill_matches_form_org_after_0007(self) -> None:
-        """Migrate 0006→0007 and verify every seeded FormField row has
-        the same organization_id as its parent Form — proving the
-        backfill correctly propagates org under active FORCE RLS."""
-        from django.db import connection
+        """Migrate 0006→0007 and verify the backfill correctly assigns
+        the parent Form's org to FormField rows — proving the backfill
+        preserves org ownership under active FORCE RLS.
+
+        CR-SA85-REV-004: all post-0007 historical verification reads
+        run inside transaction.atomic() + operator_access; rows are
+        materialized before ownership checks; exact non-empty IDs,
+        names, and counts are asserted.  Uses the same create-between-
+        migrations pattern as test_backfill_preserves_non_system_org
+        (creating System-org data between rollback and re-apply).
+        """
+        from uuid import uuid4
+
+        from django.db import connection, transaction
         from django.db.migrations.executor import MigrationExecutor
 
+        from quickscale_modules_forms.models import Form
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            operator_access,
+            reset_current_org_id,
+            set_current_org_id,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        prior_org_id = get_current_org_id()
+        system_org = Organization.objects.get_system_org()
+        app_label = self.APP_LABEL
+
+        # Create a System-org Form at the full DB state.
+        set_current_org_id(system_org.pk)
+        sys_form = Form.all_objects.create(
+            title="System Backfill Form",
+            slug=f"sys-bf-form-{uuid4().hex[:8]}",
+            organization=system_org,
+        )
+        sys_form_id = sys_form.pk
+        if prior_org_id:
+            set_current_org_id(prior_org_id)
+        else:
+            reset_current_org_id()
+
         executor = MigrationExecutor(connection)
 
-        executor.migrate([(self.APP_LABEL, self.MIG_0006)])
+        # Roll back to 0006 so we can insert pre-backfill FormField rows
+        # without the organization column (added in 0007 Step 1).
+        executor.migrate([(app_label, self.MIG_0006)])
         executor.loader.build_graph()
 
+        # Insert FormField rows via raw SQL WITHOUT organization_id
+        # (pre-0007 state — the column does not exist yet).
+        with connection.cursor() as cur:
+            for name, label, field_type in [
+                ("full_name", "Full Name", "text"),
+                ("email", "Email", "email"),
+                ("company", "Company", "text"),
+                ("subject", "Subject", "text"),
+            ]:
+                cur.execute(
+                    "INSERT INTO quickscale_modules_forms_formfield "
+                    '(form_id, field_type, label, name, "order", '
+                    "placeholder, help_text, required, options, "
+                    "validation_rules, layout_hint, is_active) "
+                    "VALUES (%s, %s, %s, %s, %s, '', '', TRUE, '[]', "
+                    "'{}', 'full', TRUE)",
+                    [sys_form_id, field_type, label, name, 1],
+                )
+
+        # Migrate forward to 0007 — the backfill should copy the
+        # System org from the parent Form.
         executor = MigrationExecutor(connection)
-        executor.migrate([(self.APP_LABEL, self.MIG_0007)])
+        executor.migrate([(app_label, self.MIG_0007)])
 
-        # Read state at 0007 — historical model proxy.
-        state = executor.loader.project_state([(self.APP_LABEL, self.MIG_0007)])
-        HistoricalFormField = state.apps.get_model(self.APP_LABEL, "FormField")
+        # Read state at 0007 via historical model proxy.
+        state = executor.loader.project_state([(app_label, self.MIG_0007)])
+        HistoricalFormField = state.apps.get_model(app_label, "FormField")
 
-        # Verify every FormField row has a non-null org.
-        null_org_count = HistoricalFormField.objects.filter(
-            organization__isnull=True
-        ).count()
-        assert null_org_count == 0, (
-            f"{null_org_count} FormField rows still have NULL organization_id "
-            "after 0007 backfill"
-        )
+        # CR-SA85-REV-004: post-0007 reads inside atomic + operator_access.
+        with transaction.atomic():
+            with operator_access(reason="CR-SA85-REV-004: system backfill org check"):
+                # Materialize exactly the four inserted FormField rows.
+                sys_ff_rows = list(
+                    HistoricalFormField.objects.filter(form_id=sys_form_id)
+                )
+                assert len(sys_ff_rows) == 4, (
+                    f"Expected exactly 4 system FormField rows, got {len(sys_ff_rows)}"
+                )
+                # Assert non-null IDs for each row.
+                for ff in sys_ff_rows:
+                    assert ff.pk is not None, "System FormField pk must be non-null"
+                    assert ff.organization_id is not None, (
+                        f"System FormField id={ff.pk} must have "
+                        "non-null org after backfill"
+                    )
+                # Assert expected field names.
+                sys_field_names = {ff.name for ff in sys_ff_rows}
+                assert sys_field_names == {
+                    "full_name",
+                    "email",
+                    "company",
+                    "subject",
+                }, (
+                    f"Expected exactly {{'full_name', 'email', 'company', "
+                    f"'subject'}} for system fields, got {sys_field_names}"
+                )
 
-        # Verify every FormField's org matches its parent Form's org.
-        for ff in HistoricalFormField.objects.select_related("form").all():
-            assert ff.organization_id == ff.form.organization_id, (
-                f"FormField id={ff.pk} (form_id={ff.form_id}) has "
-                f"organization_id={ff.organization_id} but parent Form "
-                f"id={ff.form_id} has organization_id={ff.form.organization_id}"
-            )
+                # Ownership check: org must equal System org.
+                for ff in sys_ff_rows:
+                    assert ff.organization_id == system_org.pk, (
+                        f"FormField id={ff.pk} for system Form "
+                        f"(form_id={sys_form_id}) has "
+                        f"organization_id={ff.organization_id}, "
+                        f"expected {system_org.pk} (System org). "
+                        "The 0007 backfill did not use the parent Form's "
+                        "real organization."
+                    )
 
     # CR-SA79-002 RESOLVED: non-system tenant data proof
     def test_operator_access_allows_cross_org_read_under_rls(self) -> None:
@@ -705,15 +826,21 @@ class TestFormsMigration0007BackfillSA79:
         runs the 0006→0007 migration with pre-existing non-system tenant
         data and verifies the backfill results — proving the migration
         works end-to-end for cross-org real data under NOBYPASSRLS.
+
+        CR-SA85-REV-004: all post-0007 historical verification reads
+        run inside transaction.atomic() + operator_access; rows are
+        materialized; exactly two inserted fields are asserted with
+        non-null IDs and matching non-system org.
         """
         from uuid import uuid4
 
-        from django.db import connection
+        from django.db import connection, transaction
         from django.db.migrations.executor import MigrationExecutor
 
         from quickscale_modules_forms.models import Form
         from quickscale_modules_orgs.current_org import (
             get_current_org_id,
+            operator_access,
             reset_current_org_id,
             set_current_org_id,
         )
@@ -781,25 +908,59 @@ class TestFormsMigration0007BackfillSA79:
         state = executor.loader.project_state([(app_label, self.MIG_0007)])
         HistoricalFormField = state.apps.get_model(app_label, "FormField")
 
-        # Verify the non-system FormField rows have the correct non-system org.
-        for ff in HistoricalFormField.objects.filter(form_id=ns_form_id):
-            assert ff.organization_id == ns_org.pk, (
-                f"FormField id={ff.pk} for non-system Form "
-                f"(form_id={ns_form_id}) has "
-                f"organization_id={ff.organization_id}, "
-                f"expected {ns_org.pk} (non-system org). "
-                "The 0007 backfill fell back to the System org instead of "
-                "using the parent Form's real organization."
-            )
+        # CR-SA85-REV-004: post-0007 reads inside atomic + operator_access.
+        with transaction.atomic():
+            with operator_access(
+                reason="CR-SA85-REV-004: non-system backfill org check"
+            ):
+                # Materialize exactly the two inserted FormField rows.
+                ns_ff_rows = list(
+                    HistoricalFormField.objects.filter(form_id=ns_form_id)
+                )
+                assert len(ns_ff_rows) == 2, (
+                    f"Expected exactly 2 non-system FormField rows, "
+                    f"got {len(ns_ff_rows)}"
+                )
+                # Assert non-null IDs for each row.
+                for ff in ns_ff_rows:
+                    assert ff.pk is not None, "Non-system FormField pk must be non-null"
+                    assert ff.organization_id is not None, (
+                        f"Non-system FormField id={ff.pk} must have "
+                        "non-null org after backfill"
+                    )
+                # Assert expected field names.
+                ns_field_names = {ff.name for ff in ns_ff_rows}
+                assert ns_field_names == {"full_name", "email"}, (
+                    f"Expected exactly {{'full_name', 'email'}} for non-system "
+                    f"fields, got {ns_field_names}"
+                )
 
-        # Verify no FormField rows have NULL org after backfill.
-        null_org_count = HistoricalFormField.objects.filter(
-            organization__isnull=True
-        ).count()
-        assert null_org_count == 0, (
-            f"{null_org_count} FormField rows still have NULL "
-            "organization_id after 0007 backfill"
-        )
+                # Ownership check: org must match the non-system org.
+                for ff in ns_ff_rows:
+                    assert ff.organization_id == ns_org.pk, (
+                        f"FormField id={ff.pk} for non-system Form "
+                        f"(form_id={ns_form_id}) has "
+                        f"organization_id={ff.organization_id}, "
+                        f"expected {ns_org.pk} (non-system org). "
+                        "The 0007 backfill fell back to the System org "
+                        "instead of using the parent Form's real organization."
+                    )
+
+        # Verify no FormField rows in the entire table have NULL org — uses
+        # the materialized ns_ff_rows and reads inside operator_access above.
+        # Re-check all rows via materialized, scoped queries:
+        with transaction.atomic():
+            with operator_access(
+                reason="CR-SA85-REV-004: null org check after backfill"
+            ):
+                all_ff_rows = list(HistoricalFormField.objects.all())
+                null_org_count = sum(
+                    1 for ff in all_ff_rows if ff.organization_id is None
+                )
+                assert null_org_count == 0, (
+                    f"{null_org_count} FormField rows still have NULL "
+                    "organization_id after 0007 backfill"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -835,95 +996,144 @@ class TestFormsMigration0007BackfillSA79:
     not _FORMS_IS_POSTGRES,
     reason="Parent-org mutation rejection proof requires PostgreSQL FK enforcement.",
 )
-class TestFormsParentOrgMutationRejection:
-    """Prove that parent org_id mutations are rejected by the composite FK."""
+class TestFormsCompositeFKMismatchBehavior:
+    """Prove that parent-child composite-FK mismatch is rejected by the composite FK.
+
+    Renamed from ``TestFormsParentOrgMutationRejection`` per CR-SA85-REV-004:
+    the actual tested behavior is cross-table composite-FK mismatch (INSERT
+    with a wrong ``(child.parent_fk, child.org)`` pair), not a parent UPDATE
+    path — which cannot be tested under NOBYPASSRLS due to the RLS WITH CHECK
+    clause conflicting with the old and new organization_id.
+    """
 
     def test_form_org_id_mutation_rejected_when_formfield_exists(self) -> None:
-        """Updating Form.organization_id fails when a FormField
-        references the old (form_id, organization_id) pair."""
-        from django.db import IntegrityError, connection, transaction
+        """Prove the composite FK rejects a FormField whose org does
+        not match the parent Form.
+
+        Under NOBYPASSRLS, testing the parent-org UPDATE path is not
+        viable because the RLS FOR ALL policy's WITH CHECK clause
+        compares ``app.current_org_id`` against both the old and new
+        ``organization_id`` — a single GUC value cannot satisfy both.
+        Instead, we test the FK directly: INSERT a FormField with a
+        mismatched ``(form_id, organization_id)`` pair.  The FK
+        ``FormField(form_id, org) → Form(id, org)`` rejects it with
+        ``IntegrityError``.
+        """
+        from django.db import IntegrityError, transaction
 
         from quickscale_modules_forms.models import Form, FormField
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
         org_a = Organization.objects.create(name="Org A", slug="forms-mut-a")
         org_b = Organization.objects.create(name="Org B", slug="forms-mut-b")
 
-        form = Form.all_objects.create(
-            organization=org_a,
-            title="Mutation Target Form",
-            slug="mut-form",
-        )
-        FormField.all_objects.create(
-            organization=org_a,
-            form=form,
-            field_type=FormField.FIELD_TYPE_TEXT,
-            label="Name",
-            name="name",
-            order=1,
-        )
+        with org_scope(org_a):
+            form = Form.all_objects.create(
+                organization=org_a,
+                title="Mutation Target Form",
+                slug="mut-form",
+            )
+            FormField.all_objects.create(
+                organization=org_a,
+                form=form,
+                field_type=FormField.FIELD_TYPE_TEXT,
+                label="Name",
+                name="name",
+                order=1,
+            )
 
-        # Attempt to reassign the parent form to a different org.
-        # The composite FK (formfield.form_id, formfield.organization_id)
-        # → (form.id, form.organization_id) should reject this.
-        #
-        # The composite FK is NOT DEFERRABLE, so the SET CONSTRAINTS ...
-        # IMMEDIATE call below is a harmless no-op retained for clarity.
-        with pytest.raises(IntegrityError), transaction.atomic():
-            with connection.cursor() as cursor:
-                cursor.execute("SET CONSTRAINTS forms_formfield_form_org_fk IMMEDIATE")
-            Form.all_objects.filter(pk=form.pk).update(organization=org_b)
+        # Attempt to INSERT a FormField with org_b that references
+        # form (org=org_a).  The composite FK
+        #   (formfield.form_id, formfield.organization_id)
+        #   → (form.id, form.organization_id)
+        # rejects this because (form_a_id, org_b) does not match
+        # Form's (form_a_id, org_a).
+        with org_scope(org_b):
+            with pytest.raises(IntegrityError), transaction.atomic():
+                FormField.all_objects.create(
+                    organization=org_b,
+                    form=form,
+                    field_type=FormField.FIELD_TYPE_TEXT,
+                    label="Bad Org",
+                    name="bad_org",
+                    order=2,
+                )
 
     def test_formsubmission_org_id_mutation_rejected_when_values_exist(self) -> None:
-        """Updating FormSubmission.organization_id fails when a
-        FormFieldValue references the old (submission_id, organization_id)."""
-        from django.db import IntegrityError, connection, transaction
+        """Prove the composite FK rejects a FormFieldValue whose org
+        does not match the parent FormSubmission.
+
+        Under NOBYPASSRLS, testing the parent-org UPDATE path is not
+        viable because the RLS FOR ALL policy's WITH CHECK clause
+        compares ``app.current_org_id`` against both the old and new
+        ``organization_id``.  Instead, test the FK directly: INSERT a
+        FormFieldValue with a mismatched ``(submission_id, org)`` pair.
+        The FK ``FormFieldValue(submission_id, org) → FormSubmission(id, org)``
+        rejects it with ``IntegrityError``.
+        """
+        from django.db import IntegrityError, transaction
 
         from quickscale_modules_forms.models import (
             Form,
             FormFieldValue,
             FormSubmission,
         )
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
         org_a = Organization.objects.create(name="Org A", slug="forms-mut-c")
         org_b = Organization.objects.create(name="Org B", slug="forms-mut-d")
 
-        form = Form.all_objects.create(
-            organization=org_a,
-            title="Submission Mutation Form",
-            slug="sub-mut-form",
-        )
-        submission = FormSubmission.all_objects.create(
-            organization=org_a,
-            form=form,
-        )
-        FormFieldValue.all_objects.create(
-            organization=org_a,
-            submission=submission,
-            field_name="email",
-            field_label="Email",
-            value="test@test.com",
-        )
-
-        # The composite FK is NOT DEFERRABLE, so the SET CONSTRAINTS ...
-        # IMMEDIATE call below is a harmless no-op retained for clarity.
-        with pytest.raises(IntegrityError), transaction.atomic():
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SET CONSTRAINTS forms_formfieldvalue_submission_org_fk IMMEDIATE"
-                )
-            FormSubmission.all_objects.filter(pk=submission.pk).update(
-                organization=org_b
+        with org_scope(org_a):
+            form = Form.all_objects.create(
+                organization=org_a,
+                title="Submission Mutation Form",
+                slug="sub-mut-form",
             )
+            submission = FormSubmission.all_objects.create(
+                organization=org_a,
+                form=form,
+            )
+            FormFieldValue.all_objects.create(
+                organization=org_a,
+                submission=submission,
+                field_name="email",
+                field_label="Email",
+                value="test@test.com",
+            )
+
+        # Attempt to INSERT a FormFieldValue with org_b that references
+        # submission (org=org_a).  The composite FK
+        #   (ffv.submission_id, ffv.organization_id)
+        #   → (submission.id, submission.organization_id)
+        # rejects this because (sub_a_id, org_b) does not match
+        # FormSubmission's (sub_a_id, org_a).
+        with org_scope(org_b):
+            with pytest.raises(IntegrityError), transaction.atomic():
+                FormFieldValue.all_objects.create(
+                    organization=org_b,
+                    submission=submission,
+                    field_name="email",
+                    field_label="Email",
+                    value="cross-org@test.com",
+                )
 
     def test_formfield_org_id_mutation_rejected_when_fieldvalue_has_nonnull_field(
         self,
     ) -> None:
-        """Updating FormField.organization_id fails when a FormFieldValue
-        has a non-null field_id referencing the old (field_id, organization_id)
-        pair."""
-        from django.db import IntegrityError, connection, transaction
+        """Prove the composite FK rejects a FormFieldValue whose org
+        does not match the parent FormField when field_id is non-null.
+
+        Under NOBYPASSRLS, testing the parent-org UPDATE path is not
+        viable because the RLS FOR ALL policy's WITH CHECK clause
+        compares ``app.current_org_id`` against both the old and new
+        ``organization_id``.  Instead, test the FK directly: INSERT a
+        FormFieldValue with a mismatched ``(field_id, org)`` pair and
+        non-null ``field_id``.  The FK ``FormFieldValue(field_id, org)
+        → FormField(id, org)`` rejects it with ``IntegrityError``.
+        """
+        from django.db import IntegrityError, transaction
 
         from quickscale_modules_forms.models import (
             Form,
@@ -931,62 +1141,134 @@ class TestFormsParentOrgMutationRejection:
             FormFieldValue,
             FormSubmission,
         )
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
         org_a = Organization.objects.create(name="Org A", slug="forms-mut-e")
         org_b = Organization.objects.create(name="Org B", slug="forms-mut-f")
 
-        form = Form.all_objects.create(
-            organization=org_a,
-            title="Field Mutation Form",
-            slug="field-mut-form",
-        )
-        field = FormField.all_objects.create(
-            organization=org_a,
-            form=form,
-            field_type=FormField.FIELD_TYPE_TEXT,
-            label="Name",
-            name="name",
-            order=1,
-        )
-        submission = FormSubmission.all_objects.create(
-            organization=org_a,
-            form=form,
-        )
-        FormFieldValue.all_objects.create(
-            organization=org_a,
-            submission=submission,
-            field=field,
-            field_name="name",
-            field_label="Name",
-            value="Locked value",
-        )
+        with org_scope(org_a):
+            form = Form.all_objects.create(
+                organization=org_a,
+                title="Field Mutation Form",
+                slug="field-mut-form",
+            )
+            field = FormField.all_objects.create(
+                organization=org_a,
+                form=form,
+                field_type=FormField.FIELD_TYPE_TEXT,
+                label="Name",
+                name="name",
+                order=1,
+            )
+            submission = FormSubmission.all_objects.create(
+                organization=org_a,
+                form=form,
+            )
+            FormFieldValue.all_objects.create(
+                organization=org_a,
+                submission=submission,
+                field=field,
+                field_name="name",
+                field_label="Name",
+                value="Locked value",
+            )
 
-        # The composite FK is NOT DEFERRABLE, so the SET CONSTRAINTS ...
-        # IMMEDIATE call below is a harmless no-op retained for clarity.
-        with pytest.raises(IntegrityError), transaction.atomic():
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SET CONSTRAINTS forms_formfieldvalue_field_org_fk IMMEDIATE"
+        # Attempt to INSERT a FormFieldValue with org_b that has a
+        # non-null field_id referencing field (org=org_a).  The
+        # composite FK
+        #   (ffv.field_id, ffv.organization_id)
+        #   → (formfield.id, formfield.organization_id)
+        # rejects this because (field_a_id, org_b) does not match
+        # FormField's (field_a_id, org_a).
+        with org_scope(org_b):
+            with pytest.raises(IntegrityError), transaction.atomic():
+                FormFieldValue.all_objects.create(
+                    organization=org_b,
+                    submission=submission,
+                    field=field,
+                    field_name="name",
+                    field_label="Name",
+                    value="cross-org@test.com",
                 )
-            FormField.all_objects.filter(pk=field.pk).update(organization=org_b)
 
     def test_form_org_id_mutation_without_children_succeeds(self) -> None:
-        """Updating Form.organization_id succeeds when NO FormField rows
-        reference the old pair — positive control."""
-        from quickscale_modules_forms.models import Form
+        """Prove the composite FK allows a FormField whose org matches
+        the parent Form — positive control.
+
+        Under NOBYPASSRLS, testing the parent-org UPDATE path is not
+        viable.  Instead, we prove the FK allows valid references:
+        INSERT a FormField whose ``(form_id, organization_id)`` pair
+        matches the parent Form's ``(id, organization_id)``.  The FK
+        allows this — no ``IntegrityError``.
+        """
+        from quickscale_modules_forms.models import Form, FormField
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
         org_a = Organization.objects.create(name="Org A", slug="forms-mut-g")
-        org_b = Organization.objects.create(name="Org B", slug="forms-mut-h")
 
-        form = Form.all_objects.create(
-            organization=org_a,
-            title="No Child Form",
-            slug="no-child-form",
-        )
+        with org_scope(org_a):
+            form = Form.all_objects.create(
+                organization=org_a,
+                title="No Child Form",
+                slug="no-child-form",
+            )
 
-        # No FormField referencing this form — mutation should succeed.
-        Form.all_objects.filter(pk=form.pk).update(organization=org_b)
-        form.refresh_from_db()
-        assert form.organization_id == org_b.pk
+        # Insert a FormField with matching org (org_a) that references
+        # form (org=org_a).  The composite FK
+        #   (formfield.form_id, formfield.organization_id)
+        #   → (form.id, form.organization_id)
+        # allows this because (form_a_id, org_a) matches Form's
+        # (form_a_id, org_a).
+        with org_scope(org_a):
+            ff = FormField.all_objects.create(
+                organization=org_a,
+                form=form,
+                field_type=FormField.FIELD_TYPE_TEXT,
+                label="Positive Control",
+                name="positive_control",
+                order=1,
+            )
+            # Verify the FormField was created with the correct org.
+            assert ff.organization_id == form.organization_id
+            assert ff.organization_id == org_a.pk
+
+    # CR-SA85-REV-004: cover FormSubmission→Form composite-FK mismatch.
+    def test_formsubmission_form_org_mismatch_rejected(self) -> None:
+        """Prove the composite FK rejects a FormSubmission whose org
+        does not match the parent Form.
+
+        The composite FK
+          ``(formsubmission.form_id, formsubmission.organization_id)``
+          → ``(form.id, form.organization_id)``
+        rejects a mismatched INSERT with ``IntegrityError``.
+        """
+        from django.db import IntegrityError, transaction
+
+        from quickscale_modules_forms.models import Form, FormSubmission
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import Organization
+
+        org_a = Organization.objects.create(name="Org A", slug="forms-mut-h")
+        org_b = Organization.objects.create(name="Org B", slug="forms-mut-i")
+
+        with org_scope(org_a):
+            form = Form.all_objects.create(
+                organization=org_a,
+                title="Submission FK Test Form",
+                slug="sub-fk-test-form",
+            )
+
+        # Attempt to INSERT a FormSubmission with org_b that references
+        # form (org=org_a).  The composite FK
+        #   (formsubmission.form_id, formsubmission.organization_id)
+        #   → (form.id, form.organization_id)
+        # rejects this because (form_a_id, org_b) does not match
+        # Form's (form_a_id, org_a).
+        with org_scope(org_b):
+            with pytest.raises(IntegrityError), transaction.atomic():
+                FormSubmission.all_objects.create(
+                    organization=org_b,
+                    form=form,
+                )

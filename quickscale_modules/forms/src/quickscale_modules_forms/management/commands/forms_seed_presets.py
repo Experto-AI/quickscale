@@ -193,38 +193,63 @@ class Command(BaseCommand):
     ]
 
     def handle(self, *args: Any, **options: Any) -> None:
+        from django.db import transaction
+
+        from quickscale_modules_orgs.current_org import operator_access, org_scope
         from quickscale_modules_orgs.models import Organization
 
         system_org = Organization.objects.get_system_org()
-        for preset in self.PRESETS:
-            # Use all_objects (operator path) so that get_or_create can find
-            # existing rows regardless of the current org context. Scope the
-            # lookup to System org (D2) so tenant-owned rows with the same
-            # slug are not mistaken for presets.
-            form, created = Form.all_objects.get_or_create(
-                slug=preset["slug"],
-                organization=system_org,
-                defaults={
-                    "title": preset["title"],
-                    "description": preset["description"],
-                    "success_message": preset["success_message"],
-                    "notify_emails": preset["notify_emails"],
-                    "organization": system_org,
-                },
-            )
-            status_label = "Created" if created else "Already exists"
-            self.stdout.write(f"  {status_label}: {form.slug}")
 
-            for field_data in preset["fields"]:
-                field_defaults = {k: v for k, v in field_data.items() if k != "name"}
-                field_defaults.setdefault("placeholder", "")
-                field_defaults.setdefault("options", [])
-                field_defaults.setdefault("validation_rules", {})
-                field_defaults["organization"] = form.organization
-                FormField.all_objects.get_or_create(
-                    form=form,
-                    name=field_data["name"],
-                    defaults=field_defaults,
+        with transaction.atomic():
+            # Phase 1 — Read inventory: find which preset slugs already exist
+            # in the System org.  operator_access is SELECT-only (SA14.5):
+            # it lets us see cross-tenant rows without elevating write
+            # privilege.
+            with operator_access(
+                reason="forms_seed_presets: lookup existing preset slugs"
+            ):
+                existing_slugs = set(
+                    Form.all_objects.filter(
+                        organization=system_org,
+                    ).values_list("slug", flat=True)
                 )
+
+            # Phase 2 — Create/verify presets inside System org scope.
+            # Every write uses the public ``objects`` manager under
+            # ``org_scope`` so FORCE RLS sees the correct
+            # ``app.current_org_id`` (write-path policy).
+            with org_scope(system_org):
+                for preset in self.PRESETS:
+                    slug = preset["slug"]
+                    if slug in existing_slugs:
+                        self.stdout.write(f"  Already exists: {slug}")
+                        form = Form.objects.get(slug=slug)
+                    else:
+                        form = Form.objects.create(
+                            slug=preset["slug"],
+                            title=preset["title"],
+                            description=preset["description"],
+                            success_message=preset["success_message"],
+                            notify_emails=preset["notify_emails"],
+                            organization=system_org,
+                        )
+                        self.stdout.write(f"  Created: {slug}")
+
+                    for field_data in preset["fields"]:
+                        field_defaults = {
+                            k: v for k, v in field_data.items() if k != "name"
+                        }
+                        field_defaults.setdefault("placeholder", "")
+                        field_defaults.setdefault("options", [])
+                        field_defaults.setdefault("validation_rules", {})
+                        # The ``objects`` manager does not auto-populate
+                        # the org FK — set it explicitly in create values
+                        # so FORCE RLS write-path policy allows the INSERT.
+                        field_defaults.setdefault("organization", form.organization)
+                        FormField.objects.get_or_create(
+                            form=form,
+                            name=field_data["name"],
+                            defaults=field_defaults,
+                        )
 
         self.stdout.write(self.style.SUCCESS("Form presets seeded successfully."))

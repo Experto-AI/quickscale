@@ -58,32 +58,10 @@ SA83 implementation and closure is the sole Track 1 work delivered in this cycle
 - **Pending on other tracks:** SA85 (forms, Track 2), SA86 (listings, Track 2). CR-TRACK3-MERGE-002 (medium/blocking/open accepted merge checkpoint from Track 3 — audit-prose overstatement of Finding 8/`operator_access` causality across SA84–SA86). SA81 (Track 3) completed alongside this merge. SA84–SA86 remain the only `make test-integration` gate red causes.
 
 >
-> **Track readiness (2026-07-13, updated):** Full post-resync `make test-integration` gate exit 1 — only SA84–SA86 cause red. Mean coverage 93.55%, no quarantine entries. SA77, SA79, SA80.3b, SA83, SA87, SA81 all closed.
-> - **Track 1** — SA83 (blog) implementation/validation complete 2026-07-13; closed after independent review. Blog 211p/0f, coverage 91.62%. SA84 (CRM, 195p/67f/20s) open, no deps.
-> - **Track 2** — SA85 (forms, 125p/50f/8s/11d/2e) open, no deps. SA86 (listings, 128p/6f) open, no deps.
-> - **Track 3** — SA80 (venv + retained-role env wiring) done. SA80.3b (backups) done: 299p/2s/0f. SA87 done. SA81 (no deps) completed 2026-07-13, unrelated to gate.
-
-### Dependency & parallelization overview
-
-```
-Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
-───────────────────────────────         ───────────────────────────────────       ───────────────────────────
-SA77 — done (SA82, 2026-07-13)         SA79 — done (SA82, 2026-07-13)            SA80 — done (2026-07-13)
-  orgs 850p/11 BYPASSRLS-skips/0f        notifications 39p/0f;                     SA82 — done (2026-07-13)
-  (SA82-era historical: 847p)            forms 0007 acceptance verified            SA80.3a — done (2026-07-13)
-SA83 — done (blog)                       SA85 — forms residual                     SA80.3b — done (backups)
-  closed after independent review         125p/50f/8s/11d/2e open, no deps          299p/2s/0f
-  blog 211p/0f, API 57p/0f,              (reassigned from Track 1,                 SA81 — done (2026-07-13)
-  admin 33p/0f, managers 5p/0f,           2026-07-13)
-  isolation 2p/0f, mean 93.55%            SA86 — listings (6 RLS failures)
-SA84 — CRM (195p/67f/20s)                  open, no deps, unknown root
-  open, no deps, unknown root              cause (reassigned from Track 1,
-  cause                                    2026-07-13)
-
-```
-
-
-Full post-resync `make test-integration` gate exit 1 — only SA84–SA86 cause red. SA77, SA79, SA80.3b, SA83, SA87, SA81 all closed. Mean coverage 93.55%, no quarantine entries. Backups 299p/2s/0f. Blog 211p/0f coverage 91.62%, orgs 850p/11 BYPASSRLS-skips/0f coverage 93.08%. SA84 (CRM) 195p/67f/20s open. SA85 (forms) 125p/50f/8s/11 deselected/2 errors open. SA86 (listings) 128p/6f open.
+> **Track readiness (2026-07-13, updated):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed, notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. SA85 (Track 2) blocked — forms restricted-role implementation/validation complete (196p/8s/12d/0f/0e; E2E 12p; intermediate 186p/0f/0e, 95.70%; QG2 gate 93.00% mean, exit 1 solely from other findings); independent review blocked on CR-SA85-REV-001 (high/blocking — admin-route/session parity contract remains incomplete in tests/README). CR-SA85-REV-002 through CR-SA85-REV-007 resolved. User directed stop, commit, merge blocked checkpoint. The repository integration gate remains red due to separate independent restricted-role findings (SA83, SA84, SA86) that do not affect SA77/SA79 closure.
+> - **Track 1** — unblocked from SA82 (SA77 closed); open findings SA83 (blog, 86 RLS failures) and SA84 (CRM, 67 RLS failures/20 skipped) recorded below — each is a separate restricted-role residual, not a blocker for SA77/SA85 closure. SA83 is **root-caused (AF9 priming-memo staleness) with an in-progress uncommitted fix in wt-track1** — blog now 211 passed/0 failures in isolation under the restricted role; still to commit, merge v87, and confirm under the full gate.
+> - **Track 2** — unblocked from SA82 (SA79 closed); its own acceptance conditions (forms 0007 backfill + unquarantined notifications under the full gate) are satisfied. Reassigned 2026-07-13 from Track 1 (parallelization): SA85 (forms residual) impl/validation complete 2026-07-13 — review blocked on CR-SA85-REV-001, see below; SA86 (listings, 6 RLS failures) open, no deps.
+> - **Track 3** — SA80 (venv + retained-role env wiring) done; SA82 (gate rerun) completed; SA80.3a (pg_dump install) done 2026-07-13; SA80.3b (backups suite rerun) completed 2026-07-13; SA81 (no deps) completed 2026-07-13; SA87 (username-independent restore test) completed 2026-07-13.
 
 > ### Merge checkpoint: CR-TRACK3-MERGE-002 (medium · blocking · open)
 >
@@ -109,10 +87,35 @@ Full post-resync `make test-integration` gate exit 1 — only SA84–SA86 cause 
 >
 > **Acceptance:** Merge proceeds with this checkpoint — CR-TRACK3-MERGE-002 remains medium/blocking/open. The audit files are restored to their incoming v87 state; no reconciliation edits are applied to them. This roadmap entry is the sole record of the blocker.
 >
-> > **Track readiness (2026-07-13, reconciled):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed, notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. The repository integration gate remains red due to separate independent restricted-role findings (SA84–SA86) that do not affect SA77/SA79 closure.
-> > - **Track 1** — SA83 (blog) implementation/validation complete 2026-07-13; closed after independent review. Blog 211p/0f, coverage 91.62%. SA84 (CRM, 67 RLS failures/20 skipped) open, no deps.
-> > - **Track 2** — unblocked from SA82 (SA79 closed); SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures), both open, no deps (reassigned from Track 1, 2026-07-13).
+> > **Track readiness (2026-07-13, updated):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed, notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. The repository integration gate remains red due to separate independent restricted-role findings (SA83–SA86) that do not affect SA77/SA79 closure.
+> > - **Track 1** — unblocked from SA82 (SA77 closed); open findings SA83 (blog) and SA84 (CRM, 67 RLS failures/20 skipped) recorded below. SA83 is **root-caused (AF9 priming-memo staleness) with an in-progress uncommitted fix in wt-track1** — blog now 211 passed/0 failures in isolation under the restricted role; still to commit, merge v87, and confirm under the full gate. SA84 remains a separate restricted-role residual, not a blocker for SA77 closure.
+> > - **Track 2** — unblocked from SA82 (SA79 closed); its own acceptance conditions (forms 0007 backfill + unquarantined notifications under the full gate) are satisfied. Reassigned 2026-07-13 from Track 1 (parallelization): SA85 (forms residual) impl/validation complete 2026-07-13 — review blocked on CR-SA85-REV-001, see below; SA86 (listings, 6 RLS failures) open, no deps.
 > > - **Track 3** — SA80 (venv + retained-role env wiring) done; SA82 (gate rerun) completed; SA80.3a (pg_dump install) done 2026-07-13; SA80.3b (backups suite rerun) completed 2026-07-13; SA81 (no deps) completed 2026-07-13; SA87 (username-independent restore test) completed 2026-07-13.
+
+### Dependency & parallelization overview
+
+```
+Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
+───────────────────────────────         ───────────────────────────────────       ───────────────────────────
+SA77 — done (SA82, 2026-07-13)         SA79 — done (SA82, 2026-07-13)            SA80 — done (2026-07-13)
+  orgs 847p/11 BYPASSRLS-skips/0f        notifications 39p/0f;                     SA82 — done (2026-07-13)
+  code fix verified live under gate      forms 0007 acceptance verified            SA80.3a — done (2026-07-13)
+SA83 — blog: root-caused; fix WIP        SA85 — forms residual —                     SA80.3b (backups rerun)
+  in wt-track1: 211p/0f in isolation       impl/validation complete;                  done (2026-07-13)
+SA84 — CRM (67 RLS failures/20             CR-SA85-REV-002–007 resolved;              SA81 — done (2026-07-13)
+  skipped) open, no deps, unknown          blocked: CR-SA85-REV-001                   SA87 — username-independent
+  root cause                               Current: 196p/8s/12d/0f/0e                  restore test
+                                            QG2: 192p/8s/95.73%/93.00% mean            done (2026-07-13)
+                                            Intermed: 186p/8s/0f/0e/95.70%
+                                            E2E 12p, no quarantine
+                                             SA86 — listings (6 RLS failures)
+                                               open, no deps, unknown root
+                                               cause (reassigned from Track 1,
+                                               2026-07-13)
+```
+
+
+SA82 (Track 3) completed 2026-07-13 — the `orgs`/`notifications` quarantine entries are removed; the full gate rerun confirmed orgs (847 passed/11 BYPASSRLS-skips/0 failed) and notifications (39 passed/0 failed) clean. SA77 and SA79 are closed by this result. Track 1 is unblocked from SA82 with SA83–SA84 open; Track 2 is unblocked from SA82 with SA85 impl/validation-complete/review-blocked (see below; CR-SA85-REV-001 high/blocking, REV-002–007 resolved) and SA86 open. The integration gate remains red due to separate independent restricted-role findings (SA83, SA84, SA86) recorded below. (SA81 is unrelated cleanup — per-module lockfile removal — and does not affect the gate.)
 
 ### Track 1 — Tenant-context surface
 
@@ -145,7 +148,7 @@ SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 cl
 
 ### Track 2 — Module contracts & settings
 
-SA79 closed 2026-07-13 by SA82 — see below and CHANGELOG.md. SA85 and SA86 reassigned here from Track 1 on 2026-07-13 to parallelize the four independent restricted-role residuals surfaced by SA82.
+SA79 closed 2026-07-13 by SA82 — see below and CHANGELOG.md. SA85 impl/validation complete 2026-07-13 (see below); independent review blocked on CR-SA85-REV-001 (high/blocking); CR-SA85-REV-002 through CR-SA85-REV-007 resolved. SA86 reassigned here from Track 1 on 2026-07-13; remains open. See CHANGELOG.md for SA85 implementation detail; current status is impl/validation-complete/review-blocked — do not close before CR-SA85-REV-001 is resolved.
 
 - [x] **SA79 — Closeout verification/reconciliation.** `Tier 1 · Track 2 · deps: none → closed 2026-07-13`
 
@@ -155,14 +158,47 @@ SA79 closed 2026-07-13 by SA82 — see below and CHANGELOG.md. SA85 and SA86 rea
 
   *Acceptance:* forms 0007 backfill passes under full retained-role env; notifications suite runs clean (unquarantined) under a full `make test-integration` gate run; audit/status docs reflect current state. **Achieved.** SA79 closed.
 
-#### Finding — Forms residual restricted-role test failures (`why →` CR-SA82-NT-004; discovered during SA82 full-gate rerun)
+- [ ] **SA85 — Fix forms' residual restricted-role test failures (implementation/validation complete; independent review blocked — CR-SA85-REV-001 high/blocking; CR-SA85-REV-002 through CR-SA85-REV-007 resolved).** `Tier 1 · Track 2 · deps: none → impl/validation complete 2026-07-13; review blocked on CR-SA85-REV-001` *(reassigned from Track 1, 2026-07-13)*
 
-- [ ] **SA85 — Investigate and fix forms' residual restricted-role test failures.** `Tier 1 · Track 2 · deps: none` *(reassigned from Track 1, 2026-07-13)*
-  Under the SA82 full `make test-integration` gate run, forms' restricted-role suite showed 140 passed, 33 RLS failures, 8 skipped, 10 errors. Root cause is unknown/unconfirmed — RLS policy violations and test-structural errors under `quickscale_test_role`.
+  Under the SA82 full `make test-integration` gate run, forms' restricted-role suite showed 140 passed, 33 RLS failures, 8 skipped, 10 errors (historical SA82 baseline; individual reproduction on the current branch before fixes: 139 passed/29 failed/8 skipped/11 deselected/15 errors). Root cause: RLS policy violations and test-structural errors under `quickscale_test_role` — tests created rows outside an `org_scope` context, so FORCE RLS blocked both reads and writes on tenant-managed models; management commands used `all_objects` without `operator_access` for cross-tenant reads and wrote outside `org_scope`; admin views and notification content building lacked role-aware org scoping.
 
-  *Acceptance:* forms' restricted-role suite passes clean (0 failures, 0 errors) under `make test-integration` with no quarantine entry.
-  *(why →* CR-SA82-NT-004*)*
+  **Fix summary (4 phases):**
+  - **Phase 1 (bounded fixture/test org scopes):** conftest, `test_models.py`, `test_serializers.py`, `test_validators.py`, `test_notifications.py`, `test_admin.py`, `test_isolation.py`, `test_management.py`, `test_migrations.py`, `test_views.py` — model creation and mutations wrapped in `org_scope()` so FORCE RLS sees the correct `app.current_org_id` GUC. Two slug-uniqueness / field-duplicate expected-failure paths use `set_current_org_id` + `set_db_current_org_id` to avoid the AF9 priming-memo staleness and savepoint-abort issues inside `org_scope`.
+  - **Phase 2 (retained-role management read-inventory/per-org writes):** `forms_anonymize_submissions.py` and `forms_seed_presets.py` rewritten with a three-phase pattern: `operator_access(reason=...)` for cross-tenant SELECT inventory reads, per-organization writes inside `org_scope()`, all wrapped in `transaction.atomic()`. `operator_access` is SELECT-only (SA14.5) audit-logged at INFO via `operator_access`.
+  - **Phase 3 (notification content scoped and post-commit tested):** `notifications.py::_enqueue_notification` now wraps `_build_submission_notification_content(submission)` inside `org_scope(submission.organization)` so FORCE RLS allows reading committed `FormFieldValue` rows via the DB-level GUC. The scope exits before email delivery, ensuring no live transaction is held across a remote call. New `TestNotifySubmissionNoContext` regression test proves `notify_submission` works without ambient org context or active `transaction.atomic()` — the content renders correctly and field values appear in the email body.
+  - **Phase 4 (Staff current-org/superuser operator contract across source/tests/README/E2E):** `views.py::FormsAdminApiMixin` gains `_is_superuser()`, `_get_org_bound_queryset()` (superuser → `all_objects`, regular staff with active org → `objects`, regular staff without org → `objects.none()` fail-closed), and `_with_superuser_operator_access()` for cross-tenant read audit. All four admin views (`AdminFormListAPIView`, `AdminSubmissionListAPIView`, `AdminSubmissionDetailAPIView`, `AdminSubmissionExportView`) are role-aware: superuser reads through `operator_access`, regular staff scoped to active org, PATCH saves inside the target record's `org_scope`. `test_e2e.py` adapted for the new contract. README `Retained-Role Contract` table documents the superuser/staff/anonymous matrix.
 
+  **SA77 boundary helper reuse:** `test_rls_boundary.py::_ensure_rls_test_role()` reuses the SA77 `connection.cursor()` + savepoint pattern (psycopg2 → Django managed connection) with best-effort GRANTs wrapped in `transaction.atomic()` savepoints so permission-denied failures under NOBYPASSRLS do not abort the outer test transaction.
+
+  **Serializer/validator context amendment:** `test_serializers.py` and `test_validators.py` tests wrap data setup in `org_scope()`, making assertions non-vacuous — previously they passed because `all_objects.create` silently bypassed RLS; now they prove the serializer/validator paths work correctly under FORCE RLS.
+
+  *Evidence:*
+  - Intermediate (post-Phase 1–3, pre-Phase 4): module suite **186 passed/8 existing DDL-only skips/12 e2e deselected/0 failed/0 errors/95.70% coverage** (lint, type, org-context all pass).
+  - Forms E2E: **12 passed**.
+  - QG2 full gate (`QUICKSCALE_ALLOW_BYPASSRLS=0 make test-integration`): forms runs without quarantine entry; overall mean coverage **93.00%**; **exit 1 solely** from unchanged SA83 (blog 86), SA84 (CRM 67 failures/20 skips), SA86 (listings 6).
+  - All other modules clean — no regression introduced.
+
+  **Non-blocking discovered observations:**
+  - Disposable Forms test DB had one stale `postgres`-owned `django_session` table (from earlier non-`quickscale_test_role` runs); it was recreated under `quickscale_test_role` for transaction-test teardown — environment evidence, not a product change.
+  - Existing Django app-init DB-access warning (BYPASSRLS/SUPERUSER boot guard during `manage.py test` discovery) remains unchanged — it fires before any module-specific setup, is a pre-existing Django test-runner pattern, and is unrelated to SA85.
+
+  **No Forms quarantine entry needed** — the fixed suite runs clean under the full retained-role gate without any `QUARANTINE_TICKETS` entry.
+
+  **Review status (7 findings):**
+  - **CR-SA85-REV-001** (high, blocking): Forms admin session tests/README still rely on a false `/admin/` exemption premise — tests do not create own/foreign Forms using real `force_login` + `ACTIVE_ORG_SESSION_KEY` without direct context, failing to assert staff inclusion/exclusion and superuser cross-tenant parity. No-org staff/superuser behavior not tested (expected 302 redirect to `/orgs/`). README contract table and comments/references incomplete.
+  - **CR-SA85-REV-002 through CR-SA85-REV-007** (resolved in earlier review passes).
+
+  *Required next action:* rewrite `test_views.py` admin-form-list tests to create own/foreign Forms, use real `force_login` + `ACTIVE_ORG_SESSION_KEY` with no direct context, assert staff inclusion/exclusion and superuser cross-tenant; no-org staff/superuser must request admin-form-list and assert 302 Location `/orgs/`; correct README contract table, comments, and references.
+
+  **Settled decisions (no product decision remains):**
+  - TenantMiddleware redirect is the correct mechanism for driving users to select/switch organizations — preserved as-is.
+  - QG2 backups-port attribution: user accepted the backups port artifact; no further action needed.
+  - User explicitly directed: stop review iteration, update roadmap/CHANGELOG to reflect blocked checkpoint, commit, merge to `v87` as a blocked checkpoint branch. No product decision remains.
+
+  **Current code checkpoint:** Forms 196p/8s/12d/0f/0e; E2E 12p; lint/type/context/diff pass. QG2 earlier 192p/8s/95.73%, overall mean 93.00%, user-accepted backups port artifact. SA83/84/86 remain on Tracks 1–2.
+
+  **SA85 checkbox remains `[ ]`** — closing CR-SA85-REV-001 (or a user decision to waive/descope) is required before closure. No product decision remains.
+  *(why →* CR-SA82-NT-004; CR-SA85-REV-001 through CR-SA85-REV-007*)
 #### Finding — Listings restricted-role RLS failures (`why →` CR-SA82-NT-005; discovered during SA82 full-gate rerun)
 
 - [ ] **SA86 — Investigate and fix listings' 6 restricted-role RLS failures.** `Tier 1 · Track 2 · deps: none` *(reassigned from Track 1, 2026-07-13)*
@@ -179,7 +215,7 @@ SA80 closed 2026-07-13 (venv re-provision + retained-role env wiring) — see CH
 
   Removed `orgs` and `notifications` from `QUARANTINE_TICKETS` in `scripts/test_integration.sh` (passed `bash -n` syntax check). Ran `make test-integration` end-to-end — exit 1 (expected: separate findings remain). Target evidence: orgs 847 passed/11 BYPASSRLS-skips/0 failed, 93.04% coverage; notifications 39 passed/0 failed, 91.76% coverage. Overall mean coverage 92.95% passed.
 
-  SA77 closed and SA79 closed by this result — their acceptance conditions are met under the full unquarantined gate. Three independent restricted-role findings surfaced by removing the quarantine remain open: SA84 (CRM, 67 RLS failures/20 skipped) in Track 1, SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures) in Track 2 (reassigned 2026-07-13 to parallelize). SA83 (blog, 86 RLS failures) resolved; closed after independent review. Backups (SA80.3b) resolved 2026-07-13 (see below).
+  SA77 closed and SA79 closed by this result — their acceptance conditions are met under the full unquarantined gate. The four independent restricted-role findings surfaced by removing the quarantine are recorded as SA83 (blog, 86 RLS failures) and SA84 (CRM, 67 RLS failures/20 skipped) in Track 1 above, and SA85 (forms residual — blocked checkpoint, impl/validation complete, review blocked on CR-SA85-REV-001 — see above) and SA86 (listings, 6 RLS failures) in Track 2 (reassigned 2026-07-13 to parallelize) — SA83 root-caused (see Track 1 above), SA84–SA86 open with no deps. Backups was tracked by SA80.3b — resolved 2026-07-13 (see below).
 
   *Acceptance:* orgs and notifications both pass clean under the full unquarantined gate. **Achieved.** SA77 and SA79 closed.
   *(why →* 2026-07-13 roadmap closeout checkpoint, [CHANGELOG.md](../../CHANGELOG.md)*)*

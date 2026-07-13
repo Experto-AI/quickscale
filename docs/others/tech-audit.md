@@ -33,14 +33,13 @@
 > ran the full `make test-integration` gate end-to-end — orgs 847 passed/11 BYPASSRLS-skips/0 failed
 > (93.04% coverage), notifications 39 passed/0 failed (91.76% coverage), overall mean 92.95% passed.
 > **SA77 and SA79 are closed** by this result — their acceptance conditions are met under the full
-> unquarantined gate. The repository integration gate remains red due to three independent
-> restricted-role findings — SA84 (CRM) on Track 1, SA85 (forms residual) and SA86 (listings) on Track 2 —
-> plus the existing SA80.3b (backups: one independent failure; 24 missing-pg_dump failures resolved) on Track 3. SA83 (blog)
-> implementation/validation complete; closed after independent review. SA81 unchanged. This
+> unquarantined gate. The repository integration gate remains red due to four independent
+> restricted-role findings (blog → SA83, CRM → SA84, forms residual → SA85 impl/validation-complete/blocked-on-CR-SA85-REV-001, listings → SA86) now
+> tracked on the roadmap Track 1, plus the existing SA80.3 (backups pg_dump). SA81 unchanged. This
 > document's reconciled status is unchanged — SA77/SA79 were tracked on the roadmap, not as
 > tech-audit findings; their closure is recorded here for status accuracy.
 >
-> **Update (2026-07-13, SA80.3b/SA87 reconciliation, revised):** SA80.3b rerun confirmed 0 missing-`pg_dump`/`pg_restore` failures (retained-role: 298 passed/1 failed/2 skipped; default-user: 299 passed/2 skipped). SA80.3/SA80.3b fully resolved. The 1 retained-role failure was **SA87** (backups retained-role assertion, Track 3) — completed 2026-07-13 per change review; see [roadmap.md §Track 3](../technical/roadmap.md). The current open restricted-role findings keeping the integration gate red are **SA84** (Track 1 CRM), **SA85** (Track 2 forms), and **SA86** (Track 2 listings). SA83 (blog) completed 2026-07-13 — closed after independent review. SA87 is no longer an open finding. SA81 (per-module lockfiles, no deps) is unrelated cleanup and does not affect the gate. SA80.3b evidence retained: retained-role run 298 passed/1 failed/2 skipped, default-user run 299 passed/2 skipped, zero missing-tool failures in both.
+> **Update (2026-07-13, SA80.3b/SA87 reconciliation, revised):** SA80.3b rerun confirmed 0 missing-`pg_dump`/`pg_restore` failures (retained-role: 298 passed/1 failed/2 skipped; default-user: 299 passed/2 skipped). SA80.3/SA80.3b fully resolved. The 1 retained-role failure was **SA87** (backups retained-role assertion, Track 3) — completed 2026-07-13 per change review; see [roadmap.md §Track 3](../technical/roadmap.md). The current open restricted-role findings keeping the integration gate red are **SA83** (Track 1 blog), **SA84** (Track 1 CRM), **SA85** (Track 2 forms, impl/validation-complete/blocked-on-CR-SA85-REV-001), and **SA86** (Track 2 listings). SA87 is no longer an open finding. SA81 (per-module lockfiles, no deps) is unrelated cleanup and does not affect the gate. SA80.3b evidence retained: retained-role run 298 passed/1 failed/2 skipped, default-user run 299 passed/2 skipped, zero missing-tool failures in both.
 >
 > **Update (2026-07-13, V3 delta re-run — HEAD `41689be7`, prior `53a657d6`):** full delta sweep
 > over the `53a657d6..HEAD` production diff (SA60/SA70/SA74/SA75/SA76/SA77/SA78/SA79/SA80/SA82/SA87
