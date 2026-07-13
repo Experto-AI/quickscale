@@ -49,8 +49,32 @@ git merge --no-ff wt-track{N}
 
 > Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). This section retains checked closeout entries for completed items as evidence of acceptance (their full implementation detail lives in CHANGELOG.md). Active and blocked work stays open below.
 >
-> **Track readiness (2026-07-13, updated):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed, notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. The repository integration gate remains red due to separate independent restricted-role findings (SA83–SA86) that do not affect SA77/SA79 closure.
-> - **Track 1** — unblocked from SA82 (SA77 closed); open findings SA83 (blog, 86 RLS failures) and SA84 (CRM, 67 RLS failures/20 skipped) recorded below — each is a separate restricted-role residual, not a blocker for SA77 closure.
+> ### Merge checkpoint: CR-TRACK3-MERGE-002 (medium · blocking · open)
+>
+> User explicitly accepted merging Track 3 into v87 with this medium blocking finding open. This checkpoint records what is done, what remains blocking, and what evidence/decision is needed.
+>
+> **Done:**
+> - SA81 implementation, review, and validation completed 2026-07-13 (see ✓ checked entry below).
+> - SA81 roadmap conflict structurally resolved by preserving incoming v87 content and adding this checkpoint.
+>
+> **Blocking (current audit prose overstates shared Finding 8 / `operator_access` causality):**
+> The incoming v87 arch-audit.md and tech-audit.md (restored to index exactly) describe Finding 8 as a shared structural root for SA83–SA86, with `operator_access` as a candidate shared hypothesis. This overstates what the evidence supports — see the evidence/decision table below.
+>
+> **Evidence and decisions needed before closing:**
+>
+> | Dimension | Current incoming prose | Evidence-calibrated statement | Decision |
+> |-----------|-----------------------|------------------------------|----------|
+> | SA83 root cause | Bundled under Finding 8 shared diagnosis | **AF9 priming-memo staleness only** — 211 passed/0 failed in isolation, fix WIP in wt-track1. Blog's own `operator_access` migration gap is a separate latent concern, not the cause of SA83's 86 gate failures. | Accept SA83 as independent; do not fold into Finding 8 shared diagnosis. |
+> | SA84–SA86 relationship | Described as one shared structural root | **Separately bucketed** — SA84 (CRM, `operator_access` candidate), SA85 (forms, `operator_access` already present via SA79, root unknown), SA86 (listings, `operator_access` candidate). No evidence they share one root. | Treat each as independent investigation with its own diagnosis step. |
+> | `operator_access` as Finding 8 remedy | Described as the implied shared fix | `operator_access` is a candidate hypothesis for SA84/SA86 only (not SA85, which already has it). Not a shared diagnosis or fix for all four. | Confirm per-module before prescribing a shared mechanism. |
+> | Finding 8 scope | Described as an active gate diagnosis | Finding 8 is a **latent census concern** (procedural RLS-context acquisition) unless bucket-triaging confirms a runtime read path that would bite production. Currently it describes the structural pattern, not a confirmed defect class for any specific module. | Maintain Finding 8 as structural observation only; promote if bucket-3 evidence emerges. |
+>
+> **Preserved:** All historical audit logs, reconciliation entries, and per-pass finding records in both arch-audit.md and tech-audit.md remain intact — only the `current audit prose` (top-of-file orientation, Finding 8 recommendation, and current-status blocks) carry the overstated causality. Historical passes correctly recorded their own evidence-calibrated language.
+>
+> **Acceptance:** Merge proceeds with this checkpoint — CR-TRACK3-MERGE-002 remains medium/blocking/open. The audit files are restored to their incoming v87 state; no reconciliation edits are applied to them. This roadmap entry is the sole record of the blocker.
+>
+> > **Track readiness (2026-07-13, updated):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed, notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. The repository integration gate remains red due to separate independent restricted-role findings (SA83–SA86) that do not affect SA77/SA79 closure.
+> - **Track 1** — unblocked from SA82 (SA77 closed); open findings SA83 (blog) and SA84 (CRM, 67 RLS failures/20 skipped) recorded below. SA83 is **root-caused (AF9 priming-memo staleness) with an in-progress uncommitted fix in wt-track1** — blog now 211 passed/0 failures in isolation under the restricted role; still to commit, merge v87, and confirm under the full gate. SA84 remains a separate restricted-role residual, not a blocker for SA77 closure.
 > - **Track 2** — unblocked from SA82 (SA79 closed); its own acceptance conditions (forms 0007 backfill + unquarantined notifications under the full gate) are satisfied. Reassigned 2026-07-13 from Track 1 (parallelization): SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures), both open, no deps.
 > - **Track 3** — SA80 (venv + retained-role env wiring) done; SA82 (gate rerun) completed; SA80.3a (pg_dump install) done 2026-07-13; SA80.3b (backups suite rerun) completed 2026-07-13; SA81 (no deps) completed 2026-07-13; SA87 (username-independent restore test) completed 2026-07-13.
 
@@ -62,12 +86,12 @@ Track 1 (tenant-context surface)        Track 2 (module contracts & settings)   
 SA77 — done (SA82, 2026-07-13)         SA79 — done (SA82, 2026-07-13)            SA80 — done (2026-07-13)
   orgs 847p/11 BYPASSRLS-skips/0f        notifications 39p/0f;                     SA82 — done (2026-07-13)
   code fix verified live under gate      forms 0007 acceptance verified            SA80.3a — done (2026-07-13)
-SA83 — blog (86 RLS failures) open,      SA85 — forms residual (33 RLS             SA80.3b (backups rerun)
-  no deps, unknown root cause              failures/8 skipped/10 errors)             done (2026-07-13)
+SA83 — blog: root-caused; fix WIP        SA85 — forms residual (33 RLS             SA80.3b (backups rerun)
+  in wt-track1: 211p/0f in isolation       failures/8 skipped/10 errors)             done (2026-07-13)
 SA84 — CRM (67 RLS failures/20             open, no deps, unknown root             SA81 — done (2026-07-13)
   skipped) open, no deps, unknown          cause (reassigned from Track 1,          SA87 — username-independent
   root cause                               2026-07-13)                                restore test
-                                                                                       done (2026-07-13)
+                                                                                        done (2026-07-13)
                                            SA86 — listings (6 RLS failures)
                                              open, no deps, unknown root
                                              cause (reassigned from Track 1,
@@ -89,8 +113,16 @@ SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 cl
 
 #### Finding — Blog restricted-role RLS failures (`why →` CR-SA82-NT-002; discovered during SA82 full-gate rerun)
 
-- [ ] **SA83 — Investigate and fix blog's 86 restricted-role RLS failures.** `Tier 1 · Track 1 · deps: none`
-  Under the SA82 full `make test-integration` gate run with quarantine entries removed, blog's restricted-role suite showed 121 passed, 86 RLS failures. Root cause is unknown/unconfirmed — the failures are RLS policy violations under `quickscale_test_role` (NOBYPASSRLS), but the specific mechanism (missing org context, missing `operator_access`, or policy gap) has not been isolated.
+- [ ] **SA83 — Investigate and fix blog's 86 restricted-role RLS failures.** `Tier 1 · Track 1 · deps: none → root-caused; fix in progress (uncommitted) in wt-track1, 2026-07-13`
+  Under the SA82 full `make test-integration` gate run with quarantine entries removed, blog's restricted-role suite showed 121 passed, 86 RLS failures.
+
+  **Root cause identified (2026-07-13):** AF9 priming-**memo staleness**. The AF9 execute wrapper (`orgs/current_org.py`) primes `app.current_org_id` from the ContextVar and memoizes the primed value per transaction (`_af9_primed_for_txn`) to skip redundant `SET LOCAL`s. When a direct GUC mutator (`_set_db_current_org_id`, `reset_db_current_org_id`, `_restore_current_org_id`) changed the GUC out-of-band while the ContextVar was unchanged, the stale memo made the wrapper *skip* re-priming — leaving the DB GUC desynchronized from the ContextVar, so the next tenant query ran under the wrong (or empty) org context and tripped FORCE-RLS.
+
+  **Fix in progress (uncommitted, wt-track1):** added `_clear_priming_memo(connection)` and call it from all three direct GUC mutators so the next wrapped statement re-primes unconditionally; added 3 orgs regression tests (`test_direct_set_b_clears_memo`, `test_reset_clears_memo`, `test_restore_b_clears_memo` in `test_af9_priming.py`) plus blog test/view updates.
+
+  **Verification so far:** blog's restricted-role suite runs clean in isolation — `QS_BLOG_DB_USER=quickscale_test_role QUICKSCALE_ALLOW_BYPASSRLS=0 make MODULE=blog test -- --modules` → **211 passed, 0 failures** (was 121 passed / 86 failures). `quickscale_test_role` confirmed `NOBYPASSRLS`, so this is a true restricted-role pass.
+
+  **Remaining to close:** commit the wt-track1 work, `git merge v87`, confirm the orgs `test_af9_priming.py` regression tests pass under the restricted role, then confirm blog clean under the full `make test-integration` gate, and merge back to v87.
 
   *Acceptance:* blog's restricted-role suite passes clean (0 failures) under `make test-integration` with no quarantine entry.
   *(why →* CR-SA82-NT-002*)*
@@ -139,7 +171,7 @@ SA80 closed 2026-07-13 (venv re-provision + retained-role env wiring) — see CH
 
   Removed `orgs` and `notifications` from `QUARANTINE_TICKETS` in `scripts/test_integration.sh` (passed `bash -n` syntax check). Ran `make test-integration` end-to-end — exit 1 (expected: separate findings remain). Target evidence: orgs 847 passed/11 BYPASSRLS-skips/0 failed, 93.04% coverage; notifications 39 passed/0 failed, 91.76% coverage. Overall mean coverage 92.95% passed.
 
-  SA77 closed and SA79 closed by this result — their acceptance conditions are met under the full unquarantined gate. The four independent restricted-role findings surfaced by removing the quarantine are recorded as SA83 (blog, 86 RLS failures) and SA84 (CRM, 67 RLS failures/20 skipped) in Track 1 above, and SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures) in Track 2 (reassigned 2026-07-13 to parallelize) — each open with no deps and unknown root cause. Backups was tracked by SA80.3b — resolved 2026-07-13 (see below).
+  SA77 closed and SA79 closed by this result — their acceptance conditions are met under the full unquarantined gate. The four independent restricted-role findings surfaced by removing the quarantine are recorded as SA83 (blog, 86 RLS failures) and SA84 (CRM, 67 RLS failures/20 skipped) in Track 1 above, and SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures) in Track 2 (reassigned 2026-07-13 to parallelize) — SA83 root-caused (see Track 1 above), SA84–SA86 open with no deps and unknown root cause. Backups was tracked by SA80.3b — resolved 2026-07-13 (see below).
 
   *Acceptance:* orgs and notifications both pass clean under the full unquarantined gate. **Achieved.** SA77 and SA79 closed.
   *(why →* 2026-07-13 roadmap closeout checkpoint, [CHANGELOG.md](../../CHANGELOG.md)*)*
