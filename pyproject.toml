@@ -39,7 +39,7 @@ pytest-playwright = "^0.7.2"
 pytest-django = "^4.11.1"
 # Code quality tools
 ruff = ">=0.15.9,<1.0.0"
-mypy = "^1.20.0"
+mypy = "^2.2.0"
 # Advanced code quality analysis tools
 vulture = "^2.14"        # Dead code detection
 radon = "^6.0.1"         # Complexity metrics

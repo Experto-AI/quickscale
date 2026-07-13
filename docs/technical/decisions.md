@@ -1517,6 +1517,7 @@ work, not manual maintainer operations against external infrastructure.
 - ❌ Tests inside `src/` (place in parallel `tests/` directory)
 - ❌ Treating package `README.md` files as authoritative over root docs or `decisions.md`
 - ❌ NEVER run `quickscale plan`/`quickscale apply` in the QuickScale codebase (would generate unwanted project files)
+- ❌ Standalone `poetry install`/`poetry lock` of an individual `quickscale_modules/*` package outside the monorepo — not a supported use case; see §Package Structure below
 
 **Dependencies & Versions:**
 - ❌ Unpinned versions in production
@@ -1537,6 +1538,8 @@ work, not manual maintainer operations against external infrastructure.
 - ❌ Deep nesting in config syntax (keep flat and readable)
 
 ## Package Structure
+
+**Standalone Module Installation — Not Supported:** Individual `quickscale_modules/*` packages (`auth`, `orgs`, `billing`, etc.) are never installed or resolved on their own outside the monorepo. They're only meant to run interconnected, wired together by the `quickscale` CLI's bundle generation (`quickscale plan`/`quickscale apply`) into a generated project. The root `pyproject.toml` is the single source of truth for dependency resolution — it wires every module in as a `path = "...", develop = true` dependency and resolves them all together into one `poetry.lock`. Do not add per-module `poetry.lock` files, sibling-module version-range dependencies (e.g. a module pyproject declaring `quickscale-module-orgs = ">=x,<y"` instead of relying on the root-level path wiring), or any other standalone-install machinery for a module package — confirmed 2026-07-13; tracked cleanup of pre-existing dead lockfiles/constraints in [roadmap.md SA81](./roadmap.md).
 
 **Namespace Packaging Notes (maintainer reference, not current generated-project contract):**
 - ✅ `quickscale_modules/`, `quickscale_themes/`: PEP 420 namespaces (no `__init__.py` at root)
