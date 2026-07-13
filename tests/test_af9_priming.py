@@ -495,6 +495,159 @@ def test_short_atomic_does_not_leak_across_calls() -> None:
 
 
 # ---------------------------------------------------------------------------
+# SA83 — Canonical GUC mutator memo-clearing lifecycle
+# ---------------------------------------------------------------------------
+# Each direct GUC mutator (_set_db_current_org_id, reset_db_current_org_id,
+# _restore_current_org_id) must clear the per-transaction priming memo so
+# that the next wrapped statement re-primes unconditionally.
+#
+# Without memo clearing, the wrapper skips SET LOCAL when the ContextVar
+# matches the stale memo, leaving the GUC desynchronized — a problem that
+# manifests as RLS-blocked queries when session auth code (or any code that
+# sets the ContextVar after a direct GUC mutation) runs on the same
+# connection.
+#
+# Each test:
+#  1. Sets ContextVar A and enters one explicit outer atomic.
+#  2. An ordinary wrapped query seeds the GUC and memo with A.
+#  3. Directly mutates the GUC while ContextVar is still A.
+#  4. No intermediate normal (unwrapped) query.
+#  5. CaptureQueriesContext around the next normal wrapped current_setting.
+#  6. Asserts result == str(A) and exactly one fresh SET LOCAL.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+def test_direct_set_b_clears_memo() -> None:
+    """Direct _set_db_current_org_id(B) clears the priming memo so the
+    next wrapped query re-primes from the ContextVar (A)."""
+    from django.test.utils import CaptureQueriesContext
+
+    from quickscale_modules_orgs.current_org import _set_db_current_org_id
+
+    org_a = uuid.uuid4()
+    org_b = uuid.uuid4()
+
+    set_current_org_id(org_a)
+    try:
+        with transaction.atomic():
+            # Seed: first wrapped query primes GUC = org_a, memo = org_a.
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+
+            # Directly set GUC to org_b via raw mutator.
+            # ContextVar is still org_a.
+            _set_db_current_org_id(org_b)
+
+            # Next wrapped query: must re-prime because memo was cleared.
+            with CaptureQueriesContext(connection) as captured:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                    (raw,) = cursor.fetchone()
+
+            assert raw == str(org_a), (
+                f"Expected GUC = {org_a} (re-primed from ContextVar), got {raw!r}"
+            )
+
+            set_local_count = sum(
+                1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
+            )
+            assert set_local_count == 1, (
+                f"Expected exactly 1 SET LOCAL after direct mutation "
+                f"(the re-prime), got {set_local_count}"
+            )
+    finally:
+        reset_current_org_id()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_reset_clears_memo() -> None:
+    """Direct reset_db_current_org_id() clears the priming memo so the
+    next wrapped query re-primes from the ContextVar (A)."""
+    from django.test.utils import CaptureQueriesContext
+
+    from quickscale_modules_orgs.current_org import reset_db_current_org_id
+
+    org_a = uuid.uuid4()
+
+    set_current_org_id(org_a)
+    try:
+        with transaction.atomic():
+            # Seed: first wrapped query primes GUC = org_a, memo = org_a.
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+
+            # Directly reset the GUC to default ('').
+            reset_db_current_org_id()
+
+            # Next wrapped query: must re-prime because memo was cleared.
+            with CaptureQueriesContext(connection) as captured:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                    (raw,) = cursor.fetchone()
+
+            assert raw == str(org_a), (
+                f"Expected GUC = {org_a} (re-primed from ContextVar after reset), "
+                f"got {raw!r}"
+            )
+
+            set_local_count = sum(
+                1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
+            )
+            assert set_local_count == 1, (
+                f"Expected exactly 1 SET LOCAL after reset "
+                f"(the re-prime), got {set_local_count}"
+            )
+    finally:
+        reset_current_org_id()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_restore_b_clears_memo() -> None:
+    """Direct _restore_current_org_id(B) with a non-None prior clears
+    the priming memo so the next wrapped query re-primes from the
+    ContextVar (A)."""
+    from django.test.utils import CaptureQueriesContext
+
+    from quickscale_modules_orgs.current_org import _restore_current_org_id
+
+    org_a = uuid.uuid4()
+    org_b = uuid.uuid4()
+
+    set_current_org_id(org_a)
+    try:
+        with transaction.atomic():
+            # Seed: first wrapped query primes GUC = org_a, memo = org_a.
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+
+            # Directly restore GUC to org_b via the restore helper.
+            # ContextVar is still org_a.
+            _restore_current_org_id(org_b)
+
+            # Next wrapped query: must re-prime because memo was cleared.
+            with CaptureQueriesContext(connection) as captured:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                    (raw,) = cursor.fetchone()
+
+            assert raw == str(org_a), (
+                f"Expected GUC = {org_a} (re-primed from ContextVar after restore), "
+                f"got {raw!r}"
+            )
+
+            set_local_count = sum(
+                1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
+            )
+            assert set_local_count == 1, (
+                f"Expected exactly 1 SET LOCAL after restore "
+                f"(the re-prime), got {set_local_count}"
+            )
+    finally:
+        reset_current_org_id()
+
+
+# ---------------------------------------------------------------------------
 # ORM pass-through
 # ---------------------------------------------------------------------------
 # The recursion-guard tests above already prove that cursor.execute() works
