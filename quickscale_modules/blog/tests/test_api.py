@@ -233,6 +233,8 @@ class TestPublishPostApi:
         self,
         settings,
         staff_user,
+        staff_org,
+        blog_org_scope,
     ):
         """Test machine-authenticated publish requests can use bearer tokens."""
         settings.BLOG_API_TOKENS = [
@@ -248,15 +250,18 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 201
-        post = Post.all_objects.get(slug="token-post")
-        assert post.author == staff_user
-        # Token auth resolves user's personal org
-        assert post.organization is not None
+        with blog_org_scope(staff_org):
+            post = Post.all_objects.get(slug="token-post")
+            assert post.author == staff_user
+            # Token auth resolves user's personal org
+            assert post.organization is not None
 
     def test_publish_post_api_token_auth_ignores_spoofed_forwarded_for_for_rate_limit(
         self,
         settings,
         staff_user,
+        staff_org,
+        blog_org_scope,
     ):
         """Token-authenticated publish requests should throttle by REMOTE_ADDR by default."""
         settings.BLOG_API_RATE_LIMIT = "1/hour"
@@ -286,7 +291,8 @@ class TestPublishPostApi:
         assert second_response.status_code == 429
         assert second_response.json() == {"error": "Rate limit exceeded"}
         assert int(second_response["Retry-After"]) > 0
-        assert Post.objects.filter(slug="token-post-two").count() == 0
+        with blog_org_scope(staff_org):
+            assert Post.objects.filter(slug="token-post-two").count() == 0
 
     def test_publish_post_api_token_auth_uses_xff_when_configured(
         self,
@@ -462,12 +468,14 @@ class TestPublishPostApi:
         client,
         staff_user,
         staff_org,
+        blog_org_scope,
     ):
         """Test API validates category slug exists"""
         # Create a category in a different org to confirm it's not found
-        Category.objects.create(
-            name="Missing Cat", slug="missing-category", organization=staff_org
-        )
+        with blog_org_scope(staff_org):
+            Category.objects.create(
+                name="Missing Cat", slug="missing-category", organization=staff_org
+            )
         _login_with_org(client, staff_user)
 
         # Use a slug that doesn't exist in the resolved org
@@ -539,14 +547,13 @@ class TestPublishPostApi:
         client,
         staff_user,
         staff_org,
+        blog_org_scope,
     ):
         """Test API creates published post and returns metadata"""
-        from quickscale_modules_orgs.current_org import (
-            reset_current_org_id,
-            set_current_org_id,
-        )
-
-        category = Category.objects.create(name="Automation", organization=staff_org)
+        with blog_org_scope(staff_org):
+            category = Category.objects.create(
+                name="Automation", organization=staff_org
+            )
         _login_with_org(client, staff_user)
 
         response = client.post(
@@ -569,9 +576,7 @@ class TestPublishPostApi:
         assert payload["slug"] == "automated-post"
         assert payload["url"] == "/blog/post/automated-post/"
 
-        # Set contextvar so post.tags M2M queries resolve correctly
-        set_current_org_id(staff_org.pk)
-        try:
+        with blog_org_scope(staff_org):
             post = Post.all_objects.get(slug="automated-post")
             assert post.status == "published"
             assert post.author == staff_user
@@ -581,8 +586,6 @@ class TestPublishPostApi:
                 "release",
                 "automation",
             }
-        finally:
-            reset_current_org_id()
 
     def test_publish_post_api_featured_image_id_assigns_uploaded_asset(
         self,
@@ -591,19 +594,21 @@ class TestPublishPostApi:
         staff_org,
         tmp_path,
         settings,
+        blog_org_scope,
     ):
         """Test publish API can attach a previously uploaded media asset."""
         settings.MEDIA_ROOT = str(tmp_path)
-        asset = BlogMediaAsset.objects.create(
-            file=make_uploaded_test_image(filename="featured.png"),
-            alt="Generated cover image",
-            kind=BlogMediaAsset.Kind.FEATURED,
-            original_filename="featured.png",
-            width=1200,
-            height=800,
-            uploaded_by=staff_user,
-            organization=staff_org,
-        )
+        with blog_org_scope(staff_org):
+            asset = BlogMediaAsset.objects.create(
+                file=make_uploaded_test_image(filename="featured.png"),
+                alt="Generated cover image",
+                kind=BlogMediaAsset.Kind.FEATURED,
+                original_filename="featured.png",
+                width=1200,
+                height=800,
+                uploaded_by=staff_user,
+                organization=staff_org,
+            )
         _login_with_org(client, staff_user)
 
         response = client.post(
@@ -619,9 +624,10 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 201
-        post = Post.all_objects.get(slug="featured-asset-post")
-        assert post.featured_image.name == asset.file.name
-        assert post.featured_image_alt == "Generated cover image"
+        with blog_org_scope(staff_org):
+            post = Post.all_objects.get(slug="featured-asset-post")
+            assert post.featured_image.name == asset.file.name
+            assert post.featured_image_alt == "Generated cover image"
 
     def test_publish_post_api_unknown_featured_image_returns_400(
         self,
@@ -675,16 +681,17 @@ class TestPublishPostApi:
         }
 
     def test_publish_post_api_duplicate_slug_returns_409(
-        self, client, staff_user, staff_org
+        self, client, staff_user, staff_org, blog_org_scope
     ):
         """Test API handles duplicate generated slug as conflict"""
-        Post.objects.create(
-            title="Duplicate Title",
-            content="Existing content",
-            status="published",
-            author=staff_user,
-            organization=staff_org,
-        )
+        with blog_org_scope(staff_org):
+            Post.objects.create(
+                title="Duplicate Title",
+                content="Existing content",
+                status="published",
+                author=staff_user,
+                organization=staff_org,
+            )
         _login_with_org(client, staff_user)
 
         response = client.post(
@@ -794,10 +801,13 @@ class TestPublishPostApi:
         assert response.status_code == 409
         assert response.json()["error"] == "Post already exists for generated slug"
 
-    def test_publish_post_api_creates_missing_tags(self, client, staff_user, staff_org):
+    def test_publish_post_api_creates_missing_tags(
+        self, client, staff_user, staff_org, blog_org_scope
+    ):
         """Test API creates new tags when they do not exist"""
         _login_with_org(client, staff_user)
-        assert Tag.objects.count() == 0
+        with blog_org_scope(staff_org):
+            assert Tag.objects.count() == 0
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -812,10 +822,167 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 201
-        assert Tag.all_objects.filter(slug="launch", name="Launch").exists()
-        # Tag should be created in the user's personal org
-        tag = Tag.all_objects.get(slug="launch")
-        assert tag.organization is not None
+        with blog_org_scope(staff_org):
+            assert Tag.all_objects.filter(slug="launch", name="Launch").exists()
+            # Tag should be created in the user's personal org
+            tag = Tag.all_objects.get(slug="launch")
+            assert tag.organization is not None
+
+    # ------------------------------------------------------------------
+    # SA83 — ContextVar lifecycle restoration tests
+    # ------------------------------------------------------------------
+
+    def test_publish_post_api_token_system_fallback_restores_prior_context(
+        self,
+        settings,
+        system_org,
+        blog_org_scope,
+    ):
+        """Publish token for a user without personal org falls back to
+        the System org and restores the prior ContextVar via finally.
+
+        Strengthened (CR-SA83-REV-002): runs under explicit outer
+        ``transaction.atomic()``, asserts both Python ContextVar and
+        PostgreSQL GUC are restored to the exact prior (None), and
+        proves the next wrapped tenant query re-primes with a fresh
+        ``SET LOCAL`` (memo was invalidated).
+        """
+        from django.db import connection, transaction
+        from django.test.utils import CaptureQueriesContext
+
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            set_current_org_id,
+        )
+
+        User = get_user_model()
+        fallback_user = User.objects.create_user(
+            username="sysfallback",
+            email="sysfallback@example.com",
+            password="pass",
+            is_staff=True,
+        )
+        # No personal org → System org fallback in _resolve_api_org.
+        settings.BLOG_API_TOKENS = [
+            {"token": "sysfallback-token", "username": fallback_user.username}
+        ]
+
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        with transaction.atomic():
+            response = csrf_client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "System Fallback", "content": "Body"}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION="Bearer sysfallback-token",
+            )
+
+            # ContextVar restored to prior (captured after middleware reset).
+            assert get_current_org_id() is None, (
+                "ContextVar should be restored after the request completes"
+            )
+            # GUC restored to fail-closed default.
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                (raw_guc,) = cursor.fetchone()
+            assert raw_guc == "" or raw_guc is None, (
+                f"GUC should be empty after restore, got {raw_guc!r}"
+            )
+
+            # Prove next wrapped query re-primes (memo was cleared).
+            with CaptureQueriesContext(connection) as captured:
+                set_current_org_id(system_org.pk)
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT current_setting('app.current_org_id', true)"
+                        )
+                finally:
+                    set_current_org_id(None)
+
+            set_local_count = sum(
+                1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
+            )
+            assert set_local_count == 1, (
+                f"Expected 1 SET LOCAL after memo-clear re-prime, got {set_local_count}"
+            )
+
+        assert response.status_code == 201
+
+        # Readback: post should belong to System org (fallback)
+        with blog_org_scope(system_org):
+            post = Post.all_objects.get(slug="system-fallback")
+            assert post.organization == system_org
+
+    def test_publish_post_api_token_handled_error_restores_prior_context(
+        self,
+        settings,
+        staff_user,
+        system_org,
+    ):
+        """Publish token handled error (400) restores the prior ContextVar.
+
+        Strengthened (CR-SA83-REV-002): runs under explicit outer
+        ``transaction.atomic()``, asserts both Python ContextVar and
+        PostgreSQL GUC are restored to the exact prior (None), and
+        proves the next wrapped tenant query re-primes with a fresh
+        ``SET LOCAL`` (memo was invalidated).
+        """
+        from django.db import connection, transaction
+        from django.test.utils import CaptureQueriesContext
+
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            set_current_org_id,
+        )
+
+        settings.BLOG_API_TOKENS = [
+            {"token": "error-test-token", "username": staff_user.username}
+        ]
+
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        with transaction.atomic():
+            # Non-sluggable title triggers BlogPublishValidationError (handled 400)
+            response = csrf_client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "!!!", "content": "Body"}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION="Bearer error-test-token",
+            )
+
+            # ContextVar restored to prior (captured after middleware reset).
+            assert get_current_org_id() is None, (
+                "ContextVar should be restored after a handled error"
+            )
+            # GUC restored to fail-closed default.
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                (raw_guc,) = cursor.fetchone()
+            assert raw_guc == "" or raw_guc is None, (
+                f"GUC should be empty after restore, got {raw_guc!r}"
+            )
+
+            # Prove next wrapped query re-primes (memo was cleared).
+            with CaptureQueriesContext(connection) as captured:
+                set_current_org_id(system_org.pk)
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT current_setting('app.current_org_id', true)"
+                        )
+                finally:
+                    set_current_org_id(None)
+
+            set_local_count = sum(
+                1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
+            )
+            assert set_local_count == 1, (
+                f"Expected 1 SET LOCAL after handled-error memo-clear, "
+                f"got {set_local_count}"
+            )
+
+        assert response.status_code == 400
 
 
 @pytest.mark.django_db
@@ -936,6 +1103,7 @@ class TestUploadMediaApi:
         tmp_path,
         settings,
         storage_validator,
+        blog_org_scope,
     ):
         """Test upload API stores the file and returns stable metadata."""
         settings.MEDIA_ROOT = str(tmp_path)
@@ -963,9 +1131,10 @@ class TestUploadMediaApi:
         assert payload["width"] == 1600
         assert payload["height"] == 900
         assert payload["url"].startswith("http://testserver/media/blog/uploads/")
-        asset = BlogMediaAsset.all_objects.get(pk=payload["id"])
-        # Media asset should be stamped with the user's personal org
-        assert asset.organization is not None
+        with blog_org_scope(staff_org):
+            asset = BlogMediaAsset.all_objects.get(pk=payload["id"])
+            # Media asset should be stamped with the user's personal org
+            assert asset.organization is not None
 
     @pytest.mark.parametrize("storage_validator", UPLOAD_VALIDATION_PATHS)
     def test_upload_media_api_rejects_excessive_width_with_or_without_helper(
@@ -1254,3 +1423,194 @@ class TestUploadMediaApi:
         assert second_response.status_code == 429
         assert second_response.json() == {"error": "Rate limit exceeded"}
         assert int(second_response["Retry-After"]) > 0
+
+    # ------------------------------------------------------------------
+    # SA83 — ContextVar lifecycle restoration tests
+    # ------------------------------------------------------------------
+
+    def test_upload_media_api_token_success_restores_prior_context(
+        self,
+        rf,
+        settings,
+        staff_user,
+        staff_org,
+        tmp_path,
+        system_org,
+        blog_org_scope,
+    ):
+        """Upload success restores the exact non-None prior ContextVar and GUC.
+
+        Strengthened (CR-SA83-REV-002): uses a direct unwrapped
+        RequestFactory call with bearer-token auth so there is no middleware
+        to reset the prior.  The API caller itself captures a distinct
+        non-None ``prior_org`` before resolving the token user's org, then
+        restores the exact prior in the ``finally`` block.  Inside an
+        explicit outer ``transaction.atomic()``, pre-primes ContextVar and
+        GUC to ``prior_org.pk`` (a distinct org, not the token user's
+        personal org), invokes the unwrapped upload endpoint, then asserts
+        both Python ContextVar and PostgreSQL GUC equal the exact prior
+        (``prior_org.pk``) — proving the ``finally`` block restores the
+        pre-invocation non-None value.  Afterwards switches to a different
+        intended org (``system_org``) and proves a fresh ``SET LOCAL`` with
+        the expected switched GUC.
+        """
+        from django.db import connection, transaction
+        from django.test.utils import CaptureQueriesContext
+
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            set_current_org_id,
+        )
+        from quickscale_modules_orgs.models import Organization
+
+        from quickscale_modules_blog.views import upload_media_api
+
+        prior_org = Organization.objects.create(name="Prior Org", slug="prior-org")
+        distinct_prior = prior_org.pk
+
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.BLOG_API_TOKENS = [
+            {"token": "upload-token", "username": staff_user.username}
+        ]
+
+        with transaction.atomic():
+            # Pre-prime ContextVar and GUC to a distinct non-None UUID
+            # that is NOT staff_org.pk (the token user's personal org).
+            set_current_org_id(distinct_prior)
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+
+            # Build a direct token-auth request (no middleware, no session).
+            request = rf.post(
+                reverse("quickscale_blog:api_upload_media"),
+                data={"file": make_uploaded_test_image()},
+                HTTP_AUTHORIZATION="Bearer upload-token",
+            )
+
+            # Call the view directly — no middleware, no client.
+            response = upload_media_api(request)
+
+            # ContextVar restored to the pre-primed distinct prior.
+            assert get_current_org_id() == distinct_prior, (
+                f"Expected ContextVar = {distinct_prior} (pre-primed prior), "
+                f"got {get_current_org_id()!r}"
+            )
+            # GUC restored to match the pre-primed prior.
+            # Temporarily set ContextVar to None so AF9 does not re-prime
+            # (masking the actual GUC value) before the raw SELECT.
+            prior_var = get_current_org_id()
+            set_current_org_id(None)
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                    (raw_guc,) = cursor.fetchone()
+            finally:
+                set_current_org_id(prior_var)
+            assert raw_guc == str(distinct_prior), (
+                f"Expected GUC = {distinct_prior} (restored prior), got {raw_guc!r}"
+            )
+
+            # Switch to a different intended org and prove fresh SET LOCAL.
+            with CaptureQueriesContext(connection) as captured:
+                set_current_org_id(system_org.pk)
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT current_setting('app.current_org_id', true)"
+                        )
+                        (switched_guc,) = cursor.fetchone()
+                finally:
+                    set_current_org_id(None)
+
+            assert switched_guc == str(system_org.pk), (
+                f"Expected GUC = {system_org.pk} after fresh SET LOCAL, "
+                f"got {switched_guc!r}"
+            )
+            set_local_count = sum(
+                1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
+            )
+            assert set_local_count == 1, (
+                f"Expected 1 SET LOCAL after upload success memo-clear, "
+                f"got {set_local_count}"
+            )
+
+        assert response.status_code == 201
+
+        # Readback: media asset should be stored with the user's org
+        with blog_org_scope(staff_org):
+            payload = json.loads(response.content)
+            asset = BlogMediaAsset.all_objects.get(pk=payload["id"])
+            assert asset.organization is not None
+
+    def test_upload_media_api_token_handled_error_restores_prior_context(
+        self,
+        settings,
+        staff_user,
+        system_org,
+    ):
+        """Upload token handled error (400) restores the prior ContextVar.
+
+        Strengthened (CR-SA83-REV-002): runs under explicit outer
+        ``transaction.atomic()``, asserts both Python ContextVar and
+        PostgreSQL GUC are restored to the exact prior (None), and
+        proves the next wrapped tenant query re-primes with a fresh
+        ``SET LOCAL`` (memo was invalidated).
+        """
+        from django.db import connection, transaction
+        from django.test.utils import CaptureQueriesContext
+
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            set_current_org_id,
+        )
+
+        settings.BLOG_API_TOKENS = [
+            {"token": "upload-error-test", "username": staff_user.username}
+        ]
+
+        csrf_client = Client(enforce_csrf_checks=True)
+        bad_file = SimpleUploadedFile(
+            "notes.txt",
+            b"not an image",
+            content_type="text/plain",
+        )
+
+        with transaction.atomic():
+            response = csrf_client.post(
+                reverse("quickscale_blog:api_upload_media"),
+                data={"file": bad_file},
+                HTTP_AUTHORIZATION="Bearer upload-error-test",
+            )
+
+            # ContextVar restored to prior (captured after middleware reset).
+            assert get_current_org_id() is None, (
+                "ContextVar should be restored after upload handled error"
+            )
+            # GUC restored to fail-closed default.
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT current_setting('app.current_org_id', true)")
+                (raw_guc,) = cursor.fetchone()
+            assert raw_guc == "" or raw_guc is None, (
+                f"GUC should be empty after restore, got {raw_guc!r}"
+            )
+
+            # Prove next wrapped query re-primes (memo was cleared).
+            with CaptureQueriesContext(connection) as captured:
+                set_current_org_id(system_org.pk)
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT current_setting('app.current_org_id', true)"
+                        )
+                finally:
+                    set_current_org_id(None)
+
+            set_local_count = sum(
+                1 for q in captured.captured_queries if "SET LOCAL" in q["sql"]
+            )
+            assert set_local_count == 1, (
+                f"Expected 1 SET LOCAL after upload handled-error memo-clear, "
+                f"got {set_local_count}"
+            )
+
+        assert response.status_code == 400

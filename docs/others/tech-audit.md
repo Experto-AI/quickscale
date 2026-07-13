@@ -29,9 +29,10 @@
 > ran the full `make test-integration` gate end-to-end — orgs 847 passed/11 BYPASSRLS-skips/0 failed
 > (93.04% coverage), notifications 39 passed/0 failed (91.76% coverage), overall mean 92.95% passed.
 > **SA77 and SA79 are closed** by this result — their acceptance conditions are met under the full
-> unquarantined gate. The repository integration gate remains red due to four independent
-> restricted-role findings (blog → SA83, CRM → SA84, forms residual → SA85, listings → SA86) now
-> tracked on the roadmap Track 1, plus the existing SA80.3 (backups pg_dump). SA81 unchanged. This
+> unquarantined gate. The repository integration gate remains red due to three independent
+> restricted-role findings — SA84 (CRM) on Track 1, SA85 (forms residual) and SA86 (listings) on Track 2 —
+> plus the existing SA80.3b (backups: one independent failure; 24 missing-pg_dump failures resolved) on Track 3. SA83 (blog)
+> implementation/validation complete; closed after independent review. SA81 unchanged. This
 > document's reconciled status is unchanged — SA77/SA79 were tracked on the roadmap, not as
 > tech-audit findings; their closure is recorded here for status accuracy.
 
@@ -313,7 +314,7 @@ docs updated in the same delta).
    code fix landed 2026-07-12; final restricted-role verification blocked on SA79) and **SA79**
    (forms `0007` backfill data mismatch, distinct from the deferability contract SA60 already
     fixed; reopened/blocked on CR-PLAN-SA79-004 and CR-PLAN-SA79-005).
-- 2026-07-13 (SA82 completed) — **SA77 and SA79: resolved.** SA82 removed the SA76 quarantine entries and ran the full `make test-integration` gate end-to-end. Orgs 847 passed/11 BYPASSRLS-skips/0 failed (93.04% coverage), notifications 39 passed/0 failed (91.76% coverage), overall mean coverage 92.95% passed. SA77's code fix (2026-07-12) verified live under the unquarantined gate; SA79's forms 0007 backfill and notifications acceptance confirmed under the full gate. Both are closed. Four new independent restricted-role findings surfaced by the quarantine removal are tracked on `roadmap.md` §Track 1 as **SA83** (blog, 86 RLS failures), **SA84** (CRM, 67 RLS failures/20 skipped), **SA85** (forms residual, 33 RLS failures/8 skipped/10 errors), and **SA86** (listings, 6 RLS failures) — not tech-audit findings, per this document's convention that roadmap-tracked work is not duplicated here. SA80.3 (backups pg_dump) remains open. See CHANGELOG.md's SA82 entry for detail.
+- 2026-07-13 (SA82 completed) — **SA77 and SA79: resolved.** SA82 removed the SA76 quarantine entries and ran the full `make test-integration` gate end-to-end. Orgs 847 passed/11 BYPASSRLS-skips/0 failed (93.04% coverage), notifications 39 passed/0 failed (91.76% coverage), overall mean coverage 92.95% passed. SA77's code fix (2026-07-12) verified live under the unquarantined gate; SA79's forms 0007 backfill and notifications acceptance confirmed under the full gate. Both are closed. Three independent restricted-role findings surfaced by the quarantine removal remain open on `roadmap.md` — **SA84** (CRM, 67 RLS failures/20 skipped) on Track 1, **SA85** (forms residual, 33 RLS failures/8 skipped/10 errors) and **SA86** (listings, 6 RLS failures) on Track 2 — not tech-audit findings, per this document's convention that roadmap-tracked work is not duplicated here. **SA83** (blog, 86 RLS failures) implementation/validation complete; closed after independent review. SA80.3b (Track 3, backups: one independent failure; 24 missing-pg_dump failures resolved) remains open. See CHANGELOG.md's SA82 entry for detail.
 
 ## Notes (not violations, watch items)
 
@@ -356,4 +357,6 @@ docs updated in the same delta).
   composite-FK contract issue closed via SA60 (TA50); notifications' duplicate-db issue closed via
   SA78; the residual forms backfill bug was SA79 (closed 2026-07-13 by SA82); orgs' 9 restricted-role failures
   were SA77 (closed 2026-07-13 by SA82 — code fix verified live under the full unquarantined gate). TA57's gate-red consequence closed via
-  SA76's quarantine mechanism. See `roadmap.md` for SA83–SA86 open tracking.
+   SA76's quarantine mechanism.
+
+- **SA83 (blog restricted-role, 86 RLS failures) — implementation/validation complete 2026-07-13; closed after independent review.** Three root causes: (1) unscoped blog test setup across nine blog test files — every tenant INSERT/read needed matching `blog_org_scope(org)` for FORCE RLS compliance; (2) missing `_resolve_api_org` context priming — token-auth blog API paths didn't set the ContextVar before ORM ops; (3) stale AF9 priming memo on GUC reset — `org_scope()` exit reset the GUC but left the per-transaction memo, preventing re-priming when the same org was re-resolved. Phase 4 shared orgs fix (`_clear_priming_memo` in `current_org.py`) applies to all modules, not just blog. Outcome: blog 211 passed/0 failed, coverage 91.57%, no quarantine. Orgs 850 passed/11 BYPASSRLS-skips/0 failed, 93.08% coverage. Overall mean 93.54%. Exit 1 from `make test-integration` reflects only independent residuals (SA80.3b, SA84–SA86). SA83 closed after independent review. See CHANGELOG.md v0.87.0 SA83 entry for full detail.
