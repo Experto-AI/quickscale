@@ -48,6 +48,15 @@ git merge --no-ff wt-track{N}
 ## Open work
 
 > Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). This section retains checked closeout entries for completed items as evidence of acceptance (their full implementation detail lives in CHANGELOG.md). Active and blocked work stays open below.
+
+### Track 1 closeout (SA83)
+
+SA83 implementation and closure is the sole Track 1 work delivered in this cycle. Three security-boundary root causes were identified and fixed across 6 implementation phases, followed by a user-approved post-cap closure cycle:
+
+- **Done:** SA83 — blog restricted-role RLS failures (86 failures, 3 root causes, fixed and closed after independent review). Blog 211/0, API 57/57, admin 33/33, managers 5/5, isolation 2/2. Shared AF9 memo fix (`_clear_priming_memo` in `current_org.py`) hardened tenant-context invariants for all modules.
+- **Pending/blocking within Track 1:** SA84 (CRM) — 195p/67f/20s restricted-role failures, root cause unknown, no deps.
+- **Pending on other tracks:** SA85 (forms, Track 2), SA86 (listings, Track 2). CR-TRACK3-MERGE-002 (medium/blocking/open accepted merge checkpoint from Track 3 — audit-prose overstatement of Finding 8/`operator_access` causality across SA84–SA86). SA81 (Track 3) completed alongside this merge. SA84–SA86 remain the only `make test-integration` gate red causes.
+
 >
 > **Track readiness (2026-07-13, updated):** Full post-resync `make test-integration` gate exit 1 — only SA84–SA86 cause red. Mean coverage 93.55%, no quarantine entries. SA77, SA79, SA80.3b, SA83, SA87, SA81 all closed.
 > - **Track 1** — SA83 (blog) implementation/validation complete 2026-07-13; closed after independent review. Blog 211p/0f, coverage 91.62%. SA84 (CRM, 195p/67f/20s) open, no deps.
