@@ -49,10 +49,10 @@ git merge --no-ff wt-track{N}
 
 > Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). Keep only active or blocked work here. Completed items (SA60, SA70, SA74, SA75, SA76, SA78, SA80, SA59 umbrella including SA59.1–SA59.4) were pruned from this section — their full implementation detail lives in CHANGELOG.md. **SA79 is reopened/blocked (see Track 2 below).**
 >
-> **Track readiness (2026-07-13):** Track 1 and Track 2 remain blocked despite SA80 (Track 3) landing and verifying clean — SA80's rerun used direct pytest invocations against the retained-role env, not a full `make test-integration` gate run with the SA76 quarantine entries for `orgs`/`notifications` removed. That numeric result (orgs 847 passed/11 BYPASSRLS-skips; notifications 39 passed) is suggestive but not the same proof standard this project has required at prior SA79 checkpoints (see the corrected-fix episode, CR-SA79-001/002) — a partial/direct-invocation pass has previously masked unrelated failures under quarantine (see CHANGELOG's 2026-07-13 CR-PLAN-SA79-004 entry). **Next concrete step to unblock both tracks:** remove the `orgs` and `notifications` entries from `scripts/test_integration.sh`'s `QUARANTINE_TICKETS` and rerun the full `make test-integration` gate — a clean run there is the acceptance bar for both SA77 and SA79.
-> - **Track 1** — blocked on SA79 (shared gate rerun above). SA77's code fix landed 2026-07-12; unconfirmed under the full gate.
-> - **Track 2** — blocked on the same gate rerun. SA79's acceptance (forms 0007 backfill + unquarantined notifications) is not yet confirmed under `make test-integration` itself.
-> - **Track 3** — clean. SA80 (venv + retained-role env wiring) is done; only SA80.3 (pg_dump, non-blocking) remains open, alongside new item SA81.
+> **Track readiness (2026-07-13):** Track 1 and Track 2 remain blocked despite SA80 (Track 3) landing and verifying clean — SA80's rerun used direct pytest invocations against the retained-role env, not a full `make test-integration` gate run with the SA76 quarantine entries for `orgs`/`notifications` removed. That numeric result (orgs 847 passed/11 BYPASSRLS-skips; notifications 39 passed) is suggestive but not the same proof standard this project has required at prior SA79 checkpoints (see the corrected-fix episode, CR-SA79-001/002) — a partial/direct-invocation pass has previously masked unrelated failures under quarantine (see CHANGELOG's 2026-07-13 CR-PLAN-SA79-004 entry). **SA82 (Track 3) is the concrete next step that unblocks both tracks:** it removes the quarantine entries and reruns the full gate; a clean run closes SA77 and SA79.
+> - **Track 1** — blocked on SA82's gate rerun. SA77's code fix landed 2026-07-12; unconfirmed under the full gate.
+> - **Track 2** — blocked on the same SA82 rerun. SA79's acceptance (forms 0007 backfill + unquarantined notifications) is not yet confirmed under `make test-integration` itself.
+> - **Track 3** — clean. SA80 (venv + retained-role env wiring) is done; SA82 (gate rerun), SA80.3 (pg_dump, non-blocking), and SA81 are open, all with no dependencies.
 
 ### Dependency & parallelization overview
 
@@ -60,13 +60,14 @@ git merge --no-ff wt-track{N}
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
 SA77 — fix orgs restricted-role        SA79 — reopened/blocked                    SA80 — done (2026-07-13)
-  test failures                          (needs a clean full                       SA80.3 (pg_dump) open,
-  ◐ code fix landed 2026-07-12;          make test-integration gate                non-blocking
-    unconfirmed under the full             rerun, quarantine removed)              SA81 — open, no deps
-    gate rerun
+  test failures                          (waits on SA82's                          SA82 — gate rerun, open,
+  ◐ code fix landed 2026-07-12;          full-gate rerun, Track 3)                   unblocks Track 1 + 2
+    waits on SA82 (Track 3)                                                        SA80.3 (pg_dump) open,
+                                                                                    non-blocking
+                                                                                    SA81 — open, no deps
 ```
 
-SA77 (Track 1) code fix landed 2026-07-12; full detail in CHANGELOG.md. SA80 (Track 3) is complete and verified (CHANGELOG.md). Track 1 and Track 2 both wait on the same next step: a full `make test-integration` gate rerun with the `orgs`/`notifications` quarantine entries removed.
+SA77 (Track 1) code fix landed 2026-07-12; full detail in CHANGELOG.md. SA80 (Track 3) is complete and verified (CHANGELOG.md). Track 1 and Track 2 both wait on **SA82** (Track 3): a full `make test-integration` gate rerun with the `orgs`/`notifications` quarantine entries removed.
 
 ### Track 1 — Tenant-context surface
 
@@ -74,11 +75,11 @@ SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 co
 
 #### Finding — `test-tooling-auto-primes-bypassrls-hatch`, orgs restricted-role residual (`why →` [tech-audit.md TA49](../others/tech-audit.md); split from SA59.1 per the 2026-07-12 closeout-path decision)
 
-- [ ] **SA77 — Root-cause and fix orgs' restricted-role test failures.** `Tier 1 · Track 1 · deps: code fix landed 2026-07-12; final verification depends on SA79`
+- [ ] **SA77 — Root-cause and fix orgs' restricted-role test failures.** `Tier 1 · Track 1 · deps: code fix landed 2026-07-12; final verification depends on SA82 (Track 3)`
   Code fix landed 2026-07-12 — full root-cause and fix detail (psycopg2→`connection.cursor()` conversion in two test helpers; 6 dynamic-DDL tests marked `@pytest.mark.bypass_rls`) is in [CHANGELOG.md](../../CHANGELOG.md)'s SA77 entry, not repeated here.
 
   *Acceptance:* the 3 helper-path restricted-role tests pass under the restricted `quickscale_test_role`/`quickscale_rls_test_role` roles; the 6 dynamic-DDL tests skip in restricted mode. The `scripts/test_integration.sh` quarantine entry (from SA76) is removed.
-  **Blocked:** SA80's direct-pytest rerun (2026-07-13) showed orgs reaching this code path clean (847 passed, 11 BYPASSRLS-skips), but that is not yet a full `make test-integration` gate rerun with the quarantine entry removed — see the Track readiness note above for why that distinction matters here. Next step is shared with SA79 (Track 2): drop the quarantine entries and rerun the full gate.
+  **Blocked on SA82** (Track 3): SA80's direct-pytest rerun (2026-07-13) showed orgs reaching this code path clean (847 passed, 11 BYPASSRLS-skips), but that is not yet the full `make test-integration` gate rerun with the quarantine entry removed that SA82 performs — see the Track readiness note above for why that distinction matters here.
   *(why →* [tech-audit.md TA49](../others/tech-audit.md)*)*
 
 ### Track 2 — Module contracts & settings
@@ -87,16 +88,24 @@ SA79 is reopened/blocked — the closeout verification revealed that the current
 
 #### Finding — SA79 closeout verification and reconciliation (`why →` closeout-review cap; CR-PLAN-SA79-004, CR-PLAN-SA79-005)
 
-- [ ] **SA79 — Closeout verification/reconciliation.** `Tier 1 · Track 2 · deps: shared gate rerun with SA77`
+- [ ] **SA79 — Closeout verification/reconciliation.** `Tier 1 · Track 2 · deps: SA82 (Track 3)`
   Direct forms 0007 proof must be rerun under the exact retained-role environment (full `QS_*_DB_USER=quickscale_test_role` set, BYPASSRLS hatch closed). Notifications suite must pass unquarantined before SA79 can honestly close.
 
-  SA80 (Track 3, done 2026-07-13) resolved the local env gaps that previously blocked any rerun from reaching this code path, and its direct-pytest verification already shows notifications at 39 passed/0 failed. Per the Track readiness note above, that's not yet the same proof standard as a clean `make test-integration` gate run with the quarantine entries removed — **CR-PLAN-SA79-004 remains the sole blocker**, now reduced to: drop `orgs`/`notifications` from `scripts/test_integration.sh`'s `QUARANTINE_TICKETS` and rerun the full gate. Full history of the 2026-07-13 rerun attempt is in [CHANGELOG.md](../../CHANGELOG.md).
+  SA80 (Track 3, done 2026-07-13) resolved the local env gaps that previously blocked any rerun from reaching this code path, and its direct-pytest verification already shows notifications at 39 passed/0 failed. Per the Track readiness note above, that's not yet the same proof standard as a clean `make test-integration` gate run with the quarantine entries removed — **CR-PLAN-SA79-004 remains the sole blocker, and SA82 (Track 3) is now the ticket that closes it.** Full history of the 2026-07-13 rerun attempt is in [CHANGELOG.md](../../CHANGELOG.md).
 
   *Acceptance:* forms 0007 backfill passes under full retained-role env; notifications suite runs clean (unquarantined) under a full `make test-integration` gate run; audit/status docs reflect current state.
 
 ### Track 3 — Core/CLI plumbing
 
 SA80 closed 2026-07-13 (venv re-provision + retained-role env wiring) — see CHANGELOG.md. Track 3 is clean; SA80.3 and SA81 below are both open with no dependencies.
+
+#### Finding — Full-gate verification owed for SA77/SA79 acceptance (`why →` 2026-07-13 roadmap closeout checkpoint; [CHANGELOG.md](../../CHANGELOG.md))
+
+- [ ] **SA82 — Remove the SA76 `orgs`/`notifications` quarantine entries and rerun the full `make test-integration` gate to prove SA77/SA79 clean.** `Tier 1 · Track 3 · deps: none`
+  SA80's direct-pytest rerun (2026-07-13) already reached orgs' and notifications' target code paths clean (847 passed/11 BYPASSRLS-skips; 39 passed/0 failed), but that is not the same proof standard as the full CI-equivalent gate — the SA76 quarantine mechanism (matches on module name, not failure signature) has already twice this cycle absorbed unrelated failures under these exact tickets. Edit `scripts/test_integration.sh` to drop `orgs` and `notifications` from `QUARANTINE_TICKETS`, then run `make test-integration` end-to-end.
+
+  *Acceptance:* orgs and notifications both pass clean under the full unquarantined gate. A clean run is what actually closes SA77 (Track 1) and SA79 (Track 2) and lifts their blocked status here; any new failure surfaced by removing the quarantine is investigated as its own finding before either ticket is called done.
+  *(why →* 2026-07-13 roadmap closeout checkpoint, [CHANGELOG.md](../../CHANGELOG.md)*)*
 
 #### Finding — PostgreSQL client tools missing locally (`why →` [CHANGELOG.md](../../CHANGELOG.md)'s SA80 entry)
 
