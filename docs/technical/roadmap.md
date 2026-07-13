@@ -50,7 +50,7 @@ git merge --no-ff wt-track{N}
 > Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). This section retains checked closeout entries for completed items as evidence of acceptance (their full implementation detail lives in CHANGELOG.md). Active and blocked work stays open below.
 >
 > **Track readiness (2026-07-13, updated):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed, notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. The repository integration gate remains red due to separate independent restricted-role findings (SA83–SA86) that do not affect SA77/SA79 closure.
-> - **Track 1** — unblocked from SA82 (SA77 closed); open findings SA83 (blog, 86 RLS failures) and SA84 (CRM, 67 RLS failures/20 skipped) recorded below — each is a separate restricted-role residual, not a blocker for SA77 closure.
+> - **Track 1** — unblocked from SA82 (SA77 closed); open findings SA83 (blog) and SA84 (CRM, 67 RLS failures/20 skipped) recorded below. SA83 is **root-caused (AF9 priming-memo staleness) with an in-progress uncommitted fix in wt-track1** — blog now 211 passed/0 failures in isolation under the restricted role; still to commit, merge v87, and confirm under the full gate. SA84 remains a separate restricted-role residual, not a blocker for SA77 closure.
 > - **Track 2** — unblocked from SA82 (SA79 closed); its own acceptance conditions (forms 0007 backfill + unquarantined notifications under the full gate) are satisfied. Reassigned 2026-07-13 from Track 1 (parallelization): SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures), both open, no deps.
 > - **Track 3** — SA80 (venv + retained-role env wiring) done; SA82 (gate rerun) completed; SA80.3a (pg_dump install) done 2026-07-13; SA80.3b (backups suite rerun) completed 2026-07-13; SA81 (no deps) remains open; SA87 (username-independent restore test) completed 2026-07-13.
 
@@ -62,8 +62,8 @@ Track 1 (tenant-context surface)        Track 2 (module contracts & settings)   
 SA77 — done (SA82, 2026-07-13)         SA79 — done (SA82, 2026-07-13)            SA80 — done (2026-07-13)
   orgs 847p/11 BYPASSRLS-skips/0f        notifications 39p/0f;                     SA82 — done (2026-07-13)
   code fix verified live under gate      forms 0007 acceptance verified            SA80.3a — done (2026-07-13)
-SA83 — blog (86 RLS failures) open,      SA85 — forms residual (33 RLS             SA80.3b (backups rerun)
-  no deps, unknown root cause              failures/8 skipped/10 errors)             done (2026-07-13)
+SA83 — blog: root-caused; fix WIP        SA85 — forms residual (33 RLS             SA80.3b (backups rerun)
+  in wt-track1: 211p/0f in isolation       failures/8 skipped/10 errors)             done (2026-07-13)
 SA84 — CRM (67 RLS failures/20             open, no deps, unknown root             SA81 — open, no deps
   skipped) open, no deps, unknown          cause (reassigned from Track 1,          SA87 — username-independent
   root cause                               2026-07-13)                                restore test
@@ -89,8 +89,16 @@ SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 cl
 
 #### Finding — Blog restricted-role RLS failures (`why →` CR-SA82-NT-002; discovered during SA82 full-gate rerun)
 
-- [ ] **SA83 — Investigate and fix blog's 86 restricted-role RLS failures.** `Tier 1 · Track 1 · deps: none`
-  Under the SA82 full `make test-integration` gate run with quarantine entries removed, blog's restricted-role suite showed 121 passed, 86 RLS failures. Root cause is unknown/unconfirmed — the failures are RLS policy violations under `quickscale_test_role` (NOBYPASSRLS), but the specific mechanism (missing org context, missing `operator_access`, or policy gap) has not been isolated.
+- [ ] **SA83 — Investigate and fix blog's 86 restricted-role RLS failures.** `Tier 1 · Track 1 · deps: none → root-caused; fix in progress (uncommitted) in wt-track1, 2026-07-13`
+  Under the SA82 full `make test-integration` gate run with quarantine entries removed, blog's restricted-role suite showed 121 passed, 86 RLS failures.
+
+  **Root cause identified (2026-07-13):** AF9 priming-**memo staleness**. The AF9 execute wrapper (`orgs/current_org.py`) primes `app.current_org_id` from the ContextVar and memoizes the primed value per transaction (`_af9_primed_for_txn`) to skip redundant `SET LOCAL`s. When a direct GUC mutator (`_set_db_current_org_id`, `reset_db_current_org_id`, `_restore_current_org_id`) changed the GUC out-of-band while the ContextVar was unchanged, the stale memo made the wrapper *skip* re-priming — leaving the DB GUC desynchronized from the ContextVar, so the next tenant query ran under the wrong (or empty) org context and tripped FORCE-RLS.
+
+  **Fix in progress (uncommitted, wt-track1):** added `_clear_priming_memo(connection)` and call it from all three direct GUC mutators so the next wrapped statement re-primes unconditionally; added 3 orgs regression tests (`test_direct_set_b_clears_memo`, `test_reset_clears_memo`, `test_restore_b_clears_memo` in `test_af9_priming.py`) plus blog test/view updates.
+
+  **Verification so far:** blog's restricted-role suite runs clean in isolation — `QS_BLOG_DB_USER=quickscale_test_role QUICKSCALE_ALLOW_BYPASSRLS=0 make MODULE=blog test -- --modules` → **211 passed, 0 failures** (was 121 passed / 86 failures). `quickscale_test_role` confirmed `NOBYPASSRLS`, so this is a true restricted-role pass.
+
+  **Remaining to close:** commit the wt-track1 work, `git merge v87`, confirm the orgs `test_af9_priming.py` regression tests pass under the restricted role, then confirm blog clean under the full `make test-integration` gate, and merge back to v87.
 
   *Acceptance:* blog's restricted-role suite passes clean (0 failures) under `make test-integration` with no quarantine entry.
   *(why →* CR-SA82-NT-002*)*
