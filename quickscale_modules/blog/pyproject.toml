@@ -16,7 +16,6 @@ python = ">=3.13,<3.15"
 Django = ">=6.0.5,<6.1.0"
 django-markdownx = "^4.0.9"
 Pillow = ">=12.2.0,<13.0.0"
-quickscale-module-orgs = ">=0.86.0,<0.87.0"
 
 [tool.poetry.group.dev.dependencies]
 # Minimal dev dependencies for standalone testing

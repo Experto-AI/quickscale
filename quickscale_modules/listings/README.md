@@ -216,15 +216,15 @@ LISTINGS_IMAGE_MAX_SIZE = {'size': (1920, 1080), 'quality': 90}
 Run module tests:
 
 ```bash
-cd quickscale_modules/listings
-poetry install
-poetry run pytest
+# From repository root
+make MODULE=listings test -- --modules
 ```
 
 With coverage:
 
 ```bash
-poetry run pytest --cov=src/quickscale_modules_listings --cov-report=html
+# From repository root
+poetry run pytest quickscale_modules/listings/tests/ --cov=quickscale_modules_listings --cov-report=html
 ```
 
 ## Development
@@ -232,22 +232,21 @@ poetry run pytest --cov=src/quickscale_modules_listings --cov-report=html
 ### Running Tests Locally
 
 ```bash
-cd quickscale_modules/listings
-poetry install
-poetry run pytest
+# From repository root
+make MODULE=listings test -- --modules
 ```
 
 ### Code Quality
 
 ```bash
 # Format code
-poetry run ruff format src/ tests/
+poetry run ruff format quickscale_modules/listings/src/ quickscale_modules/listings/tests/
 
 # Check code
-poetry run ruff check src/ tests/
+poetry run ruff check quickscale_modules/listings/src/ quickscale_modules/listings/tests/
 
 # Type check
-poetry run mypy src/
+poetry run mypy quickscale_modules/listings/src/
 ```
 
 ## Dependencies

@@ -150,16 +150,16 @@ Notes attached to contacts or deals with created_by tracking.
 ### Running Tests
 
 ```bash
-cd quickscale_modules/crm
-poetry install
-poetry run pytest
+# From repository root
+make MODULE=crm test -- --modules
 ```
 
 ### Code Quality
 
 ```bash
-poetry run ruff check .
-poetry run mypy src/
+# From repository root
+poetry run ruff check quickscale_modules/crm/
+poetry run mypy quickscale_modules/crm/src/
 ```
 
 ## License
