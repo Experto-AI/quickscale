@@ -49,10 +49,10 @@ git merge --no-ff wt-track{N}
 
 > Completed and archived work lives in [CHANGELOG.md](../../CHANGELOG.md). This section retains checked closeout entries for completed items as evidence of acceptance (their full implementation detail lives in CHANGELOG.md). Active and blocked work stays open below.
 >
-> **Track readiness (2026-07-13, updated):** SA82 (Track 3) completed — the SA76 `orgs`/`notifications` quarantine entries are removed; the full `make test-integration` gate ran with both suites unquarantined (exit 1, as expected: orgs 847 passed/11 BYPASSRLS-skips/0 failed, notifications 39 passed/0 failed, overall mean coverage 92.95% passed). SA77 and SA79 closed by this result — their acceptance conditions are met. The repository integration gate remains red due to separate independent restricted-role findings that do not affect SA77/SA79 closure — exit 1 reflects only the independent residuals listed below.
-> - **Track 1** — SA83 (blog) implementation/validation complete 2026-07-13; closed after independent review. SA84 (CRM, 67 RLS failures/20 skipped) open, no deps.
-> - **Track 2** — unblocked from SA82 (SA79 closed); SA85 (forms, 33 RLS failures/8 skipped/10 errors) and SA86 (listings, 6 RLS failures), both open, no deps (reassigned from Track 1, 2026-07-13).
-> - **Track 3** — SA80 (venv + retained-role env wiring) done; SA82 (gate rerun) completed; SA80.3a (pg_dump install) done 2026-07-13; SA80.3b (backups suite rerun) completed 2026-07-13; SA81 (no deps) remains open; SA87 (username-independent restore test) completed 2026-07-13.
+> **Track readiness (2026-07-13, updated):** Full post-resync `make test-integration` gate exit 1 — only SA84–SA86 cause red. Mean coverage 93.55%, no quarantine entries. SA77, SA79, SA80.3b, SA83, SA87 all closed.
+> - **Track 1** — SA83 (blog) implementation/validation complete 2026-07-13; closed after independent review. Blog 211p/0f, coverage 91.62%. SA84 (CRM, 195p/67f/20s) open, no deps.
+> - **Track 2** — SA85 (forms, 125p/50f/8s/11d/2e) open, no deps. SA86 (listings, 128p/6f) open, no deps.
+> - **Track 3** — SA80 (venv + retained-role env wiring) done. SA80.3b (backups) done: 299p/2s/0f. SA87 done. SA81 (no deps) remains open, unrelated to gate.
 
 ### Dependency & parallelization overview
 
@@ -60,37 +60,20 @@ git merge --no-ff wt-track{N}
 Track 1 (tenant-context surface)        Track 2 (module contracts & settings)     Track 3 (core/CLI plumbing)
 ───────────────────────────────         ───────────────────────────────────       ───────────────────────────
 SA77 — done (SA82, 2026-07-13)         SA79 — done (SA82, 2026-07-13)            SA80 — done (2026-07-13)
-  orgs 847p/11 BYPASSRLS-skips/0f        notifications 39p/0f;                     SA82 — done (2026-07-13)
-  (SA82-era historical counts)           forms 0007 acceptance verified            SA80.3a — done (2026-07-13)
-SA83 — blog: impl/validation              SA85 — forms residual (33 RLS             SA80.3b (backups rerun)
-  impl/validation complete;               failures at SA82; current                  done; 298p/1f/2s
-  closed after independent review         125p/50f/8s) open, no deps               one remaining failure
-  blog 211p/0f, API 57p/0f,               (reassigned from Track 1,                 open follow-up
-  admin 33p/0f, managers 5p/0f,           2026-07-13)                              SA81 — open, no deps,
-  isolation 2p/0f, mean 93.54%            SA86 — listings (6 RLS failures)           not a gate-failure
-SA84 — CRM (30 RLS failures)               open, no deps, unknown root               cause
+  orgs 850p/11 BYPASSRLS-skips/0f        notifications 39p/0f;                     SA82 — done (2026-07-13)
+  (SA82-era historical: 847p)            forms 0007 acceptance verified            SA80.3a — done (2026-07-13)
+SA83 — done (blog)                       SA85 — forms residual                     SA80.3b — done (backups)
+  closed after independent review         125p/50f/8s/11d/2e open, no deps          299p/2s/0f
+  blog 211p/0f, API 57p/0f,              (reassigned from Track 1,                 SA81 — open, no deps,
+  admin 33p/0f, managers 5p/0f,           2026-07-13)                                not a gate-failure
+  isolation 2p/0f, mean 93.55%            SA86 — listings (6 RLS failures)           cause
+SA84 — CRM (195p/67f/20s)                  open, no deps, unknown root
   open, no deps, unknown root              cause (reassigned from Track 1,
   cause                                    2026-07-13)
 ```
 
 
-SA82 (Track 3) completed 2026-07-13 — the `orgs`/`notifications` quarantine entries are removed; the full gate rerun confirmed orgs (847 passed/11 BYPASSRLS-skips/0 failed — SA82-era historical counts only) and notifications (39 passed/0 failed) clean. SA77 and SA79 are closed by this result. SA83 (blog) implementation/validation complete; closed after independent review; SA84 open; Track 2 is unblocked from SA82 with SA85–SA86 open (reassigned from Track 1, 2026-07-13, to parallelize the independent restricted-role residuals). The integration gate remains red due to separate independent findings (SA80.3b, SA84–SA86) recorded below. (SA81 is unrelated cleanup — per-module lockfile removal — and does not affect the gate.)
-
-SA83 — blog: root-caused; fix WIP        SA85 — forms residual (33 RLS             SA80.3b (backups rerun)
-  in wt-track1: 211p/0f in isolation       failures/8 skipped/10 errors)             done (2026-07-13)
-SA84 — CRM (67 RLS failures/20             open, no deps, unknown root             SA81 — open, no deps
-  skipped) open, no deps, unknown          cause (reassigned from Track 1,          SA87 — username-independent
-  root cause                               2026-07-13)                                restore test
-                                                                                       done (2026-07-13)
-                                           SA86 — listings (6 RLS failures)
-                                             open, no deps, unknown root
-                                             cause (reassigned from Track 1,
-                                             2026-07-13)
-```
-
-
-SA82 (Track 3) completed 2026-07-13 — the `orgs`/`notifications` quarantine entries are removed; the full gate rerun confirmed orgs (847 passed/11 BYPASSRLS-skips/0 failed) and notifications (39 passed/0 failed) clean. SA77 and SA79 are closed by this result. Track 1 is unblocked from SA82 with SA83–SA84 open; Track 2 is unblocked from SA82 with SA85–SA86 open (reassigned from Track 1, 2026-07-13, to parallelize the four independent restricted-role residuals). The integration gate remains red due to separate independent restricted-role findings (SA83–SA86) recorded below. (SA81 is unrelated cleanup — per-module lockfile removal — and does not affect the gate.)
-
+Full post-resync `make test-integration` gate exit 1 — only SA84–SA86 cause red. SA77, SA79, SA80.3b, SA83, SA87 all closed. Mean coverage 93.55%, no quarantine entries. Backups 299p/2s/0f. Blog 211p/0f coverage 91.62%, orgs 850p/11 BYPASSRLS-skips/0f coverage 93.08%. SA84 (CRM) 195p/67f/20s open. SA85 (forms) 125p/50f/8s/11 deselected/2 errors open. SA86 (listings) 128p/6f open. SA81 (no deps) remains open, unrelated to gate.
 
 ### Track 1 — Tenant-context surface
 
@@ -110,7 +93,7 @@ SA59 (umbrella, SA59.1–SA59.4) closed 2026-07-12 — see CHANGELOG.md. SA77 cl
   2. **Missing `_resolve_api_org` context priming** — the blog publish/upload API view helper resolved the organization but did not set the ContextVar or GUC before ORM operations. Token-authenticated requests (which bypass TenantMiddleware) hit RLS policy violations. Fixed by converging three resolution branches to one local `org` variable, calling `set_current_org_id(org.pk)` once, and documenting the side effect. Both API callers (`upload_media_api`, `publish_post_api`) now capture `prior=get_current_org_id()`, wrap all post-resolution returns in `try`, and restore prior in `finally`.
   3. **Stale AF9 priming memo on GUC reset** — `org_scope()` exit resets the GUC via `RESET app.current_org_id` but does not clear the per-transaction priming memo (`_af9_primed_for_txn`/`_af9_primed_atomic`). When the same org is resolved again (e.g. by session middleware), the priming wrapper sees the stale memo and skips `SET LOCAL`, leaving the GUC empty for subsequent queries. Fixed by adding `_clear_priming_memo(connection)` and calling it from all three direct GUC mutators (`_set_db_current_org_id`, `reset_db_current_org_id`, `_restore_current_org_id`). Three regressions prove each mutator triggers a fresh SET LOCAL on the next wrapped query.
 
-  *Outcome:* blog 211 passed/0 failed, coverage 91.57%, no quarantine entry. Full module suite: API 57/57, admin 33/33, managers 5/5, isolation 2/2. Orgs shared fix verified under full orgs suite (850 passed/11 BYPASSRLS-skips/0 failed, coverage 93.08%). Overall mean coverage 93.54%, every module ≥80%. Repository remains red (SA80.3b, SA84–SA86 open; SA81 is unrelated cleanup and does not affect the gate).
+  *Outcome:* blog 211 passed/0 failed, coverage 91.62%, no quarantine entry. Full module suite: API 57/57, admin 33/33, managers 5/5, isolation 2/2. Orgs shared fix verified under full orgs suite (850 passed/11 BYPASSRLS-skips/0 failed, coverage 93.08%). Overall mean coverage 93.55%, every module ≥80%. Repository remains red (SA84–SA86 open; SA81 is unrelated cleanup and does not affect the gate).
   *(why →* CR-SA82-NT-002*)*
 
 #### Finding — CRM restricted-role RLS failures (`why →` CR-SA82-NT-003; discovered during SA82 full-gate rerun)
