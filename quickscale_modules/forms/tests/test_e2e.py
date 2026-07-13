@@ -3,7 +3,7 @@
 These tests exercise the full user journey:
   seed presets → fetch schema → submit form → verify in DB
 
-They run against the in-memory SQLite test database and do not require
+They run against the PostgreSQL test database and do not require
 Docker, Playwright, or any external services.  They are marked with
 ``@pytest.mark.e2e`` so the CI matrix can run them in a dedicated step.
 """
@@ -38,9 +38,19 @@ def clear_rate_limit_cache():
 
 @pytest.fixture
 def seeded_contact_form(db):
-    """Seed the contact preset and return the resulting Form instance."""
+    """Seed the contact preset and return the resulting Form instance.
+
+    Uses ``org_scope`` inside the fixture to read back the created form
+    because PG RLS requires ``app.current_org_id`` for SELECT even when
+    using ``all_objects`` (super_scope bypasses only Django-level filtering).
+    """
     call_command("forms_seed_presets", verbosity=0)
-    return Form.all_objects.get(slug="contact")
+    from quickscale_modules_orgs.current_org import org_scope
+    from quickscale_modules_orgs.models import Organization
+
+    system_org = Organization.objects.get_system_org()
+    with org_scope(system_org):
+        return Form.all_objects.get(slug="contact")
 
 
 @pytest.fixture
@@ -51,7 +61,7 @@ def api_client():
 
 @pytest.fixture
 def staff_client(db):
-    """DRF API client authenticated as a staff user."""
+    """DRF API client authenticated as a staff user (non-superuser)."""
     from django.contrib.auth import get_user_model
 
     User = get_user_model()
@@ -63,6 +73,28 @@ def staff_client(db):
     )
     client = APIClient()
     client.force_authenticate(user=staff)
+    return client
+
+
+@pytest.fixture
+def superuser_client(db):
+    """DRF API client authenticated as a superuser.
+
+    SA85 Phase 4: only superusers may perform cross-tenant SELECT via
+    ``operator_access``.
+    """
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    superuser = User.objects.create_user(
+        username="super_e2e",
+        email="super_e2e@example.com",
+        password="superpass",
+        is_staff=True,
+        is_superuser=True,
+    )
+    client = APIClient()
+    client.force_authenticate(user=superuser)
     return client
 
 
@@ -82,11 +114,14 @@ class TestContactFormE2EWorkflow:
 
     def test_seed_creates_contact_form_with_required_fields(self, seeded_contact_form):
         """forms_seed_presets creates the contact form with all five expected fields."""
-        field_names = list(
-            FormField.all_objects.filter(form=seeded_contact_form).values_list(
-                "name", flat=True
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(seeded_contact_form.organization):
+            field_names = list(
+                FormField.all_objects.filter(form=seeded_contact_form).values_list(
+                    "name", flat=True
+                )
             )
-        )
         assert seeded_contact_form.slug == "contact"
         assert seeded_contact_form.is_active is True
         for expected in ("full_name", "email", "company", "subject", "project_context"):
@@ -94,9 +129,14 @@ class TestContactFormE2EWorkflow:
 
     def test_seed_is_idempotent(self, db):
         """Running forms_seed_presets twice does not create duplicate forms."""
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import Organization
+
         call_command("forms_seed_presets", verbosity=0)
         call_command("forms_seed_presets", verbosity=0)
-        assert Form.all_objects.filter(slug="contact").count() == 1
+        system_org = Organization.objects.get_system_org()
+        with org_scope(system_org):
+            assert Form.all_objects.filter(slug="contact").count() == 1
 
     # ------------------------------------------------------------------
     # 2. Schema endpoint
@@ -137,6 +177,8 @@ class TestContactFormE2EWorkflow:
         self, api_client, seeded_contact_form
     ):
         """Submitting a valid contact form returns 201 and creates a submission record."""
+        from quickscale_modules_orgs.current_org import org_scope
+
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
         payload = {
             "full_name": "Alice Example",
@@ -150,12 +192,17 @@ class TestContactFormE2EWorkflow:
         assert response.status_code == 201
         assert "message" in response.data
 
-        submission = FormSubmission.all_objects.filter(form=seeded_contact_form).first()
+        with org_scope(seeded_contact_form.organization):
+            submission = FormSubmission.all_objects.filter(
+                form=seeded_contact_form
+            ).first()
         assert submission is not None
         assert submission.is_spam is False
 
     def test_submission_stores_all_field_values(self, api_client, seeded_contact_form):
         """All submitted field values are persisted as FormFieldValue records."""
+        from quickscale_modules_orgs.current_org import org_scope
+
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
         payload = {
             "full_name": "Bob Builder",
@@ -166,14 +213,15 @@ class TestContactFormE2EWorkflow:
         }
         api_client.post(url, data=payload, format="json")
 
-        submission = FormSubmission.all_objects.filter(form=seeded_contact_form).latest(
-            "submitted_at"
-        )
-        stored_names = list(
-            FormFieldValue.all_objects.filter(submission=submission).values_list(
-                "field_name", flat=True
+        with org_scope(seeded_contact_form.organization):
+            submission = FormSubmission.all_objects.filter(
+                form=seeded_contact_form
+            ).latest("submitted_at")
+            stored_names = list(
+                FormFieldValue.all_objects.filter(submission=submission).values_list(
+                    "field_name", flat=True
+                )
             )
-        )
         for field in ("full_name", "email", "company", "subject", "project_context"):
             assert field in stored_names, f"Field value '{field}' not stored"
 
@@ -199,6 +247,8 @@ class TestContactFormE2EWorkflow:
         self, api_client, seeded_contact_form
     ):
         """Submissions with a filled honeypot field are flagged as spam in the DB."""
+        from quickscale_modules_orgs.current_org import org_scope
+
         url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
         payload = {
             "full_name": "Spambot",
@@ -211,9 +261,10 @@ class TestContactFormE2EWorkflow:
 
         # Returns 201 to fool bots — but marks submission as spam
         assert response.status_code == 201
-        latest = FormSubmission.all_objects.filter(form=seeded_contact_form).latest(
-            "submitted_at"
-        )
+        with org_scope(seeded_contact_form.organization):
+            latest = FormSubmission.all_objects.filter(form=seeded_contact_form).latest(
+                "submitted_at"
+            )
         assert latest.is_spam is True
 
     # ------------------------------------------------------------------
@@ -246,10 +297,10 @@ class TestContactFormE2EWorkflow:
     # 6. Admin retrieval
     # ------------------------------------------------------------------
 
-    def test_admin_can_list_submissions(
-        self, staff_client, api_client, seeded_contact_form
+    def test_superuser_can_list_submissions(
+        self, superuser_client, api_client, seeded_contact_form
     ):
-        """Staff user can retrieve the list of form submissions via the admin API."""
+        """Superuser can retrieve the list of form submissions via the admin API."""
         # Create a submission first
         submit_url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
         api_client.post(
@@ -267,13 +318,28 @@ class TestContactFormE2EWorkflow:
             "quickscale_forms:admin-submission-list",
             kwargs={"pk": seeded_contact_form.pk},
         )
-        response = staff_client.get(list_url)
+        response = superuser_client.get(list_url)
 
         assert response.status_code == 200
         assert len(response.data) >= 1
         submission_data = response.data[0]
         assert "submitted_at" in submission_data
         assert "is_spam" in submission_data
+
+    def test_staff_without_org_fails_closed_on_admin_submissions(
+        self, staff_client, seeded_contact_form
+    ):
+        """View-unit defense-in-depth: force-auth staff without org gets
+        empty list on admin submission list (fail-closed)."""
+        url = reverse(
+            "quickscale_forms:admin-submission-list",
+            kwargs={"pk": seeded_contact_form.pk},
+        )
+        response = staff_client.get(url)
+        assert response.status_code == 200
+        assert len(response.data) == 0, (
+            "Staff without org must see empty submission list (fail-closed)"
+        )
 
     def test_anonymous_user_cannot_list_submissions(
         self, api_client, seeded_contact_form

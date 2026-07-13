@@ -7,6 +7,7 @@ from quickscale_modules_forms.serializers import (
     FormSchemaSerializer,
     FormSubmissionCreateSerializer,
 )
+from quickscale_modules_orgs.current_org import org_scope
 
 
 @pytest.mark.django_db
@@ -15,45 +16,48 @@ class TestFormSchemaSerializer:
 
     def test_formschema_serializer_returns_active_fields_only(self, form, form_field):
         """Inactive fields are excluded from the schema"""
-        FormField.all_objects.create(
-            form=form,
-            organization=form.organization,
-            field_type="text",
-            label="Hidden",
-            name="hidden_field",
-            order=99,
-            is_active=False,
-        )
-        data = FormSchemaSerializer(form).data
+        with org_scope(form.organization):
+            FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type="text",
+                label="Hidden",
+                name="hidden_field",
+                order=99,
+                is_active=False,
+            )
+            data = FormSchemaSerializer(form).data
         names = [f["name"] for f in data["fields"]]
         assert "full_name" in names
         assert "hidden_field" not in names
 
     def test_formschema_serializer_fields_ordered_by_order(self, form):
         """Fields appear in ascending order"""
-        FormField.all_objects.create(
-            form=form,
-            organization=form.organization,
-            field_type="text",
-            label="Last",
-            name="last_field",
-            order=10,
-        )
-        FormField.all_objects.create(
-            form=form,
-            organization=form.organization,
-            field_type="text",
-            label="First",
-            name="first_field",
-            order=1,
-        )
-        data = FormSchemaSerializer(form).data
+        with org_scope(form.organization):
+            FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type="text",
+                label="Last",
+                name="last_field",
+                order=10,
+            )
+            FormField.all_objects.create(
+                form=form,
+                organization=form.organization,
+                field_type="text",
+                label="First",
+                name="first_field",
+                order=1,
+            )
+            data = FormSchemaSerializer(form).data
         orders = [f["order"] for f in data["fields"]]
         assert orders == sorted(orders)
 
     def test_formschema_serializer_contains_slug_and_title(self, form):
         """Serialized data includes slug and title"""
-        data = FormSchemaSerializer(form).data
+        with org_scope(form.organization):
+            data = FormSchemaSerializer(form).data
         assert data["slug"] == "test-contact"
         assert data["title"] == "Test Contact"
 
@@ -65,25 +69,34 @@ class TestFormSubmissionCreateSerializer:
     def test_valid_data_passes_validation(self, form, form_field, email_field):
         """All required fields present and valid — serializer passes"""
         data = {"full_name": "Alice", "email": "alice@example.com"}
-        serializer = FormSubmissionCreateSerializer(data=data, context={"form": form})
-        assert serializer.is_valid(), serializer.errors
+        with org_scope(form.organization):
+            serializer = FormSubmissionCreateSerializer(
+                data=data, context={"form": form}
+            )
+            assert serializer.is_valid(), serializer.errors
 
     def test_missing_required_field_raises_field_error(
         self, form, form_field, email_field
     ):
         """Missing required field yields a field-name-keyed error"""
         data = {"full_name": "Alice"}  # missing email
-        serializer = FormSubmissionCreateSerializer(data=data, context={"form": form})
-        assert not serializer.is_valid()
-        assert "email" in serializer.errors
+        with org_scope(form.organization):
+            serializer = FormSubmissionCreateSerializer(
+                data=data, context={"form": form}
+            )
+            assert not serializer.is_valid()
+            assert "email" in serializer.errors
 
     def test_optional_field_can_be_omitted(
         self, form, form_field, email_field, optional_field
     ):
         """Optional fields (required=False) do not raise errors when absent"""
         data = {"full_name": "Alice", "email": "alice@example.com"}
-        serializer = FormSubmissionCreateSerializer(data=data, context={"form": form})
-        assert serializer.is_valid(), serializer.errors
+        with org_scope(form.organization):
+            serializer = FormSubmissionCreateSerializer(
+                data=data, context={"form": form}
+            )
+            assert serializer.is_valid(), serializer.errors
 
     def test_unknown_field_raises_field_error(self, form, form_field, email_field):
         """Submitting an unknown field key raises a field-named error"""
@@ -92,35 +105,50 @@ class TestFormSubmissionCreateSerializer:
             "email": "alice@example.com",
             "unexpected_key": "value",
         }
-        serializer = FormSubmissionCreateSerializer(data=data, context={"form": form})
-        assert not serializer.is_valid()
-        assert "unexpected_key" in serializer.errors
+        with org_scope(form.organization):
+            serializer = FormSubmissionCreateSerializer(
+                data=data, context={"form": form}
+            )
+            assert not serializer.is_valid()
+            assert "unexpected_key" in serializer.errors
+            assert "full_name" not in serializer.errors
+            assert "email" not in serializer.errors
 
     def test_invalid_email_format_raises_named_error(
         self, form, form_field, email_field
     ):
         """Invalid email format yields an 'email'-keyed error"""
         data = {"full_name": "Alice", "email": "not-an-email"}
-        serializer = FormSubmissionCreateSerializer(data=data, context={"form": form})
-        assert not serializer.is_valid()
-        assert "email" in serializer.errors
+        with org_scope(form.organization):
+            serializer = FormSubmissionCreateSerializer(
+                data=data, context={"form": form}
+            )
+            assert not serializer.is_valid()
+            assert "email" in serializer.errors
+            assert "Enter a valid email address" in str(serializer.errors["email"][0])
 
     def test_validation_rules_max_length_enforced(self, form, form_field, email_field):
         """max_length validation_rule is enforced"""
-        form_field.validation_rules = {"max_length": 5}
-        form_field.save()
-        data = {"full_name": "This name is too long", "email": "alice@example.com"}
-        serializer = FormSubmissionCreateSerializer(data=data, context={"form": form})
-        assert not serializer.is_valid()
-        assert "full_name" in serializer.errors
+        with org_scope(form.organization):
+            form_field.validation_rules = {"max_length": 5}
+            form_field.save()
+            data = {"full_name": "This name is too long", "email": "alice@example.com"}
+            serializer = FormSubmissionCreateSerializer(
+                data=data, context={"form": form}
+            )
+            assert not serializer.is_valid()
+            assert "full_name" in serializer.errors
 
     def test_validation_rules_with_nonnumeric_limits_return_validation_error(
         self, form, form_field, email_field
     ):
         """Non-numeric min/max rules surface as field-level validation errors."""
-        form_field.validation_rules = {"min_length": "not-a-number"}
-        form_field.save()
-        data = {"full_name": "Alice", "email": "alice@example.com"}
-        serializer = FormSubmissionCreateSerializer(data=data, context={"form": form})
-        assert not serializer.is_valid()
-        assert "full_name" in serializer.errors
+        with org_scope(form.organization):
+            form_field.validation_rules = {"min_length": "not-a-number"}
+            form_field.save()
+            data = {"full_name": "Alice", "email": "alice@example.com"}
+            serializer = FormSubmissionCreateSerializer(
+                data=data, context={"form": form}
+            )
+            assert not serializer.is_valid()
+            assert "full_name" in serializer.errors

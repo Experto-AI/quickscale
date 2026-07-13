@@ -41,7 +41,9 @@ def django_db_setup(django_db_blocker):
         call_command("migrate", "--run-syncdb", verbosity=0)
 
 
+from collections.abc import Iterator  # noqa: E402
 from django.contrib.auth import get_user_model  # noqa: E402
+from django.core.cache import cache  # noqa: E402
 from rest_framework.test import APIClient  # noqa: E402
 
 from quickscale_modules_forms.models import (  # noqa: E402
@@ -52,6 +54,78 @@ from quickscale_modules_forms.models import (  # noqa: E402
 )
 
 User = get_user_model()
+
+
+# ---------------------------------------------------------------------------
+# SA85 Phase 1 — reset per-test state: ContextVar and cache
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_test_state() -> Iterator[None]:
+    """Reset per-test state: ContextVar, DB GUCs, and cache.
+
+    ContextVars persist across tests within the same thread; this fixture
+    clears the org ContextVar before each test so the baseline is always
+    ``None`` (fail-closed).  Also clears the PostgreSQL GUCs
+    ``app.current_org_id``, ``app.operator_access``, and resets the DB
+    role to the session default after any test that changes them.
+    Cache is cleared to prevent cross-test leaks.
+
+    CR-SA85-REV-006: restore direct setter state and reset
+    role/current-org/operator GUCs in every boundary finally block.
+
+    Tests without the ``db`` marker (e.g. ``test_apps.py``,
+    ``test_throttles.py``) do not have database access; DB GUC
+    resets are safely skipped in that case.
+    """
+    from quickscale_modules_orgs.current_org import reset_current_org_id
+
+    reset_current_org_id()
+    # Reset DB-side GUCs if PostgreSQL is the backend and database
+    # access is available (tests without the ``db`` marker may not
+    # have database access).
+    from django.db import connection
+
+    if connection.vendor == "postgresql":
+        try:
+            with connection.cursor() as cur:
+                cur.execute("RESET app.current_org_id")
+                cur.execute("RESET app.operator_access")
+                cur.execute("RESET ROLE")
+        except RuntimeError:
+            # Database access not allowed (test without db marker).
+            pass
+    # Clear AF9 per-transaction priming memo (connection-level attributes)
+    # so a stale memo from a prior test does not suppress re-priming
+    # in a new transaction (CR-SA85-REV-006).
+    if hasattr(connection, "_af9_primed_for_txn"):
+        del connection._af9_primed_for_txn
+    if hasattr(connection, "_af9_primed_atomic"):
+        del connection._af9_primed_atomic
+    cache.clear()
+    yield
+    # Post-yield teardown: restore ContextVar, GUCs, and AF9 memo so
+    # a test that alters them does not leak state into the next test
+    # (CR-SA85-REV-006).
+    from quickscale_modules_orgs.current_org import reset_current_org_id
+
+    reset_current_org_id()
+    from django.db import connection
+
+    if connection.vendor == "postgresql":
+        try:
+            with connection.cursor() as cur:
+                cur.execute("RESET app.current_org_id")
+                cur.execute("RESET app.operator_access")
+                cur.execute("RESET ROLE")
+        except RuntimeError:
+            pass
+    if hasattr(connection, "_af9_primed_for_txn"):
+        del connection._af9_primed_for_txn
+    if hasattr(connection, "_af9_primed_atomic"):
+        del connection._af9_primed_atomic
+    cache.clear()
 
 
 @pytest.fixture
@@ -66,12 +140,34 @@ def user(db):
 
 @pytest.fixture
 def staff_user(db):
-    """Staff Django user with admin access"""
+    """Staff Django user with admin access (not a superuser).
+
+    This fixture provides a plain staff user for view-unit defense-in-depth
+    tests (CR-SA85-REV-001).  Session-parity proofs that exercise the real
+    middleware pipeline use ``force_login`` + ``ACTIVE_ORG_SESSION_KEY``
+    instead.
+    """
     return User.objects.create_user(
         username="staffuser",
         email="staffuser@example.com",
         password="testpass123",
         is_staff=True,
+    )
+
+
+@pytest.fixture
+def superuser(db):
+    """Superuser with Django admin access.
+
+    SA85 Phase 4: superuser is the only role permitted cross-tenant SELECT
+    via ``operator_access``.
+    """
+    return User.objects.create_user(
+        username="superuser",
+        email="superuser@example.com",
+        password="testpass123",
+        is_staff=True,
+        is_superuser=True,
     )
 
 
@@ -83,111 +179,176 @@ def api_client():
 
 @pytest.fixture
 def staff_client(api_client, staff_user):
-    """DRF API client authenticated as staff user"""
+    """DRF API client authenticated as staff user (non-superuser).
+
+    Uses ``force_authenticate`` (DRF-only, no session middleware).
+    This is a view-unit defense-in-depth fixture (CR-SA85-REV-001).
+    Session-parity proofs that exercise the real middleware pipeline
+    use ``force_login`` + ``ACTIVE_ORG_SESSION_KEY`` instead.
+    """
     api_client.force_authenticate(user=staff_user)
     return api_client
 
 
 @pytest.fixture
+def superuser_client(api_client, superuser):
+    """DRF API client authenticated as superuser.
+
+    SA85 Phase 4: use this fixture for tests that verify cross-tenant
+    read access via ``operator_access``.
+    """
+    api_client.force_authenticate(user=superuser)
+    return api_client
+
+
+@pytest.fixture
 def form(db):
-    """Active form with notify email set"""
-    from quickscale_modules_orgs.current_org import set_current_org_id
+    """Active form with notify email set.
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
+    for the duration of the fixture body and cleaned up before the
+    fixture returns — test bodies do not inherit fixture-held org context
+    (SA85 Phase 1).
+    """
+    from quickscale_modules_orgs.current_org import org_scope
     from quickscale_modules_orgs.models import Organization
 
     system_org = Organization.objects.get_system_org()
-    set_current_org_id(system_org.pk)
-    form, _ = Form.all_objects.update_or_create(
-        slug="test-contact",
-        defaults={
-            "title": "Test Contact",
-            "description": "Get in touch.",
-            "success_message": "Thank you, we will be in touch.",
-            "notify_emails": "admin@example.com",
-            "spam_protection_enabled": True,
-            "organization": system_org,
-        },
-    )
+    with org_scope(system_org):
+        form, _ = Form.all_objects.update_or_create(
+            slug="test-contact",
+            defaults={
+                "title": "Test Contact",
+                "description": "Get in touch.",
+                "success_message": "Thank you, we will be in touch.",
+                "notify_emails": "admin@example.com",
+                "spam_protection_enabled": True,
+                "organization": system_org,
+            },
+        )
     return form
 
 
 @pytest.fixture
 def inactive_form(db):
-    """Inactive form that should not be accessible via public API"""
+    """Inactive form that should not be accessible via public API.
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
+    for the duration of the fixture body and cleaned up before the
+    fixture returns (SA85 Phase 1).
+    """
+    from quickscale_modules_orgs.current_org import org_scope
     from quickscale_modules_orgs.models import Organization
 
     system_org = Organization.objects.get_system_org()
-    return Form.all_objects.create(
-        title="Inactive Form",
-        slug="inactive",
-        is_active=False,
-        organization=system_org,
-    )
+    with org_scope(system_org):
+        return Form.all_objects.create(
+            title="Inactive Form",
+            slug="inactive",
+            is_active=False,
+            organization=system_org,
+        )
 
 
 @pytest.fixture
 def form_field(db, form):
-    """Text field on the contact form"""
-    return FormField.all_objects.create(
-        form=form,
-        organization=form.organization,
-        field_type=FormField.FIELD_TYPE_TEXT,
-        label="Name",
-        name="full_name",
-        required=True,
-        order=1,
-    )
+    """Text field on the contact form.
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
+    for the duration of the fixture body (SA85 Phase 1).
+    """
+    from quickscale_modules_orgs.current_org import org_scope
+
+    with org_scope(form.organization):
+        return FormField.all_objects.create(
+            form=form,
+            organization=form.organization,
+            field_type=FormField.FIELD_TYPE_TEXT,
+            label="Name",
+            name="full_name",
+            required=True,
+            order=1,
+        )
 
 
 @pytest.fixture
 def email_field(db, form):
-    """Email field on the contact form"""
-    return FormField.all_objects.create(
-        form=form,
-        organization=form.organization,
-        field_type=FormField.FIELD_TYPE_EMAIL,
-        label="Email",
-        name="email",
-        required=True,
-        order=2,
-    )
+    """Email field on the contact form.
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
+    for the duration of the fixture body (SA85 Phase 1).
+    """
+    from quickscale_modules_orgs.current_org import org_scope
+
+    with org_scope(form.organization):
+        return FormField.all_objects.create(
+            form=form,
+            organization=form.organization,
+            field_type=FormField.FIELD_TYPE_EMAIL,
+            label="Email",
+            name="email",
+            required=True,
+            order=2,
+        )
 
 
 @pytest.fixture
 def optional_field(db, form):
-    """Optional text field on the contact form"""
-    return FormField.all_objects.create(
-        form=form,
-        organization=form.organization,
-        field_type=FormField.FIELD_TYPE_TEXT,
-        label="Company",
-        name="company",
-        required=False,
-        order=3,
-    )
+    """Optional text field on the contact form.
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
+    for the duration of the fixture body (SA85 Phase 1).
+    """
+    from quickscale_modules_orgs.current_org import org_scope
+
+    with org_scope(form.organization):
+        return FormField.all_objects.create(
+            form=form,
+            organization=form.organization,
+            field_type=FormField.FIELD_TYPE_TEXT,
+            label="Company",
+            name="company",
+            required=False,
+            order=3,
+        )
 
 
 @pytest.fixture
 def submission(db, form):
-    """A form submission for the contact form"""
-    return FormSubmission.all_objects.create(
-        form=form,
-        organization=form.organization,
-        ip_address="127.0.0.1",
-        user_agent="TestBrowser/1.0",
-    )
+    """A form submission for the contact form.
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
+    for the duration of the fixture body (SA85 Phase 1).
+    """
+    from quickscale_modules_orgs.current_org import org_scope
+
+    with org_scope(form.organization):
+        return FormSubmission.all_objects.create(
+            form=form,
+            organization=form.organization,
+            ip_address="127.0.0.1",
+            user_agent="TestBrowser/1.0",
+        )
 
 
 @pytest.fixture
 def field_value(db, submission, form_field):
-    """A field value snapshot attached to the submission"""
-    return FormFieldValue.all_objects.create(
-        submission=submission,
-        organization=submission.organization,
-        field=form_field,
-        field_name="full_name",
-        field_label="Name",
-        value="Alice",
-    )
+    """A field value snapshot attached to the submission.
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
+    for the duration of the fixture body (SA85 Phase 1).
+    """
+    from quickscale_modules_orgs.current_org import org_scope
+
+    with org_scope(submission.organization):
+        return FormFieldValue.all_objects.create(
+            submission=submission,
+            organization=submission.organization,
+            field=form_field,
+            field_name="full_name",
+            field_label="Name",
+            value="Alice",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -205,21 +366,25 @@ def org(db):
 
 @pytest.fixture
 def org_form(db, org):
-    """Active form owned by an organization."""
-    from quickscale_modules_orgs.current_org import set_current_org_id
+    """Active form owned by an organization.
 
-    set_current_org_id(org.pk)
-    form, _ = Form.all_objects.update_or_create(
-        slug="org-contact",
-        defaults={
-            "title": "Org Contact",
-            "description": "Org contact form.",
-            "success_message": "Thank you.",
-            "notify_emails": "org@example.com",
-            "spam_protection_enabled": True,
-            "organization": org,
-        },
-    )
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set only
+    for the duration of the fixture body (SA85 Phase 1).
+    """
+    from quickscale_modules_orgs.current_org import org_scope
+
+    with org_scope(org):
+        form, _ = Form.all_objects.update_or_create(
+            slug="org-contact",
+            defaults={
+                "title": "Org Contact",
+                "description": "Org contact form.",
+                "success_message": "Thank you.",
+                "notify_emails": "org@example.com",
+                "spam_protection_enabled": True,
+                "organization": org,
+            },
+        )
     return form
 
 

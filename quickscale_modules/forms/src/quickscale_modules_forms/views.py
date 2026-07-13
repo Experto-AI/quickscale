@@ -49,7 +49,12 @@ from quickscale_modules_forms.serializers import (
     FormSubmissionCreateSerializer,
 )
 from quickscale_modules_forms.throttles import FormSubmitThrottle
-from quickscale_modules_orgs.current_org import get_client_ip, org_scope
+from quickscale_modules_orgs.current_org import (
+    get_client_ip,
+    get_current_org_id,
+    operator_access,
+    org_scope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +141,63 @@ class FormsAdminApiMixin:
         if not bool(getattr(settings, "FORMS_SUBMISSIONS_API", None)):
             raise Http404
         APIView.initial(self, request, *args, **kwargs)
+
+    # ------------------------------------------------------------------
+    # SA85 Phase 4 — retained-role helpers
+    # ------------------------------------------------------------------
+
+    def _is_superuser(self) -> bool:
+        """Return True when the requesting user is a superuser.
+
+        Superusers are the only role permitted cross-tenant SELECT via
+        ``operator_access``.  Regular staff (is_staff=True, is_superuser=False)
+        are always scoped to their active org and fail-closed without one.
+        """
+        return bool(getattr(self.request.user, "is_superuser", False))
+
+    def _get_org_bound_queryset(self, model: Any) -> Any:
+        """Return a fail-closed base queryset for the requesting user's role.
+
+        * **Superuser**: returns ``model.all_objects.all()`` — cross-tenant
+          read access.  The view must wrap evaluation in ``operator_access``
+          for audit logging (see ``_with_superuser_operator_access``).
+        * **Regular staff with active org**: returns ``model.objects.all()``
+          which is RLS-scoped to the request's active org context.
+        * **Regular staff without active org**: returns ``model.objects.none()``
+          — fail-closed: no org context, no data.
+
+        Child-data prefetches that must bypass RLS (e.g. ``FormFieldValue``
+        values in submissions) should continue to use ``all_objects`` in the
+        ``Prefetch`` queryset argument regardless of user role.
+        """
+        if self._is_superuser():
+            return model.all_objects.all()
+        org_id = get_current_org_id()
+        if org_id is None:
+            return model.objects.none()
+        return model.objects.all()
+
+    def _with_superuser_operator_access(
+        self,
+        view_method: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Wrap a view method in ``operator_access`` for superuser audit.
+
+        Must be called from the view's ``list`` / ``retrieve`` / ``get``
+        override when the requesting user is a superuser.  The ``operator_access``
+        context manager requires an active ``transaction.atomic()`` block.
+
+        For non-superuser callers this is a pass-through — no wrapping.
+        """
+        if not self._is_superuser():
+            return view_method(*args, **kwargs)
+        with transaction.atomic():
+            with operator_access(
+                reason=f"{self.__class__.__name__}: superuser {self.request.user.pk}"
+            ):
+                return view_method(*args, **kwargs)
 
 
 class FormsSubmissionPagination(PageNumberPagination):
@@ -293,28 +355,54 @@ class FormSubmitAPIView(CreateAPIView):
 
 
 class AdminFormListAPIView(FormsAdminApiMixin, ListAPIView):
-    """Staff-only: list all forms with submission counts (operator path)."""
+    """Staff-only: list all forms with submission counts.
+
+    SA85 Phase 4 retained-role behavior:
+    * Superuser: cross-tenant read via ``operator_access`` (audited).
+    * Regular staff with active org: scoped to that org via RLS.
+    * Regular staff without org: fail-closed (empty list).
+    """
 
     serializer_class = AdminFormListSerializer
 
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        return self._with_superuser_operator_access(
+            super().list, request, *args, **kwargs
+        )
+
     def get_queryset(self):
         return (
-            Form.all_objects.all()
+            self._get_org_bound_queryset(Form)
             .annotate(submission_count=Count("submissions"))
             .order_by("title")
         )
 
 
 class AdminSubmissionListAPIView(FormsAdminApiMixin, ListAPIView):
-    """Staff-only: paginated list of submissions for a given form (operator path)."""
+    """Staff-only: paginated list of submissions for a given form.
+
+    SA85 Phase 4 retained-role behavior:
+    * Superuser: cross-tenant read via ``operator_access`` (audited).
+    * Regular staff with active org: scoped to that org via RLS.
+    * Regular staff without org: fail-closed (empty list).
+
+    Child ``FormFieldValue`` prefetch continues to use ``all_objects``
+    (AF1-CR-002 invariant) regardless of user role.
+    """
 
     pagination_class = FormsSubmissionPagination
     serializer_class = FormSubmissionAdminSerializer
 
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        return self._with_superuser_operator_access(
+            super().list, request, *args, **kwargs
+        )
+
     def get_queryset(self):
         form_pk = self.kwargs.get("pk")
         qs = (
-            FormSubmission.all_objects.filter(form_id=form_pk)
+            self._get_org_bound_queryset(FormSubmission)
+            .filter(form_id=form_pk)
             .select_related("form")
             .prefetch_related(
                 Prefetch(
@@ -344,18 +432,34 @@ class AdminSubmissionListAPIView(FormsAdminApiMixin, ListAPIView):
 
 
 class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
-    """Staff-only: retrieve or patch a single submission (status / is_spam only)."""
+    """Staff-only: retrieve or patch a single submission (status / is_spam only).
+
+    SA85 Phase 4 retained-role behavior:
+    * **GET**: Superuser may read cross-tenant via ``operator_access`` (audited).
+      Regular staff is scoped to active org or fail-closed.
+    * **PATCH**: Target identified through allowed read elevation.  The actual
+      save occurs inside ``org_scope(submission.organization)`` so the write
+      respects the target tenant boundary even when the read used a cross-tenant
+      path.
+    """
 
     serializer_class = FormSubmissionAdminSerializer
     http_method_names = ["get", "patch", "head", "options"]
 
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        return self._with_superuser_operator_access(
+            super().retrieve, request, *args, **kwargs
+        )
+
     def get_queryset(self):
-        return FormSubmission.all_objects.filter(
-            form_id=self.kwargs.get("pk")
-        ).prefetch_related(
-            Prefetch(
-                "values",
-                queryset=FormFieldValue.all_objects.all(),
+        return (
+            self._get_org_bound_queryset(FormSubmission)
+            .filter(form_id=self.kwargs.get("pk"))
+            .prefetch_related(
+                Prefetch(
+                    "values",
+                    queryset=FormFieldValue.all_objects.all(),
+                )
             )
         )
 
@@ -367,26 +471,60 @@ class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
         return obj
 
     def partial_update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        instance = self.get_object()
+        # SA85 Phase 4: superuser get_object uses operator_access for
+        # cross-tenant read; regular staff uses scoped queryset.
+        if self._is_superuser():
+            instance = self._with_superuser_operator_access(self.get_object)
+        else:
+            instance = self.get_object()
         # Only allow patching status and is_spam
         allowed_fields = {"status", "is_spam"}
         patch_data = {k: v for k, v in request.data.items() if k in allowed_fields}
         serializer = self.get_serializer(instance, data=patch_data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        # SA85 Phase 4: save inside the submission's org scope so the write
+        # respects the target tenant boundary regardless of how the object
+        # was read (superuser cross-tenant or staff scoped).  Materialize
+        # serializer.data inside org_scope so that lazy FK traversals (e.g.
+        # form.title via form_title source) resolve under the correct RLS
+        # context (CR-SA85-REV-002).
+        with org_scope(instance.organization):
+            serializer.save()
+            response_data = serializer.data
+        return Response(response_data)
 
 
 class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
-    """Staff-only: stream all submissions for a form as a CSV file (operator path)."""
+    """Staff-only: stream all submissions for a form as a CSV file.
+
+    SA85 Phase 4 retained-role behavior:
+    * Superuser: cross-tenant read via ``operator_access`` (audited).
+    * Regular staff with active org: scoped to that org via RLS.
+    * Regular staff without org: fail-closed (404).
+
+    Child ``FormField`` / ``FormFieldValue`` queries continue to use
+    ``all_objects`` (AF1-CR-002 / AF1-CR-REV-001 invariants).
+    """
 
     def get(self, request: Request, pk: int, *args: Any, **kwargs: Any) -> HttpResponse:
-        form = Form.all_objects.filter(pk=pk).first()
+        # SA85 Phase 4: wrap the entire method in operator_access for superuser
+        if self._is_superuser():
+            return self._with_superuser_operator_access(
+                self._export_csv, request, pk, *args, **kwargs
+            )
+        return self._export_csv(request, pk, *args, **kwargs)
+
+    def _export_csv(
+        self, request: Request, pk: int, *args: Any, **kwargs: Any
+    ) -> HttpResponse:
+        form = self._get_org_bound_queryset(Form).filter(pk=pk).first()
         if form is None:
             raise Http404
 
-        submissions = FormSubmission.all_objects.filter(form=form).order_by(
-            "-submitted_at"
+        submissions = (
+            self._get_org_bound_queryset(FormSubmission)
+            .filter(form=form)
+            .order_by("-submitted_at")
         )
 
         # Harden AF1-CR-002: batch-load all field values via all_objects to avoid
