@@ -13,8 +13,7 @@
 #   make lint -- --modules    - Run lint only for quickscale_modules/*
 #   make check -- --core      - Run checks only for quickscale_core
 #   make MODULE=blog test -- --modules - Run tests only for quickscale_modules/blog
-#   make MODULE=blog test-integration - Run integration tests for quickscale_modules/blog
-#   make test-integration     - Run integration tests for quickscale_modules/*
+#   make test-integration     - Run integration tests for all modules (full gate; for focused module reruns use `make MODULE=<name> test -- --modules`)
 #   make check SECTIONS="core modules" - Run checks for multiple sections without `--`
 #   make test-cov             - Run tests with coverage (aggregates DR-engine coverage from backups module when PostgreSQL is available)
 #   make test-e2e             - Run E2E tests (needs Docker + Playwright)

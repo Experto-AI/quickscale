@@ -156,7 +156,7 @@ show_help() {
   echo "  - PostgreSQL running on localhost:5432"
   echo "  - Module test databases pre-created"
   echo "  - Restricted role (e.g. quickscale_test_role) with LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER"
-  echo "  - QS_*_DB_USER env vars set to the restricted role for each module"
+  echo "  - QS_*_DB_USER env vars default to quickscale_test_role; can be overridden per module"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -367,6 +367,27 @@ if [ "$POETRY_AVAILABLE" = false ] && [ -x "$VENV_BIN/python" ]; then
   echo "Execution environment: repo-local .venv (Poetry not found on PATH)"
 fi
 echo ""
+
+# ---------------------------------------------------------------------------
+# SA80.2 — Wire every PostgreSQL-using module's test settings to the
+# restricted role, matching CI workflow retained-role contract.
+# Each var defaults to quickscale_test_role; callers can pre-export to
+# override individual modules.  Keeps the SA58 boot guard active against
+# the NOBYPASSRLS/NOSUPERUSER role.
+# Matches .github/workflows/ci.yml (lines 399-410) and publish.yml (160-171).
+# ---------------------------------------------------------------------------
+export QS_ANALYTICS_DB_USER="${QS_ANALYTICS_DB_USER:-quickscale_test_role}"
+export QS_AUTH_DB_USER="${QS_AUTH_DB_USER:-quickscale_test_role}"
+export QS_BACKUPS_DB_USER="${QS_BACKUPS_DB_USER:-quickscale_test_role}"
+export QS_BILLING_DB_USER="${QS_BILLING_DB_USER:-quickscale_test_role}"
+export QS_BLOG_DB_USER="${QS_BLOG_DB_USER:-quickscale_test_role}"
+export QS_CRM_DB_USER="${QS_CRM_DB_USER:-quickscale_test_role}"
+export QS_FORMS_DB_USER="${QS_FORMS_DB_USER:-quickscale_test_role}"
+export QS_LISTINGS_DB_USER="${QS_LISTINGS_DB_USER:-quickscale_test_role}"
+export QS_NOTIFICATIONS_DB_USER="${QS_NOTIFICATIONS_DB_USER:-quickscale_test_role}"
+export QS_ORGS_DB_USER="${QS_ORGS_DB_USER:-quickscale_test_role}"
+export QS_SOCIAL_DB_USER="${QS_SOCIAL_DB_USER:-quickscale_test_role}"
+export QS_STORAGE_DB_USER="${QS_STORAGE_DB_USER:-quickscale_test_role}"
 
 if [ "$POETRY_AVAILABLE" = false ]; then
   get_repo_venv_python >/dev/null || exit 1
