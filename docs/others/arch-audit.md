@@ -83,7 +83,7 @@ number rather than derived) — held on fail-loud, third station recorded.
 | 9 | Tenant-model purge **order** | hand-ordered `_DELETE_SPECS` (`purge_organization.py:64`), comment-justified | convention | unchanged (Finding 4); SA60 policy ratified, purge-order derivation still deferred to teams |
 | 10 | Deletion invariants at account boundary | one canonical check + SA70 `pre_delete` backstop | convention + backstop | stable (Finding 2) — `apps.py:194–206` receiver + `models.py:165/298/329` re-verified |
 | 11 | pyproject TOML write safety | `_write_validated_toml` (3 CLI splice sites) | structural per package | stable; devtools copy unchanged |
-| 12 | Generator-emitted file ownership for upgrades | SA66 conformance gate (emitted-file universe derived from templates) | gated | stable (Finding 7); residual hand-synced routing copy unchanged |
+| 12 | Generator-emitted file ownership for upgrades | SA66 conformance gate + SA90 manifest-parity fixture; production consumes `get_generator_emission_mapping()` | gated | stable (Finding 7); production routing copy closed (SA90); beta-migration hand-synced tuples remain |
 | 13 | Generated-project boot correctness | `test_generated_project_runtime.py` boot smoke harness | gated | stable |
 | 14 | Module suites run under a restricted DB role | ci.yml + publish.yml role provisioning **+ now `test_integration.sh` (SA80.2)** `QS_*_DB_USER` wiring | gated | **3rd station added** — the `QS_*_DB_USER` list is now hand-enumerated in *three* places (ci.yml, publish.yml, test_integration.sh:368–382), the new one comment-synced by literal line-number reference (`:373` "Matches ci.yml lines 399-410 and publish.yml 160-171"), not derived from `quickscale_modules/*/`. Omission still fails **loud** (postgres fallback → boot guard). Watchlist trigger fired |
 | 15 | Release-gate test scope | publish.yml `test` job (same split as ci.yml) | gated | stable |
@@ -95,7 +95,7 @@ number rather than derived) — held on fail-loud, third station recorded.
 |---|----|---------|-----------|------|------------------|
 | 8 | `module-rls-context-procedural` | now | Medium | M | Module migrations and test fixtures acquire elevated RLS context per-callsite (only orgs/forms do it at all); the invariant was unverified under a real restricted role until SA82, which exposed four modules at once — now being fixed as four unknown-root tickets, not one root |
 | 1 | `dr-engine-module-circular-lattice` | now | High | M | DR logic lives in core but its state/lifecycle live in the backups module; the cycle is held by hand-synced symbol stations, a linter exception list, and a mypy ignore — third consecutive quiet delta; persistence port still scheduled |
-| 7 | `generated-file-ownership-unmodeled` | 6–18 months | High | M | SA66's gate closed the silent-miss class but the taxonomy and the gate's emission-path mapping remain hand-synced copies of generator knowledge in the ungoverned devtools package |
+| 7 | `generated-file-ownership-unmodeled` | 6–18 months | High | M | Production routing and manifest parity closed (SA90); beta-migration hand-synced tuples and devtools governance remain as open sub-items |
 | 2 | `deletion-invariants-per-boundary-reimplementation` | deferred (teams) | High | S | Last-owner check now has an SA70 `pre_delete` backstop; no domain-owned deletion service consolidating other boundaries' invariants (e.g. billing) |
 | 4 | `org-model-universe-hand-enumerated` | deferred (teams) | High | M | Tenant-model membership is derivation-gated; purge *order* is hand-written; SA60 ratified the deferrability policy |
 
@@ -281,34 +281,61 @@ number rather than derived) — held on fail-loud, third station recorded.
 - **Context dependence:** wrong-for-now on the **consumer-count** dimension; wrong-regardless at a
   third site / second operator / public update command.
 - **Problem:** the generator has no machine-readable, generator-owned statement of per-file
-  ownership — the taxonomy lives as hand-written tuples in the maintainer migration tool, and the
-  SA66 conformance gate holds them honest by *re-implementing the generator's template→emitted-path
-  routing inside the test* rather than consuming a mapping the generator exports.
-- **Evidence (carried; files verified untouched this delta):**
-  - `test_beta_migration_ownership_conformance.py`'s `_THEME_DEST_MAP`/`_THEME_SUBDIR_MAP`/
-    `_map_theme_template` plus special cases and a hand entry for `poetry.lock` are a parallel copy
-    of `generator.py`'s procedural emission routing (the generator exposes no declarative mapping).
-    `_theme_non_jinja_emitted_paths` hardcodes `("showcase_react",)` — a future theme's non-Jinja
-    files would be silently absent from the enumerated universe (the residual silent direction).
-  - decisions.md rule 3 requires each `INTENTIONALLY_UNMANAGED` entry to have a documented rationale,
-    but `test_intentionally_unmanaged_entries_have_documented_rationale` asserts only non-emptiness.
-  - `quickscale_devtools` remains outside the lint/typecheck universe (absent from `ruff.toml`,
-    `mypy.ini`, Makefile targets; present only as a path dep + on `pythonpath`), yet the conformance
-    test importing it runs in the unit gate of ci.yml **and** publish.yml — the release pipeline is
-    import-load-bearing on an ungoverned package.
-- **Counter-evidence:** searched for a generator-exported emission mapping (none), a decisions.md↔tuple
-  cross-check (none), devtools lint/type coverage (none). Strongest disconfirming fact: the gate is
-  real, derivation-based, CI-enforced — the `.j2` silent-miss class cannot recur. That narrows the
-  finding to its remaining copies; it does not close it (the correct shape exists nowhere).
-- **Why it compounds:** every generator routing change (new theme, subdir mapping, dynamic artifact)
-  needs a matching hand edit inside the conformance test; taxonomy judgments stay maintainer-memory
-  encoded in tuples the type checker and linter never see. Cost grows O(themes × dynamic artifacts ×
-  consumer sites). The devtools TOML-splice copy (`beta_migration.py:597` twin of
-  `module_dependency_sync.py:223`) is the second manifestation.
+  ownership — the taxonomy lives as hand-written tuples in the maintainer migration tool.
+  Production generation now consumes ``get_generator_emission_mapping()`` as the authoritative
+  template→emitted-path routing (exported since SA90), and the SA66 conformance gate derives its
+  expected file universe from the same function rather than re-implementing the routing.  The
+  residual gap closed by SA90's durable-exact-manifest parity is that the mapping itself was only
+  checked by mapping-consumption tests (which derive expectations from the same mapping), not by
+  an independent checked-in fixture.  The ``sa90_emission_manifests.json`` fixture now pins every
+  emitted file's path, SHA-256 content hash, and executable mode across four variants
+  (html_default, react_default, react_empty, react_selected) — a change that omits a mapping
+  entry will now fail the manifest-parity gate.  **SA90 is closed** — CR-SA90-REV-002 and CR-SA90-REV-003 resolved by independent review.
+  CR-SA90-REV-004 remains a low advisory (no-op/unused private React helper seams, deferred bounded cleanup).
+  The beta-migration tool's file-taxonomy tuples remain a separate unclosed sub-item.
+- **Evidence (carried; files verified untouched this delta unless noted):**
+  - `test_generator.py` ``TestSa90ExactManifestParity`` (new) generates four actual trees,
+    computes SHA-256 + mode for every non-dynamic file, and compares against the checked-in
+    fixture ``quickscale_core/tests/fixtures/sa90_emission_manifests.json`` — an independent
+    second source of truth that does not derive from the production mapping at runtime.
+  - Production routing: ``get_generator_emission_mapping()`` in ``generator.py:154–338`` is the
+    single authoritative template→emitted-path function consumed by ``ProjectGenerator`` and the
+    SA66 conformance gate.  The SA66 gate no longer re-implements the routing logic.
+  - The SA66 conformance gate no longer carries a private routing copy — it delegates to
+    ``get_generator_emission_mapping()`` (closed by SA90).  Residual Finding 7 sub-items that
+    remain outside the closed production-routing scope:
+    * ``quickscale_devtools/beta_migration.py`` hand-synced taxonomy tuples — the devtools tool
+      retains a parallel copy of emission knowledge not derived from the shared mapping.
+    * Devtools governance — ``quickscale_devtools`` sits outside the lint/typecheck universe
+      (absent from ``ruff.toml``, ``mypy.ini``, Makefile targets) yet the conformance test
+      importing it runs in the unit gate of ci.yml **and** publish.yml.
+    * decisions.md rule 3 rationale enforcement — ``test_intentionally_unmanaged_entries_have_documented_rationale``
+      asserts only non-emptiness, not documented substantive rationale.
+  - decisions.md rule 3 requires each ``INTENTIONALLY_UNMANAGED`` entry to have a documented
+    rationale, but ``test_intentionally_unmanaged_entries_have_documented_rationale`` asserts
+    only non-emptiness.
+  - ``quickscale_devtools`` remains outside the lint/typecheck universe (absent from ``ruff.toml``,
+    ``mypy.ini``, Makefile targets; present only as a path dep + on ``pythonpath``), yet the
+    conformance test importing it runs in the unit gate of ci.yml **and** publish.yml — the
+    release pipeline is import-load-bearing on an ungoverned package.
+- **Counter-evidence:** the generator now exports ``get_generator_emission_mapping()`` and the
+  SA66 conformance test consumes it — the ``.j2`` silent-miss class and the test-side routing
+  copy are both closed.  The remaining hand-synced copies (beta_migration tuples, devtools
+  governance) still exist; no decisions.md↔tuple cross-check exists for those.  Strongest
+  disconfirming fact: the SA90 manifest-parity fixture adds an independent third source of
+  truth — the exact path/hash/mode fixture will catch an omitted mapping entry at test time,
+  which neither the production mapping nor the SA66 mapping-consumption test could do alone.
+- **Why it compounds:** the production routing and SA66 conformance gate are now closed (shared
+   ``get_generator_emission_mapping()``).  The residual hand-synced copies (beta_migration.py
+   taxonomy tuples, devtools TOML-splice copy at ``beta_migration.py:597``) are outside the
+   derivation chain — they are typed only informally and need manual updating when the generator
+   routing changes.  Cost grows O(themes × dynamic artifacts × consumer sites).  The devtools
+   governance gap (ungoverned package import-load-bearing for the release gate) compounds the
+   risk: a drift between the shared mapping and the devtools copy would pass all existing gates.
 - **Detection signal:** a conformance-gate failure naming an unclassified path is the loud (good)
-  signal; the silent direction is a new theme/dynamic artifact absent from the test's universe —
-  instrument by asserting the test's enumerated-universe size against a real generated tree in the
-  boot smoke harness.
+   signal; the silent direction is the devtools copy drifting from the shared mapping, which no
+   existing gate detects — instrument by running a cross-check between the beta_migration.py
+   taxonomy tuples and ``get_generator_emission_mapping()``.
 - **Steelman:** Option 1 was this audit's own scoped interim; hand-curated tuples encode judgment
   naive derivation would get wrong; the emission-routing copy fails loud in most divergence
   scenarios; the maintainer is the only operator. Holds until a third consumer or a public update
@@ -317,21 +344,45 @@ number rather than derived) — held on fail-loud, third station recorded.
   (generator-owned / user-seeded / protected / unmanaged), emitted with each project or exported as
   a routing API; upgrade tooling and the conformance gate consume it; no second implementation of
   the template→emitted-path mapping exists anywhere.
+- **Current status (SA90, reviewed and closed):**
+  - **Production routing closure:** the generator exports ``get_generator_emission_mapping()``
+    as a declarative template→emitted-path function; ``ProjectGenerator.generate()`` and the
+    SA66 conformance gate both consume it.  This closes the "no generator-exported mapping"
+    gap that Finding 7 cited as the core evidence.
+  - **Durable manifest parity closure:** a checked-in fixture
+    (``sa90_emission_manifests.json``) pins exact path, SHA-256 content hash, and executable
+    mode for every emitted non-dynamic file across four variants.  The ``TestSa90ExactManifestParity``
+    test class generates actual trees and compares them against this fixture — providing the
+    independent second source of truth that mapping-consumption-only tests could not supply.
+    An omitted mapping entry will now cause a manifest-parity test failure.
+  - **CR-SA90-REV-001** resolved (production consumes exported mapping).
+  - **CR-SA90-REV-002** resolved (checked fixture and four-variant exact parity).
+  - **CR-SA90-REV-003** resolved (audit/open records synchronized).
+  - **CR-SA90-REV-005** resolved (start.sh docstring).
+  - **CR-SA90-REV-004** — low advisory, non-blocking (no-op/unused private React helper seams,
+    deferred bounded cleanup).
+  - **Still open after SA90 (Finding 7 residuals):** the beta-migration tool's hand-synced taxonomy
+    tuples in ``quickscale_devtools/beta_migration.py``; devtools governance (outside lint/typecheck
+    universe); decisions.md rationale enforcement for ``INTENTIONALLY_UNMANAGED`` entries.
+    These residuals are independent of SA90 and remain open as part of Finding 7.
 - **Options:**
   1. ~~Derivation gate over the existing lists~~ — **done** (SA66); closed the silent-miss class at
      the cost of one hand-synced mapping copy.
-  2. **Generator-emitted ownership manifest (the live option).** The generator writes per-file
-     ownership/provenance into project state, or exports the emission mapping as a function;
-     `beta_migration` and the conformance test derive their sets from it. M; the natural substrate
-     for a public upgrade story.
+  2. **Generator-emitted ownership manifest (partial).** The generator now exports the emission
+     mapping as a function (``get_generator_emission_mapping()``), and the SA66 conformance gate
+     consumes it — the "export the mapping" half of Option 2 is done.  The durable exact-manifest
+     fixture (SA90) adds independent parity on top.  Remaining: fold the beta-migration tool's
+     hand-synced tuples to derive from the same mapping; writing per-file ownership/provenance
+     into project state is still unscheduled.
   3. **Fold the upgrade path into the product.** Extend `quickscale apply`'s contract-vintage
      machinery to refresh generator-owned infra on existing projects. L; only when generated-project
      upgrades become a public feature.
-- **Recommendation:** Option 2 when its trigger fires; until then the SA66 gate carries the load.
-  Cheap interim if touched: export the generator's emission mapping as a function and point the
-  conformance test at it, deleting the test-side routing copy. · **Size:** M remaining · **First
-  step:** export the generator's emission mapping as a function (pure refactor of `_generate_project`'s
-  inline destination logic) and point the conformance test at it.
+- **Recommendation:** the production routing closure (``get_generator_emission_mapping`` export)
+   and the durable manifest-parity fixture (SA90) together cover the highest-risk sub-items of
+   Option 2.  The remaining work (beta-migration tuple derivation, project-state ownership
+   manifest, devtools governance) is unscheduled and gated on a third consumer or public update
+   command.  SA90 is closed — CR-SA90-REV-001/002/003/005 resolved by independent review;
+   CR-SA90-REV-004 remains a low advisory (no-op/unused private React helper seams).
 
 ---
 
@@ -451,8 +502,11 @@ number rather than derived) — held on fail-loud, third station recorded.
    minting inline `operator_access` copies (SA83 already resolved). Independent of Findings 1/2/4/7.
 5. **Finding 1 Option 2 (persistence port)** — scheduled next planning cycle; independent of
    everything above.
-3. **Finding 7's remainder (Option 2)** waits on its trigger; the cheap interim (export the
-   generator's emission mapping, point the SA66 test at it) is independent and small.
+3. **Finding 7's remainder (Option 2)** — the "export the generator's emission mapping" sub-item
+   is now done (SA90); the durable manifest-parity fixture is also landed.  The remaining
+   beta-migration tuple derivation and project-state ownership manifest wait on a third consumer
+   or public update command.  SA90 is closed — CR-SA90-REV-001/002/003/005 resolved by independent
+   review; CR-SA90-REV-004 remains low advisory (no-op/unused private React helper seams).
 4. Findings 2 and 4 are deferred with teams; independent.
 
 All five findings are independent — no fix forces rework of another.

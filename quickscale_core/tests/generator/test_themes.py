@@ -708,19 +708,25 @@ class TestSelectedModulesReactTheme:
 class TestSharedAdminTemplates:
     """Both themes should reuse the consolidated admin override templates."""
 
-    def test_react_missing_shared_template_raises_file_not_found(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """React shared-template loop must fail hard when a shared Django template is missing."""
-        monkeypatch.setattr(
-            "quickscale_core.generator.generator.REACT_THEME_SHARED_DJANGO_TEMPLATES",
-            ("templates/admin/nonexistent_template.html.j2",),
-        )
-        generator = ProjectGenerator(theme="showcase_react")
-        # The FileNotFoundError is raised inside _generate_react_frontend but
-        # re-raised as RuntimeError by generate() (which wraps all exceptions).
-        with pytest.raises(RuntimeError, match="Shared Django template"):
-            generator.generate("test_missing_shared", tmp_path / "out")
+    def test_react_missing_shared_template_not_in_mapping(self, tmp_path: Path) -> None:
+        """A missing template file simply won't appear in the emission mapping.
+
+        With the SA90 mapping-driven approach, templates are discovered via
+        filesystem enumeration, not hardcoded lists, so a missing file is
+        simply absent from the mapping and never rendered.
+        """
+        # The mapping for the React theme should NOT include a path for a
+        # nonexistent template — it will be absent without error.
+        from pathlib import Path
+
+        import quickscale_core
+        from quickscale_core.generator import get_generator_emission_mapping
+
+        template_dir = Path(quickscale_core.__file__).parent / "generator" / "templates"
+        mapping = get_generator_emission_mapping(template_dir, theme="showcase_react")
+
+        # A nonexistent template path is simply absent from the mapping
+        assert "templates/admin/nonexistent_template.html" not in mapping
 
     @pytest.mark.parametrize("theme", ["showcase_html", "showcase_react"])
     def test_both_themes_render_shared_admin_overrides(

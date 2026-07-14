@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active and blocked work.
 
-**Recently closed (2026-07-13 — full detail in CHANGELOG):** SA77 (orgs restricted-role), SA82 (quarantine removal + full-gate rerun, closing SA77/SA79), SA79 (forms 0007 backfill), SA83 (blog restricted-role — shared `_clear_priming_memo` fix in `orgs/current_org.py`), SA80.3a / SA80.3b (pg_dump tooling + backups rerun), SA87 (backups username-independent test), SA81 (per-module lockfile / sibling-constraint cleanup). The SA82 unquarantined `make test-integration` gate is the current integration baseline; it remains red **only** on SA84–SA86 below.
+**Recently closed (2026-07-14 — full detail in CHANGELOG):** SA85 (forms residual — CR-SA85-REV-001 resolved; force_authenticate contamination fix; 196/8/12 deselected clean; no blockers), SA77 (orgs restricted-role), SA82 (quarantine removal + full-gate rerun, closing SA77/SA79), SA79 (forms 0007 backfill), SA83 (blog restricted-role — shared `_clear_priming_memo` fix in `orgs/current_org.py`), SA80.3a / SA80.3b (pg_dump tooling + backups rerun), SA87 (backups username-independent test), SA81 (per-module lockfile / sibling-constraint cleanup). The SA82 unquarantined `make test-integration` gate is the current integration baseline; it remains red **only** on SA84 and SA86 below.
 
 ### Cross-cutting decision (resolved 2026-07-14) — drain SA84–SA86 via one shared RLS-context seam (arch-audit Finding 8, Option 1)
 
@@ -91,13 +91,11 @@ SA83–SA86 are four instances of one structural pattern, **arch-audit [Finding 
 
 ### Track 2 — Module contracts & settings
 
-- [ ] **SA85 — Fix forms' residual restricted-role test failures — blocked on review finding CR-SA85-REV-001.** `Tier 1 · Track 2 · deps: none → impl/validation complete 2026-07-13; review blocked` *(reassigned from Track 1, 2026-07-13)*
-  Implementation and validation complete (four-phase fix — bounded fixture/test org scopes, retained-role management read-inventory/per-org writes, scoped notification content, and the Staff current-org/superuser operator contract; full detail in CHANGELOG). Current: forms 196 passed/8 skipped/12 deselected/0 failed/0 errors; E2E 12 passed; no quarantine entry needed; all other modules clean.
+- [x] **SA85 — Fix forms' residual restricted-role test failures.** `Tier 1 · Track 2 · deps: none → completed 2026-07-14` *(reassigned from Track 1, 2026-07-13)*
+  Implementation and validation complete (four-phase fix — bounded fixture/test org scopes, retained-role management read-inventory/per-org writes, scoped notification content, and the Staff current-org/superuser operator contract; full detail in CHANGELOG). Final evidence: forms restricted-role suite 196 passed/8 pre-existing skipped/12 e2e deselected/0 failed/0 errors, one pre-existing warning; E2E 12 passed; no quarantine entry needed; all other modules clean.
 
-  **Blocked on CR-SA85-REV-001 (high/blocking):** the admin-form-list session tests and README contract still rest on a false `/admin/` exemption premise — they do not create own/foreign Forms with real `force_login` + `ACTIVE_ORG_SESSION_KEY` and no direct context, so they never assert staff inclusion/exclusion or superuser cross-tenant parity; no-org staff/superuser behavior (expected 302 → `/orgs/`) is untested; the README contract table/comments/references are incomplete. CR-SA85-REV-002 through -007 are resolved. **No product decision remains** — this is bounded implementation work.
-
-  *Required next action:* rewrite `test_views.py` admin-form-list tests (create own/foreign Forms; real `force_login` + `ACTIVE_ORG_SESSION_KEY`, no direct context; assert staff inclusion/exclusion + superuser cross-tenant; no-org staff/superuser request admin-form-list and assert 302 Location `/orgs/`); correct the README contract table, comments, and references. **Ratified 2026-07-14: finish the rewrite (waive/descope declined).** Do not flip to `[x]` before CR-SA85-REV-001 is resolved.
-  *(why →* CR-SA82-NT-004; CR-SA85-REV-001*)*
+  **CR-SA85-REV-001 resolved (Adaptive-change-review pass 2, STATUS ok).** The review finding required admin-form-list session tests to use real `force_login` + `ACTIVE_ORG_SESSION_KEY` with own/foreign Forms, and correct the README contract table/comments/references. During implementation, discovered `superuser_client` had pre-applied DRF `force_authenticate` which bypasses real session/org context; fixed by replacing with clean `api_client` + `force_login` + `ACTIVE_ORG_SESSION_KEY` and selected/foreign Forms. Ruff passed; no remaining blockers or open decisions.
+  *(why →* CR-SA82-NT-004; CR-SA85-REV-001 — resolved*)*
 
 - [ ] **SA86 — Fix listings' 6 restricted-role RLS failures via the SA88 seam.** `Tier 2 · Track 2 · deps: SA88` *(reassigned from Track 1, 2026-07-13)*
   Under the SA82 full gate, listings' restricted-role suite showed 128 passed, 6 RLS failures — an instance of Finding 8. Bucket the 6 failures per SA88's triage method, then route each cross-org migration/fixture through SA88's helper; fix any runtime-query-bucket failure as a real isolation bug. *(Small failure count — may downgrade to Tier 1 once SA88's triage establishes the class and the seam exists; held at Tier 2 while the root is unconfirmed.)*
@@ -107,11 +105,17 @@ SA83–SA86 are four instances of one structural pattern, **arch-audit [Finding 
 
 ### Track 3 — Core/CLI plumbing
 
-- [ ] **SA90 — Export the generator's emission mapping as a function; point the SA66 conformance gate at it (Finding 7 interim).** `Tier 2 · Track 3 · deps: none`
+- [x] **SA90 — Export the generator's emission mapping as a function; point the SA66 conformance gate at it (Finding 7 interim).** `Tier 2 · Track 3 · deps: none`
   arch-audit [Finding 7](../others/arch-audit.md) (`generated-file-ownership-unmodeled`): the SA66 conformance gate keeps a hand-written *copy* of the generator's template→emitted-path routing (`_THEME_DEST_MAP`/`_THEME_SUBDIR_MAP`/`_map_theme_template` in `test_beta_migration_ownership_conformance.py`), so a future theme's non-Jinja files could silently escape the enumerated universe. Cheap, independent interim: refactor `_generate_project`'s inline destination logic to export the emission mapping as a pure function, then have the conformance test derive its set from that function and delete the test-side routing copy. Independent of the SA84–SA86 cluster — parallel Track 3 work.
 
   *Acceptance:* the generator exposes its emission mapping as a callable; the SA66 conformance test consumes it and no longer carries a private routing copy; gate still passes; no behavior change to generated output. *(Sized Tier 2: pure refactor but spans generator + test with scope to discover in `_generate_project`; single concern, RISK low.)*
   *(why →* arch-audit Finding 7, Option 2 cheap interim*)*
+  **Review findings lifecycle (independent review pass 3 ok):**
+  - **CR-SA90-REV-001** — resolved: production consumes exported mapping.
+  - **CR-SA90-REV-002** — resolved: checked fixture and four-variant exact path/hash/mode parity.
+  - **CR-SA90-REV-003** — resolved: audit/open records synchronized.
+  - **CR-SA90-REV-005** — resolved: start.sh docstring corrected.
+  - **CR-SA90-REV-004** — low advisory, non-blocking: no-op/unused private React helper seams; deferred bounded cleanup.
 
 **Staged, not activated — next planning cycle:** arch-audit **[Finding 1](../others/arch-audit.md)** (`dr-engine-module-circular-lattice`, DR persistence port). One ticket would be Tier 3 (architectural), so it is pre-split into two Tier 2 sub-tickets to activate when DR work is next scheduled:
 - *SA89a* — define the artifact/policy persistence protocol in `core`; port `restore_admin_uploaded_backup` (the SA54 seam) onto it. `Tier 2 · Track 3 · deps: none`
@@ -124,25 +128,25 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 ```
 Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
-SA88 — RLS-context helper + gate   SA85 — forms residual                    SA90 — generator emission
-  (Finding 8, Option 1)              impl/validation complete;                map export (Finding 7)
-  no deps · GATES SA84, SA86         blocked on CR-SA85-REV-001               no deps · independent
-      │                              no deps · independent                        (parallel now)
-      │ gates                            (parallel now)                       ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+SA88 — RLS-context helper + gate   SA85 — forms residual ✓                 SA90 — generator emission
+  (Finding 8, Option 1)              completed 2026-07-14                    map export (Finding 7)
+  no deps · GATES SA84, SA86         CR-SA85-REV-001 resolved               no deps · independent
+      │                              no deps · independent                        [x] closed
+      │ gates                            (parallel now)                      ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
       ▼                              SA86 — listings (6 failures)             staged, next cycle:
 SA84 — CRM (67 failures)  ◄──────────  deps: SA88 ◄──────────────────────      SA89a → SA89b
   deps: SA88                           (consumes the shared seam)               (Finding 1 DR port)
 ```
 
-**Ordering.** SA88 is the gating ticket: it lands the shared seam and *includes the CRM triage* that diagnoses the whole cluster, so both SA84 (Track 1, same track — sequential after SA88) and SA86 (Track 2, cross-track) must wait for it to merge before their fix. **While SA88 is in flight, both other tracks have independent parallel work:** Track 2 runs SA85 (review-finding rewrite, unaffected by SA88), Track 3 runs SA90 (Finding 7 interim). After SA88 merges to `v87`, Track 1 picks up SA84 and Track 2 picks up SA86, both consuming the merged helper.
+**Ordering.** SA88 is the gating ticket: it lands the shared seam and *includes the CRM triage* that diagnoses the whole cluster, so both SA84 (Track 1, same track — sequential after SA88) and SA86 (Track 2, cross-track) must wait for it to merge before their fix. **While SA88 is in flight, Track 2 completed SA85 (2026-07-14) and Track 3 completed SA90 (Finding 7 interim) in parallel.** After SA88 merges to `v87`, Track 1 picks up SA84 and Track 2 picks up SA86, both consuming the merged helper.
 
 ### Track readiness & decision (2026-07-14)
 
 - **Track 1 — SA88** is the gating ticket (the shared helper + conformance gate). Implementation/validation complete; **blocked on CR-SA88-REV-002 (high/blocking, completeness) and CR-SA88-REV-004 (low/blocking, consistency).** SA88 must be resolved before SA84 can start. The Finding 8 approach is decided (Option 1); no open decision remains.
-- **Track 2 — SA85 clean to start now** (independent of SA88); **SA86 waits on SA88.** SA85's block (CR-SA85-REV-001) is bounded implementation work with a defined next action; **ratified 2026-07-14 to finish the rewrite** (waive/descope declined) — resume by rewriting the admin-form-list tests.
-- **Track 3 — SA90 clean to start now** (Finding 7 interim, independent). SA89a/SA89b (Finding 1 DR port) staged for next cycle.
+- **Track 2 — SA85 completed 2026-07-14** (CR-SA85-REV-001 resolved; force_authenticate contamination fix; 196/8/12 clean); **SA86 waits on SA88.**
+- **Track 3 — SA90 completed** (Finding 7 interim, independent). CR-SA90-REV-004 remains low advisory/non-blocking. SA89a/SA89b (Finding 1 DR port) staged for next cycle.
 
-**Cross-track decision resolved (2026-07-14):** SA84–SA86 drain via **Finding 8 Option 1** — the SA88 shared RLS-context helper + conformance gate lands first and gates SA84/SA86 (see Cross-cutting decision). SA88 implementation/validation complete but currently **blocked on CR-SA88-REV-002/004** (see SA88 entry above). No open cross-track decision remains. Parallel work independent of SA88: SA85 (Track 2) and SA90 (Track 3). SA84 (Track 1) and SA86 (Track 2) remain gated on SA88 resolution.
+**Cross-track decision resolved (2026-07-14):** SA84–SA86 drain via **Finding 8 Option 1** — the SA88 shared RLS-context helper + conformance gate lands first and gates SA84/SA86 (see Cross-cutting decision). SA88 implementation/validation complete but currently **blocked on CR-SA88-REV-002/004** (see SA88 entry above). No open cross-track decision remains. Parallel work independent of SA88: SA85 (Track 2, completed 2026-07-14) and SA90 (Track 3, completed). SA84 (Track 1) and SA86 (Track 2) remain gated on SA88 resolution.
 
 ---
 
