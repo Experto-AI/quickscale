@@ -32,6 +32,7 @@ from django.db import migrations, models
 from quickscale_modules_orgs.tenancy import (
     add_parent_unique_constraint,
     apply_force_rls,
+    operator_access_migration,
     remove_composite_child_fk,
     remove_parent_unique_constraint,
     revert_force_rls,
@@ -90,13 +91,21 @@ def _backfill_formfield_org(apps: Any, schema_editor: Any) -> None:
     regardless of their organization — so non-system tenant data is
     correctly backfilled with the parent Form's real org.
 
-    The ``operator_access`` GUC is scoped to ``SET LOCAL``, so it only
-    applies within the current transaction and is cleaned up automatically
-    on commit/rollback.  Because Django wraps the entire migration in an
-    ``atomic()`` block on PostgreSQL, the same ``operator_access`` elevation
-    also covers ``_backfill_formsubmission_org`` and
-    ``_backfill_formfieldvalue_org`` later in this migration (they share
-    the same transaction).
+    SA88: The ``operator_access_migration`` context manager from
+    ``quickscale_modules_orgs.tenancy`` encapsulates this SET LOCAL
+    pattern.  Each backfill function independently wraps its DML in
+    ``with operator_access_migration(schema_editor)`` for lexical proof
+    that every cross-table write assigning ``organization_id`` is
+    covered.  The conformance gate ``test_sa88_migration_operator_access_conformance``
+    AST-parses this migration and requires lexical enclosure by
+    ``with operator_access_migration(schema_editor)`` for all cross-table
+    DML assigning ``organization_id``.
+
+    The ``operator_access_migration`` context manager captures the prior
+    GUC on entry and lexically restores it in ``finally`` via
+    ``set_config(..., is_local=true)``.  Each wrapper independently
+    elevates and restores; no GUC value leaks between sequential wrappers
+    or beyond the enclosing scope.
     """
     Organization = apps.get_model("quickscale_modules_orgs", "Organization")
     try:
@@ -109,63 +118,78 @@ def _backfill_formfield_org(apps: Any, schema_editor: Any) -> None:
             is_personal=False,
         )
 
-    # SA79: Elevate to operator_access so the correlated subquery can
-    # read Form rows across all organizations (not just the System org).
-    # ``SET LOCAL`` is scoped to the current transaction and cleaned up
-    # automatically when the migration transaction commits or rolls back.
-    schema_editor.execute(
-        "SET LOCAL app.operator_access = 'on'",
-    )
+    # SA79 + SA88: Use operator_access_migration() so the correlated
+    # subqueries on Form are not blocked by FORCE RLS (enabled in 0006)
+    # when the connected role has NOBYPASSRLS.
+    # Each backfill function independently wraps in
+    # operator_access_migration() — the context manager lexically
+    # restores the prior GUC on exit via set_config(..., is_local=true)
+    # so each wrapper self-contains its operator_access elevation.
+    with operator_access_migration(schema_editor):
+        # Ensure Form itself is backfilled (defensive — 0005 covers this
+        # but the migration executor may process app migrations in an
+        # order that leaves Form rows without org during test DB creation).
+        schema_editor.execute(
+            "UPDATE quickscale_modules_forms_form "
+            "SET organization_id = %s "
+            "WHERE organization_id IS NULL",
+            [system_org.pk],
+        )
 
-    # Ensure Form itself is backfilled (defensive — 0005 covers this
-    # but the migration executor may process app migrations in an
-    # order that leaves Form rows without org during test DB creation).
-    schema_editor.execute(
-        "UPDATE quickscale_modules_forms_form "
-        "SET organization_id = %s "
-        "WHERE organization_id IS NULL",
-        [system_org.pk],
-    )
-
-    # Copy org from the parent Form, falling back to System org for
-    # any rows whose parent Form was seeded before the org column existed.
-    # With ``operator_access`` active, the subquery sees ALL Form rows,
-    # so non-system tenant data is correctly backfilled.
-    schema_editor.execute(
-        "UPDATE quickscale_modules_forms_formfield "
-        "SET organization_id = COALESCE("
-        "  (SELECT f.organization_id FROM quickscale_modules_forms_form f "
-        "   WHERE f.id = quickscale_modules_forms_formfield.form_id),"
-        "  %s"
-        ") "
-        "WHERE organization_id IS NULL",
-        [system_org.pk],
-    )
+        # Copy org from the parent Form, falling back to System org for
+        # any rows whose parent Form was seeded before the org column existed.
+        # With ``operator_access`` active, the subquery sees ALL Form rows,
+        # so non-system tenant data is correctly backfilled.
+        schema_editor.execute(
+            "UPDATE quickscale_modules_forms_formfield "
+            "SET organization_id = COALESCE("
+            "  (SELECT f.organization_id FROM quickscale_modules_forms_form f "
+            "   WHERE f.id = quickscale_modules_forms_formfield.form_id),"
+            "  %s"
+            ") "
+            "WHERE organization_id IS NULL",
+            [system_org.pk],
+        )
 
 
 def _backfill_formsubmission_org(apps: Any, schema_editor: Any) -> None:
-    """Copy organization_id from the parent Form to FormSubmission rows."""
-    schema_editor.execute(
-        "UPDATE quickscale_modules_forms_formsubmission "
-        "SET organization_id = ("
-        "  SELECT f.organization_id FROM quickscale_modules_forms_form f "
-        "  WHERE f.id = quickscale_modules_forms_formsubmission.form_id"
-        ") "
-        "WHERE organization_id IS NULL"
-    )
+    """Copy organization_id from the parent Form to FormSubmission rows.
+
+    SA88: Wrapped in operator_access_migration for lexical proof that
+    the correlated subquery on Form (FORCE RLS enabled in 0006) is
+    covered under NOBYPASSRLS.  The context manager lexically restores
+    the prior GUC on exit; each wrapper in this migration independently
+    elevates and restores.
+    """
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE quickscale_modules_forms_formsubmission "
+            "SET organization_id = ("
+            "  SELECT f.organization_id FROM quickscale_modules_forms_form f "
+            "  WHERE f.id = quickscale_modules_forms_formsubmission.form_id"
+            ") "
+            "WHERE organization_id IS NULL"
+        )
 
 
 def _backfill_formfieldvalue_org(apps: Any, schema_editor: Any) -> None:
-    """Copy organization_id from the parent FormSubmission to FormFieldValue rows."""
-    schema_editor.execute(
-        "UPDATE quickscale_modules_forms_formfieldvalue "
-        "SET organization_id = ("
-        "  SELECT fs.organization_id "
-        "  FROM quickscale_modules_forms_formsubmission fs "
-        "  WHERE fs.id = quickscale_modules_forms_formfieldvalue.submission_id"
-        ") "
-        "WHERE organization_id IS NULL"
-    )
+    """Copy organization_id from the parent FormSubmission to FormFieldValue rows.
+
+    SA88: Wrapped in operator_access_migration for lexical proof that
+    the correlated subquery on FormSubmission (FORCE RLS enabled in
+    0006) is covered under NOBYPASSRLS.  The context manager lexically
+    restores the prior GUC on exit.
+    """
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE quickscale_modules_forms_formfieldvalue "
+            "SET organization_id = ("
+            "  SELECT fs.organization_id "
+            "  FROM quickscale_modules_forms_formsubmission fs "
+            "  WHERE fs.id = quickscale_modules_forms_formfieldvalue.submission_id"
+            ") "
+            "WHERE organization_id IS NULL"
+        )
 
 
 def _assert_no_null_org(apps: Any, schema_editor: Any) -> None:
@@ -210,102 +234,107 @@ def _install_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
     """
     del apps
 
-    # 1. Add UNIQUE (id, organization_id) on parent tables.
-    add_parent_unique_constraint(
-        schema_editor,
-        table=FORMS_FORM_TABLE,
-        constraint_name=FORMS_FORM_ID_ORG_UNIQUE,
-    )
-    add_parent_unique_constraint(
-        schema_editor,
-        table=FORMS_FORMFIELD_TABLE,
-        constraint_name=FORMS_FORMFIELD_ID_ORG_UNIQUE,
-    )
-    add_parent_unique_constraint(
-        schema_editor,
-        table=FORMS_FORMSUBMISSION_TABLE,
-        constraint_name=FORMS_FORMSUBMISSION_ID_ORG_UNIQUE,
-    )
-
-    # 2. Add composite child FKs with NOT VALID, then validate each one.
-    #    Backfill is complete (steps 2–3 above), so validation guarantees
-    #    the constraint holds across all existing data.
-    def _add_fk_not_valid(
-        child_table: str,
-        constraint: str,
-        child_fk_column: str,
-        parent_table: str,
-        on_delete: str,
-    ) -> None:
-        schema_editor.execute(
-            f"ALTER TABLE {child_table} ADD CONSTRAINT {constraint} "
-            f"FOREIGN KEY ({child_fk_column}, organization_id) "
-            f"REFERENCES {parent_table}(id, organization_id) "
-            f"ON DELETE {on_delete} "
-            f"NOT DEFERRABLE "
-            f"NOT VALID"
+    # SA88: Use operator_access_migration context manager instead of raw
+    # SET LOCAL.  The context manager captures and restores the GUC
+    # lexically via set_config(..., is_local=true), eliminating the risk
+    # of bare GUC manipulation that the conformance gate rejects.
+    with operator_access_migration(schema_editor):
+        # 1. Add UNIQUE (id, organization_id) on parent tables.
+        add_parent_unique_constraint(
+            schema_editor,
+            table=FORMS_FORM_TABLE,
+            constraint_name=FORMS_FORM_ID_ORG_UNIQUE,
+        )
+        add_parent_unique_constraint(
+            schema_editor,
+            table=FORMS_FORMFIELD_TABLE,
+            constraint_name=FORMS_FORMFIELD_ID_ORG_UNIQUE,
+        )
+        add_parent_unique_constraint(
+            schema_editor,
+            table=FORMS_FORMSUBMISSION_TABLE,
+            constraint_name=FORMS_FORMSUBMISSION_ID_ORG_UNIQUE,
         )
 
-    def _validate_fk(
-        child_table: str,
-        constraint: str,
-    ) -> None:
-        schema_editor.execute(
-            f"ALTER TABLE {child_table} VALIDATE CONSTRAINT {constraint}"
+        # 2. Add composite child FKs with NOT VALID, then validate each one.
+        #    Backfill is complete (steps 2–3 above), so validation guarantees
+        #    the constraint holds across all existing data.
+        def _add_fk_not_valid(
+            child_table: str,
+            constraint: str,
+            child_fk_column: str,
+            parent_table: str,
+            on_delete: str,
+        ) -> None:
+            schema_editor.execute(
+                f"ALTER TABLE {child_table} ADD CONSTRAINT {constraint} "
+                f"FOREIGN KEY ({child_fk_column}, organization_id) "
+                f"REFERENCES {parent_table}(id, organization_id) "
+                f"ON DELETE {on_delete} "
+                f"NOT DEFERRABLE "
+                f"NOT VALID"
+            )
+
+        def _validate_fk(
+            child_table: str,
+            constraint: str,
+        ) -> None:
+            schema_editor.execute(
+                f"ALTER TABLE {child_table} VALIDATE CONSTRAINT {constraint}"
+            )
+
+        #    FormField → Form (ON DELETE CASCADE matches Django FK)
+        _add_fk_not_valid(
+            child_table=FORMS_FORMFIELD_TABLE,
+            constraint=FORMS_FORMFIELD_FORM_ORG_FK,
+            child_fk_column="form_id",
+            parent_table=FORMS_FORM_TABLE,
+            on_delete="CASCADE",
+        )
+        _validate_fk(
+            child_table=FORMS_FORMFIELD_TABLE,
+            constraint=FORMS_FORMFIELD_FORM_ORG_FK,
+        )
+        #    FormSubmission → Form (ON DELETE RESTRICT matches Django FK PROTECT)
+        _add_fk_not_valid(
+            child_table=FORMS_FORMSUBMISSION_TABLE,
+            constraint=FORMS_FORMSUBMISSION_FORM_ORG_FK,
+            child_fk_column="form_id",
+            parent_table=FORMS_FORM_TABLE,
+            on_delete="RESTRICT",
+        )
+        _validate_fk(
+            child_table=FORMS_FORMSUBMISSION_TABLE,
+            constraint=FORMS_FORMSUBMISSION_FORM_ORG_FK,
+        )
+        #    FormFieldValue → FormSubmission (ON DELETE CASCADE matches Django FK)
+        _add_fk_not_valid(
+            child_table=FORMS_FORMFIELDVALUE_TABLE,
+            constraint=FORMS_FORMFIELDVALUE_SUBMISSION_ORG_FK,
+            child_fk_column="submission_id",
+            parent_table=FORMS_FORMSUBMISSION_TABLE,
+            on_delete="CASCADE",
+        )
+        _validate_fk(
+            child_table=FORMS_FORMFIELDVALUE_TABLE,
+            constraint=FORMS_FORMFIELDVALUE_SUBMISSION_ORG_FK,
         )
 
-    #    FormField → Form (ON DELETE CASCADE matches Django FK)
-    _add_fk_not_valid(
-        child_table=FORMS_FORMFIELD_TABLE,
-        constraint=FORMS_FORMFIELD_FORM_ORG_FK,
-        child_fk_column="form_id",
-        parent_table=FORMS_FORM_TABLE,
-        on_delete="CASCADE",
-    )
-    _validate_fk(
-        child_table=FORMS_FORMFIELD_TABLE,
-        constraint=FORMS_FORMFIELD_FORM_ORG_FK,
-    )
-    #    FormSubmission → Form (ON DELETE RESTRICT matches Django FK PROTECT)
-    _add_fk_not_valid(
-        child_table=FORMS_FORMSUBMISSION_TABLE,
-        constraint=FORMS_FORMSUBMISSION_FORM_ORG_FK,
-        child_fk_column="form_id",
-        parent_table=FORMS_FORM_TABLE,
-        on_delete="RESTRICT",
-    )
-    _validate_fk(
-        child_table=FORMS_FORMSUBMISSION_TABLE,
-        constraint=FORMS_FORMSUBMISSION_FORM_ORG_FK,
-    )
-    #    FormFieldValue → FormSubmission (ON DELETE CASCADE matches Django FK)
-    _add_fk_not_valid(
-        child_table=FORMS_FORMFIELDVALUE_TABLE,
-        constraint=FORMS_FORMFIELDVALUE_SUBMISSION_ORG_FK,
-        child_fk_column="submission_id",
-        parent_table=FORMS_FORMSUBMISSION_TABLE,
-        on_delete="CASCADE",
-    )
-    _validate_fk(
-        child_table=FORMS_FORMFIELDVALUE_TABLE,
-        constraint=FORMS_FORMFIELDVALUE_SUBMISSION_ORG_FK,
-    )
+        # 3. FormFieldValue → FormField: special partial-column SET NULL.
+        _add_fk_not_valid(
+            child_table=FORMS_FORMFIELDVALUE_TABLE,
+            constraint=FORMS_FORMFIELDVALUE_FIELD_ORG_FK,
+            child_fk_column="field_id",
+            parent_table=FORMS_FORMFIELD_TABLE,
+            on_delete="SET NULL (field_id)",
+        )
+        _validate_fk(
+            child_table=FORMS_FORMFIELDVALUE_TABLE,
+            constraint=FORMS_FORMFIELDVALUE_FIELD_ORG_FK,
+        )
 
-    # 3. FormFieldValue → FormField: special partial-column SET NULL.
-    _add_fk_not_valid(
-        child_table=FORMS_FORMFIELDVALUE_TABLE,
-        constraint=FORMS_FORMFIELDVALUE_FIELD_ORG_FK,
-        child_fk_column="field_id",
-        parent_table=FORMS_FORMFIELD_TABLE,
-        on_delete="SET NULL (field_id)",
-    )
-    _validate_fk(
-        child_table=FORMS_FORMFIELDVALUE_TABLE,
-        constraint=FORMS_FORMFIELDVALUE_FIELD_ORG_FK,
-    )
-
-    # 4. Enable FORCE RLS on all three tables.
-    apply_force_rls(schema_editor, _FORMS_RLS_TARGETS)
+        # 4. Enable FORCE RLS on all three tables.
+        apply_force_rls(schema_editor, _FORMS_RLS_TARGETS)
 
 
 def _uninstall_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
