@@ -130,6 +130,17 @@ arch-audit **[Finding 1](../others/arch-audit.md)** (`dr-engine-module-circular-
 - [ ] **SA89a — Define the artifact/policy persistence protocol in `core`; port `restore_admin_uploaded_backup` (the SA54 seam) onto it.** `Tier 2 · Track 3 · deps: none`
   Core defines protocols for artifact/policy persistence; the backups module implements and injects them at app-ready. First step of Finding 1 Option 2 (persistence port).
   *(why →* arch-audit Finding 1 Option 2*)*
+
+  **Partial checkpoint (2026-07-14) — Phase 1 core persistence contract partially landed:**
+  - [x] Created `quickscale_core/src/quickscale_core/dr_engine/persistence.py` with Django-free `PersistedBackupArtifact` (extends `ArtifactLike`), `BackupArtifactPersistence`, `BackupPolicyPersistence` protocols, atomic `register_backup_persistence()` fail-hard registry, module-level `resolve_admin_uploaded_restore_artifact()`/`load_default_policy()`/`save_default_policy()` getters, and private `_reset_backup_persistence_for_tests()`.
+  - [ ] **Blocked — Phase 1 test file (`test_dr_engine_persistence.py`) not created:** subagent usage limit hit before tests or runtime facade updates could be applied. Registry lifecycle, fail-hard unconfigured access, idempotent re-registration, and reset isolation all uncovered.
+  - [ ] **Blocked — runtime facade not wired:** `runtime/dr.py` lacks eager persistence exports and a `_LAZY_PERSISTENCE_SYMBOLS` table; `runtime/__init__.py.__all__` lacks the 7 new symbols. Without this, nothing can use the persistence seam.
+  - [ ] **Phase 2 (backups Django-backed stores, AppConfig.ready injection, restore port) — not started:** all SA89a implementation past the core contract is deferred.
+
+  **Findings/blockers discovered:**
+  - _Usage limit_: subagent quotas exhausted mid-execution after writing `persistence.py` but before writing tests or updating the runtime facade. Manual continuation required for the remaining Phase 1 steps then Phase 2.
+  - _No decision outstanding_: the approved plan's three design choices (protocol location = `dr_engine/persistence.py`, scope = only `restore_admin_uploaded_backup`, injection = fail-hard `AppConfig.ready`) remain valid.
+
 - [ ] **SA89b — Migrate the remaining DR orchestration model-access onto the injected persistence.** `Tier 2 · Track 3 · deps: SA89a`
   Remove the `orchestration.py:80` core→module import, the `_LAZY_*` tables, and the `mypy.ini:94` backups ignore.
   *(why →* arch-audit Finding 1 Option 2*)*
