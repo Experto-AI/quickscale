@@ -61,26 +61,42 @@ SA83–SA86 are four instances of one structural pattern, **arch-audit [Finding 
 
 ### Track 1 — Tenant-context surface
 
-- [ ] **SA88 — Land an orgs-owned shared RLS-context migration helper + conformance gate (Finding 8, Option 1) — blocked checkpoint: implementation/validation complete 2026-07-14; independent review blocked on CR-SA88-REV-002/004.** `Tier 2 · Track 1 · deps: none → gates SA84, SA86`
-  The structural fix for the SA84–SA86 cluster (see Cross-cutting decision). Implementation and triage complete:
+- [ ] **SA88 — Land an orgs-owned shared RLS-context migration helper + conformance gate (Finding 8, Option 1) — user-selected blocked checkpoint (2026-07-14).** `Tier 2 · Track 1 · deps: none → gates SA84, SA86`
+  The structural fix for the SA84–SA86 cluster (see Cross-cutting decision). Implementation, triage, and focused validation complete; held as a user-selected blocked checkpoint. **No completion or merge is claimed** — the user chose to stop, record, and merge this blocked state rather than continue to full resolution.
 
   1. **CRM triage completed:** 195 passed, 67 failed, 20 skipped under the SA82 full `make test-integration` gate. **Buckets:** 0 migration-time, 67 fixture-time, 0 runtime-query. **No new TA finding** — all CRM restricted-role failures are test-posture (fixture-time), not production-severity. The Finding 8 root cause is confirmed: cross-org fixtures without `operator_access`.
   2. **Seam built:** restoring orgs-owned `operator_access_migration(schema_editor)` context manager / `RunPython` wrapper in `orgs/tenancy.py`; `forms/0007` rerouted through the helper (wraps three backfills and DDL/FK/RLS install, no behavior change); lifecycle regression tests.
-  3. **Focused validation evidence:**
+  3. **Conformance analyzer / inventory corrections:** conformance test corrected to detect omissions; verified against full module inventory.
+  4. **forms 0007 caller parity:** examined all callsites of the shared helper; no production code changes needed — the rerouted callsites already match the helper's contract.
+  5. **Restricted-role SELECT/UPDATE/DELETE/INSERT tests:** focused suite verifying existing seams work correctly under `quickscale_test_role` (NOBYPASSRLS, NOSUPERUSER, NOINHERIT).
+  6. **Focused validation evidence:**
      - Ruff lint pass — clean
-     - MyPy pass — clean
+     - MyPy typecheck pass — clean
      - Conformance gate (SA88 conformance test) — 37 passed
      - Restricted forms migrations — 16 passed / 8 expected skipped (BYPASSRLS-marked DDL tests)
      - Tenancy suite — 86 passed
+     - Focused restricted-role suite — 147 passed
      - `quickscale_test_role` contract: NOBYPASSRLS, NOSUPERUSER (confirmed)
+  7. **Accepted baseline for downstream tickets:**
+     - CRM 67 failures → SA84
+     - Listings 6 failures → SA86
 
-  **Blocked on CR-SA88-REV-002 (high/blocking, completeness):** The conformance test's negative proofs, provenance, and inventory paths are bypassable — an ungated cross-org migration can evade detection. The gate's enforcement surface is not yet exhaustive.
+  **Unresolved findings (carried forward):**
 
-  **Blocked on CR-SA88-REV-004 (low/blocking, consistency):** The pre-commit hook auto-formatted `test_tenancy.py` and `test_sa88_migration_operator_access_conformance.py` via Ruff, but the finding remains open until the authoritative lint/format gate is rerun and independent review confirms closure.
+  **CR-SA88-REV-002 (high/blocking, completeness):** The conformance test's negative proofs, provenance, and inventory paths are bypassable — an ungated cross-org migration can evade detection. The gate's enforcement surface is not yet exhaustive. No exact-commit independent review has resolved this finding.
 
-  **No product decision remains** — this is bounded implementation work. Full integration validation (tenancy + conformance + all downstream modules under `make test-integration`) is deferred because the blocked checkpoint was chosen instead of continuing to full resolution.
+  **CR-SA88-REV-004 (low/blocking, consistency):** The pre-commit hook auto-formatted `test_tenancy.py` and `test_sa88_migration_operator_access_conformance.py` via Ruff, but the finding remains open until the authoritative lint/format gate is rerun and independent review confirms closure. No exact-commit independent review has resolved this finding.
 
-  *Required next actions:* (1) harden the conformance gate's negative/provenance/inventory coverage so bypass paths are detected; (2) stage the hook-applied formatting, rerun the authoritative lint/format gate, then pass independent review to confirm CR-SA88-REV-004 closure; (3) re-run `make test-integration` after both findings are resolved to confirm SA88 passes clean before SA84/SA86 can proceed.
+  **New blocker (SA88-QG-FORMS-001):** During the second and intended final quality-gate run (`make test-integration`), the forms module restricted-role suite produced **50 failed, 125 passed, 8 skipped, 2 errors** — a regression from the prior run where forms had passed clean. The failures are RLS-denied INSERTs on forms tables. **No forms source code changed** between the passing and failing runs; the cause is unresolved. The quality-gate cycle limit (2 runs) has been reached, so this is recorded as a stable blocker for clean continuation rather than retried. The forms failure may be a pre-existing environment/timing issue that the first pass happened to avoid, but without a confirmed root cause it cannot be dismissed.
+
+  **No product decision remains for the original scope** — the Finding 8 Option 1 approach is decided. The new QG blocker (SA88-QG-FORMS-001) introduces a fresh decision point: is the forms regression transient or a real baseline?
+
+  **Clean continuation requirements:**
+
+  - **Option A (recommended — fresh-turn diagnosis):** Start a new implementation turn with a targeted forms DB diagnosis/reset to determine whether the QG run 2 forms failures (SA88-QG-FORMS-001) are a transient environment artifact or a real regression. After diagnosis, re-run the full `make test-integration` gate. If the gate passes (forms clean), proceed with independent review.
+  - **Option B (re-plan):** If repeated diagnosis confirms the forms failures are a real baseline rather than a transient issue, update the plan to account for the newly surfaced forms restricted-role gap before proceeding with SA88 closeout.
+  - **After a green/accepted gate:** create a hook-clean immutable commit and submit to exact-SHA independent review to resolve CR-SA88-REV-002 and CR-SA88-REV-004.
+
   *(why →* arch-audit Finding 8, Option 1; roadmap Cross-cutting decision 2026-07-14*)*
 
 - [ ] **SA84 — Fix CRM's 67 restricted-role RLS failures (plus 20 skipped) via the SA88 seam.** `Tier 2 · Track 1 · deps: SA88`
