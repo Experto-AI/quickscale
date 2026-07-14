@@ -5,6 +5,12 @@ Template-based Django project generator for QuickScale.
 MVP: Simple Jinja2 template rendering for production-ready Django starters.
 """
 
-from quickscale_core.generator.generator import ProjectGenerator
+from quickscale_core.generator.generator import (
+    ProjectGenerator,
+    get_generator_emission_mapping,
+)
 
-__all__ = ["ProjectGenerator"]
+__all__ = [
+    "ProjectGenerator",
+    "get_generator_emission_mapping",
+]

@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pytest
 
+from quickscale_core.generator import get_generator_emission_mapping
 from quickscale_devtools.beta_migration import (
     FRESH_FIRST_DONOR_DJANGO_FILES,
     FRESH_FIRST_IDENTITY_PACKAGE_FILES,
@@ -53,175 +54,44 @@ _TEMPLATES_ROOT = (
 )
 
 # ---------------------------------------------------------------------------
-# Template-to-emitted-path mapping helpers
+# Template-to-emitted-path mapping factory
 # ---------------------------------------------------------------------------
-
-#: Theme prefix -> emitted-project directory mapping.
-#: Keys are the directory name under ``themes/``; values are the destination
-#: directory in the generated project.
-_THEME_DEST_MAP: dict[str, str] = {
-    "showcase_react": "frontend",
-    "showcase_html": "",  # theme files map to project root
-}
-
-#: Subdirectory re-mappings within a theme's tree.
-#: Keys are source subdirectory patterns; values are the complete emitted
-#: path relative to the project root (ignoring the theme's root destination,
-#: since these subdirectories map to well-known project directories rather
-#: than being nested under the theme's root prefix).
-_THEME_SUBDIR_MAP: dict[str, str] = {
-    "templates": "templates",
-    "static": "static",
-    "public": "frontend/public",
-    "src": "frontend/src",
-    "e2e": "frontend/e2e",
-}
-
-
-def _map_theme_template(template_rel: Path) -> str | None:
-    """Map a theme template path to its emitted project-relative path.
-
-    Returns ``None`` for theme files that are not directly emitted as
-    project files (e.g. non-Jinja2 artifacts only used at scaffold time,
-    or the theme README which the generator explicitly skips).
-    """
-    # template_rel looks like themes/showcase_react/vite.config.ts.j2
-    parts = template_rel.parts
-    # parts[0] = "themes", parts[1] = theme_name, parts[2:] = rest
-    if len(parts) < 3:
-        return None
-    theme_name = parts[1]
-    rest = Path(*parts[2:])
-
-    dest_prefix = _THEME_DEST_MAP.get(theme_name)
-    if dest_prefix is None:
-        return None
-
-    # Check for a known subdirectory mapping.
-    # The subdirectory map gives the COMPLETE emitted paths relative to the
-    # project root, so the theme prefix is ignored for these entries —
-    # the subdir might map to a totally different location (e.g. theme
-    # templates/ goes to project templates/, not frontend/templates/).
-    first_segment = rest.parts[0] if rest.parts else ""
-    if first_segment in _THEME_SUBDIR_MAP:
-        sub_dest = _THEME_SUBDIR_MAP[first_segment]
-        suffix = Path(*rest.parts[1:])
-        return str(Path(sub_dest) / suffix)
-
-    # Files at the theme root (package.json.j2, tsconfig.json.j2, etc.)
-    dest_segments = [seg for seg in [dest_prefix] if seg]
-    return str(Path(*dest_segments) / rest)
-
-
-def _theme_non_jinja_emitted_paths() -> dict[str, str]:
-    """Return ``{emitted_path: theme_rel_path}`` for non-Jinja theme files
-    that the generator copies as-is.
-
-    The ``showcase_react`` theme ships non-Jinja TypeScript source files
-    that are copied by ``_generate_react_frontend`` without Jinja rendering.
-    Non-Jinja files in ``showcase_html`` (e.g. ``.gitkeep`` placeholders)
-    are not emitted — they only exist to keep empty directories tracked in
-    the repo.
-    """
-    result: dict[str, str] = {}
-    for theme_name in ("showcase_react",):
-        theme_dir = _TEMPLATES_ROOT / "themes" / theme_name
-        if not theme_dir.is_dir():
-            continue
-        dest_prefix = _THEME_DEST_MAP.get(theme_name, "")
-        for theme_path in sorted(theme_dir.rglob("*")):
-            if not theme_path.is_file():
-                continue
-            # Only include non-Jinja files
-            if theme_path.suffix == ".j2":
-                continue
-            # The generator explicitly skips the theme README
-            if theme_path.name == "README.md" and theme_path.parent == theme_dir:
-                continue
-            rel = theme_path.relative_to(theme_dir)
-            first_segment = rel.parts[0] if rel.parts else ""
-            if first_segment in _THEME_SUBDIR_MAP:
-                sub_dest = _THEME_SUBDIR_MAP[first_segment]
-                suffix = Path(*rel.parts[1:])
-                emitted = str(Path(sub_dest) / suffix)
-            else:
-                dest_segments = [seg for seg in [dest_prefix] if seg]
-                emitted = str(Path(*dest_segments) / rel)
-            result[emitted] = str(rel)
-    return result
 
 
 def _template_emitted_paths() -> dict[str, str]:
-    """Yield ``{emitted_path: template_rel}`` for every ``.j2`` template.
+    """Yield ``{emitted_path: template_rel}`` for every emitted file.
+
+    Delegates to the production ``get_generator_emission_mapping()`` function
+    in :mod:`quickscale_core.generator` for each supported theme and merges
+    the results.  This is the authoritative source for the SA66 conformance
+    gate and replaces the private routing copy (SA90).
+
+    Each theme's mapping represents an actual generated project.  The union
+    of both themes covers every possible emitted file across all generation
+    variants.
 
     The emitted path is the path the file would have in a generated project,
     relative to the project root.  For package-level files (under
     ``project_name/``) the ``project_name`` segment is replaced with
-    ``{package}``, meaning the exact package name is a variable.  For theme
-    files the path is resolved to its destination directory.
-
-    Non-Jinja theme files copied as-is are included via
-    ``_theme_non_jinja_emitted_paths()``.
+    ``{package}``, meaning the exact package name is a variable.
     """
     if not _TEMPLATES_ROOT.is_dir():
         pytest.skip(f"Template tree not found at {_TEMPLATES_ROOT}")
 
-    result: dict[str, str] = {}
-    for template_path in sorted(_TEMPLATES_ROOT.rglob("*.j2")):
-        rel = template_path.relative_to(_TEMPLATES_ROOT)
-        # Strip the .j2 suffix
-        stem = str(rel)
-        name_without_suffix = stem[:-3] if stem.endswith(".j2") else stem
-        rel_no_j2 = Path(name_without_suffix)
+    combined: dict[str, str] = {}
+    for theme in ("showcase_html", "showcase_react"):
+        mapping = get_generator_emission_mapping(
+            _TEMPLATES_ROOT,
+            theme=theme,
+            package_name="{package}",
+        )
+        # Merge — new entries and same-key entries from different themes
+        # are both fine (they produce the same emitted path).
+        for emitted_path, template_rel in mapping.items():
+            if emitted_path not in combined:
+                combined[emitted_path] = template_rel
 
-        parts = rel_no_j2.parts
-
-        # --- Theme templates ---
-        if parts[0] == "themes":
-            emitted = _map_theme_template(rel_no_j2)
-            if emitted is not None:
-                result[emitted] = stem
-            continue
-
-        # --- project_name/ templates (emitted as {package}/...) ---
-        if parts[0] == "project_name":
-            # The emitted path is {package}/rest/of/path
-            suffix = Path(*parts[1:])
-            # Record the root-relative form
-            root_relative = str(Path("{package}") / suffix)
-            result[root_relative] = stem
-            continue
-
-        # --- Common/ subdirectory ---
-        if parts[0] == "common":
-            # common/templates/admin/... -> templates/admin/...
-            suffix = Path(*parts[1:])
-            result[str(suffix)] = stem
-            continue
-
-        # --- Root-level templates ---
-        # Handle github/ -> .github/ mapping for CI workflow templates
-        if parts[0] == "github":
-            # github/workflows/ci.yml -> .github/workflows/ci.yml
-            suffix = Path(*parts[1:])
-            result[str(Path(".github") / suffix)] = stem
-            continue
-
-        # Strip .j2 suffix already done; keep as-is for root files
-        result[name_without_suffix] = stem
-
-    # Add non-Jinja theme files copied as-is by the generator
-    for emitted_path, theme_rel in _theme_non_jinja_emitted_paths().items():
-        result[emitted_path] = f"themes/{theme_rel}"
-
-    # Add dynamically generated outputs that are not template-derived.
-    # poetry.lock is generated by _generate_poetry_lock() after all templates
-    # are rendered (generator.py:417-419).  It is not a .j2 template or a
-    # copied theme file — it is a runtime artifact created by running
-    # ``poetry lock`` in the generated project directory.
-    result["poetry.lock"] = "<dynamic: generated by _generate_poetry_lock()>"
-
-    return result
+    return combined
 
 
 # ---------------------------------------------------------------------------

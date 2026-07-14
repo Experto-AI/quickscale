@@ -91,11 +91,17 @@ SA83–SA86 are four instances of one structural pattern, **arch-audit [Finding 
 
 ### Track 3 — Core/CLI plumbing
 
-- [ ] **SA90 — Export the generator's emission mapping as a function; point the SA66 conformance gate at it (Finding 7 interim).** `Tier 2 · Track 3 · deps: none`
+- [x] **SA90 — Export the generator's emission mapping as a function; point the SA66 conformance gate at it (Finding 7 interim).** `Tier 2 · Track 3 · deps: none`
   arch-audit [Finding 7](../others/arch-audit.md) (`generated-file-ownership-unmodeled`): the SA66 conformance gate keeps a hand-written *copy* of the generator's template→emitted-path routing (`_THEME_DEST_MAP`/`_THEME_SUBDIR_MAP`/`_map_theme_template` in `test_beta_migration_ownership_conformance.py`), so a future theme's non-Jinja files could silently escape the enumerated universe. Cheap, independent interim: refactor `_generate_project`'s inline destination logic to export the emission mapping as a pure function, then have the conformance test derive its set from that function and delete the test-side routing copy. Independent of the SA84–SA86 cluster — parallel Track 3 work.
 
   *Acceptance:* the generator exposes its emission mapping as a callable; the SA66 conformance test consumes it and no longer carries a private routing copy; gate still passes; no behavior change to generated output. *(Sized Tier 2: pure refactor but spans generator + test with scope to discover in `_generate_project`; single concern, RISK low.)*
   *(why →* arch-audit Finding 7, Option 2 cheap interim*)*
+  **Review findings lifecycle (independent review pass 3 ok):**
+  - **CR-SA90-REV-001** — resolved: production consumes exported mapping.
+  - **CR-SA90-REV-002** — resolved: checked fixture and four-variant exact path/hash/mode parity.
+  - **CR-SA90-REV-003** — resolved: audit/open records synchronized.
+  - **CR-SA90-REV-005** — resolved: start.sh docstring corrected.
+  - **CR-SA90-REV-004** — low advisory, non-blocking: no-op/unused private React helper seams; deferred bounded cleanup.
 
 **Staged, not activated — next planning cycle:** arch-audit **[Finding 1](../others/arch-audit.md)** (`dr-engine-module-circular-lattice`, DR persistence port). One ticket would be Tier 3 (architectural), so it is pre-split into two Tier 2 sub-tickets to activate when DR work is next scheduled:
 - *SA89a* — define the artifact/policy persistence protocol in `core`; port `restore_admin_uploaded_backup` (the SA54 seam) onto it. `Tier 2 · Track 3 · deps: none`
@@ -111,22 +117,22 @@ Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track
 SA88 — RLS-context helper + gate   SA85 — forms residual ✓                 SA90 — generator emission
   (Finding 8, Option 1)              completed 2026-07-14                    map export (Finding 7)
   no deps · GATES SA84, SA86         CR-SA85-REV-001 resolved               no deps · independent
-      │                              no deps · independent                        (parallel now)
+      │                              no deps · independent                        [x] closed
       │ gates                            (parallel now)                      ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
       ▼                              SA86 — listings (6 failures)             staged, next cycle:
 SA84 — CRM (67 failures)  ◄──────────  deps: SA88 ◄──────────────────────      SA89a → SA89b
   deps: SA88                           (consumes the shared seam)               (Finding 1 DR port)
 ```
 
-**Ordering.** SA88 is the gating ticket: it lands the shared seam and *includes the CRM triage* that diagnoses the whole cluster, so both SA84 (Track 1, same track — sequential after SA88) and SA86 (Track 2, cross-track) must wait for it to merge before their fix. **While SA88 is in flight, Track 3 runs SA90 (Finding 7 interim).** SA85 (Track 2) completed 2026-07-14. After SA88 merges to `v87`, Track 1 picks up SA84 and Track 2 picks up SA86, both consuming the merged helper.
+**Ordering.** SA88 is the gating ticket: it lands the shared seam and *includes the CRM triage* that diagnoses the whole cluster, so both SA84 (Track 1, same track — sequential after SA88) and SA86 (Track 2, cross-track) must wait for it to merge before their fix. **While SA88 is in flight, Track 2 completed SA85 (2026-07-14) and Track 3 completed SA90 (Finding 7 interim) in parallel.** After SA88 merges to `v87`, Track 1 picks up SA84 and Track 2 picks up SA86, both consuming the merged helper.
 
 ### Track readiness & decision (2026-07-14)
 
 - **Track 1 — start with SA88** (the gating helper + gate), then SA84. The Finding 8 approach is decided (Option 1); no open decision remains.
 - **Track 2 — SA85 completed 2026-07-14** (CR-SA85-REV-001 resolved; force_authenticate contamination fix; 196/8/12 clean); **SA86 waits on SA88.**
-- **Track 3 — SA90 clean to start now** (Finding 7 interim, independent). SA89a/SA89b (Finding 1 DR port) staged for next cycle.
+- **Track 3 — SA90 completed** (Finding 7 interim, independent). CR-SA90-REV-004 remains low advisory/non-blocking. SA89a/SA89b (Finding 1 DR port) staged for next cycle.
 
-**Cross-track decision resolved (2026-07-14):** SA84–SA86 drain via **Finding 8 Option 1** — the SA88 shared RLS-context helper + conformance gate lands first and gates SA84/SA86 (see Cross-cutting decision). No open cross-track decision remains. SA88 (Track 1) and SA90 (Track 3) start immediately; Track 2 waits for SA88 before SA86.
+**Cross-track decision resolved (2026-07-14):** SA84–SA86 drain via **Finding 8 Option 1** — the SA88 shared RLS-context helper + conformance gate lands first and gates SA84/SA86 (see Cross-cutting decision). No open cross-track decision remains. SA88 (Track 1) starts immediately; SA85 (Track 2) completed 2026-07-14; SA90 (Track 3) completed in parallel.
 
 ---
 

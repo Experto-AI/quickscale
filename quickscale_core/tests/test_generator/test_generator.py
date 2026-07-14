@@ -1,12 +1,18 @@
 """Tests for ProjectGenerator class"""
 
+import hashlib
+import json
 import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quickscale_core.generator import ProjectGenerator
+from quickscale_core.generator import (
+    ProjectGenerator,
+    get_generator_emission_mapping,
+)
+from quickscale_core.generator.generator import REACT_THEME_OPTIONAL_FILES
 
 
 class TestProjectGeneratorInit:
@@ -612,3 +618,495 @@ class TestProjectGeneratorErrorPaths:
 
         captured = capsys.readouterr()
         assert captured.err == ""
+
+
+class TestSa90MappingDrivenGeneration:
+    """SA90: mapping-driven generation correctness.
+
+    Verifies that ``get_generator_emission_mapping`` is the authoritative
+    single source of truth and that production generation consumes it
+    faithfully.
+    """
+
+    # Known executable files at emitted-project paths.
+    # Note: start.sh is intentionally NOT included to preserve backward
+    # compat (original file_mappings had start.sh executable=False).
+    _EXECUTABLE_EMITTED = frozenset({"manage.py", "scripts/lint.sh"})
+
+    @staticmethod
+    def _get_template_dir() -> Path:
+        """Resolve the live template directory from a temporary generator."""
+        import quickscale_core
+
+        return Path(quickscale_core.__file__).parent / "generator" / "templates"
+
+    # ------------------------------------------------------------------
+    # Mapping correctness
+    # ------------------------------------------------------------------
+
+    def test_mapping_contains_poetry_lock(self) -> None:
+        """The mapping should always include a poetry.lock entry."""
+        mapping = get_generator_emission_mapping(
+            self._get_template_dir(), theme="showcase_react"
+        )
+        assert "poetry.lock" in mapping
+        assert "dynamic" in mapping["poetry.lock"]
+
+    def test_mapping_no_duplicate_destinations(self) -> None:
+        """The mapping must never contain duplicate emitted paths."""
+        for theme in ("showcase_html", "showcase_react"):
+            mapping = get_generator_emission_mapping(
+                self._get_template_dir(), theme=theme
+            )
+            assert len(mapping) == len(set(mapping.keys())), (
+                f"Duplicate destinations in mapping for theme={theme}"
+            )
+
+    def test_mapping_different_per_theme(self) -> None:
+        """Each supported theme produces a distinct emitted-path set."""
+        html_map = get_generator_emission_mapping(
+            self._get_template_dir(), theme="showcase_html"
+        )
+        react_map = get_generator_emission_mapping(
+            self._get_template_dir(), theme="showcase_react"
+        )
+        assert html_map != react_map
+        # React maps frontend/ files; HTML does not
+        assert any(k.startswith("frontend/") for k in react_map), (
+            "React theme should include frontend/ files"
+        )
+        assert not any(k.startswith("frontend/") for k in html_map), (
+            "HTML theme should not include frontend/ files"
+        )
+        # HTML maps static/ files that React does not
+        assert any(k.startswith("static/") for k in html_map), (
+            "HTML theme should include static/ files"
+        )
+        assert not any(k.startswith("static/") for k in react_map), (
+            "React theme should not include static/ files"
+        )
+        # HTML maps templates/components/ that React does not
+        assert any("templates/components/" in k for k in html_map), (
+            "HTML theme should include templates/components/"
+        )
+        assert not any("templates/components/" in k for k in react_map), (
+            "React theme should not include templates/components/"
+        )
+
+    def test_mapping_shared_django_templates_present(self) -> None:
+        """Both themes must map shared Django templates (admin overrides)."""
+        for theme in ("showcase_html", "showcase_react"):
+            mapping = get_generator_emission_mapping(
+                self._get_template_dir(), theme=theme
+            )
+            assert "templates/admin/index.html" in mapping, (
+                f"admin/index.html missing from {theme} mapping"
+            )
+            assert "templates/admin/app_index.html" in mapping, (
+                f"admin/app_index.html missing from {theme} mapping"
+            )
+
+    # ------------------------------------------------------------------
+    # selected_modules filtering in the mapping
+    # ------------------------------------------------------------------
+
+    def test_selected_modules_none_includes_optional(self) -> None:
+        """selected_modules=None must include every optional React file."""
+        mapping = get_generator_emission_mapping(
+            self._get_template_dir(),
+            theme="showcase_react",
+            selected_modules=None,
+        )
+        for opt_rel in REACT_THEME_OPTIONAL_FILES:
+            emitted_opt = f"frontend/{opt_rel}"
+            assert emitted_opt in mapping, (
+                f"Optional file {emitted_opt} should be present when "
+                f"selected_modules=None"
+            )
+
+    def test_selected_modules_empty_excludes_all_optional(self) -> None:
+        """selected_modules=[] must exclude every optional React file."""
+        mapping = get_generator_emission_mapping(
+            self._get_template_dir(),
+            theme="showcase_react",
+            selected_modules=[],
+        )
+        for opt_rel in REACT_THEME_OPTIONAL_FILES:
+            emitted_opt = f"frontend/{opt_rel}"
+            assert emitted_opt not in mapping, (
+                f"Optional file {emitted_opt} should be absent when selected_modules=[]"
+            )
+
+    def test_selected_modules_partial_includes_only_selected(self) -> None:
+        """Partial selection must include only gated files for selected modules."""
+        mapping = get_generator_emission_mapping(
+            self._get_template_dir(),
+            theme="showcase_react",
+            selected_modules=["blog", "forms"],
+        )
+        # blog and forms optional files should be present
+        assert "frontend/src/pages/BlogPage.tsx" in mapping
+        assert "frontend/src/components/forms/FormRenderer.tsx" in mapping
+        assert "frontend/src/hooks/useFormSchema.ts" in mapping
+        # crm and listings should be absent (not selected)
+        assert "frontend/src/pages/CrmPage.tsx" not in mapping
+        assert "frontend/src/pages/ListingsPage.tsx" not in mapping
+        # social should also be absent
+        assert "frontend/src/pages/SocialLinkTreePublicPage.tsx" not in mapping
+        assert "frontend/src/pages/SocialEmbedsPublicPage.tsx" not in mapping
+
+    # ------------------------------------------------------------------
+    # Generated-tree completeness: every mapped file exists on disk
+    # ------------------------------------------------------------------
+
+    def test_generated_tree_matches_mapping_html(self, tmp_path: Path) -> None:
+        """Generated HTML project must contain every file in the mapping."""
+        template_dir = self._get_template_dir()
+        project_name = "validname"
+        mapping = get_generator_emission_mapping(
+            template_dir,
+            theme="showcase_html",
+            package_name=project_name,
+        )
+        gen = ProjectGenerator(template_dir=template_dir, theme="showcase_html")
+        output = tmp_path / "test_html_map"
+        gen.generate(project_name, output)
+
+        missing = [
+            ep for ep in mapping if ep != "poetry.lock" and not (output / ep).exists()
+        ]
+        assert not missing, (
+            f"HTML generated project missing {len(missing)} file(s): {missing[:10]}"
+        )
+
+    def test_generated_tree_matches_mapping_react(self, tmp_path: Path) -> None:
+        """Generated React project must contain every file in the mapping."""
+        template_dir = self._get_template_dir()
+        project_name = "validname"
+        mapping = get_generator_emission_mapping(
+            template_dir,
+            theme="showcase_react",
+            package_name=project_name,
+        )
+        gen = ProjectGenerator(template_dir=template_dir, theme="showcase_react")
+        output = tmp_path / "test_react_map"
+        gen.generate(project_name, output)
+
+        missing = [
+            ep for ep in mapping if ep != "poetry.lock" and not (output / ep).exists()
+        ]
+        assert not missing, (
+            f"React generated project missing {len(missing)} file(s): {missing[:10]}"
+        )
+
+    def test_generated_tree_matches_mapping_react_with_selection(
+        self, tmp_path: Path
+    ) -> None:
+        """Generated React project with selected modules must match mapping."""
+        template_dir = self._get_template_dir()
+        project_name = "validname"
+        selected = ["blog", "forms", "social"]
+        mapping = get_generator_emission_mapping(
+            template_dir,
+            theme="showcase_react",
+            package_name=project_name,
+            selected_modules=selected,
+        )
+        gen = ProjectGenerator(
+            template_dir=template_dir,
+            theme="showcase_react",
+            selected_modules=selected,
+        )
+        output = tmp_path / "test_react_sel_map"
+        gen.generate(project_name, output)
+
+        missing = [
+            ep for ep in mapping if ep != "poetry.lock" and not (output / ep).exists()
+        ]
+        assert not missing, (
+            f"React+selection generated project missing {len(missing)} "
+            f"file(s): {missing[:10]}"
+        )
+
+    # ------------------------------------------------------------------
+    # Executable modes
+    # ------------------------------------------------------------------
+
+    def test_executable_files_have_correct_mode(self, tmp_path: Path) -> None:
+        """manage.py and scripts/lint.sh must be executable.
+
+        Note: start.sh is intentionally NOT executable — see
+        ``_EXECUTABLE_EMITTED`` exclusion comment above.  This test
+        reflects the actual production mode, not an aspirational
+        docstring.
+        """
+        template_dir = self._get_template_dir()
+        gen = ProjectGenerator(template_dir=template_dir, theme="showcase_html")
+        output = tmp_path / "test_exec"
+        gen.generate("validname", output)
+
+        for emitted in self._EXECUTABLE_EMITTED:
+            fpath = output / emitted
+            assert fpath.exists(), f"{emitted} should exist"
+            assert os.access(fpath, os.X_OK), f"{emitted} should be executable"
+
+    def test_non_executable_files_not_executable(self, tmp_path: Path) -> None:
+        """Non-executable mapped files must NOT have exec mode."""
+        template_dir = self._get_template_dir()
+        gen = ProjectGenerator(template_dir=template_dir, theme="showcase_html")
+        output = tmp_path / "test_noexec"
+        gen.generate("validname", output)
+
+        non_exec_samples = (
+            "Makefile",
+            "pyproject.toml",
+            "README.md",
+        )
+        for emitted in non_exec_samples:
+            candidate = output / emitted
+            if candidate.exists():
+                assert not os.access(candidate, os.X_OK), (
+                    f"{candidate} should NOT be executable"
+                )
+        # Also check a package file inside the project directory
+        pkg_init = output / "validname" / "__init__.py"
+        if pkg_init.exists():
+            assert not os.access(pkg_init, os.X_OK), (
+                f"{pkg_init} should NOT be executable"
+            )
+
+    # ------------------------------------------------------------------
+    # Non-Jinja byte-preserving copy
+    # ------------------------------------------------------------------
+
+    def test_non_jinja_file_bytes_preserved(self, tmp_path: Path) -> None:
+        """Non-Jinja theme files must be byte-identical (shutil.copy2)."""
+        template_dir = self._get_template_dir()
+        # Pick a representative non-Jinja source
+        non_jinja_rel = "themes/showcase_react/src/lib/utils.ts"
+        source_path = template_dir / non_jinja_rel
+        assert source_path.exists(), f"Non-Jinja source not found: {source_path}"
+        original = source_path.read_bytes()
+
+        gen = ProjectGenerator(template_dir=template_dir, theme="showcase_react")
+        output = tmp_path / "test_bytes"
+        gen.generate("validname", output)
+
+        emitted_path = output / "frontend" / "src" / "lib" / "utils.ts"
+        assert emitted_path.exists(), "Emitted non-Jinja file not found"
+        assert emitted_path.read_bytes() == original, (
+            "Non-Jinja file must be byte-identical after generation"
+        )
+
+    # ------------------------------------------------------------------
+    # Union mapping for SA66 (no duplicates, covers all themes)
+    # ------------------------------------------------------------------
+
+    def test_union_mapping_covers_both_themes(self) -> None:
+        """Union of per-theme mappings must not have intra-theme duplicates
+        and must include theme-specific files from both themes."""
+        html_map = get_generator_emission_mapping(
+            self._get_template_dir(), theme="showcase_html"
+        )
+        react_map = get_generator_emission_mapping(
+            self._get_template_dir(), theme="showcase_react"
+        )
+
+        # HTML-specific files
+        assert "templates/components/navigation.html" in html_map
+        assert "static/css/style.css" in html_map
+        assert "static/images/favicon.svg" in html_map
+
+        # React-specific files
+        assert "frontend/src/App.tsx" in react_map
+        assert "frontend/src/main.tsx" in react_map
+        assert "frontend/package.json" in react_map
+
+        # Shared files appear in both
+        assert "Makefile" in html_map
+        assert "Makefile" in react_map
+
+
+class TestSa90ExactManifestParity:
+    """SA90 durable exact-manifest parity: every generated file's path, SHA-256
+    content hash, and executable mode is pinned against a checked-in fixture.
+
+    The fixture (``sa90_emission_manifests.json``) is built independently from
+    current template generation, **not** derived from
+    ``get_generator_emission_mapping`` or production output at test runtime.
+    This means an omitted mapping entry will cause a test failure (the
+    generated tree will contain a file the fixture does not expect, or the
+    fixture expects a file the tree is missing), which the mapping-consumption
+    tests cannot catch because they derive their expected set from the same
+    mapping.
+
+    ``poetry.lock`` is excluded from the fixture because it is a dynamically
+    generated artifact whose content varies per environment.  All other emitted
+    files are pinned.
+    """
+
+    _FIXTURE_PATH = (
+        Path(__file__).parents[1] / "fixtures" / "sa90_emission_manifests.json"
+    )
+
+    _VARIANTS: dict[str, dict] = {
+        "html_default": {
+            "theme": "showcase_html",
+            "selected_modules": None,
+            "project_name": "testproject",
+        },
+        "react_default": {
+            "theme": "showcase_react",
+            "selected_modules": None,
+            "project_name": "testproject",
+        },
+        "react_empty": {
+            "theme": "showcase_react",
+            "selected_modules": [],
+            "project_name": "testproject",
+        },
+        "react_selected": {
+            "theme": "showcase_react",
+            "selected_modules": ["blog", "forms", "social"],
+            "project_name": "testproject",
+        },
+    }
+
+    # Files that are inherently non-deterministic and excluded from
+    # exact manifest comparison.
+    _DYNAMIC_PATHS = frozenset({"poetry.lock"})
+
+    # ------------------------------------------------------------------
+    # Fixture validation
+    # ------------------------------------------------------------------
+
+    def test_fixture_is_valid_json(self) -> None:
+        """The checked-in fixture must be parseable JSON."""
+        assert self._FIXTURE_PATH.exists(), f"Fixture not found at {self._FIXTURE_PATH}"
+        data = json.loads(self._FIXTURE_PATH.read_text())
+        assert "_provenance" in data, "Fixture must include _provenance section"
+        for var_key in self._VARIANTS:
+            assert var_key in data, f"Fixture missing variant {var_key!r}"
+
+    def test_fixture_provenance_matches_variants(self) -> None:
+        """The fixture's _provenance.variants must match this test's variant table."""
+        data = json.loads(self._FIXTURE_PATH.read_text())
+        prov = data.get("_provenance", {}).get("variants", {})
+        for var_key, cfg in self._VARIANTS.items():
+            pv = prov.get(var_key, {})
+            assert pv.get("theme") == cfg["theme"], (
+                f"Provenance theme mismatch for {var_key}"
+            )
+            assert pv.get("selected_modules") == cfg["selected_modules"], (
+                f"Provenance selected_modules mismatch for {var_key}"
+            )
+
+    # ------------------------------------------------------------------
+    # Manifest parity per variant
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("variant", list(_VARIANTS.keys()))
+    def test_generated_tree_matches_manifest(
+        self, tmp_path: Path, variant: str
+    ) -> None:
+        """For each variant, every emitted file (except poetry.lock) must
+        match the checked-in manifest's path, SHA-256 hash, and mode."""
+        cfg = self._VARIANTS[variant]
+        fixture = json.loads(self._FIXTURE_PATH.read_text())
+        expected = fixture.get(variant, {})
+        assert expected, f"No manifest data for variant {variant!r}"
+
+        generator = ProjectGenerator(
+            theme=cfg["theme"],
+            selected_modules=cfg.get("selected_modules"),
+        )
+        output = tmp_path / variant
+        generator.generate(cfg["project_name"], output)
+
+        actual: dict[str, dict] = {}
+        for fpath in sorted(output.rglob("*")):
+            if not fpath.is_file():
+                continue
+            rel = str(fpath.relative_to(output))
+            if rel in self._DYNAMIC_PATHS:
+                continue
+            content = fpath.read_bytes()
+            actual[rel] = {
+                "mode": oct(os.stat(fpath).st_mode)[-3:],
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
+
+        missing = set(expected.keys()) - set(actual.keys())
+        extra = set(actual.keys()) - set(expected.keys())
+        mismatch: list[str] = []
+
+        for path, exp_entry in expected.items():
+            if path not in actual:
+                continue
+            act = actual[path]
+            if act["mode"] != exp_entry["mode"]:
+                mismatch.append(
+                    f"{path}: mode expected {exp_entry['mode']}, got {act['mode']}"
+                )
+            if act["sha256"] != exp_entry["sha256"]:
+                mismatch.append(
+                    f"{path}: sha256 expected {exp_entry['sha256']}, got {act['sha256']}"
+                )
+
+        # Build a single assertion message with all discrepancies
+        errors: list[str] = []
+        if missing:
+            errors.append(
+                f"Files in fixture but absent from generated tree ({len(missing)}):\n  "
+                + "\n  ".join(sorted(missing)[:20])
+            )
+        if extra:
+            errors.append(
+                f"Files in generated tree but absent from fixture ({len(extra)}):\n  "
+                + "\n  ".join(sorted(extra)[:20])
+            )
+        if mismatch:
+            errors.append(
+                f"Content/mode mismatches ({len(mismatch)}):\n  "
+                + "\n  ".join(mismatch[:20])
+            )
+
+        assert not errors, (
+            f"Variant {variant!r} manifest parity failure:\n" + "\n".join(errors)
+        )
+
+    # ------------------------------------------------------------------
+    # Stability check: current run against itself
+    # ------------------------------------------------------------------
+
+    def test_zero_delta_regeneration_stable(self) -> None:
+        """Generating the same variant twice must produce identical trees
+        (no non-determinism beyond poetry.lock)."""
+        import tempfile
+
+        cfg = self._VARIANTS["html_default"]
+        generator = ProjectGenerator(theme=cfg["theme"])
+
+        def _capture(out_dir: Path) -> dict[str, str]:
+            generator.generate(cfg["project_name"], out_dir)
+            result: dict[str, str] = {}
+            for fpath in sorted(out_dir.rglob("*")):
+                if not fpath.is_file():
+                    continue
+                rel = str(fpath.relative_to(out_dir))
+                if rel in self._DYNAMIC_PATHS:
+                    continue
+                result[rel] = hashlib.sha256(fpath.read_bytes()).hexdigest()
+            return result
+
+        base = Path(tempfile.mkdtemp())
+        try:
+            tree1 = _capture(base / "run1")
+            tree2 = _capture(base / "run2")
+            assert tree1 == tree2, (
+                "Two successive generations of html_default produced different trees"
+            )
+        finally:
+            import shutil
+
+            shutil.rmtree(base, ignore_errors=True)
