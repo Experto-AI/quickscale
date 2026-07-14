@@ -18,7 +18,7 @@ with a scope tied to the active ``schema_editor`` parameter.
 Known debt exemptions are tracked in ``SA88_DEBT_EXEMPTIONS`` — an exact
 file/symbol/reason ledger keyed to the owning SA issue.  Currently exempted:
 - CRM 0009 ``_backfill_contactnote_org`` / ``_backfill_dealnote_org`` (ORM
-  ``_base_manager`` bypasses FORCE RLS; owned by SA86 for uplift).
+  ``_base_manager`` bypasses FORCE RLS; owned by SA84 for uplift).
 
 Comments, docstrings, DDL, and read-only SQL are ignored.
 
@@ -49,7 +49,7 @@ _OPERATOR_ACCESS_CM_NAME = "operator_access_migration"
 # Tests prove that unlisted debt (migrations not in this ledger) FAILS
 # the real-tree compliance check as a violation.
 #
-# When SA84/SA86 remediates the underlying issue, these exemptions can
+# When SA84 remediates the underlying issue, these exemptions can
 # be removed.
 
 SA88_DEBT_EXEMPTIONS: dict[tuple[str, str], list[dict[str, str]]] = {
@@ -278,19 +278,6 @@ def _is_execute_call(node: ast.AST) -> bool:
     )
 
 
-def _find_enclosing_function_name(tree: ast.AST, lineno: int) -> str | None:
-    """Return the name of the function that contains *lineno*.
-
-    Returns ``None`` if the line is not inside any function definition.
-    """
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            end = node.end_lineno
-            if end is not None and node.lineno <= lineno <= end:
-                return node.name
-    return None
-
-
 # =========================================================================
 # Detector: ORM .update(organization_id=...) writes
 # =========================================================================
@@ -481,183 +468,175 @@ def _is_raw_guc_manipulation(sql_text: str) -> bool:
 # =========================================================================
 
 
+def _text_key(node: ast.AST | None) -> str | None:
+    """Return a canonical key for *node* for receiver identity matching.
+
+    ``ast.unparse()`` normalises superficial formatting and is resilient to
+    context differences (``Store``/``Load``), which is useful when comparing
+    the same lexical receiver across assignment and save sites.
+    """
+    if node is None:
+        return None
+    try:
+        return ast.unparse(node)
+    except Exception:
+        return ast.dump(node, include_attributes=False)
+
+
+def _extract_org_id_receivers(target: ast.AST) -> list[ast.AST]:
+    """Return any ``*.organization_id`` receiver expressions within *target*."""
+    receivers: list[ast.AST] = []
+
+    if isinstance(target, ast.Attribute) and target.attr == "organization_id":
+        receivers.append(target.value)
+    elif isinstance(target, (ast.Tuple, ast.List)):
+        for elt in target.elts:
+            receivers.extend(_extract_org_id_receivers(elt))
+    elif isinstance(target, ast.Starred):
+        receivers.extend(_extract_org_id_receivers(target.value))
+
+    return receivers
+
+
+def _save_receiver(call: ast.Call) -> tuple[int, int, str] | None:
+    """Return receiver span and key when *call* is ``obj.save()``.
+
+    Returns ``(start_line, end_line, receiver_key)`` when matched.
+    """
+    if not isinstance(call.func, ast.Attribute):
+        return None
+    if call.func.attr not in {"save", "asave"}:
+        return None
+    key = _text_key(call.func.value)
+    if key is None:
+        return None
+    start, end = _node_span(call)
+    return start, end, key
+
+
+def _span_within_ranges(
+    start: int,
+    end: int,
+    ranges: list[tuple[int, int]],
+) -> bool:
+    """Return True when ``[start, end]`` is fully inside any *ranges* interval."""
+    return any(start >= r_start and end <= r_end for r_start, r_end in ranges)
+
+
 def _check_body_for_assignment_save(
     body: list[ast.stmt],
     func_name: str,
     op_ranges: list[tuple[int, int]],
     violations: list[dict],
 ) -> None:
-    """Recursively scan *body* (a list of statements) for the pattern
-    ``obj.organization_id = value`` followed by ``obj.save()`` (or
-    ``obj.save(update_fields=...)``) that is NOT enclosed by
-    ``operator_access_migration``.
+    """Scan an immediate function body for assignment/save pair violations.
 
-    Appends violation dicts to *violations* in place.
+    The detector now:
+
+    * matches assignment receivers exactly by AST receiver identity,
+    * pairs assignments with later saves of that same receiver anywhere in the
+      immediate function (no fixed short horizon), and
+    * flags violations when either node is outside every
+      ``operator_access_migration`` range in that same immediate function.
+
+    It intentionally ignores nested function/class/lambda scopes.
     """
-    for i, stmt in enumerate(body):
-        # Check compound statements with nested bodies (for, while, with, try, etc.)
-        if isinstance(stmt, (ast.For, ast.AsyncFor)):
-            _check_body_for_assignment_save(
-                stmt.body,
-                func_name,
-                op_ranges,
-                violations,
-            )
-            _check_body_for_assignment_save(
-                stmt.orelse or [],
-                func_name,
-                op_ranges,
-                violations,
-            )
-        if isinstance(stmt, (ast.While,)):
-            _check_body_for_assignment_save(
-                stmt.body,
-                func_name,
-                op_ranges,
-                violations,
-            )
-            _check_body_for_assignment_save(
-                stmt.orelse or [],
-                func_name,
-                op_ranges,
-                violations,
-            )
-        if isinstance(stmt, ast.With):
-            _check_body_for_assignment_save(
-                stmt.body,
-                func_name,
-                op_ranges,
-                violations,
-            )
-        if isinstance(stmt, ast.Try):
-            _check_body_for_assignment_save(
-                stmt.body,
-                func_name,
-                op_ranges,
-                violations,
-            )
-            for handler in stmt.handlers:
-                _check_body_for_assignment_save(
-                    handler.body,
-                    func_name,
-                    op_ranges,
-                    violations,
-                )
-            _check_body_for_assignment_save(
-                stmt.orelse or [],
-                func_name,
-                op_ranges,
-                violations,
-            )
-            _check_body_for_assignment_save(
-                stmt.finalbody or [],
-                func_name,
-                op_ranges,
-                violations,
-            )
-        if isinstance(stmt, ast.If):
-            _check_body_for_assignment_save(
-                stmt.body,
-                func_name,
-                op_ranges,
-                violations,
-            )
-            _check_body_for_assignment_save(
-                stmt.orelse or [],
-                func_name,
-                op_ranges,
-                violations,
-            )
+    module_node = ast.Module(body=body, type_ignores=[])
 
-        # Look for: <expr>.organization_id = <value>
-        if not isinstance(stmt, ast.Assign):
-            continue
-        assign = stmt
-        if len(assign.targets) != 1:
-            continue
-        target = assign.targets[0]
-        if not isinstance(target, ast.Attribute):
-            continue
-        if target.attr != "organization_id":
-            continue
+    assignments: list[tuple[int, int, str]] = []
+    saves: list[tuple[int, int, str]] = []
 
-        # Found an assignment to .organization_id.  Check whether a
-        # .save() call follows within the next few statements (same block).
-        saved_at: int | None = None
-        for j in range(i + 1, min(i + 5, len(body))):
-            next_stmt = body[j]
-            if isinstance(next_stmt, ast.Expr):
-                inner = next_stmt.value
-                if isinstance(inner, ast.Call):
-                    if isinstance(inner.func, ast.Attribute) and inner.func.attr in (
-                        "save",
-                        "asave",
-                    ):
-                        saved_at = next_stmt.lineno
-                        break
-        if saved_at is None:
-            continue
+    for node in _iter_non_nested_nodes(module_node):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                for receiver in _extract_org_id_receivers(target):
+                    receiver_key = _text_key(receiver)
+                    if receiver_key is not None:
+                        start, end = _node_span(node)
+                        assignments.append((start, end, receiver_key))
+        elif isinstance(node, ast.AnnAssign):
+            for receiver in _extract_org_id_receivers(node.target):
+                receiver_key = _text_key(receiver)
+                if receiver_key is not None:
+                    start, end = _node_span(node)
+                    assignments.append((start, end, receiver_key))
+        elif isinstance(node, ast.NamedExpr):
+            for receiver in _extract_org_id_receivers(node.target):
+                receiver_key = _text_key(receiver)
+                if receiver_key is not None:
+                    start, end = _node_span(node)
+                    assignments.append((start, end, receiver_key))
 
-        # Check if both assignment AND save are inside
-        # operator_access_migration ranges.
-        assign_covered = _is_within_ranges(
-            assign.lineno,
-            op_ranges,
-        ) or _is_within_ranges(
-            assign.end_lineno or assign.lineno,
+        expr: ast.AST | None = None
+        if isinstance(node, ast.Expr):
+            expr = node.value
+        elif isinstance(node, ast.Await) and isinstance(node.value, ast.Call):
+            expr = node.value
+
+        if expr is None or not isinstance(expr, ast.Call):
+            continue
+        save = _save_receiver(expr)
+        if save is None:
+            continue
+        saves.append(save)
+
+    if not assignments or not saves:
+        return
+
+    for assignment_start, assignment_end, assignment_receiver in assignments:
+        assignment_covered = _span_within_ranges(
+            assignment_start,
+            assignment_end,
             op_ranges,
         )
-        save_covered = _is_within_ranges(saved_at, op_ranges)
+        violation_save_line: int | None = None
 
-        if not (assign_covered and save_covered):
-            violations.append(
-                {
-                    "func_name": func_name,
-                    "line": assign.lineno,
-                    "message": (
-                        f"organization_id assignment (line {assign.lineno}) "
-                        f"followed by .save() (line {saved_at}) is not "
-                        f"enclosed by `with operator_access_migration("
-                        f"schema_editor):`.  ORM writes through the default "
-                        f"manager are subject to FORCE RLS and need "
-                        f"operator_access."
-                    ),
-                    "category": "ungated-assignment-save",
-                }
-            )
+        for save_start, save_end, save_receiver in saves:
+            if save_start <= assignment_start:
+                continue
+            if save_receiver != assignment_receiver:
+                continue
+            save_covered = _span_within_ranges(save_start, save_end, op_ranges)
+            if not (assignment_covered and save_covered):
+                violation_save_line = save_start
+                break
 
+        if violation_save_line is None:
+            continue
 
-def _uses_base_manager(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return ``True`` if *func_node* contains a reference to
-    ``_base_manager`` in its AST.
-
-    ``_base_manager`` bypasses FORCE RLS, so assignment+save patterns
-    using it do not need ``operator_access_migration``.
-    """
-    for subnode in ast.walk(func_node):
-        if isinstance(subnode, ast.Attribute) and subnode.attr == "_base_manager":
-            return True
-    return False
+        violations.append(
+            {
+                "func_name": func_name,
+                "line": assignment_start,
+                "message": (
+                    f"organization_id assignment (line {assignment_start}) followed by "
+                    f"a same-receiver .save() at line {violation_save_line} that is "
+                    f"is not enclosed by `with operator_access_migration("
+                    "schema_editor"
+                    " ):`. "
+                    "ORM writes through the default manager are subject to FORCE "
+                    "RLS and need operator_access."
+                ),
+                "category": "ungated-assignment-save",
+            }
+        )
 
 
 def _find_assignment_save_in_function(
     func_node: ast.FunctionDef | ast.AsyncFunctionDef,
-    op_ranges: list[tuple[int, int]],
+    op_ranges_by_function: dict[
+        ast.FunctionDef | ast.AsyncFunctionDef, list[tuple[int, int]]
+    ],
 ) -> list[dict]:
     """Detect ``obj.organization_id = value`` followed by ``obj.save()``
     (or ``obj.save(update_fields=...)``) within *func_node* that are NOT
     enclosed by ``operator_access_migration``.
 
-    Skips functions that use ``_base_manager`` (which bypasses FORCE RLS
-    and does not need operator_access).
-
     Recursively checks compound statement bodies (for, while, with, try,
     if).  Returns a list of violation dicts with the line of the assignment.
     """
     violations: list[dict] = []
-    # Functions using _base_manager bypass RLS — no violation.
-    if _uses_base_manager(func_node):
-        return violations
+    op_ranges = op_ranges_by_function.get(func_node, [])
     _check_body_for_assignment_save(
         func_node.body,
         func_node.name,
@@ -672,6 +651,151 @@ def _find_assignment_save_in_function(
 # =========================================================================
 
 
+def _extract_bound_names(target: ast.AST) -> list[str]:
+    """Return all ``Name`` bindings implied by an assignment target.
+
+    Supports tuples, lists, and starred targets used by Python destructuring.
+    """
+    names: list[str] = []
+    if isinstance(target, ast.Name):
+        names.append(target.id)
+    elif isinstance(target, (ast.Tuple, ast.List)):
+        for element in target.elts:
+            names.extend(_extract_bound_names(element))
+    elif isinstance(target, ast.Starred):
+        names.extend(_extract_bound_names(target.value))
+    return names
+
+
+def _iter_function_parameter_names(func_node: ast.AST) -> list[str]:
+    """Return all parameter names declared by *func_node*.
+
+    Handles ``ast.FunctionDef``, ``ast.AsyncFunctionDef``, and ``ast.Lambda``.
+    """
+    if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        return []
+    args = func_node.args
+    names = [arg.arg for arg in args.posonlyargs + args.args + args.kwonlyargs]
+    if args.vararg is not None:
+        names.append(args.vararg.arg)
+    if args.kwarg is not None:
+        names.append(args.kwarg.arg)
+    return names
+
+
+def _collect_editor_bindings(
+    scope_node: ast.AST,
+    editor_name: str,
+) -> list[tuple[int, str]]:
+    """Collect all binding-site lines for *editor_name* in *scope_node*.
+
+    Returns ``(lineno, binding_kind)`` tuples with *binding_kind* describing
+    the binding form (``param``, ``assign``, ``annassign``, ``augassign``,
+    ``for``, ``with_as``, ``except``, ``import``, ``function``, ``class``,
+    ``named_expr``, or ``delete``).
+
+    Nested function/class/lambda scopes are intentionally excluded to enforce
+    immediate-scope resolution semantics for editor provenance.
+    """
+    events: list[tuple[int, str]] = []
+
+    scope_node_lineno = getattr(scope_node, "lineno", 0)
+
+    for arg_name in _iter_function_parameter_names(scope_node):
+        if arg_name == editor_name:
+            events.append((scope_node_lineno, "param"))
+
+    for node in _iter_non_nested_nodes(scope_node):
+        if isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            # Names here affect immediate scope only by their own definitions.
+            if isinstance(
+                node,
+                (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+            ):
+                if node.name == editor_name:
+                    events.append(
+                        (
+                            node.lineno,
+                            "class" if isinstance(node, ast.ClassDef) else "function",
+                        )
+                    )
+            continue
+
+        if isinstance(node, (ast.Assign, ast.With)):
+            if isinstance(node, ast.With):
+                for item in node.items:
+                    if item.optional_vars is None:
+                        continue
+                    if editor_name in _extract_bound_names(item.optional_vars):
+                        events.append((node.lineno, "with_as"))
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if editor_name in _extract_bound_names(target):
+                        events.append((node.lineno, "assign"))
+
+        if isinstance(node, ast.AnnAssign):
+            if editor_name in _extract_bound_names(node.target):
+                events.append((node.lineno, "annassign"))
+
+        if isinstance(node, ast.AugAssign):
+            if editor_name in _extract_bound_names(node.target):
+                events.append((node.lineno, "augassign"))
+
+        if isinstance(node, ast.NamedExpr):
+            if editor_name in _extract_bound_names(node.target):
+                events.append((node.lineno, "named_expr"))
+
+        if isinstance(node, (ast.For, ast.AsyncFor)):
+            if editor_name in _extract_bound_names(node.target):
+                events.append((node.lineno, "for"))
+
+        if isinstance(node, ast.ExceptHandler):
+            if node.name == editor_name:
+                events.append((node.lineno, "except"))
+
+        if isinstance(node, ast.With):
+            # Already handled above for 'with-as' bindings.
+            pass
+
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                bound = alias.asname or alias.name
+                if bound == editor_name:
+                    events.append((node.lineno, "import"))
+
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                bound = alias.asname or alias.name
+                if bound == editor_name:
+                    events.append((node.lineno, "import"))
+
+        if isinstance(node, ast.Delete):
+            for target in node.targets:
+                if editor_name in _extract_bound_names(target):
+                    events.append((node.lineno, "delete"))
+
+    # Remove duplicates from nodes that can report multiple bindings per line.
+    return sorted(set(events), key=lambda item: (item[0], item[1]))
+
+
+def _binding_kind_for_editor_at_line(
+    bindings: list[tuple[int, str]],
+    lineno: int,
+) -> str | None:
+    """Return the binding kind for *editor_name* most recently bound before
+    *lineno*.
+
+    ``lineno`` is statement-level; if multiple bindings share the same line,
+    the first by kind order in sorted tuples is selected for deterministic output.
+    """
+    applicable = [(line, kind) for line, kind in bindings if line <= lineno]
+    if not applicable:
+        return None
+    return max(applicable, key=lambda item: item[0])[1]
+
+
 def _check_wrong_editor(tree: ast.AST) -> list[dict]:
     """Detect ``with operator_access_migration(...)`` blocks where the
     argument passed is not the enclosing function's ``schema_editor``
@@ -679,69 +803,107 @@ def _check_wrong_editor(tree: ast.AST) -> list[dict]:
 
     Returns a list of violation dicts, one per misused call.
     """
-    # Build a line-indexed function-parameter map for fast lookup.
-    func_params: dict[tuple[int, int], set[str]] = {}
-    func_names: dict[tuple[int, int], str] = {}
-    for func_node in ast.walk(tree):
-        if isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            end = func_node.end_lineno or func_node.lineno
-            params = {p.arg for p in func_node.args.args}
-            func_params[(func_node.lineno, end)] = params
-            func_names[(func_node.lineno, end)] = func_node.name
-
-    def _find_enclosing_params(lineno: int) -> tuple[set[str], str]:
-        for (start, end), params in sorted(func_params.items(), reverse=True):
-            if start <= lineno <= end:
-                return params, func_names[(start, end)]
-        return set(), "<module>"
+    function_scopes: list[ast.AST] = [
+        tree,
+        *[
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ],
+    ]
 
     violations: list[dict] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.With):
-            continue
-        for item in node.items:
-            if not _is_operator_access_migration_call(item.context_expr):
-                continue
-            assert isinstance(item.context_expr, ast.Call)
-            call = item.context_expr
+    for scope_node in function_scopes:
+        scope_name = (
+            "<module>"
+            if isinstance(scope_node, ast.Module)
+            else getattr(scope_node, "name", "<lambda>")
+        )
+        editor_bindings = _collect_editor_bindings(scope_node, "schema_editor")
 
-            # Check the first argument
-            if not call.args:
+        for node in _iter_non_nested_nodes(scope_node):
+            if not isinstance(node, ast.With):
                 continue
-            first_arg = call.args[0]
+            for item in node.items:
+                if not _is_operator_access_migration_call(item.context_expr):
+                    continue
+                assert isinstance(item.context_expr, ast.Call)
+                call = item.context_expr
 
-            if isinstance(first_arg, ast.Name):
-                arg_name = first_arg.id
-                enclosing_params, enclosing_name = _find_enclosing_params(node.lineno)
-                if arg_name not in enclosing_params:
+                if len(call.args) != 1 or call.keywords:
                     violations.append(
                         {
                             "line": node.lineno,
                             "message": (
-                                f"operator_access_migration() called "
-                                f"with argument '{arg_name}' at line "
-                                f"{node.lineno}, but '{arg_name}' is "
-                                f"not a parameter of the enclosing "
-                                f"function '{enclosing_name}'.  Must use "
-                                f"the callback's own 'schema_editor'."
+                                f"operator_access_migration() called at line "
+                                f"{node.lineno} must be passed exactly one positional "
+                                f"argument: schema_editor.  No keyword args or "
+                                f"additional arguments are allowed."
                             ),
                             "category": "wrong-editor",
                         }
                     )
-            else:
-                # Non-name argument (e.g. attribute, call, etc.)
-                violations.append(
-                    {
-                        "line": node.lineno,
-                        "message": (
-                            f"operator_access_migration() called with an "
-                            f"expression at line {node.lineno} that is not "
-                            f"a simple name.  Must use the callback's own "
-                            f"'schema_editor' parameter."
-                        ),
-                        "category": "wrong-editor",
-                    }
+                    continue
+
+                first_arg = call.args[0]
+                if not isinstance(first_arg, ast.Name):
+                    violations.append(
+                        {
+                            "line": node.lineno,
+                            "message": (
+                                f"operator_access_migration() called with an expression "
+                                f"at line {node.lineno} that is not a simple name. "
+                                "Must use the enclosing callback's own "
+                                "'schema_editor' parameter."
+                            ),
+                            "category": "wrong-editor",
+                        }
+                    )
+                    continue
+
+                if first_arg.id != "schema_editor":
+                    violations.append(
+                        {
+                            "line": node.lineno,
+                            "message": (
+                                f"operator_access_migration() called with argument "
+                                f"'{first_arg.id}' at line {node.lineno}, but only the "
+                                "enclosing callback's own 'schema_editor' parameter "
+                                "is allowed."
+                            ),
+                            "category": "wrong-editor",
+                        }
+                    )
+                    continue
+
+                binding_kind = _binding_kind_for_editor_at_line(
+                    editor_bindings,
+                    node.lineno,
                 )
+                if binding_kind != "param":
+                    if binding_kind is None:
+                        message = (
+                            f"operator_access_migration() called with argument "
+                            f"'schema_editor' at line {node.lineno}, but no enclosing "
+                            f"callback parameter named 'schema_editor' is in scope "
+                            f"(current scope: '{scope_name}').  Use the callback's "
+                            "own parameter."
+                        )
+                    else:
+                        message = (
+                            f"operator_access_migration() called with argument "
+                            f"'schema_editor' at line {node.lineno}, but that name "
+                            f"is currently resolved as a '{binding_kind}' binding in "
+                            f"'{scope_name}', not the callback parameter."
+                        )
+                    violations.append(
+                        {
+                            "line": node.lineno,
+                            "message": message,
+                            "category": "wrong-editor",
+                        }
+                    )
+
     return violations
 
 
@@ -757,10 +919,87 @@ def _check_operator_access_shadowing(tree: ast.AST) -> list[dict]:
     The canonical import is:
         from quickscale_modules_orgs.tenancy import operator_access_migration
 
-    Any assignment or re-import that shadows this name is flagged.
+    Any assignment or rebinding that shadows this name is flagged.
+    Additionally, using the symbol without the exact canonical import is a
+    hard violation.
     """
     violations: list[dict] = []
+
+    operator_access_calls: list[int] = []
+    canonical_import_lines: set[int] = set()
+
     for node in ast.walk(tree):
+        if isinstance(node, ast.With):
+            for item in node.items:
+                if _is_operator_access_migration_call(item.context_expr):
+                    operator_access_calls.append(node.lineno)
+
+    # If operator_access_migration is never used as a context manager,
+    # shadowing checks are intentionally out-of-scope for this file.
+    if not operator_access_calls:
+        return violations
+
+    for node in ast.walk(tree):
+        # Canonical import checks.
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name != _OPERATOR_ACCESS_CM_NAME:
+                    continue
+
+                if node.module != "quickscale_modules_orgs.tenancy":
+                    violations.append(
+                        {
+                            "filepath": "<unknown>",
+                            "line": node.lineno,
+                            "message": (
+                                f"Import of '{_OPERATOR_ACCESS_CM_NAME}' from "
+                                f"non-canonical module '{node.module}' at line "
+                                f"{node.lineno}.  Must import from "
+                                f"quickscale_modules_orgs.tenancy."
+                            ),
+                            "category": "shadowing",
+                        }
+                    )
+                    continue
+
+                if alias.asname is not None:
+                    violations.append(
+                        {
+                            "filepath": "<unknown>",
+                            "line": node.lineno,
+                            "message": (
+                                f"Alias '{alias.asname}' on import of "
+                                f"'{_OPERATOR_ACCESS_CM_NAME}' at line "
+                                f"{node.lineno} is forbidden.  Use the "
+                                f"unaliased name from quickscale_modules_orgs.tenancy."
+                            ),
+                            "category": "shadowing",
+                        }
+                    )
+                else:
+                    canonical_import_lines.add(node.lineno)
+
+            # Keep ImportFrom handling scoped to import checks above.
+            continue
+
+        # Check named imports that alias the context manager.
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname == _OPERATOR_ACCESS_CM_NAME:
+                    violations.append(
+                        {
+                            "filepath": "<unknown>",
+                            "line": node.lineno,
+                            "message": (
+                                f"Alias '{alias.asname}' shadows the canonical "
+                                f"'{_OPERATOR_ACCESS_CM_NAME}' name at line "
+                                f"{node.lineno}.  Use the unaliased name from "
+                                f"quickscale_modules_orgs.tenancy."
+                            ),
+                            "category": "shadowing",
+                        }
+                    )
+
         # Check assignments: operator_access_migration = <something>
         if isinstance(node, ast.Assign):
             for target in node.targets:
@@ -783,43 +1022,98 @@ def _check_operator_access_shadowing(tree: ast.AST) -> list[dict]:
                         }
                     )
 
-        # Check imports that shadow the name from a different module
-        if isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                if alias.name == _OPERATOR_ACCESS_CM_NAME:
-                    if node.module != "quickscale_modules_orgs.tenancy":
-                        violations.append(
-                            {
-                                "filepath": "<unknown>",
-                                "line": node.lineno,
-                                "message": (
-                                    f"Import of '{_OPERATOR_ACCESS_CM_NAME}' "
-                                    f"from non-canonical module "
-                                    f"'{node.module}' at line {node.lineno}.  "
-                                    f"Must import from "
-                                    f"quickscale_modules_orgs.tenancy."
-                                ),
-                                "category": "shadowing",
-                            }
-                        )
+        # Check annotated assignments: operator_access_migration: Type = ...
+        if isinstance(node, ast.AnnAssign):
+            if (
+                isinstance(node.target, ast.Name)
+                and node.target.id == _OPERATOR_ACCESS_CM_NAME
+            ):
+                violations.append(
+                    {
+                        "filepath": "<unknown>",
+                        "line": node.lineno,
+                        "message": (
+                            f"Shadowing annotated assignment to "
+                            f"'{_OPERATOR_ACCESS_CM_NAME}' at line "
+                            f"{node.lineno}.  The name must remain bound to "
+                            f"its canonical import from quickscale_modules_orgs.tenancy."
+                        ),
+                        "category": "shadowing",
+                    }
+                )
 
-        # Check named imports that alias the context manager
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            for alias in node.names:
-                if alias.asname == _OPERATOR_ACCESS_CM_NAME:
+        # Check walrus assignments: (operator_access_migration := ...)
+        if isinstance(node, ast.NamedExpr):
+            if (
+                isinstance(node.target, ast.Name)
+                and node.target.id == _OPERATOR_ACCESS_CM_NAME
+            ):
+                violations.append(
+                    {
+                        "filepath": "<unknown>",
+                        "line": node.lineno,
+                        "message": (
+                            f"Shadowing walrus assignment to "
+                            f"'{_OPERATOR_ACCESS_CM_NAME}' at line "
+                            f"{node.lineno}.  The name must remain "
+                            f"bound to its canonical import from "
+                            f"quickscale_modules_orgs.tenancy."
+                        ),
+                        "category": "shadowing",
+                    }
+                )
+
+        # Check function parameters that shadow the canonical symbol.
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            for arg in node.args.args:
+                if arg.arg == _OPERATOR_ACCESS_CM_NAME:
                     violations.append(
                         {
                             "filepath": "<unknown>",
                             "line": node.lineno,
                             "message": (
-                                f"Alias '{alias.asname}' shadows the canonical "
-                                f"'{_OPERATOR_ACCESS_CM_NAME}' name at line "
-                                f"{node.lineno}.  Use the unaliased name from "
+                                f"Parameter '{_OPERATOR_ACCESS_CM_NAME}' in a "
+                                f"callable at line {node.lineno} shadows the "
+                                "canonical context manager symbol.  Use only the "
+                                f"unaliased import from "
                                 f"quickscale_modules_orgs.tenancy."
                             ),
                             "category": "shadowing",
                         }
                     )
+
+        # Check function/class definitions that redefine the symbol.
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == _OPERATOR_ACCESS_CM_NAME:
+                kind = "function" if not isinstance(node, ast.ClassDef) else "class"
+                violations.append(
+                    {
+                        "filepath": "<unknown>",
+                        "line": node.lineno,
+                        "message": (
+                            f"Defining a {kind} named "
+                            f"'{_OPERATOR_ACCESS_CM_NAME}' at line {node.lineno} "
+                            f"shadows the canonical import.  Use only the "
+                            f"unaliased import from quickscale_modules_orgs.tenancy."
+                        ),
+                        "category": "shadowing",
+                    }
+                )
+
+    if not canonical_import_lines:
+        violations.append(
+            {
+                "filepath": "<unknown>",
+                "line": min(operator_access_calls),
+                "message": (
+                    "operator_access_migration is used without the exact, "
+                    "unaliased import from quickscale_modules_orgs.tenancy.  "
+                    "Add `from quickscale_modules_orgs.tenancy import "
+                    "operator_access_migration`."
+                ),
+                "category": "shadowing",
+            }
+        )
 
     return violations
 
@@ -863,7 +1157,7 @@ def check_migration_source(
             }
         ]
 
-    op_ranges = _find_operator_access_ranges(tree)
+    op_ranges_by_function = _collect_operator_access_ranges_by_function(tree)
 
     violations: list[dict] = []
 
@@ -877,33 +1171,45 @@ def check_migration_source(
         if sql is None:
             # Check for dynamic SQL
             if _is_dynamic_sql_with_org_id(node):
-                func_name = _find_enclosing_function_name(tree, node.lineno)
-                if not _is_exempt_symbol(
-                    filepath,
-                    func_name,
-                    module_label,
-                    category="dynamic-sql",
-                ):
-                    violations.append(
-                        {
-                            "filepath": filepath,
-                            "line": node.lineno,
-                            "message": (
-                                f"Dynamic SQL at line {node.lineno} contains "
-                                f"organization_id reference and is not "
-                                f"statically analysable — requires manual "
-                                f"review and operator_access_migration() "
-                                f"enclosure."
-                            ),
-                            "category": "dynamic-sql",
-                        }
-                    )
+                op_ranges = _operator_access_ranges_for_node(
+                    tree,
+                    node,
+                    op_ranges_by_function,
+                )
+                if not _node_within_ranges(node, op_ranges):
+                    func_name = _find_enclosing_function_name(tree, node.lineno)
+                    if not _is_exempt_symbol(
+                        filepath,
+                        func_name,
+                        module_label,
+                        category="dynamic-sql",
+                    ):
+                        violations.append(
+                            {
+                                "filepath": filepath,
+                                "line": node.lineno,
+                                "message": (
+                                    f"Dynamic SQL at line {node.lineno} contains "
+                                    f"organization_id reference and is not "
+                                    f"statically analysable — requires manual "
+                                    f"review and operator_access_migration() "
+                                    f"enclosure."
+                                ),
+                                "category": "dynamic-sql",
+                            }
+                        )
             continue
 
         if not _is_cross_table_dml_assigning_org_id(sql):
             continue
 
-        if not _is_within_ranges(node.lineno, op_ranges):
+        op_ranges = _operator_access_ranges_for_node(
+            tree,
+            node,
+            op_ranges_by_function,
+        )
+
+        if not _node_within_ranges(node, op_ranges):
             func_name = _find_enclosing_function_name(tree, node.lineno)
             if not _is_exempt_symbol(
                 filepath,
@@ -931,7 +1237,13 @@ def check_migration_source(
             continue
         assert isinstance(node, ast.Call)
 
-        if not _is_within_ranges(node.lineno, op_ranges):
+        op_ranges = _operator_access_ranges_for_node(
+            tree,
+            node,
+            op_ranges_by_function,
+        )
+
+        if not _node_within_ranges(node, op_ranges):
             func_name = _find_enclosing_function_name(tree, node.lineno)
             if not _is_exempt_symbol(
                 filepath,
@@ -961,9 +1273,15 @@ def check_migration_source(
             continue
         assert isinstance(node, ast.Call)
 
+        op_ranges = _operator_access_ranges_for_node(
+            tree,
+            node,
+            op_ranges_by_function,
+        )
+
         for sql in _extract_runsql_sql(node):
             if _is_cross_table_dml_assigning_org_id(sql):
-                if not _is_within_ranges(node.lineno, op_ranges):
+                if not _node_within_ranges(node, op_ranges):
                     func_name = _find_enclosing_function_name(tree, node.lineno)
                     if not _is_exempt_symbol(
                         filepath,
@@ -1038,7 +1356,10 @@ def check_migration_source(
     # --- Detector 5: assignment+save pattern ---
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            as_violations = _find_assignment_save_in_function(node, op_ranges)
+            as_violations = _find_assignment_save_in_function(
+                node,
+                op_ranges_by_function,
+            )
             for v in as_violations:
                 v["filepath"] = filepath
                 # Check exemption
@@ -1064,29 +1385,151 @@ def check_migration_source(
     return violations
 
 
-def get_migration_files() -> list[Path]:
-    """Return ``Path`` objects for every shipped migration ``.py`` file under
-    all installed ``quickscale_modules_*`` apps.
+def _node_span(node: ast.AST) -> tuple[int, int]:
+    """Return ``(start_line, end_line)`` for *node*.
 
-    Only returns files matching the ``[0-9]*.py`` pattern (migration files
-    as opposed to ``__init__.py``).
+    AST callers need both span endpoints to prove same-function coverage: a DML
+    call must be fully enclosed by the operator-access wrapper range in the same
+    immediate function.
     """
-    from django.apps import apps
+    start = getattr(node, "lineno", None)
+    if start is None:
+        return (0, 0)
+    end = getattr(node, "end_lineno", start)
+    return start, end if end is not None else start
 
-    files: list[Path] = []
-    for app_config in apps.get_app_configs():
-        label: str = app_config.label
-        if not label.startswith("quickscale_modules_"):
+
+def _iter_function_nodes(tree: ast.AST) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Return function nodes in *tree*.
+
+    Works for both synchronous and async migration callbacks.
+    """
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+
+
+def _iter_non_nested_nodes(node: ast.AST) -> list[ast.AST]:
+    """Iterate descendants without descending into nested function bodies.
+
+    This ensures immediate-function scope checks do not leak wrappers or
+    assignment/save checks across nested callback boundaries.
+    """
+    nodes: list[ast.AST] = []
+    for child in ast.iter_child_nodes(node):
+        if isinstance(
+            child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            # Preserve the binding site itself (for shadowing/editor checks),
+            # but do not recurse into the nested scope.
+            nodes.append(child)
             continue
-        migrations_path = Path(app_config.path) / "migrations"
-        if not migrations_path.is_dir():
+        nodes.append(child)
+        nodes.extend(_iter_non_nested_nodes(child))
+    return nodes
+
+
+def _find_enclosing_function_node(
+    tree: ast.AST, lineno: int
+) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+    """Return the innermost function containing *lineno*, or ``None``."""
+    enclosing: ast.FunctionDef | ast.AsyncFunctionDef | None = None
+    best_span: tuple[int, int] | None = None
+
+    for func_node in _iter_function_nodes(tree):
+        start = func_node.lineno
+        end = func_node.end_lineno or start
+        if not (start <= lineno <= end):
             continue
-        for py_file in sorted(migrations_path.glob("[0-9]*.py")):
-            files.append(py_file)
-    return files
+        span = (start, end)
+        if best_span is None:
+            enclosing = func_node
+            best_span = span
+            continue
+        current_span_size = best_span[1] - best_span[0]
+        new_span_size = span[1] - span[0]
+        # Pick the smallest enclosing span for true immediate scope.
+        if new_span_size < current_span_size:
+            enclosing = func_node
+            best_span = span
+
+    return enclosing
 
 
-def get_all_module_migration_dirs() -> list[Path]:
+def _collect_operator_access_ranges_by_function(
+    tree: ast.AST,
+) -> dict[ast.FunctionDef | ast.AsyncFunctionDef, list[tuple[int, int]]]:
+    """Collect ``with operator_access_migration(...)`` ranges per enclosing function.
+
+    Returns a mapping from function nodes to inclusive ``(start_line, end_line)``
+    wrapper ranges.
+    """
+    by_function: dict[
+        ast.FunctionDef | ast.AsyncFunctionDef, list[tuple[int, int]]
+    ] = {}
+
+    for func_node in _iter_function_nodes(tree):
+        ranges: list[tuple[int, int]] = []
+        for child in _iter_non_nested_nodes(func_node):
+            if not isinstance(child, ast.With):
+                continue
+            for item in child.items:
+                if _is_operator_access_migration_call(item.context_expr):
+                    ranges.append(_node_span(child))
+
+        # Keep deterministic order for easier proof and stable diagnostics.
+        by_function[func_node] = sorted(set(ranges))
+
+    return by_function
+
+
+def _node_within_ranges(node: ast.AST, ranges: list[tuple[int, int]]) -> bool:
+    """Return ``True`` if *node* is fully inside any span in *ranges*."""
+    start, end = _node_span(node)
+    return any(start >= r_start and end <= r_end for r_start, r_end in ranges)
+
+
+def _operator_access_ranges_for_node(
+    tree: ast.AST,
+    node: ast.AST,
+    op_ranges_by_function: dict[
+        ast.FunctionDef | ast.AsyncFunctionDef, list[tuple[int, int]]
+    ],
+) -> list[tuple[int, int]]:
+    """Return enclosing-function operator-access ranges for *node*.
+
+    This enforces same-function scope: an inner function must supply its own
+    `with operator_access_migration(...)` wrapper to satisfy checks for
+    operations inside that immediate lexical function.
+    """
+    lineno = getattr(node, "lineno", -1)
+    enclosing_func = _find_enclosing_function_node(tree, lineno)
+    if enclosing_func is None:
+        return []
+    return op_ranges_by_function.get(enclosing_func, [])
+
+
+def _find_enclosing_function_name(tree: ast.AST, lineno: int) -> str | None:
+    """Return the name of the function that contains *lineno*.
+
+    Returns ``None`` if the line is not inside any function definition.
+    """
+    enclosing = _find_enclosing_function_node(tree, lineno)
+    if enclosing is None:
+        return None
+    return enclosing.name
+
+
+def get_migration_files() -> list[Path]:
+    """Backward-compatible alias for the full manifested migration file scan."""
+    return get_all_migration_files()
+
+
+def get_all_module_migration_dirs(
+    modules_root: Path | str | None = None,
+) -> list[Path]:
     """Return sorted list of migration directory paths for ALL manifested
     ``quickscale_modules_*`` packages found on the filesystem, independent
     of Django ``INSTALLED_APPS``.
@@ -1100,11 +1543,13 @@ def get_all_module_migration_dirs() -> list[Path]:
     """
     import pytest
 
-    # Determine the quickscale_modules workspace root relative to this file.
-    # This test lives in: quickscale_modules/orgs/tests/
-    # The workspace root is three levels up.
-    this_file = Path(__file__).resolve()
-    qs_modules_root = this_file.parents[2]  # quickscale_modules/
+    # Determine the quickscale_modules workspace root.
+    # Default is three levels up from this test file.
+    if modules_root is None:
+        this_file = Path(__file__).resolve()
+        qs_modules_root = this_file.parents[2]
+    else:
+        qs_modules_root = Path(modules_root)
 
     if not qs_modules_root.is_dir():
         pytest.fail(
@@ -1112,39 +1557,89 @@ def get_all_module_migration_dirs() -> list[Path]:
             f"{qs_modules_root} is not a directory"
         )
 
-    dirs: list[Path] = []
-    entries = sorted(qs_modules_root.iterdir())
+    try:
+        entries = sorted(qs_modules_root.iterdir(), key=lambda p: p.name)
+    except OSError as exc:
+        pytest.fail(f"Failed to list module workspace {qs_modules_root}: {exc}")
+
+    dirs: set[Path] = set()
 
     for entry in entries:
         if not entry.is_dir() or entry.name.startswith("."):
             continue
+        if not (entry / "module.yml").is_file():
+            continue
 
-        # Check for src/quickscale_modules_<name>/migrations/ layout
-        src_pkg = entry / "src"
+        module_pkg_name = f"quickscale_modules_{entry.name.replace('-', '_')}"
+
+        # Check for src/quickscale_modules_<module>/migrations/ layout
+        src_pkg = entry / "src" / module_pkg_name
         if src_pkg.is_dir():
-            for pkg_dir in sorted(src_pkg.iterdir()):
-                pkg_name = pkg_dir.name
-                if pkg_name.startswith("quickscale_modules_"):
-                    migrations_dir = pkg_dir / "migrations"
-                    if migrations_dir.is_dir():
-                        dirs.append(migrations_dir.resolve())
+            migration_dir = src_pkg / "migrations"
+            if migration_dir.is_dir():
+                dirs.add(migration_dir.resolve())
 
         # Also check flat layout: quickscale_modules_<name>/migrations/
-        pkg_dir = entry / entry.name.replace("-", "_")
-        if pkg_dir.is_dir() and not pkg_dir.exists():
-            pass  # flat layout check not applicable for first-party modules
-        elif pkg_dir.name.startswith("quickscale_modules_"):
-            migrations_dir = pkg_dir / "migrations"
-            if migrations_dir.is_dir():
-                resolved = migrations_dir.resolve()
-                if resolved not in dirs:
-                    dirs.append(resolved)
+        pkg_dir = entry / module_pkg_name
+        if pkg_dir.is_dir():
+            migration_dir = pkg_dir / "migrations"
+            if migration_dir.is_dir():
+                dirs.add(migration_dir.resolve())
 
     if not dirs:
         pytest.fail(
             f"No quickscale_modules migration directories found under {qs_modules_root}"
         )
-    return dirs
+
+    return sorted(dirs, key=lambda p: str(p))
+
+
+def get_all_migration_files(
+    modules_root: Path | str | None = None,
+) -> list[Path]:
+    """Return all migration files for manifested modules in stable order.
+
+    Includes only Python files that look like timestamp-numbered migration files.
+    """
+    migration_files: set[Path] = set()
+    for directory in get_all_module_migration_dirs(modules_root):
+        try:
+            candidates = sorted(directory.glob("[0-9]*.py"), key=lambda p: p.name)
+        except OSError as exc:
+            pytest.fail(f"Failed to list migration files in {directory}: {exc}")
+
+        for migration_file in candidates:
+            if migration_file.is_file():
+                migration_files.add(migration_file.resolve())
+
+    if not migration_files:
+        pytest.fail(
+            "No migration files discovered for manifested quickscale_modules "
+            f"under modules_root={modules_root or '<default>'}"
+        )
+
+    return sorted(migration_files, key=lambda p: str(p))
+
+
+def _read_migration_source_with_read_error(
+    filepath: Path,
+) -> tuple[str | None, list[dict]]:
+    """Read migration source text and emit migration-read-error violations.
+
+    Returns ``(source, violations)`` where *violations* contains an explicit
+    ``migration-read-error`` entry when ``read_text()`` fails.
+    """
+    try:
+        return filepath.read_text(encoding="utf-8"), []
+    except OSError as exc:
+        return None, [
+            {
+                "filepath": str(filepath),
+                "line": 0,
+                "message": f"migration-read-error: cannot read migration file: {exc}",
+                "category": "migration-read-error",
+            }
+        ]
 
 
 # =========================================================================
@@ -1166,6 +1661,8 @@ def forward(apps, schema_editor):
 """
 
 WRAPPED_CODE = f"""
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     with operator_access_migration(schema_editor):
         schema_editor.execute(
@@ -1216,6 +1713,8 @@ def forward(apps, schema_editor):
 """
 
 WRAPPED_ORM_UPDATE_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     with operator_access_migration(schema_editor):
         MyModel._base_manager.filter(fk_id=1).update(
@@ -1231,6 +1730,8 @@ def forward(apps, schema_editor):
 """
 
 WRAPPED_RUNSQL_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     with operator_access_migration(schema_editor):
         migrations.RunSQL(
@@ -1278,6 +1779,8 @@ def forward(apps, schema_editor):
 """
 
 WRAPPED_UPDATE_FROM_CODE = f"""
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     with operator_access_migration(schema_editor):
         schema_editor.execute(
@@ -1301,6 +1804,8 @@ def forward(apps, schema_editor):
 """
 
 WRAPPED_INSERT_SELECT_CODE = f"""
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     with operator_access_migration(schema_editor):
         schema_editor.execute(
@@ -1389,17 +1894,176 @@ def forward(apps, schema_editor):
         )
 """
 
+WRONG_EDITOR_KEYWORD_CODE = """
+def forward(apps, schema_editor):
+    with operator_access_migration(editor=schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+WRONG_EDITOR_EXTRA_ARGS_CODE = """
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor, schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+WRONG_EDITOR_NO_ARGS_CODE = """
+def forward(apps, schema_editor):
+    with operator_access_migration():
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+WRONG_EDITOR_NON_NAME_CODE = """
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor.connection):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+WRONG_EDITOR_REBOUND_ASSIGN_CODE = """
+def forward(apps, schema_editor):
+    schema_editor = schema_editor.connection
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+WRONG_EDITOR_REBOUND_TUPLE_CODE = """
+def forward(apps, schema_editor):
+    (schema_editor,) = [schema_editor.connection]
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+WRONG_EDITOR_REBOUND_LIST_CODE = """
+def forward(apps, schema_editor):
+    [schema_editor] = [schema_editor.connection]
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+WRONG_EDITOR_REBOUND_STARRED_CODE = """
+def forward(apps, schema_editor):
+    *schema_editor, = [schema_editor.connection]
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+WRONG_EDITOR_REBOUND_WITH_AS_CODE = """
+def forward(apps, schema_editor):
+    with open("/tmp/example.txt") as schema_editor:
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+"""
+
+WRONG_EDITOR_REBOUND_FOR_CODE = """
+def forward(apps, schema_editor):
+    for schema_editor in []:
+        pass
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+WRONG_EDITOR_REBOUND_EXCEPT_CODE = """
+def forward(apps, schema_editor):
+    try:
+        raise ValueError
+    except Exception as schema_editor:
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+"""
+
+WRONG_EDITOR_REBOUND_IMPORT_CODE = """
+def forward(apps, schema_editor):
+    import builtins as schema_editor
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+WRONG_EDITOR_REBOUND_FUNCTION_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    def schema_editor(_):
+        return None
+
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+WRONG_EDITOR_REBOUND_CLASS_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    class schema_editor:
+        pass
+
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+CANONICAL_MISSING_IMPORT_CODE = """
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
 # =========================================================================
 # Shadowing synthetic test code
 # =========================================================================
 
 SHADOWING_ASSIGN_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     operator_access_migration = lambda x: x  # shadowing
-    schema_editor.execute(
-        "UPDATE t SET organization_id = "
-        "(SELECT id FROM other WHERE other.x = t.x)"
-    )
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
 """
 
 SHADOWING_IMPORT_CODE = """
@@ -1453,6 +2117,70 @@ def forward(apps, schema_editor):
         obj.save(update_fields=["organization_id"])
 """
 
+ASSIGN_SAVE_BASE_MANAGER_CODE = """
+def forward(apps, schema_editor):
+    MyModel = apps.get_model("some_app", "MyModel")
+    for obj in MyModel._base_manager.filter(active=True):
+        obj.organization_id = "some-org-id"
+        obj.save()
+"""
+
+ASSIGN_SAVE_OUTER_WRAPPED_INNER_UNGATED_CODE = """
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+
+        def _inner():
+            MyModel = apps.get_model("some_app", "MyModel")
+            for obj in MyModel.objects.filter(organization__isnull=True):
+                obj.organization_id = "some-org-id"
+                obj.save()
+
+        _inner()
+"""
+
+ASSIGN_SAVE_OUTER_WRAPPED_INNER_WRAPPED_CODE = """
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+
+        def _inner(schema_editor):
+            MyModel = apps.get_model("some_app", "MyModel")
+            with operator_access_migration(schema_editor):
+                for obj in MyModel.objects.filter(organization__isnull=True):
+                    obj.organization_id = "some-org-id"
+                    obj.save()
+
+        _inner(schema_editor)
+"""
+
+ASSIGN_SAVE_FAR_APART_CODE = """
+def forward(apps, schema_editor):
+    MyModel = apps.get_model("some_app", "MyModel")
+    for obj in MyModel.objects.filter(organization__isnull=True):
+        obj.organization_id = "some-org-id"
+        obj.name = "name-1"
+        obj.status = "active"
+        obj.save(update_fields=["name"])
+        obj.update_timestamp = "now"
+        obj.save()
+"""
+
+ASSIGN_SAVE_ANNASSIGN_CODE = """
+def forward(apps, schema_editor):
+    MyModel = apps.get_model("some_app", "MyModel")
+    for obj in MyModel.objects.filter(organization__isnull=True):
+        obj.organization_id: str = "some-org-id"
+        obj.save()
+"""
+
+ASSIGN_SAVE_DIFFERENT_RECEIVER_CODE = """
+def forward(apps, schema_editor):
+    MyModel = apps.get_model("some_app", "MyModel")
+    src = MyModel.objects.filter(organization__isnull=True)[0]
+    dst = MyModel.objects.filter(organization__isnull=False)[0]
+    src.organization_id = "src-org-id"
+    dst.save()
+"""
+
 # =========================================================================
 # Canonical import test code
 # =========================================================================
@@ -1466,6 +2194,49 @@ def forward(apps, schema_editor):
             "UPDATE t SET organization_id = "
             "(SELECT id FROM other WHERE other.x = t.x)"
         )
+"""
+
+NESTED_INNER_FUNCTION_UNGATED_CODE = """
+def forward(apps, schema_editor):
+
+    def _inner():
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+            " WHERE t.x = 1"
+        )
+
+    _inner()
+"""
+
+NESTED_INNER_FUNCTION_WRAPPED_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+
+    def _inner(schema_editor):
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+                " WHERE t.x = 1"
+            )
+
+    _inner(schema_editor)
+"""
+
+NESTED_WRONG_EDITOR_CAPTURE_CODE = """
+def forward(apps, schema_editor):
+
+    def _inner():
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+                " WHERE t.x = 1"
+            )
+
+    _inner()
 """
 
 
@@ -1516,13 +2287,17 @@ class TestGateSyntheticProof:
             f"{len(violations)}: {violations}"
         )
 
-    def test_orm_backfill_not_flagged(self) -> None:
-        """ORM-based backfill with individual .save() (no .update()) is
-        not flagged."""
+    def test_orm_backfill_is_detected(self) -> None:
+        """ORM-based backfill with individual .save() (including
+        _base_manager) is now flagged by the ungated assignment-save
+        detector."""
         violations = check_migration_source(NO_EXECUTE_CODE)
-        assert len(violations) == 0, (
-            f"Expected 0 violations for ORM-only code, got "
-            f"{len(violations)}: {violations}"
+        as_violations = [
+            v for v in violations if v.get("category") == "ungated-assignment-save"
+        ]
+        assert len(as_violations) >= 1, (
+            f"Expected at least 1 assignment-save violation for ORM backfill, got "
+            f"{len(as_violations)}: {violations}"
         )
 
     # --- ORM .update() tests ---
@@ -1758,6 +2533,71 @@ def forward(apps, schema_editor):
             f"{len(guc_violations)}: {guc_violations}"
         )
 
+    # --- Canonical import tests ---
+
+    def test_canonical_import_is_clean(self) -> None:
+        """Canonical import from ``quickscale_modules_orgs.tenancy`` with
+        wrapped cross-table DML is clean."""
+        violations = check_migration_source(CANONICAL_IMPORT_CODE)
+        assert len(violations) == 0, (
+            f"Expected 0 violations for canonical wrapped import case, got "
+            f"{len(violations)}: {violations}"
+        )
+
+    def test_canonical_import_is_required_when_used(self) -> None:
+        """Using operator_access_migration without canonical import is a
+        shadowing violation."""
+        violations = check_migration_source(CANONICAL_MISSING_IMPORT_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation when canonical import is "
+            f"missing, got {len(shadow_violations)}: {violations}"
+        )
+
+    # --- Nested scope tests ---
+
+    def test_nested_inner_function_ungated_code_is_detected(self) -> None:
+        """Cross-table DML in a nested callback without local
+        ``operator_access_migration`` is detected."""
+        violations = check_migration_source(NESTED_INNER_FUNCTION_UNGATED_CODE)
+        raw_violations = [
+            v for v in violations if v.get("category") == "ungated-raw-sql"
+        ]
+        assert len(raw_violations) >= 1, (
+            f"Expected at least 1 nested ungated-raw-sql violation, got "
+            f"{len(violations)}: {violations}"
+        )
+
+    def test_nested_inner_function_wrapped_code_is_clean(self) -> None:
+        """Nested callback must wrap cross-table DML in its own local
+        ``operator_access_migration`` block."""
+        violations = check_migration_source(NESTED_INNER_FUNCTION_WRAPPED_CODE)
+        assert len(violations) == 0, (
+            f"Expected 0 violations for nested locally wrapped code, got "
+            f"{len(violations)}: {violations}"
+        )
+
+    def test_nested_wrong_editor_capture_is_detected(self) -> None:
+        """Nested callback capturing outer ``schema_editor`` for
+        ``operator_access_migration`` is detected as wrong-editor."""
+        violations = check_migration_source(NESTED_WRONG_EDITOR_CAPTURE_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        raw_sentinel_violations = [
+            v
+            for v in violations
+            if v.get("category") in ("ungated-raw-sql", "ungated-runsql")
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for nested capture, "
+            f"got {len(violations)}: {violations}"
+        )
+        assert len(raw_sentinel_violations) == 0, (
+            f"Wrong-editor capture should remain wrapped by operator_access in the "
+            f"local callback, got cross-table violations: {violations}"
+        )
+
     # --- Wrong editor tests ---
 
     def test_wrong_editor_is_detected(self) -> None:
@@ -1770,6 +2610,167 @@ def forward(apps, schema_editor):
         assert len(editor_violations) >= 1, (
             f"Expected at least 1 wrong-editor violation, got "
             f"{len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_keyword_argument_is_detected(self) -> None:
+        """Passing editor=... to operator_access_migration is invalid."""
+        violations = check_migration_source(WRONG_EDITOR_KEYWORD_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for keyword argument, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_extra_args_are_detected(self) -> None:
+        """Passing extra positional args to operator_access_migration is invalid."""
+        violations = check_migration_source(WRONG_EDITOR_EXTRA_ARGS_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for extra args, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_no_args_is_detected(self) -> None:
+        """Calling operator_access_migration() without args is invalid."""
+        violations = check_migration_source(WRONG_EDITOR_NO_ARGS_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for missing arg, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_non_name_is_detected(self) -> None:
+        """Passing a non-name expression into operator_access_migration is
+        detected as wrong-editor."""
+        violations = check_migration_source(WRONG_EDITOR_NON_NAME_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for non-name arg, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_rebound_via_assign_is_detected(self) -> None:
+        """Rebinding ``schema_editor`` via assignment before the wrapper call
+        is detected as wrong-editor."""
+        violations = check_migration_source(WRONG_EDITOR_REBOUND_ASSIGN_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for rebinding by Assign, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_rebound_via_tuple_is_detected(self) -> None:
+        """Tuple-unpack rebinding of ``schema_editor`` is detected as
+        wrong-editor."""
+        violations = check_migration_source(WRONG_EDITOR_REBOUND_TUPLE_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for tuple binding, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_rebound_via_list_is_detected(self) -> None:
+        """List-unpack rebinding of ``schema_editor`` is detected as
+        wrong-editor."""
+        violations = check_migration_source(WRONG_EDITOR_REBOUND_LIST_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for list binding, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_rebound_via_starred_is_detected(self) -> None:
+        """Starred-target rebinding of ``schema_editor`` is detected as
+        wrong-editor."""
+        violations = check_migration_source(WRONG_EDITOR_REBOUND_STARRED_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for starred binding, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_rebound_via_with_as_is_detected(self) -> None:
+        """``with ... as schema_editor`` rebinding is detected as wrong-editor."""
+        violations = check_migration_source(WRONG_EDITOR_REBOUND_WITH_AS_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for with-as binding, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_rebound_via_for_is_detected(self) -> None:
+        """Loop-target rebinding of ``schema_editor`` is detected as
+        wrong-editor."""
+        violations = check_migration_source(WRONG_EDITOR_REBOUND_FOR_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for for-loop binding, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_rebound_via_except_is_detected(self) -> None:
+        """``except ... as schema_editor`` rebinding is detected as
+        wrong-editor."""
+        violations = check_migration_source(WRONG_EDITOR_REBOUND_EXCEPT_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for except binding, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_rebound_via_import_is_detected(self) -> None:
+        """Import binding of ``schema_editor`` is detected as wrong-editor."""
+        violations = check_migration_source(WRONG_EDITOR_REBOUND_IMPORT_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for import binding, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_rebound_via_function_is_detected(self) -> None:
+        """Defining ``schema_editor`` as a function before use is detected."""
+        violations = check_migration_source(WRONG_EDITOR_REBOUND_FUNCTION_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for function-name binding, "
+            f"got {len(editor_violations)}: {violations}"
+        )
+
+    def test_wrong_editor_rebound_via_class_is_detected(self) -> None:
+        """Defining ``schema_editor`` as a class before use is detected."""
+        violations = check_migration_source(WRONG_EDITOR_REBOUND_CLASS_CODE)
+        editor_violations = [
+            v for v in violations if v.get("category") == "wrong-editor"
+        ]
+        assert len(editor_violations) >= 1, (
+            f"Expected at least 1 wrong-editor violation for class-name binding, "
+            f"got {len(editor_violations)}: {violations}"
         )
 
     # --- Shadowing tests ---
@@ -1830,6 +2831,49 @@ def forward(apps, schema_editor):
             f"{len(as_violations)}: {violations}"
         )
 
+    def test_ungated_assignment_save_base_manager_is_detected(self) -> None:
+        """A _base_manager assignment-save pattern is still detected as
+        ungated and not exempted by earlier ORM-manager assumptions."""
+        violations = check_migration_source(ASSIGN_SAVE_BASE_MANAGER_CODE)
+        as_violations = [
+            v for v in violations if v.get("category") == "ungated-assignment-save"
+        ]
+        assert len(as_violations) >= 1, (
+            f"Expected at least 1 assignment-save violation with _base_manager, got "
+            f"{len(as_violations)}: {violations}"
+        )
+
+    def test_outer_wrapped_inner_ungated_assignment_save_is_detected(self) -> None:
+        """Wrapping the outer callback does not satisfy inner nested callbacks.
+
+        Inner callback operations require their own local
+        ``operator_access_migration`` scope.
+        """
+        violations = check_migration_source(
+            ASSIGN_SAVE_OUTER_WRAPPED_INNER_UNGATED_CODE
+        )
+        as_violations = [
+            v for v in violations if v.get("category") == "ungated-assignment-save"
+        ]
+        assert len(as_violations) >= 1, (
+            f"Expected at least 1 nested inner assignment-save violation, got "
+            f"{len(as_violations)}: {violations}"
+        )
+
+    def test_outer_and_inner_wrapped_assignment_save_is_clean(self) -> None:
+        """Nested callbacks are clean when both outer and inner scopes are
+        properly wrapped with their own local callback argument."""
+        violations = check_migration_source(
+            ASSIGN_SAVE_OUTER_WRAPPED_INNER_WRAPPED_CODE
+        )
+        as_violations = [
+            v for v in violations if v.get("category") == "ungated-assignment-save"
+        ]
+        assert len(as_violations) == 0, (
+            f"Expected 0 assignment-save violations when inner callback is also "
+            f"wrapped, got {len(as_violations)}: {violations}"
+        )
+
     def test_ungated_assignment_save_update_fields_is_detected(self) -> None:
         """obj.organization_id = x followed by
         obj.save(update_fields=[...]) without operator_access_migration
@@ -1841,6 +2885,40 @@ def forward(apps, schema_editor):
         assert len(as_violations) >= 1, (
             f"Expected at least 1 assignment-save violation with "
             f"update_fields, got {len(as_violations)}: {violations}"
+        )
+
+    def test_ungated_assignment_save_far_apart_is_detected(self) -> None:
+        """Assignments and same-receiver saves far apart in a function are still
+        detected."""
+        violations = check_migration_source(ASSIGN_SAVE_FAR_APART_CODE)
+        as_violations = [
+            v for v in violations if v.get("category") == "ungated-assignment-save"
+        ]
+        assert len(as_violations) >= 1, (
+            f"Expected at least 1 assignment-save violation for far-apart pair, "
+            f"got {len(as_violations)}: {violations}"
+        )
+
+    def test_ungated_assignment_save_annassign_is_detected(self) -> None:
+        """Annotated assignment to ``organization_id`` before save is detected."""
+        violations = check_migration_source(ASSIGN_SAVE_ANNASSIGN_CODE)
+        as_violations = [
+            v for v in violations if v.get("category") == "ungated-assignment-save"
+        ]
+        assert len(as_violations) >= 1, (
+            f"Expected at least 1 assignment-save violation for annassign, "
+            f"got {len(as_violations)}: {violations}"
+        )
+
+    def test_assignment_save_different_receivers_are_not_flagged(self) -> None:
+        """Assignment and save on different receivers are not paired."""
+        violations = check_migration_source(ASSIGN_SAVE_DIFFERENT_RECEIVER_CODE)
+        as_violations = [
+            v for v in violations if v.get("category") == "ungated-assignment-save"
+        ]
+        assert len(as_violations) == 0, (
+            f"Expected 0 assignment-save violations for different receivers, "
+            f"got {len(as_violations)}: {as_violations}"
         )
 
 
@@ -1932,9 +3010,13 @@ class TestManifestedModuleInventory:
         syntax errors."""
         dirs = get_all_module_migration_dirs()
         all_syntax_errors: list[str] = []
+        migration_read_errors: list[dict] = []
         for d in dirs:
             for py_file in sorted(d.glob("[0-9]*.py")):
-                source = py_file.read_text(encoding="utf-8")
+                source, read_errors = _read_migration_source_with_read_error(py_file)
+                migration_read_errors.extend(read_errors)
+                if source is None:
+                    continue
                 violations = check_migration_source(
                     source,
                     str(py_file),
@@ -1942,11 +3024,121 @@ class TestManifestedModuleInventory:
                 for v in violations:
                     if "Syntax error" in v.get("message", ""):
                         all_syntax_errors.append(f"{py_file}: {v['message']}")
+        read_error_lines = [
+            f"{v['filepath']}:{v['line']} [{v.get('category')}] {v['message']}"
+            for v in migration_read_errors
+        ]
+        if read_error_lines:
+            pytest.fail(
+                f"{len(read_error_lines)} migration file(s) were unreadable:\n"
+                + "\n".join(read_error_lines)
+            )
         if all_syntax_errors:
             pytest.fail(
                 f"{len(all_syntax_errors)} file(s) have syntax errors:\n"
                 + "\n".join(all_syntax_errors)
             )
+
+    def test_discovery_discovers_src_and_flat_module_layouts(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Manifest discovery resolves migrations for both ``src`` and
+        package-level module layouts."""
+        src_layout = tmp_path / "mod-src"
+        src_layout.mkdir()
+        (src_layout / "module.yml").write_text('{"name": "mod-src"}', encoding="utf-8")
+        src_migrations = (
+            src_layout / "src" / "quickscale_modules_mod_src" / "migrations"
+        )
+        src_migrations.mkdir(parents=True)
+        (src_migrations / "0001_src_mod.py").write_text(
+            "from django.db import migrations\n", encoding="utf-8"
+        )
+
+        flat_layout = tmp_path / "mod_flat"
+        flat_layout.mkdir()
+        (flat_layout / "module.yml").write_text(
+            '{"name": "mod-flat"}', encoding="utf-8"
+        )
+        flat_migrations = flat_layout / "quickscale_modules_mod_flat" / "migrations"
+        flat_migrations.mkdir(parents=True)
+        (flat_migrations / "0002_flat_mod.py").write_text(
+            "from django.db import migrations\n", encoding="utf-8"
+        )
+
+        dirs = get_all_module_migration_dirs(modules_root=tmp_path)
+        assert len(dirs) == 2, (
+            f"Expected exactly 2 discovered migration dirs, got {dirs}"
+        )
+        assert src_migrations.resolve() in dirs, (
+            f"src-layout migrations missing: {dirs}"
+        )
+        assert flat_migrations.resolve() in dirs, (
+            f"flat-layout migrations missing: {dirs}"
+        )
+
+    def test_discovery_respects_migration_file_glob_pattern(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """`get_all_migration_files` only returns timestamp-like Python
+        migration files and ignores non-matching entries."""
+        mod_dir = tmp_path / "mod-pattern"
+        mod_dir.mkdir()
+        (mod_dir / "module.yml").write_text('{"name": "mod-pattern"}', encoding="utf-8")
+        mig_dir = mod_dir / "src" / "quickscale_modules_mod_pattern" / "migrations"
+        mig_dir.mkdir(parents=True)
+        (mig_dir / "0001_valid.py").write_text("from django.db import migrations\n")
+        (mig_dir / "init.py").write_text("from django.db import migrations\n")
+        (mig_dir / "README.txt").write_text("ignore\n")
+
+        files = get_all_migration_files(modules_root=tmp_path)
+        assert files == [mig_dir / "0001_valid.py"], (
+            f"Expected only timestamp-like migration file, got: {files}"
+        )
+
+    def test_read_error_returns_diagnostic(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """OSError on file reads becomes a migration-read-error diagnostic."""
+        migration_file = tmp_path / "0001_broken.py"
+        migration_file.write_text(
+            "from django.db import migrations\n", encoding="utf-8"
+        )
+
+        def _raise_os_error(self: Path, *args: object, **kwargs: object) -> str:
+            raise OSError("boom")
+
+        monkeypatch.setattr(Path, "read_text", _raise_os_error)
+        source, errors = _read_migration_source_with_read_error(migration_file)
+
+        assert source is None
+        assert len(errors) == 1
+        assert errors[0]["category"] == "migration-read-error"
+        assert (
+            "migration-read-error: cannot read migration file" in errors[0]["message"]
+        )
+
+    def test_read_non_os_error_is_not_swallowed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Non-OSError read failures should propagate for visibility."""
+        migration_file = tmp_path / "0002_broken.py"
+        migration_file.write_text(
+            "from django.db import migrations\n", encoding="utf-8"
+        )
+
+        def _raise_value_error(self: Path, *args: object, **kwargs: object) -> str:
+            raise ValueError("unexpected")
+
+        monkeypatch.setattr(Path, "read_text", _raise_value_error)
+        with pytest.raises(ValueError, match="unexpected"):
+            _read_migration_source_with_read_error(migration_file)
 
 
 # =========================================================================
@@ -1983,13 +3175,31 @@ class TestMigrationOperatorAccessConformance:
         all_violations: list[dict] = []
         for filepath in get_migration_files():
             fp_str = str(filepath)
-            source = filepath.read_text(encoding="utf-8")
+            source, read_errors = _read_migration_source_with_read_error(filepath)
+            all_violations.extend(read_errors)
+            if source is None:
+                continue
             module_label = self._get_module_label(fp_str)
             violations = check_migration_source(source, fp_str, module_label)
             all_violations.extend(violations)
 
+        read_violations = [
+            v for v in all_violations if v.get("category") == "migration-read-error"
+        ]
+
         if all_violations:
-            msg_lines = [f"{len(all_violations)} violation(s) found:"]
+            msg_lines: list[str] = []
+            if read_violations:
+                msg_lines.extend(
+                    [f"{len(read_violations)} unreadable migration file(s) found:"]
+                )
+                for v in read_violations:
+                    msg_lines.append(
+                        f"  {v['filepath']}:{v['line']} "
+                        f"[{v.get('category')}] — {v['message']}"
+                    )
+                msg_lines.append("---")
+            msg_lines.append(f"{len(all_violations)} violation(s) found:")
             for v in all_violations:
                 msg_lines.append(
                     f"  {v['filepath']}:{v['line']} "
@@ -2010,18 +3220,36 @@ class TestMigrationOperatorAccessConformance:
         raw_guc_violations: list[dict] = []
         for filepath in get_migration_files():
             fp_str = str(filepath)
-            source = filepath.read_text(encoding="utf-8")
+            source, read_errors = _read_migration_source_with_read_error(filepath)
+            raw_guc_violations.extend(read_errors)
+            if source is None:
+                continue
             module_label = self._get_module_label(fp_str)
             violations = check_migration_source(source, fp_str, module_label)
             for v in violations:
                 if v.get("category") == "raw-guc":
                     raw_guc_violations.append(v)
 
+        read_violations = [
+            v for v in raw_guc_violations if v.get("category") == "migration-read-error"
+        ]
+
         if raw_guc_violations:
-            msg_lines = [
+            msg_lines: list[str] = []
+            if read_violations:
+                msg_lines.extend(
+                    [f"{len(read_violations)} unreadable migration file(s) found:"]
+                )
+                for v in read_violations:
+                    msg_lines.append(
+                        f"  {v['filepath']}:{v['line']} "
+                        f"[{v.get('category')}] — {v['message']}"
+                    )
+                msg_lines.append("---")
+            msg_lines.append(
                 f"{len(raw_guc_violations)} migration(s) contain raw GUC "
                 f"manipulation of app.operator_access:"
-            ]
+            )
             for v in raw_guc_violations:
                 msg_lines.append(f"  {v['filepath']}:{v['line']} — {v['message']}")
             pytest.fail("\n".join(msg_lines))
