@@ -59,20 +59,33 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
 
 **Baseline merged (69cabb47).** The `operator_access_migration` helper (`orgs/tenancy.py`), the `forms/0007` reroute, and the baseline conformance gate + lifecycle tests are merged to `v87`. CRM triage is complete — 67 failures bucket **0 migration / 67 fixture / 0 runtime-query** (test-posture; no production NOBYPASSRLS read-path gap, no new tech-audit finding), which answers arch-audit Finding 8's key severity question. Detail in [CHANGELOG.md §SA88](../../CHANGELOG.md).
 
-**Hardening split across tracks.** Two independent workstreams remain — **SA88a** (gate-hardening, Track 1; blockers CR-SA88-REV-006/007) and **SA88b** (forms diagnosis, Track 2; SA88-QG-FORMS-001) — run in parallel; **both** must merge for a clean SA88 gate claim before SA84/SA86 drain. The withdrawn e1d38bd5 hardening attempt is archived in [CHANGELOG.md §SA88](../../CHANGELOG.md).
+**Hardening split into three tickets.** The gate-hardening blockers are split one-per-finding for divide-and-conquer: **SA88a** (CR-SA88-REV-006, Track 1) and **SA88c** (CR-SA88-REV-007, Track 1) — worked in sequence on the shared analyzer file — plus **SA88b** (forms diagnosis, Track 2; SA88-QG-FORMS-001), independent and parallel. **All three** must merge for a clean SA88 gate claim before SA84/SA86 drain. The withdrawn e1d38bd5 hardening attempt is archived in [CHANGELOG.md §SA88](../../CHANGELOG.md).
 
 ### Track 1 — Tenant-context surface
 
-- [ ] **SA88a — Harden the SA88 conformance gate's negative proofs (CR-SA88-REV-002).** `Tier 2 · Track 1 · deps: none → co-gates SA84, SA86 with SA88b`
-  The baseline `operator_access_migration` seam and gate are merged, but the gate's enforcement surface is not yet exhaustive: its negative proofs, provenance, and inventory paths are bypassable, and a nested function capturing the outer `schema_editor` parameter could hide an ungated DML call. Write fresh conformance negative proofs that (a) cannot be bypassed by nested-function parameter capture and (b) add genuine omission/read-error negatives rather than structural proxies. **Any new test helper that sets ContextVar or GUC must restore both on exit** (ContextVar via `try`/`finally`; GUC via `reset_db_current_org_id()`) — the withdrawn helper leaked both (CR-SA88-REV-005), so this is a hard requirement on any replacement. After a green/accepted gate, submit to fresh independent review to close CR-SA88-REV-002.
+> **SA88a hardening — split one-per-finding (divide & conquer, 2026-07-14).** The remaining gate-hardening work is split into two tightly-scoped, independently-reviewable tickets — **SA88a** (CR-SA88-REV-006) and **SA88c** (CR-SA88-REV-007) — so each can be made *exhaustive* and reviewed on its own. Both must merge (with SA88b on Track 2) for a clean SA88 gate claim. The shared hand-off context below applies to both.
+>
+> **↪ HAND-OFF — Option A continuation authorized (multi-pass).** This gate has hit the review-cycle cap twice (withdrawn `e1d38bd5`, then the accepted partial), each round reopening a *new* bypass because it patched one shape at a time. The maintainer authorizes a **persistent, multi-pass continuation**: for each ticket, iterate implement→review→fix across *as many cycles as it takes* to genuinely close its finding — **do not stop at a review-cycle/convergence cap with it open, and never weaken/skip a test or withdraw code to force a green.** If truly non-convergent after sustained effort, stop and report the specific unresolved defect with a failing example rather than merging. **Enumerate the full evasion space for the ticket's finding up front, then design for completeness** (not shape-by-shape).
+>
+> **Shared context (both tickets):**
+> - **Work location:** Track 1 worktree `/home/victor/code/quickscale-wt-track1` (branch `wt-track1`). Run the roadmap start procedure (`git merge v87`) first. Commit checkpoints on `wt-track1`; **do not merge to `v87`** — the maintainer keeps the merge decision and the final independent review.
+> - **Shared file — coordinate:** both tickets edit the same analyzer, `quickscale_modules/orgs/tests/test_sa88_migration_operator_access_conformance.py` (~3,255 lines). They are *not* safely parallel on it: **land SA88a first, then rebase/continue SA88c on top** (REV-006's name-resolution layer is the natural foundation REV-007's write-analysis builds on). Seam-under-test `.../tenancy.py` must not change runtime behavior; related `test_tenancy.py`.
+> - **Hard requirements (both):** negative proofs must exercise the *actual* evasion shapes (not structural proxies); any test helper setting a ContextVar/GUC must restore both on exit (ContextVar `try`/`finally`; GUC `reset_db_current_org_id()` — prior withdrawal was CR-SA88-REV-005); prefer not introducing an executable GUC helper at all. Validation per ticket: full conformance suite green + MyPy + orgs lint, and a clean independent review of the finding.
+> - **Merged partial baseline (2026-07-14):** immediate-function wrapper ranges rejecting outer/nested-DML capture; manifest-independent migration discovery; explicit read-error proofs; CR-SA88-REV-002 and CR-SA88-REV-009 resolved; no ContextVar/GUC leak. Detail in [CHANGELOG.md §SA88](../../CHANGELOG.md).
 
-  *Acceptance:* new negative proofs cannot be evaded by nested-function `schema_editor` capture; genuine omission/read-error negatives present; no ContextVar/GUC leak in any test helper; independent review closes CR-SA88-REV-002.
-  *(why →* arch-audit Finding 8 Option 1; independent review of e1d38bd5; CR-SA88-REV-002, CR-SA88-REV-005*)*
+- [ ] **SA88a — Close CR-SA88-REV-006: canonical-import provenance in the call's active scope.** `Tier 1 · Track 1 · deps: none → co-gates SA84, SA86 with SA88c + SA88b`
+  The gate must verify the called `operator_access_migration` resolves, *in the scope where it is called*, to the canonical orgs helper — not merely that a call to something so-named appears. Enumerate and cover the evasion space up front: `import ... as x`; `oam = operator_access_migration; oam(...)`; `from ...tenancy import *`; local rebinding; a counterfeit same-named helper imported/defined elsewhere.
 
-  **Blocked checkpoint (2026-07-14; partial merged to `v87` after review-cycle cap).** The partial gate hardening (immediate-function wrapper ranges rejecting outer/nested-DML capture; manifest-independent migration discovery; explicit read-error proofs; 66 tests + MyPy + orgs lint green; CR-SA88-REV-002 and CR-SA88-REV-009 resolved; no ContextVar/GUC leak) is landed — detail in [CHANGELOG.md §SA88](../../CHANGELOG.md). **Still blocking:** **CR-SA88-REV-006 (high)** — canonical-import provenance isn't resolved in the call's active lexical scope; destructured/starred/protected-name bindings can substitute a fake `operator_access_migration`. **CR-SA88-REV-007 (high)** — save-analysis misses saves in return/yield/nested expressions and doesn't model mutually-exclusive control flow, so ungated writes can still evade the gate.
-  - **Decision needed:** authorize a focused continuation to close CR-SA88-REV-006/007, or accept a lighter gate given triage proved these failures are test-posture only (see track-readiness guidance below). SA88a stays open — not a clean SA88 gate claim until both findings pass strict validation and fresh independent review.
+  *Acceptance:* negative proofs prove each REV-006 evasion shape (alias, rebind, star-import, counterfeit same-named helper) is flagged; no ContextVar/GUC leak in any test helper; full conformance suite + MyPy + orgs lint green; independent review closes CR-SA88-REV-006.
+  *(why →* arch-audit Finding 8 Option 1; independent review of the accepted partial; CR-SA88-REV-006, CR-SA88-REV-005*)*
 
-- [ ] **SA84 — Fix CRM's 67 restricted-role RLS failures (plus 20 skipped) via the SA88 seam.** `Tier 2 · Track 1 · deps: SA88 (SA88a + SA88b)`
+- [ ] **SA88c — Close CR-SA88-REV-007: write-expression & control-flow coverage.** `Tier 1 · Track 1 · deps: SA88a (shared analyzer file — rebase on top) → co-gates SA84, SA86 with SA88a + SA88b`
+  Save/write analysis must collect writes in `return`/`yield`/nested/comprehension/call-argument expressions (`return Model.objects.create(...)`, `yield obj.save()`, a save inside a comprehension) and model mutually-exclusive control flow — a write on one `if/else` branch guarded by the helper on only the *other* branch must still flag.
+
+  *Acceptance:* negative proofs prove each REV-007 shape (return/yield/nested/comprehension write, branch-asymmetric guarding) is flagged; no ContextVar/GUC leak in any test helper; full conformance suite + MyPy + orgs lint green; independent review closes CR-SA88-REV-007.
+  *(why →* arch-audit Finding 8 Option 1; independent review of the accepted partial; CR-SA88-REV-007*)*
+
+- [ ] **SA84 — Fix CRM's 67 restricted-role RLS failures (plus 20 skipped) via the SA88 seam.** `Tier 2 · Track 1 · deps: SA88 (SA88a + SA88c + SA88b)`
   Under the SA82 gate, CRM showed 195 passed, 67 fixture-time RLS failures, 20 skipped (triage: 0 migration / 67 fixture / 0 runtime — test-posture, not a production isolation bug). Route each cross-org fixture/migration through the SA88 helper rather than inlining `SET LOCAL`. Any runtime-query-bucket failure that surfaces is fixed as a real isolation bug (with its own regression test), not test-posture.
 
   *Acceptance:* CRM restricted-role suite passes clean (0 failures) under `make test-integration`, no quarantine entry; all cross-org context acquired through the SA88 helper (conformance gate passes for CRM).
@@ -80,13 +93,13 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
 
 ### Track 2 — Module contracts & settings
 
-- [ ] **SA88b — Diagnose and clear the forms regression SA88-QG-FORMS-001.** `Tier 1 · Track 2 · deps: none → co-gates SA84, SA86 with SA88a`
+- [ ] **SA88b — Diagnose and clear the forms regression SA88-QG-FORMS-001.** `Tier 1 · Track 2 · deps: none → co-gates SA84, SA86 with SA88a + SA88c`
   A second `make test-integration` gate run produced 50 failed / 125 passed / 8 skipped / 2 errors in forms (RLS-denied INSERTs) with **no forms source changed** between the clean pass and the regression — strongly consistent with the transient stale-`postgres`-owned-test-DB artifact class already seen in SA78 and SA85 (each a disposable-DB ownership issue, not a product bug). Start a fresh forms DB diagnosis/reset to determine whether SA88-QG-FORMS-001 is a transient environment artifact or a real regression, then re-run the full gate. Forms is Track 2's domain (SA85).
 
   *Acceptance:* forms restricted-role suite passes clean under `make test-integration` (transient artifact confirmed and cleared, or a real regression fixed with a regression test); SA88-QG-FORMS-001 closed.
   *(why →* SA88-QG-FORMS-001; independent review of e1d38bd5*)*
 
-- [ ] **SA86 — Fix listings' 6 restricted-role RLS failures via the SA88 seam.** `Tier 2 · Track 2 · deps: SA88 (SA88a + SA88b)` *(reassigned from Track 1, 2026-07-13)*
+- [ ] **SA86 — Fix listings' 6 restricted-role RLS failures via the SA88 seam.** `Tier 2 · Track 2 · deps: SA88 (SA88a + SA88c + SA88b)` *(reassigned from Track 1, 2026-07-13)*
   Under the SA82 gate, listings showed 128 passed, 6 RLS failures — an instance of Finding 8. Bucket the 6 failures per SA88's triage method, then route each cross-org fixture/migration through the SA88 helper; fix any runtime-query-bucket failure as a real isolation bug. *(Small failure count — may downgrade to Tier 1 once SA88's triage establishes the class and the seam exists.)*
 
   *Acceptance:* listings restricted-role suite passes clean (0 failures) under `make test-integration`, no quarantine entry; cross-org context acquired through the SA88 helper (conformance gate passes for listings).
@@ -110,12 +123,15 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 ```
 Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
-SA88a — gate hardening (BLOCKED)   SA88b — forms regression diagnosis      SA89a — DR persistence protocol
-  (CR-SA88-REV-006/007)              (SA88-QG-FORMS-001)                     (Finding 1, no deps) · ACTIVE
-  no deps                            no deps                                     │
-      │                                  │                                       ▼
-      └───────────┬──────────────────────┘                                  SA89b — DR orchestration port
-                  ▼ both required                                             deps: SA89a
+SA88a — REV-006 provenance         SA88b — forms regression diagnosis      SA89a — DR persistence protocol
+  (HAND-OFF, no deps)               (SA88-QG-FORMS-001)                     (Finding 1, no deps) · ACTIVE
+      │ same analyzer file          no deps                                     │
+      ▼ (rebase on top)                 │                                       ▼
+SA88c — REV-007 write/flow            │                                    SA89b — DR orchestration port
+  deps: SA88a                          │                                      deps: SA89a
+      │                                │
+      └───────────┬──────────────────┘
+                  ▼ all three required
           SA88 clean gate claim
                   │ gates
         ┌─────────┴─────────┐
@@ -125,28 +141,15 @@ SA88a — gate hardening (BLOCKED)   SA88b — forms regression diagnosis      S
     Track 1             Track 2
 ```
 
-**Ordering.** SA88a (Track 1) and SA88b (Track 2) are independent and run in parallel; **both** must merge to `v87` for a clean SA88 gate claim. Once SA88 is clean, Track 1 picks up SA84 and Track 2 picks up SA86, both consuming the merged helper. Track 3 runs SA89a → SA89b fully independently of the whole cluster.
+**Ordering.** SA88a → SA88c run in sequence on Track 1 (they share the analyzer file — SA88a's name-resolution layer is the foundation SA88c builds on); SA88b runs independently and parallel on Track 2. **All three** must merge to `v87` for a clean SA88 gate claim. Once SA88 is clean, Track 1 picks up SA84 and Track 2 picks up SA86, both consuming the merged helper. Track 3 runs SA89a → SA89b fully independently of the whole cluster.
 
 ### Track readiness (2026-07-14)
 
-- **Track 1 — BLOCKED (SA88a), pending a maintainer decision.** The partial hardening is merged and CR-SA88-REV-002 is resolved, but CR-SA88-REV-006/007 remain high/blocking after the review-cycle cap. The gate has now hit the cap twice (withdrawn e1d38bd5, then this partial), each round surfacing fresh detector-bypass findings. Because triage proved the underlying failures are **test-posture** (CRM 0 runtime-query), the open question is one of scope, not correctness — see the decision guidance below. SA88a co-gates SA84 and stays open until resolved.
+- **Track 1 — HAND-OFF READY (SA88a → SA88c).** Decision made: **Option A, multi-pass**, split one-per-finding for divide-and-conquer. SA88a (REV-006) is ready to pick up now; SA88c (REV-007) rebases on top once SA88a lands (shared analyzer file). Both carry a self-contained hand-off brief (work location, evasion space, hard requirements, multi-pass mandate) in the ticket bodies above. Track 1 co-gates SA84 and stays open until both merge.
 - **Track 2 — READY (SA88b).** Split out of SA88 to parallelize: diagnose/clear the forms regression SA88-QG-FORMS-001 (probable transient test-DB-ownership artifact, SA78/SA85 class). Independent of SA88a; forms is Track 2's domain. SA88b co-gates SA86; SA86 follows once SA88 is clean.
 - **Track 3 — READY (SA89a, activated).** The Finding 1 DR persistence port is pulled forward to use idle capacity. SA89a has no deps; SA89b follows. Independent of the SA88/SA84/SA86 cluster.
 
-**Open decision — Track 1 gate scope (see guidance below).** The Finding 8 Option 1 seam is ratified and merged; the live question is how exhaustive the SA88a conformance gate must be before it is "clean." SA88's workstreams stay split into SA88a (Track 1, blocked) and SA88b (Track 2, ready); Tracks 2 and 3 remain active regardless of the SA88a decision.
-
-### Track 1 decision guidance — how exhaustive must the SA88a gate be?
-
-**Context.** SA88's *seam* (the `operator_access_migration` helper) is merged and settled. What is contested is the *conformance gate*'s static analysis: how hard it tries to detect a cross-org migration write that skips the helper. Two review rounds (e1d38bd5, then the accepted partial) each closed the prior finding and surfaced new detector-bypass findings (now CR-SA88-REV-006/007). This is the classic diminishing-returns curve of trying to make an AST-based detector adversarially complete against a cooperative author (the maintainer writing his own migrations), not a hostile one.
-
-Crucially, SA88's own triage already answered the severity question the gate exists to protect against: CRM's 67 failures bucket **0 runtime-query** — every failure is test-posture, and production `migrate` runs privileged anyway (arch-audit Finding 8's severity-bounding caveat). So the gate is not standing between the codebase and a live tenant-isolation leak; it is a future-regression tripwire.
-
-**Options.**
-- **A — Authorize one more focused continuation (close REV-006/007), then stop.** *Pro:* finishes the "governance by gate" pattern the project prizes (SA15.3/SA45/SA49/SA66/SA60); a genuinely exhaustive gate. *Con:* a third review round on a detector that has produced a new bypass finding every round, for a class already proven test-posture — likely more cycles, same diminishing returns. Highest cost, marginal safety gain.
-- **B — Accept the merged partial gate as "good enough," downgrade REV-006/007 to advisories, unblock SA84/SA86 (Recommended).** Keep the gate as a best-effort tripwire (it already catches the common shapes), record REV-006/007 as known non-exhaustive edges, and proceed to drain SA84/SA86 through the merged seam. *Pro:* matches arch-audit's own steelman ("if no runtime gap and the fix isn't operator_access-sprinkling, downgrade to a testing-architecture cleanup" — both conditions now hold); stops paying for adversarial completeness the threat model doesn't warrant; unblocks Track 1's real deliverable. *Con:* the gate can be evaded by a maintainer who writes a deliberately obfuscated ungated write — a low-likelihood, self-inflicted, non-production-severity scenario.
-- **C — Replace the AST detector with a runtime/integration check.** Instead of statically proving no ungated write exists, let the restricted-role integration gate (already load-bearing since SA82) be the enforcement: a new cross-org migration that skips the helper fails the NOBYPASSRLS suite loudly. *Pro:* enforcement by real execution, not static approximation — no bypass surface; aligns with the "the restricted-role gate is the loud signal" framing in arch-audit. *Con:* only catches migrations exercised under the gate; some M effort to make the coverage explicit.
-
-**Best fit.** **Option B**, optionally folding in C's insight. It matches the ratified Finding 8 analysis (severity is test-posture, bounded), respects the fail-hard/"governance by gate" ethos without over-fitting a detector to an author who is not an adversary, and unblocks the actual goal (SA84/SA86 drain). Option A only wins if a future *public* multi-author migration surface appears — which is exactly the "third consumer / teams" horizon the audits already defer other hardening to. Recommend downgrading CR-SA88-REV-006/007 to advisories, declaring SA88a's gate accepted, and releasing SA84/SA86.
+**Decision made (2026-07-14) — Track 1 gate scope: Option A, multi-pass, split one-per-finding.** The Finding 8 Option 1 seam is ratified and merged; the contested question was how exhaustive the conformance gate must be. The maintainer chose to **fully close** the two blocking findings rather than downgrade them (weighed against accepting the partial gate as a best-effort tripwire, since triage proved the failures are test-posture — CRM 0 runtime-query). To break the twice-hit review-cycle cap, the work is a **persistent multi-pass hand-off split one-per-finding** (SA88a = REV-006, SA88c = REV-007): each ticket is scoped so it can be made exhaustive and independently reviewed, and the picker-upper iterates until its finding genuinely closes rather than stopping at a cap. Self-contained briefs live in the ticket bodies above; SA88b (Track 2) and the SA89 line (Track 3) proceed independently.
 
 ---
 
