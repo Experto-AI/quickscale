@@ -40,6 +40,14 @@ import pytest
 _OPERATOR_ACCESS_CM_NAME = "operator_access_migration"
 """Name of the context manager function that gates must check for."""
 
+_CANONICAL_TENANCY_MODULE = "quickscale_modules_orgs.tenancy"
+"""Canonical module for operator_access_migration resolution."""
+
+_CANONICAL_OPERATOR_ACCESS_FQN = (
+    f"{_CANONICAL_TENANCY_MODULE}.{_OPERATOR_ACCESS_CM_NAME}"
+)
+"""Canonical fully-qualified name expected for safe operator-access access."""
+
 
 # =========================================================================
 # Debt exemption ledger
@@ -217,26 +225,237 @@ def _is_cross_table_dml_assigning_org_id(sql_text: str) -> bool:
     return False
 
 
-def _is_operator_access_migration_call(node: ast.AST) -> bool:
-    """Return ``True`` if *node* is a call to ``operator_access_migration``."""
+def _resolve_attribute_fqn(node: ast.AST) -> str | None:
+    """Resolve an AST attribute chain into a dotted FQN string.
+
+    Supports Name/Attribute chains only.
+    """
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _resolve_attribute_fqn(node.value)
+        if base is None:
+            return None
+        return f"{base}.{node.attr}"
+    return None
+
+
+def _is_potential_operator_access_migration_context_expr(node: ast.AST) -> bool:
+    """Return True if *node* is a candidate operator_access_migration
+    context manager call site.
+
+    This is intentionally broader than the canonical predicate and catches
+    both candidate-name and attribute-based invocations, including potential
+    counterfeit forms.
+    """
+    if isinstance(node, ast.Name):
+        return node.id == _OPERATOR_ACCESS_CM_NAME
+    return isinstance(node, ast.Attribute) and node.attr == _OPERATOR_ACCESS_CM_NAME
+
+
+def _collect_operator_access_name_bindings(
+    scope_node: ast.AST,
+) -> list[tuple[int, str]]:
+    """Collect binding sites for operator_access_migration in *scope_node*.
+
+    Returns (lineno, binding_kind) tuples, where binding_kind is one of
+    canonical-import, import, import-star, param, assign,
+    annassign, augassign, for, with_as, except,
+    named_expr, function, class, or delete.
+    """
+    events: list[tuple[int, str]] = []
+
+    if isinstance(scope_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        for arg_name in _iter_function_parameter_names(scope_node):
+            if arg_name == _OPERATOR_ACCESS_CM_NAME:
+                events.append((scope_node.lineno, "param"))
+
+    for node in _iter_non_nested_nodes(scope_node):
+        if isinstance(
+            node,
+            (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda),
+        ):
+            if node.name == _OPERATOR_ACCESS_CM_NAME:
+                kind = "class" if isinstance(node, ast.ClassDef) else "function"
+                events.append((node.lineno, kind))
+            continue
+
+        if isinstance(node, ast.With):
+            for item in node.items:
+                if item.optional_vars is None:
+                    continue
+                if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(item.optional_vars):
+                    events.append((node.lineno, "with_as"))
+
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(target):
+                    events.append((node.lineno, "assign"))
+
+        if isinstance(node, ast.AnnAssign):
+            if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(node.target):
+                events.append((node.lineno, "annassign"))
+
+        if isinstance(node, ast.AugAssign):
+            if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(node.target):
+                events.append((node.lineno, "augassign"))
+
+        if isinstance(node, ast.NamedExpr):
+            if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(node.target):
+                events.append((node.lineno, "named_expr"))
+
+        if isinstance(node, (ast.For, ast.AsyncFor)):
+            if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(node.target):
+                events.append((node.lineno, "for"))
+
+        if isinstance(node, ast.ExceptHandler):
+            if node.name == _OPERATOR_ACCESS_CM_NAME:
+                events.append((node.lineno, "except"))
+
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                bound = alias.asname or alias.name
+                if bound == _OPERATOR_ACCESS_CM_NAME:
+                    events.append((node.lineno, "import"))
+
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == "*":
+                    events.append((node.lineno, "import-star"))
+                    continue
+
+                bound = alias.asname or alias.name
+                if bound != _OPERATOR_ACCESS_CM_NAME:
+                    continue
+
+                if (
+                    node.module == _CANONICAL_TENANCY_MODULE
+                    and alias.name == _OPERATOR_ACCESS_CM_NAME
+                    and alias.asname is None
+                ):
+                    events.append((node.lineno, "canonical-import"))
+                else:
+                    events.append((node.lineno, "import"))
+
+        if isinstance(node, ast.Delete):
+            for target in node.targets:
+                if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(target):
+                    events.append((node.lineno, "delete"))
+
+    return sorted(set(events), key=lambda item: item[0])
+
+
+def _scope_chain_for_operator_access_call(
+    tree: ast.AST,
+    lineno: int,
+) -> list[ast.AST]:
+    """Return outer-to-inner scope chain for *lineno* in *tree*.
+
+    The chain always starts with tree (module scope), followed by any
+    enclosing function scopes containing *lineno*.
+    """
+    chain: list[ast.AST] = [tree]
+    nested_funcs: list[ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda] = []
+    for node in _iter_function_nodes(tree):
+        start = node.lineno
+        end = node.end_lineno or start
+        if start <= lineno <= end:
+            nested_funcs.append(node)
+    nested_funcs.sort(key=lambda f: f.lineno)
+    chain.extend(nested_funcs)
+    return chain
+
+
+def _operator_access_binding_kind_for_call(
+    tree: ast.AST,
+    lineno: int,
+    scope_chain: list[ast.AST] | None = None,
+) -> str | None:
+    """Return the nearest binding kind for operator_access_migration at line.
+
+    If multiple bindings apply, the most-recent binding by line and inner scope
+    depth is selected.
+    """
+    chain = scope_chain or _scope_chain_for_operator_access_call(tree, lineno)
+    best: tuple[int, int, str] | None = None
+    for depth, scope_node in enumerate(chain):
+        for line, kind in _collect_operator_access_name_bindings(scope_node):
+            if line > lineno:
+                continue
+            candidate = (line, depth, kind)
+            if (
+                best is None
+                or candidate[0] > best[0]
+                or (candidate[0] == best[0] and candidate[1] > best[1])
+            ):
+                best = candidate
+    if best is None:
+        return None
+    return best[2]
+
+
+def _is_operator_access_migration_call(
+    node: ast.AST,
+    tree: ast.AST | None = None,
+    scope_chain: list[ast.AST] | None = None,
+    lineno: int | None = None,
+) -> bool:
+    """Return True if *node* is a canonical operator-access context call.
+
+    Canonical calls are:
+    1. exact attribute FQN quickscale_modules_orgs.tenancy.operator_access_migration
+    2. direct operator_access_migration name bound by
+       from quickscale_modules_orgs.tenancy import operator_access_migration
+       with no alias in scope.
+    """
+    if not isinstance(node, ast.Call):
+        return False
+
+    context_expr = node.func
+
+    resolved_fqn = _resolve_attribute_fqn(context_expr)
+    if resolved_fqn == _CANONICAL_OPERATOR_ACCESS_FQN:
+        return True
+
+    if (
+        not isinstance(context_expr, ast.Name)
+        or context_expr.id != _OPERATOR_ACCESS_CM_NAME
+    ):
+        return False
+
+    if tree is None:
+        return False
+    call_lineno = lineno if lineno is not None else getattr(node, "lineno", None)
+    if call_lineno is None:
+        return False
+
     return (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == _OPERATOR_ACCESS_CM_NAME
+        _operator_access_binding_kind_for_call(
+            tree,
+            call_lineno,
+            scope_chain=scope_chain,
+        )
+        == "canonical-import"
     )
 
 
 def _find_operator_access_ranges(tree: ast.AST) -> list[tuple[int, int]]:
-    """Find ``(start_line, end_line)`` for every ``with
-    operator_access_migration(...)`` block in *tree*.
+    """Find ``(start_line, end_line)`` for every canonical
+    ``with operator_access_migration(...)`` block in *tree*.
 
     Returns a list of inclusive line-number ranges.
     """
     ranges: list[tuple[int, int]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.With):
+            chain = _scope_chain_for_operator_access_call(tree, node.lineno)
             for item in node.items:
-                if _is_operator_access_migration_call(item.context_expr):
+                if _is_operator_access_migration_call(
+                    item.context_expr,
+                    tree=tree,
+                    scope_chain=chain,
+                    lineno=node.lineno,
+                ):
                     # end_lineno is available in Python 3.8+.
                     end_lineno = node.end_lineno
                     end = end_lineno if end_lineno is not None else node.lineno
@@ -820,12 +1039,20 @@ def _check_wrong_editor(tree: ast.AST) -> list[dict]:
             else getattr(scope_node, "name", "<lambda>")
         )
         editor_bindings = _collect_editor_bindings(scope_node, "schema_editor")
+        scope_chain = _scope_chain_for_operator_access_call(
+            tree, getattr(scope_node, "lineno", 0)
+        )
 
         for node in _iter_non_nested_nodes(scope_node):
             if not isinstance(node, ast.With):
                 continue
             for item in node.items:
-                if not _is_operator_access_migration_call(item.context_expr):
+                if not _is_operator_access_migration_call(
+                    item.context_expr,
+                    tree=tree,
+                    scope_chain=scope_chain,
+                    lineno=node.lineno,
+                ):
                     continue
                 assert isinstance(item.context_expr, ast.Call)
                 call = item.context_expr
@@ -925,14 +1152,47 @@ def _check_operator_access_shadowing(tree: ast.AST) -> list[dict]:
     """
     violations: list[dict] = []
 
-    operator_access_calls: list[int] = []
+    operator_access_calls: list[tuple[int, bool, bool]] = []
+    # tuple entries: (call_line, is_canonical_call, is_direct_name_call)
     canonical_import_lines: set[int] = set()
 
     for node in ast.walk(tree):
         if isinstance(node, ast.With):
+            chain = _scope_chain_for_operator_access_call(tree, node.lineno)
             for item in node.items:
-                if _is_operator_access_migration_call(item.context_expr):
-                    operator_access_calls.append(node.lineno)
+                if not isinstance(item.context_expr, ast.Call):
+                    continue
+                context_fn = item.context_expr.func
+                if not _is_potential_operator_access_migration_context_expr(context_fn):
+                    continue
+
+                is_canonical = _is_operator_access_migration_call(
+                    item.context_expr,
+                    tree=tree,
+                    scope_chain=chain,
+                    lineno=node.lineno,
+                )
+                is_direct_name = isinstance(context_fn, ast.Name)
+                operator_access_calls.append(
+                    (node.lineno, is_canonical, is_direct_name)
+                )
+
+                if not is_canonical:
+                    violations.append(
+                        {
+                            "filepath": "<unknown>",
+                            "line": node.lineno,
+                            "message": (
+                                "operator_access_migration() is used with a non-canonical "
+                                "symbol at line "
+                                f"{node.lineno}.  Use either `from "
+                                f"{_CANONICAL_TENANCY_MODULE} import "
+                                f"{_OPERATOR_ACCESS_CM_NAME}` or the exact "
+                                f"FQN `{_CANONICAL_OPERATOR_ACCESS_FQN}(schema_editor)`."
+                            ),
+                            "category": "shadowing",
+                        }
+                    )
 
     # If operator_access_migration is never used as a context manager,
     # shadowing checks are intentionally out-of-scope for this file.
@@ -943,6 +1203,23 @@ def _check_operator_access_shadowing(tree: ast.AST) -> list[dict]:
         # Canonical import checks.
         if isinstance(node, ast.ImportFrom):
             for alias in node.names:
+                if alias.name == "*":
+                    violations.append(
+                        {
+                            "filepath": "<unknown>",
+                            "line": node.lineno,
+                            "message": (
+                                f"`from {node.module or '<unknown>'} import *` is disallowed "
+                                "when operator_access_migration is used because it can "
+                                "inject a counterfeit symbol.  Use only the exact "
+                                f"canonical import: `from {_CANONICAL_TENANCY_MODULE} "
+                                f"import {_OPERATOR_ACCESS_CM_NAME}`."
+                            ),
+                            "category": "shadowing",
+                        }
+                    )
+                    continue
+
                 if alias.name != _OPERATOR_ACCESS_CM_NAME:
                     continue
 
@@ -985,7 +1262,8 @@ def _check_operator_access_shadowing(tree: ast.AST) -> list[dict]:
         # Check named imports that alias the context manager.
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.asname == _OPERATOR_ACCESS_CM_NAME:
+                bound = alias.asname or alias.name
+                if bound == _OPERATOR_ACCESS_CM_NAME:
                     violations.append(
                         {
                             "filepath": "<unknown>",
@@ -1100,11 +1378,17 @@ def _check_operator_access_shadowing(tree: ast.AST) -> list[dict]:
                     }
                 )
 
-    if not canonical_import_lines:
+    canonical_name_calls = [
+        call_line
+        for call_line, is_canonical, is_direct_name in operator_access_calls
+        if is_canonical and is_direct_name
+    ]
+
+    if canonical_name_calls and not canonical_import_lines:
         violations.append(
             {
                 "filepath": "<unknown>",
-                "line": min(operator_access_calls),
+                "line": min(canonical_name_calls),
                 "message": (
                     "operator_access_migration is used without the exact, "
                     "unaliased import from quickscale_modules_orgs.tenancy.  "
@@ -1475,8 +1759,14 @@ def _collect_operator_access_ranges_by_function(
         for child in _iter_non_nested_nodes(func_node):
             if not isinstance(child, ast.With):
                 continue
+            chain = _scope_chain_for_operator_access_call(tree, child.lineno)
             for item in child.items:
-                if _is_operator_access_migration_call(item.context_expr):
+                if _is_operator_access_migration_call(
+                    item.context_expr,
+                    tree=tree,
+                    scope_chain=chain,
+                    lineno=child.lineno,
+                ):
                     ranges.append(_node_span(child))
 
         # Keep deterministic order for easier proof and stable diagnostics.
@@ -2082,6 +2372,37 @@ from quickscale_modules_orgs.tenancy import something as operator_access_migrati
 
 def forward(apps, schema_editor):
     with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+CANONICAL_FQN_CODE = """
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+IMPORT_STAR_CODE = """
+from quickscale_modules_orgs.tenancy import *
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+ALIAS_MODULE_CODE = """
+import quickscale_modules_orgs.tenancy as tenancy
+
+def forward(apps, schema_editor):
+    with tenancy.operator_access_migration(schema_editor):
         schema_editor.execute(
             "UPDATE t SET organization_id = "
             "(SELECT id FROM other WHERE other.x = t.x)"
@@ -2802,6 +3123,35 @@ def forward(apps, schema_editor):
         shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
         assert len(shadow_violations) >= 1, (
             f"Expected at least 1 shadowing violation for alias, got "
+            f"{len(shadow_violations)}: {violations}"
+        )
+
+    def test_canonical_fqn_call_is_accepted(self) -> None:
+        """Direct canonical FQN ``quickscale_modules_orgs.tenancy.
+        operator_access_migration`` is treated as canonical and clean."""
+        violations = check_migration_source(CANONICAL_FQN_CODE)
+        assert len(violations) == 0, (
+            f"Expected 0 violations for canonical FQN usage, got "
+            f"{len(violations)}: {violations}"
+        )
+
+    def test_import_star_block_is_rejected(self) -> None:
+        """``from quickscale_modules_orgs.tenancy import *`` is rejected when
+        operator_access_migration is used."""
+        violations = check_migration_source(IMPORT_STAR_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for wildcard import, got "
+            f"{len(shadow_violations)}: {violations}"
+        )
+
+    def test_module_alias_counterfeit_is_rejected(self) -> None:
+        """Alias-based access through ``import quickscale_modules_orgs.tenancy as``
+        is not canonical."""
+        violations = check_migration_source(ALIAS_MODULE_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for module alias access, got "
             f"{len(shadow_violations)}: {violations}"
         )
 
