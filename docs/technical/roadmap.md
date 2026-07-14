@@ -79,6 +79,22 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
   *Acceptance:* negative proofs prove each REV-006 evasion shape (alias, rebind, star-import, counterfeit same-named helper) is flagged; no ContextVar/GUC leak in any test helper; full conformance suite + MyPy + orgs lint green; independent review closes CR-SA88-REV-006.
   *(why →* arch-audit Finding 8 Option 1; independent review of the accepted partial; CR-SA88-REV-006, CR-SA88-REV-005*)*
 
+  **SA88a partial checkpoint (2026-07-14, agent usage limit reached mid-implementation).** Analyzer infrastructure added but not yet wired into `check_migration_source`:
+
+  **Done:**
+  - Canonical module/FQN constants (`_CANONICAL_TENANCY_MODULE`, `_CANONICAL_OPERATOR_ACCESS_FQN`)
+  - `_extract_attribute_fqn()` — dotted-name FQN resolver for AST `Attribute` chains
+  - `_collect_operator_access_bindings()` — comprehensive binding-event scanner covering canonical/non-canonical imports, assignment, annotation assignment, augmented assignment, named expressions, function/class defs, parameters, `for`/`except`/`with as` bindings, and `del`
+  - `_collect_operator_access_bindings_by_scope()` — collects scope-local binding tables per enclosing function
+  - `_is_bound_to_canonical_operator_access()` — resolves a named call against its latest binding at or before the call-site line, merging immediate-function and module scopes
+
+  **Pending (next pass):**
+  - Wire the provenance resolution into `_collect_operator_access_ranges_by_function()` or add a separate Detector 8 so `check_migration_source()` rejects non-canonical calls
+  - Add direct negative-proof test source stanzas and tests for each REV-006 evasion shape
+  - Full conformance suite + MyPy + orgs lint validation
+  - Independent review
+
+  **Blocking continuation:** subagent API usage limit reached for the current session. The analyzer file is syntactically valid and baseline collection (66 conformance tests) is unaffected. Next implementer should continue on `wt-track1` (Track 1 worktree), run the roadmap start procedure, then wire and test the provenance layer against the full evasion inventory listed in the ticket body.
 - [ ] **SA88c — Close CR-SA88-REV-007: write-expression & control-flow coverage.** `Tier 1 · Track 1 · deps: SA88a (shared analyzer file — rebase on top) → co-gates SA84, SA86 with SA88a + SA88b`
   Save/write analysis must collect writes in `return`/`yield`/nested/comprehension/call-argument expressions (`return Model.objects.create(...)`, `yield obj.save()`, a save inside a comprehension) and model mutually-exclusive control flow — a write on one `if/else` branch guarded by the helper on only the *other* branch must still flag.
 
