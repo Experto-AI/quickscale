@@ -59,7 +59,7 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
 
 **Baseline landed.** The `operator_access_migration` helper (`orgs/tenancy.py`), the `forms/0007` reroute, and a baseline conformance gate + lifecycle tests are **merged to `v87`**. **CRM triage complete** — CRM's 67 failures bucket **0 migration-time / 67 fixture-time / 0 runtime-query**: no production-severity NOBYPASSRLS read-path gap, no new tech-audit finding. The Finding 8 root is confirmed: cross-org fixtures without `operator_access`.
 
-**SA88 hardening blocked, now split across tracks.** An attempted hardening checkpoint (commit e1d38bd5) was independently reviewed **STATUS partial/unsafe to merge** and withdrawn (its two-file test delta is restored to the 69cabb47 baseline). Two live blockers remain, and they are independent — so SA88 is split into **SA88a** (gate-hardening, Track 1) and **SA88b** (forms diagnosis, Track 2), which run in parallel. Full withdrawn-attempt detail is in [CHANGELOG.md §SA88](../../CHANGELOG.md).
+**SA88 hardening blocked, now split across tracks.** An attempted hardening checkpoint (commit e1d38bd5) was independently reviewed **STATUS partial/unsafe to merge** and withdrawn (its two-file test delta is restored to the 69cabb47 baseline). Two independent workstreams remain — **SA88a** (gate-hardening, Track 1) and **SA88b** (forms diagnosis, Track 2), which run in parallel. SA88a's current blockers are CR-SA88-REV-006/007; SA88b tracks SA88-QG-FORMS-001. Full withdrawn-attempt detail is in [CHANGELOG.md §SA88](../../CHANGELOG.md).
 
 ### Track 1 — Tenant-context surface
 
@@ -68,6 +68,11 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
 
   *Acceptance:* new negative proofs cannot be evaded by nested-function `schema_editor` capture; genuine omission/read-error negatives present; no ContextVar/GUC leak in any test helper; independent review closes CR-SA88-REV-002.
   *(why →* arch-audit Finding 8 Option 1; independent review of e1d38bd5; CR-SA88-REV-002, CR-SA88-REV-005*)*
+
+  **Blocked checkpoint (2026-07-14; partial accepted for merge after review-cycle cap):**
+  - **Done:** function-local wrapper ranges now reject outer-wrapper/nested-DML capture; manifested-but-uninstalled migration discovery and explicit `OSError`/non-`OSError` read proofs are present; no ContextVar or executable GUC helper was introduced. Strict retained-role validation passed (66 tests), MyPy passed, and orgs module lint passed. Independent review resolved CR-SA88-REV-002 and the SA84 ownership consistency note (CR-SA88-REV-009).
+  - **Pending/Blocking:** **CR-SA88-REV-006 (high/blocking)** — canonical-import provenance is not resolved in the call's active lexical scope, and destructured/starred or other protected-name bindings can still substitute a fake `operator_access_migration`. **CR-SA88-REV-007 (high/blocking)** — assignment/save analysis does not yet collect saves in return/yield/nested expressions or model mutually exclusive control-flow paths, so ungated writes can still evade the gate.
+  - **Decisions needed:** decide when to authorize a new focused continuation for CR-SA88-REV-006/007. SA88a remains open and must not be treated as a clean SA88 gate claim until both findings pass strict validation and fresh independent review.
 
 - [ ] **SA84 — Fix CRM's 67 restricted-role RLS failures (plus 20 skipped) via the SA88 seam.** `Tier 2 · Track 1 · deps: SA88 (SA88a + SA88b)`
   Under the SA82 gate, CRM showed 195 passed, 67 fixture-time RLS failures, 20 skipped (triage: 0 migration / 67 fixture / 0 runtime — test-posture, not a production isolation bug). Route each cross-org fixture/migration through the SA88 helper rather than inlining `SET LOCAL`. Any runtime-query-bucket failure that surfaces is fixed as a real isolation bug (with its own regression test), not test-posture.
@@ -107,8 +112,8 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 ```
 Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
-SA88a — gate hardening             SA88b — forms regression diagnosis      SA89a — DR persistence protocol
-  (CR-SA88-REV-002)                  (SA88-QG-FORMS-001)                     (Finding 1, no deps) · ACTIVE
+SA88a — gate hardening (BLOCKED)   SA88b — forms regression diagnosis      SA89a — DR persistence protocol
+  (CR-SA88-REV-006/007)              (SA88-QG-FORMS-001)                     (Finding 1, no deps) · ACTIVE
   no deps                            no deps                                     │
       │                                  │                                       ▼
       └───────────┬──────────────────────┘                                  SA89b — DR orchestration port
@@ -126,11 +131,11 @@ SA88a — gate hardening             SA88b — forms regression diagnosis      S
 
 ### Track readiness (2026-07-14)
 
-- **Track 1 — READY (SA88a).** The SA88 baseline seam + gate are merged; the remaining Track-1 work is bounded and reviewable — CR-SA88-REV-002 (harden the gate's negative proofs; no ContextVar/GUC-leaking helper). No product decision remains: Finding 8 Option 1 is ratified. SA88a co-gates SA84.
+- **Track 1 — BLOCKED (SA88a).** The partial hardening checkpoint is validated and accepted for merge, and CR-SA88-REV-002 is resolved, but CR-SA88-REV-006/007 remain high/blocking after the review-cycle cap. SA88a stays open and continues to co-gate SA84; a new focused continuation must close both detector bypasses before the clean SA88 claim.
 - **Track 2 — READY (SA88b).** Split out of SA88 to parallelize: diagnose/clear the forms regression SA88-QG-FORMS-001 (probable transient test-DB-ownership artifact, SA78/SA85 class). Independent of SA88a; forms is Track 2's domain. SA88b co-gates SA86; SA86 follows once SA88 is clean.
 - **Track 3 — READY (SA89a, activated).** The Finding 1 DR persistence port is pulled forward to use idle capacity. SA89a has no deps; SA89b follows. Independent of the SA88/SA84/SA86 cluster.
 
-**No open cross-track product decision.** SA84/SA86 drain via **Finding 8 Option 1** (ratified). SA88's two independent blockers are split into SA88a (Track 1) and SA88b (Track 2) to run in parallel; the Finding 1 DR port (SA89a) is activated on Track 3. All three tracks are unblocked and have active work.
+**No open cross-track product decision.** SA84/SA86 drain via **Finding 8 Option 1** (ratified). SA88's two independent workstreams remain split into SA88a (Track 1) and SA88b (Track 2); Track 1 is blocked on CR-SA88-REV-006/007, while Tracks 2 and 3 remain active.
 
 ---
 
