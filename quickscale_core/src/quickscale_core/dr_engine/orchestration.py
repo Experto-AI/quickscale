@@ -2612,134 +2612,24 @@ def _resolve_admin_uploaded_restore_artifact(
     checksum_sha256: str,
     size_bytes: int,
 ) -> BackupArtifact:
-    """Resolve an uploaded file to exactly one trusted authoritative artifact."""
-    normalized_checksum = checksum_sha256.strip().lower()
-    if not normalized_checksum:
-        raise BackupRestoreBlocked(
-            "Restore blocked because the uploaded backup file checksum could not be determined."
-        )
-    if size_bytes < 1:
-        raise BackupRestoreBlocked(
-            "Restore blocked because the uploaded backup file is empty."
-        )
+    """Resolve an uploaded file to exactly one trusted authoritative artifact.
 
-    candidates = list(
-        BackupArtifact.objects.filter(
-            checksum_sha256=normalized_checksum,
-            size_bytes=size_bytes,
-        )
-        .select_related("authoritative_snapshot")
-        .order_by("pk")
+    Delegates the ORM query and trust resolution to the registered persistence
+    provider through the core ``resolve_admin_uploaded_restore_artifact`` seam
+    (SA89a Phase 2).
+    """
+    from quickscale_core.runtime import (
+        resolve_admin_uploaded_restore_artifact as _core_resolve,
     )
-    if not candidates:
-        raise BackupRestoreBlocked(
-            "Restore blocked because the uploaded backup file does not match any recorded authoritative backup artifact."
-        )
 
-    trusted_candidates: list[BackupArtifact] = []
-    trust_issues: list[str] = []
-    for candidate in candidates:
-        trust_issue = _get_admin_uploaded_restore_artifact_trust_issue(candidate)
-        if trust_issue is None:
-            trusted_candidates.append(candidate)
-            continue
-        trust_issues.append(trust_issue)
-
-    if not trusted_candidates:
-        issue_message = (
-            trust_issues[0]
-            if trust_issues
-            else "no trusted metadata match was available"
-        )
-        raise BackupRestoreBlocked(
-            "Restore blocked because the uploaded backup file could not be resolved "
-            f"to a trusted authoritative backup artifact: {issue_message}."
-        )
-
-    if len(trusted_candidates) > 1:
-        raise BackupRestoreBlocked(
-            "Restore blocked because the uploaded backup file matches multiple trusted authoritative backup artifacts."
-        )
-
-    return trusted_candidates[0]
+    return _core_resolve(checksum_sha256=checksum_sha256, size_bytes=size_bytes)  # type: ignore[no-any-return]  # lazy import through __getattr__ -> Any
 
 
-def _get_admin_uploaded_restore_artifact_trust_issue(
-    artifact: BackupArtifact,
-) -> str | None:
-    """Return why one checksum-matched artifact is not trusted for admin upload."""
-    if artifact.status == BackupArtifact.STATUS_DELETED:
-        return "matching recorded artifact has been deleted"
-    if artifact.is_export_only() or artifact.backup_format != "pg_dump_custom":
-        return "matching recorded artifact is not a PostgreSQL custom-format restore candidate"
-    if artifact.effective_restore_scope() not in {
-        BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
-        BackupArtifact.RESTORE_SCOPE_PORTABLE,
-    }:
-        return "matching recorded artifact is not classified as an eligible restore candidate"
-
-    snapshot = _get_authoritative_snapshot_for_artifact(artifact)
-    if snapshot is None:
-        return "matching recorded artifact is not linked to an authoritative snapshot"
-    if snapshot.status == BackupSnapshot.STATUS_DELETED:
-        return "matching authoritative snapshot has been deleted or pruned"
-
-    full_backup_contract = _build_snapshot_full_backup_contract(snapshot)
-    if str(full_backup_contract.get("status", "")).strip() != "complete":
-        contract_issues = _summarize_full_backup_contract_issues(full_backup_contract)
-        if contract_issues:
-            return (
-                "matching authoritative snapshot does not satisfy the full-backup "
-                f"contract: {contract_issues}"
-            )
-        return (
-            "matching authoritative snapshot does not satisfy the full-backup contract"
-        )
-
-    provenance = full_backup_contract.get("provenance", {})
-    authoritative_dump = (
-        provenance.get("authoritative_dump", {}) if isinstance(provenance, dict) else {}
-    )
-    if not isinstance(authoritative_dump, dict):
-        return "matching authoritative snapshot does not record authoritative dump metadata"
-    if authoritative_dump.get("artifact_id") != artifact.pk:
-        return "matching authoritative snapshot does not point back to this artifact"
-    if (
-        str(authoritative_dump.get("checksum_sha256", "")).strip()
-        != artifact.checksum_sha256
-    ):
-        return "matching authoritative snapshot checksum metadata does not match the artifact row"
-    if authoritative_dump.get("size_bytes") != artifact.size_bytes:
-        return "matching authoritative snapshot size metadata does not match the artifact row"
-
-    return None
-
-
-def _summarize_full_backup_contract_issues(
-    full_backup_contract: dict[str, Any],
-) -> str:
-    """Flatten completeness and provenance issues from the Phase 1 contract."""
-    issues: list[str] = []
-
-    completeness = full_backup_contract.get("completeness", {})
-    if isinstance(completeness, dict):
-        completeness_issues = completeness.get("issues", [])
-        if isinstance(completeness_issues, list):
-            issues.extend(
-                str(issue).strip()
-                for issue in completeness_issues
-                if str(issue).strip()
-            )
-
-    provenance = full_backup_contract.get("provenance", {})
-    if isinstance(provenance, dict):
-        provenance_issues = provenance.get("issues", [])
-        if isinstance(provenance_issues, list):
-            issues.extend(
-                str(issue).strip() for issue in provenance_issues if str(issue).strip()
-            )
-
-    return "; ".join(dict.fromkeys(issues))
+# SA89a Phase 2 — ``_get_admin_uploaded_restore_artifact_trust_issue`` and
+# ``_summarize_full_backup_contract_issues`` have been moved to
+# ``quickscale_modules_backups.persistence`` where they live as provider-local
+# helpers.  The old ``_resolve_admin_uploaded_restore_artifact`` now delegates
+# to the registered persistence provider through the core persistence seam.
 
 
 def _persist_restore_artifact_metadata(

@@ -85,6 +85,14 @@ __all__ = [
     "RestoreResult",
     "RestoreSourceResolutionMode",
     "RestoreWarning",
+    # DR persistence surface (Django-free — lazy-loaded)
+    "BackupArtifactPersistence",
+    "BackupPolicyPersistence",
+    "PersistedBackupArtifact",
+    "load_default_policy",
+    "register_backup_persistence",
+    "resolve_admin_uploaded_restore_artifact",
+    "save_default_policy",
     # Module wiring spec (from manifest)
     "ModuleWiringSpec",
     # Manifest/resolver types

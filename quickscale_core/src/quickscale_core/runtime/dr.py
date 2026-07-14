@@ -78,6 +78,14 @@ __all__ = [
     "RestoreResult",  # noqa: F822
     "RestoreSourceResolutionMode",  # noqa: F822
     "RestoreWarning",  # noqa: F822
+    # DR persistence surface (Django-free — lazy-loaded)
+    "BackupArtifactPersistence",  # noqa: F822
+    "BackupPolicyPersistence",  # noqa: F822
+    "PersistedBackupArtifact",  # noqa: F822
+    "load_default_policy",  # noqa: F822
+    "register_backup_persistence",  # noqa: F822
+    "resolve_admin_uploaded_restore_artifact",  # noqa: F822
+    "save_default_policy",  # noqa: F822
 ]
 
 # ---------------------------------------------------------------------------
@@ -200,6 +208,17 @@ _LAZY_RECOVERY_SYMBOLS: frozenset[str] = frozenset(
         "_normalize_restore_file_path",
     }
 )
+_LAZY_PERSISTENCE_SYMBOLS: frozenset[str] = frozenset(
+    {
+        "BackupArtifactPersistence",
+        "BackupPolicyPersistence",
+        "PersistedBackupArtifact",
+        "load_default_policy",
+        "register_backup_persistence",
+        "resolve_admin_uploaded_restore_artifact",
+        "save_default_policy",
+    }
+)
 _LAZY_VERIFICATION_SYMBOLS: frozenset[str] = frozenset(
     {
         "_build_clear_rollback_pin_fields",
@@ -226,6 +245,11 @@ def __getattr__(name: str) -> typing.Any:
         import quickscale_core.dr_engine.recovery as _lazy_rec
 
         return getattr(_lazy_rec, name)
+
+    if name in _LAZY_PERSISTENCE_SYMBOLS:
+        import quickscale_core.dr_engine.persistence as _lazy_pers
+
+        return getattr(_lazy_pers, name)
 
     if name in _LAZY_VERIFICATION_SYMBOLS:
         import quickscale_core.dr_engine.verification as _lazy_ver
