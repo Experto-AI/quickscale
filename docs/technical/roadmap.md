@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active and blocked work.
 
-**Integration baseline:** the SA82 unquarantined `make test-integration` gate is the current integration baseline; it is red **only** on SA84 and SA86 below. Closed tickets (SA77–SA83, SA85, SA87, SA90, SA80.x, SA81, SA82, and the SA59.x umbrella) have full detail in [CHANGELOG.md](../../CHANGELOG.md).
+**Integration baseline (pre-SA88):** the SA82 unquarantined `make test-integration` gate is the last accepted baseline before the SA88 hardening attempt (2026-07-14). It was red only on SA84 and SA86 at that time. The subsequent SA88 hardening attempt (commit e1d38bd5, independently reviewed STATUS partial/unsafe to merge) produced a forms regression (SA88-QG-FORMS-001) not present in this baseline; that finding remains open. See §SA88 below for clean continuation. Closed tickets (SA77–SA83, SA85, SA87, SA90, SA80.x, SA81, SA82, and the SA59.x umbrella) have full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 ### Cross-cutting decision (resolved 2026-07-14) — drain SA84–SA86 via one shared RLS-context seam (arch-audit Finding 8, Option 1)
 
@@ -61,43 +61,42 @@ SA83–SA86 are four instances of one structural pattern, **arch-audit [Finding 
 
 ### Track 1 — Tenant-context surface
 
-- [ ] **SA88 — Land an orgs-owned shared RLS-context migration helper + conformance gate (Finding 8, Option 1) — user-selected blocked checkpoint (2026-07-14).** `Tier 2 · Track 1 · deps: none → gates SA84, SA86`
-  The structural fix for the SA84–SA86 cluster (see Cross-cutting decision). Implementation, triage, and focused validation complete; held as a user-selected blocked checkpoint. **No completion or merge is claimed** — the user chose to stop, record, and merge this blocked state rather than continue to full resolution.
+- [ ] **SA88 — Land an orgs-owned shared RLS-context migration helper + conformance gate (Finding 8, Option 1) — attempted hardening withdrawn after independent review (2026-07-14).** `Tier 2 · Track 1 · deps: none → gates SA84, SA86`
+  The structural fix for the SA84–SA86 cluster (see Cross-cutting decision). An attempted hardening checkpoint (commit e1d38bd5, adding conformance negative proofs and a 147-test restricted-role suite) was independently reviewed and found **STATUS partial / unsafe to merge**. The two-file test delta has been withdrawn (this pass, restoring to exact 69cabb47 baseline). What follows records the accepted baseline scope and the withdrawn attempt faithfully — the attempted work was reviewed but never landed in the final tree.
 
+  **Accepted baseline (uncontested, from prior pass — corresponds to 69cabb47/final tree):**
   1. **CRM triage completed:** 195 passed, 67 failed, 20 skipped under the SA82 full `make test-integration` gate. **Buckets:** 0 migration-time, 67 fixture-time, 0 runtime-query. **No new TA finding** — all CRM restricted-role failures are test-posture (fixture-time), not production-severity. The Finding 8 root cause is confirmed: cross-org fixtures without `operator_access`.
-  2. **Seam built:** restoring orgs-owned `operator_access_migration(schema_editor)` context manager / `RunPython` wrapper in `orgs/tenancy.py`; `forms/0007` rerouted through the helper (wraps three backfills and DDL/FK/RLS install, no behavior change); lifecycle regression tests.
-  3. **Conformance analyzer / inventory corrections:** conformance test corrected to detect omissions; verified against full module inventory.
-  4. **forms 0007 caller parity:** examined all callsites of the shared helper; no production code changes needed — the rerouted callsites already match the helper's contract.
-  5. **Restricted-role SELECT/UPDATE/DELETE/INSERT tests:** focused suite verifying existing seams work correctly under `quickscale_test_role` (NOBYPASSRLS, NOSUPERUSER, NOINHERIT).
-  6. **Focused validation evidence:**
-     - Ruff lint pass — clean
-     - MyPy typecheck pass — clean
-     - Conformance gate (SA88 conformance test) — 37 passed
-     - Restricted forms migrations — 16 passed / 8 expected skipped (BYPASSRLS-marked DDL tests)
-     - Tenancy suite — 86 passed
-     - Focused restricted-role suite — 147 passed
-     - `quickscale_test_role` contract: NOBYPASSRLS, NOSUPERUSER (confirmed)
-  7. **Accepted baseline for downstream tickets:**
-     - CRM 67 failures → SA84
-     - Listings 6 failures → SA86
+  2. **Seam built:** orgs-owned `operator_access_migration(schema_editor)` context manager / `RunPython` wrapper in `orgs/tenancy.py`; `forms/0007` rerouted through the helper (wraps three backfills and DDL/FK/RLS install, no behavior change); lifecycle regression tests.
+  3. **Accepted downstream baseline:** CRM 67 failures → SA84, Listings 6 failures → SA86.
 
-  **Unresolved findings (carried forward):**
+  **Prior inspections (no code changes):**
+  - **forms 0007 caller parity:** examined all callsites of the shared helper during prior pass; no production code changes were needed — the rerouted callsites already matched the helper's contract. (Observation only — no code landed in the final tree.)
 
-  **CR-SA88-REV-002 (high/blocking, completeness):** The conformance test's negative proofs, provenance, and inventory paths are bypassable — an ungated cross-org migration can evade detection. The gate's enforcement surface is not yet exhaustive. No exact-commit independent review has resolved this finding.
+  **Attempted hardening (e1d38bd5, independently reviewed, NOT landed):**
+  - Conformance gate negative proofs / provenance / inventory hardening, including conformance analyzer corrections verified against full module inventory
+  - Focused restricted-role suite — 147 tests under `quickscale_test_role` (NOBYPASSRLS, NOSUPERUSER, NOINHERIT), covering SELECT/UPDATE/DELETE/INSERT
+  - Ruff lint and MyPy passes verified
+  - Commit e1d38bd5 was independently reviewed: **STATUS partial / unsafe to merge**
+  - The two-file code delta (conformance test and tenancy test) is withdrawn as part of this docs-only checkpoint
 
-  **CR-SA88-REV-004 (low/blocking, consistency):** The pre-commit hook auto-formatted `test_tenancy.py` and `test_sa88_migration_operator_access_conformance.py` via Ruff, but the finding remains open until the authoritative lint/format gate is rerun and independent review confirms closure. No exact-commit independent review has resolved this finding.
+  **Carried-forward findings:**
 
-  **New blocker (SA88-QG-FORMS-001):** During the second and intended final quality-gate run (`make test-integration`), the forms module restricted-role suite produced **50 failed, 125 passed, 8 skipped, 2 errors** — a regression from the prior run where forms had passed clean. The failures are RLS-denied INSERTs on forms tables. **No forms source code changed** between the passing and failing runs; the cause is unresolved. The quality-gate cycle limit (2 runs) has been reached, so this is recorded as a stable blocker for clean continuation rather than retried. The forms failure may be a pre-existing environment/timing issue that the first pass happened to avoid, but without a confirmed root cause it cannot be dismissed.
+  | ID | Severity | Category | Status | Detail |
+  |---|---|---|---|---|
+  | CR-SA88-REV-002 | high/blocking | completeness | **still-open** | The conformance test's negative proofs, provenance, and inventory paths are bypassable — an ungated cross-org migration can evade detection. Additionally, the nested function `schema_editor` parameter could capture the outer parameter scope, allowing a compliant-looking inner function to hide an ungated DML call. The gate's enforcement surface is not yet exhaustive. |
+  | CR-SA88-REV-004 | low/advisory | consistency | **resolved** | Resolved by exact-commit independent review of e1d38bd5 (review confirmed lint/format gate passed; CR-SA88-REV-004 closed by that review SHA). |
+  | CR-SA88-REV-005 | medium/blocking | correctness | **withdrawn** (code removed) | Found during review of e1d38bd5: the attempted `operator_access_migration` test helper did not restore the ContextVar/GUC on exit (leak across subsequent tests). The code delta containing the helper has been withdrawn. **Do not call resolved until final review confirms the ContextVar/GUC leak pattern is absent** from any future replacement helper. |
+  | CR-SA88-REV-006 | medium/blocking | consistency | **fixed in this pass** | The line-52 integration baseline overstated pre-SA88 gate state. Fixed: relabeled as "last accepted pre-SA88 baseline" and distinguished the latest forms failure (SA88-QG-FORMS-001) from the older SA84/SA86 track. |
+  | SA88-QG-FORMS-001 | high | validation/environment | **still-open** | Second/final `make test-integration` gate run produced 50 failed / 125 passed / 8 skipped / 2 errors in forms (RLS-denied INSERTs). No forms source changed between the clean pass and this regression. Cause unresolved; QG cycle limit reached. Recorded for clean continuation. |
 
-  **No product decision remains for the original scope** — the Finding 8 Option 1 approach is decided. The new QG blocker (SA88-QG-FORMS-001) introduces a fresh decision point: is the forms regression transient or a real baseline?
+  **Clean continuation requirements (for a future implementation turn):**
 
-  **Clean continuation requirements:**
+  1. **Fresh forms diagnosis:** Start a new implementation turn with a targeted forms DB diagnosis/reset to determine whether SA88-QG-FORMS-001 is a transient environment artifact or a real regression. After diagnosis, re-run the full `make test-integration` gate.
+  2. **New reviewed implementation for CR-SA88-REV-002:** Write fresh conformance negative proofs that (a) cannot be silently bypassed by a nested function capturing the outer `schema_editor`, and (b) add genuine omission/read-error negatives rather than structural proxies. Any new test helper that sets ContextVar or GUC must restore both on exit (ContextVar via `try`/`finally`; GUC via `reset_db_current_org_id()`).
+  3. **Any future test helper must restore ContextVar/GUC** and add genuine omission/read-error negatives to the conformance gate.
+  4. **After a green/accepted gate:** submit to fresh independent review to close CR-SA88-REV-002.
 
-  - **Option A (recommended — fresh-turn diagnosis):** Start a new implementation turn with a targeted forms DB diagnosis/reset to determine whether the QG run 2 forms failures (SA88-QG-FORMS-001) are a transient environment artifact or a real regression. After diagnosis, re-run the full `make test-integration` gate. If the gate passes (forms clean), proceed with independent review.
-  - **Option B (re-plan):** If repeated diagnosis confirms the forms failures are a real baseline rather than a transient issue, update the plan to account for the newly surfaced forms restricted-role gap before proceeding with SA88 closeout.
-  - **After a green/accepted gate:** create a hook-clean immutable commit and submit to exact-SHA independent review to resolve CR-SA88-REV-002 and CR-SA88-REV-004.
-
-  *(why →* arch-audit Finding 8, Option 1; roadmap Cross-cutting decision 2026-07-14*)*
+  *(why →* arch-audit Finding 8, Option 1; roadmap Cross-cutting decision 2026-07-14; independent review of e1d38bd5*)*
 
 - [ ] **SA84 — Fix CRM's 67 restricted-role RLS failures (plus 20 skipped) via the SA88 seam.** `Tier 2 · Track 1 · deps: SA88`
   Under the SA82 full `make test-integration` gate, CRM's restricted-role suite showed 195 passed, 67 RLS failures, 20 skipped — an instance of Finding 8 (cross-org migrations/fixtures without `operator_access`). SA88's triage already buckets these failures; route each cross-org migration/fixture through SA88's helper rather than inlining `SET LOCAL`. Any runtime-query-bucket failure that SA88 flagged as production-severe is fixed as a real isolation bug (with its own regression test), not test-posture.
@@ -144,7 +143,7 @@ SA84 — CRM (67 failures)  ◄────────────────�
 
 ### Track readiness (2026-07-14)
 
-- **Track 1 — BLOCKED on bounded implementation (no product decision).** SA88 (the shared helper + conformance gate) has implementation/triage/validation complete but is held at a blocked checkpoint on **CR-SA88-REV-002 (high/blocking, completeness)** and **CR-SA88-REV-004 (low/blocking, consistency)**. Both are implementation work, not forks: harden the conformance gate's negative/provenance/inventory coverage, stage the hook-applied formatting + rerun the authoritative lint gate, then re-run `make test-integration` and pass independent review. The Finding 8 approach is decided (Option 1). SA88 must land before SA84 can start.
+- **Track 1 — BLOCKED (attempted hardening withdrawn after independent review).** SA88 (the shared helper + conformance gate) has accepted baseline scope from prior passes. The attempted hardening (e1d38bd5) was independently reviewed STATUS partial/unsafe to merge and the code delta withdrawn in this pass. Blocking findings: **CR-SA88-REV-002 (high/blocking, completeness)** requires fresh conformance negative proofs that cannot be bypassed by nested function parameter capture, plus genuine omission/read-error negatives; **CR-SA88-REV-005 (medium/blocking, correctness)** was withdrawn with the code — any future ContextVar/GUC-setting test helper must restore both on exit; **CR-SA88-REV-006 (medium/blocking, consistency)** fixed in this pass; **SA88-QG-FORMS-001 (high, still-open)** blocks any clean SA88 gate claim until the forms regression is diagnosed. CR-SA88-REV-004 (low/advisory) resolved by exact-commit review of e1d38bd5. Clean continuation: fresh forms diagnosis and a new reviewed implementation for CR-SA88-REV-002. The Finding 8 approach is decided (Option 1). SA88 must land before SA84 can start.
 - **Track 2 — BLOCKED (waiting on Track 1).** SA85 completed 2026-07-14; SA86 is the only remaining item and is gated on SA88. No independent work, no decision.
 - **Track 3 — CLEAN / IDLE.** SA90 completed; no active work. SA89a (Finding 1 DR port, no deps) is available to pull forward if Track 3 capacity should be used before the next planning cycle — a scheduling choice, not a blocker (see final note below).
 
