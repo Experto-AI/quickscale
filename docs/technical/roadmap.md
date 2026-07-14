@@ -61,12 +61,26 @@ SA83–SA86 are four instances of one structural pattern, **arch-audit [Finding 
 
 ### Track 1 — Tenant-context surface
 
-- [ ] **SA88 — Land an orgs-owned shared RLS-context migration helper + conformance gate (Finding 8, Option 1).** `Tier 2 · Track 1 · deps: none → gates SA84, SA86`
-  The structural fix for the SA84–SA86 cluster (see Cross-cutting decision). Two concerns, one seam:
-  1. **Triage first (Option 3 folded in):** run CRM's restricted-role suite and bucket its 67 failures into migration-time / fixture-time / runtime-query. Record the runtime-query subset explicitly — if any failure is a NOBYPASSRLS-in-production read path missing its context, promote it to a new TA finding (production-severity isolation bug), don't just fix it as test-posture.
-  2. **Build the seam:** lift SA79's inline `SET LOCAL app.operator_access` idiom (`forms/0007`) into an orgs-owned helper — a `with operator_access_migration(schema_editor):` context manager / `RunPython` wrapper that any cross-org data migration routes through — plus a **conformance gate** (house pattern, mirrors SA66/SA60) that fails any module migration writing `organization_id` across orgs without going through the helper.
+- [ ] **SA88 — Land an orgs-owned shared RLS-context migration helper + conformance gate (Finding 8, Option 1) — blocked checkpoint: implementation/validation complete 2026-07-14; independent review blocked on CR-SA88-REV-002/004.** `Tier 2 · Track 1 · deps: none → gates SA84, SA86`
+  The structural fix for the SA84–SA86 cluster (see Cross-cutting decision). Implementation and triage complete:
 
-  *Acceptance:* the helper exists and is orgs-owned; the conformance gate is CI-wired and fails on an ungated cross-org migration; `forms/0007`'s inline `operator_access` is rerouted through the helper (no behavior change); the CRM triage buckets are recorded in the SA88 CHANGELOG entry; no BYPASSRLS hatch reintroduced. *Sized Tier 2: one concern (the shared seam), RISK medium (tenant-context domain, but migration/fixture side is test-posture and the helper is an existing idiom lifted into the house gate pattern) — floors Tier 2, not Tier 3.*
+  1. **CRM triage completed:** 195 passed, 67 failed, 20 skipped under the SA82 full `make test-integration` gate. **Buckets:** 0 migration-time, 67 fixture-time, 0 runtime-query. **No new TA finding** — all CRM restricted-role failures are test-posture (fixture-time), not production-severity. The Finding 8 root cause is confirmed: cross-org fixtures without `operator_access`.
+  2. **Seam built:** restoring orgs-owned `operator_access_migration(schema_editor)` context manager / `RunPython` wrapper in `orgs/tenancy.py`; `forms/0007` rerouted through the helper (wraps three backfills and DDL/FK/RLS install, no behavior change); lifecycle regression tests.
+  3. **Focused validation evidence:**
+     - Ruff lint pass — clean
+     - MyPy pass — clean
+     - Conformance gate (SA88 conformance test) — 37 passed
+     - Restricted forms migrations — 16 passed / 8 expected skipped (BYPASSRLS-marked DDL tests)
+     - Tenancy suite — 86 passed
+     - `quickscale_test_role` contract: NOBYPASSRLS, NOSUPERUSER (confirmed)
+
+  **Blocked on CR-SA88-REV-002 (high/blocking, completeness):** The conformance test's negative proofs, provenance, and inventory paths are bypassable — an ungated cross-org migration can evade detection. The gate's enforcement surface is not yet exhaustive.
+
+  **Blocked on CR-SA88-REV-004 (low/blocking, consistency):** The pre-commit hook auto-formatted `test_tenancy.py` and `test_sa88_migration_operator_access_conformance.py` via Ruff, but the finding remains open until the authoritative lint/format gate is rerun and independent review confirms closure.
+
+  **No product decision remains** — this is bounded implementation work. Full integration validation (tenancy + conformance + all downstream modules under `make test-integration`) is deferred because the blocked checkpoint was chosen instead of continuing to full resolution.
+
+  *Required next actions:* (1) harden the conformance gate's negative/provenance/inventory coverage so bypass paths are detected; (2) stage the hook-applied formatting, rerun the authoritative lint/format gate, then pass independent review to confirm CR-SA88-REV-004 closure; (3) re-run `make test-integration` after both findings are resolved to confirm SA88 passes clean before SA84/SA86 can proceed.
   *(why →* arch-audit Finding 8, Option 1; roadmap Cross-cutting decision 2026-07-14*)*
 
 - [ ] **SA84 — Fix CRM's 67 restricted-role RLS failures (plus 20 skipped) via the SA88 seam.** `Tier 2 · Track 1 · deps: SA88`
@@ -128,11 +142,11 @@ SA84 — CRM (67 failures)  ◄──────────  deps: SA88 ◄─
 
 ### Track readiness & decision (2026-07-14)
 
-- **Track 1 — start with SA88** (the gating helper + gate), then SA84. The Finding 8 approach is decided (Option 1); no open decision remains.
+- **Track 1 — SA88** is the gating ticket (the shared helper + conformance gate). Implementation/validation complete; **blocked on CR-SA88-REV-002 (high/blocking, completeness) and CR-SA88-REV-004 (low/blocking, consistency).** SA88 must be resolved before SA84 can start. The Finding 8 approach is decided (Option 1); no open decision remains.
 - **Track 2 — SA85 completed 2026-07-14** (CR-SA85-REV-001 resolved; force_authenticate contamination fix; 196/8/12 clean); **SA86 waits on SA88.**
 - **Track 3 — SA90 completed** (Finding 7 interim, independent). CR-SA90-REV-004 remains low advisory/non-blocking. SA89a/SA89b (Finding 1 DR port) staged for next cycle.
 
-**Cross-track decision resolved (2026-07-14):** SA84–SA86 drain via **Finding 8 Option 1** — the SA88 shared RLS-context helper + conformance gate lands first and gates SA84/SA86 (see Cross-cutting decision). No open cross-track decision remains. SA88 (Track 1) starts immediately; SA85 (Track 2) completed 2026-07-14; SA90 (Track 3) completed in parallel.
+**Cross-track decision resolved (2026-07-14):** SA84–SA86 drain via **Finding 8 Option 1** — the SA88 shared RLS-context helper + conformance gate lands first and gates SA84/SA86 (see Cross-cutting decision). SA88 implementation/validation complete but currently **blocked on CR-SA88-REV-002/004** (see SA88 entry above). No open cross-track decision remains. Parallel work independent of SA88: SA85 (Track 2, completed 2026-07-14) and SA90 (Track 3, completed). SA84 (Track 1) and SA86 (Track 2) remain gated on SA88 resolution.
 
 ---
 
