@@ -127,19 +127,17 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
 
 arch-audit **[Finding 1](../others/arch-audit.md)** (`dr-engine-module-circular-lattice`, DR persistence port) — **activated 2026-07-14** to use idle Track 3 capacity. Independent of the SA88/SA84/SA86 cluster. Pre-split into two Tier 2 sub-tickets (the whole is Tier 3):
 
-- [ ] **SA89a — Define the artifact/policy persistence protocol in `core`; port `restore_admin_uploaded_backup` (the SA54 seam) onto it.** `Tier 2 · Track 3 · deps: none`
+- [x] **SA89a — Define the artifact/policy persistence protocol in `core`; port `restore_admin_uploaded_backup` (the SA54 seam) onto it.** `Tier 2 · Track 3 · deps: none`
   Core defines protocols for artifact/policy persistence; the backups module implements and injects them at app-ready. First step of Finding 1 Option 2 (persistence port).
   *(why →* arch-audit Finding 1 Option 2*)*
 
-  **Partial checkpoint (2026-07-14) — Phase 1 core persistence contract partially landed:**
-  - [x] Created `quickscale_core/src/quickscale_core/dr_engine/persistence.py` with Django-free `PersistedBackupArtifact` (extends `ArtifactLike`), `BackupArtifactPersistence`, `BackupPolicyPersistence` protocols, atomic `register_backup_persistence()` fail-hard registry, module-level `resolve_admin_uploaded_restore_artifact()`/`load_default_policy()`/`save_default_policy()` getters, and private `_reset_backup_persistence_for_tests()`.
-  - [ ] **Blocked — Phase 1 test file (`test_dr_engine_persistence.py`) not created:** subagent usage limit hit before tests or runtime facade updates could be applied. Registry lifecycle, fail-hard unconfigured access, idempotent re-registration, and reset isolation all uncovered.
-  - [ ] **Blocked — runtime facade not wired:** `runtime/dr.py` lacks eager persistence exports and a `_LAZY_PERSISTENCE_SYMBOLS` table; `runtime/__init__.py.__all__` lacks the 7 new symbols. Without this, nothing can use the persistence seam.
-  - [ ] **Phase 2 (backups Django-backed stores, AppConfig.ready injection, restore port) — not started:** all SA89a implementation past the core contract is deferred.
+  **Completed 2026-07-14.** Full implementation: core persistence contracts (Django-free protocols for `BackupArtifactPersistence`/`BackupPolicyPersistence`, fail-hard `register_backup_persistence()` registry, identity-idempotent re-registration, `_reset_backup_persistence_for_tests()`), runtime facade wiring (`runtime/dr.py` eager exports, `_LAZY_PERSISTENCE_SYMBOLS` table, `runtime/__init__.__all__` update), core test suite (`test_dr_engine_persistence.py` covering registry lifecycle, fail-hard unconfigured access, idempotent re-registration, reset isolation), backups `QuickscaleBackupsConfig.ready()` injection and `test_apps.py` fixture hardening, and the `restore_admin_uploaded_backup` port from orchestration layer onto injected persistence.
 
-  **Findings/blockers discovered:**
-  - _Usage limit_: subagent quotas exhausted mid-execution after writing `persistence.py` but before writing tests or updating the runtime facade. Manual continuation required for the remaining Phase 1 steps then Phase 2.
-  - _No decision outstanding_: the approved plan's three design choices (protocol location = `dr_engine/persistence.py`, scope = only `restore_admin_uploaded_backup`, injection = fail-hard `AppConfig.ready`) remain valid.
+  **Validation:** 64 core persistence tests, 24 targeted backups tests, 2125 core unit (1 pre-existing bypass_rls skip), 320 backups (2 pre-existing bypass_rls skips); Ruff/MyPy green; 92.73% coverage.
+
+  **Advisory resolved (CR-SA89A-ADV-001, low):** teardown `try/except` restructured so `LookupError` is caught only around `apps.get_app_config()` — `config.ready()` runs in the `else` branch outside the catch scope, so any `ready()` exception (including `LookupError`) propagates.
+
+  **No task dependencies, open decisions, or blockers remained.** Independent change-review pass 1 STATUS ok.
 
 - [ ] **SA89b — Migrate the remaining DR orchestration model-access onto the injected persistence.** `Tier 2 · Track 3 · deps: SA89a`
   Remove the `orchestration.py:80` core→module import, the `_LAZY_*` tables, and the `mypy.ini:94` backups ignore.
@@ -152,8 +150,8 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 ```
 Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
-SA88a — REV-006 provenance         SA88b — forms diagnosis ✓ DONE          SA89a — DR persistence protocol
-  (HAND-OFF, no deps)               (SA88-QG-FORMS-001)                     (Finding 1, no deps) · ACTIVE
+SA88a — REV-006 provenance         SA88b — forms diagnosis ✓ DONE          SA89a — DR persistence protocol ✓ DONE
+  (HAND-OFF, no deps)               (SA88-QG-FORMS-001)                     (Finding 1, no deps)
       │ same analyzer file          no deps                                     │
       ▼ (rebase on top)                 │                                       ▼
 SA88c — REV-007 write/flow            │                                    SA89b — DR orchestration port
@@ -176,7 +174,7 @@ SA88c — REV-007 write/flow            │                                    S
 
 - **Track 1 — HAND-OFF READY (SA88a → SA88c).** Decision made: **Option A, multi-pass**, split one-per-finding for divide-and-conquer. SA88a (REV-006) is ready to pick up now; SA88c (REV-007) rebases on top once SA88a lands (shared analyzer file). Both carry a self-contained hand-off brief (work location, evasion space, hard requirements, multi-pass mandate) in the ticket bodies above. Track 1 co-gates SA84 and stays open until both merge.
 - **Track 2 — BLOCKED (SA86 awaits SA88a + SA88c).** SA88b is complete: Forms passed clean in focused and full retained-role execution, and independent review closed SA88-QG-FORMS-001 as transient/environment-dependent. SA86 is next but remains gated on both Track 1 hardening tickets.
-- **Track 3 — READY (SA89a, activated).** The Finding 1 DR persistence port is pulled forward to use idle capacity. SA89a has no deps; SA89b follows. Independent of the SA88/SA84/SA86 cluster.
+- **Track 3 — SA89a complete; SA89b next.** The Finding 1 DR persistence port is fully implemented and reviewed. SA89a is closed; SA89b is next with no remaining blockers. Independent of the SA88/SA84/SA86 cluster.
 
 **Decision made (2026-07-14) — Track 1 gate scope: Option A, multi-pass, split one-per-finding.** The Finding 8 Option 1 seam is ratified and merged; the contested question was how exhaustive the conformance gate must be. The maintainer chose to **fully close** the two blocking findings rather than downgrade them (weighed against accepting the partial gate as a best-effort tripwire, since triage proved the failures are test-posture — CRM 0 runtime-query). To break the twice-hit review-cycle cap, the work is a **persistent multi-pass hand-off split one-per-finding** (SA88a = REV-006, SA88c = REV-007): each ticket is scoped so it can be made exhaustive and independently reviewed, and the picker-upper iterates until its finding genuinely closes rather than stopping at a cap. Self-contained briefs live in the ticket bodies above; SA88b is complete, and the SA89 line (Track 3) proceeds independently.
 
