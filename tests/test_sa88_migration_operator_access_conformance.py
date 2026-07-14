@@ -40,6 +40,14 @@ import pytest
 _OPERATOR_ACCESS_CM_NAME = "operator_access_migration"
 """Name of the context manager function that gates must check for."""
 
+_CANONICAL_TENANCY_MODULE = "quickscale_modules_orgs.tenancy"
+"""Canonical module for operator_access_migration resolution."""
+
+_CANONICAL_OPERATOR_ACCESS_FQN = (
+    f"{_CANONICAL_TENANCY_MODULE}.{_OPERATOR_ACCESS_CM_NAME}"
+)
+"""Canonical fully-qualified name expected for safe operator-access access."""
+
 
 # =========================================================================
 # Debt exemption ledger
@@ -218,12 +226,210 @@ def _is_cross_table_dml_assigning_org_id(sql_text: str) -> bool:
 
 
 def _is_operator_access_migration_call(node: ast.AST) -> bool:
-    """Return ``True`` if *node* is a call to ``operator_access_migration``."""
-    return (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == _OPERATOR_ACCESS_CM_NAME
+    """Return ``True`` if *node* is a call treated as an
+    ``operator_access_migration`` reference.
+
+    In addition to the canonical bare name (``operator_access_migration(... )``),
+    accept the canonical fully-qualified attribute form:
+
+    ``quickscale_modules_orgs.tenancy.operator_access_migration(...)``.
+
+    Alias or module-imported forms (for example
+    ``some_alias.operator_access_migration(...)``) are rejected and handled by
+    the dedicated canonicality checks in ``_check_operator_access_shadowing``.
+    """
+    return isinstance(node, ast.Call) and (
+        (isinstance(node.func, ast.Name) and node.func.id == _OPERATOR_ACCESS_CM_NAME)
+        or (
+            isinstance(node.func, ast.Attribute)
+            and _extract_attribute_fqn(node.func) == _CANONICAL_OPERATOR_ACCESS_FQN
+        )
     )
+
+
+def _extract_attribute_fqn(node: ast.AST) -> str | None:
+    """Return the dotted attribute fullname for Name/Attribute nodes."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _extract_attribute_fqn(node.value)
+        if parent is None:
+            return None
+        return f"{parent}.{node.attr}"
+    return None
+
+
+def _collect_operator_access_bindings(
+    scope_node: ast.AST,
+) -> dict[str, list[tuple[int, str]]]:
+    """Collect name-binding events for ``operator_access_migration`` in scope.
+
+    Events are ``(lineno, kind)`` tuples keyed by bound name.
+    ``kind`` is the binding kind (`canonical-import`, `noncanonical-import`,
+    `param`, `assign`, and so on). The latest event at or before a line is used
+    as the effective binding for provenance checks.
+    """
+    bindings: dict[str, list[tuple[int, str]]] = {_OPERATOR_ACCESS_CM_NAME: []}
+
+    if isinstance(scope_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        for arg_name in _iter_function_parameter_names(scope_node):
+            if arg_name == _OPERATOR_ACCESS_CM_NAME:
+                bindings[_OPERATOR_ACCESS_CM_NAME].append((scope_node.lineno, "param"))
+
+    for node in _iter_non_nested_nodes(scope_node):
+        if isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+        ):
+            if node.name == _OPERATOR_ACCESS_CM_NAME:
+                kind = "lambda" if isinstance(node, ast.Lambda) else "function"
+                if isinstance(node, ast.ClassDef):
+                    kind = "class"
+                bindings[_OPERATOR_ACCESS_CM_NAME].append((node.lineno, kind))
+            continue
+
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name != _OPERATOR_ACCESS_CM_NAME:
+                    continue
+                if node.module != _CANONICAL_TENANCY_MODULE or alias.asname is not None:
+                    kind = "noncanonical-import"
+                else:
+                    kind = "canonical-import"
+                bindings[_OPERATOR_ACCESS_CM_NAME].append((node.lineno, kind))
+            continue
+
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname != _OPERATOR_ACCESS_CM_NAME:
+                    continue
+                bindings[_OPERATOR_ACCESS_CM_NAME].append(
+                    (node.lineno, "noncanonical-import")
+                )
+            continue
+
+        if isinstance(node, ast.Assign):
+            if _OPERATOR_ACCESS_CM_NAME in _collect_bound_names_for_scope(node.targets):
+                bindings[_OPERATOR_ACCESS_CM_NAME].append((node.lineno, "assign"))
+            continue
+
+        if isinstance(node, ast.AnnAssign):
+            if _extract_bound_names(node.target):
+                if _OPERATOR_ACCESS_CM_NAME in _collect_bound_names_for_scope(
+                    [node.target]
+                ):
+                    bindings[_OPERATOR_ACCESS_CM_NAME].append(
+                        (node.lineno, "annassign")
+                    )
+            continue
+
+        if isinstance(node, ast.AugAssign):
+            if _extract_bound_names(node.target):
+                if _OPERATOR_ACCESS_CM_NAME in _collect_bound_names_for_scope(
+                    [node.target]
+                ):
+                    bindings[_OPERATOR_ACCESS_CM_NAME].append(
+                        (node.lineno, "augassign")
+                    )
+            continue
+
+        if isinstance(node, ast.NamedExpr):
+            if _OPERATOR_ACCESS_CM_NAME in _collect_bound_names_for_scope(
+                [node.target]
+            ):
+                bindings[_OPERATOR_ACCESS_CM_NAME].append((node.lineno, "named_expr"))
+            continue
+
+        if isinstance(node, (ast.For, ast.AsyncFor)):
+            if _OPERATOR_ACCESS_CM_NAME in _collect_bound_names_for_scope(
+                [node.target]
+            ):
+                bindings[_OPERATOR_ACCESS_CM_NAME].append((node.lineno, "for"))
+            continue
+
+        if isinstance(node, ast.ExceptHandler):
+            if node.name == _OPERATOR_ACCESS_CM_NAME:
+                bindings[_OPERATOR_ACCESS_CM_NAME].append((node.lineno, "except"))
+            continue
+
+        if isinstance(node, ast.With):
+            for item in node.items:
+                if item.optional_vars is None:
+                    continue
+                if _OPERATOR_ACCESS_CM_NAME in _collect_bound_names_for_scope(
+                    [item.optional_vars]
+                ):
+                    bindings[_OPERATOR_ACCESS_CM_NAME].append((node.lineno, "with_as"))
+            continue
+
+        if isinstance(node, ast.Delete):
+            for target in node.targets:
+                if _OPERATOR_ACCESS_CM_NAME in _collect_bound_names_for_scope([target]):
+                    bindings[_OPERATOR_ACCESS_CM_NAME].append((node.lineno, "delete"))
+            continue
+
+    return {
+        name: sorted(event_list, key=lambda item: item[0])
+        for name, event_list in bindings.items()
+    }
+
+
+def _collect_bound_names_for_scope(targets: list[ast.AST]) -> list[str]:
+    """Collect all bound names from a target list."""
+    names: list[str] = []
+    for target in targets:
+        names.extend(_extract_bound_names(target))
+    return names
+
+
+def _collect_operator_access_bindings_by_scope(
+    tree: ast.AST,
+) -> dict[ast.AST, dict[str, list[tuple[int, str]]]]:
+    """Collect operator-access binding tables for module and each function node."""
+    bindings_by_scope: dict[ast.AST, dict[str, list[tuple[int, str]]]] = {
+        tree: _collect_operator_access_bindings(tree)
+    }
+    for func_node in _iter_function_nodes(tree):
+        bindings_by_scope[func_node] = _collect_operator_access_bindings(func_node)
+    return bindings_by_scope
+
+
+def _is_bound_to_canonical_operator_access(
+    tree: ast.AST,
+    call_node: ast.Call,
+    bindings_by_scope: dict[ast.AST, dict[str, list[tuple[int, str]]]],
+) -> bool:
+    """Return True when a call-name resolves to canonical import in scope.
+
+    Resolution uses local function scope plus module scope and prefers the latest
+    binding at or before call-site line.
+    """
+    if not isinstance(call_node.func, ast.Name):
+        return False
+    if call_node.func.id != _OPERATOR_ACCESS_CM_NAME:
+        return False
+
+    lineno = getattr(call_node, "lineno", -1)
+    binding_sites: list[tuple[int, str]] = []
+
+    enclosing_func = _find_enclosing_function_node(tree, lineno)
+    if enclosing_func is not None:
+        binding_sites.extend(
+            bindings_by_scope.get(enclosing_func, {}).get(_OPERATOR_ACCESS_CM_NAME, [])
+        )
+
+    binding_sites.extend(
+        bindings_by_scope.get(tree, {}).get(_OPERATOR_ACCESS_CM_NAME, [])
+    )
+
+    if not binding_sites:
+        return False
+
+    applicable = [(line, kind) for line, kind in binding_sites if line <= lineno]
+    if not applicable:
+        return False
+
+    _, last_kind = max(applicable, key=lambda item: item[0])
+    return last_kind == "canonical-import"
 
 
 def _find_operator_access_ranges(tree: ast.AST) -> list[tuple[int, int]]:
