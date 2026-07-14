@@ -752,7 +752,7 @@ class TestAdminFormListAPIView:
         )
 
     def test_superuser_session_active_org_sees_cross_tenant(
-        self, superuser, superuser_client, form, org
+        self, superuser, api_client, db
     ):
         """Superuser with ACTIVE_ORG_SESSION_KEY set to a specific org
         can still see forms across all tenants via operator_access.
@@ -761,26 +761,62 @@ class TestAdminFormListAPIView:
         non-exempt admin path.  TenantMiddleware runs and populates the
         ContextVar, but _get_org_bound_queryset returns all_objects.all()
         for superusers regardless of ContextVar state.
+
+        Uses clean ``api_client`` with ``force_login`` (real session
+        authentication), not ``force_authenticate``, so the full
+        middleware + RLS pipeline is exercised.
         """
         from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
-        from quickscale_modules_orgs.models import OrgRole, OrganizationMembership
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+        from quickscale_modules_forms.models import Form
+
+        active_org = Organization.objects.create(name="Active Org", slug="active-org")
+        foreign_org = Organization.objects.create(
+            name="Foreign Org", slug="foreign-org"
+        )
 
         OrganizationMembership.objects.create(
             user=superuser,
-            organization=org,
+            organization=active_org,
             role=OrgRole.ADMIN,
         )
-        superuser_client.force_login(user=superuser)
-        session = superuser_client.session
-        session[ACTIVE_ORG_SESSION_KEY] = str(org.pk)
+
+        with org_scope(active_org):
+            Form.all_objects.create(
+                organization=active_org,
+                title="Active Form",
+                slug="active-form",
+                success_message="Thanks!",
+                is_active=True,
+            )
+        with org_scope(foreign_org):
+            Form.all_objects.create(
+                organization=foreign_org,
+                title="Foreign Form",
+                slug="foreign-form",
+                success_message="Thanks!",
+                is_active=True,
+            )
+
+        api_client.force_login(user=superuser)
+        session = api_client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(active_org.pk)
         session.save()
 
         url = reverse("quickscale_forms:admin-form-list")
-        response = superuser_client.get(url)
+        response = api_client.get(url)
         assert response.status_code == 200
         slugs = [item["slug"] for item in response.data]
-        assert "test-contact" in slugs, (
-            "Superuser with session active org must see System org's form "
+        assert "active-form" in slugs, (
+            f"Superuser must see active org's form. Got slugs: {slugs}"
+        )
+        assert "foreign-form" in slugs, (
+            f"Superuser must see foreign org's form "
             f"via operator path. Got slugs: {slugs}"
         )
 
