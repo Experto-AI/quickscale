@@ -405,6 +405,15 @@ docs updated in the same delta).
   SA80.3, SA81 remain roadmap-tracked; structural root owned by arch-audit Finding 8
   (`module-rls-context-procedural`); not promoted here per convention. Empirical checks: still none
   possible — `psql`/`pg_isready` clients now installed but no PostgreSQL server running.
+- 2026-07-14 (roadmap cleanup, status refresh) — **SA85 (forms residual restricted-role failures):
+  closed** after independent review (CR-SA85-REV-001 resolved; `force_authenticate` session/org-context
+  contamination fixed; forms 196 passed/8 skipped/12 e2e deselected/0 failed). The masthead/orientation
+  prose above (dated 2026-07-13) that lists SA85 among the open gate-red findings is historical — the
+  **current** roadmap-tracked findings keeping the SA82 integration gate red are **SA84** (CRM) and
+  **SA86** (listings) only, both gated behind **SA88** (Finding 8 Option 1, in flight). Still no
+  tech-audit finding: SA88's CRM triage bucketed 0 runtime-query failures (67 fixture-time), confirming
+  no production-severity NOBYPASSRLS read-path gap. Not tech-audit findings per this document's
+  roadmap-tracked convention; recorded here for status accuracy.
 
 ## Notes (not violations, watch items)
 

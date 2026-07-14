@@ -49,15 +49,15 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active and blocked work.
 
-**Recently closed (2026-07-14 — full detail in CHANGELOG):** SA85 (forms residual — CR-SA85-REV-001 resolved; force_authenticate contamination fix; 196/8/12 deselected clean; no blockers), SA77 (orgs restricted-role), SA82 (quarantine removal + full-gate rerun, closing SA77/SA79), SA79 (forms 0007 backfill), SA83 (blog restricted-role — shared `_clear_priming_memo` fix in `orgs/current_org.py`), SA80.3a / SA80.3b (pg_dump tooling + backups rerun), SA87 (backups username-independent test), SA81 (per-module lockfile / sibling-constraint cleanup). The SA82 unquarantined `make test-integration` gate is the current integration baseline; it remains red **only** on SA84 and SA86 below.
+**Integration baseline:** the SA82 unquarantined `make test-integration` gate is the current integration baseline; it is red **only** on SA84 and SA86 below. Closed tickets (SA77–SA83, SA85, SA87, SA90, SA80.x, SA81, SA82, and the SA59.x umbrella) have full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 ### Cross-cutting decision (resolved 2026-07-14) — drain SA84–SA86 via one shared RLS-context seam (arch-audit Finding 8, Option 1)
 
 SA83–SA86 are four instances of one structural pattern, **arch-audit [Finding 8](../others/arch-audit.md) (`module-rls-context-procedural`)**: module RLS-context acquisition is procedural. Only `orgs` and `forms` migrations acquire `operator_access`; `blog`/`crm`/`listings` cross-org data migrations and test fixtures acquire none. The blanket BYPASSRLS hatch masked every omission until SA82 removed it and exposed four modules at once.
 
-**Decision: Option 1 (arch-audit's recommendation).** Land an orgs-owned shared RLS-context migration/ops helper (`with operator_access_migration(schema_editor):` or a `RunPython` wrapper) **plus a conformance gate**, as new ticket **SA88 ahead of SA84/SA86**, so the remaining tickets share one diagnosis and one seam instead of copying SA79's inline `SET LOCAL app.operator_access` into three more modules (Option 2 — a §0 fix-regression that relocates the procedural pattern; rejected). Option 3 (posture-split, gate only runtime read paths) is **folded in as SA88's triage step**, not adopted as the whole approach. This integrates with the project's locked "governance by gate" house style (SA15.3/SA45/SA49/SA66/SA60) and the fail-hard principle: a forgotten cross-org context becomes a build failure, not a silent future outage. **SA88 gates SA84 and SA86; SA85 is unaffected** (it already has `operator_access` via SA79).
+**Decision: Option 1 (arch-audit's recommendation).** Land an orgs-owned shared RLS-context migration/ops helper (`with operator_access_migration(schema_editor):` or a `RunPython` wrapper) **plus a conformance gate**, as new ticket **SA88 ahead of SA84/SA86**, so the remaining tickets share one diagnosis and one seam instead of copying SA79's inline `SET LOCAL app.operator_access` into three more modules (Option 2 — a §0 fix-regression that relocates the procedural pattern; rejected). Option 3 (posture-split, gate only runtime read paths) is **folded in as SA88's triage step**, not adopted as the whole approach. This integrates with the project's locked "governance by gate" house style (SA15.3/SA45/SA49/SA66/SA60) and the fail-hard principle: a forgotten cross-org context becomes a build failure, not a silent future outage. **SA88 gates SA84 and SA86.**
 
-**Mandatory first step inside SA88, before designing the helper:** triage CRM's failures (largest remaining, 67) into **migration-time / fixture-time / runtime-query** buckets — only the runtime-query bucket is production-severity (a real NOBYPASSRLS-in-prod read path missing its context, which would be promoted to a new TA finding); the migration- and fixture-time buckets are test-posture (production `migrate` runs privileged under the SA68 one-shot role). The triage confirms the shared root and sizes the production-severe subset before the seam is shaped.
+**SA88 triage (complete):** CRM's failures (largest remaining, 67) bucketed **0 migration-time / 67 fixture-time / 0 runtime-query** — no production-severity NOBYPASSRLS read-path gap, no new TA finding. The shared Finding 8 root is confirmed: cross-org fixtures without `operator_access`.
 
 ### Track 1 — Tenant-context surface
 
@@ -91,11 +91,7 @@ SA83–SA86 are four instances of one structural pattern, **arch-audit [Finding 
 
 ### Track 2 — Module contracts & settings
 
-- [x] **SA85 — Fix forms' residual restricted-role test failures.** `Tier 1 · Track 2 · deps: none → completed 2026-07-14` *(reassigned from Track 1, 2026-07-13)*
-  Implementation and validation complete (four-phase fix — bounded fixture/test org scopes, retained-role management read-inventory/per-org writes, scoped notification content, and the Staff current-org/superuser operator contract; full detail in CHANGELOG). Final evidence: forms restricted-role suite 196 passed/8 pre-existing skipped/12 e2e deselected/0 failed/0 errors, one pre-existing warning; E2E 12 passed; no quarantine entry needed; all other modules clean.
-
-  **CR-SA85-REV-001 resolved (Adaptive-change-review pass 2, STATUS ok).** The review finding required admin-form-list session tests to use real `force_login` + `ACTIVE_ORG_SESSION_KEY` with own/foreign Forms, and correct the README contract table/comments/references. During implementation, discovered `superuser_client` had pre-applied DRF `force_authenticate` which bypasses real session/org context; fixed by replacing with clean `api_client` + `force_login` + `ACTIVE_ORG_SESSION_KEY` and selected/foreign Forms. Ruff passed; no remaining blockers or open decisions.
-  *(why →* CR-SA82-NT-004; CR-SA85-REV-001 — resolved*)*
+> SA85 (forms residual restricted-role failures) completed 2026-07-14 — full detail in [CHANGELOG.md](../../CHANGELOG.md).
 
 - [ ] **SA86 — Fix listings' 6 restricted-role RLS failures via the SA88 seam.** `Tier 2 · Track 2 · deps: SA88` *(reassigned from Track 1, 2026-07-13)*
   Under the SA82 full gate, listings' restricted-role suite showed 128 passed, 6 RLS failures — an instance of Finding 8. Bucket the 6 failures per SA88's triage method, then route each cross-org migration/fixture through SA88's helper; fix any runtime-query-bucket failure as a real isolation bug. *(Small failure count — may downgrade to Tier 1 once SA88's triage establishes the class and the seam exists; held at Tier 2 while the root is unconfirmed.)*
@@ -105,17 +101,7 @@ SA83–SA86 are four instances of one structural pattern, **arch-audit [Finding 
 
 ### Track 3 — Core/CLI plumbing
 
-- [x] **SA90 — Export the generator's emission mapping as a function; point the SA66 conformance gate at it (Finding 7 interim).** `Tier 2 · Track 3 · deps: none`
-  arch-audit [Finding 7](../others/arch-audit.md) (`generated-file-ownership-unmodeled`): the SA66 conformance gate keeps a hand-written *copy* of the generator's template→emitted-path routing (`_THEME_DEST_MAP`/`_THEME_SUBDIR_MAP`/`_map_theme_template` in `test_beta_migration_ownership_conformance.py`), so a future theme's non-Jinja files could silently escape the enumerated universe. Cheap, independent interim: refactor `_generate_project`'s inline destination logic to export the emission mapping as a pure function, then have the conformance test derive its set from that function and delete the test-side routing copy. Independent of the SA84–SA86 cluster — parallel Track 3 work.
-
-  *Acceptance:* the generator exposes its emission mapping as a callable; the SA66 conformance test consumes it and no longer carries a private routing copy; gate still passes; no behavior change to generated output. *(Sized Tier 2: pure refactor but spans generator + test with scope to discover in `_generate_project`; single concern, RISK low.)*
-  *(why →* arch-audit Finding 7, Option 2 cheap interim*)*
-  **Review findings lifecycle (independent review pass 3 ok):**
-  - **CR-SA90-REV-001** — resolved: production consumes exported mapping.
-  - **CR-SA90-REV-002** — resolved: checked fixture and four-variant exact path/hash/mode parity.
-  - **CR-SA90-REV-003** — resolved: audit/open records synchronized.
-  - **CR-SA90-REV-005** — resolved: start.sh docstring corrected.
-  - **CR-SA90-REV-004** — low advisory, non-blocking: no-op/unused private React helper seams; deferred bounded cleanup.
+> SA90 (generator emission-mapping export, Finding 7 interim) completed — full detail in [CHANGELOG.md](../../CHANGELOG.md). CR-SA90-REV-004 remains a low advisory, non-blocking (no-op/unused private React helper seams; deferred bounded cleanup). No active Track 3 work; the items below are staged for the next planning cycle.
 
 **Staged, not activated — next planning cycle:** arch-audit **[Finding 1](../others/arch-audit.md)** (`dr-engine-module-circular-lattice`, DR persistence port). One ticket would be Tier 3 (architectural), so it is pre-split into two Tier 2 sub-tickets to activate when DR work is next scheduled:
 - *SA89a* — define the artifact/policy persistence protocol in `core`; port `restore_admin_uploaded_backup` (the SA54 seam) onto it. `Tier 2 · Track 3 · deps: none`
@@ -128,25 +114,25 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 ```
 Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
-SA88 — RLS-context helper + gate   SA85 — forms residual ✓                 SA90 — generator emission
-  (Finding 8, Option 1)              completed 2026-07-14                    map export (Finding 7)
-  no deps · GATES SA84, SA86         CR-SA85-REV-001 resolved               no deps · independent
-      │                              no deps · independent                        [x] closed
-      │ gates                            (parallel now)                      ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-      ▼                              SA86 — listings (6 failures)             staged, next cycle:
-SA84 — CRM (67 failures)  ◄──────────  deps: SA88 ◄──────────────────────      SA89a → SA89b
-  deps: SA88                           (consumes the shared seam)               (Finding 1 DR port)
+SA88 — RLS-context helper + gate   SA85 — forms residual ✓ closed          SA90 — emission map ✓ closed
+  (Finding 8, Option 1)              (see CHANGELOG)                         (Finding 7, see CHANGELOG)
+  no deps · GATES SA84, SA86        ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄          ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      │                              SA86 — listings (6 failures)             staged, next cycle:
+      │ gates                          deps: SA88                              SA89a → SA89b
+      ▼                                (consumes the shared seam)              (Finding 1 DR port)
+SA84 — CRM (67 failures)  ◄──────────────────┘
+  deps: SA88
 ```
 
-**Ordering.** SA88 is the gating ticket: it lands the shared seam and *includes the CRM triage* that diagnoses the whole cluster, so both SA84 (Track 1, same track — sequential after SA88) and SA86 (Track 2, cross-track) must wait for it to merge before their fix. **While SA88 is in flight, Track 2 completed SA85 (2026-07-14) and Track 3 completed SA90 (Finding 7 interim) in parallel.** After SA88 merges to `v87`, Track 1 picks up SA84 and Track 2 picks up SA86, both consuming the merged helper.
+**Ordering.** SA88 is the gating ticket: it lands the shared seam and *includes the CRM triage* that diagnoses the whole cluster, so both SA84 (Track 1, same track — sequential after SA88) and SA86 (Track 2, cross-track) must wait for it to merge before their fix. After SA88 merges to `v87`, Track 1 picks up SA84 and Track 2 picks up SA86, both consuming the merged helper.
 
-### Track readiness & decision (2026-07-14)
+### Track readiness (2026-07-14)
 
-- **Track 1 — SA88** is the gating ticket (the shared helper + conformance gate). Implementation/validation complete; **blocked on CR-SA88-REV-002 (high/blocking, completeness) and CR-SA88-REV-004 (low/blocking, consistency).** SA88 must be resolved before SA84 can start. The Finding 8 approach is decided (Option 1); no open decision remains.
-- **Track 2 — SA85 completed 2026-07-14** (CR-SA85-REV-001 resolved; force_authenticate contamination fix; 196/8/12 clean); **SA86 waits on SA88.**
-- **Track 3 — SA90 completed** (Finding 7 interim, independent). CR-SA90-REV-004 remains low advisory/non-blocking. SA89a/SA89b (Finding 1 DR port) staged for next cycle.
+- **Track 1 — BLOCKED on bounded implementation (no product decision).** SA88 (the shared helper + conformance gate) has implementation/triage/validation complete but is held at a blocked checkpoint on **CR-SA88-REV-002 (high/blocking, completeness)** and **CR-SA88-REV-004 (low/blocking, consistency)**. Both are implementation work, not forks: harden the conformance gate's negative/provenance/inventory coverage, stage the hook-applied formatting + rerun the authoritative lint gate, then re-run `make test-integration` and pass independent review. The Finding 8 approach is decided (Option 1). SA88 must land before SA84 can start.
+- **Track 2 — BLOCKED (waiting on Track 1).** SA85 completed 2026-07-14; SA86 is the only remaining item and is gated on SA88. No independent work, no decision.
+- **Track 3 — CLEAN / IDLE.** SA90 completed; no active work. SA89a (Finding 1 DR port, no deps) is available to pull forward if Track 3 capacity should be used before the next planning cycle — a scheduling choice, not a blocker (see final note below).
 
-**Cross-track decision resolved (2026-07-14):** SA84–SA86 drain via **Finding 8 Option 1** — the SA88 shared RLS-context helper + conformance gate lands first and gates SA84/SA86 (see Cross-cutting decision). SA88 implementation/validation complete but currently **blocked on CR-SA88-REV-002/004** (see SA88 entry above). No open cross-track decision remains. Parallel work independent of SA88: SA85 (Track 2, completed 2026-07-14) and SA90 (Track 3, completed). SA84 (Track 1) and SA86 (Track 2) remain gated on SA88 resolution.
+**No open cross-track product decision.** SA84–SA86 drain via **Finding 8 Option 1** (the SA88 seam), already ratified. The only forward choice is Track 3 scheduling (activate SA89a now vs. hold for next cycle).
 
 ---
 
