@@ -59,7 +59,7 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
 
 **Baseline landed.** The `operator_access_migration` helper (`orgs/tenancy.py`), the `forms/0007` reroute, and a baseline conformance gate + lifecycle tests are **merged to `v87`**. **CRM triage complete** — CRM's 67 failures bucket **0 migration-time / 67 fixture-time / 0 runtime-query**: no production-severity NOBYPASSRLS read-path gap, no new tech-audit finding. The Finding 8 root is confirmed: cross-org fixtures without `operator_access`.
 
-**SA88 hardening blocked, now split across tracks.** An attempted hardening checkpoint (commit e1d38bd5) was independently reviewed **STATUS partial/unsafe to merge** and withdrawn (its two-file test delta is restored to the 69cabb47 baseline). Two live blockers remain, and they are independent — so SA88 is split into **SA88a** (gate-hardening, Track 1) and **SA88b** (forms diagnosis, Track 2), which run in parallel. Full withdrawn-attempt detail is in [CHANGELOG.md §SA88](../../CHANGELOG.md).
+**SA88 hardening split across tracks; SA88b closed.** An attempted hardening checkpoint (commit e1d38bd5) was independently reviewed **STATUS partial/unsafe to merge** and withdrawn (its two-file test delta is restored to the 69cabb47 baseline). The two independent blockers were split into **SA88a** (gate-hardening, Track 1) and **SA88b** (forms diagnosis, Track 2). SA88b is now complete; SA88a remains the live blocker before SA84/SA86. Full withdrawn-attempt detail is in [CHANGELOG.md §SA88](../../CHANGELOG.md).
 
 ### Track 1 — Tenant-context surface
 
@@ -77,8 +77,10 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
 
 ### Track 2 — Module contracts & settings
 
-- [ ] **SA88b — Diagnose and clear the forms regression SA88-QG-FORMS-001.** `Tier 1 · Track 2 · deps: none → co-gates SA84, SA86 with SA88a`
+- [x] **SA88b — Diagnose and clear the forms regression SA88-QG-FORMS-001.** `Tier 1 · Track 2 · deps: none → co-gates SA84, SA86 with SA88a`
   A second `make test-integration` gate run produced 50 failed / 125 passed / 8 skipped / 2 errors in forms (RLS-denied INSERTs) with **no forms source changed** between the clean pass and the regression — strongly consistent with the transient stale-`postgres`-owned-test-DB artifact class already seen in SA78 and SA85 (each a disposable-DB ownership issue, not a product bug). Start a fresh forms DB diagnosis/reset to determine whether SA88-QG-FORMS-001 is a transient environment artifact or a real regression, then re-run the full gate. Forms is Track 2's domain (SA85).
+
+  *Completed 2026-07-14:* the focused retained-role Forms suite and the Forms stage of the full integration gate both passed with 196 passed / 8 skipped / 12 deselected / 0 failures. Only separately ticketed CRM (SA84) and listings (SA86) failures remained. Independent review closed SA88-QG-FORMS-001 as transient/environment-dependent; no product source change was required, and the exact stale-database ownership mechanism was not claimed as proven.
 
   *Acceptance:* forms restricted-role suite passes clean under `make test-integration` (transient artifact confirmed and cleared, or a real regression fixed with a regression test); SA88-QG-FORMS-001 closed.
   *(why →* SA88-QG-FORMS-001; independent review of e1d38bd5*)*
@@ -107,12 +109,12 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 ```
 Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
-SA88a — gate hardening             SA88b — forms regression diagnosis      SA89a — DR persistence protocol
+SA88a — gate hardening             SA88b — forms diagnosis ✓ DONE          SA89a — DR persistence protocol
   (CR-SA88-REV-002)                  (SA88-QG-FORMS-001)                     (Finding 1, no deps) · ACTIVE
   no deps                            no deps                                     │
       │                                  │                                       ▼
       └───────────┬──────────────────────┘                                  SA89b — DR orchestration port
-                  ▼ both required                                             deps: SA89a
+                  ▼ SA88b done; SA88a remains required                         deps: SA89a
           SA88 clean gate claim
                   │ gates
         ┌─────────┴─────────┐
@@ -122,15 +124,15 @@ SA88a — gate hardening             SA88b — forms regression diagnosis      S
     Track 1             Track 2
 ```
 
-**Ordering.** SA88a (Track 1) and SA88b (Track 2) are independent and run in parallel; **both** must merge to `v87` for a clean SA88 gate claim. Once SA88 is clean, Track 1 picks up SA84 and Track 2 picks up SA86, both consuming the merged helper. Track 3 runs SA89a → SA89b fully independently of the whole cluster.
+**Ordering.** SA88b (Track 2) is complete. SA88a (Track 1) remains required for a clean SA88 gate claim; once it lands, Track 1 picks up SA84 and Track 2 picks up SA86, both consuming the merged helper. Track 3 runs SA89a → SA89b fully independently of the whole cluster.
 
 ### Track readiness (2026-07-14)
 
 - **Track 1 — READY (SA88a).** The SA88 baseline seam + gate are merged; the remaining Track-1 work is bounded and reviewable — CR-SA88-REV-002 (harden the gate's negative proofs; no ContextVar/GUC-leaking helper). No product decision remains: Finding 8 Option 1 is ratified. SA88a co-gates SA84.
-- **Track 2 — READY (SA88b).** Split out of SA88 to parallelize: diagnose/clear the forms regression SA88-QG-FORMS-001 (probable transient test-DB-ownership artifact, SA78/SA85 class). Independent of SA88a; forms is Track 2's domain. SA88b co-gates SA86; SA86 follows once SA88 is clean.
+- **Track 2 — BLOCKED (SA86 awaits SA88a).** SA88b is complete: Forms passed clean in both focused and full retained-role execution, and independent review closed SA88-QG-FORMS-001 as transient/environment-dependent. SA86 is next but remains gated on Track 1 completing SA88a.
 - **Track 3 — READY (SA89a, activated).** The Finding 1 DR persistence port is pulled forward to use idle capacity. SA89a has no deps; SA89b follows. Independent of the SA88/SA84/SA86 cluster.
 
-**No open cross-track product decision.** SA84/SA86 drain via **Finding 8 Option 1** (ratified). SA88's two independent blockers are split into SA88a (Track 1) and SA88b (Track 2) to run in parallel; the Finding 1 DR port (SA89a) is activated on Track 3. All three tracks are unblocked and have active work.
+**No open cross-track product decision.** SA84/SA86 drain via **Finding 8 Option 1** (ratified). SA88b is complete; SA88a remains active on Track 1 and gates both downstream tickets. Track 2 therefore waits on SA88a before starting SA86. The Finding 1 DR port remains independent on Track 3.
 
 ---
 
