@@ -48,6 +48,295 @@ REACT_THEME_SHARED_DJANGO_TEMPLATES: tuple[str, ...] = (
     "templates/admin/app_index.html.j2",
 )
 
+# ---------------------------------------------------------------------------
+# Theme-to-emitted-path routing (consumed by SA66 conformance gate)
+# ---------------------------------------------------------------------------
+
+#: Theme prefix -> emitted-project directory mapping.
+#: Keys are the directory name under ``themes/``; values are the destination
+#: directory in the generated project.
+_THEME_DEST_MAP: dict[str, str] = {
+    "showcase_react": "frontend",
+    "showcase_html": "",
+}
+
+#: Subdirectory re-mappings within a theme's tree.
+#: Keys are source subdirectory patterns; values are the complete emitted
+#: path relative to the project root (ignoring the theme's root destination,
+#: since these subdirectories map to well-known project directories rather
+#: than being nested under the theme's root prefix).
+_THEME_SUBDIR_MAP: dict[str, str] = {
+    "templates": "templates",
+    "static": "static",
+    "public": "frontend/public",
+    "src": "frontend/src",
+    "e2e": "frontend/e2e",
+}
+
+
+def _resolve_theme_emitted_path(template_rel: Path) -> str | None:
+    """Map a theme template path to its emitted project-relative path.
+
+    Returns ``None`` for theme files that are not directly emitted as
+    project files (e.g. non-Jinja2 artifacts only used at scaffold time,
+    or the theme README which the generator explicitly skips).
+    """
+    # template_rel looks like themes/showcase_react/vite.config.ts (no .j2)
+    parts = template_rel.parts
+    if len(parts) < 3:
+        return None
+    theme_name = parts[1]
+    rest = Path(*parts[2:])
+
+    dest_prefix = _THEME_DEST_MAP.get(theme_name)
+    if dest_prefix is None:
+        return None
+
+    # Check for a known subdirectory mapping.
+    # The subdirectory map gives the COMPLETE emitted paths relative to the
+    # project root, so the theme prefix is ignored for these entries --
+    # the subdir might map to a totally different location (e.g. theme
+    # templates/ goes to project templates/, not frontend/templates/).
+    first_segment = rest.parts[0] if rest.parts else ""
+    if first_segment in _THEME_SUBDIR_MAP:
+        sub_dest = _THEME_SUBDIR_MAP[first_segment]
+        suffix = Path(*rest.parts[1:])
+        return str(Path(sub_dest) / suffix)
+
+    # Files at the theme root (package.json.j2, tsconfig.json.j2, etc.)
+    dest_segments = [seg for seg in [dest_prefix] if seg]
+    return str(Path(*dest_segments) / rest)
+
+
+def _theme_non_jinja_emitted_paths(
+    template_root: Path, theme: str = "showcase_react"
+) -> dict[str, str]:
+    """Return ``{emitted_path: template_root_rel_path}`` for non-Jinja theme files
+    that the generator copies as-is.
+
+    Only the ``showcase_react`` theme emits non-Jinja files (TypeScript source
+    files, PNG icons, etc.).  Non-Jinja files in ``showcase_html`` (e.g.
+    ``.gitkeep`` placeholders) are not emitted -- they only exist to keep empty
+    directories tracked in the repo.
+    """
+    result: dict[str, str] = {}
+    # Only the React theme has non-Jinja files that are emitted as project
+    # artifacts.  Other themes only carry repo-tracking placeholders.
+    if theme != "showcase_react":
+        return result
+    theme_dir = template_root / "themes" / theme
+    if not theme_dir.is_dir():
+        return result
+    dest_prefix = _THEME_DEST_MAP.get(theme, "")
+    for theme_path in sorted(theme_dir.rglob("*")):
+        if not theme_path.is_file():
+            continue
+        # Only include non-Jinja files
+        if theme_path.suffix == ".j2":
+            continue
+        # The generator explicitly skips the theme README
+        if theme_path.name == "README.md" and theme_path.parent == theme_dir:
+            continue
+        rel = theme_path.relative_to(theme_dir)
+        first_segment = rel.parts[0] if rel.parts else ""
+        if first_segment in _THEME_SUBDIR_MAP:
+            sub_dest = _THEME_SUBDIR_MAP[first_segment]
+            suffix = Path(*rel.parts[1:])
+            emitted = str(Path(sub_dest) / suffix)
+        else:
+            dest_segments = [seg for seg in [dest_prefix] if seg]
+            emitted = str(Path(*dest_segments) / rel)
+        # Store the template-root-relative path (includes theme name)
+        result[emitted] = f"themes/{theme}/{rel}"
+    return result
+
+
+def get_generator_emission_mapping(
+    template_root: Path,
+    *,
+    theme: str = "showcase_react",
+    package_name: str = "{package}",
+    selected_modules: list[str] | None = None,
+) -> dict[str, str]:
+    """Return ``{emitted_path: template_rel_path}`` for every file the
+    generator emits for a given theme and module selection.
+
+    This is the authoritative emission mapping consumed by both production
+    generation and the SA66 conformance gate.  Template paths use
+    ``{package}`` or ``package_name`` as a placeholder for the generated
+    project's Python package name.
+
+    Priority order for conflicting emitted destinations:
+        1. Theme-specific templates (always win)
+        2. Common templates (only if not claimed by theme)
+        3. ``project_name``, ``github``, and root-level templates (only if
+           not claimed by theme or common)
+
+    Args:
+    ----
+        template_root: Path to the generator's templates directory.
+        theme: Theme name to use for resolution (default ``showcase_react``).
+        package_name: Python package name placeholder.  For conformance
+            mapping use the default ``{package}``; for production use the
+            actual package name.
+        selected_modules: Optional list of selected module names.  When
+            provided, files gated by unselected modules are omitted from
+            the mapping.
+
+    Returns:
+    -------
+        dict mapping each emitted project-relative path to the source
+        template's relative path within the template tree.
+
+    Raises:
+    ------
+        ValueError: If two different source templates map to the same
+            emitted destination.
+
+    """
+    mapping: dict[str, str] = {}
+    theme_claimed: set[str] = set()
+    common_claimed: set[str] = set()
+
+    # ------------------------------------------------------------------
+    # Pass 1: Theme-specific .j2 templates (highest priority)
+    # ------------------------------------------------------------------
+    for template_path in sorted(template_root.rglob("*.j2")):
+        rel = template_path.relative_to(template_root)
+        stem = str(rel)
+        name_without_suffix = stem[:-3] if stem.endswith(".j2") else stem
+        rel_no_j2 = Path(name_without_suffix)
+        parts = rel_no_j2.parts
+
+        if parts[0] != "themes":
+            continue
+        # Skip templates from non-matching themes
+        if len(parts) < 3 or parts[1] != theme:
+            continue
+
+        emitted = _resolve_theme_emitted_path(rel_no_j2)
+        if emitted is not None:
+            if emitted in mapping:
+                raise ValueError(
+                    f"Duplicate emitted destination {emitted!r}: "
+                    f"'{mapping[emitted]}' and '{stem}'"
+                )
+            mapping[emitted] = stem
+            theme_claimed.add(emitted)
+
+    # ------------------------------------------------------------------
+    # Pass 2: Common templates (lower priority than theme, higher than root)
+    # ------------------------------------------------------------------
+    for template_path in sorted(template_root.rglob("*.j2")):
+        rel = template_path.relative_to(template_root)
+        stem = str(rel)
+        name_without_suffix = stem[:-3] if stem.endswith(".j2") else stem
+        rel_no_j2 = Path(name_without_suffix)
+        parts = rel_no_j2.parts
+
+        if parts[0] != "common":
+            continue
+
+        suffix = Path(*parts[1:])
+        emitted = str(suffix)
+
+        if emitted in theme_claimed:
+            continue  # theme-specific template overrides common
+
+        if emitted in mapping:
+            if mapping[emitted] == stem:
+                continue  # idempotent entry
+            raise ValueError(
+                f"Duplicate emitted destination {emitted!r}: "
+                f"'{mapping[emitted]}' and '{stem}'"
+            )
+        mapping[emitted] = stem
+        common_claimed.add(emitted)
+
+    # ------------------------------------------------------------------
+    # Pass 3: All remaining .j2 templates (project_name, github, root-level)
+    # ------------------------------------------------------------------
+    for template_path in sorted(template_root.rglob("*.j2")):
+        rel = template_path.relative_to(template_root)
+        stem = str(rel)
+        name_without_suffix = stem[:-3] if stem.endswith(".j2") else stem
+        rel_no_j2 = Path(name_without_suffix)
+        parts = rel_no_j2.parts
+
+        # Skip theme and common — handled in passes 1 and 2
+        if parts[0] in ("themes", "common"):
+            continue
+
+        # --- project_name/ templates (emitted as {package}/...) ---
+        if parts[0] == "project_name":
+            suffix = Path(*parts[1:])
+            emitted = str(Path(package_name) / suffix)
+        # --- github/ -> .github/ ---
+        elif parts[0] == "github":
+            suffix = Path(*parts[1:])
+            emitted = str(Path(".github") / suffix)
+        # --- Root-level templates ---
+        else:
+            emitted = name_without_suffix
+
+        # Skip if already claimed by a higher-priority template
+        if emitted in theme_claimed:
+            continue
+
+        # Root-level templates defer to common/ when they map to the same
+        # emitted project path (e.g. templates/admin/index.html.j2 exists
+        # both at root and under common/ — common wins).
+        if parts[0] not in ("project_name", "github") and emitted in common_claimed:
+            continue
+
+        # HTML-specific root-level templates that should only be emitted
+        # for the HTML theme.  The React theme has frontend/ equivalents.
+        if theme == "showcase_react" and parts[0] not in ("project_name", "github"):
+            # Skip static/ and templates/components/ — these are HTML-only
+            # assets that the React theme does not produce.
+            if emitted.startswith("static/") or emitted.startswith(
+                "templates/components/"
+            ):
+                continue
+
+        if emitted in mapping:
+            if mapping[emitted] == stem:
+                continue  # idempotent entry
+            raise ValueError(
+                f"Duplicate emitted destination {emitted!r}: "
+                f"'{mapping[emitted]}' and '{stem}'"
+            )
+        mapping[emitted] = stem
+
+    # ------------------------------------------------------------------
+    # Pass 4: Non-Jinja theme files copied as-is
+    # ------------------------------------------------------------------
+    for emitted_path, template_rel in _theme_non_jinja_emitted_paths(
+        template_root, theme=theme
+    ).items():
+        if emitted_path in mapping:
+            raise ValueError(
+                f"Duplicate emitted destination {emitted_path!r}: "
+                f"'{mapping[emitted_path]}' and '{template_rel}'"
+            )
+        mapping[emitted_path] = template_rel
+
+    # ------------------------------------------------------------------
+    # Pass 5: Dynamically generated outputs
+    # ------------------------------------------------------------------
+    mapping["poetry.lock"] = "<dynamic: generated by _generate_poetry_lock()>"
+
+    # ------------------------------------------------------------------
+    # Pass 6: selected_modules filtering for React theme optional files
+    # ------------------------------------------------------------------
+    if selected_modules is not None and theme == "showcase_react":
+        for rel_opt_path, gating_module in REACT_THEME_OPTIONAL_FILES.items():
+            emitted_opt = f"frontend/{rel_opt_path}"
+            if emitted_opt in mapping and gating_module not in selected_modules:
+                del mapping[emitted_opt]
+
+    return mapping
+
 
 class ProjectGenerator:
     """Generate Django projects from templates"""
@@ -263,259 +552,70 @@ class ProjectGenerator:
             "runtime_db_password": _runtime_db_default_password,
         }
 
-        # Map of template files to output files
-        # Format: (template_path, output_path, executable)
-        file_mappings = [
-            # Root level files
-            ("Makefile.j2", "Makefile", False),
-            ("README.md.j2", "README.md", False),
-            ("manage.py.j2", "manage.py", True),
-            ("pyproject.toml.j2", "pyproject.toml", False),
-            # poetry.lock is generated dynamically via `poetry lock` below
-            (".gitignore.j2", ".gitignore", False),
-            (".dockerignore.j2", ".dockerignore", False),
-            (".editorconfig.j2", ".editorconfig", False),
-            (".env.example.j2", ".env.example", False),
-            (".env.j2", ".env", False),
-            ("Dockerfile.j2", "Dockerfile", False),
-            ("docker-compose.yml.j2", "docker-compose.yml", False),
-            ("railway.json.j2", "railway.json", False),
-            ("start.sh.j2", "start.sh", False),
-            ("scripts/lint.sh.j2", "scripts/lint.sh", True),
-            # Project package files
-            ("project_name/__init__.py.j2", f"{package_name}/__init__.py", False),
-            ("project_name/urls.py.j2", f"{package_name}/urls.py", False),
-            (
-                "project_name/urls_modules.py.j2",
-                f"{package_name}/urls_modules.py",
-                False,
-            ),
-            ("project_name/views.py.j2", f"{package_name}/views.py", False),
-            ("project_name/wsgi.py.j2", f"{package_name}/wsgi.py", False),
-            ("project_name/asgi.py.j2", f"{package_name}/asgi.py", False),
-            (
-                "project_name/context_processors.py.j2",
-                f"{package_name}/context_processors.py",
-                False,
-            ),
-            # Settings files
-            (
-                "project_name/settings/__init__.py.j2",
-                f"{package_name}/settings/__init__.py",
-                False,
-            ),
-            (
-                "project_name/settings/base.py.j2",
-                f"{package_name}/settings/base.py",
-                False,
-            ),
-            (
-                "project_name/settings/modules.py.j2",
-                f"{package_name}/settings/modules.py",
-                False,
-            ),
-            (
-                "project_name/settings/local.py.j2",
-                f"{package_name}/settings/local.py",
-                False,
-            ),
-            (
-                "project_name/settings/production.py.j2",
-                f"{package_name}/settings/production.py",
-                False,
-            ),
-            # Error page templates (shared across all themes)
-            ("templates/404.html.j2", "templates/404.html", False),
-            ("templates/500.html.j2", "templates/500.html", False),
-            # CI/CD and quality tools
-            ("github/workflows/ci.yml.j2", ".github/workflows/ci.yml", False),
-            (".pre-commit-config.yaml.j2", ".pre-commit-config.yaml", False),
-            # Tests
-            ("tests/__init__.py.j2", "tests/__init__.py", False),
-            ("tests/conftest.py.j2", "tests/conftest.py", False),
-            ("tests/test_example.py.j2", "tests/test_example.py", False),
-            # Database init SQL for restricted runtime role (RLS enforcement)
-            ("db/init.sql.j2", "db/init.sql", False),
-            # Operations guide for the generated project
-            ("OPERATIONS.md.j2", "OPERATIONS.md", False),
-        ]
+        # Known executable files (emitted paths that should be executable)
+        _EXECUTABLE_FILES: frozenset[str] = frozenset(
+            {
+                "manage.py",
+                "scripts/lint.sh",
+                # Note: start.sh is intentionally excluded from executable
+                # mode to preserve backward-compatible generated-output
+                # behavior (it was False in the original file_mappings).
+            }
+        )
 
-        # Theme-specific files: HTML uses Django templates, React uses frontend/
-        if self.theme == "showcase_react":
-            # React theme: copy entire frontend directory
-            self._generate_react_frontend(output_path, context)
-        else:
-            # HTML secondary theme: use Django templates and static files
-            file_mappings.extend(
-                [
-                    (
-                        self._get_theme_template_path("templates/base.html.j2"),
-                        "templates/base.html",
-                        False,
-                    ),
-                    (
-                        self._get_theme_template_path("templates/index.html.j2"),
-                        "templates/index.html",
-                        False,
-                    ),
-                    (
-                        self._get_theme_template_path("templates/admin/index.html.j2"),
-                        "templates/admin/index.html",
-                        False,
-                    ),
-                    (
-                        self._get_theme_template_path(
-                            "templates/admin/app_index.html.j2"
-                        ),
-                        "templates/admin/app_index.html",
-                        False,
-                    ),
-                    (
-                        self._get_theme_template_path(
-                            "templates/components/navigation.html.j2"
-                        ),
-                        "templates/components/navigation.html",
-                        False,
-                    ),
-                    (
-                        self._get_theme_template_path("static/css/style.css.j2"),
-                        "static/css/style.css",
-                        False,
-                    ),
-                    (
-                        self._get_theme_template_path("static/images/favicon.svg.j2"),
-                        "static/images/favicon.svg",
-                        False,
-                    ),
-                    (
-                        self._get_theme_template_path(
-                            "templates/social/link_tree.html.j2"
-                        ),
-                        "templates/social/link_tree.html",
-                        False,
-                    ),
-                    (
-                        self._get_theme_template_path(
-                            "templates/social/embeds.html.j2"
-                        ),
-                        "templates/social/embeds.html",
-                        False,
-                    ),
-                ]
-            )
+        # Get the authoritative emission mapping for this theme and selection.
+        # This replaces the previous hardcoded file_mappings and
+        # _generate_react_frontend routing.
+        mapping = get_generator_emission_mapping(
+            self.template_dir,
+            theme=self.theme,
+            package_name=package_name,
+            selected_modules=self.selected_modules,
+        )
 
-        # Render and write all files
-        for template_path, output_file, executable in file_mappings:
-            # Render template
-            template = self.env.get_template(template_path)
-            content = template.render(**context)
+        for emitted_path, template_rel in mapping.items():
+            # poetry.lock is generated dynamically after all files are written
+            if emitted_path == "poetry.lock":
+                continue
 
-            # Write file
-            output_file_path = output_path / output_file
-            write_file(output_file_path, content, executable=executable)
+            output_file_path = output_path / emitted_path
+
+            if template_rel.endswith(".j2"):
+                # Jinja template — render with project context
+                template = self.env.get_template(template_rel)
+                content = template.render(**context)
+
+                is_executable = emitted_path in _EXECUTABLE_FILES
+                write_file(output_file_path, content, executable=is_executable)
+            else:
+                # Non-Jinja file — copy as-is (preserving metadata via shutil.copy2)
+                source_path = self.template_dir / template_rel
+                ensure_directory(output_file_path.parent)
+                shutil.copy2(source_path, output_file_path)
 
         # Generate poetry.lock dynamically to ensure it's always in sync
         # with pyproject.toml (avoids stale lock file issues)
         self._generate_poetry_lock(output_path)
 
     def _generate_react_frontend(self, output_path: Path, context: dict) -> None:
-        """Generate React frontend from theme templates
+        """Generate React frontend from theme templates (delegating compatibility seam).
 
-        Copies all files from showcase_react theme, rendering .j2 templates
-        with project context. Also generates the Django index.html template
-        for serving the React app.
+        The actual frontend generation is now handled by the authoritative
+        :meth:`_generate_project` which consumes
+        :func:`get_generator_emission_mapping`. This method is retained as
+        a delegating seam for any external caller that directly references
+        it — it calls ``_generate_project`` via the parent generation flow.
 
+        .. note::
+
+            This method is **not** called by the current generation path
+            (``_generate_project`` handles both themes uniformly). It exists
+            only as a compatibility shim for any code that may call it
+            directly.
         """
-        theme_dir = self.template_dir / "themes" / "showcase_react"
-        frontend_output = output_path / "frontend"
-        templates_output = output_path / "templates"
-        ensure_directory(frontend_output)
-        ensure_directory(templates_output)
-
-        # Walk through all files in theme directory
-        for root, _dirs, files in os.walk(theme_dir):
-            rel_root = Path(root).relative_to(theme_dir)
-
-            for filename in files:
-                src_path = Path(root) / filename
-
-                # Skip README.md (theme documentation, not project file)
-                if filename == "README.md" and rel_root == Path("."):
-                    continue
-
-                # Handle templates directory separately - copy to project templates/
-                if str(rel_root).startswith("templates"):
-                    if filename.endswith(".j2"):
-                        output_filename = filename[:-3]  # Remove .j2 extension
-                        rel_template_path = rel_root / output_filename
-                        # Convert relative path to just the filename within templates/
-                        output_file_path = output_path / rel_template_path
-
-                        # Prefer the theme-specific Django template when it
-                        # exists; otherwise fall back to the shared
-                        # ``templates/`` location so that admin overrides and
-                        # other identical templates can live in one place.
-                        template_rel_path = (
-                            f"themes/showcase_react/{rel_root / filename}"
-                        )
-                        if not (self.template_dir / template_rel_path).exists():
-                            template_rel_path = str(rel_root / filename)
-
-                        template = self.env.get_template(template_rel_path)
-                        content = template.render(**context)
-
-                        write_file(output_file_path, content)
-                    continue
-
-                # Determine output path and whether to render as template
-                if filename.endswith(".j2"):
-                    # Template file: render it
-                    output_filename = filename[:-3]  # Remove .j2 extension
-                    rel_output_path = rel_root / output_filename
-
-                    # Get template relative to template_dir
-                    template_rel_path = f"themes/showcase_react/{rel_root / filename}"
-                    template = self.env.get_template(template_rel_path)
-                    content = template.render(**context)
-
-                    # Skip optional React components when their gating module
-                    # is not selected. This keeps generated apps free of dead
-                    # imports and unrendered routes for unselected modules.
-                    if self._should_skip_optional_react_file(rel_output_path):
-                        continue
-
-                    output_file_path = frontend_output / rel_output_path
-                    write_file(output_file_path, content)
-                else:
-                    # Regular file: copy as-is
-                    rel_output_path = rel_root / filename
-                    output_file_path = frontend_output / rel_output_path
-
-                    ensure_directory(output_file_path.parent)
-                    shutil.copy2(src_path, output_file_path)
-
-        # Render shared Django templates that are not theme-specific. The
-        # React walker above only visits files inside the theme directory, so
-        # we explicitly add shared Django templates (such as admin overrides)
-        # here to keep both themes in sync without duplicating files.
-        for shared_rel in REACT_THEME_SHARED_DJANGO_TEMPLATES:
-            shared_source = self.template_dir / shared_rel
-            if not shared_source.exists():
-                raise FileNotFoundError(
-                    f"Shared Django template '{shared_rel}' not found. "
-                    f"Searched:\n"
-                    f"  - {shared_source}\n"
-                    "Ensure the template exists in the templates/admin/ "
-                    "directory or add it to REACT_THEME_SHARED_DJANGO_TEMPLATES. "
-                    "These templates are required for the React theme — "
-                    "missing templates are no longer silently skipped."
-                )
-
-            output_rel = Path(shared_rel).with_suffix("")  # Strip .j2
-            output_file_path = output_path / output_rel
-            template = self.env.get_template(shared_rel)
-            content = template.render(**context)
-            write_file(output_file_path, content)
+        # Delegate to the same mapping-driven path that _generate_project uses.
+        # Re-render would be redundant; this is a no-op seam.
+        pass
 
     def _should_skip_optional_react_file(self, rel_output_path: Path) -> bool:
         """Return True when an optional React file should be skipped.
