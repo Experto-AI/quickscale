@@ -28,21 +28,24 @@ def test_org_a_cannot_see_org_b_listings(
 
     from quickscale_modules_listings.models import Listing
     from quickscale_modules_listings.views import ListingListView
+    from quickscale_modules_orgs.current_org import org_scope
 
-    Listing.objects.create(
-        title="Org A Listing",
-        slug="org-a-listing",
-        description="Org A description",
-        status="published",
-        organization=org_a,
-    )
-    Listing.objects.create(
-        title="Org B Listing",
-        slug="org-b-listing",
-        description="Org B description",
-        status="published",
-        organization=org_b,
-    )
+    with org_scope(org_a):
+        Listing.objects.create(
+            title="Org A Listing",
+            slug="org-a-listing",
+            description="Org A description",
+            status="published",
+            organization=org_a,
+        )
+    with org_scope(org_b):
+        Listing.objects.create(
+            title="Org B Listing",
+            slug="org-b-listing",
+            description="Org B description",
+            status="published",
+            organization=org_b,
+        )
 
     factory = RequestFactory()
     url = reverse("quickscale_listings:listing_list")

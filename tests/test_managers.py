@@ -12,7 +12,11 @@ from quickscale_modules_listings.managers import (
     TenantScopedManager,
 )
 from quickscale_modules_listings.models import Listing
-from quickscale_modules_orgs.current_org import set_current_org_id
+from quickscale_modules_orgs.current_org import (
+    operator_access,
+    org_scope,
+    set_current_org_id,
+)
 from quickscale_modules_orgs.managers import TenantManager
 from quickscale_modules_orgs.models import Organization
 
@@ -46,8 +50,10 @@ class TestTenantManagerScoping:
     @pytest.mark.django_db
     def test_objects_scopes_to_current_org(self, org, org_a):
         """``Listing.objects.all()`` must scope to the org set in the ContextVar."""
-        Listing.objects.create(title="Org A Listing", organization=org_a)
-        Listing.objects.create(title="Default Listing", organization=org)
+        with org_scope(org_a):
+            Listing.objects.create(title="Org A Listing", organization=org_a)
+        with org_scope(org):
+            Listing.objects.create(title="Default Listing", organization=org)
 
         set_current_org_id(org_a.pk)
         results = list(Listing.objects.all().values_list("title", flat=True))
@@ -59,7 +65,8 @@ class TestTenantManagerScoping:
     @pytest.mark.django_db
     def test_objects_returns_none_without_org_context(self, org):
         """``Listing.objects.all()`` returns empty when ContextVar is unset."""
-        Listing.objects.create(title="Some Listing", organization=org)
+        with org_scope(org):
+            Listing.objects.create(title="Some Listing", organization=org)
 
         # Reset ContextVar to unset state
         from quickscale_modules_orgs.current_org import reset_current_org_id
@@ -72,10 +79,13 @@ class TestTenantManagerScoping:
     @pytest.mark.django_db
     def test_all_objects_returns_all_rows(self, org, org_a):
         """``Listing.all_objects.all()`` must return all rows (operator bypass)."""
-        Listing.objects.create(title="Listing A", organization=org)
-        Listing.objects.create(title="Listing B", organization=org_a)
+        with org_scope(org):
+            Listing.objects.create(title="Listing A", organization=org)
+        with org_scope(org_a):
+            Listing.objects.create(title="Listing B", organization=org_a)
 
-        results = list(Listing.all_objects.all().values_list("title", flat=True))
+        with operator_access(reason="test_all_objects_returns_all_rows"):
+            results = list(Listing.all_objects.all().values_list("title", flat=True))
 
         assert "Listing A" in results
         assert "Listing B" in results
@@ -85,6 +95,9 @@ class TestTenantManagerScoping:
     def test_create_stamps_correct_org(self, org):
         """Creating a listing via ``objects.create`` requires explicit org."""
         system_org = Organization.objects.get_system_org()
-        listing = Listing.objects.create(title="New Listing", organization=system_org)
+        with org_scope(system_org):
+            listing = Listing.objects.create(
+                title="New Listing", organization=system_org
+            )
         assert listing.organization == system_org
         assert listing.pk is not None
