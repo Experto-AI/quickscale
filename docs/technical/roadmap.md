@@ -65,7 +65,7 @@ git merge --no-ff wt-track{N}
 
 #### Repo-global gates (run once at v87 integration, after per-module work lands)
 
-Assigned to **Track 2** (its module work — SA86, SA88b — is complete, so it owns the green-gate closeout). **GATE-lint and GATE-typecheck are done** (2026-07-15; see [CHANGELOG.md](../../CHANGELOG.md)); the gate below plus SA91 remain.
+Assigned to **Track 2** (its module work — SA86, SA88b — is complete, so it owns the green-gate closeout). **GATE-lint and GATE-typecheck are done** (2026-07-15; see [CHANGELOG.md](../../CHANGELOG.md)); GATE-quality is the only remaining repo-global gate.
 
 - [x] **GATE-lint** — `make lint` (Ruff) green. `Track 2`
 - [x] **GATE-typecheck** — `make typecheck` (MyPy) green. `Track 2 · deps: none` — completed 2026-07-15.
@@ -73,12 +73,6 @@ Assigned to **Track 2** (its module work — SA86, SA88b — is complete, so it 
 - [x] **GATE-check-suite** — `check-core-compat`, `check-module-core-imports`, `check-manifest-sync`, `check-org-context-primitives`, `check-csrf-exempt` all green. `Track 2`
   **Findings/blockers discovered:** None — all five gates passed clean on first run. All five gates were already green from prior SA implementation phases (check-core-compat from SA9.2, check-module-core-imports from SA9.6, check-manifest-sync from SA16.1, check-org-context-primitives from SA13.4, check-csrf-exempt from SA46). No script or source changes were needed to close GATE-check-suite; closeout was documentation-only.
 - [ ] **GATE-quality** — `make quality` (vulture / radon / pylint) within agreed thresholds. `Track 2`
-
-- [ ] **SA91 — Fork the per-module integration loop for true parallel execution.** `Tier 2 · Track 2 · deps: none`
-  `scripts/test_integration.sh` runs module stages serially (loop at `:414–442`). Fork each module's pytest stage and join exit codes + coverage. Contention points to resolve: the shared `COVERAGE_RESULTS_FILE` mktemp (`:57`) must become per-module and be merged before `check_overall_mean_coverage`; the per-module `QS_*_DB_USER` role setup (`:375–386`) and pre-created test databases must not collide across concurrent workers. Kept separate from the SA84 correctness work — this is CI-time speedup only, not a gate for green.
-
-  *Acceptance:* parallel run produces the identical pass/fail verdict and the identical overall-mean coverage as the serial run; no cross-worker DB collision under the restricted role.
-  *(why →* green-gate milestone; parallelize testing by module*)*
 
 ### Cross-cutting decision (re-based 2026-07-15) — eliminate the cross-org-migration class by squashing to a final-schema initial migration (arch-audit Finding 8)
 
@@ -117,6 +111,14 @@ SA84 and SA86 were originally framed as two instances of **arch-audit [Finding 8
 
 > **SA88b (forms diagnosis, SA88-QG-FORMS-001) — done 2026-07-14; detail in [CHANGELOG.md §SA88b](../../CHANGELOG.md).** Forms passed clean (196 passed / 8 skipped / 12 deselected / 0 failed); independent review closed SA88-QG-FORMS-001 as transient/environment-dependent, no product source changed. **SA86 — done 2026-07-15; detail in [CHANGELOG.md §SA86](../../CHANGELOG.md).** Listings restricted-role suite 134 passed/0 failed, 95.73% coverage, no quarantine. Track 2 module work is complete.
 
+**Pending non-gating follow-up (Track 2):**
+
+- [ ] **SA91 — Fork the per-module integration loop for true parallel execution.** `Tier 2 · Track 2 · deps: none`
+  `scripts/test_integration.sh` runs module stages serially (loop at `:414–442`). Fork each module's pytest stage and join exit codes + coverage. Contention points to resolve: the shared `COVERAGE_RESULTS_FILE` mktemp (`:57`) must become per-module and be merged before `check_overall_mean_coverage`; the per-module `QS_*_DB_USER` role setup (`:375–386`) and pre-created test databases must not collide across concurrent workers. CI-time speedup only — not a gate for the green-gate milestone.
+
+  *Acceptance:* parallel run produces the identical pass/fail verdict and the identical overall-mean coverage as the serial run; no cross-worker DB collision under the restricted role.
+  *(why →* parallelize testing by module*)*
+
 ### Track 3 — Core/CLI plumbing (complete)
 
 > **Track 3 is complete.** arch-audit **[Finding 1](../others/arch-audit.md)** (`dr-engine-module-circular-lattice`, DR persistence port) is closed: SA89a (persistence protocol in `core` + `restore_admin_uploaded_backup` port, done 2026-07-14) and SA89b (orchestration port closeout — declarative reverse import ban + modules-absent runtime proof, custom boundary scanner deleted, done 2026-07-15). Detail in [CHANGELOG.md §SA89a/§SA89b](../../CHANGELOG.md). **SA89B-CR-004 (low/advisory)** remains open against `check_module_core_compatibility.py` independently — not gating.
@@ -133,7 +135,7 @@ SA92 — squash migrations +          module work ✓ DONE (SA86, SA88b)        
   deps: none                            ▼
       │                             Green-gate closeout (remaining):
       ▼                               GATE-quality
-SA84 — CRM (67 fixtures)              SA91 — parallel integration loop
+SA84 — CRM (67 fixtures)              SA91 — parallel integration loop (non-gating; CI speedup only)
   deps: none                          deps: none  (GATE-lint / GATE-typecheck / GATE-check-suite ✓ DONE)
   │  (per-module gate)
   Track 1                            Track 2                               Track 3
@@ -141,12 +143,12 @@ SA84 — CRM (67 fixtures)              SA91 — parallel integration loop
 
 **Ordering.** The squash (SA92) eliminates the cross-org-migration class, so the SA88 gate saga (SA88a–e) is deleted, not completed. SA84 survived as a **fixture** cleanup. Track 1 runs SA92 → SA84. Track 2 (module work complete) owns the repo-global closeout. Track 3 is complete.
 
-**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join: the per-module gate (SA84, Track 1) plus the repo-global gates and the SA91 parallel-loop tooling (Track 2) must all land on `v87`. GATE-typecheck's former wait on SA89b is satisfied (the backups `mypy.ini` ignore is already removed on `v87`). Track 2, having finished its module work, owns the closeout: GATE-lint, GATE-typecheck, and GATE-check-suite are complete; GATE-quality and SA91 remain pending.
+**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join: the per-module gate (SA84, Track 1) plus the repo-global gates must all land on `v87`. GATE-typecheck's former wait on SA89b is satisfied (the backups `mypy.ini` ignore is already removed on `v87`). Track 2, having finished its module work, owns the closeout: GATE-lint, GATE-typecheck, and GATE-check-suite are complete; GATE-quality remains pending. SA91 is a separate pending non-gating optimization follow-up — CI-time speedup only, not a gate for green.
 
 ### Track readiness (2026-07-15)
 
 - **Track 1 — READY, clean to continue (SA92, deps: none).** The squash-and-drop-backward-compat decision (see cross-cutting decision above) makes the whole cross-org-migration problem disappear: no static analyzer, no runtime boundary proofs, no gate. The decision is already ratified, so no maintainer decision is pending. SA92 is fresh, dependency-free work; SA84 follows it and is unblocked by it. The retired SA88a–e findings (CR-SA88-REV-006/007, CR-SA88A1-REV-002/003/004) close as obsoleted-by-schema-squash.
-- **Track 2 — module work complete; owns green-gate closeout.** SA88b and SA86 are both done (listings restricted-role suite passes clean, 134 passed/0 failed, no quarantine entry). With its module work finished, Track 2 now owns the green-gate closeout: GATE-lint, GATE-typecheck, and GATE-check-suite are complete; GATE-quality and SA91 remain pending.
+- **Track 2 — module work complete; owns green-gate closeout.** SA88b and SA86 are both done (listings restricted-role suite passes clean, 134 passed/0 failed, no quarantine entry). With its module work finished, Track 2 now owns the green-gate closeout: GATE-lint, GATE-typecheck, and GATE-check-suite are complete; GATE-quality remains pending. SA91 is a separate pending non-gating optimization follow-up — CI-time speedup only, not a gate for green.
 - **Track 3 — COMPLETE.** SA89a + SA89b done (2026-07-15); Finding 1 (DR persistence port) closed. No open Track-3 work; **SA89B-CR-004 (low/advisory)** remains against `check_module_core_compatibility.py` independently, not gating.
 
 **No track is blocked. No maintainer decision is pending** — the squash re-base and the SA89b descope were both ratified on 2026-07-15.
