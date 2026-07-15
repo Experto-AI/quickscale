@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from django import forms
 from django.contrib import admin, messages
@@ -100,7 +100,7 @@ class BackupPolicyRestoreForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.allow_recorded_artifact_source = allow_recorded_artifact_source
         if allow_recorded_artifact_source:
-            self.fields["source_mode"].choices = [
+            self.fields["source_mode"].choices = [  # type: ignore[attr-defined]
                 (
                     self.SOURCE_MODE_RECORDED_ARTIFACT,
                     "Recorded local artifact",
@@ -109,7 +109,7 @@ class BackupPolicyRestoreForm(forms.Form):
             ]
             self.fields["source_mode"].initial = self.SOURCE_MODE_RECORDED_ARTIFACT
         else:
-            self.fields["source_mode"].choices = [
+            self.fields["source_mode"].choices = [  # type: ignore[attr-defined]
                 (self.SOURCE_MODE_UPLOADED_FILE, "Uploaded backup file")
             ]
             self.fields["source_mode"].initial = self.SOURCE_MODE_UPLOADED_FILE
@@ -906,7 +906,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
     def _get_snapshot(self, obj: BackupArtifact) -> BackupSnapshot | None:
         """Return the attached authoritative snapshot when one is tracked."""
         if hasattr(obj, "authoritative_snapshot"):
-            return obj.authoritative_snapshot
+            return cast(BackupSnapshot | None, obj.authoritative_snapshot)
         return None
 
     def _snapshot_metadata(self, obj: BackupArtifact) -> dict[str, Any]:
@@ -920,7 +920,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         """Return the tracked snapshot identifier when one is available."""
         snapshot = self._get_snapshot(obj)
         if snapshot is not None:
-            return snapshot.snapshot_id
+            return cast(str | None, snapshot.snapshot_id)
 
         snapshot_id = str(self._snapshot_metadata(obj).get("snapshot_id", "")).strip()
         return snapshot_id or None
@@ -929,7 +929,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         """Return the tracked snapshot lifecycle status when one is available."""
         snapshot = self._get_snapshot(obj)
         if snapshot is not None:
-            return snapshot.status
+            return cast(str | None, snapshot.status)
 
         snapshot_status = str(
             self._snapshot_metadata(obj).get("snapshot_status", "")
