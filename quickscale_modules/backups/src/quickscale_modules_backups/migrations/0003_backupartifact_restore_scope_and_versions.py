@@ -64,7 +64,9 @@ def _restore_scope_for_legacy_artifact(backup_format: str) -> str | None:
     return None
 
 
-def backfill_backupartifact_restore_scope_and_versions(apps, schema_editor):
+def backfill_backupartifact_restore_scope_and_versions(
+    apps: Any, schema_editor: Any
+) -> None:
     del schema_editor
     BackupArtifact = apps.get_model("quickscale_modules_backups", "BackupArtifact")
 
