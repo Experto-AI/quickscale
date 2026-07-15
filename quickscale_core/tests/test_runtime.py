@@ -78,6 +78,21 @@ class TestRuntimeAllExport:
             f"Missing backup symbols: {backup_symbols - set(runtime.__all__)}"
         )
 
+    def test_all_contains_persistence_surface(self) -> None:
+        """DR persistence surface symbols are in __all__."""
+        persistence_symbols = {
+            "BackupArtifactPersistence",
+            "BackupPolicyPersistence",
+            "PersistedBackupArtifact",
+            "load_default_policy",
+            "register_backup_persistence",
+            "resolve_admin_uploaded_restore_artifact",
+            "save_default_policy",
+        }
+        assert persistence_symbols.issubset(runtime.__all__), (
+            f"Missing persistence symbols: {persistence_symbols - set(runtime.__all__)}"
+        )
+
     def test_all_contains_social_surface(self) -> None:
         social_symbols = {
             "SOCIAL_EMBEDS_PATH",
@@ -107,12 +122,15 @@ class TestRuntimeAllExport:
         expected = {
             "ADAPTER_FUNCTIONS",
             "ArtifactLike",
+            "BackupArtifactPersistence",
             "BackupConfigurationError",
             "BackupError",
             "BackupLockError",
+            "BackupPolicyPersistence",
             "BackupPolicySnapshot",
             "BackupRestoreBlocked",
             "ModuleWiringSpec",
+            "PersistedBackupArtifact",
             "RemoteMaterializer",
             "ResolverResult",
             "ResolvedRestoreSource",
@@ -141,18 +159,22 @@ class TestRuntimeAllExport:
             "fetch_snapshot_report",
             "get_backup_snapshot",
             "get_local_backup_directory",
+            "load_default_policy",
             "load_social_manifest",
             "prune_expired_backups",
             "record_backup_snapshot_verification",
             "record_verification",
+            "register_backup_persistence",
             "render_social_managed_init_module",
             "render_social_managed_urls_module",
             "render_social_managed_views_module",
             "report_backup_snapshot",
+            "resolve_admin_uploaded_restore_artifact",
             "resolve_social_module_options",
             "restore_admin_uploaded_backup",
             "restore_backup_artifact",
             "restore_backup_source",
+            "save_default_policy",
             "set_backup_snapshot_rollback_pin",
             "set_rollback_pin",
             "social_provider_supports_embeds",
@@ -234,6 +256,31 @@ class TestRuntimeSymbolTypes:
     def test_resolve_social_module_options_is_callable(self) -> None:
         assert callable(runtime.resolve_social_module_options)
 
+    # ------------------------------------------------------------------
+    # Persistence surface types
+    # ------------------------------------------------------------------
+
+    def test_persistence_protocols_are_classes(self) -> None:
+        for name in (
+            "BackupArtifactPersistence",
+            "BackupPolicyPersistence",
+            "PersistedBackupArtifact",
+        ):
+            symbol = getattr(runtime, name, None)
+            assert symbol is not None, f"runtime.{name} is None"
+            assert isclass(symbol), f"runtime.{name} is not a class"
+
+    def test_persistence_functions_are_callable(self) -> None:
+        for name in (
+            "load_default_policy",
+            "register_backup_persistence",
+            "resolve_admin_uploaded_restore_artifact",
+            "save_default_policy",
+        ):
+            symbol = getattr(runtime, name, None)
+            assert symbol is not None, f"runtime.{name} is None"
+            assert callable(symbol), f"runtime.{name} is not callable"
+
 
 # ===================================================================
 # Importable-by-name verification
@@ -247,8 +294,11 @@ class TestRuntimeImportable:
         "symbol_name",
         [
             "ADAPTER_FUNCTIONS",
+            "BackupArtifactPersistence",
             "BackupError",
+            "BackupPolicyPersistence",
             "ModuleWiringSpec",
+            "PersistedBackupArtifact",
             "ResolverResult",
             "SOCIAL_EMBEDS_PATH",
             "SOCIAL_INTEGRATION_BASE_PATH",
@@ -259,12 +309,16 @@ class TestRuntimeImportable:
             "capture_snapshot",
             "execute_database_restore",
             "fetch_snapshot_report",
+            "load_default_policy",
             "load_social_manifest",
             "record_verification",
+            "register_backup_persistence",
             "render_social_managed_init_module",
             "render_social_managed_urls_module",
             "render_social_managed_views_module",
+            "resolve_admin_uploaded_restore_artifact",
             "resolve_social_module_options",
+            "save_default_policy",
             "set_rollback_pin",
             "social_provider_supports_embeds",
             "sync_media",
@@ -364,6 +418,17 @@ class TestRuntimeDrGetAttrDir:
         )
 
         assert result is _validate_verification_inputs
+
+    def test_getattr_persistence_symbol(self) -> None:
+        """Persistence is Django-free; the real module should resolve."""
+        from quickscale_core.runtime import dr as _dr
+
+        result = _dr.__getattr__("register_backup_persistence")
+        from quickscale_core.dr_engine.persistence import (
+            register_backup_persistence,
+        )
+
+        assert result is register_backup_persistence
 
     def test_getattr_unknown_raises_attribute_error(self) -> None:
         from quickscale_core.runtime import dr as _dr
