@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active and blocked work.
 
-**Integration baseline (SA82).** The SA82 unquarantined `make test-integration` gate is the accepted baseline for the remaining restricted-role cluster. Under it the only reds are **CRM (SA84)** and **listings (SA86)**; blog (SA83), forms (SA85), orgs (SA77), and notifications (SA79) are all closed — see [CHANGELOG.md](../../CHANGELOG.md).
+**Integration baseline (SA82).** The SA82 unquarantined `make test-integration` gate is the accepted baseline for the remaining restricted-role cluster. Under it the only red remaining is **CRM (SA84)**; blog (SA83), forms (SA85), listings (SA86), orgs (SA77), and notifications (SA79) are all closed — see [CHANGELOG.md](../../CHANGELOG.md).
 
 ### Cross-cutting decision (re-based 2026-07-15) — eliminate the cross-org-migration class by squashing to a final-schema initial migration (arch-audit Finding 8)
 
@@ -86,12 +86,12 @@ SA84 and SA86 were originally framed as two instances of **arch-audit [Finding 8
 
 ### Track 2 — Module contracts & settings
 
-> **SA88b (forms diagnosis, SA88-QG-FORMS-001) — done 2026-07-14; detail in [CHANGELOG.md §SA88b](../../CHANGELOG.md).** Forms passed clean (196 passed / 8 skipped / 12 deselected / 0 failed); independent review closed SA88-QG-FORMS-001 as transient/environment-dependent, no product source changed. SA86 is Track 2's remaining work, now decoupled from Track 1 by the squash re-base.
+> **SA88b (forms diagnosis, SA88-QG-FORMS-001) — done 2026-07-14; detail in [CHANGELOG.md §SA88b](../../CHANGELOG.md).** Forms passed clean (196 passed / 8 skipped / 12 deselected / 0 failed); independent review closed SA88-QG-FORMS-001 as transient/environment-dependent, no product source changed. **SA86 — done 2026-07-15; detail in [CHANGELOG.md §SA86](../../CHANGELOG.md).** Listings restricted-role suite 134 passed/0 failed, 95.73% coverage, no quarantine. Track 2 is complete.
 
-- [ ] **SA86 — Fix listings' 6 restricted-role RLS fixture failures.** `Tier 1 · Track 2 · deps: none (decoupled from SA88 by the squash)` *(reassigned from Track 1, 2026-07-13; downgraded to Tier 1, 2026-07-15)*
-  Under the SA82 gate, listings showed 128 passed, 6 RLS failures — the fixture half of Finding 8, unaffected by SA90. Bucket the 6 failures, then route each cross-org *fixture* through the shared org-context helper; fix any runtime-query-bucket failure as a real isolation bug.
+- [x] **SA86 — Fix listings' 6 restricted-role RLS fixture failures.** `Tier 1 · Track 2 · deps: none (decoupled from SA88 by the squash)` *(completed 2026-07-15)*
+  All six original errors were fixture-time INSERT RLS failures under `quickscale_test_role`. Routed each cross-org fixture through the shared `org_scope` helper, which primes the `app.current_org_id` GUC for FORCE RLS (same pattern as SA83/SA85). The fix revealed one intentional cross-tenant `all_objects` admin query that required explicit `operator_access()` — not a production isolation defect. No production source isolation defect was found; all six were test-posture only (Finding 8 fixture half).
 
-  *Acceptance:* listings restricted-role suite passes clean (0 failures) under `make test-integration`, no quarantine entry.
+  *Acceptance:* focused restricted-role suite 134 passed/0 failed; full `make test-integration` listings stage 134 passed/0 failed at 95.73% coverage; no listings quarantine entry. The only full-gate blocker remains out-of-scope CRM SA84 (67 failures), not an SA86 blocker. Closes SA86.
   *(why →* CR-SA82-NT-005; arch-audit Finding 8 (fixture half)*)*
 
 ### Track 3 — Core/CLI plumbing
@@ -118,21 +118,21 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
 SA90 — squash migrations +          SA88b — forms diagnosis ✓ DONE          SA89a — DR persistence protocol ✓ DONE
-  delete SA88 gate saga             (SA88-QG-FORMS-001)                     (Finding 1, no deps)
-  deps: none                             │                                       │
-      │                                  │                                       ▼
-      ▼                                  ▼                                   SA89b — DR orchestration port
-SA84 — CRM (67 fixtures)           SA86 — listings (6 fixtures)               deps: SA89a
-  deps: none                         deps: none
-  Track 1                            Track 2
+  delete SA88 gate saga             SA86 — listings ✓ DONE                    (Finding 1, no deps)
+  deps: none                                                                      │
+      │                                                                           ▼
+      ▼                                                                       SA89b — DR orchestration port
+SA84 — CRM (67 fixtures)                                                        deps: SA89a
+  deps: none
+  Track 1                            Track 2                               Track 3
 ```
 
-**Ordering.** The squash (SA90) eliminates the cross-org-migration class, so the SA88 gate saga (SA88a–e) is deleted, not completed. SA84 and SA86 survive as **fixture** cleanups and are now **independent** — no gate between them and their fixes. Track 1 runs SA90 → SA84; Track 2 runs SA86 (both parallel, no cross-track dependency). Track 3 runs SA89a → SA89b fully independently.
+**Ordering.** The squash (SA90) eliminates the cross-org-migration class, so the SA88 gate saga (SA88a–e) is deleted, not completed. SA84 and SA86 survived as **fixture** cleanups, independent of each other. Track 1 runs SA90 → SA84; SA86 is complete on Track 2. Track 3 runs SA89a → SA89b fully independently.
 
 ### Track readiness (2026-07-15)
 
 - **Track 1 — READY (SA90, deps: none).** The squash-and-drop-backward-compat decision (see cross-cutting decision above) makes the whole cross-org-migration problem disappear: no static analyzer, no runtime boundary proofs, no gate. SA90 is fresh, dependency-free work; SA84 follows it and is unblocked by it. The retired SA88a–e findings (CR-SA88-REV-006/007, CR-SA88A1-REV-002/003/004) close as obsoleted-by-schema-squash.
-- **Track 2 — READY (SA86, deps: none).** SA88b is complete. SA86 is the fixture half of Finding 8 for listings and no longer waits on Track 1 — it can proceed in parallel.
+- **Track 2 — SA86 complete.** SA88b and SA86 are both done; no remaining open work on Track 2. Listings restricted-role suite passes clean (134 passed/0 failed), no quarantine entry.
 - **Track 3 — SA89b blocked checkpoint; no decision pending.** SA89b's runtime/provider migration is implemented and validated, but independent review remains `STATUS: partial` on **SA89B-CR-001 (medium/blocking)**: the private-adapter boundary gate is still fail-open across indirect lexical scopes (a static-AST-completeness gap with a known fix — a pruning lexical-scope visitor). The maintainer selected stop-and-merge at the review cap; a future continuation implements the pruning visitor + direct control-flow/lambda/class negatives, reruns the invalidated gates, and obtains clean review. Independent of the SA84/SA86 cluster.
 
 **Decision re-based (2026-07-15) — Track 1: squash migrations, delete the SA88 gate saga.** After the static-analyzer line and its runtime-oracle successor both proved to be chasing an artifact of schema evolution, the maintainer confirmed (no deployed DB to preserve) that squashing every module to a final-schema `0001_initial` eliminates the cross-org-*migration* class outright. **Why:** the backfills only exist because `organization_id` was added to populated tables; a fresh schema has no rows to backfill, so there is no invariant left to gate. RLS enforcement (SA59/SA82) is unchanged; the *fixture* failures (SA84/SA86) are a separate, ContextVar-level concern the squash does not touch. **Sub-decisions (maintainer-selected):** (1) squash-and-drop-compat over continue-oracle; (2) manually re-attach RLS `RunPython` to the squashed migrations (not auto-generated); (3) keep a ~30-line forward guardrail against reintroducing cross-org migration DML. This supersedes every SA88 decision below.
