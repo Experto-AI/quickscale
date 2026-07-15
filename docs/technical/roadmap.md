@@ -49,7 +49,7 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active and blocked work.
 
-**Integration baseline (SA82).** The SA82 unquarantined `make test-integration` gate is the accepted baseline for the remaining restricted-role cluster. Under it the only red remaining is **CRM (SA84)**; blog (SA83), forms (SA85), listings (SA86), orgs (SA77), and notifications (SA79) are all closed — see [CHANGELOG.md](../../CHANGELOG.md).
+**Integration baseline (SA82).** The SA82 unquarantined `make test-integration` gate is the accepted baseline for the remaining restricted-role cluster. Under it the closed modules are blog (SA83), forms (SA85), listings (SA86), orgs (SA77), and notifications (SA79) — see [CHANGELOG.md](../../CHANGELOG.md). Two reds remain open: **CRM (SA84)** and a **blog fixture-finalizer regression (SA95)** that SA93's broad run re-surfaced after SA83 had closed blog green (see SA95 under Track 1).
 
 ### Green-gate milestone — all quality make commands pass
 
@@ -59,15 +59,15 @@ git merge --no-ff wt-track{N}
 
 #### Per-module test gate (the parallelizable axis)
 
-- [ ] **SA84 — CRM restricted-role fixtures (67 fail).** `Tier 2 · Track 1 · deps: none` — the one open per-module blocker; full brief in the SA84 ticket under Track 1 below. Gate line: `make MODULE=crm test -- --modules` → 0 failures at the 80%/90% floors, no quarantine entry.
+- [ ] **SA84 — CRM restricted-role fixtures (67 fail).** `Tier 2 · Track 1 · deps: none` — full brief in the SA84 ticket under Track 1 below. Gate line: `make MODULE=crm test -- --modules` → 0 failures at the 80%/90% floors, no quarantine entry.
+- [ ] **SA95 — Blog fixture-finalizer regression.** `Tier 2 · Track 1 · deps: none` — blog was closed green by SA83 but SA93's broad run re-surfaced `pytest-django` fixture-finalizer failures; full brief in the SA95 ticket under Track 1 below.
 
-  blog (SA83), forms (SA85), listings (SA86), orgs (SA77), notifications (SA79) are green under the SA82 baseline — see [CHANGELOG.md](../../CHANGELOG.md).
+  forms (SA85), listings (SA86), orgs (SA77), notifications (SA79) are green under the SA82 baseline — see [CHANGELOG.md](../../CHANGELOG.md).
 
 #### Repo-global gates (run once at v87 integration, after per-module work lands)
 
-GATE-lint, GATE-typecheck, and GATE-check-suite are all **done** (2026-07-15; see [CHANGELOG.md](../../CHANGELOG.md)). Track 2's module work and its own gates are complete, so the remaining closeout — **GATE-quality**, the **SA91** tooling, and the new **SA93** (e2e in the green-gate) — is **reassigned to the freed Track 3** (idle after SA89a/b closed Finding 1). GATE-quality (done) and SA91 have no dependencies. SA93 now carries a hidden cross-track prerequisite — see SA93 entry below.
+GATE-lint, GATE-typecheck, GATE-check-suite, and **GATE-quality** are all **done** (2026-07-15; see [CHANGELOG.md](../../CHANGELOG.md)). Track 2's module work and its own gates are complete, so the remaining closeout — the **SA91** tooling and the new **SA93** (e2e in the green-gate) — is **reassigned to the freed Track 3** (idle after SA89a/b closed Finding 1). SA91 has no dependencies. SA93 now carries a hidden cross-track prerequisite — see SA93 entry below.
 
-- [x] **GATE-quality** — `make quality` (vulture / radon / pylint) within agreed thresholds. `Track 3` — done 2026-07-15. Reconciled `scripts/quality_baseline.json` against the v87 codebase (5 dead-code, 151 complexity, 41 large-file entries accepted as baseline); `make quality` exits 0 with 0 warning/0 critical regressions.
 - [ ] **SA93 — Fold the e2e lane into the green-gate definition of done.** `Tier 1 · Track 3 · deps: blog+CRM integration green (previously unstated cross-track join prerequisite)`
   **Blocked checkpoint (2026-07-15; maintainer-selected stop-and-merge; not complete).**
 
@@ -80,14 +80,14 @@ GATE-lint, GATE-typecheck, and GATE-check-suite are all **done** (2026-07-15; se
   **Pending/Blocking:**
   - **CR-SA93-REV-002 (high/blocking):** coverage JSON validation is not fully fail-closed. Scalar/null roots and non-dict file records can raise; reports missing either expected package can pass; prefix-only classification accepts non-canonical traversal paths. Add root/container/record validation, require both packages, reject non-canonical paths, and add malformed/missing-package/traversal proofs.
   - **CR-SA93-REV-004 (medium/blocking):** `scripts/check_ci_locally.sh` advertises 12 stages but uses inconsistent `/11` denominators and duplicates `[11/11]` on the non-E2E path. Normalize conditional stage totals and make the E2E-skip message unnumbered before relying on stage-number evidence.
-  - **SA93-BLOCK-001 (high/blocking):** blog and CRM integration shards fail with `pytest-django` fixture-finalizer errors. CRM maps to open **SA84** (Track 1); blog was previously considered closed by SA83 and needs separate regression triage.
+  - **SA93-BLOCK-001 (high/blocking):** blog and CRM integration shards fail with `pytest-django` fixture-finalizer errors. CRM maps to open **SA84** (Track 1); the blog regression is now owned by dedicated ticket **SA95** (Track 1).
   - **SA93-BLOCK-002 (high/blocking):** core and CLI E2E remain unexecuted because integration fails first. The current post-review 12-stage flow has not received a broad rerun; only the focused post-fix evidence above is current.
 
-  **Decisions needed:**
-  - Assign ownership for the newly observed blog regression and confirm CRM/SA84 plus blog-green as explicit cross-track prerequisites for SA93. Preserve the exact unquarantined `make ci-e2e` contract; quarantine and threshold weakening are not acceptable.
+  **Decisions needed (resolved 2026-07-16):**
+  - Blog-regression ownership is **decided**: it is a dedicated ticket, **SA95** (Track 1), and — together with CRM/**SA84** — is now an explicit cross-track prerequisite for SA93. Preserve the exact unquarantined `make ci-e2e` contract; quarantine and threshold weakening are not acceptable.
   - No design decision is needed for CR-SA93-REV-002 or CR-SA93-REV-004; they are deterministic first fixes for the next Track 3 continuation.
 
-  **Clean continuation:** fix CR-SA93-REV-002/004 → land blog/CRM fixes on `v87` → resync `wt-track3` → rerun exact `make ci-e2e` → verify both E2E suites execute and `e2e.yml` is green on `v87` → independent final review → mark SA93 complete.
+  **Clean continuation:** fix CR-SA93-REV-002/004 → land SA84 (CRM) + SA95 (blog) fixes on `v87` → resync `wt-track3` → rerun exact `make ci-e2e` → verify both E2E suites execute and `e2e.yml` is green on `v87` → independent final review → mark SA93 complete.
 
   *(Acceptance unchanged:* `make ci-e2e` exits 0 on a fresh clone; `e2e.yml` green on `v87`; exit-criteria prose lists the e2e lane.*)*
   *(why →* green-gate milestone; e2e was outside the definition of done*)*
@@ -125,6 +125,12 @@ SA84 and SA86 were originally framed as two instances of **arch-audit [Finding 8
   *Acceptance:* CRM restricted-role suite passes clean (0 failures) under `make test-integration`, no quarantine entry.
   *(why →* CR-SA82-NT-003; arch-audit Finding 8 (fixture half)*)*
 
+- [ ] **SA95 — Fix the blog restricted-role fixture-finalizer regression.** `Tier 2 · Track 1 · deps: none`
+  SA83 closed blog green (211 passed/0 failed under the SA82 gate), but SA93's broad pre-review run re-surfaced blog integration-shard failures with `pytest-django` fixture-finalizer errors. **First step — triage before fixing** (matches the SA83–SA86 discipline): run blog's restricted-role suite on current `v87` (`QS_BLOG_DB_USER=quickscale_test_role make MODULE=blog test -- --modules`) and bucket the failures into fixture-teardown-ordering vs migration-state vs runtime-query. Fix the confirmed root; a runtime-query-bucket failure is a real isolation bug (with its own regression test), not test-posture. Note the interaction with SA92: the squash regenerates blog's migrations, so re-run this suite after SA92 lands to confirm the regression is not a migration-state artifact before closing.
+
+  *Acceptance:* blog restricted-role suite passes clean (0 failures) under `make test-integration`, no quarantine entry; regression test pins the finalizer fix.
+  *(why →* SA93-BLOCK-001; blog regression re-surfaced after SA83 closure*)*
+
 ### Track 2 — Module contracts & settings
 
 > **Prior Track 2 work is complete.** SA88b (forms diagnosis) done 2026-07-14; SA86 (listings) done 2026-07-15; GATE-lint / GATE-typecheck / GATE-check-suite all green 2026-07-15 — detail in [CHANGELOG.md](../../CHANGELOG.md). The remaining closeout items (GATE-quality, SA91, SA93) were reassigned to the freed Track 3 to balance load — see the green-gate section and Track 3 below. **One new item (SA94) is open** below.
@@ -141,7 +147,7 @@ SA84 and SA86 were originally framed as two instances of **arch-audit [Finding 8
 
 **Reassigned closeout work (from Track 2, to use freed Track 3 capacity — all `deps: none`):**
 
-- **GATE-quality** ✓ DONE (2026-07-15) and **SA93** (fold e2e into the green-gate) — defined in the green-gate section above; both now `Track 3`.
+- **GATE-quality** (done 2026-07-15, see [CHANGELOG.md](../../CHANGELOG.md)) and **SA93** (fold e2e into the green-gate) were reassigned here; SA93 is defined in the green-gate section above and remains open (blocked checkpoint).
 - [ ] **SA91 — Fork the per-module integration loop for true parallel execution.** `Tier 2 · Track 3 · deps: none`
   `scripts/test_integration.sh` runs module stages serially (loop at `:414–442`). Fork each module's pytest stage and join exit codes + coverage. Contention points to resolve: the shared `COVERAGE_RESULTS_FILE` mktemp (`:57`) must become per-module and be merged before `check_overall_mean_coverage`; the per-module `QS_*_DB_USER` role setup (`:375–386`) and pre-created test databases must not collide across concurrent workers. CI-time speedup only — not a gate for the green-gate milestone.
 
@@ -155,28 +161,28 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 ```
 Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
-SA92 — squash migrations +          ✓ COMPLETE                              Finding 1 ✓ DONE (SA89a+SA89b)
-  delete SA88 gate saga               module work (SA86, SA88b)             reassigned closeout (deps: none):
-  deps: none                          GATE-lint/typecheck/check-suite         GATE-quality ✓
-      │                                                                       SA93 — e2e in green-gate
-      ▼                                                                       SA91 — parallel loop (non-gating)
-SA84 — CRM (67 fixtures)
-  deps: none
-  │  (per-module gate)
+SA92 — squash migrations +          SA94 — remove showcase_html theme     Finding 1 ✓ DONE (SA89a+SA89b)
+  delete SA88 gate saga               deps: none (non-gating)               GATE-lint/typecheck/check/quality ✓
+  deps: none                          (prior module work + gates COMPLETE)  SA93 — e2e in green-gate (blocked)
+      │                                                                       SA91 — parallel loop (non-gating)
+      ▼
+SA84 — CRM (67 fixtures) ┐
+SA95 — blog regression   ┘ deps: none
+  │  (per-module gates; SA93 prereqs)
   Track 1                            Track 2                               Track 3
 ```
 
-**Ordering.** The squash (SA92) eliminates the cross-org-migration class, so the SA88 gate saga (SA88a–e) is deleted, not completed. SA84 survived as a **fixture** cleanup. Track 1 runs SA92 → SA84. Track 2's prior work is complete (module work + its own gates); its one open item is SA94 (remove the `showcase_html` theme, non-gating). Track 3, freed after closing Finding 1, took over the remaining closeout (GATE-quality ✓ DONE, SA93, SA91).
+**Ordering.** The squash (SA92) eliminates the cross-org-migration class, so the SA88 gate saga (SA88a–e) is deleted, not completed. SA84 and SA95 survived as **fixture / test-posture** cleanups. Track 1 runs SA92 → SA84 → SA95. Track 2's prior work is complete (module work + its own gates); its one open item is SA94 (remove the `showcase_html` theme, non-gating). Track 3, freed after closing Finding 1, took over the remaining closeout (all GATEs done, SA93, SA91).
 
-**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join: the per-module gate (SA84, Track 1) plus the repo-global closeout (GATE-quality ✓ DONE + SA93 e2e, Track 3) must all land on `v87`. GATE-lint, GATE-typecheck, GATE-check-suite, and GATE-quality are complete. **SA93 is a blocked checkpoint** — the broad pre-review run reached coverage but blog+CRM integration failed before E2E, and independent review leaves CR-SA93-REV-002/004 open in the post-fix local-CI path. See the SA93 entry above for the exact Done / Pending-Blocking / Decisions-needed ledger. SA91 is a separate non-gating optimization (Track 3) — CI-time speedup only, not a gate for green.
+**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join: the per-module gates (SA84 CRM + SA95 blog, Track 1) plus the repo-global closeout (SA93 e2e, Track 3) must all land on `v87`. GATE-lint, GATE-typecheck, GATE-check-suite, and GATE-quality are complete. **SA93 is a blocked checkpoint** — the broad pre-review run reached coverage but blog+CRM integration failed before E2E, and independent review leaves CR-SA93-REV-002/004 open in the post-fix local-CI path. See the SA93 entry above for the exact Done / Pending-Blocking / Decisions-needed ledger. SA91 is a separate non-gating optimization (Track 3) — CI-time speedup only, not a gate for green.
 
-### Track readiness (2026-07-15)
+### Track readiness (2026-07-16)
 
-- **Track 1 — READY, clean to continue (SA92, deps: none).** The squash-and-drop-backward-compat decision (see cross-cutting decision above) makes the whole cross-org-migration problem disappear: no static analyzer, no runtime boundary proofs, no gate. The decision is already ratified, so no maintainer decision is pending. SA92 is fresh, dependency-free work; SA84 follows it and is unblocked by it. The retired SA88a–e findings (CR-SA88-REV-006/007, CR-SA88A1-REV-002/003/004) close as obsoleted-by-schema-squash.
-- **Track 2 — one open item (SA94).** Prior module work (SA86, SA88b) and its own gates (GATE-lint, GATE-typecheck, GATE-check-suite) are all done; earlier closeout items were reassigned to Track 3. Newly ticketed **SA94** (remove the `showcase_html` generator theme, `deps: none`) is the only open Track-2 work; it is independent of the green-gate milestone.
-- **Track 3 — GATE-quality ✓ DONE (2026-07-15); SA93 blocked-checkpoint and SA91 remain.** Finding 1 (DR persistence port) is closed (SA89a + SA89b, 2026-07-15). To use the freed capacity, Track 3 took over **GATE-quality** (now done — baseline reconciled, `make quality` exits 0), **SA93** (fold e2e into the green-gate — see blocked-checkpoint entry above for the complete Done / Pending-Blocking / Decisions-needed ledger), and **SA91** (non-gating parallel-loop tooling). **SA89B-CR-004 (low/advisory)** remains against `check_module_core_compatibility.py` independently, not gating.
+- **Track 1 — CLEAN to continue (SA92 → SA84 → SA95, all deps: none).** The squash-and-drop-backward-compat decision (see cross-cutting decision above) makes the whole cross-org-migration problem disappear: no static analyzer, no runtime boundary proofs, no gate. The decision is ratified, so no maintainer decision is pending. SA92 is fresh, dependency-free work; SA84 (CRM fixtures) and SA95 (blog regression) follow it and are unblocked. Re-run SA84/SA95 suites after SA92 lands to confirm no failure is a migration-state artifact. The retired SA88a–e findings (CR-SA88-REV-006/007, CR-SA88A1-REV-002/003/004) close as obsoleted-by-schema-squash.
+- **Track 2 — CLEAN to continue (one open item, SA94).** Prior module work (SA86, SA88b) and its own gates (GATE-lint, GATE-typecheck, GATE-check-suite) are all done; earlier closeout items were reassigned to Track 3. Newly ticketed **SA94** (remove the `showcase_html` generator theme, `deps: none`) is the only open Track-2 work; it is independent of the green-gate milestone.
+- **Track 3 — BLOCKED (partially).** Finding 1 (DR persistence port) is closed (SA89a + SA89b) and all four GATEs are done. **SA93** (fold e2e into the green-gate) is a blocked checkpoint: it first needs the deterministic CR-SA93-REV-002/004 fixes (no decision required), then cannot complete until CRM (**SA84**) and blog (**SA95**) integration shards are green on `v87` — a cross-track dependency on Track 1. The blog-ownership decision is now resolved (dedicated ticket SA95, 2026-07-16). **SA91** (non-gating parallel-loop tooling) is unblocked and can proceed in parallel. **SA89B-CR-004 (low/advisory)** remains against `check_module_core_compatibility.py` independently, not gating.
 
-**Track 3 is partially blocked:** SA93 first needs deterministic fixes for CR-SA93-REV-002/004, then cannot complete until blog (new fixture-finalizer regression) and CRM (SA84) integration shards are green. A maintainer ownership decision remains for the cross-track blog/CRM work; see the SA93 checkpoint ledger above.
+**Net:** Tracks 1 and 2 are clean to continue with no pending maintainer decision. Track 3's SA93 is blocked on Track 1 (SA84 + SA95) plus its own deterministic fixes; SA91 on Track 3 can proceed now.
 
 **Decision (ratified 2026-07-15) — Track 1: squash migrations, delete the SA88 gate saga.** After the static-analyzer line and its runtime-oracle successor both proved to be chasing an artifact of schema evolution, the maintainer confirmed (no deployed DB to preserve) that squashing every module to a final-schema `0001_initial` eliminates the cross-org-*migration* class outright. **Why:** the backfills only exist because `organization_id` was added to populated tables; a fresh schema has no rows to backfill, so there is no invariant left to gate. RLS enforcement (SA59/SA82) is unchanged; the *fixture* failures (SA84) are a separate, ContextVar-level concern the squash does not touch. **Sub-decisions:** (1) squash-and-drop-compat over continue-oracle; (2) manually re-attach RLS `RunPython` to the squashed migrations (not auto-generated); (3) keep a ~30-line forward guardrail against reintroducing cross-org migration DML. This supersedes every SA88 decision — the SA88a–e static-analyzer line and its runtime-oracle successor (SA88d/e) are all obsoleted-by-squash; their full reasoning trail is preserved in [CHANGELOG.md §SA88](../../CHANGELOG.md).
 
