@@ -20,6 +20,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make test` - Shared unit and integration test entrypoint.
 - `make test-unit` - Shared unit-only entrypoint with section and module scoping.
 - `make test-integration` - Shared integration-test entrypoint for module suites against a NOBYPASSRLS PostgreSQL 18 role.
+- `make test-cov` - Combined coverage path (core + CLI + optional backups module) with dual-threshold enforcement.
 - `make test-e2e` - End-to-end validation with PostgreSQL and browser automation.
 - `make ci-e2e` - CI-parity release-gate validation including E2E.
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
@@ -37,10 +38,13 @@ This companion owns repository validation entrypoints, testing standards, covera
 ## Testing Standards
 
 **Coverage Targets:**
-- 90% overall mean coverage plus 80% minimum per file for `quickscale_core`, `quickscale_cli`, modules, and themes.
-- CI fails if overall mean drops below 90% or any file falls below 80%.
+- 90% equal-weight package mean coverage plus 80% minimum per file for `quickscale_core`, `quickscale_cli`, modules, and themes.
+- CI fails if the equal-weight package mean drops below 90% or any file falls below 80%.
 - Coverage reports run on every CI build.
 - Thresholds are enforced across both unit and integration gates — `make test-unit` (via `scripts/test_unit.sh`) covers core and CLI code, while `make test-integration` (via `scripts/test_integration.sh`) covers module suites. Non-quarantined integration suites enforce the normal dual overall and per-file thresholds. Quarantined suites are excluded from gate failure and from the overall mean; each quarantine entry is removed independently as its own owning ticket lands/completes — quarantine is per-entry, not held for a single simultaneous closeout across all entries.
+- **Combined coverage path**: `make test-cov` aggregates coverage from core + CLI unit tests and (when PostgreSQL is available) the backups module's DR-engine exercise into a single combined measurement. The dual-threshold policy (90% equal-weight package mean, 80% per-file) is enforced via `scripts/check_coverage_policy.py`, which is invoked as Phase 4 of the `test-cov` recipe. Standalone `make test-cov` skips the backups module when PostgreSQL is unavailable.
+- **Required-backups mode**: Set `REQUIRE_BACKUPS_COVERAGE=1` (e.g., `make test-cov REQUIRE_BACKUPS_COVERAGE=1`) to fail if PostgreSQL or the DR toolchain is not available, ensuring CI cannot silently skip backups-module coverage. This mode is used by `make ci` and `make ci-e2e` via `scripts/check_ci_locally.sh`.
+- **Coverage policy helper**: `scripts/check_coverage_policy.py` is a standalone Python script that validates `coverage.json` output against the dual-threshold policy. It accepts `--mean-threshold` and `--per-file-threshold` overrides and exits with code 0 (pass), 1 (fail), or 2 (data error). Tests are in `scripts/test_ci_coverage_policy.py`.
 
 **Test Requirements:**
 - New features require tests.
