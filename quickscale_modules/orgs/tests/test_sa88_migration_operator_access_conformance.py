@@ -33,9 +33,28 @@ from __future__ import annotations
 
 import ast
 import re
+from collections import namedtuple
 from pathlib import Path
 
 import pytest
+
+# BindingEvent: unified event record for any name binding within a scope.
+# Fields:
+#   lineno       - source line
+#   col_offset   - source column (for same-line ordering)
+#   kind         - binding form: canonical-import, import, import-from, import-star,
+#                  param, assign, annassign, augassign, for, with_as, except,
+#                  named_expr, function, class, delete, global, nonlocal
+#   target       - the bound name
+#   source_module - for imports, the imported module path (None otherwise)
+BindingEvent = namedtuple(
+    "BindingEvent",
+    ["lineno", "col_offset", "kind", "target", "source_module"],
+)
+
+# Sentinel for when a local name is bound later in the function (compile-time local
+# but not yet assigned at the use site).
+_UNBOUND_LOCAL = "unbound-local"
 
 _OPERATOR_ACCESS_CM_NAME = "operator_access_migration"
 """Name of the context manager function that gates must check for."""
@@ -253,96 +272,302 @@ def _is_potential_operator_access_migration_context_expr(node: ast.AST) -> bool:
     return isinstance(node, ast.Attribute) and node.attr == _OPERATOR_ACCESS_CM_NAME
 
 
-def _collect_operator_access_name_bindings(
-    scope_node: ast.AST,
-) -> list[tuple[int, str]]:
-    """Collect binding sites for operator_access_migration in *scope_node*.
+def _col_of(node: ast.AST) -> int:
+    """Return col_offset with a safe default."""
+    return getattr(node, "col_offset", 0)
 
-    Returns (lineno, binding_kind) tuples, where binding_kind is one of
-    canonical-import, import, import-star, param, assign,
-    annassign, augassign, for, with_as, except,
-    named_expr, function, class, or delete.
+
+def _lineno_of(node: ast.AST) -> int:
+    """Return lineno with a safe default."""
+    return getattr(node, "lineno", 0)
+
+
+def _bound_name_from_import_alias(
+    alias: ast.alias, is_from_import: bool = False
+) -> str:
+    """Return the local name bound by an import alias.
+
+    For ``import X.Y.Z`` (``ast.Import``), the bound name is ``X`` (first
+    component of the dotted path) unless ``asname`` is set.
+    For ``from X import Y`` (``ast.ImportFrom``), the bound name is ``Y``
+    (or ``asname``).
     """
-    events: list[tuple[int, str]] = []
+    if alias.asname is not None:
+        return alias.asname
+    if is_from_import:
+        return alias.name
+    # ast.Import: the bound name is the top-level package name.
+    return alias.name.split(".", 1)[0]
 
+
+def _source_module_from_import(alias: ast.alias) -> str:
+    """Return the dotted module path for a named import alias."""
+    return alias.name
+
+
+def _import_is_canonical_operator_access(
+    node_module: str | None,
+    alias: ast.alias,
+) -> bool:
+    """Return True if this ImportFrom alias is the exact canonical
+    ``from quickscale_modules_orgs.tenancy import operator_access_migration``."""
+    return (
+        node_module == _CANONICAL_TENANCY_MODULE
+        and alias.name == _OPERATOR_ACCESS_CM_NAME
+        and alias.asname is None
+    )
+
+
+def _iter_binding_events(
+    scope_node: ast.AST,
+    target_name: str,
+) -> list[BindingEvent]:
+    """Collect all binding events for *target_name* in *scope_node*.
+
+    Returns a list of ``BindingEvent`` tuples sorted by (lineno, col_offset),
+    covering all binding forms: canonical-import, import, import-from,
+    import-star, param, assign, annassign, augassign, for, with_as, except,
+    named_expr, function, class, delete, global, nonlocal.
+
+    Nested function/class/lambda bodies are NOT descended into, preserving
+    immediate-scope semantics.
+    """
+    events: list[BindingEvent] = []
+
+    # --- Function / lambda parameters ---
     if isinstance(scope_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-        for arg_name in _iter_function_parameter_names(scope_node):
-            if arg_name == _OPERATOR_ACCESS_CM_NAME:
-                events.append((scope_node.lineno, "param"))
+        for arg in _iter_function_arg_nodes(scope_node):
+            if arg.arg == target_name:
+                events.append(
+                    BindingEvent(
+                        lineno=getattr(arg, "lineno", _lineno_of(scope_node)),
+                        col_offset=getattr(arg, "col_offset", 0),
+                        kind="param",
+                        target=target_name,
+                        source_module=None,
+                    )
+                )
 
+    # --- Global / nonlocal declarations ---
     for node in _iter_non_nested_nodes(scope_node):
+        if isinstance(node, ast.Global):
+            if target_name in node.names:
+                events.append(
+                    BindingEvent(
+                        lineno=_lineno_of(node),
+                        col_offset=_col_of(node),
+                        kind="global",
+                        target=target_name,
+                        source_module=None,
+                    )
+                )
+
+        if isinstance(node, ast.Nonlocal):
+            if target_name in node.names:
+                events.append(
+                    BindingEvent(
+                        lineno=_lineno_of(node),
+                        col_offset=_col_of(node),
+                        kind="nonlocal",
+                        target=target_name,
+                        source_module=None,
+                    )
+                )
+
+    # --- Statement-level binding forms ---
+    for node in _iter_non_nested_nodes(scope_node):
+        # Skip nested function/class/lambda definition nodes themselves
+        # (their names are binding events, but we handle those below).
         if isinstance(
             node,
             (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda),
         ):
-            if node.name == _OPERATOR_ACCESS_CM_NAME:
+            node_name = getattr(node, "name", None)
+            if node_name == target_name:
                 kind = "class" if isinstance(node, ast.ClassDef) else "function"
-                events.append((node.lineno, kind))
+                events.append(
+                    BindingEvent(
+                        lineno=_lineno_of(node),
+                        col_offset=_col_of(node),
+                        kind=kind,
+                        target=target_name,
+                        source_module=None,
+                    )
+                )
             continue
 
+        # --- with ... as target ---
         if isinstance(node, ast.With):
             for item in node.items:
                 if item.optional_vars is None:
                     continue
-                if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(item.optional_vars):
-                    events.append((node.lineno, "with_as"))
+                bound_names = _extract_bound_names(item.optional_vars)
+                if target_name in bound_names:
+                    events.append(
+                        BindingEvent(
+                            lineno=_lineno_of(node),
+                            col_offset=_col_of(item.optional_vars),
+                            kind="with_as",
+                            target=target_name,
+                            source_module=None,
+                        )
+                    )
 
+        # --- Plain assignment ---
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(target):
-                    events.append((node.lineno, "assign"))
+                if target_name in _extract_bound_names(target):
+                    events.append(
+                        BindingEvent(
+                            lineno=_lineno_of(target),
+                            col_offset=_col_of(target),
+                            kind="assign",
+                            target=target_name,
+                            source_module=None,
+                        )
+                    )
 
+        # --- Annotated assignment ---
         if isinstance(node, ast.AnnAssign):
-            if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(node.target):
-                events.append((node.lineno, "annassign"))
+            if target_name in _extract_bound_names(node.target):
+                events.append(
+                    BindingEvent(
+                        lineno=_lineno_of(node.target),
+                        col_offset=_col_of(node.target),
+                        kind="annassign",
+                        target=target_name,
+                        source_module=None,
+                    )
+                )
 
+        # --- Augmented assignment ---
         if isinstance(node, ast.AugAssign):
-            if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(node.target):
-                events.append((node.lineno, "augassign"))
+            if target_name in _extract_bound_names(node.target):
+                events.append(
+                    BindingEvent(
+                        lineno=_lineno_of(node.target),
+                        col_offset=_col_of(node.target),
+                        kind="augassign",
+                        target=target_name,
+                        source_module=None,
+                    )
+                )
 
+        # --- Walrus operator (NamedExpr) ---
         if isinstance(node, ast.NamedExpr):
-            if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(node.target):
-                events.append((node.lineno, "named_expr"))
+            if target_name in _extract_bound_names(node.target):
+                events.append(
+                    BindingEvent(
+                        lineno=_lineno_of(node.target),
+                        col_offset=_col_of(node.target),
+                        kind="named_expr",
+                        target=target_name,
+                        source_module=None,
+                    )
+                )
 
+        # --- For / async for target ---
         if isinstance(node, (ast.For, ast.AsyncFor)):
-            if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(node.target):
-                events.append((node.lineno, "for"))
+            if target_name in _extract_bound_names(node.target):
+                events.append(
+                    BindingEvent(
+                        lineno=_lineno_of(node.target),
+                        col_offset=_col_of(node.target),
+                        kind="for",
+                        target=target_name,
+                        source_module=None,
+                    )
+                )
 
+        # --- Except handler ---
         if isinstance(node, ast.ExceptHandler):
-            if node.name == _OPERATOR_ACCESS_CM_NAME:
-                events.append((node.lineno, "except"))
+            if node.name == target_name:
+                events.append(
+                    BindingEvent(
+                        lineno=_lineno_of(node),
+                        col_offset=_col_of(node),
+                        kind="except",
+                        target=target_name,
+                        source_module=None,
+                    )
+                )
 
+        # --- ast.Import (``import X`` or ``import X.Y``) ---
         if isinstance(node, ast.Import):
             for alias in node.names:
-                bound = alias.asname or alias.name
-                if bound == _OPERATOR_ACCESS_CM_NAME:
-                    events.append((node.lineno, "import"))
+                bound = _bound_name_from_import_alias(alias)
+                if bound == target_name:
+                    events.append(
+                        BindingEvent(
+                            lineno=_lineno_of(node),
+                            col_offset=_col_of(node),
+                            kind="import",
+                            target=target_name,
+                            source_module=_source_module_from_import(alias),
+                        )
+                    )
 
+        # --- ast.ImportFrom (``from X import Y``) ---
         if isinstance(node, ast.ImportFrom):
+            has_star = any(a.name == "*" for a in node.names)
+            if has_star:
+                events.append(
+                    BindingEvent(
+                        lineno=_lineno_of(node),
+                        col_offset=_col_of(node),
+                        kind="import-star",
+                        target=target_name,
+                        source_module=node.module,
+                    )
+                )
+                # Star import affects ALL names; continue to check specific aliases
+                # because an exact import on the same line would override.
+
             for alias in node.names:
                 if alias.name == "*":
-                    events.append((node.lineno, "import-star"))
+                    continue
+                bound = _bound_name_from_import_alias(alias, is_from_import=True)
+                if bound != target_name:
                     continue
 
-                bound = alias.asname or alias.name
-                if bound != _OPERATOR_ACCESS_CM_NAME:
-                    continue
-
-                if (
-                    node.module == _CANONICAL_TENANCY_MODULE
-                    and alias.name == _OPERATOR_ACCESS_CM_NAME
-                    and alias.asname is None
-                ):
-                    events.append((node.lineno, "canonical-import"))
+                if _import_is_canonical_operator_access(node.module, alias):
+                    events.append(
+                        BindingEvent(
+                            lineno=_lineno_of(node),
+                            col_offset=_col_of(node),
+                            kind="canonical-import",
+                            target=target_name,
+                            source_module=node.module,
+                        )
+                    )
                 else:
-                    events.append((node.lineno, "import"))
+                    events.append(
+                        BindingEvent(
+                            lineno=_lineno_of(node),
+                            col_offset=_col_of(node),
+                            kind="import-from",
+                            target=target_name,
+                            source_module=node.module,
+                        )
+                    )
 
+        # --- Delete ---
         if isinstance(node, ast.Delete):
             for target in node.targets:
-                if _OPERATOR_ACCESS_CM_NAME in _extract_bound_names(target):
-                    events.append((node.lineno, "delete"))
+                if target_name in _extract_bound_names(target):
+                    events.append(
+                        BindingEvent(
+                            lineno=_lineno_of(target),
+                            col_offset=_col_of(target),
+                            kind="delete",
+                            target=target_name,
+                            source_module=None,
+                        )
+                    )
 
-    return sorted(set(events), key=lambda item: item[0])
+    # Sort by (lineno, col_offset) for stable source-order semantics.
+    events.sort(key=lambda e: (e.lineno, e.col_offset))
+    return events
 
 
 def _scope_chain_for_operator_access_call(
@@ -366,32 +591,152 @@ def _scope_chain_for_operator_access_call(
     return chain
 
 
-def _operator_access_binding_kind_for_call(
+def _resolve_active_binding(
     tree: ast.AST,
     lineno: int,
+    col_offset: int,
+    target_name: str,
     scope_chain: list[ast.AST] | None = None,
-) -> str | None:
-    """Return the nearest binding kind for operator_access_migration at line.
+) -> BindingEvent | None:
+    """Scope-chain-aware resolution of the active binding for *target_name*.
 
-    If multiple bindings apply, the most-recent binding by line and inner scope
-    depth is selected.
+    Walks the scope chain from innermost to outermost, applying:
+
+    * **Module-scope (global) rule**: Uses the *last* (by lineno, col_offset)
+      binding in module scope because all module-level statements execute
+      before any migration callback runs.
+
+    * **LEGB order**: Iterates from innermost to outermost enclosing scope.
+      The first scope that has a local binding wins.
+
+    * **Function-scope compile-time-local rule**: If a name is bound ANYWHERE
+      in a function (any binding form except ``global``/``nonlocal``), it is
+      local to that function at compile time.  A use before any such binding
+      does NOT fall through to an outer scope — the active binding is returned
+      as kind ``"unbound-local"``.
+
+    * **``global`` / ``nonlocal``**: A ``global`` declaration makes the name
+      resolve to module scope; ``nonlocal`` makes it resolve to the nearest
+      enclosing function scope.
+
+    * **Source-order**: Within a scope, the most recent binding by
+      (lineno, col_offset) before the call site is used.
+
+    Returns a ``BindingEvent`` or ``None`` (unbound in all reachable scopes).
     """
     chain = scope_chain or _scope_chain_for_operator_access_call(tree, lineno)
-    best: tuple[int, int, str] | None = None
-    for depth, scope_node in enumerate(chain):
-        for line, kind in _collect_operator_access_name_bindings(scope_node):
-            if line > lineno:
+    call_key = (lineno, col_offset)
+
+    for depth in range(len(chain) - 1, -1, -1):
+        scope_node = chain[depth]
+        is_module = isinstance(scope_node, ast.Module)
+        events = _iter_binding_events(scope_node, target_name)
+
+        if not events:
+            continue  # No binding in this scope — fall through.
+
+        if is_module:
+            # Module-final: the last binding by source order.
+            return events[-1]
+
+        # --- Function / class scope ---
+
+        # Separate global/nonlocal declarations from real bindings.
+        real_bindings = [e for e in events if e.kind not in ("global", "nonlocal")]
+        has_global = any(e.kind == "global" for e in events)
+        has_nonlocal = any(e.kind == "nonlocal" for e in events)
+
+        if has_global:
+            # ``global target_name`` — the name resolves to module scope.
+            # Continue to the next outer scope in the chain.
+            # (If we're already at module scope, this shouldn't happen,
+            # but guard against it.)
+            if depth == 0:
+                return None
+            continue
+
+        if has_nonlocal:
+            # ``nonlocal target_name`` — the name resolves to the nearest
+            # enclosing function scope (skip this one).
+            # Find the next outer function scope.
+            outer_depth = depth - 1
+            while outer_depth >= 0:
+                outer = chain[outer_depth]
+                if isinstance(
+                    outer,
+                    (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda),
+                ):
+                    break
+                outer_depth -= 1
+            if outer_depth < 0:
+                # nonlocal at module level — should not happen in valid code,
+                # but fall through safely.
                 continue
-            candidate = (line, depth, kind)
-            if (
-                best is None
-                or candidate[0] > best[0]
-                or (candidate[0] == best[0] and candidate[1] > best[1])
-            ):
-                best = candidate
-    if best is None:
-        return None
-    return best[2]
+            # Skip this scope; the loop will continue to outer scopes
+            # (we've already determined that the module case handles last).
+            # BUT: we need the loop to actually find the outer scope.
+            # The natural fall-through handles this; continue to next depth.
+            continue
+
+        if not real_bindings:
+            continue  # Only global/nonlocal — name not actually bound here.
+
+        # Name is bound somewhere in this function → COMPILE-TIME LOCAL.
+        # Find the most recent binding before the call site.
+        before = [e for e in real_bindings if (e.lineno, e.col_offset) <= call_key]
+        if not before:
+            # All bindings are after the use site — still local, but unbound.
+            return BindingEvent(
+                lineno=lineno,
+                col_offset=col_offset,
+                kind=_UNBOUND_LOCAL,
+                target=target_name,
+                source_module=None,
+            )
+
+        # Return the most recent binding by source order.
+        return before[-1]
+
+    return None
+
+
+def _is_root_canonically_bound(
+    tree: ast.AST,
+    lineno: int,
+    col_offset: int,
+    scope_chain: list[ast.AST] | None = None,
+) -> bool:
+    """Return ``True`` if ``quickscale_modules_orgs`` is canonically bound
+    at (lineno, col_offset).
+
+    A canonical root binding is ``import quickscale_modules_orgs`` or
+    ``import quickscale_modules_orgs.tenancy`` (an ``ast.Import`` node where
+    the imported module starts with ``quickscale_modules_orgs``).
+
+    All other binding forms (ImportFrom, assignment, parameter, function
+    definition, class definition, for/with/except target, import-as alias)
+    make the root counterfeit or unbound.
+
+    Uses the same scope-chain-aware active-binding resolution as the
+    bare-name resolver, ensuring inner canonical imports override outer
+    counterfeit bindings and module-final semantics apply.
+    """
+    active = _resolve_active_binding(
+        tree, lineno, col_offset, "quickscale_modules_orgs", scope_chain
+    )
+    if active is None:
+        return False  # Unbound — not canonical.
+
+    if active.kind == "import" and active.source_module is not None:
+        # ``import quickscale_modules_orgs`` or
+        # ``import quickscale_modules_orgs.tenancy`` — the source module
+        # string starts with the canonical package name.
+        return active.source_module.split(".", 1)[0] == "quickscale_modules_orgs"
+
+    # All other binding forms (import-from, param, assign, function, class,
+    # for, with_as, except, named_expr, unbound-local, delete, star, etc.)
+    # are counterfeit or non-canonical.
+    return False
 
 
 def _is_operator_access_migration_call(
@@ -404,6 +749,7 @@ def _is_operator_access_migration_call(
 
     Canonical calls are:
     1. exact attribute FQN quickscale_modules_orgs.tenancy.operator_access_migration
+       where the root name is canonically bound (scope-chain-aware).
     2. direct operator_access_migration name bound by
        from quickscale_modules_orgs.tenancy import operator_access_migration
        with no alias in scope.
@@ -412,10 +758,20 @@ def _is_operator_access_migration_call(
         return False
 
     context_expr = node.func
-
     resolved_fqn = _resolve_attribute_fqn(context_expr)
+    call_lineno = lineno if lineno is not None else getattr(node, "lineno", None)
+    call_col_offset = getattr(node, "col_offset", 0)
+
     if resolved_fqn == _CANONICAL_OPERATOR_ACCESS_FQN:
-        return True
+        # FQN call — verify the root name is canonically bound.
+        if tree is None:
+            return False
+        return _is_root_canonically_bound(
+            tree,
+            call_lineno,
+            call_col_offset,
+            scope_chain=scope_chain,
+        )
 
     if (
         not isinstance(context_expr, ast.Name)
@@ -425,18 +781,18 @@ def _is_operator_access_migration_call(
 
     if tree is None:
         return False
-    call_lineno = lineno if lineno is not None else getattr(node, "lineno", None)
     if call_lineno is None:
         return False
 
-    return (
-        _operator_access_binding_kind_for_call(
-            tree,
-            call_lineno,
-            scope_chain=scope_chain,
-        )
-        == "canonical-import"
+    # Bare-name call — resolve the active binding.
+    active = _resolve_active_binding(
+        tree,
+        call_lineno,
+        call_col_offset,
+        _OPERATOR_ACCESS_CM_NAME,
+        scope_chain=scope_chain,
     )
+    return active is not None and active.kind == "canonical-import"
 
 
 def _find_operator_access_ranges(tree: ast.AST) -> list[tuple[int, int]]:
@@ -902,6 +1258,25 @@ def _iter_function_parameter_names(func_node: ast.AST) -> list[str]:
     return names
 
 
+def _iter_function_arg_nodes(func_node: ast.AST) -> list[ast.arg]:
+    """Return all ``ast.arg`` nodes declared by *func_node*.
+
+    Handles ``ast.FunctionDef``, ``ast.AsyncFunctionDef``, and ``ast.Lambda``.
+    """
+    if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        return []
+    args = func_node.args
+    result: list[ast.arg] = []
+    result.extend(args.posonlyargs)
+    result.extend(args.args)
+    result.extend(args.kwonlyargs)
+    if args.vararg is not None:
+        result.append(args.vararg)
+    if args.kwarg is not None:
+        result.append(args.kwarg)
+    return result
+
+
 def _collect_editor_bindings(
     scope_node: ast.AST,
     editor_name: str,
@@ -1140,21 +1515,33 @@ def _check_wrong_editor(tree: ast.AST) -> list[dict]:
 
 
 def _check_operator_access_shadowing(tree: ast.AST) -> list[dict]:
-    """Detect assignments, imports, or function definitions that shadow the
-    ``operator_access_migration`` name within the migration source.
+    """Detect shadowing or missing import of ``operator_access_migration``
+    using scope-chain-aware binding resolution.
 
-    The canonical import is:
-        from quickscale_modules_orgs.tenancy import operator_access_migration
+    Uses ``_resolve_active_binding`` with the unified BindingEvent model,
+    call-local LEGB resolution, and col_offset ordering:
 
-    Any assignment or rebinding that shadows this name is flagged.
-    Additionally, using the symbol without the exact canonical import is a
-    hard violation.
+    * For each call site using a bare ``operator_access_migration`` name,
+      resolves the effective binding in the active scope chain.  If the
+      effective binding is not ``canonical-import``, the site is flagged.
+
+    * Star imports are handled via the binding-event model: an ``import-star``
+      event at module scope only flags the call if no later canonical import
+      overrides it (module-final semantics).
+
+    * Module-level late rebindings (e.g. ``for`` target, assignment after
+      callback definition) are caught because module-scope resolution uses
+      the *last* binding by source order.
+
+    * Non-canonical outer bindings overridden by an inner canonical import
+      are NOT flagged (CR-SA88-REV-006 fix).
+
+    * A local name bound after the use site (compile-time local) returns
+      ``unbound-local`` and is flagged.
     """
     violations: list[dict] = []
 
-    operator_access_calls: list[tuple[int, bool, bool]] = []
-    # tuple entries: (call_line, is_canonical_call, is_direct_name_call)
-    canonical_import_lines: set[int] = set()
+    operator_access_calls: list[tuple[int, int, bool, bool]] = []
 
     for node in ast.walk(tree):
         if isinstance(node, ast.With):
@@ -1173,231 +1560,97 @@ def _check_operator_access_shadowing(tree: ast.AST) -> list[dict]:
                     lineno=node.lineno,
                 )
                 is_direct_name = isinstance(context_fn, ast.Name)
+                call_col = getattr(item.context_expr, "col_offset", 0)
                 operator_access_calls.append(
-                    (node.lineno, is_canonical, is_direct_name)
+                    (node.lineno, call_col, is_canonical, is_direct_name)
                 )
-
-                if not is_canonical:
-                    violations.append(
-                        {
-                            "filepath": "<unknown>",
-                            "line": node.lineno,
-                            "message": (
-                                "operator_access_migration() is used with a non-canonical "
-                                "symbol at line "
-                                f"{node.lineno}.  Use either `from "
-                                f"{_CANONICAL_TENANCY_MODULE} import "
-                                f"{_OPERATOR_ACCESS_CM_NAME}` or the exact "
-                                f"FQN `{_CANONICAL_OPERATOR_ACCESS_FQN}(schema_editor)`."
-                            ),
-                            "category": "shadowing",
-                        }
-                    )
 
     # If operator_access_migration is never used as a context manager,
     # shadowing checks are intentionally out-of-scope for this file.
     if not operator_access_calls:
         return violations
 
-    for node in ast.walk(tree):
-        # Canonical import checks.
-        if isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                if alias.name == "*":
-                    violations.append(
-                        {
-                            "filepath": "<unknown>",
-                            "line": node.lineno,
-                            "message": (
-                                f"`from {node.module or '<unknown>'} import *` is disallowed "
-                                "when operator_access_migration is used because it can "
-                                "inject a counterfeit symbol.  Use only the exact "
-                                f"canonical import: `from {_CANONICAL_TENANCY_MODULE} "
-                                f"import {_OPERATOR_ACCESS_CM_NAME}`."
-                            ),
-                            "category": "shadowing",
-                        }
-                    )
-                    continue
+    # --- Call-site resolved checks ---
 
-                if alias.name != _OPERATOR_ACCESS_CM_NAME:
-                    continue
-
-                if node.module != "quickscale_modules_orgs.tenancy":
-                    violations.append(
-                        {
-                            "filepath": "<unknown>",
-                            "line": node.lineno,
-                            "message": (
-                                f"Import of '{_OPERATOR_ACCESS_CM_NAME}' from "
-                                f"non-canonical module '{node.module}' at line "
-                                f"{node.lineno}.  Must import from "
-                                f"quickscale_modules_orgs.tenancy."
-                            ),
-                            "category": "shadowing",
-                        }
-                    )
-                    continue
-
-                if alias.asname is not None:
-                    violations.append(
-                        {
-                            "filepath": "<unknown>",
-                            "line": node.lineno,
-                            "message": (
-                                f"Alias '{alias.asname}' on import of "
-                                f"'{_OPERATOR_ACCESS_CM_NAME}' at line "
-                                f"{node.lineno} is forbidden.  Use the "
-                                f"unaliased name from quickscale_modules_orgs.tenancy."
-                            ),
-                            "category": "shadowing",
-                        }
-                    )
-                else:
-                    canonical_import_lines.add(node.lineno)
-
-            # Keep ImportFrom handling scoped to import checks above.
+    for call_line, call_col, is_canonical, is_direct_name in operator_access_calls:
+        if not is_direct_name:
+            # FQN call: counterfeit root is already checked in
+            # _is_operator_access_migration_call.  Only flag if the
+            # call itself is non-canonical.
+            if not is_canonical:
+                violations.append(
+                    {
+                        "filepath": "<unknown>",
+                        "line": call_line,
+                        "message": (
+                            f"operator_access_migration() is used with a "
+                            f"non-canonical symbol at line "
+                            f"{call_line}.  Use either `from "
+                            f"{_CANONICAL_TENANCY_MODULE} import "
+                            f"{_OPERATOR_ACCESS_CM_NAME}` or the exact "
+                            f"FQN `{_CANONICAL_OPERATOR_ACCESS_FQN}"
+                            f"(schema_editor)`."
+                        ),
+                        "category": "shadowing",
+                    }
+                )
             continue
 
-        # Check named imports that alias the context manager.
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                bound = alias.asname or alias.name
-                if bound == _OPERATOR_ACCESS_CM_NAME:
-                    violations.append(
-                        {
-                            "filepath": "<unknown>",
-                            "line": node.lineno,
-                            "message": (
-                                f"Alias '{alias.asname}' shadows the canonical "
-                                f"'{_OPERATOR_ACCESS_CM_NAME}' name at line "
-                                f"{node.lineno}.  Use the unaliased name from "
-                                f"quickscale_modules_orgs.tenancy."
-                            ),
-                            "category": "shadowing",
-                        }
-                    )
-
-        # Check assignments: operator_access_migration = <something>
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if (
-                    isinstance(target, ast.Name)
-                    and target.id == _OPERATOR_ACCESS_CM_NAME
-                ):
-                    violations.append(
-                        {
-                            "filepath": "<unknown>",
-                            "line": node.lineno,
-                            "message": (
-                                f"Shadowing assignment to "
-                                f"'{_OPERATOR_ACCESS_CM_NAME}' at line "
-                                f"{node.lineno}.  The name must remain "
-                                f"bound to its canonical import from "
-                                f"quickscale_modules_orgs.tenancy."
-                            ),
-                            "category": "shadowing",
-                        }
-                    )
-
-        # Check annotated assignments: operator_access_migration: Type = ...
-        if isinstance(node, ast.AnnAssign):
-            if (
-                isinstance(node.target, ast.Name)
-                and node.target.id == _OPERATOR_ACCESS_CM_NAME
-            ):
-                violations.append(
-                    {
-                        "filepath": "<unknown>",
-                        "line": node.lineno,
-                        "message": (
-                            f"Shadowing annotated assignment to "
-                            f"'{_OPERATOR_ACCESS_CM_NAME}' at line "
-                            f"{node.lineno}.  The name must remain bound to "
-                            f"its canonical import from quickscale_modules_orgs.tenancy."
-                        ),
-                        "category": "shadowing",
-                    }
-                )
-
-        # Check walrus assignments: (operator_access_migration := ...)
-        if isinstance(node, ast.NamedExpr):
-            if (
-                isinstance(node.target, ast.Name)
-                and node.target.id == _OPERATOR_ACCESS_CM_NAME
-            ):
-                violations.append(
-                    {
-                        "filepath": "<unknown>",
-                        "line": node.lineno,
-                        "message": (
-                            f"Shadowing walrus assignment to "
-                            f"'{_OPERATOR_ACCESS_CM_NAME}' at line "
-                            f"{node.lineno}.  The name must remain "
-                            f"bound to its canonical import from "
-                            f"quickscale_modules_orgs.tenancy."
-                        ),
-                        "category": "shadowing",
-                    }
-                )
-
-        # Check function parameters that shadow the canonical symbol.
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-            for arg in node.args.args:
-                if arg.arg == _OPERATOR_ACCESS_CM_NAME:
-                    violations.append(
-                        {
-                            "filepath": "<unknown>",
-                            "line": node.lineno,
-                            "message": (
-                                f"Parameter '{_OPERATOR_ACCESS_CM_NAME}' in a "
-                                f"callable at line {node.lineno} shadows the "
-                                "canonical context manager symbol.  Use only the "
-                                f"unaliased import from "
-                                f"quickscale_modules_orgs.tenancy."
-                            ),
-                            "category": "shadowing",
-                        }
-                    )
-
-        # Check function/class definitions that redefine the symbol.
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if node.name == _OPERATOR_ACCESS_CM_NAME:
-                kind = "function" if not isinstance(node, ast.ClassDef) else "class"
-                violations.append(
-                    {
-                        "filepath": "<unknown>",
-                        "line": node.lineno,
-                        "message": (
-                            f"Defining a {kind} named "
-                            f"'{_OPERATOR_ACCESS_CM_NAME}' at line {node.lineno} "
-                            f"shadows the canonical import.  Use only the "
-                            f"unaliased import from quickscale_modules_orgs.tenancy."
-                        ),
-                        "category": "shadowing",
-                    }
-                )
-
-    canonical_name_calls = [
-        call_line
-        for call_line, is_canonical, is_direct_name in operator_access_calls
-        if is_canonical and is_direct_name
-    ]
-
-    if canonical_name_calls and not canonical_import_lines:
-        violations.append(
-            {
-                "filepath": "<unknown>",
-                "line": min(canonical_name_calls),
-                "message": (
-                    "operator_access_migration is used without the exact, "
-                    "unaliased import from quickscale_modules_orgs.tenancy.  "
-                    "Add `from quickscale_modules_orgs.tenancy import "
-                    "operator_access_migration`."
-                ),
-                "category": "shadowing",
-            }
+        # Bare-name call — resolve the effective binding.
+        active = _resolve_active_binding(
+            tree,
+            call_line,
+            call_col,
+            _OPERATOR_ACCESS_CM_NAME,
         )
+
+        if active is None:
+            violations.append(
+                {
+                    "filepath": "<unknown>",
+                    "line": call_line,
+                    "message": (
+                        f"operator_access_migration is used without the exact, "
+                        f"unaliased import from "
+                        f"quickscale_modules_orgs.tenancy at line "
+                        f"{call_line}.  Add `from "
+                        f"quickscale_modules_orgs.tenancy import "
+                        f"operator_access_migration`."
+                    ),
+                    "category": "shadowing",
+                }
+            )
+        elif active.kind not in ("canonical-import", None):
+            kind_labels: dict[str, str] = {
+                "import": "a non-canonical import",
+                "import-from": "a non-canonical import-from",
+                "import-star": "a star import",
+                "param": "a function parameter",
+                "assign": "an assignment",
+                "annassign": "an annotated assignment",
+                "augassign": "an augmented assignment",
+                "for": "a for-loop target",
+                "with_as": "a with-as target",
+                "except": "an exception handler",
+                "named_expr": "a walrus operator",
+                "function": "a local function definition",
+                "class": "a local class definition",
+                "delete": "a deletion",
+                _UNBOUND_LOCAL: "a later local binding (unbound at this point)",
+            }
+            label = kind_labels.get(active.kind, f"a '{active.kind}' binding")
+            violations.append(
+                {
+                    "filepath": "<unknown>",
+                    "line": call_line,
+                    "message": (
+                        f"operator_access_migration used at line {call_line} is "
+                        f"resolved through {label}, not the canonical import "
+                        f"from quickscale_modules_orgs.tenancy."
+                    ),
+                    "category": "shadowing",
+                }
+            )
 
     return violations
 
@@ -2175,6 +2428,8 @@ def forward(apps, schema_editor):
 # =========================================================================
 
 WRONG_EDITOR_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     wrong_editor = schema_editor
     with operator_access_migration(wrong_editor):
@@ -2185,6 +2440,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_KEYWORD_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     with operator_access_migration(editor=schema_editor):
         schema_editor.execute(
@@ -2194,6 +2451,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_EXTRA_ARGS_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     with operator_access_migration(schema_editor, schema_editor):
         schema_editor.execute(
@@ -2203,6 +2462,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_NO_ARGS_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     with operator_access_migration():
         schema_editor.execute(
@@ -2212,6 +2473,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_NON_NAME_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     with operator_access_migration(schema_editor.connection):
         schema_editor.execute(
@@ -2221,6 +2484,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_REBOUND_ASSIGN_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     schema_editor = schema_editor.connection
     with operator_access_migration(schema_editor):
@@ -2231,6 +2496,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_REBOUND_TUPLE_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     (schema_editor,) = [schema_editor.connection]
     with operator_access_migration(schema_editor):
@@ -2241,6 +2508,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_REBOUND_LIST_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     [schema_editor] = [schema_editor.connection]
     with operator_access_migration(schema_editor):
@@ -2251,6 +2520,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_REBOUND_STARRED_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     *schema_editor, = [schema_editor.connection]
     with operator_access_migration(schema_editor):
@@ -2261,6 +2532,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_REBOUND_WITH_AS_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     with open("/tmp/example.txt") as schema_editor:
         with operator_access_migration(schema_editor):
@@ -2271,6 +2544,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_REBOUND_FOR_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     for schema_editor in []:
         pass
@@ -2282,6 +2557,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_REBOUND_EXCEPT_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     try:
         raise ValueError
@@ -2294,6 +2571,8 @@ def forward(apps, schema_editor):
 """
 
 WRONG_EDITOR_REBOUND_IMPORT_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     import builtins as schema_editor
     with operator_access_migration(schema_editor):
@@ -2379,6 +2658,8 @@ def forward(apps, schema_editor):
 """
 
 CANONICAL_FQN_CODE = """
+import quickscale_modules_orgs
+
 def forward(apps, schema_editor):
     with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
         schema_editor.execute(
@@ -2410,6 +2691,539 @@ def forward(apps, schema_editor):
 """
 
 # =========================================================================
+# Additional shadowing synthetic test code (CR-SA88-REV-006)
+# =========================================================================
+
+SHADOWING_FUNCTION_DEF_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    def operator_access_migration(x):
+        return x
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+SHADOWING_CLASS_DEF_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    class operator_access_migration:
+        pass
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+SHADOWING_ANNASSIGN_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    operator_access_migration: str = "not-the-real-one"
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+SHADOWING_WALRUS_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    if (operator_access_migration := lambda x: x):
+        pass
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+SHADOWING_PARAMETER_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor, operator_access_migration=None):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# =========================================================================
+# CR-SA88-REV-006: exhaustive evasion/legitimate-binding test constants
+# =========================================================================
+
+COUNTERFEIT_ROOT_FQN_CODE = """
+from evil_package import quickscale_modules_orgs
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Counterfeit root: ``from evil import quickscale_modules_orgs`` then
+FQN call.  The dotted string matches the canonical FQN but the root
+name is bound to a different package."""
+
+LATE_MODULE_FOR_REBIND_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+
+for operator_access_migration in [lambda x: None]:
+    pass
+"""
+"""Late module-level ``for``-target rebinding after callback definition.
+When Django invokes the callback, the global binding is the loop variable,
+not the canonical import."""
+
+LATE_MODULE_ASSIGN_REBIND_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+
+operator_access_migration = lambda x: None
+"""
+"""Late module-level assignment rebinding after callback definition."""
+
+LATE_MODULE_ANNASSIGN_REBIND_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+
+operator_access_migration: object = lambda x: None
+"""
+"""Late module-level annotated assignment rebinding."""
+
+LATE_MODULE_WALRUS_REBIND_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+
+if (operator_access_migration := lambda x: None):
+    pass
+"""
+"""Late module-level walrus-operator rebinding after callback definition."""
+
+LATE_MODULE_AUGASSIGN_REBIND_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+
+operator_access_migration += "suffix"
+"""
+"""Late module-level augmented assignment rebinding after callback
+definition.  (Augmented assignment references the prior value so this
+would raise at runtime, but for the analyzer it is a binding event.)"""
+
+LATE_MODULE_FUNCTION_DEF_REBIND_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+
+def operator_access_migration(x):
+    return x
+"""
+"""Late module-level function definition that replaces the canonical
+import after callback definition."""
+
+LATE_MODULE_CLASS_DEF_REBIND_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+
+class operator_access_migration:
+    pass
+"""
+"""Late module-level class definition that replaces the canonical
+import after callback definition."""
+
+INNER_CANONICAL_OVERRIDE_CODE = """
+operator_access_migration = lambda x: None
+
+def forward(apps, schema_editor):
+    from quickscale_modules_orgs.tenancy import operator_access_migration
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Positive test: a module-level counterfeit is overridden by an inner
+canonical import.  The scope-aware resolver should NOT flag this as a
+shadowing violation because the effective binding at the call site is
+the canonical import."""
+
+INNER_CANONICAL_OVERRIDE_NESTED_CODE = """
+operator_access_migration = lambda x: None
+
+def forward(apps, schema_editor):
+    def inner():
+        from quickscale_modules_orgs.tenancy import operator_access_migration
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+    inner()
+"""
+"""Positive test: inner-function canonical import overrides module-level
+counterfeit in a nested scope chain."""
+
+CANONICAL_ASSIGN_ALIAS_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    op_acc_mig = operator_access_migration
+    with op_acc_mig(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Positive test: creating an alias name (not shadowing the canonical
+name) does not produce a shadowing violation.  The ``with`` call uses
+the alias which is a non-canonical call (separate detection), but the
+canonical name itself is never rebound."""
+
+PARAM_SHADOWING_POSONLY_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor, operator_access_migration=None, /):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Positional-only parameter shadows the canonical name (Python 3.8+ ``/``)."""
+
+PARAM_SHADOWING_KWONLY_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor, *, operator_access_migration=None):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Keyword-only parameter shadows the canonical name (``*`` separator)."""
+
+PARAM_SHADOWING_VARARG_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor, *operator_access_migration):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Variable-length positional parameter (``*args``) shadows the canonical
+name."""
+
+PARAM_SHADOWING_KWARG_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor, **operator_access_migration):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Variable-length keyword parameter (``**kwargs``) shadows the canonical
+name."""
+
+FUNCTION_SCOPE_REBIND_NOT_GLOBAL_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    def operator_access_migration(x):
+        return x
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+
+def other_func(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Positive test: a function-scope rebind in ``forward`` only shadows
+the canonical name in that function.  ``other_func`` still sees the
+module-level canonical import."""
+
+FQN_WITH_IMPORT_MODULE_ALIAS_CODE = """
+import quickscale_modules_orgs.tenancy as tenancy
+
+def forward(apps, schema_editor):
+    with tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Module alias using ``import ... as`` is not the canonical FQN and is
+a non-canonical call.  The shadowing checker should produce a violation
+because the call is not recognized as canonical."""
+
+# =========================================================================
+# CR-SA88-REV-006: exhaustive counterfeit-root forms (scope-chain-aware)
+# =========================================================================
+
+COUNTERFEIT_ROOT_ASSIGN_CODE = """
+quickscale_modules_orgs = "fake"
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Counterfeit root via assignment: ``quickscale_modules_orgs = 'fake'`` then
+FQN call.  The dotted string matches the canonical FQN but the root name is
+bound via assignment, not a real import."""
+
+COUNTERFEIT_ROOT_FUNCTION_CODE = """
+def quickscale_modules_orgs():
+    return None
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Counterfeit root via function definition: the root name is bound as a
+local function, not the real module."""
+
+COUNTERFEIT_ROOT_CLASS_CODE = """
+class quickscale_modules_orgs:
+    pass
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Counterfeit root via class definition: the root name is bound as a local
+class, not the real module."""
+
+COUNTERFEIT_ROOT_FOR_CODE = """
+for quickscale_modules_orgs in [None]:
+    pass
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Counterfeit root via for-loop target: the root name is bound as a loop
+variable, not the real module."""
+
+COUNTERFEIT_ROOT_WITHAS_CODE = """
+from contextlib import nullcontext
+
+with nullcontext() as quickscale_modules_orgs:
+    pass
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Counterfeit root via with-as target: the root name is bound as a
+context manager target, not the real module."""
+
+COUNTERFEIT_ROOT_EXCEPT_CODE = """
+try:
+    raise ValueError
+except ValueError as quickscale_modules_orgs:
+    pass
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Counterfeit root via except handler: the root name is bound as an
+exception target, not the real module."""
+
+COUNTERFEIT_ROOT_PARAM_CODE = """
+def forward(quickscale_modules_orgs, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Counterfeit root via function parameter: the root name is bound as a
+parameter of the callback, not the real module."""
+
+COUNTERFEIT_ROOT_IMPORT_ALIAS_CODE = """
+import sys as quickscale_modules_orgs
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Counterfeit root via import alias: ``import sys as quickscale_modules_orgs``
+binds the name to the sys module, not the real quickscale_modules_orgs."""
+
+COUNTERFEIT_THEN_CANONICAL_ROOT_CODE = """
+from evil_package import quickscale_modules_orgs
+import quickscale_modules_orgs.tenancy
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Positive test: a counterfeit root binding followed by a later canonical
+``import quickscale_modules_orgs.tenancy``.  Module-final semantics should
+use the later canonical import as the active root binding."""
+
+COUNTERFEIT_THEN_CANONICAL_ROOT_VIA_IMPORT_CODE = """
+from evil_package import quickscale_modules_orgs
+import quickscale_modules_orgs
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Positive test: a counterfeit root followed by ``import quickscale_modules_orgs``
+at module level.  The later exact import should restore canonical root binding."""
+
+LATER_COUNTERFEIT_ROOT_AFTER_CANONICAL_CODE = """
+import quickscale_modules_orgs.tenancy
+quickscale_modules_orgs = "fake"
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""A later assignment rebinding after the canonical import makes the root
+counterfeit at module-final state."""
+
+STAR_IMPORT_THEN_CANONICAL_CODE = """
+from quickscale_modules_orgs.tenancy import *
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+"""Positive test: a star import at module level (uncertain provenance) is
+overridden by a later exact canonical import.  Module-final semantics should
+produce zero shadowing violations."""
+
+STAR_IMPORT_THEN_LATE_COUNTERFEIT_CODE = """
+from quickscale_modules_orgs.tenancy import *
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+
+operator_access_migration = lambda x: None
+"""
+"""Negative test: star import then canonical import then late module-level
+counterfeit.  The last binding is counterfeit, so the call should be flagged."""
+
+USE_BEFORE_FUNCTION_LOCAL_BIND_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+    operator_access_migration = lambda x: None
+"""
+"""Function-scope compile-time-local rule: ``operator_access_migration`` is
+assigned later in the function, making it LOCAL at compile time.  The
+``with`` call site must NOT fall through to the module-level canonical
+import.  Instead it should be resolved as an unbound-local and flagged."""
+
+# =========================================================================
 # Assignment+save synthetic test code
 # =========================================================================
 
@@ -2422,6 +3236,8 @@ def forward(apps, schema_editor):
 """
 
 ASSIGN_SAVE_WRAPPED_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     MyModel = apps.get_model("some_app", "MyModel")
     with operator_access_migration(schema_editor):
@@ -2460,6 +3276,8 @@ def forward(apps, schema_editor):
 """
 
 ASSIGN_SAVE_OUTER_WRAPPED_INNER_WRAPPED_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
     with operator_access_migration(schema_editor):
 
@@ -2547,6 +3365,8 @@ def forward(apps, schema_editor):
 """
 
 NESTED_WRONG_EDITOR_CAPTURE_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
 def forward(apps, schema_editor):
 
     def _inner():
@@ -3153,6 +3973,411 @@ def forward(apps, schema_editor):
         assert len(shadow_violations) >= 1, (
             f"Expected at least 1 shadowing violation for module alias access, got "
             f"{len(shadow_violations)}: {violations}"
+        )
+
+    # --- CR-SA88-REV-006: additional shadowing/evasion negative proofs ---
+
+    def test_shadowing_function_def_is_detected(self) -> None:
+        """Local function definition with name ``operator_access_migration``
+        that shadows the canonical import is detected as shadowing.
+
+        This is a counterfeit locally defined helper (CR-SA88-REV-006
+        evasion shape).
+        """
+        violations = check_migration_source(SHADOWING_FUNCTION_DEF_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for function-def shadowing, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_shadowing_class_def_is_detected(self) -> None:
+        """Local class definition with name ``operator_access_migration``
+        that shadows the canonical import is detected as shadowing.
+
+        This is a counterfeit locally defined helper (CR-SA88-REV-006
+        evasion shape).
+        """
+        violations = check_migration_source(SHADOWING_CLASS_DEF_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for class-def shadowing, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_shadowing_annassign_is_detected(self) -> None:
+        """Annotated assignment that rebinds ``operator_access_migration``
+        is detected as shadowing.
+
+        This is a ``local rebinding`` evasion shape (CR-SA88-REV-006).
+        """
+        violations = check_migration_source(SHADOWING_ANNASSIGN_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for annotated assignment, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_shadowing_walrus_is_detected(self) -> None:
+        """Walrus operator (``:=``) that rebinds ``operator_access_migration``
+        is detected as shadowing.
+
+        This is a ``local rebinding`` evasion shape (CR-SA88-REV-006).
+        """
+        violations = check_migration_source(SHADOWING_WALRUS_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for walrus-operator rebinding, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_shadowing_parameter_is_detected(self) -> None:
+        """Function parameter named ``operator_access_migration`` that shadows
+        the canonical import is detected as shadowing.
+
+        This is a ``local rebinding`` evasion shape (CR-SA88-REV-006).
+        """
+        violations = check_migration_source(SHADOWING_PARAMETER_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for parameter shadowing, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    # --- CR-SA88-REV-006: exhaustive evasion/legitimate-binding tests ---
+
+    def test_counterfeit_root_fqn_is_rejected(self) -> None:
+        """``from evil import quickscale_modules_orgs; ... FQN call`` is
+        rejected because the root module name is a counterfeit binding,
+        even though the dotted string textually matches the canonical FQN.
+        """
+        violations = check_migration_source(COUNTERFEIT_ROOT_FQN_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for counterfeit root "
+            f"FQN, got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_late_module_for_rebind_is_detected(self) -> None:
+        """Module-level ``for``-target rebinding after the callback definition
+        is detected because module-scope resolution uses the LAST binding,
+        and the loop variable is active when Django later invokes the callback.
+        """
+        violations = check_migration_source(LATE_MODULE_FOR_REBIND_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for late module-level "
+            f"for-rebind, got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_late_module_assign_rebind_is_detected(self) -> None:
+        """Module-level assignment rebinding after the callback definition
+        is detected (same late-rebinding principle as the for-target case).
+        """
+        violations = check_migration_source(LATE_MODULE_ASSIGN_REBIND_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for late module-level "
+            f"assign-rebind, got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_late_module_annassign_rebind_is_detected(self) -> None:
+        """Module-level annotated assignment rebinding after the callback
+        definition is detected."""
+        violations = check_migration_source(LATE_MODULE_ANNASSIGN_REBIND_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for late module-level "
+            f"annassign-rebind, got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_late_module_walrus_rebind_is_detected(self) -> None:
+        """Module-level walrus-operator rebinding after the callback
+        definition is detected."""
+        violations = check_migration_source(LATE_MODULE_WALRUS_REBIND_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for late module-level "
+            f"walrus-rebind, got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_late_module_augassign_rebind_is_detected(self) -> None:
+        """Module-level augmented assignment rebinding after the callback
+        definition is detected."""
+        violations = check_migration_source(LATE_MODULE_AUGASSIGN_REBIND_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for late module-level "
+            f"augassign-rebind, got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_late_module_function_def_rebind_is_detected(self) -> None:
+        """Module-level function definition after the callback definition
+        that shadows the canonical name is detected."""
+        violations = check_migration_source(LATE_MODULE_FUNCTION_DEF_REBIND_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for late module-level "
+            f"function-def rebind, got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_late_module_class_def_rebind_is_detected(self) -> None:
+        """Module-level class definition after the callback definition
+        that shadows the canonical name is detected."""
+        violations = check_migration_source(LATE_MODULE_CLASS_DEF_REBIND_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for late module-level "
+            f"class-def rebind, got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_inner_canonical_override_accepts_inner_import(self) -> None:
+        """A module-level counterfeit binding overridden by an inner
+        canonical import is NOT flagged (positive test for the CR-SA88-REV-006
+        false positive fix)."""
+        violations = check_migration_source(INNER_CANONICAL_OVERRIDE_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) == 0, (
+            f"Expected 0 shadowing violations when inner canonical import "
+            f"overrides outer counterfeit, got {len(shadow_violations)}: "
+            f"{violations}"
+        )
+
+    def test_inner_canonical_override_nested_scope(self) -> None:
+        """A nested-function canonical import that overrides a module-level
+        counterfeit is not flagged."""
+        violations = check_migration_source(INNER_CANONICAL_OVERRIDE_NESTED_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) == 0, (
+            f"Expected 0 shadowing violations for nested inner canonical "
+            f"override, got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_canonical_alias_not_flagged_as_shadowing(self) -> None:
+        """Creating an alias name (``op_acc_mig = operator_access_migration``)
+        does not shadow the canonical name and is not flagged.  The alias is
+        a different name."""
+        violations = check_migration_source(CANONICAL_ASSIGN_ALIAS_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) == 0, (
+            f"Expected 0 shadowing violations for canonical alias (different "
+            f"name), got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_param_shadowing_posonly_is_detected(self) -> None:
+        """Positional-only parameter shadowing is detected (Python 3.8+
+        ``/`` separator)."""
+        violations = check_migration_source(PARAM_SHADOWING_POSONLY_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for positional-only "
+            f"parameter, got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_param_shadowing_kwonly_is_detected(self) -> None:
+        """Keyword-only parameter shadowing is detected (``*`` separator)."""
+        violations = check_migration_source(PARAM_SHADOWING_KWONLY_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for keyword-only "
+            f"parameter, got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_param_shadowing_vararg_is_detected(self) -> None:
+        """Variable-length positional parameter (``*args``) shadowing is
+        detected."""
+        violations = check_migration_source(PARAM_SHADOWING_VARARG_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for vararg parameter, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_param_shadowing_kwarg_is_detected(self) -> None:
+        """Variable-length keyword parameter (``**kwargs``) shadowing is
+        detected."""
+        violations = check_migration_source(PARAM_SHADOWING_KWARG_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for kwarg parameter, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_function_scope_rebind_only_affects_own_scope(self) -> None:
+        """A function-scope rebind in ``forward`` shadows the canonical name
+        only in that function.  ``other_func`` still sees the module-level
+        canonical import (positive test)."""
+        violations = check_migration_source(FUNCTION_SCOPE_REBIND_NOT_GLOBAL_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        # forward has a function-def shadowing of operator_access_migration
+        # so the call inside forward uses the function-scope binding (not
+        # canonical). other_func uses the module-level canonical import.
+        # So we expect exactly 1 shadowing violation for forward's call.
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation (forward's call uses "
+            f"local function-def name), got {len(shadow_violations)}: "
+            f"{violations}"
+        )
+
+    def test_canonical_fqn_with_import_is_accepted(self) -> None:
+        """Canonical FQN with proper ``import quickscale_modules_orgs``
+        is accepted and produces zero violations."""
+        violations = check_migration_source(CANONICAL_FQN_CODE)
+        assert len(violations) == 0, (
+            f"Expected 0 violations for canonical FQN with import, got "
+            f"{len(violations)}: {violations}"
+        )
+
+    def test_fqn_module_alias_is_rejected(self) -> None:
+        """``import quickscale_modules_orgs.tenancy as tenancy`` followed by
+        ``tenancy.operator_access_migration(...)`` is not the canonical FQN
+        and the call is non-canonical.  The checker should flag this."""
+        violations = check_migration_source(FQN_WITH_IMPORT_MODULE_ALIAS_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for module alias FQN, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    # --- CR-SA88-REV-006: exhaustive counterfeit-root forms ---
+
+    def test_counterfeit_root_assign_is_rejected(self) -> None:
+        """Assignment binding of ``quickscale_modules_orgs`` before FQN call
+        is a counterfeit root and the FQN call is rejected."""
+        violations = check_migration_source(COUNTERFEIT_ROOT_ASSIGN_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected shadowing violation for assignment counterfeit root, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_counterfeit_root_function_is_rejected(self) -> None:
+        """Function definition binding of ``quickscale_modules_orgs`` before
+        FQN call is a counterfeit root."""
+        violations = check_migration_source(COUNTERFEIT_ROOT_FUNCTION_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected shadowing violation for function-def counterfeit root, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_counterfeit_root_class_is_rejected(self) -> None:
+        """Class definition binding of ``quickscale_modules_orgs`` before
+        FQN call is a counterfeit root."""
+        violations = check_migration_source(COUNTERFEIT_ROOT_CLASS_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected shadowing violation for class-def counterfeit root, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_counterfeit_root_for_target_is_rejected(self) -> None:
+        """For-loop target binding of ``quickscale_modules_orgs`` before
+        FQN call is a counterfeit root."""
+        violations = check_migration_source(COUNTERFEIT_ROOT_FOR_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected shadowing violation for for-target counterfeit root, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_counterfeit_root_withas_is_rejected(self) -> None:
+        """With-as target binding of ``quickscale_modules_orgs`` before
+        FQN call is a counterfeit root."""
+        violations = check_migration_source(COUNTERFEIT_ROOT_WITHAS_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected shadowing violation for with-as counterfeit root, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_counterfeit_root_except_is_rejected(self) -> None:
+        """Except-handler binding of ``quickscale_modules_orgs`` before
+        FQN call is a counterfeit root."""
+        violations = check_migration_source(COUNTERFEIT_ROOT_EXCEPT_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected shadowing violation for except counterfeit root, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_counterfeit_root_param_is_rejected(self) -> None:
+        """Parameter binding of ``quickscale_modules_orgs`` before FQN call
+        is a counterfeit root."""
+        violations = check_migration_source(COUNTERFEIT_ROOT_PARAM_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected shadowing violation for param counterfeit root, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    def test_counterfeit_root_import_alias_is_rejected(self) -> None:
+        """Import alias binding of ``quickscale_modules_orgs`` before FQN
+        call is a counterfeit root."""
+        violations = check_migration_source(COUNTERFEIT_ROOT_IMPORT_ALIAS_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected shadowing violation for import alias counterfeit root, "
+            f"got {len(shadow_violations)}: {violations}"
+        )
+
+    # --- CR-SA88-REV-006: later canonical root restoration ---
+
+    def test_counterfeit_then_canonical_root_is_accepted(self) -> None:
+        """A counterfeit root followed by a later canonical
+        ``import quickscale_modules_orgs.tenancy`` produces zero violations
+        (module-final semantics)."""
+        violations = check_migration_source(COUNTERFEIT_THEN_CANONICAL_ROOT_CODE)
+        assert len(violations) == 0, (
+            f"Expected 0 violations when later canonical import overrides "
+            f"counterfeit root, got {len(violations)}: {violations}"
+        )
+
+    def test_counterfeit_then_canonical_root_via_import_is_accepted(self) -> None:
+        """A counterfeit root followed by ``import quickscale_modules_orgs``
+        restores canonical root validity (module-final semantics)."""
+        violations = check_migration_source(
+            COUNTERFEIT_THEN_CANONICAL_ROOT_VIA_IMPORT_CODE
+        )
+        assert len(violations) == 0, (
+            f"Expected 0 violations when later ``import quickscale_modules_orgs`` "
+            f"overrides counterfeit root, got {len(violations)}: {violations}"
+        )
+
+    def test_later_counterfeit_root_after_canonical_is_rejected(self) -> None:
+        """A later assignment rebinding after the canonical import makes the
+        root counterfeit at module-final state (flagged)."""
+        violations = check_migration_source(LATER_COUNTERFEIT_ROOT_AFTER_CANONICAL_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected shadowing violation when later binding makes FQN root "
+            f"counterfeit, got {len(shadow_violations)}: {violations}"
+        )
+
+    # --- CR-SA88-REV-006: star import ordering ---
+
+    def test_star_import_then_canonical_is_clean(self) -> None:
+        """Star import followed by exact canonical import at module level
+        produces zero shadowing violations (module-final semantics)."""
+        violations = check_migration_source(STAR_IMPORT_THEN_CANONICAL_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) == 0, (
+            f"Expected 0 shadowing violations when exact canonical follows "
+            f"star import, got {len(shadow_violations)}: {violations}"
+        )
+
+    # --- CR-SA88-REV-006: function-scope compile-time-local rule ---
+
+    def test_use_before_function_local_bind_is_rejected(self) -> None:
+        """A canonical import at module scope followed by an assignment in
+        the function makes the name LOCAL at compile time.  A use before the
+        assignment must NOT fall through to the module-level canonical import
+        and should be flagged as unbound-local."""
+        violations = check_migration_source(USE_BEFORE_FUNCTION_LOCAL_BIND_CODE)
+        shadow_violations = [v for v in violations if v.get("category") == "shadowing"]
+        assert len(shadow_violations) >= 1, (
+            f"Expected at least 1 shadowing violation for use before function "
+            f"local bind, got {len(shadow_violations)}: {violations}"
         )
 
     # --- Assignment+save tests ---
