@@ -51,6 +51,30 @@ git merge --no-ff wt-track{N}
 
 **Integration baseline (SA82).** The SA82 unquarantined `make test-integration` gate is the accepted baseline for the remaining restricted-role cluster. Under it the only red remaining is **CRM (SA84)**; blog (SA83), forms (SA85), listings (SA86), orgs (SA77), and notifications (SA79) are all closed — see [CHANGELOG.md](../../CHANGELOG.md).
 
+### Green-gate milestone — all quality make commands pass
+
+**Exit criteria (single definition of done).** On a fresh clone + fresh `migrate` (post-SA90 squash), `make check`, `make quality`, and `make ci` all exit 0, with `QUARANTINE_TICKETS` **empty** in `scripts/test_integration.sh` (no masked failures). `make check` is the umbrella gate — `lint` + `typecheck` + `test` (unit + integration) + `check-core-compat` + `check-module-core-imports` + `check-manifest-sync` + `check-org-context-primitives` + `check-csrf-exempt` (`Makefile:652`).
+
+**Only the integration suite shards by module.** `scripts/test_integration.sh` loops `quickscale_modules/*` sequentially (one pytest stage per module, each with its own per-file 80% / mean 90% coverage floor). `lint`, `typecheck`, and the `check-*` gates are repo-global — they do not parallelize per module. A single module runs in isolation via `make MODULE=<name> test -- --modules`.
+
+#### Per-module test gate (the parallelizable axis)
+
+- [ ] **SA84 — CRM restricted-role fixtures (67 fail).** `Tier 2 · Track 1 · deps: none` — the one open per-module blocker; full brief in the SA84 ticket under Track 1 below. Gate line: `make MODULE=crm test -- --modules` → 0 failures at the 80%/90% floors, no quarantine entry.
+- [x] blog (SA83) · forms (SA85) · listings (SA86) · orgs (SA77) · notifications (SA79) — green under the SA82 baseline (see [CHANGELOG.md](../../CHANGELOG.md)).
+
+#### Repo-global gates (run once at v87 integration, after per-module work lands)
+
+- [ ] **GATE-lint** — `make lint` (Ruff) green.
+- [ ] **GATE-typecheck** — `make typecheck` (MyPy) green. Blocked on **SA89b** removing the `mypy.ini:94` backups ignore; until then MyPy passes only on a suppressed baseline, so this gate is not truly green.
+- [ ] **GATE-check-suite** — `check-core-compat`, `check-module-core-imports`, `check-manifest-sync`, `check-org-context-primitives`, `check-csrf-exempt` all green.
+- [ ] **GATE-quality** — `make quality` (vulture / radon / pylint) within agreed thresholds.
+
+- [ ] **SA91 — Fork the per-module integration loop for true parallel execution.** `Tier 2 · deps: none`
+  `scripts/test_integration.sh` runs module stages serially (loop at `:414–442`). Fork each module's pytest stage and join exit codes + coverage. Contention points to resolve: the shared `COVERAGE_RESULTS_FILE` mktemp (`:57`) must become per-module and be merged before `check_overall_mean_coverage`; the per-module `QS_*_DB_USER` role setup (`:375–386`) and pre-created test databases must not collide across concurrent workers. Kept separate from the SA84 correctness work — this is CI-time speedup only, not a gate for green.
+
+  *Acceptance:* parallel run produces the identical pass/fail verdict and the identical overall-mean coverage as the serial run; no cross-worker DB collision under the restricted role.
+  *(why →* green-gate milestone; parallelize testing by module*)*
+
 ### Cross-cutting decision (re-based 2026-07-15) — eliminate the cross-org-migration class by squashing to a final-schema initial migration (arch-audit Finding 8)
 
 SA84 and SA86 were originally framed as two instances of **arch-audit [Finding 8](../others/arch-audit.md) (`module-rls-context-procedural`)**: RLS-context acquisition is procedural — cross-org *data migrations* and test fixtures must remember to acquire `operator_access`. The blanket BYPASSRLS hatch masked every omission until SA82 removed it.
