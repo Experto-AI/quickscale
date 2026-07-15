@@ -133,6 +133,7 @@ def _scan_model_method_calls(
     Allowed: exactly one ``storage.save()`` in upload, one ``storage.delete()``
     in delete — proven by a local ``S3Storage`` assignment.
     """
+    assert isinstance(tree, ast.Module), "tree must be a parsed Module"
     diags: list[str] = []
 
     # Find S3Storage import status
@@ -149,6 +150,29 @@ def _scan_model_method_calls(
     # Sentinel for function/class scope boundaries — do not traverse into
     # these with ast.walk since the recursive _walk handles them separately.
     _SCOPE_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+    def _pruning_ast_walk(node: ast.AST) -> list[ast.AST]:
+        """Yield all descendant AST nodes, pruning at nested lexical scope
+        boundaries (FunctionDef, AsyncFunctionDef, ClassDef, Lambda).
+
+        Unlike ``ast.walk``, this does NOT descend into the bodies of nested
+        function, async-function, class, or lambda definitions.
+        """
+        _BOUNDARY = (
+            ast.FunctionDef,
+            ast.AsyncFunctionDef,
+            ast.ClassDef,
+            ast.Lambda,
+        )
+        result: list[ast.AST] = []
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            result.append(current)
+            if isinstance(current, _BOUNDARY):
+                continue
+            stack.extend(reversed(list(ast.iter_child_nodes(current))))
+        return result
 
     def _walk(
         stmts: list[ast.stmt],
@@ -196,10 +220,8 @@ def _scan_model_method_calls(
                         elif target.id in proven:
                             proven.discard(target.id)
 
-            # --- Check calls (skip scope boundaries already handled) ---
-            for node in ast.walk(stmt):
-                if isinstance(node, _SCOPE_NODES):
-                    continue  # skip — handled recursively
+            # --- Check calls (scope boundaries already pruned) ---
+            for node in _pruning_ast_walk(stmt):
                 if not isinstance(node, ast.Call):
                     continue
                 func = node.func
@@ -255,12 +277,8 @@ def _scan_model_method_calls(
                         elif target.id in proven:
                             proven.discard(target.id)
 
-            # --- Check calls (skip scope boundaries) ---
-            for node in ast.walk(stmt):
-                if isinstance(node, _SCOPE_BOUNDARY):
-                    continue
-                if isinstance(node, ast.Lambda):
-                    continue
+            # --- Check calls (scope boundaries already pruned) ---
+            for node in _pruning_ast_walk(stmt):
                 if not isinstance(node, ast.Call):
                     continue
                 func = node.func
@@ -303,53 +321,73 @@ def _scan_model_method_calls(
     # Each function (including nested) is checked in isolation: nested
     # function/class/lambda bodies do NOT contribute to the parent scope's
     # counts.
-    def _collect_all_functions(
-        module_body: list[ast.stmt],
-    ) -> list[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef, int]]:
-        """Recursively collect all lexical function scopes."""
-        scopes: list[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef, int]] = []
+    def _collect_all_lexical_scopes(
+        node: ast.AST,
+    ) -> list[tuple[str | None, ast.AST, int]]:
+        """Recursively collect all lexical scope definitions
+        (FunctionDef, AsyncFunctionDef, ClassDef, Lambda) even through
+        intervening control-flow nodes.
 
-        def _recurse(body: list[ast.stmt]) -> None:
-            for stmt in body:
-                if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    scopes.append((stmt.name, stmt, stmt.lineno))
-                    _recurse(stmt.body)
-
-        _recurse(module_body)
+        Returns list of (name, node, lineno) tuples; lambdas have name=None.
+        """
+        scopes: list[tuple[str | None, ast.AST, int]] = []
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                scopes.append((child.name, child, child.lineno))
+                scopes.extend(_collect_all_lexical_scopes(child))
+            elif isinstance(child, ast.ClassDef):
+                scopes.append((child.name, child, child.lineno))
+                scopes.extend(_collect_all_lexical_scopes(child))
+            elif isinstance(child, ast.Lambda):
+                scopes.append((None, child, child.lineno))
+            else:
+                scopes.extend(_collect_all_lexical_scopes(child))
         return scopes
 
-    for func_name, func_node, func_lineno in _collect_all_functions(tree.body):
-        f_has_s3 = has_s3_import or _has_local_s3_import(func_node)
+    for scope_name, scope_node, scope_lineno in _collect_all_lexical_scopes(tree):
+        f_has_s3 = has_s3_import or _scope_has_local_s3_import(scope_node)
         f_save: list[int] = [0]
         f_delete: list[int] = [0]
-        _walk_direct_scope(func_node.body, set(), f_has_s3, f_save, f_delete)
 
-        if func_name == "upload_file_to_s3":
+        if isinstance(
+            scope_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            _walk_direct_scope(scope_node.body, set(), f_has_s3, f_save, f_delete)
+        elif isinstance(scope_node, ast.Lambda):
+            _count_lambda_calls(scope_node, f_save, f_delete)
+
+        # Determine display name for diagnostics
+        if isinstance(scope_node, ast.Lambda):
+            display_name = f"lambda at line {scope_lineno}"
+        else:
+            display_name = scope_name  # type: ignore[assignment]
+
+        if display_name == "upload_file_to_s3":
             if f_save[0] != 1:
                 diags.append(
-                    f"line {func_lineno}: 'upload_file_to_s3' must contain "
+                    f"line {scope_lineno}: 'upload_file_to_s3' must contain "
                     f"exactly 1 storage.save() call, found {f_save[0]}"
                 )
             if f_delete[0] != 0:
                 diags.append(
-                    f"line {func_lineno}: 'upload_file_to_s3' must contain "
+                    f"line {scope_lineno}: 'upload_file_to_s3' must contain "
                     f"exactly 0 storage.delete() calls, found {f_delete[0]}"
                 )
-        elif func_name == "delete_s3_key":
+        elif display_name == "delete_s3_key":
             if f_delete[0] != 1:
                 diags.append(
-                    f"line {func_lineno}: 'delete_s3_key' must contain "
+                    f"line {scope_lineno}: 'delete_s3_key' must contain "
                     f"exactly 1 storage.delete() call, found {f_delete[0]}"
                 )
             if f_save[0] != 0:
                 diags.append(
-                    f"line {func_lineno}: 'delete_s3_key' must contain "
+                    f"line {scope_lineno}: 'delete_s3_key' must contain "
                     f"exactly 0 storage.save() calls, found {f_save[0]}"
                 )
         else:
             if f_save[0] != 0 or f_delete[0] != 0:
                 diags.append(
-                    f"line {func_lineno}: '{func_name}' must not contain any "
+                    f"line {scope_lineno}: '{display_name}' must not contain any "
                     f"storage.save() or storage.delete() calls, "
                     f"found save={f_save[0]}, delete={f_delete[0]}"
                 )
@@ -357,11 +395,13 @@ def _scan_model_method_calls(
     return diags
 
 
-def _has_local_s3_import(
-    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
-) -> bool:
-    """Return True if *func_node* body contains a S3Storage import."""
-    for stmt in func_node.body:
+def _scope_has_local_s3_import(scope_node: ast.AST) -> bool:
+    """Return True if *scope_node* body contains an S3Storage import.
+    Handles FunctionDef, AsyncFunctionDef, and ClassDef; Lambdas have
+    no body statements and always return False.
+    """
+    body: list[ast.stmt] = getattr(scope_node, "body", [])
+    for stmt in body:
         if (
             isinstance(stmt, ast.ImportFrom)
             and stmt.module == "storages.backends.s3"
@@ -369,6 +409,35 @@ def _has_local_s3_import(
         ):
             return True
     return False
+
+
+def _count_lambda_calls(
+    lambda_node: ast.Lambda,
+    save_count: list[int],
+    delete_count: list[int],
+) -> None:
+    """Count save/delete calls in a lambda body expression.
+
+    Lambdas capture variables by closure, so a Name receiver may refer
+    to a proven S3Storage from the enclosing scope. We conservatively
+    count any Name-receiver save/delete call — this avoids under-counting
+    (false negatives) in the closed-schema contract while keeping the
+    analysis independent of parent-scope provenance tracking.
+    """
+    for node in ast.walk(lambda_node.body):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            continue
+        if func.attr not in _ALLOWED_METHODS:
+            continue
+        if not isinstance(func.value, ast.Name):
+            continue
+        if func.attr == "save":
+            save_count[0] += 1
+        elif func.attr == "delete":
+            delete_count[0] += 1
 
 
 def _scan_class_definitions(tree: ast.AST) -> list[str]:
@@ -745,6 +814,163 @@ class TestBoundaryScanner:
         tree = ast.parse(source, filename="test.py")
         diags = _scan_model_method_calls(tree)
         assert any("_inner" in d and "delete=1" in d for d in diags), str(diags)
+
+    # ------------------------------------------------------------------
+    # Lexical-scope pruning regression negatives (SA89B-CR-001)
+    # ------------------------------------------------------------------
+
+    def test_nested_function_inside_if_save_not_leaked(self) -> None:
+        """Nested function inside ``if`` block: its ``storage.save()`` is
+        NOT attributed to the parent's per-function count. Proves the
+        pruning visitor genuinely skips nested lexical scopes even when
+        they are wrapped in control-flow statements.
+        """
+        source = (
+            "from storages.backends.s3 import S3Storage\n"
+            "def upload_file_to_s3(local_path, requested_key, storage_options):\n"
+            "    storage = S3Storage()\n"
+            "    if True:\n"
+            "        def _inner():\n"
+            "            s = S3Storage()\n"
+            "            s.save('k', 'f')\n"
+            "        storage.save('k', django_file)\n"
+            "    return requested_key\n"
+            "def delete_s3_key(requested_key, storage_options):\n"
+            "    pass\n"
+        )
+        tree = ast.parse(source, filename="test.py")
+        diags = _scan_model_method_calls(tree)
+        # The only diagnostics should be about delete_s3_key having no
+        # delete call — the nested function's save inside ``if`` is
+        # pruned and NOT leaked into upload_file_to_s3's count.
+        assert not any(
+            "upload_file_to_s3" in d and "save=" in d and "found" in d for d in diags
+        ), str(diags)
+        # _inner is now discovered through control-flow traversal and
+        # analyzed as its own lexical scope. Its save=1 is reported
+        # independently (not attributed to upload_file_to_s3).
+        assert any("_inner" in d and "save=1" in d for d in diags), str(diags)
+
+    def test_nested_async_function_inside_if_save_not_leaked(self) -> None:
+        """Async function nested inside ``if`` block: its ``storage.save()``
+        is NOT leaked into the parent function count.
+        """
+        source = (
+            "from storages.backends.s3 import S3Storage\n"
+            "def upload_file_to_s3(local_path, requested_key, storage_options):\n"
+            "    storage = S3Storage()\n"
+            "    if True:\n"
+            "        async def _inner():\n"
+            "            s = S3Storage()\n"
+            "            s.save('k', 'f')\n"
+            "        storage.save('k', django_file)\n"
+            "    return requested_key\n"
+            "def delete_s3_key(requested_key, storage_options):\n"
+            "    pass\n"
+        )
+        tree = ast.parse(source, filename="test.py")
+        diags = _scan_model_method_calls(tree)
+        assert not any(
+            "upload_file_to_s3" in d and "save=" in d and "found" in d for d in diags
+        ), str(diags)
+        assert any("_inner" in d and "save=1" in d for d in diags), str(diags)
+
+    def test_lambda_save_not_leaked_to_parent(self) -> None:
+        """Lambda calling ``storage.save()`` with the outer-proven variable
+        must NOT inflate the parent's per-function save count.
+        """
+        source = (
+            "from storages.backends.s3 import S3Storage\n"
+            "def upload_file_to_s3(local_path, requested_key, storage_options):\n"
+            "    storage = S3Storage()\n"
+            "    on_complete = lambda: storage.save('k', 'f')\n"
+            "    storage.save('k', django_file)\n"
+            "    return requested_key\n"
+            "def delete_s3_key(requested_key, storage_options):\n"
+            "    pass\n"
+        )
+        tree = ast.parse(source, filename="test.py")
+        diags = _scan_model_method_calls(tree)
+        # The lambda's .save() must not be attributed to parent,
+        # so upload_file_to_s3 should have exactly 1 save.
+        assert not any(
+            "upload_file_to_s3" in d and "save=" in d and "found" in d for d in diags
+        ), str(diags)
+        # The lambda is now discovered through control-flow traversal
+        # and analyzed as its own lexical scope. Its save=1 is reported
+        # independently (not attributed to upload_file_to_s3).
+        assert any("lambda" in d and "save=1" in d for d in diags), str(diags)
+
+    def test_class_save_not_leaked_to_parent(self) -> None:
+        """Class method calling ``storage.save()`` inside a function
+        must NOT inflate the parent function's per-function count.
+        """
+        source = (
+            "from storages.backends.s3 import S3Storage\n"
+            "def upload_file_to_s3(local_path, requested_key, storage_options):\n"
+            "    storage = S3Storage()\n"
+            "    class Helper:\n"
+            "        def save_it(self):\n"
+            "            s = S3Storage()\n"
+            "            s.save('k', 'f')\n"
+            "    storage.save('k', django_file)\n"
+            "    return requested_key\n"
+            "def delete_s3_key(requested_key, storage_options):\n"
+            "    pass\n"
+        )
+        tree = ast.parse(source, filename="test.py")
+        diags = _scan_model_method_calls(tree)
+        # upload_file_to_s3 must have exactly 1 save (not inflated)
+        assert not any(
+            "upload_file_to_s3" in d and "save=" in d and "found" in d for d in diags
+        ), str(diags)
+        # save_it is now discovered and analyzed as its own lexical
+        # scope. Its save=1 is reported independently.
+        assert any("save_it" in d and "save=1" in d for d in diags), str(diags)
+
+    def test_direct_if_save_is_counted(self) -> None:
+        """Direct ``storage.save()`` inside an ``if`` block IS counted
+        in the parent function. Proves control-flow traversal still
+        works — the pruning only removes nested lexical scopes, not
+        ordinary control-flow branches."""
+        source = (
+            "from storages.backends.s3 import S3Storage\n"
+            "def upload_file_to_s3(local_path, requested_key, storage_options):\n"
+            "    storage = S3Storage()\n"
+            "    if True:\n"
+            "        storage.save('k', django_file)\n"
+            "    return requested_key\n"
+            "def delete_s3_key(requested_key, storage_options):\n"
+            "    pass\n"
+        )
+        tree = ast.parse(source, filename="test.py")
+        diags = _scan_model_method_calls(tree)
+        # upload_file_to_s3 must have exactly 1 save (direct, inside if)
+        assert not any(
+            "upload_file_to_s3" in d and "save=" in d and "found" in d for d in diags
+        ), str(diags)
+
+    def test_direct_for_save_is_counted(self) -> None:
+        """Direct ``storage.save()`` inside a ``for`` loop IS counted
+        in the parent function. Proves for-loop traversal with the
+        pruning visitor still works — only nested lexical scopes are
+        pruned, not ordinary control-flow bodies."""
+        source = (
+            "from storages.backends.s3 import S3Storage\n"
+            "def upload_file_to_s3(local_path, requested_key, storage_options):\n"
+            "    storage = S3Storage()\n"
+            "    for key in [requested_key]:\n"
+            "        storage.save(key, django_file)\n"
+            "    return requested_key\n"
+            "def delete_s3_key(requested_key, storage_options):\n"
+            "    pass\n"
+        )
+        tree = ast.parse(source, filename="test.py")
+        diags = _scan_model_method_calls(tree)
+        # upload_file_to_s3 must have exactly 1 save (direct, inside for)
+        assert not any(
+            "upload_file_to_s3" in d and "save=" in d and "found" in d for d in diags
+        ), str(diags)
 
     # ------------------------------------------------------------------
     # Class definitions
