@@ -66,7 +66,7 @@ git merge --no-ff wt-track{N}
 
 Assigned to **Track 2** (its module work — SA86, SA88b — is complete, so it owns the green-gate closeout). GATE-typecheck coordinates with Track 3 (SA89b).
 
-- [ ] **GATE-lint** — `make lint` (Ruff) green. `Track 2`
+- [x] **GATE-lint** — `make lint` (Ruff) green. `Track 2`
 - [ ] **GATE-typecheck** — `make typecheck` (MyPy) green. `Track 2 · deps: SA89b (Track 3)` — blocked on SA89b removing the `mypy.ini:94` backups ignore; until then MyPy passes only on a suppressed baseline, so this gate is not truly green.
 - [ ] **GATE-check-suite** — `check-core-compat`, `check-module-core-imports`, `check-manifest-sync`, `check-org-context-primitives`, `check-csrf-exempt` all green. `Track 2`
 - [ ] **GATE-quality** — `make quality` (vulture / radon / pylint) within agreed thresholds. `Track 2`
