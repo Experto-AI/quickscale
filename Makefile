@@ -44,8 +44,8 @@
 #   make clean                - Remove build artifacts
 
 .PHONY: setup bootstrap install \
-        test test-unit test-integration test-cov test-e2e test-agent \
-	lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
+        test test-unit test-integration test-cov test-cov-policy test-e2e test-agent \
+        lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
         quality check ci ci-e2e \
         docs \
         build clean \
@@ -342,13 +342,21 @@ test-e2e:
 test-agent:
 	@scripts/test_agentic_flow.sh
 
-# Run tests with coverage (90% total, 80% per-file threshold)
+# Run tests with coverage (90% equal-weight package mean, 80% per-file threshold)
 #
-# Phase 1: Core + CLI unit tests
+# Phase 1: Core + CLI unit tests (threshold deferred via --cov-fail-under=0)
 # Phase 2: Backups-module tests (when PostgreSQL is available) — aggregates
 #          legitimate DR-engine exercise into the combined coverage measurement.
-# Phase 3: Combined coverage report and threshold check.
-# Phase 4: Final exit code (test failures are captured but coverage is always reported).
+#          Set REQUIRE_BACKUPS_COVERAGE=1 to fail when PostgreSQL or the DR
+#          toolchain is not available (instead of silently skipping).
+# Phase 3: Combined coverage report (threshold deferred via --fail-under=0).
+# Phase 4: Explicit dual-threshold policy check via check_coverage_policy.py
+#          (90% equal-weight package mean + 80% per-file minimum).
+# Phase 5: Final exit code (test failures are captured but coverage is always reported).
+#
+# Usage:
+#   make test-cov                          — standalone (backups optional)
+#   make test-cov REQUIRE_BACKUPS_COVERAGE=1 — CI mode (backups required)
 test-cov:
 	@set -e; \
 	overall_exit=0; \
@@ -358,7 +366,8 @@ test-cov:
 	$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short -m "not e2e" \
 		--cov=quickscale_core \
 		--cov=quickscale_cli \
-		--cov-report=; \
+		--cov-report= \
+		--cov-fail-under=0; \
 	phase1_exit=$$?; \
 	set -e; \
 	if [ $$phase1_exit -ne 0 ]; then \
@@ -406,14 +415,33 @@ test-cov:
 			[ $$overall_exit -eq 0 ] && overall_exit=$$phase2_exit; \
 		fi; \
 	else \
+		if [ -n "$(REQUIRE_BACKUPS_COVERAGE)" ]; then \
+			echo "❌ REQUIRE_BACKUPS_COVERAGE is set but PostgreSQL or DR toolchain is not available."; \
+			echo "   Ensure PostgreSQL 18 is running on localhost:5432 and the QS_BACKUPS_DB_*"; \
+			echo "   environment variables point to a valid LOGIN CREATEDB NOINHERIT NOBYPASSRLS role."; \
+			exit 1; \
+		fi; \
 		echo "ℹ️ Phase 2 — PostgreSQL or DR toolchain not available — skipping module coverage append (backups)"; \
 	fi; \
-	echo "📊 Phase 3 — Generating combined coverage report..."; \
+	echo "📊 Phase 3 — Generating combined coverage report (threshold deferred to Phase 4)..."; \
 	$(PYTHON) -m coverage html; \
-	$(PYTHON) -m coverage report --fail-under=90; \
+	$(PYTHON) -m coverage report --fail-under=0; \
 	$(PYTHON) -m coverage json; \
+	echo "🔍 Phase 4 — Checking coverage policy (90% equal-weight package mean, 80% per-file)..."; \
+	$(PYTHON) scripts/check_coverage_policy.py coverage.json; \
+	policy_exit=$$?; \
+	if [ $$policy_exit -ne 0 ]; then \
+		echo "⚠️  Phase 4 — Coverage policy check failed (exit $$policy_exit)"; \
+		[ $$overall_exit -eq 0 ] && overall_exit=$$policy_exit; \
+	fi; \
 	echo "📊 Coverage report: htmlcov/index.html"; \
 	exit $$overall_exit
+
+# Run the coverage policy helper test suite independently.
+# This verifies the helper's arithmetic, validation, and fail-closed
+# behaviour before the main test-cov pipeline uses it.
+test-cov-policy:
+	@$(PYTHON) -m pytest scripts/test_ci_coverage_policy.py -q --tb=short
 
 # --- Lint / Format ---
 

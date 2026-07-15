@@ -65,13 +65,31 @@ git merge --no-ff wt-track{N}
 
 #### Repo-global gates (run once at v87 integration, after per-module work lands)
 
-GATE-lint, GATE-typecheck, and GATE-check-suite are all **done** (2026-07-15; see [CHANGELOG.md](../../CHANGELOG.md)). Track 2's module work and its own gates are complete, so the remaining closeout — **GATE-quality**, the **SA91** tooling, and the new **SA93** (e2e in the green-gate) — is **reassigned to the freed Track 3** (idle after SA89a/b closed Finding 1). All three are `deps: none`.
+GATE-lint, GATE-typecheck, and GATE-check-suite are all **done** (2026-07-15; see [CHANGELOG.md](../../CHANGELOG.md)). Track 2's module work and its own gates are complete, so the remaining closeout — **GATE-quality**, the **SA91** tooling, and the new **SA93** (e2e in the green-gate) — is **reassigned to the freed Track 3** (idle after SA89a/b closed Finding 1). GATE-quality (done) and SA91 have no dependencies. SA93 now carries a hidden cross-track prerequisite — see SA93 entry below.
 
 - [x] **GATE-quality** — `make quality` (vulture / radon / pylint) within agreed thresholds. `Track 3` — done 2026-07-15. Reconciled `scripts/quality_baseline.json` against the v87 codebase (5 dead-code, 151 complexity, 41 large-file entries accepted as baseline); `make quality` exits 0 with 0 warning/0 critical regressions.
-- [ ] **SA93 — Fold the e2e lane into the green-gate definition of done.** `Tier 1 · Track 3 · deps: none`
-  E2e infrastructure already exists — `make test-e2e` → `scripts/test_e2e.sh` (Playwright + PostgreSQL) and the dedicated `.github/workflows/e2e.yml` lane. But `make check` deliberately runs `-m "not e2e"`, and the exit criteria previously named only `make check` / `make quality` / `make ci`, so "all quality commands pass" did **not** assert e2e green. This ticket makes the e2e lane part of "done": confirm `make ci-e2e` (which runs `make check` + `test-e2e`) passes green on `v87`, and keep the exit-criteria sentence above listing `make ci-e2e`. **No `make check` scope change** — e2e stays a distinct lane; only the green-gate definition of done gains it. No gate-code change is expected (`e2e.yml` already runs the suite).
+- [ ] **SA93 — Fold the e2e lane into the green-gate definition of done.** `Tier 1 · Track 3 · deps: blog+CRM integration green (previously unstated cross-track join prerequisite)`
+  **Blocked checkpoint (2026-07-15; maintainer-selected stop-and-merge; not complete).**
 
-  *Acceptance:* `make ci-e2e` exits 0 on a fresh clone; `e2e.yml` green on `v87`; exit-criteria prose lists the e2e lane.
+  **Done:**
+  - Added the combined core/CLI/backups coverage path, `scripts/check_coverage_policy.py`, maintained helper tests, and focused DR-engine lock/path/sidecar tests.
+  - The broad pre-review QG run reached the then-current coverage stage: its statement-weighted report was **92.02%** with **0/83 per-file offenders** (`_lock 97%`, `_paths 100%`, `_sidecar 94%); integration then failed in blog and CRM, so E2E did not run.
+  - Review follow-up corrected the intended policy to an **equal-weight core/CLI package mean**, deferred pytest's weighted threshold so the helper is the final authority, and wired `make test-cov-policy` into the local CI path. Post-fix focused evidence is **24/24 helper tests passed**, Ruff passed, and `bash -n scripts/check_ci_locally.sh` passed.
+  - Independent review resolved **CR-SA93-REV-001** (equal-package arithmetic/final authority) and **CR-SA93-REV-003** (maintained helper-test collection).
+
+  **Pending/Blocking:**
+  - **CR-SA93-REV-002 (high/blocking):** coverage JSON validation is not fully fail-closed. Scalar/null roots and non-dict file records can raise; reports missing either expected package can pass; prefix-only classification accepts non-canonical traversal paths. Add root/container/record validation, require both packages, reject non-canonical paths, and add malformed/missing-package/traversal proofs.
+  - **CR-SA93-REV-004 (medium/blocking):** `scripts/check_ci_locally.sh` advertises 12 stages but uses inconsistent `/11` denominators and duplicates `[11/11]` on the non-E2E path. Normalize conditional stage totals and make the E2E-skip message unnumbered before relying on stage-number evidence.
+  - **SA93-BLOCK-001 (high/blocking):** blog and CRM integration shards fail with `pytest-django` fixture-finalizer errors. CRM maps to open **SA84** (Track 1); blog was previously considered closed by SA83 and needs separate regression triage.
+  - **SA93-BLOCK-002 (high/blocking):** core and CLI E2E remain unexecuted because integration fails first. The current post-review 12-stage flow has not received a broad rerun; only the focused post-fix evidence above is current.
+
+  **Decisions needed:**
+  - Assign ownership for the newly observed blog regression and confirm CRM/SA84 plus blog-green as explicit cross-track prerequisites for SA93. Preserve the exact unquarantined `make ci-e2e` contract; quarantine and threshold weakening are not acceptable.
+  - No design decision is needed for CR-SA93-REV-002 or CR-SA93-REV-004; they are deterministic first fixes for the next Track 3 continuation.
+
+  **Clean continuation:** fix CR-SA93-REV-002/004 → land blog/CRM fixes on `v87` → resync `wt-track3` → rerun exact `make ci-e2e` → verify both E2E suites execute and `e2e.yml` is green on `v87` → independent final review → mark SA93 complete.
+
+  *(Acceptance unchanged:* `make ci-e2e` exits 0 on a fresh clone; `e2e.yml` green on `v87`; exit-criteria prose lists the e2e lane.*)*
   *(why →* green-gate milestone; e2e was outside the definition of done*)*
 
 ### Cross-cutting decision (re-based 2026-07-15) — eliminate the cross-org-migration class by squashing to a final-schema initial migration (arch-audit Finding 8)
@@ -144,15 +162,15 @@ SA84 — CRM (67 fixtures)
 
 **Ordering.** The squash (SA92) eliminates the cross-org-migration class, so the SA88 gate saga (SA88a–e) is deleted, not completed. SA84 survived as a **fixture** cleanup. Track 1 runs SA92 → SA84. Track 2 is complete (module work + its own gates). Track 3, freed after closing Finding 1, took over the remaining closeout (GATE-quality ✓ DONE, SA93, SA91).
 
-**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join: the per-module gate (SA84, Track 1) plus the repo-global closeout (GATE-quality ✓ DONE + SA93 e2e, Track 3) must all land on `v87`. GATE-lint, GATE-typecheck, GATE-check-suite, and GATE-quality are complete. SA91 is a separate non-gating optimization (Track 3) — CI-time speedup only, not a gate for green.
+**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join: the per-module gate (SA84, Track 1) plus the repo-global closeout (GATE-quality ✓ DONE + SA93 e2e, Track 3) must all land on `v87`. GATE-lint, GATE-typecheck, GATE-check-suite, and GATE-quality are complete. **SA93 is a blocked checkpoint** — the broad pre-review run reached coverage but blog+CRM integration failed before E2E, and independent review leaves CR-SA93-REV-002/004 open in the post-fix local-CI path. See the SA93 entry above for the exact Done / Pending-Blocking / Decisions-needed ledger. SA91 is a separate non-gating optimization (Track 3) — CI-time speedup only, not a gate for green.
 
 ### Track readiness (2026-07-15)
 
 - **Track 1 — READY, clean to continue (SA92, deps: none).** The squash-and-drop-backward-compat decision (see cross-cutting decision above) makes the whole cross-org-migration problem disappear: no static analyzer, no runtime boundary proofs, no gate. The decision is already ratified, so no maintainer decision is pending. SA92 is fresh, dependency-free work; SA84 follows it and is unblocked by it. The retired SA88a–e findings (CR-SA88-REV-006/007, CR-SA88A1-REV-002/003/004) close as obsoleted-by-schema-squash.
 - **Track 2 — COMPLETE.** Module work (SA86, SA88b) and its own gates (GATE-lint, GATE-typecheck, GATE-check-suite) are all done. Its remaining closeout items were reassigned to Track 3 to balance load; no open Track-2 work remains.
-- **Track 3 — GATE-quality ✓ DONE (2026-07-15); SA93 and SA91 remain.** Finding 1 (DR persistence port) is closed (SA89a + SA89b, 2026-07-15). To use the freed capacity, Track 3 took over **GATE-quality** (now done — baseline reconciled, `make quality` exits 0), **SA93** (fold e2e into the green-gate), and **SA91** (non-gating parallel-loop tooling). **SA89B-CR-004 (low/advisory)** remains against `check_module_core_compatibility.py` independently, not gating.
+- **Track 3 — GATE-quality ✓ DONE (2026-07-15); SA93 blocked-checkpoint and SA91 remain.** Finding 1 (DR persistence port) is closed (SA89a + SA89b, 2026-07-15). To use the freed capacity, Track 3 took over **GATE-quality** (now done — baseline reconciled, `make quality` exits 0), **SA93** (fold e2e into the green-gate — see blocked-checkpoint entry above for the complete Done / Pending-Blocking / Decisions-needed ledger), and **SA91** (non-gating parallel-loop tooling). **SA89B-CR-004 (low/advisory)** remains against `check_module_core_compatibility.py` independently, not gating.
 
-**No track is blocked. No maintainer decision is pending** — the squash re-base and the SA89b descope were both ratified on 2026-07-15.
+**Track 3 is partially blocked:** SA93 first needs deterministic fixes for CR-SA93-REV-002/004, then cannot complete until blog (new fixture-finalizer regression) and CRM (SA84) integration shards are green. A maintainer ownership decision remains for the cross-track blog/CRM work; see the SA93 checkpoint ledger above.
 
 **Decision (ratified 2026-07-15) — Track 1: squash migrations, delete the SA88 gate saga.** After the static-analyzer line and its runtime-oracle successor both proved to be chasing an artifact of schema evolution, the maintainer confirmed (no deployed DB to preserve) that squashing every module to a final-schema `0001_initial` eliminates the cross-org-*migration* class outright. **Why:** the backfills only exist because `organization_id` was added to populated tables; a fresh schema has no rows to backfill, so there is no invariant left to gate. RLS enforcement (SA59/SA82) is unchanged; the *fixture* failures (SA84) are a separate, ContextVar-level concern the squash does not touch. **Sub-decisions:** (1) squash-and-drop-compat over continue-oracle; (2) manually re-attach RLS `RunPython` to the squashed migrations (not auto-generated); (3) keep a ~30-line forward guardrail against reintroducing cross-org migration DML. This supersedes every SA88 decision — the SA88a–e static-analyzer line and its runtime-oracle successor (SA88d/e) are all obsoleted-by-squash; their full reasoning trail is preserved in [CHANGELOG.md §SA88](../../CHANGELOG.md).
 
