@@ -67,7 +67,7 @@ git merge --no-ff wt-track{N}
 
 GATE-lint, GATE-typecheck, and GATE-check-suite are all **done** (2026-07-15; see [CHANGELOG.md](../../CHANGELOG.md)). Track 2's module work and its own gates are complete, so the remaining closeout — **GATE-quality**, the **SA91** tooling, and the new **SA93** (e2e in the green-gate) — is **reassigned to the freed Track 3** (idle after SA89a/b closed Finding 1). All three are `deps: none`.
 
-- [ ] **GATE-quality** — `make quality` (vulture / radon / pylint) within agreed thresholds. `Track 3`
+- [x] **GATE-quality** — `make quality` (vulture / radon / pylint) within agreed thresholds. `Track 3` — done 2026-07-15. Reconciled `scripts/quality_baseline.json` against the v87 codebase (5 dead-code, 151 complexity, 41 large-file entries accepted as baseline); `make quality` exits 0 with 0 warning/0 critical regressions.
 - [ ] **SA93 — Fold the e2e lane into the green-gate definition of done.** `Tier 1 · Track 3 · deps: none`
   E2e infrastructure already exists — `make test-e2e` → `scripts/test_e2e.sh` (Playwright + PostgreSQL) and the dedicated `.github/workflows/e2e.yml` lane. But `make check` deliberately runs `-m "not e2e"`, and the exit criteria previously named only `make check` / `make quality` / `make ci`, so "all quality commands pass" did **not** assert e2e green. This ticket makes the e2e lane part of "done": confirm `make ci-e2e` (which runs `make check` + `test-e2e`) passes green on `v87`, and keep the exit-criteria sentence above listing `make ci-e2e`. **No `make check` scope change** — e2e stays a distinct lane; only the green-gate definition of done gains it. No gate-code change is expected (`e2e.yml` already runs the suite).
 
@@ -117,7 +117,7 @@ SA84 and SA86 were originally framed as two instances of **arch-audit [Finding 8
 
 **Reassigned closeout work (from Track 2, to use freed Track 3 capacity — all `deps: none`):**
 
-- **GATE-quality** and **SA93** (fold e2e into the green-gate) — defined in the green-gate section above; both now `Track 3`.
+- **GATE-quality** ✓ DONE (2026-07-15) and **SA93** (fold e2e into the green-gate) — defined in the green-gate section above; both now `Track 3`.
 - [ ] **SA91 — Fork the per-module integration loop for true parallel execution.** `Tier 2 · Track 3 · deps: none`
   `scripts/test_integration.sh` runs module stages serially (loop at `:414–442`). Fork each module's pytest stage and join exit codes + coverage. Contention points to resolve: the shared `COVERAGE_RESULTS_FILE` mktemp (`:57`) must become per-module and be merged before `check_overall_mean_coverage`; the per-module `QS_*_DB_USER` role setup (`:375–386`) and pre-created test databases must not collide across concurrent workers. CI-time speedup only — not a gate for the green-gate milestone.
 
@@ -133,7 +133,7 @@ Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
 SA92 — squash migrations +          ✓ COMPLETE                              Finding 1 ✓ DONE (SA89a+SA89b)
   delete SA88 gate saga               module work (SA86, SA88b)             reassigned closeout (deps: none):
-  deps: none                          GATE-lint/typecheck/check-suite         GATE-quality
+  deps: none                          GATE-lint/typecheck/check-suite         GATE-quality ✓
       │                                                                       SA93 — e2e in green-gate
       ▼                                                                       SA91 — parallel loop (non-gating)
 SA84 — CRM (67 fixtures)
@@ -142,15 +142,15 @@ SA84 — CRM (67 fixtures)
   Track 1                            Track 2                               Track 3
 ```
 
-**Ordering.** The squash (SA92) eliminates the cross-org-migration class, so the SA88 gate saga (SA88a–e) is deleted, not completed. SA84 survived as a **fixture** cleanup. Track 1 runs SA92 → SA84. Track 2 is complete (module work + its own gates). Track 3, freed after closing Finding 1, took over the remaining closeout (GATE-quality, SA93, SA91).
+**Ordering.** The squash (SA92) eliminates the cross-org-migration class, so the SA88 gate saga (SA88a–e) is deleted, not completed. SA84 survived as a **fixture** cleanup. Track 1 runs SA92 → SA84. Track 2 is complete (module work + its own gates). Track 3, freed after closing Finding 1, took over the remaining closeout (GATE-quality ✓ DONE, SA93, SA91).
 
-**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join: the per-module gate (SA84, Track 1) plus the repo-global closeout (GATE-quality + SA93 e2e, Track 3) must all land on `v87`. GATE-lint, GATE-typecheck, and GATE-check-suite are complete. SA91 is a separate non-gating optimization (Track 3) — CI-time speedup only, not a gate for green.
+**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join: the per-module gate (SA84, Track 1) plus the repo-global closeout (GATE-quality ✓ DONE + SA93 e2e, Track 3) must all land on `v87`. GATE-lint, GATE-typecheck, GATE-check-suite, and GATE-quality are complete. SA91 is a separate non-gating optimization (Track 3) — CI-time speedup only, not a gate for green.
 
 ### Track readiness (2026-07-15)
 
 - **Track 1 — READY, clean to continue (SA92, deps: none).** The squash-and-drop-backward-compat decision (see cross-cutting decision above) makes the whole cross-org-migration problem disappear: no static analyzer, no runtime boundary proofs, no gate. The decision is already ratified, so no maintainer decision is pending. SA92 is fresh, dependency-free work; SA84 follows it and is unblocked by it. The retired SA88a–e findings (CR-SA88-REV-006/007, CR-SA88A1-REV-002/003/004) close as obsoleted-by-schema-squash.
 - **Track 2 — COMPLETE.** Module work (SA86, SA88b) and its own gates (GATE-lint, GATE-typecheck, GATE-check-suite) are all done. Its remaining closeout items were reassigned to Track 3 to balance load; no open Track-2 work remains.
-- **Track 3 — reopened for reassigned closeout (was complete).** Finding 1 (DR persistence port) is closed (SA89a + SA89b, 2026-07-15). To use the freed capacity, Track 3 now owns **GATE-quality**, **SA93** (fold e2e into the green-gate), and **SA91** (non-gating parallel-loop tooling) — all `deps: none`, startable immediately. **SA89B-CR-004 (low/advisory)** remains against `check_module_core_compatibility.py` independently, not gating.
+- **Track 3 — GATE-quality ✓ DONE (2026-07-15); SA93 and SA91 remain.** Finding 1 (DR persistence port) is closed (SA89a + SA89b, 2026-07-15). To use the freed capacity, Track 3 took over **GATE-quality** (now done — baseline reconciled, `make quality` exits 0), **SA93** (fold e2e into the green-gate), and **SA91** (non-gating parallel-loop tooling). **SA89B-CR-004 (low/advisory)** remains against `check_module_core_compatibility.py` independently, not gating.
 
 **No track is blocked. No maintainer decision is pending** — the squash re-base and the SA89b descope were both ratified on 2026-07-15.
 
