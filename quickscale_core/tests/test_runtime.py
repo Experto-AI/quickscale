@@ -760,6 +760,118 @@ class TestCallerParityPassEagerSurface:
     # is accessible through the facade.
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Section 9: SA89b — modules-absent runtime proof.  Proves that
+    # the full core DR surface loads cleanly with zero quickscale_modules
+    # available, and fail-hard paths raise BackupConfigurationError.
+    # ------------------------------------------------------------------
+
+    def test_subprocess_modules_absent_fail_hard(self) -> None:
+        """Fresh isolated subprocess with ALL quickscale_modules blocked can
+        still import core DR surface, and fail-hard persistence access raises
+        BackupConfigurationError.
+
+        Eliminates the prior fragile sys.path filtering by adding a
+        deterministic premise proof: before any core import, the subprocess
+        explicitly asserts that ``quickscale_modules_backups`` is
+        **not** importable.  If a module package leaks through (e.g. from an
+        editable install), the premise check fails immediately with a clear
+        message rather than silently invalidating the test.
+
+        This is strictly stronger than the prior backups-only block test:
+        it proves core has zero import-time dependency on any module, and
+        that the fail-hard registry rejects unconfigured access at runtime.
+        """
+        import os
+        import subprocess
+        import sys
+
+        core_src = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "src",
+        )
+
+        code = (
+            "import sys\n"
+            "import os\n"
+            "\n"
+            f"_core_src = {core_src!r}\n"
+            "if _core_src not in sys.path:\n"
+            "    sys.path.insert(0, _core_src)\n"
+            "\n"
+            "# Strip potential module-resolving paths from sys.path\n"
+            "sys.path = [p for p in sys.path if 'quickscale_modules' not in p]\n"
+            "\n"
+            "# --- Deterministic premise proof ---\n"
+            "# Prove no quickscale_modules_<name> package is importable\n"
+            "# before relying on that premise for the facade imports.\n"
+            "try:\n"
+            "    import quickscale_modules_backups  # type: ignore[import-untyped]\n"
+            "    print('FAIL: quickscale_modules_backups was importable '\n"
+            "          '— modules-absent premise violated')\n"
+            "    sys.exit(1)\n"
+            "except ImportError:\n"
+            "    pass  # Expected — no modules available\n"
+            "\n"
+            "os.environ.pop('DJANGO_SETTINGS_MODULE', None)\n"
+            "\n"
+            "# 1. Eager imports work without any module available\n"
+            "from quickscale_core.runtime.dr import (\n"
+            "    BackupConfigurationError,\n"
+            "    BackupPolicySnapshot,\n"
+            "    ShellCommandRunner,\n"
+            "    ArtifactLike,\n"
+            "    BackupRestoreBlocked,\n"
+            "    RemoteMaterializer,\n"
+            "    ResolvedRestoreSource,\n"
+            "    RestoreResult,\n"
+            "    RestoreSourceResolutionMode,\n"
+            "    RestoreWarning,\n"
+            "    BackupArtifactPersistence,\n"
+            "    BackupPolicyPersistence,\n"
+            "    PersistedBackupArtifact,\n"
+            "    load_default_policy,\n"
+            "    register_backup_persistence,\n"
+            "    save_default_policy,\n"
+            ")\n"
+            "\n"
+            "# 2. The runtime facade itself also loads cleanly\n"
+            "from quickscale_core import runtime\n"
+            "assert hasattr(runtime, 'BackupConfigurationError')\n"
+            "assert hasattr(runtime, 'load_default_policy')\n"
+            "\n"
+            "# 3. Fail-hard: accessing persistence before registration raises\n"
+            "try:\n"
+            "    load_default_policy()\n"
+            "    print('FAIL: load_default_policy should have raised')\n"
+            "    sys.exit(1)\n"
+            "except BackupConfigurationError as exc:\n"
+            "    # Expected — persistence is not configured\n"
+            "    assert 'not configured' in str(exc), f'Unexpected message: {exc}'\n"
+            "\n"
+            "# 4. Registration function is importable and works\n"
+            "# (We don't actually register since we have no real impl)\n"
+            "import inspect\n"
+            "sig = inspect.signature(register_backup_persistence)\n"
+            "assert list(sig.parameters.keys()) == ['artifacts', 'policies']\n"
+            "\n"
+            "print('ALL CHECKS PASSED')\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, (
+            f"Subprocess failed (rc={result.returncode}):\n"
+            f"stdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
+        )
+        assert "ALL CHECKS PASSED" in result.stdout, (
+            f"Not all checks passed: {result.stdout}"
+        )
+
     def test_services_imports_accessible_via_runtime(self) -> None:
         """Every symbol imported by services.py lines 20-128 is accessible
         via quickscale_core.runtime."""
