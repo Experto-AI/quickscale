@@ -32,8 +32,11 @@ making every shipped migration discoverable.
 from __future__ import annotations
 
 import ast
+import enum
 import re
+import sys
 from collections import namedtuple
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -55,6 +58,114 @@ BindingEvent = namedtuple(
 # Sentinel for when a local name is bound later in the function (compile-time local
 # but not yet assigned at the use site).
 _UNBOUND_LOCAL = "unbound-local"
+
+# =========================================================================
+# SA88a.1 Phase 1 — Abstract-domain/state primitives
+# =========================================================================
+# These primitives establish non-vacuous binding-state observation,
+# evaluation-order transfer, and termination semantics for the operator
+# access wrapper call at its exact AST evaluation point.  They build
+# on the existing BindingEvent/scope-chain infrastructure and provide
+# the foundation for Phase 2 (owner-cell summaries) and Phase 3
+# (complete conditional construct matrix).
+
+
+class BindingState(enum.Enum):
+    """Binding state of a name at a specific code point.
+
+    ``BOUND`` indicates a name is canonically bound (exact canonical import).
+    ``COUNTERFEIT`` indicates the name is bound but not to the canonical
+        source (assignment, non-canonical import, parameter, etc.).
+    ``UNBOUND`` indicates the name is not bound in any reachable scope.
+    ``UNKNOWN`` indicates the binding cannot be statically determined
+        (star import, dynamic binding).
+    ``DELETED`` indicates the name was explicitly deleted.
+    ``MIXED`` indicates conflicting states from different predecessor paths.
+    ``EMPTY`` indicates vacuous/empty state (no binding facts available).
+    """
+
+    BOUND = "bound"
+    UNBOUND = "unbound"
+    UNKNOWN = "unknown"
+    DELETED = "deleted"
+    COUNTERFEIT = "counterfeit"
+    MIXED = "mixed"
+    EMPTY = "empty"
+
+
+class FlowExitKind(enum.Enum):
+    """Exit kind for block/expression flow evaluation.
+
+    ``NORMAL`` indicates the block fell through normally.
+    ``RETURN``, ``RAISE``, ``BREAK``, ``CONTINUE`` indicate abrupt exits.
+    """
+
+    NORMAL = "normal"
+    RETURN = "return"
+    RAISE = "raise"
+    BREAK = "break"
+    CONTINUE = "continue"
+
+
+@dataclass(frozen=True)
+class BindingFact:
+    """A fact about a name's binding state at an AST code point.
+
+    Records the resolved binding state for *name* at the given
+    ``(lineno, col_offset)``.  Canonical imports produce ``BOUND`` with
+    a ``source_module``; all other binding forms produce ``COUNTERFEIT``;
+    unbound names produce ``UNBOUND``; deleted names produce ``DELETED``;
+    star imports and dynamic bindings produce ``UNKNOWN``.
+
+    ``EMPTY`` state with all-default int values represents a vacuous
+    binding fact — no actual binding was observed.
+    """
+
+    name: str = ""
+    state: BindingState = BindingState.EMPTY
+    lineno: int = 0
+    col_offset: int = 0
+    source_module: str | None = None
+
+    def is_canonical(self) -> bool:
+        """Return ``True`` if this fact represents a canonical binding."""
+        return self.state == BindingState.BOUND and self.source_module is not None
+
+    def is_certify(self) -> bool:
+        """Return ``True`` if this fact can certify canonical consumption.
+
+        Only BOUND canonical facts can certify.  UNKNOWN, COUNTERFEIT,
+        UNBOUND, DELETED, MIXED, and EMPTY cannot certify even when the
+        consumer would otherwise accept them.
+        """
+        return self.is_canonical()
+
+
+@dataclass(frozen=True)
+class FlowResult:
+    """Result of evaluating a block or expression.
+
+    Records the exit kind (how control left the evaluated region)
+    and any binding facts collected during evaluation.
+    """
+
+    exit_kind: FlowExitKind = FlowExitKind.NORMAL
+    facts: tuple[BindingFact, ...] = ()
+
+    @property
+    def is_abrupt(self) -> bool:
+        """Return ``True`` if this result represents an abrupt exit."""
+        return self.exit_kind != FlowExitKind.NORMAL
+
+    @property
+    def is_normal(self) -> bool:
+        """Return ``True`` if this result represents normal completion."""
+        return self.exit_kind == FlowExitKind.NORMAL
+
+
+_EMPTY_FACT = BindingFact()
+"""Singleton vacuous binding fact."""
+
 
 _OPERATOR_ACCESS_CM_NAME = "operator_access_migration"
 """Name of the context manager function that gates must check for."""
@@ -700,6 +811,627 @@ def _resolve_active_binding(
     return None
 
 
+def _is_func_called_before_in_scope(
+    scope_body: list[ast.AST],
+    func_name: str,
+    target_lineno: int,
+) -> bool:
+    """Return ``True`` if *func_name* is called by name as a direct
+    ``Expr(Call(Name(func_name), ...))`` statement in *scope_body* at a
+    line before *target_lineno*.
+
+    Recursively descends into if/while/for/try bodies to capture calls
+    in compound statements.  Nested function/class/lambda definitions
+    are NOT descended into (their bodies are not part of the enclosing
+    execution flow).  Calls in comprehension/generator expressions are
+    also excluded.
+
+    When *target_lineno* falls inside a nested function definition in
+    *scope_body*, the enclosing scope's call statements execute AFTER
+    all nested definitions but still BEFORE the nested function body.
+    In that case the cutoff is lifted to scan the entire scope body.
+    """
+    cutoff = target_lineno
+    for stmt in scope_body:
+        if not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        s_start = stmt.lineno
+        s_end = stmt.end_lineno or s_start
+        if s_start <= target_lineno <= s_end:
+            cutoff = sys.maxsize
+            break
+
+    for stmt in scope_body:
+        stmt_lineno = getattr(stmt, "lineno", 0)
+        if stmt_lineno >= cutoff:
+            break
+
+        # Skip nested definitions.
+        if isinstance(
+            stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            continue
+
+        # Direct Expr(Call(Name(func_name), ...))
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            call = stmt.value
+            if isinstance(call.func, ast.Name) and call.func.id == func_name:
+                return True
+            if isinstance(call.func, ast.Attribute) and call.func.attr == func_name:
+                return True
+
+        # Recurse into compound statements.
+        if isinstance(stmt, ast.If):
+            if _is_func_called_before_in_scope(stmt.body, func_name, target_lineno):
+                return True
+            if _is_func_called_before_in_scope(stmt.orelse, func_name, target_lineno):
+                return True
+        if isinstance(stmt, ast.Try):
+            if _is_func_called_before_in_scope(stmt.body, func_name, target_lineno):
+                return True
+            for h in stmt.handlers:
+                if _is_func_called_before_in_scope(h.body, func_name, target_lineno):
+                    return True
+            if _is_func_called_before_in_scope(stmt.orelse, func_name, target_lineno):
+                return True
+            if _is_func_called_before_in_scope(
+                stmt.finalbody, func_name, target_lineno
+            ):
+                return True
+        if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
+            if _is_func_called_before_in_scope(stmt.body, func_name, target_lineno):
+                return True
+            if _is_func_called_before_in_scope(stmt.orelse, func_name, target_lineno):
+                return True
+        if isinstance(stmt, ast.With):
+            if _is_func_called_before_in_scope(stmt.body, func_name, target_lineno):
+                return True
+
+    return False
+
+
+def _resolve_owner_aware_binding(
+    tree: ast.AST,
+    lineno: int,
+    col_offset: int,
+    target_name: str,
+    scope_chain: list[ast.AST] | None = None,
+) -> BindingEvent | None:
+    """Phase 2 owner-aware binding resolution.
+
+    Like :func:`_resolve_active_binding` but accounts for ``global``
+    and ``nonlocal`` declarations that redirect assignments to their
+    owner cells rather than creating local bindings.
+
+    **Call-order-aware mutation model**: A global/nonlocal mutation in a
+    nested or sibling function takes effect ONLY when that function is
+    actually CALLED before the target call site in the enclosing scope.
+    Functions that are only defined (never called) do NOT transfer their
+    mutations.  When call order cannot be determined, the function
+    conservatively falls through to the normal lexical resolution.
+
+    Direct bindings (assignments, imports) in the same function body as
+    the call site are handled by ``_resolve_active_binding``.
+
+    Returns a ``BindingEvent`` with the effective kind after owner-cell
+    resolution, or ``None`` when unbound.
+    """
+    chain = scope_chain or _scope_chain_for_operator_access_call(tree, lineno)
+    normal = _resolve_active_binding(tree, lineno, col_offset, target_name, chain)
+
+    def _find_effective_global_mutations(
+        scope_node: ast.AST, scope_body: list[ast.AST] | None
+    ) -> list[tuple[BindingEvent, ast.AST]]:
+        """Return (event, func_node) for each real binding in a
+        function defined in *scope_node* that has ``global target_name``
+        AND is called before *lineno* in *scope_body*."""
+        results: list[tuple[BindingEvent, ast.AST]] = []
+        if scope_body is not None:
+            for stmt in scope_body:
+                if not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if stmt.lineno >= lineno:
+                    continue
+                fevents = _iter_binding_events(stmt, target_name)
+                if any(e.kind == "global" for e in fevents):
+                    real = [e for e in fevents if e.kind not in ("global", "nonlocal")]
+                    if real and _is_func_called_before_in_scope(
+                        scope_body, stmt.name, lineno
+                    ):
+                        for e in real:
+                            results.append((e, stmt))
+        return results
+
+    def _find_effective_nonlocal_mutations(
+        scope_node: ast.AST,
+        scope_body: list[ast.AST] | None,
+    ) -> list[tuple[BindingEvent, ast.AST]]:
+        """Same for ``nonlocal``."""
+        results: list[tuple[BindingEvent, ast.AST]] = []
+        if scope_body is not None:
+            for stmt in scope_body:
+                if not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if stmt.lineno >= lineno:
+                    continue
+                fevents = _iter_binding_events(stmt, target_name)
+                if any(e.kind == "nonlocal" for e in fevents):
+                    real = [e for e in fevents if e.kind not in ("global", "nonlocal")]
+                    if real and _is_func_called_before_in_scope(
+                        scope_body, stmt.name, lineno
+                    ):
+                        results.append((e, stmt))
+        return results
+
+    # --- Step 1: Global mutations ---
+    global_mutations: list[tuple[BindingEvent, ast.AST]] = []
+    for depth in range(len(chain)):
+        scope = chain[depth]
+        scope_body = getattr(scope, "body", None)
+        for e, func_node in _find_effective_global_mutations(scope, scope_body):
+            global_mutations.append((e, func_node))
+
+    if global_mutations:
+        best_gm = max(
+            global_mutations, key=lambda item: (item[0].lineno, item[0].col_offset)
+        )
+        best_gm_event, _ = best_gm
+        normal_at_module = False
+        if normal is not None:
+            mod_events = _iter_binding_events(chain[0], target_name)
+            normal_at_module = any(
+                e.lineno == normal.lineno and e.col_offset == normal.col_offset
+                for e in mod_events
+            )
+        else:
+            normal_at_module = True
+
+        if normal_at_module:
+            if normal is None or (
+                best_gm_event.lineno,
+                best_gm_event.col_offset,
+            ) > (normal.lineno, normal.col_offset):
+                return best_gm_event
+
+    # --- Step 2: Nonlocal mutations ---
+    nonlocal_mutations: list[tuple[BindingEvent, ast.AST, int]] = []
+    for depth in range(len(chain)):
+        scope = chain[depth]
+        scope_body = getattr(scope, "body", None)
+        for e, func_node in _find_effective_nonlocal_mutations(scope, scope_body):
+            target_depth: int | None = None
+            for td in range(depth + 1, len(chain)):
+                ts = chain[td]
+                if not isinstance(ts, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                te = _iter_binding_events(ts, target_name)
+                if any(e.kind not in ("global", "nonlocal") for e in te):
+                    target_depth = td
+                    break
+            if target_depth is None:
+                for td in range(len(chain) - 1, -1, -1):
+                    if isinstance(chain[td], (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        target_depth = td
+                        break
+            if target_depth is not None:
+                nonlocal_mutations.append((e, func_node, target_depth))
+
+    if nonlocal_mutations and normal is not None:
+        nonlocal_mutations.sort(
+            key=lambda item: (
+                item[1].lineno,
+                getattr(item[1], "col_offset", 0),
+                item[0].lineno,
+            ),
+        )
+        best_nl, nl_func, nl_target_depth = nonlocal_mutations[-1]
+        if nl_target_depth < len(chain):
+            target_scope = chain[nl_target_depth]
+            target_events = _iter_binding_events(target_scope, target_name)
+            normal_in_target = any(
+                e.lineno == normal.lineno and e.col_offset == normal.col_offset
+                for e in target_events
+            )
+            if normal_in_target:
+                if (nl_func.lineno, getattr(nl_func, "col_offset", 0)) > (
+                    normal.lineno,
+                    normal.col_offset,
+                ):
+                    return best_nl
+
+    return normal
+
+
+# =========================================================================
+# SA88a.1 Phase 3 — Reaching-state / path-sensitive transfer
+# =========================================================================
+# These helpers extend the binding resolution with path-sensitive
+# reaching-state analysis across conditional constructs (if/else,
+# loops, try/except, match, comprehension, with).  A binding is
+# canonical only when EVERY live reaching path provides a canonical
+# fact; empty/unbound/unknown/deleted/counterfeit/mixed fail closed.
+
+
+def _binding_event_to_state(event: BindingEvent) -> BindingState:
+    """Map a ``BindingEvent`` to the corresponding ``BindingState``."""
+    if event is None:
+        return BindingState.UNBOUND
+    if event.kind == "canonical-import":
+        return BindingState.BOUND
+    if event.kind == "delete":
+        return BindingState.DELETED
+    if event.kind in ("import-star",):
+        return BindingState.UNKNOWN
+    if event.kind == _UNBOUND_LOCAL:
+        return BindingState.UNBOUND
+    # Canonical root module import: ``import quickscale_modules_orgs``
+    # or ``import quickscale_modules_orgs.tenancy``.
+    if event.kind == "import" and event.source_module is not None:
+        if event.source_module.split(".", 1)[0] == "quickscale_modules_orgs":
+            return BindingState.BOUND
+    return BindingState.COUNTERFEIT
+
+
+def _merge_states(states: list[BindingState]) -> BindingState:
+    """Merge a list of ``BindingState`` values from parallel paths.
+
+    ``BOUND`` only when EVERY path agrees on ``BOUND``.
+    ``MIXED`` when any combination of non-identical states appears.
+    """
+    if not states:
+        return BindingState.EMPTY
+    unique = set(states)
+    if len(unique) == 1:
+        return unique.pop()
+    # Multiple distinct states → mixed (cannot certify)
+    return BindingState.MIXED
+
+
+def _statements_reach_line(
+    body: list[ast.AST],
+    target_lineno: int,
+    target_name: str,
+    initial_state: BindingState | None = None,
+) -> BindingState | None:
+    """Walk *body* statements tracking reaching state of *target_name*
+    up to *target_lineno*.
+
+    *initial_state* is the state entering the body (for example the
+    module-level state before the function body).  Returns ``None``
+    if the target line is not reached (all paths terminate before it),
+    or a ``BindingState`` representing the merged reaching state
+    across all live paths.
+
+    For unconditional bindings at the top level of *body*:
+    the state is updated directly (module-final semantics within
+    the body).
+
+    For conditional constructs (if/else, for/while, try/except,
+    match, with) the state is merged across branches.
+    """
+    current_state: BindingState | None = initial_state
+
+    for stmt in body:
+        stmt_lineno = getattr(stmt, "lineno", 0)
+        if stmt_lineno >= target_lineno:
+            return current_state
+
+        # Skip nested function/class/lambda — their internal
+        # bindings do not affect the outer scope's reaching state.
+        if isinstance(
+            stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            continue
+
+        # --- Unconditional binding detection ---
+        # These statements bind *target_name* unconditionally at
+        # the top level of this body.
+
+        # Import / ImportFrom
+        if isinstance(stmt, ast.Import):
+            for alias in stmt.names:
+                bound = _bound_name_from_import_alias(alias)
+                if bound == target_name:
+                    events = _iter_binding_events(
+                        ast.Module(body=[stmt], type_ignores=[]), target_name
+                    )
+                    if events:
+                        current_state = _binding_event_to_state(events[-1])
+
+        if isinstance(stmt, ast.ImportFrom):
+            for alias in stmt.names:
+                bound = _bound_name_from_import_alias(alias, is_from_import=True)
+                if bound == target_name:
+                    events = _iter_binding_events(
+                        ast.Module(body=[stmt], type_ignores=[]), target_name
+                    )
+                    if events:
+                        current_state = _binding_event_to_state(events[-1])
+
+        # Assignment targets
+        if isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                if target_name in _extract_bound_names(target):
+                    current_state = BindingState.COUNTERFEIT
+
+        if isinstance(stmt, ast.AnnAssign):
+            if target_name in _extract_bound_names(stmt.target):
+                current_state = BindingState.COUNTERFEIT
+
+        if isinstance(stmt, ast.AugAssign):
+            if target_name in _extract_bound_names(stmt.target):
+                current_state = BindingState.COUNTERFEIT
+
+        if isinstance(stmt, ast.NamedExpr):
+            if target_name in _extract_bound_names(stmt.target):
+                current_state = BindingState.COUNTERFEIT
+
+        # Function/class definition
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if stmt.name == target_name:
+                current_state = BindingState.COUNTERFEIT
+        if isinstance(stmt, ast.ClassDef):
+            if stmt.name == target_name:
+                current_state = BindingState.COUNTERFEIT
+
+        # For/AsyncFor target — unconditional binding of loop var
+        if isinstance(stmt, (ast.For, ast.AsyncFor)):
+            if target_name in _extract_bound_names(stmt.target):
+                current_state = BindingState.COUNTERFEIT
+
+        # --- Check for NamedExpr across the entire statement ---
+        # This catches walrus operators inside comprehensions, if-test
+        # expressions, argument lists, etc.
+        if isinstance(
+            stmt,
+            (
+                ast.If,
+                ast.While,
+                ast.ListComp,
+                ast.SetComp,
+                ast.DictComp,
+                ast.GeneratorExp,
+            ),
+        ):
+            for sub in ast.walk(stmt):
+                if isinstance(sub, ast.NamedExpr):
+                    if target_name in _extract_bound_names(sub.target):
+                        if current_state is None:
+                            current_state = BindingState.UNKNOWN
+                        else:
+                            current_state = BindingState.MIXED
+
+        # --- if / elif / else ---
+        if isinstance(stmt, ast.If):
+            # Seed both branches with current predecessor state.
+            if_state = _statements_reach_line(
+                stmt.body, target_lineno, target_name, current_state
+            )
+            else_body: list[ast.AST] = []
+            for orelse_node in stmt.orelse:
+                if isinstance(orelse_node, ast.If):
+                    else_body.append(orelse_node)
+                else:
+                    else_body = stmt.orelse
+                    break
+
+            # Empty else body (no else clause) → implicit fallthrough
+            # inherits the predecessor state.
+            if not else_body:
+                else_state = current_state
+            else:
+                else_state = _statements_reach_line(
+                    else_body, target_lineno, target_name, current_state
+                )
+
+            # Collect live-path states.  None means all paths through that
+            # branch terminate before the target — no state contribution.
+            branch_states: list[BindingState] = []
+            if if_state is not None:
+                branch_states.append(if_state)
+            if else_state is not None:
+                branch_states.append(else_state)
+
+            if not branch_states:
+                # Both branches terminate before target → no live path
+                return None
+
+            # Merge all live-path states.  BOUND only when EVERY live
+            # path agrees on BOUND.
+            current_state = _merge_states(branch_states)
+            continue
+
+        # --- for / while loop ---
+        if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
+            pre_loop = current_state
+            body_state = _statements_reach_line(
+                stmt.body, target_lineno, target_name, pre_loop
+            )
+            if body_state is None:
+                # All paths in body terminate before target.
+                # Loop might not execute → pre_loop state is live
+                continue
+            if body_state != pre_loop:
+                # Loop body changes the binding.  Since the loop might
+                # execute zero times, the reaching state is UNKNOWN.
+                current_state = BindingState.UNKNOWN
+            # else body_state == pre_loop: loop body doesn't change
+            # the binding; pre_loop state is preserved.
+            continue
+
+        # --- try / except / else / finally ---
+        if isinstance(stmt, ast.Try):
+            # Try body: seeded with current predecessor state.
+            try_state = _statements_reach_line(
+                stmt.body, target_lineno, target_name, current_state
+            )
+
+            # Handlers and else execute AFTER the try body.  If the try
+            # body makes binding changes before raising, the handlers
+            # must see that modified state.  Use try_state as the initial
+            # state for handlers and else; if try_state is None (try body
+            # paths all terminate before target), fall back to predecessor.
+            handler_initial = try_state if try_state is not None else current_state
+            handler_states: list[BindingState] = []
+            for handler in stmt.handlers:
+                hs = _statements_reach_line(
+                    handler.body, target_lineno, target_name, handler_initial
+                )
+                if hs is not None:
+                    handler_states.append(hs)
+
+            else_try_state = _statements_reach_line(
+                stmt.orelse, target_lineno, target_name, handler_initial
+            )
+
+            # Collect live-path states from try/except/else.
+            # If the try body has an unconditional abrupt exit (return or
+            # raise at the top level), its state should NOT be merged as a
+            # live post-try path — the exception/handler flow replaces it.
+            # The try body state only serves as the initial state for
+            # handlers (handled above via handler_initial).
+            # Similarly, the else block never executes when the try body
+            # raises — exclude its state when the try body has an abrupt exit.
+            _try_body_has_abrupt = any(
+                isinstance(s, (ast.Raise, ast.Return)) for s in stmt.body
+            )
+            all_try_states: list[BindingState] = []
+            if try_state is not None and not _try_body_has_abrupt:
+                all_try_states.append(try_state)
+            if handler_states:
+                all_try_states.extend(handler_states)
+            if else_try_state is not None and not _try_body_has_abrupt:
+                all_try_states.append(else_try_state)
+
+            if all_try_states:
+                current_state = _merge_states(all_try_states)
+            elif current_state is not None:
+                # All try/except/else paths terminate before target.
+                return None
+
+            # Finally runs on EVERY exit path.  Its bindings are
+            # guaranteed to apply after the merged try/except/else
+            # state, on ANY live path that reaches the target.
+            if stmt.finalbody:
+                finally_state = _statements_reach_line(
+                    stmt.finalbody, target_lineno, target_name, current_state
+                )
+                if finally_state is not None:
+                    current_state = finally_state
+                elif current_state is not None:
+                    # Finally body terminates before target → no live path.
+                    return None
+
+            continue
+
+        # --- with ---
+        if isinstance(stmt, ast.With):
+            with_state = _statements_reach_line(stmt.body, target_lineno, target_name)
+            if with_state is not None and with_state != current_state:
+                current_state = with_state
+            # If with_state is None (all paths in body terminate),
+            # the rest is dead
+            elif with_state is None and current_state is not None:
+                # Check if any termination is before target
+                if not _block_has_live_path_to(stmt.body, target_lineno):
+                    pass  # body terminates, but with may have exit
+                return None
+            continue
+
+        # --- match ---
+        if isinstance(stmt, ast.Match):
+            case_state_list: list[BindingState] = []
+            for case in stmt.cases:
+                cs = _statements_reach_line(case.body, target_lineno, target_name)
+                if cs is not None:
+                    case_state_list.append(cs)
+            if case_state_list:
+                current_state = _merge_states(case_state_list)
+            # If no case reaches, the target is dead
+            # (match fails closed at runtime with no default)
+            continue
+
+    return current_state
+
+
+def _resolve_reaching_state(
+    tree: ast.AST,
+    lineno: int,
+    col_offset: int,
+    target_name: str,
+    scope_chain: list[ast.AST] | None = None,
+) -> BindingState:
+    """Phase 3: resolve the path-sensitive reaching state of
+    *target_name* at ``(lineno, col_offset)``.
+
+    Returns ``BindingState.BOUND`` only when EVERY live reaching path
+    provides a canonical binding.  All other cases return the
+    appropriate non-canonical state.
+
+    This wraps ``_resolve_owner_aware_binding`` with the body-walking
+    reaching-state analysis to detect cases where a canonical-looking
+    binding is conditionally overridden on some paths (e.g. inside
+    an if/else branch, a loop body, a try handler, etc.).
+    """
+    chain = scope_chain or _scope_chain_for_operator_access_call(tree, lineno)
+
+    # Walk ALL module-level statements including those after function
+    # definitions (late rebindings).  Use sys.maxsize as the target line
+    # so that _statements_reach_line never truncates early; it already
+    # skips nested function/class/lambda bodies via its unconditional
+    # detection skip logic.
+    state = (
+        _statements_reach_line(
+            chain[0].body,
+            sys.maxsize,
+            target_name,
+            BindingState.UNBOUND,
+        )
+        or BindingState.UNBOUND
+    )
+
+    # Walk each function scope in the chain.  If the scope has a
+    # compile-time local binding of *target_name*, the module state
+    # is shadowed — pass None as initial state.  Otherwise pass the
+    # current state (which may come from module scope).
+    for depth in range(1, len(chain)):
+        scope = chain[depth]
+        if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        body = getattr(scope, "body", [])
+        # Check if this scope has a compile-time local binding.
+        events = _iter_binding_events(scope, target_name)
+        has_local = any(e.kind not in ("global", "nonlocal") for e in events)
+        initial = None if has_local else state
+        body_state = _statements_reach_line(body, lineno, target_name, initial)
+        if body_state is not None:
+            state = body_state
+        elif has_local:
+            # Scope has compile-time local but all paths terminate.
+            state = BindingState.UNKNOWN
+
+    return state
+
+
+def _is_canonical_on_all_paths(
+    tree: ast.AST,
+    lineno: int,
+    col_offset: int,
+    target_name: str,
+    scope_chain: list[ast.AST] | None = None,
+) -> bool:
+    """Phase 3: return ``True`` if *target_name* is canonically bound
+    on EVERY live reaching path at ``(lineno, col_offset)``.
+
+    Combines the Phase 2 owner-aware resolution with Phase 3
+    path-sensitive reaching-state analysis.
+    """
+    reaching = _resolve_reaching_state(
+        tree, lineno, col_offset, target_name, scope_chain
+    )
+    return reaching == BindingState.BOUND
+
+
 def _is_root_canonically_bound(
     tree: ast.AST,
     lineno: int,
@@ -707,7 +1439,7 @@ def _is_root_canonically_bound(
     scope_chain: list[ast.AST] | None = None,
 ) -> bool:
     """Return ``True`` if ``quickscale_modules_orgs`` is canonically bound
-    at (lineno, col_offset).
+    on EVERY live reaching path at (lineno, col_offset).
 
     A canonical root binding is ``import quickscale_modules_orgs`` or
     ``import quickscale_modules_orgs.tenancy`` (an ``ast.Import`` node where
@@ -717,21 +1449,20 @@ def _is_root_canonically_bound(
     definition, class definition, for/with/except target, import-as alias)
     make the root counterfeit or unbound.
 
-    Uses the same scope-chain-aware active-binding resolution as the
-    bare-name resolver, ensuring inner canonical imports override outer
-    counterfeit bindings and module-final semantics apply.
+    Uses Phase 2 owner-aware resolution plus Phase 3 path-sensitive
+    reaching-state analysis.
     """
-    active = _resolve_active_binding(
+    active = _resolve_owner_aware_binding(
         tree, lineno, col_offset, "quickscale_modules_orgs", scope_chain
     )
     if active is None:
         return False  # Unbound — not canonical.
 
     if active.kind == "import" and active.source_module is not None:
-        # ``import quickscale_modules_orgs`` or
-        # ``import quickscale_modules_orgs.tenancy`` — the source module
-        # string starts with the canonical package name.
-        return active.source_module.split(".", 1)[0] == "quickscale_modules_orgs"
+        # The single-binding check passes.  Now verify path-sensitivity.
+        return _is_canonical_on_all_paths(
+            tree, lineno, col_offset, "quickscale_modules_orgs", scope_chain
+        )
 
     # All other binding forms (import-from, param, assign, function, class,
     # for, with_as, except, named_expr, unbound-local, delete, star, etc.)
@@ -753,46 +1484,18 @@ def _is_operator_access_migration_call(
     2. direct operator_access_migration name bound by
        from quickscale_modules_orgs.tenancy import operator_access_migration
        with no alias in scope.
+
+    Uses the unified ``_consume_canonical`` predicate so wrapper
+    collection, Detector 7, and Phase 1/2 tests share one code path.
     """
     if not isinstance(node, ast.Call):
         return False
-
-    context_expr = node.func
-    resolved_fqn = _resolve_attribute_fqn(context_expr)
-    call_lineno = lineno if lineno is not None else getattr(node, "lineno", None)
-    call_col_offset = getattr(node, "col_offset", 0)
-
-    if resolved_fqn == _CANONICAL_OPERATOR_ACCESS_FQN:
-        # FQN call — verify the root name is canonically bound.
-        if tree is None:
-            return False
-        return _is_root_canonically_bound(
-            tree,
-            call_lineno,
-            call_col_offset,
-            scope_chain=scope_chain,
-        )
-
-    if (
-        not isinstance(context_expr, ast.Name)
-        or context_expr.id != _OPERATOR_ACCESS_CM_NAME
-    ):
-        return False
-
     if tree is None:
         return False
-    if call_lineno is None:
-        return False
 
-    # Bare-name call — resolve the active binding.
-    active = _resolve_active_binding(
-        tree,
-        call_lineno,
-        call_col_offset,
-        _OPERATOR_ACCESS_CM_NAME,
-        scope_chain=scope_chain,
-    )
-    return active is not None and active.kind == "canonical-import"
+    # Delegate to the unified canonical consumption predicate, which
+    # handles both FQN and bare-name forms via _observe_call_fact.
+    return _consume_canonical(tree, node, scope_chain=scope_chain)
 
 
 def _find_operator_access_ranges(tree: ast.AST) -> list[tuple[int, int]]:
@@ -1541,7 +2244,10 @@ def _check_operator_access_shadowing(tree: ast.AST) -> list[dict]:
     """
     violations: list[dict] = []
 
-    operator_access_calls: list[tuple[int, int, bool, bool]] = []
+    # Store (call_node, scope_chain) tuples so the unified
+    # _consume_canonical predicate can be used for both FQN
+    # and bare-name checks.
+    operator_access_calls: list[tuple[ast.Call, list[ast.AST], bool]] = []
 
     for node in ast.walk(tree):
         if isinstance(node, ast.With):
@@ -1552,100 +2258,47 @@ def _check_operator_access_shadowing(tree: ast.AST) -> list[dict]:
                 context_fn = item.context_expr.func
                 if not _is_potential_operator_access_migration_context_expr(context_fn):
                     continue
-
-                is_canonical = _is_operator_access_migration_call(
-                    item.context_expr,
-                    tree=tree,
-                    scope_chain=chain,
-                    lineno=node.lineno,
-                )
                 is_direct_name = isinstance(context_fn, ast.Name)
-                call_col = getattr(item.context_expr, "col_offset", 0)
-                operator_access_calls.append(
-                    (node.lineno, call_col, is_canonical, is_direct_name)
-                )
+                operator_access_calls.append((item.context_expr, chain, is_direct_name))
 
     # If operator_access_migration is never used as a context manager,
     # shadowing checks are intentionally out-of-scope for this file.
     if not operator_access_calls:
         return violations
 
-    # --- Call-site resolved checks ---
+    # --- Call-site resolved checks using unified canonical predicate ---
+    state_labels: dict[BindingState, str] = {
+        BindingState.UNBOUND: "not bound in any reachable scope",
+        BindingState.UNKNOWN: "not statically determinable",
+        BindingState.DELETED: "deleted",
+        BindingState.COUNTERFEIT: "bound through a non-canonical binding",
+        BindingState.MIXED: "bound with conflicting states across different paths",
+        BindingState.EMPTY: "no binding facts available",
+    }
 
-    for call_line, call_col, is_canonical, is_direct_name in operator_access_calls:
-        if not is_direct_name:
-            # FQN call: counterfeit root is already checked in
-            # _is_operator_access_migration_call.  Only flag if the
-            # call itself is non-canonical.
-            if not is_canonical:
-                violations.append(
-                    {
-                        "filepath": "<unknown>",
-                        "line": call_line,
-                        "message": (
-                            f"operator_access_migration() is used with a "
-                            f"non-canonical symbol at line "
-                            f"{call_line}.  Use either `from "
-                            f"{_CANONICAL_TENANCY_MODULE} import "
-                            f"{_OPERATOR_ACCESS_CM_NAME}` or the exact "
-                            f"FQN `{_CANONICAL_OPERATOR_ACCESS_FQN}"
-                            f"(schema_editor)`."
-                        ),
-                        "category": "shadowing",
-                    }
-                )
-            continue
+    for call_node, chain, is_direct_name in operator_access_calls:
+        call_line = getattr(call_node, "lineno", 0)
 
-        # Bare-name call — resolve the effective binding.
-        active = _resolve_active_binding(
-            tree,
-            call_line,
-            call_col,
-            _OPERATOR_ACCESS_CM_NAME,
-        )
+        # Use the unified canonical consumption predicate instead of
+        # separate _resolve_reaching_state paths.
+        is_canonical = _consume_canonical(tree, call_node, scope_chain=chain)
 
-        if active is None:
-            violations.append(
-                {
-                    "filepath": "<unknown>",
-                    "line": call_line,
-                    "message": (
-                        f"operator_access_migration is used without the exact, "
-                        f"unaliased import from "
-                        f"quickscale_modules_orgs.tenancy at line "
-                        f"{call_line}.  Add `from "
-                        f"quickscale_modules_orgs.tenancy import "
-                        f"operator_access_migration`."
-                    ),
-                    "category": "shadowing",
-                }
+        if not is_canonical:
+            # Produce a descriptive violation message.
+            reaching = _resolve_reaching_state(
+                tree,
+                call_line,
+                getattr(call_node, "col_offset", 0),
+                _OPERATOR_ACCESS_CM_NAME,
             )
-        elif active.kind not in ("canonical-import", None):
-            kind_labels: dict[str, str] = {
-                "import": "a non-canonical import",
-                "import-from": "a non-canonical import-from",
-                "import-star": "a star import",
-                "param": "a function parameter",
-                "assign": "an assignment",
-                "annassign": "an annotated assignment",
-                "augassign": "an augmented assignment",
-                "for": "a for-loop target",
-                "with_as": "a with-as target",
-                "except": "an exception handler",
-                "named_expr": "a walrus operator",
-                "function": "a local function definition",
-                "class": "a local class definition",
-                "delete": "a deletion",
-                _UNBOUND_LOCAL: "a later local binding (unbound at this point)",
-            }
-            label = kind_labels.get(active.kind, f"a '{active.kind}' binding")
+            label = state_labels.get(reaching, f"in state '{reaching.value}'")
             violations.append(
                 {
                     "filepath": "<unknown>",
                     "line": call_line,
                     "message": (
                         f"operator_access_migration used at line {call_line} is "
-                        f"resolved through {label}, not the canonical import "
+                        f"{label}, not the canonical import "
                         f"from quickscale_modules_orgs.tenancy."
                     ),
                     "category": "shadowing",
@@ -2183,6 +2836,260 @@ def _read_migration_source_with_read_error(
                 "category": "migration-read-error",
             }
         ]
+
+
+# =========================================================================
+# SA88a.1 Phase 1 — Observation and flow-analysis helpers
+# =========================================================================
+
+
+def _observe_name_fact(
+    tree: ast.AST,
+    lineno: int,
+    col_offset: int,
+    name: str,
+    scope_chain: list[ast.AST] | None = None,
+) -> BindingFact:
+    """Observe the binding state of *name* at the exact AST position
+    ``(lineno, col_offset)``.
+
+    Uses the existing ``_resolve_active_binding`` scope-chain-aware
+    resolver and maps the active ``BindingEvent`` (or ``None``) to a
+    ``BindingFact``.
+    """
+    reaching = _resolve_reaching_state(tree, lineno, col_offset, name, scope_chain)
+    # Map reaching state to BindingFact.  Use (lineno, col_offset) for the
+    # fact location; for BOUND we need the source_module.
+    source: str | None = None
+    if reaching == BindingState.BOUND:
+        loc_active = _resolve_owner_aware_binding(
+            tree, lineno, col_offset, name, scope_chain
+        )
+        if loc_active is not None and loc_active.source_module is not None:
+            source = loc_active.source_module
+    return BindingFact(
+        name=name,
+        state=reaching,
+        lineno=lineno,
+        col_offset=col_offset,
+        source_module=source,
+    )
+
+
+def _observe_call_fact(
+    tree: ast.AST,
+    call_node: ast.Call,
+    scope_chain: list[ast.AST] | None = None,
+) -> BindingFact:
+    """Observe the binding state of the callable at *call_node*'s
+    exact AST evaluation point.
+
+    For bare-name calls (``operator_access_migration(...)``), resolves
+    the name directly.  For FQN calls
+    (``quickscale_modules_orgs.tenancy.operator_access_migration(...)``),
+    resolves the root module name.  All other call forms return
+    ``COUNTERFEIT`` or ``UNKNOWN``.
+    """
+    lineno = getattr(call_node, "lineno", 0)
+    col_offset = getattr(call_node, "col_offset", 0)
+    func = call_node.func
+
+    # --- Bare-name call ---
+    if isinstance(func, ast.Name) and func.id == _OPERATOR_ACCESS_CM_NAME:
+        return _observe_name_fact(
+            tree, lineno, col_offset, _OPERATOR_ACCESS_CM_NAME, scope_chain
+        )
+
+    # --- FQN or attribute call ---
+    if isinstance(func, ast.Attribute) and func.attr == _OPERATOR_ACCESS_CM_NAME:
+        resolved_fqn = _resolve_attribute_fqn(func)
+        if resolved_fqn == _CANONICAL_OPERATOR_ACCESS_FQN:
+            # Resolve the root module name.
+            return _observe_name_fact(
+                tree, lineno, col_offset, "quickscale_modules_orgs", scope_chain
+            )
+        # Non-canonical FQN (e.g. tenancy.operator_access_migration)
+        return BindingFact(
+            name=_OPERATOR_ACCESS_CM_NAME,
+            state=BindingState.COUNTERFEIT,
+            lineno=lineno,
+            col_offset=col_offset,
+        )
+
+    # --- Unknown call expression ---
+    return BindingFact(
+        name=_OPERATOR_ACCESS_CM_NAME,
+        state=BindingState.UNKNOWN,
+        lineno=lineno,
+        col_offset=col_offset,
+    )
+
+
+# --- Flow analysis helpers ---
+
+
+def _stmt_is_abrupt_exit(node: ast.AST) -> bool:
+    """Return ``True`` if *node* terminates its block with an abrupt exit
+    (return, raise, break, or continue) at the statement level.
+
+    Does NOT descend into nested function/class/lambda scopes.
+    """
+    return isinstance(node, (ast.Return, ast.Raise, ast.Break, ast.Continue))
+
+
+def _block_has_live_path_to(
+    body: list[ast.AST],
+    target_lineno: int,
+) -> bool:
+    """Check whether execution can reach *target_lineno* through *body*.
+
+    Walks the statement list without descending into nested
+    function/class/lambda scopes.  Returns ``True`` if at least one
+    control-flow path reaches *target_lineno* without hitting an
+    unconditional abrupt exit.
+
+    ``False`` means every path terminates before *target_lineno* — the
+    code at that line is dead/unreachable.
+    """
+    for stmt in body:
+        stmt_lineno = getattr(stmt, "lineno", 0)
+        if stmt_lineno >= target_lineno:
+            return True
+
+        # Skip nested function/class/lambda — their internal flow does
+        # not affect the outer scope's predecessor state.
+        if isinstance(
+            stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            continue
+
+        # Unconditional abrupt exit at this level terminates the path.
+        if _stmt_is_abrupt_exit(stmt):
+            return False
+
+        # --- if / elif / else ---
+        if isinstance(stmt, ast.If):
+            if_body_live = _block_has_live_path_to(stmt.body, target_lineno)
+            else_live = (
+                _block_has_live_path_to(stmt.orelse, target_lineno)
+                if stmt.orelse
+                else True
+            )
+            if if_body_live or else_live:
+                return True
+            return False
+
+        # --- try / except / else / finally ---
+        if isinstance(stmt, ast.Try):
+            try_live = _block_has_live_path_to(stmt.body, target_lineno)
+            handlers_live = any(
+                _block_has_live_path_to(handler.body, target_lineno)
+                for handler in stmt.handlers
+            )
+            else_live = (
+                _block_has_live_path_to(stmt.orelse, target_lineno)
+                if stmt.orelse
+                else False
+            )
+            if try_live or handlers_live or else_live:
+                return True
+            # finally always runs; if the target is after the try block
+            # and the finally body doesn't terminate, there's a live path.
+            if stmt.finalbody:
+                finally_live = _block_has_live_path_to(stmt.finalbody, target_lineno)
+                if finally_live:
+                    return True
+            return False
+
+        # --- with ---
+        if isinstance(stmt, ast.With):
+            if not _block_has_live_path_to(stmt.body, target_lineno):
+                return False
+            continue
+
+        # --- for / while (loops) ---
+        # Loops may execute zero times, so there is always a live
+        # predecessor path through the loop (the skip-case).
+        if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
+            # Check whether body statements reach the target.
+            loop_body_live = _block_has_live_path_to(stmt.body, target_lineno)
+            if not loop_body_live and not getattr(stmt, "orelse", None):
+                # All body paths terminate, but the loop might not execute.
+                # If the target is after the loop, there is a live path.
+                if any(getattr(s, "lineno", 0) >= target_lineno for s in stmt.body):
+                    continue
+            continue
+
+        # Other statements (assignments, expressions, etc.) — continue.
+
+    return True
+
+
+def _isolate_nested_scope_facts(
+    facts: tuple[BindingFact, ...],
+    scope_node: ast.AST,
+) -> tuple[BindingFact, ...]:
+    """Filter *facts* to those belonging to *scope_node* (non-nested).
+
+    Removes any ``BindingFact`` originating from inside a nested
+    function/class/lambda body within *scope_node*.
+    """
+    if not isinstance(
+        scope_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module, ast.Lambda)
+    ):
+        return facts
+
+    # Collect nested function/class boundaries.
+    nested_boundaries: list[tuple[int, int]] = []
+    for node in ast.walk(scope_node):
+        if node is scope_node:
+            continue
+        if isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            n_start = getattr(node, "lineno", 0)
+            n_end = getattr(node, "end_lineno", n_start)
+            nested_boundaries.append((n_start, n_end))
+
+    result: list[BindingFact] = []
+    for fact in facts:
+        fact_lineno = fact.lineno
+        in_nested = any(
+            n_start <= fact_lineno <= n_end for n_start, n_end in nested_boundaries
+        )
+        if not in_nested:
+            result.append(fact)
+    return tuple(result)
+
+
+def _consume_canonical(
+    tree: ast.AST,
+    call_node: ast.Call,
+    scope_chain: list[ast.AST] | None = None,
+    predecessor_body: list[ast.AST] | None = None,
+) -> bool:
+    """Centralized predicate: return ``True`` if *call_node* is a canonical
+    consumption of the ``operator_access_migration`` name.
+
+    A canonical consumption requires:
+    1. The callable resolves to a ``BOUND`` canonical binding at the
+       exact AST evaluation point (via :func:`_observe_call_fact`).
+    2. There is at least one live predecessor path to the call site
+       (when *predecessor_body* is provided).
+
+    This is the universal predicate that Phase 2 and Phase 3 will build
+    on.  Phase 1 provides the centralized implementation for direct
+    test consumption.
+    """
+    fact = _observe_call_fact(tree, call_node, scope_chain)
+    if not fact.is_canonical():
+        return False
+    # Only require live predecessor when body is provided.
+    if predecessor_body is not None:
+        call_lineno = getattr(call_node, "lineno", 0)
+        if not _block_has_live_path_to(predecessor_body, call_lineno):
+            return False
+    return True
 
 
 # =========================================================================
@@ -3379,6 +4286,1413 @@ def forward(apps, schema_editor):
 
     _inner()
 """
+
+
+# =========================================================================
+# SA88a.1 Phase 1 — Synthetic test code
+# =========================================================================
+
+# T1: wrapper call inside a counterfeit-root branch
+T1_COUNTERFEIT_BRANCH_CODE = """
+from evil_package import quickscale_modules_orgs
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# T2: both branches terminate (return/raise) before post-join wrapper
+T2_BOTH_BRANCHES_TERMINATE_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    if some_condition:
+        return
+    else:
+        raise ValueError()
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# T3: unbound owner — root module name never imported
+T3_UNBOUND_OWNER_CODE = """
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# C1: canonical bare-name import
+C1_CANONICAL_BARE_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# C2: canonical FQN call
+C2_CANONICAL_FQN_CODE = """
+import quickscale_modules_orgs
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# C9: counterfeit branch returns before post-join canonical wrapper
+C9_COUNTERFEIT_RETURNS_BRANCH_CODE = """
+from evil_package import quickscale_modules_orgs
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    if some_condition:
+        with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+        return
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# C10: counterfeit branch raises before post-join canonical wrapper
+C10_COUNTERFEIT_RAISES_BRANCH_CODE = """
+from evil_package import quickscale_modules_orgs
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    if some_condition:
+        with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+        raise RuntimeError()
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# C11: nested return does not terminate outer canonical path
+C11_NESTED_RETURN_ISOLATED_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    def inner():
+        return "something"
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+
+class TestSA88aPhase1BindingFlow:
+    """Phase 1 binding-flow and evaluation-order primitives for SA88a.1.
+
+    These tests exercise the abstract-domain state primitives
+    (``BindingState``, ``BindingFact``, ``FlowResult``) and flow analysis
+    (predecessor tracking, nested-scope isolation, evaluation-order
+    transfer) on direct synthetic code.  They do NOT go through the full
+    ``check_migration_source`` gate — they test the Phase 1 primitives
+    directly.
+
+    Tests are labeled T1–T3 (new negative proofs) and C1/C2/C9–C11
+    (controls demonstrating positive and negative canonical consumption).
+    """
+
+    # =========================================================
+    # T1: wrapper inside counterfeit branch
+    # =========================================================
+
+    def test_t1_counterfeit_root_fqn_call_observed(self) -> None:
+        """T1: An FQN call using a counterfeit root binding is observed
+        at the exact AST evaluation point as COUNTERFEIT, not BOUND."""
+        tree = ast.parse(T1_COUNTERFEIT_BRANCH_CODE)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.With):
+                call = node.items[0].context_expr
+                fact = _observe_call_fact(tree, call)
+                assert not fact.is_canonical(), (
+                    f"Expected non-canonical fact for counterfeit root call "
+                    f"at line {fact.lineno}, got {fact}"
+                )
+                assert fact.state == BindingState.COUNTERFEIT, (
+                    f"Expected COUNTERFEIT state for counterfeit root call "
+                    f"at line {fact.lineno}, got {fact.state}"
+                )
+                # _consume_canonical must also fail for the counterfeit call.
+                assert not _consume_canonical(tree, call), (
+                    "Expected _consume_canonical to return False for "
+                    "counterfeit root call (T1)"
+                )
+                return
+        pytest.fail("No with-block found in T1 synthetic code")
+
+    # =========================================================
+    # T2: both branches terminate before later wrapper
+    # =========================================================
+
+    def test_t2_both_branches_terminate_no_live_predecessor(self) -> None:
+        """T2: Both branches of if/else terminate before the post-join
+        canonical wrapper.  The wrapper has no live predecessor and fails
+        closed — ``_block_has_live_path_to`` returns ``False``."""
+        tree = ast.parse(T2_BOTH_BRANCHES_TERMINATE_CODE)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                body = node.body
+                for with_stmt in ast.walk(node):
+                    if isinstance(with_stmt, ast.With):
+                        target_lineno = with_stmt.lineno
+                        live = _block_has_live_path_to(body, target_lineno)
+                        assert not live, (
+                            f"Expected no live predecessor to with-block at line "
+                            f"{target_lineno}, but _block_has_live_path_to returned True"
+                        )
+                        # _consume_canonical must also fail.
+                        call = with_stmt.items[0].context_expr
+                        canonical = _consume_canonical(
+                            tree, call, predecessor_body=body
+                        )
+                        assert not canonical, (
+                            "Expected _consume_canonical to return False when "
+                            "no live predecessor exists (T2)"
+                        )
+                        return
+        pytest.fail("No with-block found in T2 synthetic code")
+
+    # =========================================================
+    # T3: unbound owner
+    # =========================================================
+
+    def test_t3_unbound_owner_fails_closed(self) -> None:
+        """T3: When the root module name is never imported or bound,
+        the FQN call observation returns UNBOUND state, and
+        ``_consume_canonical`` returns ``False``."""
+        tree = ast.parse(T3_UNBOUND_OWNER_CODE)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.With):
+                call = node.items[0].context_expr
+                fact = _observe_call_fact(tree, call)
+                assert not fact.is_canonical(), (
+                    f"Expected non-canonical fact for unbound owner at "
+                    f"line {fact.lineno}, got {fact}"
+                )
+                assert fact.state in (
+                    BindingState.UNBOUND,
+                    BindingState.COUNTERFEIT,
+                ), (
+                    f"Expected UNBOUND or COUNTERFEIT state for unbound "
+                    f"owner, got {fact.state}"
+                )
+                assert not _consume_canonical(tree, call), (
+                    "Expected _consume_canonical to return False for unbound owner (T3)"
+                )
+                return
+        pytest.fail("No with-block found in T3 synthetic code")
+
+    # =========================================================
+    # C1: canonical bare
+    # =========================================================
+
+    def test_c1_canonical_bare_name_call(self) -> None:
+        """C1: A bare-name call with canonical import observes ``BOUND``
+        canonical state and ``_consume_canonical`` returns ``True``."""
+        tree = ast.parse(C1_CANONICAL_BARE_CODE)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.With):
+                call = node.items[0].context_expr
+                fact = _observe_call_fact(tree, call)
+                assert fact.is_canonical(), (
+                    f"Expected canonical fact for canonical bare call "
+                    f"at line {fact.lineno}, got {fact}"
+                )
+                assert fact.state == BindingState.BOUND, (
+                    f"Expected BOUND state for canonical bare call, got {fact.state}"
+                )
+                # Verify with predecessor body.
+                for func_node in ast.walk(tree):
+                    if isinstance(
+                        func_node,
+                        (ast.FunctionDef, ast.AsyncFunctionDef),
+                    ):
+                        canonical = _consume_canonical(
+                            tree, call, predecessor_body=func_node.body
+                        )
+                        assert canonical, (
+                            "Expected _consume_canonical to return True "
+                            "for canonical bare call (C1)"
+                        )
+                        break
+                return
+        pytest.fail("No with-block found in C1 synthetic code")
+
+    # =========================================================
+    # C2: canonical FQN
+    # =========================================================
+
+    def test_c2_canonical_fqn_call(self) -> None:
+        """C2: An FQN call with canonical import observes ``BOUND``
+        state and ``_consume_canonical`` returns ``True``."""
+        tree = ast.parse(C2_CANONICAL_FQN_CODE)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.With):
+                call = node.items[0].context_expr
+                fact = _observe_call_fact(tree, call)
+                assert fact.is_canonical(), (
+                    f"Expected canonical fact for canonical FQN call "
+                    f"at line {fact.lineno}, got {fact}"
+                )
+                assert fact.state == BindingState.BOUND, (
+                    f"Expected BOUND state for canonical FQN call, got {fact.state}"
+                )
+                for func_node in ast.walk(tree):
+                    if isinstance(
+                        func_node,
+                        (ast.FunctionDef, ast.AsyncFunctionDef),
+                    ):
+                        canonical = _consume_canonical(
+                            tree, call, predecessor_body=func_node.body
+                        )
+                        assert canonical, (
+                            "Expected _consume_canonical to return True "
+                            "for canonical FQN call (C2)"
+                        )
+                        break
+                return
+        pytest.fail("No with-block found in C2 synthetic code")
+
+    # =========================================================
+    # C9: counterfeit branch returns before post-join canonical wrapper
+    # =========================================================
+
+    def test_c9_counterfeit_branch_returns_before_join(self) -> None:
+        """C9: A branch with a counterfeit FQN call terminates (return)
+        before the join.  The post-join bare-name canonical wrapper has a
+        live predecessor and is correctly identified as canonical."""
+        tree = ast.parse(C9_COUNTERFEIT_RETURNS_BRANCH_CODE)
+        # Distinguish the with-blocks by expression type: attribute (FQN)
+        # vs. bare-name call.
+        counterfeit_call: ast.Call | None = None
+        canonical_call: ast.Call | None = None
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.With):
+                continue
+            call = node.items[0].context_expr
+            if (
+                isinstance(call.func, ast.Attribute)
+                and call.func.attr == _OPERATOR_ACCESS_CM_NAME
+            ):
+                counterfeit_call = call
+            elif (
+                isinstance(call.func, ast.Name)
+                and call.func.id == _OPERATOR_ACCESS_CM_NAME
+            ):
+                canonical_call = call
+        assert counterfeit_call is not None, (
+            "C9: expected a counterfeit (attribute) with-block"
+        )
+        assert canonical_call is not None, (
+            "C9: expected a canonical (bare-name) with-block"
+        )
+        # Validate counterfeit call.
+        first_fact = _observe_call_fact(tree, counterfeit_call)
+        assert not first_fact.is_canonical(), (
+            f"Expected non-canonical fact for counterfeit call, got {first_fact}"
+        )
+        # Validate canonical call.
+        second_fact = _observe_call_fact(tree, canonical_call)
+        assert second_fact.is_canonical(), (
+            f"Expected canonical fact for post-join call, got {second_fact}"
+        )
+        # Post-join call has a live predecessor.
+        for func_node in ast.walk(tree):
+            if isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                canonical = _consume_canonical(
+                    tree, canonical_call, predecessor_body=func_node.body
+                )
+                assert canonical, (
+                    "Expected _consume_canonical to return True for "
+                    "post-join canonical call (C9)"
+                )
+                break
+
+    # =========================================================
+    # C10: counterfeit branch raises before post-join canonical wrapper
+    # =========================================================
+
+    def test_c10_counterfeit_branch_raises_before_join(self) -> None:
+        """C10: Same pattern as C9 but the counterfeit branch uses
+        ``raise`` instead of ``return``.  The post-join canonical wrapper
+        still has a live predecessor (the else path)."""
+        tree = ast.parse(C10_COUNTERFEIT_RAISES_BRANCH_CODE)
+        counterfeit_call: ast.Call | None = None
+        canonical_call: ast.Call | None = None
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.With):
+                continue
+            call = node.items[0].context_expr
+            if (
+                isinstance(call.func, ast.Attribute)
+                and call.func.attr == _OPERATOR_ACCESS_CM_NAME
+            ):
+                counterfeit_call = call
+            elif (
+                isinstance(call.func, ast.Name)
+                and call.func.id == _OPERATOR_ACCESS_CM_NAME
+            ):
+                canonical_call = call
+        assert counterfeit_call is not None, (
+            "C10: expected a counterfeit (attribute) with-block"
+        )
+        assert canonical_call is not None, (
+            "C10: expected a canonical (bare-name) with-block"
+        )
+        first_fact = _observe_call_fact(tree, counterfeit_call)
+        assert not first_fact.is_canonical(), (
+            f"Expected non-canonical fact for counterfeit raise call, got {first_fact}"
+        )
+        second_fact = _observe_call_fact(tree, canonical_call)
+        assert second_fact.is_canonical(), (
+            f"Expected canonical fact for post-join call, got {second_fact}"
+        )
+        for func_node in ast.walk(tree):
+            if isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                canonical = _consume_canonical(
+                    tree, canonical_call, predecessor_body=func_node.body
+                )
+                assert canonical, (
+                    "Expected _consume_canonical to return True for "
+                    "post-join canonical call (C10)"
+                )
+                break
+
+    # =========================================================
+    # C11: nested return does not terminate outer canonical path
+    # =========================================================
+
+    def test_c11_nested_return_does_not_terminate_outer(self) -> None:
+        """C11: A ``return`` inside a nested function is isolated — it
+        does NOT terminate the outer scope's canonical path.  The outer
+        canonical wrapper still has a live predecessor."""
+        tree = ast.parse(C11_NESTED_RETURN_ISOLATED_CODE)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.With):
+                call = node.items[0].context_expr
+                fact = _observe_call_fact(tree, call)
+                assert fact.is_canonical(), (
+                    f"Expected canonical fact for outer call despite "
+                    f"nested return, got {fact}"
+                )
+                # Only the outer (forward) function body should be
+                # checked — the inner function's return is isolated.
+                outer_func: ast.FunctionDef | None = None
+                for func_node in ast.walk(tree):
+                    if (
+                        isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and func_node.name == "forward"
+                    ):
+                        outer_func = func_node
+                        break
+                assert outer_func is not None, "C11: expected 'forward' function"
+                body_live = _block_has_live_path_to(outer_func.body, call.lineno)
+                assert body_live, (
+                    "Expected live predecessor in outer scope "
+                    "despite nested return (C11)"
+                )
+                return
+        pytest.fail("No with-block found in C11 synthetic code")
+
+
+# =========================================================================
+# SA88a.1 Phase 2 — Synthetic test code (owner cells, global/nonlocal lifetime)
+# =========================================================================
+
+# R1: global redirect canonical helper -> counterfeit
+R1_GLOBAL_REDIRECT_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    global operator_access_migration
+    operator_access_migration = lambda x: None
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# R2: nonlocal redirect
+R2_NONLOCAL_REDIRECT_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    operator_access_migration = lambda x: None
+    def inner(schema_editor):
+        nonlocal operator_access_migration
+        operator_access_migration = lambda y: y
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+    inner(schema_editor)
+"""
+
+# N1: global redirect of FQN root
+N1_GLOBAL_REDIRECT_FQN_ROOT_CODE = """
+import quickscale_modules_orgs
+
+def forward(apps, schema_editor):
+    global quickscale_modules_orgs
+    quickscale_modules_orgs = "fake"
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# O1: inner defined under canonical owner, outer rebounds before inner call
+O1_OUTER_REBOUND_BEFORE_CALL_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    def inner(schema_editor):
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+    operator_access_migration = lambda x: None
+    inner(schema_editor)
+"""
+
+# O2: direct nonlocal-mutator before target callback
+O2_NONLOCAL_MUTATOR_BEFORE_TARGET_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    operator_access_migration = lambda x: None
+    def mutator():
+        nonlocal operator_access_migration
+        operator_access_migration = lambda y: y
+    def target(schema_editor):
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+    mutator()
+    target(schema_editor)
+"""
+
+# O3: direct global-mutator before target callback
+O3_GLOBAL_MUTATOR_BEFORE_TARGET_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    global operator_access_migration
+    operator_access_migration = lambda x: None
+    def target(schema_editor):
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+    target(schema_editor)
+"""
+
+# C3: global declaration reads canonical module without write
+C3_GLOBAL_NO_WRITE_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    global operator_access_migration
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# C4: global counterfeit then every-path canonical owner import
+C4_GLOBAL_COUNTERFEIT_THEN_RESTORE_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    global operator_access_migration
+    operator_access_migration = lambda x: None
+    from quickscale_modules_orgs.tenancy import operator_access_migration
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# C5: nonlocal counterfeit then canonical owner import
+C5_NONLOCAL_COUNTERFEIT_THEN_RESTORE_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    operator_access_migration = lambda x: None
+    def inner():
+        nonlocal operator_access_migration
+        operator_access_migration = lambda y: y
+    from quickscale_modules_orgs.tenancy import operator_access_migration
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# C6: outer rebind to canonical before inner direct call
+C6_CANONICAL_BEFORE_INNER_CALL_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    from quickscale_modules_orgs.tenancy import operator_access_migration
+
+    def inner(schema_editor):
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+
+    inner(schema_editor)
+"""
+
+# C7: global mutator, canonical restorer, then target in proven order
+C7_GLOBAL_MUTATE_RESTORE_TARGET_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    global operator_access_migration
+    operator_access_migration = lambda x: None
+    import quickscale_modules_orgs.tenancy
+    from quickscale_modules_orgs.tenancy import operator_access_migration
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# O4: called sibling nonlocal mutator before target
+O4_CALLED_SIBLING_NONLOCAL_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    operator_access_migration = lambda x: None
+    def mutator():
+        nonlocal operator_access_migration
+        operator_access_migration = lambda y: y
+    def target(schema_editor):
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+    mutator()
+    target(schema_editor)
+"""
+
+# O5: uncalled sibling nonlocal mutator (positive control — clean)
+O5_UNCALLED_NONLOCAL_MUTATOR_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    operator_access_migration = lambda x: None
+    def mutator():
+        nonlocal operator_access_migration
+        operator_access_migration = lambda y: y
+    from quickscale_modules_orgs.tenancy import operator_access_migration
+    def target(schema_editor):
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+    target(schema_editor)
+    # mutator is NEVER called — its nonlocal mutation never executes.
+"""
+
+# T6: counterfeit-before-raise in try body, handler restores canonical
+T6_COUNTERFEIT_BEFORE_RAISE_RESTORE_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    try:
+        operator_access_migration = lambda x: None
+        raise ValueError()
+    except ValueError:
+        from quickscale_modules_orgs.tenancy import operator_access_migration
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# T7: called sibling global mutator — global declaration in nested function called before target
+T7_CALLED_SIBLING_GLOBAL_MUTATOR_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    def mutator():
+        global operator_access_migration
+        operator_access_migration = lambda x: None
+    def target(schema_editor):
+        with operator_access_migration(schema_editor):
+            schema_editor.execute(
+                "UPDATE t SET organization_id = "
+                "(SELECT id FROM other WHERE other.x = t.x)"
+            )
+    mutator()
+    target(schema_editor)
+"""
+
+
+class TestSA88aPhase2OwnerLifetime:
+    """Phase 2 owner-cell, global/nonlocal lifetime, and restoration proofs.
+
+    These tests prove the analyzer correctly handles:
+    - ``global`` declarations that redirect assignments to the module cell
+      (R1, N1, O3)
+    - ``nonlocal`` declarations that redirect assignments to the nearest
+      enclosing function cell (R2, O2)
+    - Compile-time local scope with outer rebound before inner call (O1)
+    - Positive controls where canonical restoration executes on every
+      live path before the wrapper call (C3-C7)
+
+    Negatives go through ``check_migration_source`` and assert violations
+    in both ``shadowing`` and ``ungated-raw-sql`` categories.
+    Controls assert exactly zero violations.
+    """
+
+    # =========================================================
+    # R1: global redirect canonical helper -> counterfeit
+    # =========================================================
+
+    def test_r1_global_redirect_counterfeit(self) -> None:
+        """R1: ``global operator_access_migration`` followed by an
+        assignment redirects the module cell to counterfeit.  Exact
+        categories asserted."""
+        violations = check_migration_source(R1_GLOBAL_REDIRECT_CODE)
+        cats = sorted(v.get("category") for v in violations)
+        assert cats == ["shadowing", "ungated-raw-sql"], (
+            f"R1: expected exact categories [shadowing, ungated-raw-sql], "
+            f"got {cats}: {violations}"
+        )
+        assert len([v for v in violations if v.get("category") == "shadowing"]) == 1, (
+            f"R1: expected exactly 1 shadowing, got {violations}"
+        )
+        assert (
+            len([v for v in violations if v.get("category") == "ungated-raw-sql"]) == 1
+        ), f"R1: expected exactly 1 ungated-raw-sql, got {violations}"
+
+    # =========================================================
+    # R2: nonlocal redirect
+    # =========================================================
+
+    def test_r2_nonlocal_redirect_counterfeit(self) -> None:
+        """R2: ``nonlocal operator_access_migration`` in a nested
+        function redirects assignment to the enclosing function's cell.
+        Exact categories asserted."""
+        violations = check_migration_source(R2_NONLOCAL_REDIRECT_CODE)
+        cats = sorted(v.get("category") for v in violations)
+        assert cats == ["shadowing", "ungated-raw-sql"], (
+            f"R2: expected exact categories [shadowing, ungated-raw-sql], "
+            f"got {cats}: {violations}"
+        )
+        assert len([v for v in violations if v.get("category") == "shadowing"]) == 1, (
+            f"R2: expected exactly 1 shadowing, got {violations}"
+        )
+        assert (
+            len([v for v in violations if v.get("category") == "ungated-raw-sql"]) == 1
+        ), f"R2: expected exactly 1 ungated-raw-sql, got {violations}"
+
+    # =========================================================
+    # N1: global redirect of FQN root
+    # =========================================================
+
+    def test_n1_global_redirect_fqn_root(self) -> None:
+        """N1: ``global quickscale_modules_orgs`` followed by assignment
+        makes the FQN root counterfeit.  Shadowing and ungated-raw-sql
+        violations must appear."""
+        violations = check_migration_source(N1_GLOBAL_REDIRECT_FQN_ROOT_CODE)
+        shadow = [v for v in violations if v.get("category") == "shadowing"]
+        raw = [v for v in violations if v.get("category") == "ungated-raw-sql"]
+        assert len(shadow) >= 1, (
+            f"N1: expected >=1 shadowing violation, got {len(shadow)}: {violations}"
+        )
+        assert len(raw) >= 1, (
+            f"N1: expected >=1 ungated-raw-sql violation, got {len(raw)}: {violations}"
+        )
+
+    # =========================================================
+    # O1: outer rebounds before inner call
+    # =========================================================
+
+    def test_o1_outer_rebound_before_inner_call(self) -> None:
+        """O1: An inner function defined under a canonical owner has
+        its outer scope rebound to counterfeit before the inner call.
+        Shadowing and ungated-raw-sql violations must appear."""
+        violations = check_migration_source(O1_OUTER_REBOUND_BEFORE_CALL_CODE)
+        shadow = [v for v in violations if v.get("category") == "shadowing"]
+        raw = [v for v in violations if v.get("category") == "ungated-raw-sql"]
+        assert len(shadow) >= 1, (
+            f"O1: expected >=1 shadowing violation, got {len(shadow)}: {violations}"
+        )
+        assert len(raw) >= 1, (
+            f"O1: expected >=1 ungated-raw-sql violation, got {len(raw)}: {violations}"
+        )
+
+    # =========================================================
+    # O2: nonlocal mutator before target call
+    # =========================================================
+
+    def test_o2_nonlocal_mutator_before_target(self) -> None:
+        """O2: A nonlocal mutator runs before the target function.
+        Exact categories asserted."""
+        violations = check_migration_source(O2_NONLOCAL_MUTATOR_BEFORE_TARGET_CODE)
+        cats = sorted(v.get("category") for v in violations)
+        assert cats == ["shadowing", "ungated-raw-sql"], (
+            f"O2: expected exact categories [shadowing, ungated-raw-sql], "
+            f"got {cats}: {violations}"
+        )
+        assert len([v for v in violations if v.get("category") == "shadowing"]) == 1, (
+            f"O2: expected exactly 1 shadowing, got {violations}"
+        )
+        assert (
+            len([v for v in violations if v.get("category") == "ungated-raw-sql"]) == 1
+        ), f"O2: expected exactly 1 ungated-raw-sql, got {violations}"
+
+    # =========================================================
+    # O3: global mutator before target call
+    # =========================================================
+
+    def test_o3_global_mutator_before_target(self) -> None:
+        """O3: A global mutator changes the module cell before the
+        target runs.  Exact categories asserted."""
+        violations = check_migration_source(O3_GLOBAL_MUTATOR_BEFORE_TARGET_CODE)
+        cats = sorted(v.get("category") for v in violations)
+        assert cats == ["shadowing", "ungated-raw-sql"], (
+            f"O3: expected exact categories [shadowing, ungated-raw-sql], "
+            f"got {cats}: {violations}"
+        )
+        assert len([v for v in violations if v.get("category") == "shadowing"]) == 1, (
+            f"O3: expected exactly 1 shadowing, got {violations}"
+        )
+        assert (
+            len([v for v in violations if v.get("category") == "ungated-raw-sql"]) == 1
+        ), f"O3: expected exactly 1 ungated-raw-sql, got {violations}"
+
+    # =========================================================
+    # C3: global declaration reads canonical module without write
+    # =========================================================
+
+    def test_c3_global_no_write_clean(self) -> None:
+        """C3: ``global operator_access_migration`` without a subsequent
+        assignment preserves the module-level canonical import.  Zero
+        violations."""
+        violations = check_migration_source(C3_GLOBAL_NO_WRITE_CODE)
+        assert len(violations) == 0, (
+            f"C3: expected 0 violations, got {len(violations)}: {violations}"
+        )
+
+    # =========================================================
+    # C4: global counterfeit then every-path canonical owner import
+    # =========================================================
+
+    def test_c4_global_counterfeit_then_restore_clean(self) -> None:
+        """C4: Global counterfeit assignment followed by a canonical
+        import restoration function before the use.  The restoration
+        (canonical-import) is the last mutation so the effective
+        binding is canonical.  Zero violations."""
+        violations = check_migration_source(C4_GLOBAL_COUNTERFEIT_THEN_RESTORE_CODE)
+        assert len(violations) == 0, (
+            f"C4: expected 0 violations, got {len(violations)}: {violations}"
+        )
+
+    # =========================================================
+    # C5: nonlocal counterfeit then canonical owner import
+    # =========================================================
+
+    def test_c5_nonlocal_counterfeit_then_restore_clean(self) -> None:
+        """C5: Nonlocal counterfeit assignment in inner function
+        followed by a canonical import restoration in the outer
+        function before the wrapper use.  The restoration is the
+        last binding in the scope.  Zero violations."""
+        violations = check_migration_source(C5_NONLOCAL_COUNTERFEIT_THEN_RESTORE_CODE)
+        assert len(violations) == 0, (
+            f"C5: expected 0 violations, got {len(violations)}: {violations}"
+        )
+
+    # =========================================================
+    # C6: outer rebind to canonical before inner direct call
+    # =========================================================
+
+    def test_c6_canonical_before_inner_call_clean(self) -> None:
+        """C6: An inner function references the name which is
+        restored to canonical in the outer scope before the call.
+        The effective binding is canonical.  Zero violations."""
+        violations = check_migration_source(C6_CANONICAL_BEFORE_INNER_CALL_CODE)
+        assert len(violations) == 0, (
+            f"C6: expected 0 violations, got {len(violations)}: {violations}"
+        )
+
+    # =========================================================
+    # C7: global mutator, canonical restorer, then target
+    # =========================================================
+
+    def test_c7_global_mutate_restore_target_clean(self) -> None:
+        """C7: Global mutator + canonical import restoration before
+        the with-block.  The restoration (canonical-import) is the
+        last mutation in the global owner cell.  Zero violations."""
+        violations = check_migration_source(C7_GLOBAL_MUTATE_RESTORE_TARGET_CODE)
+        assert len(violations) == 0, (
+            f"C7: expected 0 violations, got {len(violations)}: {violations}"
+        )
+
+    # =========================================================
+    # O4: called sibling nonlocal mutator
+    # =========================================================
+
+    def test_o4_called_sibling_nonlocal_mutator(self) -> None:
+        """O4: Sibling function with nonlocal declaration is CALLED
+        before the target.  Exact categories asserted."""
+        violations = check_migration_source(O4_CALLED_SIBLING_NONLOCAL_CODE)
+        cats = sorted(v.get("category") for v in violations)
+        assert cats == ["shadowing", "ungated-raw-sql"], (
+            f"O4: expected exact categories [shadowing, ungated-raw-sql], "
+            f"got {cats}: {violations}"
+        )
+        assert len([v for v in violations if v.get("category") == "shadowing"]) == 1, (
+            f"O4: expected exactly 1 shadowing, got {violations}"
+        )
+        assert (
+            len([v for v in violations if v.get("category") == "ungated-raw-sql"]) == 1
+        ), f"O4: expected exactly 1 ungated-raw-sql, got {violations}"
+
+    # =========================================================
+    # O5: uncalled sibling nonlocal mutator (positive control)
+    # =========================================================
+
+    def test_o5_uncalled_nonlocal_mutator_clean(self) -> None:
+        """O5: Sibling function with nonlocal is defined but NEVER
+        called.  Zero violations — positive control proving uncalled
+        mutators do NOT pollute the reaching state."""
+        violations = check_migration_source(O5_UNCALLED_NONLOCAL_MUTATOR_CODE)
+        assert len(violations) == 0, (
+            f"O5: expected 0 violations, got {len(violations)}: {violations}"
+        )
+        assert not any(
+            v.get("category")
+            in (
+                "shadowing",
+                "ungated-raw-sql",
+                "ungated-orm-write",
+                "ungated-runsql",
+                "wrong-editor",
+            )
+            for v in violations
+        ), (
+            f"O5: expected only clean run, got categories: "
+            f"{[v.get('category') for v in violations]}"
+        )
+
+    # =========================================================
+    # T6: counterfeit-before-raise / canonical-restoration
+    # =========================================================
+
+    def test_t6_counterfeit_before_raise_then_canonical_restore(self) -> None:
+        """T6: try body assigns counterfeit then raises.  The except
+        handler imports canonical again — proving the try-body state
+        propagates through the exception edge.  Zero violations."""
+        violations = check_migration_source(T6_COUNTERFEIT_BEFORE_RAISE_RESTORE_CODE)
+        assert len(violations) == 0, (
+            f"T6: expected 0 violations, got {len(violations)}: {violations}"
+        )
+        assert not any(
+            v.get("category")
+            in (
+                "shadowing",
+                "ungated-raw-sql",
+                "ungated-orm-write",
+                "ungated-runsql",
+                "wrong-editor",
+            )
+            for v in violations
+        )
+
+    # =========================================================
+    # T7: called sibling global mutator
+    # =========================================================
+
+    def test_t7_called_sibling_global_mutator(self) -> None:
+        """T7: Sibling function with ``global operator_access_migration``
+        is CALLED before the target.  Exact categories asserted."""
+        violations = check_migration_source(T7_CALLED_SIBLING_GLOBAL_MUTATOR_CODE)
+        cats = sorted(v.get("category") for v in violations)
+        assert cats == ["shadowing", "ungated-raw-sql"], (
+            f"T7: expected exact categories [shadowing, ungated-raw-sql], "
+            f"got {cats}: {violations}"
+        )
+
+
+# =========================================================================
+# SA88a.1 Phase 3 — Synthetic test code (conditionals, loops, try, match)
+# =========================================================================
+
+# R3: incoming canonical with counterfeit on one if path
+R3_ONE_IF_PATH_COUNTERFEIT_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    if some_condition:
+        operator_access_migration = lambda x: None
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# R4a: if-branch canonical, else-branch counterfeit
+R4A_IF_CANONICAL_ELSE_COUNTERFEIT_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    if some_condition:
+        from quickscale_modules_orgs.tenancy import operator_access_migration
+    else:
+        operator_access_migration = lambda x: None
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# R4b: if-branch counterfeit, else-branch canonical (reversed order)
+R4B_IF_COUNTERFEIT_ELSE_CANONICAL_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    if some_condition:
+        operator_access_migration = lambda x: None
+    else:
+        from quickscale_modules_orgs.tenancy import operator_access_migration
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# N2: module branch with canonical/counterfeit FQN root
+N2_MODULE_BRANCH_COUNTERFEIT_FQN_ROOT_CODE = """
+import quickscale_modules_orgs
+
+if some_condition:
+    quickscale_modules_orgs = "fake"
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# S1: canonical import in potentially zero-trip loop
+S1_CANONICAL_IN_ZERO_TRIP_LOOP_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    for item in items:
+        from quickscale_modules_orgs.tenancy import operator_access_migration
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# S2: short-circuit/conditional NamedExpr counterfeit
+S2_NAMEDEXPR_COUNTERFEIT_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    if (oam := operator_access_migration) is not None:
+        pass
+    if some_condition and (operator_access_migration := lambda x: None):
+        pass
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# S3: try normal canonical vs handler counterfeit
+S3_TRY_CANONICAL_AND_HANDLER_COUNTERFEIT_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    try:
+        from quickscale_modules_orgs.tenancy import operator_access_migration
+    except ValueError:
+        operator_access_migration = lambda x: None
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# S4: match canonical vs counterfeit/no-match
+S4_MATCH_CANONICAL_AND_COUNTERFEIT_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    match something:
+        case 1:
+            from quickscale_modules_orgs.tenancy import operator_access_migration
+        case 2:
+            operator_access_migration = lambda x: None
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# S5: comprehension owner-directed NamedExpr with zero iteration
+S5_COMPREHENSION_NAMEDEXPR_ZERO_ITER_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    _ = [x for item in items if (operator_access_migration := item)]
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# C8: both branches canonical
+C8_BOTH_BRANCHES_CANONICAL_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    if some_condition:
+        from quickscale_modules_orgs.tenancy import operator_access_migration
+    else:
+        from quickscale_modules_orgs.tenancy import operator_access_migration
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# C12: unconditional canonical import after mixed join
+C12_UNCONDITIONAL_IMPORT_AFTER_MIXED_JOIN_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    if some_condition:
+        operator_access_migration = lambda x: None
+    else:
+        pass
+    from quickscale_modules_orgs.tenancy import operator_access_migration
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# N3: module-level reversed branch (canonical in if, counterfeit in else)
+N3_MODULE_BRANCH_REVERSED_CODE = """
+import quickscale_modules_orgs
+
+if some_condition:
+    import quickscale_modules_orgs.tenancy
+else:
+    quickscale_modules_orgs = "fake"
+
+def forward(apps, schema_editor):
+    with quickscale_modules_orgs.tenancy.operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# T4: counterfeit-finally — finally block rebinds to counterfeit
+T4_COUNTERFEIT_FINALLY_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    try:
+        pass
+    finally:
+        operator_access_migration = lambda x: None
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+# T5: reversed asymmetric function branch (else canonical, if counterfeit)
+T5_REVERSED_ASYMMETRIC_FUNCTION_CODE = """
+from quickscale_modules_orgs.tenancy import operator_access_migration
+
+def forward(apps, schema_editor):
+    if some_condition:
+        operator_access_migration = lambda x: None
+    else:
+        from quickscale_modules_orgs.tenancy import operator_access_migration
+    with operator_access_migration(schema_editor):
+        schema_editor.execute(
+            "UPDATE t SET organization_id = "
+            "(SELECT id FROM other WHERE other.x = t.x)"
+        )
+"""
+
+
+class TestSA88aPhase3ConditionalTransfer:
+    """Phase 3 path-sensitive reaching-state transfer for conditionals,
+    loops, try, match, and comprehension/generator constructs.
+
+    Negatives (R3, R4a/R4b, N2, S1-S5) assert both ``shadowing`` and
+    ``ungated-raw-sql`` violations.  Controls (C8, C12) assert exactly
+    zero violations.
+    """
+
+    # =========================================================
+    # R3: incoming canonical with counterfeit on one if path
+    # =========================================================
+
+    def test_r3_one_if_path_counterfeit(self) -> None:
+        """R3: Canonical import at module scope, then an if-branch
+        with a counterfeit assignment.  Exact categories asserted."""
+        violations = check_migration_source(R3_ONE_IF_PATH_COUNTERFEIT_CODE)
+        cats = sorted(v.get("category") for v in violations)
+        assert cats == ["shadowing", "ungated-raw-sql"], (
+            f"R3: expected exact categories [shadowing, ungated-raw-sql], "
+            f"got {cats}: {violations}"
+        )
+        assert len([v for v in violations if v.get("category") == "shadowing"]) == 1, (
+            f"R3: expected exactly 1 shadowing, got {violations}"
+        )
+        assert (
+            len([v for v in violations if v.get("category") == "ungated-raw-sql"]) == 1
+        ), f"R3: expected exactly 1 ungated-raw-sql, got {violations}"
+
+    # =========================================================
+    # R4a: if-branch canonical, else-branch counterfeit
+    # =========================================================
+
+    def test_r4a_if_canonical_else_counterfeit(self) -> None:
+        """R4a: if canonical, else counterfeit.  Exact categories."""
+        violations = check_migration_source(R4A_IF_CANONICAL_ELSE_COUNTERFEIT_CODE)
+        cats = sorted(v.get("category") for v in violations)
+        assert cats == ["shadowing", "ungated-raw-sql"], (
+            f"R4a: expected exact categories [shadowing, ungated-raw-sql], "
+            f"got {cats}: {violations}"
+        )
+        assert len([v for v in violations if v.get("category") == "shadowing"]) == 1, (
+            f"R4a: expected exactly 1 shadowing, got {violations}"
+        )
+        assert (
+            len([v for v in violations if v.get("category") == "ungated-raw-sql"]) == 1
+        ), f"R4a: expected exactly 1 ungated-raw-sql, got {violations}"
+
+    # =========================================================
+    # R4b: if-branch counterfeit, else-branch canonical
+    # =========================================================
+
+    def test_r4b_if_counterfeit_else_canonical(self) -> None:
+        """R4b: if counterfeit, else canonical.  Exact categories."""
+        violations = check_migration_source(R4B_IF_COUNTERFEIT_ELSE_CANONICAL_CODE)
+        cats = sorted(v.get("category") for v in violations)
+        assert cats == ["shadowing", "ungated-raw-sql"], (
+            f"R4b: expected exact categories [shadowing, ungated-raw-sql], "
+            f"got {cats}: {violations}"
+        )
+        assert len([v for v in violations if v.get("category") == "shadowing"]) == 1, (
+            f"R4b: expected exactly 1 shadowing, got {violations}"
+        )
+        assert (
+            len([v for v in violations if v.get("category") == "ungated-raw-sql"]) == 1
+        ), f"R4b: expected exactly 1 ungated-raw-sql, got {violations}"
+
+    # =========================================================
+    # N2: module branch with canonical/counterfeit FQN root
+    # =========================================================
+
+    def test_n2_module_branch_counterfeit_fqn_root(self) -> None:
+        """N2: FQN root bound at module level, then conditionally
+        rebound to counterfeit in a module-level if.  The join
+        state is mixed.  Violations appear."""
+        violations = check_migration_source(N2_MODULE_BRANCH_COUNTERFEIT_FQN_ROOT_CODE)
+        shadow = [v for v in violations if v.get("category") == "shadowing"]
+        raw = [v for v in violations if v.get("category") == "ungated-raw-sql"]
+        assert len(shadow) >= 1, (
+            f"N2: expected >=1 shadowing, got {len(shadow)}: {violations}"
+        )
+        assert len(raw) >= 1, (
+            f"N2: expected >=1 ungated-raw-sql, got {len(raw)}: {violations}"
+        )
+
+    # =========================================================
+    # S1: canonical import in potentially zero-trip loop
+    # =========================================================
+
+    def test_s1_canonical_in_zero_trip_loop(self) -> None:
+        """S1: A canonical import inside a for-loop body that may
+        execute zero times.  After the loop, the reaching state is
+        UNKNOWN (loop might not execute).  Violations appear."""
+        violations = check_migration_source(S1_CANONICAL_IN_ZERO_TRIP_LOOP_CODE)
+        shadow = [v for v in violations if v.get("category") == "shadowing"]
+        raw = [v for v in violations if v.get("category") == "ungated-raw-sql"]
+        assert len(shadow) >= 1, (
+            f"S1: expected >=1 shadowing, got {len(shadow)}: {violations}"
+        )
+        assert len(raw) >= 1, (
+            f"S1: expected >=1 ungated-raw-sql, got {len(raw)}: {violations}"
+        )
+
+    # =========================================================
+    # S2: short-circuit/conditional NamedExpr counterfeit
+    # =========================================================
+
+    def test_s2_namedexpr_counterfeit(self) -> None:
+        """S2: NamedExpr (walrus) inside a conditional makes the
+        binding conditional.  The reaching state is mixed/counterfeit.
+        Violations appear."""
+        violations = check_migration_source(S2_NAMEDEXPR_COUNTERFEIT_CODE)
+        shadow = [v for v in violations if v.get("category") == "shadowing"]
+        raw = [v for v in violations if v.get("category") == "ungated-raw-sql"]
+        assert len(shadow) >= 1, (
+            f"S2: expected >=1 shadowing, got {len(shadow)}: {violations}"
+        )
+        assert len(raw) >= 1, (
+            f"S2: expected >=1 ungated-raw-sql, got {len(raw)}: {violations}"
+        )
+
+    # =========================================================
+    # S3: try normal canonical vs handler counterfeit
+    # =========================================================
+
+    def test_s3_try_canonical_and_handler_counterfeit(self) -> None:
+        """S3: try body canonical import, except handler counterfeit
+        assignment.  The join is mixed.  Violations appear."""
+        violations = check_migration_source(
+            S3_TRY_CANONICAL_AND_HANDLER_COUNTERFEIT_CODE
+        )
+        shadow = [v for v in violations if v.get("category") == "shadowing"]
+        raw = [v for v in violations if v.get("category") == "ungated-raw-sql"]
+        assert len(shadow) >= 1, (
+            f"S3: expected >=1 shadowing, got {len(shadow)}: {violations}"
+        )
+        assert len(raw) >= 1, (
+            f"S3: expected >=1 ungated-raw-sql, got {len(raw)}: {violations}"
+        )
+
+    # =========================================================
+    # S4: match canonical vs counterfeit/no-match
+    # =========================================================
+
+    def test_s4_match_canonical_and_counterfeit(self) -> None:
+        """S4: match with a canonical import in one case and a
+        counterfeit in another, with no default case.  The join
+        is mixed (no-match path preserves pre-match state).
+        Violations appear."""
+        violations = check_migration_source(S4_MATCH_CANONICAL_AND_COUNTERFEIT_CODE)
+        shadow = [v for v in violations if v.get("category") == "shadowing"]
+        raw = [v for v in violations if v.get("category") == "ungated-raw-sql"]
+        assert len(shadow) >= 1, (
+            f"S4: expected >=1 shadowing, got {len(shadow)}: {violations}"
+        )
+        assert len(raw) >= 1, (
+            f"S4: expected >=1 ungated-raw-sql, got {len(raw)}: {violations}"
+        )
+
+    # =========================================================
+    # S5: comprehension NamedExpr with zero iteration
+    # =========================================================
+
+    def test_s5_comprehension_namedexpr_zero_iteration(self) -> None:
+        """S5: A comprehension using operator_access_migration in its
+        iteration may execute zero times.  The binding is not canonical
+        on all paths.  Violations appear."""
+        violations = check_migration_source(S5_COMPREHENSION_NAMEDEXPR_ZERO_ITER_CODE)
+        shadow = [v for v in violations if v.get("category") == "shadowing"]
+        raw = [v for v in violations if v.get("category") == "ungated-raw-sql"]
+        assert len(shadow) >= 1, (
+            f"S5: expected >=1 shadowing, got {len(shadow)}: {violations}"
+        )
+        assert len(raw) >= 1, (
+            f"S5: expected >=1 ungated-raw-sql, got {len(raw)}: {violations}"
+        )
+
+    # =========================================================
+    # C8: both branches canonical
+    # =========================================================
+
+    def test_c8_both_branches_canonical_clean(self) -> None:
+        """C8: Both if and else branches provide a canonical import.
+        The join reaching state is BOUND on all paths.  Zero violations."""
+        violations = check_migration_source(C8_BOTH_BRANCHES_CANONICAL_CODE)
+        assert len(violations) == 0, (
+            f"C8: expected 0 violations, got {len(violations)}: {violations}"
+        )
+
+    # =========================================================
+    # C12: unconditional canonical import after mixed join
+    # =========================================================
+
+    def test_c12_unconditional_import_after_mixed_join_clean(self) -> None:
+        """C12: A conditional branch has a counterfeit assignment,
+        but an unconditional canonical import after the join restores
+        the canonical state on all paths.  Zero violations."""
+        violations = check_migration_source(
+            C12_UNCONDITIONAL_IMPORT_AFTER_MIXED_JOIN_CODE
+        )
+        assert len(violations) == 0, (
+            f"C12: expected 0 violations, got {len(violations)}: {violations}"
+        )
 
 
 class TestGateSyntheticProof:
