@@ -1,7 +1,15 @@
 """Data models for QuickScale backups."""
 
+# mypy: disable-error-code="var-annotated"
+# Rationale: Django model fields are class-level descriptors without static
+# type annotations. Other model-bearing QuickScale modules commonly disable
+# this error at the module-section level, while backups uses a narrower
+# per-file boundary because its module override was removed. Per-file
+# suppression is equivalent and avoids adding module-level overrides.
+
 from collections.abc import Iterable
 from datetime import datetime
+from typing import cast
 
 from django.conf import settings
 from django.core.validators import MinValueValidator
@@ -76,7 +84,7 @@ class BackupPolicy(models.Model):
         verbose_name_plural = "Backup policies"
 
     def __str__(self) -> str:
-        return f"Backup policy ({self.target_mode})"
+        return f"Backup policy ({cast(str, self.target_mode)})"
 
 
 class BackupArtifact(models.Model):
@@ -180,12 +188,12 @@ class BackupArtifact(models.Model):
         verbose_name_plural = "Backup artifacts"
 
     def __str__(self) -> str:
-        return self.filename
+        return cast(str, self.filename)
 
     def effective_restore_scope(self) -> str | None:
         """Return the recorded restore scope or infer one conservatively from format."""
         if self.restore_scope:
-            return self.restore_scope
+            return cast(str | None, self.restore_scope)
         if self.backup_format == "json":
             return self.RESTORE_SCOPE_EXPORT_ONLY
         if self.backup_format == "pg_dump_custom":
@@ -214,8 +222,8 @@ class BackupArtifact(models.Model):
     def download_path(self) -> str:
         """Return the best available operator-facing download path."""
         if self.local_path:
-            return self.local_path
-        return self.remote_key
+            return cast(str, self.local_path)
+        return cast(str, self.remote_key)
 
     def is_local_available(self) -> bool:
         """Return whether a local artifact path is currently recorded."""
@@ -271,7 +279,7 @@ class BackupSnapshot(models.Model):
         verbose_name_plural = "Backup snapshots"
 
     def __str__(self) -> str:
-        return self.snapshot_id
+        return cast(str, self.snapshot_id)
 
     def save(
         self,
@@ -310,4 +318,4 @@ class BackupSnapshot(models.Model):
             return False
 
         comparison_time = now or django_timezone.now()
-        return self.rollback_pin_expires_at > comparison_time
+        return cast(bool, self.rollback_pin_expires_at > comparison_time)
