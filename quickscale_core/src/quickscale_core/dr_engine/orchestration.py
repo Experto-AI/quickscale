@@ -27,9 +27,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 import django
 from django.apps import apps
 from django.conf import settings
-from django.core.files import File
 from django.core.management import call_command
-from django.db import DatabaseError
 from django.utils import timezone as django_timezone
 
 from quickscale_core.dr_engine.primitives import (
@@ -77,11 +75,16 @@ from quickscale_core.dr_engine.verification import (
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
 
-from quickscale_modules_backups.models import (
-    BackupArtifact,
-    BackupPolicy,
-    BackupSnapshot,
-)  # noqa: E402  # isort:skip
+    from quickscale_core.dr_engine.persistence import (
+        PersistedBackupArtifact,
+        PersistedBackupPolicy,
+    )
+
+# SA89b Phase 1: All executable ORM operations (create, save, filter, get,
+# refresh, update) go through the module-level wrappers in
+# quickscale_core.dr_engine.persistence.  Model constants are expressed as
+# plain string literals.  No direct or deferred import of
+# quickscale_modules_backups.models exists in this file.
 
 # AF6 Phase 3 — re-exports from concern-focused sibling modules.
 # These names are defined in the sibling modules and re-exported here so that
@@ -117,6 +120,28 @@ from quickscale_core.dr_engine._sidecar import (  # noqa: E402, F401
     _capture_snapshot_sidecars,
     _load_snapshot_sidecar_payload,
     _persist_snapshot_sidecar_payload,
+)
+
+# SA89b Phase 1 — persistence module-level wrappers replace all direct ORM
+# create/save/filter/get/refresh/update operations.
+from quickscale_core.dr_engine.persistence import (  # noqa: E402
+    create_artifact,
+    create_snapshot,
+    get_authoritative_snapshot_for_artifact,
+    get_backup_snapshot as _get_backup_snapshot_from_persistence,
+    iter_expired_snapshots,
+    iter_expired_unlinked_artifacts,
+    refresh_snapshot,
+    resolve_admin_uploaded_restore_artifact,
+    save_artifact,
+    save_snapshot,
+    update_artifact_after_restore,
+)
+
+# SA89b Phase 1 — isolated S3 adapter replaces direct S3Storage usage.
+from quickscale_core._dr_remote_storage import (  # noqa: E402
+    delete_s3_key,
+    upload_file_to_s3,
 )
 
 # ---------------------------------------------------------------------------
@@ -479,23 +504,23 @@ def _get_postgresql_18_guidance() -> str:
 
 
 def _mark_snapshot_failed(
-    snapshot: BackupSnapshot,
+    snapshot: Any,
     *,
     failure_note: str,
     child_descriptors_json: dict[str, Any] | None = None,
 ) -> None:
     """Persist a failed snapshot outcome without hiding the stored dump artifact."""
-    snapshot.status = BackupSnapshot.STATUS_FAILED
+    snapshot.status = "failed"
     snapshot.failure_note = failure_note
     update_fields = ["status", "failure_note", "updated_at"]
     if child_descriptors_json is not None:
         snapshot.child_descriptors_json = child_descriptors_json
         update_fields.append("child_descriptors_json")
-    snapshot.save(update_fields=update_fields)
+    save_snapshot(snapshot, update_fields=update_fields)
 
 
 def _mark_remote_upload_failure(
-    artifact: BackupArtifact,
+    artifact: Any,
     *,
     local_path: Path,
     error: BackupError,
@@ -503,14 +528,15 @@ def _mark_remote_upload_failure(
     """Persist a failed remote-offload outcome without destroying the local dump."""
     notes = f"remote upload failed: {error}"
     artifact.remote_key = ""
-    artifact.status = BackupArtifact.STATUS_FAILED
+    artifact.status = "failed"
     artifact.validation_notes = notes
     artifact.metadata_json = {
         **artifact.metadata_json,
         "remote_upload_error": str(error),
         "remote_upload_failed_at": django_timezone.now().isoformat(),
     }
-    artifact.save(
+    save_artifact(
+        artifact,
         update_fields=[
             "local_path",
             "remote_key",
@@ -518,12 +544,12 @@ def _mark_remote_upload_failure(
             "validation_notes",
             "metadata_json",
             "updated_at",
-        ]
+        ],
     )
 
 
 def _rollback_remote_upload_after_persistence_failure(
-    artifact: BackupArtifact,
+    artifact: Any,
     *,
     remote_key: str,
     policy: BackupPolicySnapshot,
@@ -542,7 +568,7 @@ def _rollback_remote_upload_after_persistence_failure(
 
 
 def _record_prune_failure_without_masking_success(
-    artifact: BackupArtifact,
+    artifact: Any,
     *,
     error: Exception,
 ) -> None:
@@ -557,14 +583,17 @@ def _record_prune_failure_without_masking_success(
     }
 
     try:
-        artifact.save(update_fields=["validation_notes", "metadata_json", "updated_at"])
+        save_artifact(
+            artifact,
+            update_fields=["validation_notes", "metadata_json", "updated_at"],
+        )
     except Exception:
         return
 
 
 def _persist_snapshot_metadata_on_artifact(
-    artifact: BackupArtifact,
-    snapshot: BackupSnapshot,
+    artifact: Any,
+    snapshot: Any,
     *,
     note: str | None = None,
 ) -> None:
@@ -584,10 +613,10 @@ def _persist_snapshot_metadata_on_artifact(
             f"{existing_notes}; {note}" if existing_notes else note
         )
         update_fields.append("validation_notes")
-    artifact.save(update_fields=update_fields)
+    save_artifact(artifact, update_fields=update_fields)
 
 
-def _clear_appended_artifact_note(artifact: BackupArtifact, note: str) -> bool:
+def _clear_appended_artifact_note(artifact: Any, note: str) -> bool:
     """Remove one trailing snapshot-failure note appended during a prior attempt."""
     normalized_note = note.strip()
     existing_notes = artifact.validation_notes.strip()
@@ -607,8 +636,8 @@ def _clear_appended_artifact_note(artifact: BackupArtifact, note: str) -> bool:
 
 
 def _resolve_snapshot_database_local_path(
-    snapshot: BackupSnapshot,
-    artifact: BackupArtifact,
+    snapshot: Any,
+    artifact: Any,
 ) -> Path:
     """Resolve the authoritative local dump path for a stored snapshot."""
     if artifact.local_path:
@@ -627,39 +656,39 @@ def _mark_snapshot_descriptors_deleted(
     updated = deepcopy(child_descriptors_json)
     database_descriptor = updated.get("database")
     if isinstance(database_descriptor, dict):
-        database_descriptor["status"] = BackupSnapshot.STATUS_DELETED
+        database_descriptor["status"] = "deleted"
 
     sidecars = updated.get("sidecars")
     if isinstance(sidecars, dict):
         for descriptor in sidecars.values():
             if isinstance(descriptor, dict):
-                descriptor["status"] = BackupSnapshot.STATUS_DELETED
+                descriptor["status"] = "deleted"
 
     return updated
 
 
 def _get_authoritative_snapshot_for_artifact(
-    artifact: BackupArtifact,
-) -> BackupSnapshot | None:
-    """Return the linked snapshot for a dump artifact if one exists."""
-    try:
-        return cast("BackupSnapshot", artifact.authoritative_snapshot)  # type: ignore[attr-defined]  # django-stubs not enabled — reverse relation
-    except BackupSnapshot.DoesNotExist:
-        return None
+    artifact: Any,
+) -> Any | None:
+    """Return the linked snapshot for a dump artifact if one exists.
+
+    SA89b Phase 1: delegates to the persistence provider.
+    """
+    return get_authoritative_snapshot_for_artifact(artifact)
 
 
 def _resolve_artifact_remote_policy(
-    artifact: BackupArtifact,
+    artifact: Any,
     fallback_policy: BackupPolicySnapshot,
 ) -> BackupPolicySnapshot:
     """Build remote deletion context from artifact location plus active credentials."""
-    if artifact.storage_target != BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE:
+    if artifact.storage_target != "private_remote":
         return fallback_policy
 
     return BackupPolicySnapshot(
         retention_days=fallback_policy.retention_days,
         naming_prefix=fallback_policy.naming_prefix,
-        target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+        target_mode="private_remote",
         local_directory=fallback_policy.local_directory,
         remote_bucket_name=(
             artifact.remote_bucket_name or fallback_policy.remote_bucket_name
@@ -719,8 +748,6 @@ def _resolve_private_remote_credentials(
 
 
 def _upload_to_private_remote(local_path: Path, policy: BackupPolicySnapshot) -> str:
-    from storages.backends.s3 import S3Storage  # type: ignore[import-untyped]
-
     access_key_id, secret_access_key = _resolve_private_remote_credentials(policy)
 
     options: dict[str, Any] = {
@@ -735,13 +762,11 @@ def _upload_to_private_remote(local_path: Path, policy: BackupPolicySnapshot) ->
     options["access_key"] = access_key_id
     options["secret_key"] = secret_access_key
 
-    storage = S3Storage(**options)
     remote_prefix = policy.remote_prefix.strip().strip("/")
     remote_key = (
         f"{remote_prefix}/{local_path.name}" if remote_prefix else local_path.name
     )
-    with local_path.open("rb") as handle:
-        storage.save(remote_key, File(handle, name=local_path.name))
+    upload_file_to_s3(local_path, remote_key, options)
     return remote_key
 
 
@@ -781,8 +806,6 @@ def _materialize_private_remote_key(
 
 
 def _delete_private_remote_key(remote_key: str, policy: BackupPolicySnapshot) -> None:
-    from storages.backends.s3 import S3Storage
-
     access_key_id, secret_access_key = _resolve_private_remote_credentials(policy)
 
     options: dict[str, Any] = {
@@ -797,8 +820,7 @@ def _delete_private_remote_key(remote_key: str, policy: BackupPolicySnapshot) ->
     options["access_key"] = access_key_id
     options["secret_key"] = secret_access_key
 
-    storage = S3Storage(**options)
-    storage.delete(remote_key)
+    delete_s3_key(remote_key, options)
 
 
 def _upload_snapshot_child_to_private_remote(
@@ -826,7 +848,7 @@ def _upload_snapshot_child_to_private_remote(
 
 
 def _delete_snapshot_storage(
-    snapshot: BackupSnapshot,
+    snapshot: Any,
     *,
     policy: BackupPolicySnapshot,
     remote_deleter: _RemoteDeleter | None = None,
@@ -888,8 +910,8 @@ def _delete_snapshot_storage(
 
 
 def _complete_capture_after_dump(
-    artifact: BackupArtifact,
-    snapshot: BackupSnapshot,
+    artifact: Any,
+    snapshot: Any,
     *,
     resolved_policy: BackupPolicySnapshot,
     local_path: Path,
@@ -898,17 +920,14 @@ def _complete_capture_after_dump(
     child_descriptors_json: dict[str, Any],
     previous_failure_note: str,
     now: datetime,
-) -> BackupArtifact:
+) -> Any:
     """Execute post-dump capture steps shared by create and resume paths.
 
     Handles remote upload, sidecar capture, success/failure persistence,
     and cleanup prune in one flow.
     """
     # Remote upload for private_remote targets
-    if (
-        resolved_policy.target_mode == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
-        and not artifact.remote_key
-    ):
+    if resolved_policy.target_mode == "private_remote" and not artifact.remote_key:
         uploader = remote_uploader or _upload_to_private_remote
         try:
             remote_key = _upload_snapshot_child_to_private_remote(
@@ -920,7 +939,7 @@ def _complete_capture_after_dump(
             )
         except BackupError as exc:
             _mark_remote_upload_failure(artifact, local_path=local_path, error=exc)
-            child_descriptors_json["database"]["status"] = BackupSnapshot.STATUS_FAILED
+            child_descriptors_json["database"]["status"] = "failed"
             child_descriptors_json["database"]["error"] = str(exc)
             _mark_snapshot_failed(
                 snapshot,
@@ -941,7 +960,7 @@ def _complete_capture_after_dump(
                 local_path=local_path,
                 error=upload_error,
             )
-            child_descriptors_json["database"]["status"] = BackupSnapshot.STATUS_FAILED
+            child_descriptors_json["database"]["status"] = "failed"
             child_descriptors_json["database"]["error"] = str(upload_error)
             _mark_snapshot_failed(
                 snapshot,
@@ -952,7 +971,7 @@ def _complete_capture_after_dump(
 
         artifact.remote_key = remote_key
         try:
-            artifact.save(update_fields=["remote_key", "updated_at"])
+            save_artifact(artifact, update_fields=["remote_key", "updated_at"])
         except Exception as exc:
             cleanup_error = _rollback_remote_upload_after_persistence_failure(
                 artifact,
@@ -974,7 +993,7 @@ def _complete_capture_after_dump(
                     f"{cleanup_error}. Manual cleanup may be required for "
                     f"'{remote_key}'."
                 )
-            child_descriptors_json["database"]["status"] = BackupSnapshot.STATUS_FAILED
+            child_descriptors_json["database"]["status"] = "failed"
             child_descriptors_json["database"]["remote_key"] = remote_key
             child_descriptors_json["database"]["error"] = message
             _mark_snapshot_failed(
@@ -987,7 +1006,7 @@ def _complete_capture_after_dump(
         child_descriptors_json["database"]["remote_key"] = remote_key
         child_descriptors_json["database"].pop("error", None)
         snapshot.child_descriptors_json = child_descriptors_json
-        snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
+        save_snapshot(snapshot, update_fields=["child_descriptors_json", "updated_at"])
 
     # Capture sidecars
     child_descriptors_json, sidecar_failures = _capture_snapshot_sidecars(
@@ -999,15 +1018,16 @@ def _complete_capture_after_dump(
     snapshot.child_descriptors_json = child_descriptors_json
     if sidecar_failures:
         failure_note = "snapshot sidecar capture failed: " + "; ".join(sidecar_failures)
-        snapshot.status = BackupSnapshot.STATUS_FAILED
+        snapshot.status = "failed"
         snapshot.failure_note = failure_note
-        snapshot.save(
+        save_snapshot(
+            snapshot,
             update_fields=[
                 "child_descriptors_json",
                 "status",
                 "failure_note",
                 "updated_at",
-            ]
+            ],
         )
         _persist_snapshot_metadata_on_artifact(
             artifact,
@@ -1015,18 +1035,19 @@ def _complete_capture_after_dump(
             note=failure_note,
         )
     else:
-        snapshot.status = BackupSnapshot.STATUS_READY
-        if artifact.status != BackupArtifact.STATUS_READY:
-            artifact.status = BackupArtifact.STATUS_READY
-            artifact.save(update_fields=["status", "updated_at"])
+        snapshot.status = "ready"
+        if artifact.status != "ready":
+            artifact.status = "ready"
+            save_artifact(artifact, update_fields=["status", "updated_at"])
         snapshot.failure_note = ""
-        snapshot.save(
+        save_snapshot(
+            snapshot,
             update_fields=[
                 "child_descriptors_json",
                 "status",
                 "failure_note",
                 "updated_at",
-            ]
+            ],
         )
         cleared_previous_note = _clear_appended_artifact_note(
             artifact,
@@ -1034,7 +1055,7 @@ def _complete_capture_after_dump(
         )
         _persist_snapshot_metadata_on_artifact(artifact, snapshot)
         if cleared_previous_note:
-            artifact.save(update_fields=["validation_notes", "updated_at"])
+            save_artifact(artifact, update_fields=["validation_notes", "updated_at"])
 
     # Post-capture prune
     try:
@@ -1055,7 +1076,7 @@ def _resume_backup_capture(
     remote_uploader: _RemoteUploader | None,
     remote_deleter: _RemoteDeleter | None,
     now: datetime,
-) -> BackupArtifact:
+) -> Any:
     """Resume an incomplete snapshot capture using the existing snapshot id."""
     snapshot = get_backup_snapshot(snapshot_id)
     resolved_policy = _build_snapshot_capture_resume_policy(snapshot, policy)
@@ -1063,7 +1084,7 @@ def _resume_backup_capture(
     if issues:
         raise BackupConfigurationError("; ".join(issues))
 
-    if snapshot.status == BackupSnapshot.STATUS_DELETED:
+    if snapshot.status == "deleted":
         raise BackupError(
             f"Cannot resume snapshot '{snapshot.snapshot_id}' because it has already been deleted."
         )
@@ -1090,7 +1111,7 @@ def _resume_backup_capture(
     snapshot_lock_directory.mkdir(parents=True, exist_ok=True)
 
     with _backup_creation_lock(snapshot_lock_directory, now=now):
-        snapshot.refresh_from_db()
+        refresh_snapshot(snapshot)
         previous_failure_note = snapshot.failure_note.strip()
         snapshot_root = Path(snapshot.local_root_path)
         snapshot_root.mkdir(parents=True, exist_ok=True)
@@ -1165,13 +1186,12 @@ def _resume_backup_capture(
             if snapshot.remote_root_key:
                 metadata["snapshot_remote_root_key"] = snapshot.remote_root_key
 
-            artifact = BackupArtifact.objects.create(
+            artifact = create_artifact(
                 filename=local_path.name,
                 storage_target=(
-                    BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
-                    if resolved_policy.target_mode
-                    == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
-                    else BackupArtifact.STORAGE_TARGET_LOCAL
+                    "private_remote"
+                    if resolved_policy.target_mode == "private_remote"
+                    else "local"
                 ),
                 local_path=str(local_path),
                 remote_bucket_name=resolved_policy.remote_bucket_name,
@@ -1190,7 +1210,7 @@ def _resume_backup_capture(
             )
             snapshot.authoritative_dump = artifact
         else:
-            if artifact.status == BackupArtifact.STATUS_DELETED:
+            if artifact.status == "deleted":
                 raise BackupError(
                     f"Cannot resume snapshot '{snapshot.snapshot_id}' because its authoritative dump artifact has been deleted."
                 )
@@ -1219,16 +1239,15 @@ def _resume_backup_capture(
                 update_fields.append("local_path")
             if (
                 not (
-                    resolved_policy.target_mode
-                    == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
+                    resolved_policy.target_mode == "private_remote"
                     and not artifact.remote_key
                 )
-                and artifact.status != BackupArtifact.STATUS_READY
+                and artifact.status != "ready"
             ):
-                artifact.status = BackupArtifact.STATUS_READY
+                artifact.status = "ready"
                 update_fields.append("status")
             if update_fields:
-                artifact.save(update_fields=[*update_fields, "updated_at"])
+                save_artifact(artifact, update_fields=[*update_fields, "updated_at"])
 
         child_descriptors_json = deepcopy(
             snapshot.child_descriptors_json
@@ -1243,12 +1262,13 @@ def _resume_backup_capture(
         if not isinstance(sidecars, dict):
             child_descriptors_json["sidecars"] = {}
         snapshot.child_descriptors_json = child_descriptors_json
-        snapshot.save(
+        save_snapshot(
+            snapshot,
             update_fields=[
                 "authoritative_dump",
                 "child_descriptors_json",
                 "updated_at",
-            ]
+            ],
         )
 
         return _complete_capture_after_dump(
@@ -1274,7 +1294,7 @@ def create_backup(
     remote_deleter: _RemoteDeleter | None = None,
     now: datetime | None = None,
     resume_snapshot_id: str | None = None,
-) -> BackupArtifact:
+) -> Any:
     """Create a backup artifact, optionally offloading it to private remote storage."""
     resolved_policy = policy or _load_active_policy_snapshot()
     backup_started_at = now or datetime.now(timezone.utc)
@@ -1308,15 +1328,14 @@ def create_backup(
         snapshot_root.mkdir(parents=True, exist_ok=True)
         database_directory = snapshot_root / _SNAPSHOT_DATABASE_DIRECTORY_NAME
         database_directory.mkdir(parents=True, exist_ok=True)
-        snapshot = BackupSnapshot.objects.create(
+        snapshot = create_snapshot(
             snapshot_id=snapshot_id,
-            status=BackupSnapshot.STATUS_PENDING,
+            status="pending",
             source_environment=_get_source_environment(),
             local_root_path=str(snapshot_root),
             remote_root_key=(
                 _build_snapshot_remote_root(resolved_policy, snapshot_id)
-                if resolved_policy.target_mode
-                == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
+                if resolved_policy.target_mode == "private_remote"
                 else ""
             ),
             child_descriptors_json={"sidecars": {}},
@@ -1382,13 +1401,12 @@ def create_backup(
         if snapshot.remote_root_key:
             metadata["snapshot_remote_root_key"] = snapshot.remote_root_key
 
-        artifact = BackupArtifact.objects.create(
+        artifact = create_artifact(
             filename=filename,
             storage_target=(
-                BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
-                if resolved_policy.target_mode
-                == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
-                else BackupArtifact.STORAGE_TARGET_LOCAL
+                "private_remote"
+                if resolved_policy.target_mode == "private_remote"
+                else "local"
             ),
             local_path=str(local_path),
             remote_bucket_name=resolved_policy.remote_bucket_name,
@@ -1411,12 +1429,13 @@ def create_backup(
         }
         snapshot.authoritative_dump = artifact
         snapshot.child_descriptors_json = child_descriptors_json
-        snapshot.save(
+        save_snapshot(
+            snapshot,
             update_fields=[
                 "authoritative_dump",
                 "child_descriptors_json",
                 "updated_at",
-            ]
+            ],
         )
 
         return _complete_capture_after_dump(
@@ -1465,7 +1484,7 @@ def _resolve_snapshot_provenance_value(
 
 
 def _build_snapshot_full_backup_contract(
-    snapshot: BackupSnapshot,
+    snapshot: Any,
     *,
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -1476,7 +1495,7 @@ def _build_snapshot_full_backup_contract(
     completeness_issues: list[str] = []
     provenance_issues: list[str] = []
 
-    if snapshot.status != BackupSnapshot.STATUS_READY:
+    if snapshot.status != "ready":
         completeness_issues.append(f"snapshot status is '{snapshot.status}'")
 
     authoritative_dump = snapshot.authoritative_dump
@@ -1498,9 +1517,9 @@ def _build_snapshot_full_backup_contract(
         database_remote_available = bool(
             database_remote_key or authoritative_dump.remote_key
         )
-        if authoritative_dump.status == BackupArtifact.STATUS_DELETED:
+        if authoritative_dump.status == "deleted":
             completeness_issues.append("authoritative database dump has been deleted")
-        if database_status != BackupSnapshot.STATUS_READY:
+        if database_status != "ready":
             completeness_issues.append(f"database dump status is '{database_status}'")
         if not database_local_available and not database_remote_available:
             completeness_issues.append(
@@ -1552,7 +1571,7 @@ def _build_snapshot_full_backup_contract(
 
         if not isinstance(raw_descriptor, dict):
             completeness_issues.append(f"{filename} descriptor is missing")
-        elif sidecar_status != BackupSnapshot.STATUS_READY:
+        elif sidecar_status != "ready":
             completeness_issues.append(f"{filename} status is '{sidecar_status}'")
         if not local_available and not remote_available:
             completeness_issues.append(
@@ -1662,7 +1681,7 @@ def _build_snapshot_full_backup_contract(
 
 
 def build_backup_snapshot_report(
-    snapshot: BackupSnapshot,
+    snapshot: Any,
     *,
     now: datetime | None = None,
     sidecar_payloads: Sequence[str] | None = None,
@@ -1779,7 +1798,7 @@ def report_backup_snapshot(
 
 
 def delete_artifact_files(
-    artifact: BackupArtifact,
+    artifact: Any,
     *,
     policy: BackupPolicySnapshot | None = None,
     remote_deleter: _RemoteDeleter | None = None,
@@ -1793,13 +1812,15 @@ def delete_artifact_files(
             policy=resolved_policy,
             remote_deleter=remote_deleter,
         )
-        snapshot.status = BackupSnapshot.STATUS_DELETED
+        snapshot.status = "deleted"
         snapshot.child_descriptors_json = _mark_snapshot_descriptors_deleted(
             snapshot.child_descriptors_json
             if isinstance(snapshot.child_descriptors_json, dict)
             else {}
         )
-        snapshot.save(update_fields=["status", "child_descriptors_json", "updated_at"])
+        save_snapshot(
+            snapshot, update_fields=["status", "child_descriptors_json", "updated_at"]
+        )
         return
 
     local_path = Path(artifact.local_path) if artifact.local_path else None
@@ -1828,9 +1849,7 @@ def prune_expired_backups(
     deleted_count = 0
     deleted_at = django_timezone.now()
 
-    expired_snapshots = BackupSnapshot.objects.filter(
-        created_at__lt=cutoff,
-    ).exclude(status=BackupSnapshot.STATUS_DELETED)
+    expired_snapshots = iter_expired_snapshots(cutoff)
     for snapshot in expired_snapshots:
         if snapshot.has_active_rollback_pin(now=prune_started_at):
             continue
@@ -1840,27 +1859,27 @@ def prune_expired_backups(
             policy=resolved_policy,
             remote_deleter=remote_deleter,
         )
-        snapshot.status = BackupSnapshot.STATUS_DELETED
+        snapshot.status = "deleted"
         snapshot.child_descriptors_json = _mark_snapshot_descriptors_deleted(
             snapshot.child_descriptors_json
             if isinstance(snapshot.child_descriptors_json, dict)
             else {}
         )
-        snapshot.save(update_fields=["status", "child_descriptors_json", "updated_at"])
+        save_snapshot(
+            snapshot, update_fields=["status", "child_descriptors_json", "updated_at"]
+        )
 
         artifact = snapshot.authoritative_dump
         if artifact is not None and artifact.deleted_at is None:
-            artifact.status = BackupArtifact.STATUS_DELETED
+            artifact.status = "deleted"
             artifact.deleted_at = deleted_at
-            artifact.save(update_fields=["status", "deleted_at", "updated_at"])
+            save_artifact(
+                artifact, update_fields=["status", "deleted_at", "updated_at"]
+            )
 
         deleted_count += 1
 
-    expired = BackupArtifact.objects.filter(
-        deleted_at__isnull=True,
-        created_at__lt=cutoff,
-        authoritative_snapshot__isnull=True,
-    )
+    expired = iter_expired_unlinked_artifacts(cutoff)
 
     for artifact in expired:
         delete_artifact_files(
@@ -1868,9 +1887,9 @@ def prune_expired_backups(
             policy=resolved_policy,
             remote_deleter=remote_deleter,
         )
-        artifact.status = BackupArtifact.STATUS_DELETED
+        artifact.status = "deleted"
         artifact.deleted_at = deleted_at
-        artifact.save(update_fields=["status", "deleted_at", "updated_at"])
+        save_artifact(artifact, update_fields=["status", "deleted_at", "updated_at"])
         deleted_count += 1
 
     return deleted_count
@@ -2106,8 +2125,8 @@ def _validate_policy_snapshot_internal(policy: BackupPolicySnapshot) -> list[str
         issues.append("naming_prefix cannot be blank")
 
     if policy.target_mode not in {
-        BackupPolicy.TARGET_MODE_LOCAL,
-        BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+        "local",
+        "private_remote",
     }:
         issues.append("target_mode must be 'local' or 'private_remote'")
 
@@ -2117,7 +2136,7 @@ def _validate_policy_snapshot_internal(policy: BackupPolicySnapshot) -> list[str
     if policy.automation_enabled and not policy.schedule.strip():
         issues.append("schedule is required when automation_enabled is true")
 
-    if policy.target_mode == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE:
+    if policy.target_mode == "private_remote":
         if not policy.remote_bucket_name.strip():
             issues.append(
                 "remote_bucket_name is required when target_mode is private_remote"
@@ -2145,20 +2164,12 @@ def _validate_policy_snapshot_internal(policy: BackupPolicySnapshot) -> list[str
 # ---------------------------------------------------------------------------
 
 
-def get_backup_snapshot(snapshot_id: str) -> BackupSnapshot:
-    """Return one stored snapshot addressed by the public snapshot locator."""
-    normalized_snapshot_id = snapshot_id.strip()
-    if not normalized_snapshot_id:
-        raise BackupConfigurationError("snapshot_id cannot be blank")
+def get_backup_snapshot(snapshot_id: str) -> Any:
+    """Return one stored snapshot addressed by the public snapshot locator.
 
-    try:
-        return BackupSnapshot.objects.select_related("authoritative_dump").get(
-            snapshot_id=normalized_snapshot_id
-        )
-    except BackupSnapshot.DoesNotExist as exc:
-        raise BackupError(
-            f"Backup snapshot not found: {normalized_snapshot_id}"
-        ) from exc
+    SA89b Phase 1: delegates to the persistence provider.
+    """
+    return _get_backup_snapshot_from_persistence(snapshot_id)
 
 
 # ---------------------------------------------------------------------------
@@ -2167,36 +2178,36 @@ def get_backup_snapshot(snapshot_id: str) -> BackupSnapshot:
 
 
 def _load_active_policy_snapshot() -> BackupPolicySnapshot:
-    """Load the active runtime policy snapshot with managed settings precedence."""
+    """Load the active runtime policy snapshot with managed settings precedence.
+
+    SA89b Phase 1: policy introspection is routed through the persistence
+    provider seam.
+    """
+    from quickscale_core.dr_engine.persistence import (
+        ensure_default_policy,
+        has_any_policy,
+    )
+
     settings_snapshot = _build_policy_snapshot_from_settings()
-    policy = BackupPolicy.objects.order_by("pk").first()
-    if policy is None:
+    if not has_any_policy():
         return settings_snapshot
 
-    _ensure_default_policy_internal()
+    ensure_default_policy()
     return settings_snapshot
 
 
-def _ensure_default_policy_internal() -> BackupPolicy:
-    """Ensure a default policy row exists for admin-driven workflows."""
-    snapshot = _build_policy_snapshot_from_settings()
-    from dataclasses import asdict
+def _ensure_default_policy_internal() -> PersistedBackupPolicy:
+    """Ensure a default policy row exists for admin-driven workflows.
 
-    defaults = asdict(snapshot)
-    policy, _ = BackupPolicy.objects.get_or_create(key="default", defaults=defaults)
-    updated_fields = [
-        field_name
-        for field_name, value in defaults.items()
-        if getattr(policy, field_name) != value
-    ]
-    if updated_fields:
-        for field_name in updated_fields:
-            setattr(policy, field_name, defaults[field_name])
-        policy.save(update_fields=[*updated_fields, "updated_at"])
-    return policy
+    Delegates the create/update to the persistence provider which returns
+    the persisted policy through the ``PersistedBackupPolicy`` contract.
+    """
+    from quickscale_core.dr_engine.persistence import ensure_default_policy
+
+    return ensure_default_policy()
 
 
-def _build_policy_snapshot_from_model(policy: BackupPolicy) -> BackupPolicySnapshot:
+def _build_policy_snapshot_from_model(policy: Any) -> BackupPolicySnapshot:
     """Create a BackupPolicySnapshot from a database policy record."""
     return BackupPolicySnapshot(
         retention_days=policy.retention_days,
@@ -2223,7 +2234,7 @@ def _build_policy_snapshot_from_settings() -> BackupPolicySnapshot:
             getattr(
                 settings,
                 "QUICKSCALE_BACKUPS_TARGET_MODE",
-                BackupPolicy.TARGET_MODE_LOCAL,
+                "local",
             )
         ),
         local_directory=str(
@@ -2294,7 +2305,7 @@ def _path_uses_symlink_within_root(candidate_path: Path, root_path: Path) -> boo
 
 
 def _get_authoritative_local_backup_roots(
-    artifact: BackupArtifact,
+    artifact: Any,
     policy: BackupPolicySnapshot,
 ) -> tuple[Path, ...]:
     """Return the local roots that may legitimately contain an artifact download."""
@@ -2311,7 +2322,7 @@ def _get_authoritative_local_backup_roots(
 
 
 def download_backup_path(
-    artifact: BackupArtifact,
+    artifact: Any,
     *,
     policy: BackupPolicySnapshot | None = None,
 ) -> Path:
@@ -2356,7 +2367,7 @@ def download_backup_path(
 # ---------------------------------------------------------------------------
 
 
-def _get_restore_compatibility_issues(artifact: BackupArtifact) -> list[str]:
+def _get_restore_compatibility_issues(artifact: Any) -> list[str]:
     """Return restore guardrail issues — delegates to the core implementation."""
     current_engine = str(
         django.db.connections["default"].settings_dict.get("ENGINE") or ""
@@ -2367,7 +2378,7 @@ def _get_restore_compatibility_issues(artifact: BackupArtifact) -> list[str]:
 @contextmanager
 def _resolve_restore_source(
     *,
-    artifact: BackupArtifact | None = None,
+    artifact: Any = None,
     file_path: str | Path | None = None,
     snapshot_id: str | None = None,
     resolution_mode: RestoreSourceResolutionMode = RestoreSourceResolutionMode.REMOTE_FALLBACK,
@@ -2380,7 +2391,7 @@ def _resolve_restore_source(
     def _policy_resolver(art: ArtifactLike) -> Any:
         nonlocal resolved_policy
         resolved_policy = _resolve_artifact_remote_policy(
-            cast("BackupArtifact", art),
+            cast("Any", art),
             resolved_policy or _load_active_policy_snapshot(),
         )
         return resolved_policy
@@ -2397,10 +2408,10 @@ def _resolve_restore_source(
         yield restore_source
 
 
-def _resolve_authoritative_snapshot_dump(snapshot_id: str) -> BackupArtifact:
+def _resolve_authoritative_snapshot_dump(snapshot_id: str) -> Any:
     """Resolve a snapshot id to its authoritative database dump artifact."""
     snapshot = get_backup_snapshot(snapshot_id)
-    if snapshot.status == BackupSnapshot.STATUS_DELETED:
+    if snapshot.status == "deleted":
         raise BackupRestoreBlocked(
             f"Restore blocked because snapshot '{snapshot.snapshot_id}' has been deleted or pruned."
         )
@@ -2412,7 +2423,7 @@ def _resolve_authoritative_snapshot_dump(snapshot_id: str) -> BackupArtifact:
             "authoritative database dump artifact."
         )
 
-    return cast("BackupArtifact", artifact)
+    return artifact
 
 
 def _ensure_postgresql_18_restore_runtime(current_engine: str) -> None:
@@ -2460,7 +2471,7 @@ def _execute_restore_for_resolved_source(
 
     if result.executed and restore_source.artifact is not None:
         restore_warnings = _persist_restore_artifact_metadata(
-            cast("BackupArtifact", restore_source.artifact),
+            restore_source.artifact,
             restored_at=django_timezone.now(),
         )
         if restore_warnings:
@@ -2471,7 +2482,7 @@ def _execute_restore_for_resolved_source(
 
 def restore_backup_source(
     *,
-    artifact: BackupArtifact | None = None,
+    artifact: Any = None,
     file_path: str | Path | None = None,
     snapshot_id: str | None = None,
     confirmation: str,
@@ -2503,7 +2514,7 @@ def restore_backup_source(
 
 
 def restore_backup_artifact(
-    artifact: BackupArtifact,
+    artifact: Any,
     *,
     confirmation: str,
     dry_run: bool = False,
@@ -2611,18 +2622,16 @@ def _resolve_admin_uploaded_restore_artifact(
     *,
     checksum_sha256: str,
     size_bytes: int,
-) -> BackupArtifact:
+) -> PersistedBackupArtifact:
     """Resolve an uploaded file to exactly one trusted authoritative artifact.
 
     Delegates the ORM query and trust resolution to the registered persistence
-    provider through the core ``resolve_admin_uploaded_restore_artifact`` seam
-    (SA89a Phase 2).
+    provider through the typed core ``resolve_admin_uploaded_restore_artifact``
+    seam in ``quickscale_core.dr_engine.persistence``.
     """
-    from quickscale_core.runtime import (
-        resolve_admin_uploaded_restore_artifact as _core_resolve,
+    return resolve_admin_uploaded_restore_artifact(
+        checksum_sha256=checksum_sha256, size_bytes=size_bytes
     )
-
-    return _core_resolve(checksum_sha256=checksum_sha256, size_bytes=size_bytes)  # type: ignore[no-any-return]  # lazy import through __getattr__ -> Any
 
 
 # SA89a Phase 2 — ``_get_admin_uploaded_restore_artifact_trust_issue`` and
@@ -2633,51 +2642,15 @@ def _resolve_admin_uploaded_restore_artifact(
 
 
 def _persist_restore_artifact_metadata(
-    artifact: BackupArtifact,
+    artifact: Any,
     *,
     restored_at: datetime,
 ) -> tuple[RestoreWarning, ...]:
-    """Best-effort persist restore metadata after pg_restore succeeds."""
-    try:
-        updated_rows = BackupArtifact.objects.filter(pk=artifact.pk).update(
-            status=BackupArtifact.STATUS_RESTORED,
-            restored_at=restored_at,
-            updated_at=restored_at,
-        )
-    except DatabaseError as exc:
-        return (
-            RestoreWarning(
-                code="artifact_metadata_not_persisted_after_restore",
-                message=(
-                    "Restore executed, but backup artifact metadata could not be "
-                    "persisted after the restored database changed."
-                ),
-                details={
-                    "artifact_id": str(artifact.pk),
-                    "error_type": exc.__class__.__name__,
-                    "filename": artifact.filename,
-                },
-            ),
-        )
+    """Best-effort persist restore metadata after pg_restore succeeds.
 
-    if updated_rows == 0:
-        return (
-            RestoreWarning(
-                code="artifact_row_missing_after_restore",
-                message=(
-                    "Restore executed, but the original backup artifact row no "
-                    "longer exists in the restored database."
-                ),
-                details={
-                    "artifact_id": str(artifact.pk),
-                    "filename": artifact.filename,
-                },
-            ),
-        )
-
-    artifact.status = BackupArtifact.STATUS_RESTORED
-    artifact.restored_at = restored_at
-    return ()
+    SA89b Phase 1: delegates to the persistence provider.
+    """
+    return update_artifact_after_restore(artifact, restored_at=restored_at)
 
 
 def restore_admin_uploaded_backup(
@@ -2707,7 +2680,7 @@ def restore_admin_uploaded_backup(
         # prepare_admin_uploaded_restore_artifact (services.py) so the
         # uploaded-file dry-run path applies the same eligibility guard
         # and recovery guidance as the recorded-artifact branch.
-        if trusted_artifact.status == BackupArtifact.STATUS_RESTORING:
+        if trusted_artifact.status == "restoring":
             stale_threshold = django_timezone.now() - timedelta(
                 minutes=stale_threshold_minutes
             )
@@ -2862,7 +2835,7 @@ def record_backup_snapshot_verification(
     )
 
 
-def validate_backup_artifact(artifact: BackupArtifact) -> list[str]:
+def validate_backup_artifact(artifact: Any) -> list[str]:
     """Validate artifact integrity and update its validation status."""
     local_path = Path(artifact.local_path) if artifact.local_path else None
     issues = _collect_local_backup_validation_issues(
@@ -2874,11 +2847,10 @@ def validate_backup_artifact(artifact: BackupArtifact) -> list[str]:
 
     artifact.validated_at = django_timezone.now()
     artifact.validation_notes = "; ".join(issues)
-    artifact.status = (
-        BackupArtifact.STATUS_FAILED if issues else BackupArtifact.STATUS_VALIDATED
-    )
-    artifact.save(
-        update_fields=["validated_at", "validation_notes", "status", "updated_at"]
+    artifact.status = "failed" if issues else "validated"
+    save_artifact(
+        artifact,
+        update_fields=["validated_at", "validation_notes", "status", "updated_at"],
     )
     return issues
 
@@ -2892,7 +2864,7 @@ def set_backup_snapshot_rollback_pin(
 ) -> dict[str, Any]:
     """Set or refresh a time-bounded rollback pin on one stored snapshot."""
     snapshot = get_backup_snapshot(snapshot_id)
-    if snapshot.status == BackupSnapshot.STATUS_DELETED:
+    if snapshot.status == "deleted":
         raise BackupError(
             f"Backup snapshot '{snapshot.snapshot_id}' has already been deleted"
         )
@@ -2909,12 +2881,13 @@ def set_backup_snapshot_rollback_pin(
     )
     snapshot.rollback_pin_expires_at = fields["rollback_pin_expires_at"]
     snapshot.rollback_pin_reason = fields["rollback_pin_reason"]
-    snapshot.save(
+    save_snapshot(
+        snapshot,
         update_fields=[
             "rollback_pin_expires_at",
             "rollback_pin_reason",
             "updated_at",
-        ]
+        ],
     )
     return build_backup_snapshot_report(snapshot, now=pinned_at)
 
@@ -2926,7 +2899,7 @@ def clear_backup_snapshot_rollback_pin(
 ) -> dict[str, Any]:
     """Clear any active rollback pin on one stored snapshot."""
     snapshot = get_backup_snapshot(snapshot_id)
-    if snapshot.status == BackupSnapshot.STATUS_DELETED:
+    if snapshot.status == "deleted":
         raise BackupError(
             f"Backup snapshot '{snapshot.snapshot_id}' has already been deleted"
         )
@@ -2935,11 +2908,12 @@ def clear_backup_snapshot_rollback_pin(
     fields = _build_clear_rollback_pin_fields()
     snapshot.rollback_pin_expires_at = fields["rollback_pin_expires_at"]
     snapshot.rollback_pin_reason = fields["rollback_pin_reason"]
-    snapshot.save(
+    save_snapshot(
+        snapshot,
         update_fields=[
             "rollback_pin_expires_at",
             "rollback_pin_reason",
             "updated_at",
-        ]
+        ],
     )
     return build_backup_snapshot_report(snapshot, now=cleared_at)

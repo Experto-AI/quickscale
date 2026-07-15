@@ -3,6 +3,9 @@
 Manifest building, sidecar persistence, and snapshot descriptor management.
 All functions here use lazy imports for cross-module references to avoid
 circular imports with ``orchestration.py``.
+
+SA89b Phase 1: snapshot persistence operations are routed through the
+module-level ``save_snapshot`` wrapper in ``quickscale_core.dr_engine.persistence``.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from django.conf import settings
 
 from quickscale_core.dr_engine._lock import _cleanup_local_backup_file
 from quickscale_core.dr_engine._paths import _snapshot_sidecar_path
+from quickscale_core.dr_engine.persistence import save_snapshot
 from quickscale_core.dr_engine.primitives import (
     BackupError,
     BackupPolicySnapshot,
@@ -321,7 +325,9 @@ def _persist_snapshot_sidecar_payload(
             descriptor["error"] = str(exc)
             sidecars[filename] = descriptor
             snapshot.child_descriptors_json = child_descriptors_json
-            snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
+            save_snapshot(
+                snapshot, update_fields=["child_descriptors_json", "updated_at"]
+            )
             raise
         except Exception as exc:
             error_message = f"Private remote upload failed for {filename}: {exc}"
@@ -329,12 +335,14 @@ def _persist_snapshot_sidecar_payload(
             descriptor["error"] = error_message
             sidecars[filename] = descriptor
             snapshot.child_descriptors_json = child_descriptors_json
-            snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
+            save_snapshot(
+                snapshot, update_fields=["child_descriptors_json", "updated_at"]
+            )
             raise BackupError(error_message) from exc
 
     sidecars[filename] = descriptor
     snapshot.child_descriptors_json = child_descriptors_json
-    snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
+    save_snapshot(snapshot, update_fields=["child_descriptors_json", "updated_at"])
     return descriptor
 
 

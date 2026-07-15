@@ -55,7 +55,7 @@ class ArtifactLike(Protocol):
     checksum_sha256: str
     size_bytes: int | None
     filename: str
-    local_path: str
+    local_path: str | None
     remote_key: str
     database_server_major: int | None
     dump_client_major: int | None

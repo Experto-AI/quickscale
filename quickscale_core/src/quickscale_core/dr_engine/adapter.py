@@ -292,13 +292,10 @@ def validate_artifact(
 
     Adapter replacement for the ``backups_validate`` management command.
     """
-    from quickscale_modules_backups.models import BackupArtifact
     from quickscale_core.dr_engine.orchestration import validate_backup_artifact
+    from quickscale_core.dr_engine.persistence import get_backup_artifact
 
-    try:
-        artifact = BackupArtifact.objects.get(pk=artifact_id)
-    except BackupArtifact.DoesNotExist as exc:
-        raise BackupError(f"Backup artifact not found: {artifact_id}") from exc
+    artifact = get_backup_artifact(artifact_id)
 
     issues = validate_backup_artifact(artifact)
     return {
@@ -356,18 +353,15 @@ def restore_backup(
     materialization.
     """
     from quickscale_core.dr_engine.recovery import RestoreSourceResolutionMode
-    from quickscale_modules_backups.models import BackupArtifact
     from quickscale_core.dr_engine.orchestration import restore_backup_source
+    from quickscale_core.dr_engine.persistence import get_backup_artifact
 
     if resolution_mode is None:
         resolution_mode = RestoreSourceResolutionMode.REMOTE_FALLBACK
 
     artifact = None
     if artifact_id is not None:
-        try:
-            artifact = BackupArtifact.objects.get(pk=artifact_id)
-        except BackupArtifact.DoesNotExist as exc:
-            raise BackupError(f"Backup artifact not found: {artifact_id}") from exc
+        artifact = get_backup_artifact(artifact_id)
 
     result = restore_backup_source(
         artifact=artifact,
