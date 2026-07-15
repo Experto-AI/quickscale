@@ -83,10 +83,7 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
 
   **SA88a blocked checkpoint (2026-07-15, accepted for merge by explicit maintainer cap decision).** The provenance analyzer and direct proof inventory advanced substantially, but the second normal fix/re-review cycle remained `STATUS: partial`. SA88a stays open and **must not** be marked complete.
 
-  **Done:**
-  - Replaced the dead partial helpers with a wired `BindingEvent`-based active-scope resolver covering straight-line canonical aliases/rebinds, counterfeit same-name imports/definitions, star-import restoration, module-final callback bindings, compile-time local-name ownership, stable source ordering, and counterfeit FQN roots.
-  - Added direct positive/negative proofs for the covered alias, rebind, root, scope, ordering, and parameter forms. Validation is green: 105 focused conformance tests, 972 broader orgs tests, MyPy, and orgs Ruff lint/format.
-  - Preserved runtime behavior: only `test_sa88_migration_operator_access_conformance.py` changed; no ContextVar/GUC helper or `tenancy.py` change was introduced.
+  **Done (detail in [CHANGELOG.md §SA88](../../CHANGELOG.md)):** wired `BindingEvent` active-scope resolver + direct proofs for the covered alias/rebind/root/scope/ordering/parameter forms; 105 conformance + 972 orgs tests, MyPy, orgs lint green; only the analyzer test file changed (no `tenancy.py`/ContextVar/GUC change).
 
   **Pending/Blocking:**
   - **CR-SA88-REV-006 (high/blocking, still-open):** redirected `global`/`nonlocal` writes can fall through to stale canonical bindings; mutually exclusive branches need all-path reaching-definition joins; relative `ImportFrom` provenance must require `level == 0`; import-alias identity must reject forms such as `import quickscale_modules_orgs.evil as quickscale_modules_orgs`.
@@ -108,13 +105,7 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
 
 ### Track 2 — Module contracts & settings
 
-- [x] **SA88b — Diagnose and clear the forms regression SA88-QG-FORMS-001.** `Tier 1 · Track 2 · deps: none → co-gates SA84, SA86 with SA88a + SA88c`
-  A second `make test-integration` gate run produced 50 failed / 125 passed / 8 skipped / 2 errors in forms (RLS-denied INSERTs) with **no forms source changed** between the clean pass and the regression — strongly consistent with the transient stale-`postgres`-owned-test-DB artifact class already seen in SA78 and SA85 (each a disposable-DB ownership issue, not a product bug). Start a fresh forms DB diagnosis/reset to determine whether SA88-QG-FORMS-001 is a transient environment artifact or a real regression, then re-run the full gate. Forms is Track 2's domain (SA85).
-
-  *Completed 2026-07-14:* the focused retained-role Forms suite and the Forms stage of the full integration gate both passed with 196 passed / 8 skipped / 12 deselected / 0 failures. Only separately ticketed CRM (SA84) and listings (SA86) failures remained. Independent review closed SA88-QG-FORMS-001 as transient/environment-dependent; no product source change was required, and the exact stale-database ownership mechanism was not claimed as proven.
-
-  *Acceptance:* forms restricted-role suite passes clean under `make test-integration` (transient artifact confirmed and cleared, or a real regression fixed with a regression test); SA88-QG-FORMS-001 closed.
-  *(why →* SA88-QG-FORMS-001; independent review of e1d38bd5*)*
+> **SA88b (forms diagnosis, SA88-QG-FORMS-001) — done 2026-07-14; detail in [CHANGELOG.md §SA88b](../../CHANGELOG.md).** Forms passed clean (196 passed / 8 skipped / 12 deselected / 0 failed) in the focused suite and the full gate; independent review closed SA88-QG-FORMS-001 as transient/environment-dependent, no product source changed. SA86 is Track 2's remaining work, gated on Track 1.
 
 - [ ] **SA86 — Fix listings' 6 restricted-role RLS failures via the SA88 seam.** `Tier 2 · Track 2 · deps: SA88 (SA88a + SA88c + SA88b)` *(reassigned from Track 1, 2026-07-13)*
   Under the SA82 gate, listings showed 128 passed, 6 RLS failures — an instance of Finding 8. Bucket the 6 failures per SA88's triage method, then route each cross-org fixture/migration through the SA88 helper; fix any runtime-query-bucket failure as a real isolation bug. *(Small failure count — may downgrade to Tier 1 once SA88's triage establishes the class and the seam exists.)*
@@ -126,17 +117,7 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
 
 arch-audit **[Finding 1](../others/arch-audit.md)** (`dr-engine-module-circular-lattice`, DR persistence port) — **activated 2026-07-14** to use idle Track 3 capacity. Independent of the SA88/SA84/SA86 cluster. Pre-split into two Tier 2 sub-tickets (the whole is Tier 3):
 
-- [x] **SA89a — Define the artifact/policy persistence protocol in `core`; port `restore_admin_uploaded_backup` (the SA54 seam) onto it.** `Tier 2 · Track 3 · deps: none`
-  Core defines protocols for artifact/policy persistence; the backups module implements and injects them at app-ready. First step of Finding 1 Option 2 (persistence port).
-  *(why →* arch-audit Finding 1 Option 2*)*
-
-  **Completed 2026-07-14.** Full implementation: core persistence contracts (Django-free protocols for `BackupArtifactPersistence`/`BackupPolicyPersistence`, fail-hard `register_backup_persistence()` registry, identity-idempotent re-registration, `_reset_backup_persistence_for_tests()`), runtime facade wiring (`runtime/dr.py` eager exports, `_LAZY_PERSISTENCE_SYMBOLS` table, `runtime/__init__.__all__` update), core test suite (`test_dr_engine_persistence.py` covering registry lifecycle, fail-hard unconfigured access, idempotent re-registration, reset isolation), backups `QuickscaleBackupsConfig.ready()` injection and `test_apps.py` fixture hardening, and the `restore_admin_uploaded_backup` port from orchestration layer onto injected persistence.
-
-  **Validation:** 64 core persistence tests, 24 targeted backups tests, 2125 core unit (1 pre-existing bypass_rls skip), 320 backups (2 pre-existing bypass_rls skips); Ruff/MyPy green; 92.73% coverage.
-
-  **Advisory resolved (CR-SA89A-ADV-001, low):** teardown `try/except` restructured so `LookupError` is caught only around `apps.get_app_config()` — `config.ready()` runs in the `else` branch outside the catch scope, so any `ready()` exception (including `LookupError`) propagates.
-
-  **No task dependencies, open decisions, or blockers remained.** Independent change-review pass 1 STATUS ok.
+> **SA89a (persistence protocol in `core` + `restore_admin_uploaded_backup` port) — done 2026-07-14; detail in [CHANGELOG.md §SA89a](../../CHANGELOG.md).** Core persistence contracts, fail-hard registry, runtime-facade wiring, backups `ready()` injection, and the SA54-seam port all landed; 64 core persistence + 24 backups + 2125 core unit + 320 backups tests, Ruff/MyPy green, 92.73% coverage; advisory CR-SA89A-ADV-001 resolved; independent review STATUS ok.
 
 - [ ] **SA89b — Migrate the remaining DR orchestration model-access onto the injected persistence.** `Tier 2 · Track 3 · deps: SA89a`
   Remove the `orchestration.py:80` core→module import, the `_LAZY_*` tables, and the `mypy.ini:94` backups ignore.
