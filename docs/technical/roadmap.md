@@ -64,12 +64,14 @@ git merge --no-ff wt-track{N}
 
 #### Repo-global gates (run once at v87 integration, after per-module work lands)
 
-- [ ] **GATE-lint** — `make lint` (Ruff) green.
-- [ ] **GATE-typecheck** — `make typecheck` (MyPy) green. Blocked on **SA89b** removing the `mypy.ini:94` backups ignore; until then MyPy passes only on a suppressed baseline, so this gate is not truly green.
-- [ ] **GATE-check-suite** — `check-core-compat`, `check-module-core-imports`, `check-manifest-sync`, `check-org-context-primitives`, `check-csrf-exempt` all green.
-- [ ] **GATE-quality** — `make quality` (vulture / radon / pylint) within agreed thresholds.
+Assigned to **Track 2** (its module work — SA86, SA88b — is complete, so it owns the green-gate closeout). GATE-typecheck coordinates with Track 3 (SA89b).
 
-- [ ] **SA91 — Fork the per-module integration loop for true parallel execution.** `Tier 2 · deps: none`
+- [ ] **GATE-lint** — `make lint` (Ruff) green. `Track 2`
+- [ ] **GATE-typecheck** — `make typecheck` (MyPy) green. `Track 2 · deps: SA89b (Track 3)` — blocked on SA89b removing the `mypy.ini:94` backups ignore; until then MyPy passes only on a suppressed baseline, so this gate is not truly green.
+- [ ] **GATE-check-suite** — `check-core-compat`, `check-module-core-imports`, `check-manifest-sync`, `check-org-context-primitives`, `check-csrf-exempt` all green. `Track 2`
+- [ ] **GATE-quality** — `make quality` (vulture / radon / pylint) within agreed thresholds. `Track 2`
+
+- [ ] **SA91 — Fork the per-module integration loop for true parallel execution.** `Tier 2 · Track 2 · deps: none`
   `scripts/test_integration.sh` runs module stages serially (loop at `:414–442`). Fork each module's pytest stage and join exit codes + coverage. Contention points to resolve: the shared `COVERAGE_RESULTS_FILE` mktemp (`:57`) must become per-module and be merged before `check_overall_mean_coverage`; the per-module `QS_*_DB_USER` role setup (`:375–386`) and pre-created test databases must not collide across concurrent workers. Kept separate from the SA84 correctness work — this is CI-time speedup only, not a gate for green.
 
   *Acceptance:* parallel run produces the identical pass/fail verdict and the identical overall-mean coverage as the serial run; no cross-worker DB collision under the restricted role.
