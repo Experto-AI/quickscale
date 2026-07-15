@@ -452,6 +452,60 @@ class TestPolicyProviderLoadDefault:
 
 
 @pytest.mark.django_db
+class TestPolicyProviderEnsureDefault:
+    """ensure_default_policy behavior — return identity and no-policy cases."""
+
+    def test_creates_and_returns_policy_when_no_row(
+        self,
+        policy_provider: _BackupPolicyPersistenceProvider,
+    ) -> None:
+        """With no default policy row, creates one and returns it."""
+        BackupPolicy.objects.filter(key="default").delete()
+
+        result = policy_provider.ensure_default_policy()
+
+        assert result is not None
+        assert result.key == "default"
+        assert result.retention_days == 14
+        assert BackupPolicy.objects.filter(key="default").count() == 1
+
+    def test_returns_existing_policy(
+        self,
+        policy_provider: _BackupPolicyPersistenceProvider,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        """With an existing default policy row, returns the persisted record."""
+        result = policy_provider.ensure_default_policy()
+
+        assert result is not None
+        assert result.pk == backup_policy.pk
+        assert result.key == "default"
+        assert result.retention_days == backup_policy.retention_days
+
+    def test_updates_and_returns_when_fields_differ(
+        self,
+        policy_provider: _BackupPolicyPersistenceProvider,
+    ) -> None:
+        """When settings fields differ from the persisted row, updates and returns."""
+        BackupPolicy.objects.filter(key="default").delete()
+        # Create a row with different values than what settings define
+        BackupPolicy.objects.create(
+            key="default",
+            retention_days=999,
+            naming_prefix="old-prefix",
+            target_mode="local",
+            local_directory="/old/path",
+        )
+
+        result = policy_provider.ensure_default_policy()
+
+        assert result is not None
+        assert result.key == "default"
+        # Should have been updated to match settings defaults
+        assert result.retention_days == 14
+
+
+@pytest.mark.django_db
 class TestPolicyProviderSaveDefault:
     """save_default_policy behavior."""
 

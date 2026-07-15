@@ -44,26 +44,29 @@ def _mock_orch_and_backups() -> MagicMock:
 
     Adapter functions lazily import from
     ``quickscale_core.dr_engine.orchestration`` (which at module level
-    imports ``quickscale_modules_backups.models``, requiring Django).
-    This fixture ensures those imports resolve to mocks without triggering
-    Django model loading.
+    used to import ``quickscale_modules_backups.models``, requiring Django).
+    SA89b Phase 1: orchestration no longer imports models at module level;
+    adapter functions import ``get_backup_artifact`` from the Django-free
+    ``quickscale_core.dr_engine.persistence``, so we mock persistence too.
     """
     mock_orch = MagicMock()
+    mock_persistence = MagicMock()
     mock_backups = MagicMock()
     with patch.dict(
         "sys.modules",
         {
             "quickscale_core.dr_engine.orchestration": mock_orch,
+            "quickscale_core.dr_engine.persistence": mock_persistence,
             "quickscale_modules_backups": MagicMock(),
             "quickscale_modules_backups.models": mock_backups,
         },
     ):
         # Provide a real exception type for DoesNotExist so except
-        # clauses that catch BackupArtifact.DoesNotExist work.
+        # clauses that catch BackupArtifact.DoesNotExist work (legacy).
         mock_backups.BackupArtifact.DoesNotExist = type(
             "DoesNotExist", (Exception,), {}
         )
-        yield (mock_orch, mock_backups)
+        yield (mock_orch, mock_persistence, mock_backups)
 
 
 # ===================================================================
@@ -175,9 +178,9 @@ class TestBuildDatabasePlan:
             build_database_plan(report)
 
     def test_success_delegates_to_restore_backup_source(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        mock_orch, _ = _mock_orch_and_backups
+        mock_orch, _, _ = _mock_orch_and_backups
         mock_orch.restore_backup_source.return_value = MagicMock(message="Plan ready")
 
         result = build_database_plan(self._valid_report())
@@ -244,9 +247,9 @@ class TestCaptureSnapshot:
     """capture_snapshot — error paths."""
 
     def test_missing_authoritative_snapshot_raises(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        mock_orch, _ = _mock_orch_and_backups
+        mock_orch, _, _ = _mock_orch_and_backups
         mock_orch.create_backup.return_value = MagicMock(authoritative_snapshot=None)
 
         with pytest.raises(BackupError, match="missing its stored snapshot record"):
@@ -257,9 +260,9 @@ class TestCaptureSnapshot:
         )
 
     def test_passes_resume_snapshot_id(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        mock_orch, _ = _mock_orch_and_backups
+        mock_orch, _, _ = _mock_orch_and_backups
         mock_orch.create_backup.return_value = MagicMock(authoritative_snapshot=None)
 
         with pytest.raises(BackupError):
@@ -270,9 +273,9 @@ class TestCaptureSnapshot:
         )
 
     def test_create_backup_failure_re_raised(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        mock_orch, _ = _mock_orch_and_backups
+        mock_orch, _, _ = _mock_orch_and_backups
         mock_orch.create_backup.side_effect = BackupError("storage full")
 
         with pytest.raises(BackupError, match="storage full"):
@@ -288,12 +291,15 @@ class TestRestoreBackup:
     """restore_backup — artifact-not-found error path."""
 
     def test_artifact_id_not_found_raises(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        _, mock_backups = _mock_orch_and_backups
-        # Make objects.get raise DoesNotExist
-        does_not_exist = mock_backups.BackupArtifact.DoesNotExist("not found")
-        mock_backups.BackupArtifact.objects.get.side_effect = does_not_exist
+        _, mock_persistence, _ = _mock_orch_and_backups
+        # Make get_backup_artifact raise BackupError
+        from quickscale_core.dr_engine.primitives import BackupError
+
+        mock_persistence.get_backup_artifact.side_effect = BackupError(
+            "Backup artifact not found: 999"
+        )
 
         with pytest.raises(BackupError, match="Backup artifact not found"):
             restore_backup(artifact_id=999, confirmation="snap-001")
@@ -308,11 +314,14 @@ class TestValidateArtifact:
     """validate_artifact — artifact-not-found error path."""
 
     def test_artifact_not_found_raises(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        _, mock_backups = _mock_orch_and_backups
-        does_not_exist = mock_backups.BackupArtifact.DoesNotExist("not found")
-        mock_backups.BackupArtifact.objects.get.side_effect = does_not_exist
+        _, mock_persistence, _ = _mock_orch_and_backups
+        from quickscale_core.dr_engine.primitives import BackupError
+
+        mock_persistence.get_backup_artifact.side_effect = BackupError(
+            "Backup artifact not found: 999"
+        )
 
         with pytest.raises(BackupError, match="Backup artifact not found"):
             validate_artifact(artifact_id=999)
@@ -327,9 +336,9 @@ class TestPruneBackups:
     """prune_backups — delegation to orchestration."""
 
     def test_delegates_to_prune_expired_backups(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        mock_orch, _ = _mock_orch_and_backups
+        mock_orch, _, _ = _mock_orch_and_backups
         mock_orch.prune_expired_backups.return_value = 3
 
         result = prune_backups()
@@ -337,9 +346,9 @@ class TestPruneBackups:
         mock_orch.prune_expired_backups.assert_called_once_with()
 
     def test_zero_deleted(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        mock_orch, _ = _mock_orch_and_backups
+        mock_orch, _, _ = _mock_orch_and_backups
         mock_orch.prune_expired_backups.return_value = 0
 
         result = prune_backups()
@@ -355,9 +364,9 @@ class TestSyncMedia:
     """sync_media — delegation to orchestration."""
 
     def test_delegates_to_sync_backup_snapshot_media(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        mock_orch, _ = _mock_orch_and_backups
+        mock_orch, _, _ = _mock_orch_and_backups
         mock_orch.sync_backup_snapshot_media.return_value = {
             "synced": True,
             "files": 5,
@@ -390,9 +399,9 @@ class TestFetchSnapshotReport:
     """fetch_snapshot_report — delegation to orchestration."""
 
     def test_delegates_to_report_backup_snapshot(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        mock_orch, _ = _mock_orch_and_backups
+        mock_orch, _, _ = _mock_orch_and_backups
         mock_orch.report_backup_snapshot.return_value = {
             "snapshot_id": "snap-001",
             "status": "complete",
@@ -420,9 +429,9 @@ class TestRecordVerification:
     """record_verification — delegation to orchestration."""
 
     def test_delegates_to_record_backup_snapshot_verification(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        mock_orch, _ = _mock_orch_and_backups
+        mock_orch, _, _ = _mock_orch_and_backups
         mock_orch.record_backup_snapshot_verification.return_value = {
             "recorded": True,
         }
@@ -455,9 +464,9 @@ class TestSetRollbackPin:
     """set_rollback_pin — delegation to orchestration."""
 
     def test_delegates_to_set_backup_snapshot_rollback_pin(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        mock_orch, _ = _mock_orch_and_backups
+        mock_orch, _, _ = _mock_orch_and_backups
         mock_orch.set_backup_snapshot_rollback_pin.return_value = {
             "pinned": True,
         }
@@ -481,9 +490,9 @@ class TestClearRollbackPin:
     """clear_rollback_pin — delegation to orchestration."""
 
     def test_delegates_to_clear_backup_snapshot_rollback_pin(
-        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock]
+        self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
-        mock_orch, _ = _mock_orch_and_backups
+        mock_orch, _, _ = _mock_orch_and_backups
         mock_orch.clear_backup_snapshot_rollback_pin.return_value = {"cleared": True}
 
         result = clear_rollback_pin(snapshot_id="snap-001")

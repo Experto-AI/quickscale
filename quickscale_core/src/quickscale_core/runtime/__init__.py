@@ -4,8 +4,9 @@ QuickScale runtime API facade — combined re-export surface.
 This is the public import path for generated-project code and module-owned
 adapters.  It re-exports all symbols from two sub-modules:
 
-* ``runtime.dr`` — DR adapter functions, primitives, and lazy backup-dependent
-  symbols (orchestration, recovery, verification).
+* ``runtime.dr`` — DR adapter functions, primitives, and all backup-dependent
+  symbols (orchestration, recovery, persistence, verification) via eager
+  imports from the ``dr_engine`` sub-packages.
 * ``runtime.manifest`` — manifest resolver, assembler, social-manifest path
   constants, renderers, and wiring types.
 
@@ -25,8 +26,9 @@ from __future__ import annotations
 
 import typing
 
-# Import sub-modules as module objects — no eager ``from ... import *``
-# for lazy-loaded DR symbols (orchestration, recovery, verification).
+# Import sub-modules as module objects.  dr symbols are now eagerly imported
+# as module-level names in dr.py; runtime.__getattr__ delegates to sub-module
+# hasattr/getattr for any non-__all__ private symbols.
 from quickscale_core.runtime import dr as _dr  # noqa: F401
 from quickscale_core.runtime import manifest as _manifest  # noqa: F401
 
@@ -50,7 +52,7 @@ __all__ = [
     "record_verification",
     "set_rollback_pin",
     "sync_media",
-    # DR orchestration surface — backups module (lazy-loaded)
+    # DR orchestration surface
     "BackupLockError",
     "StagedAdminRestoreUpload",
     "build_backup_filename",
@@ -68,6 +70,7 @@ __all__ = [
     "restore_backup_artifact",
     "restore_backup_source",
     "_cleanup_admin_restore_upload_directory",
+    "_get_authoritative_snapshot_for_artifact",
     "_resolve_admin_uploaded_restore_artifact",
     "_stage_admin_restore_upload",
     "set_backup_snapshot_rollback_pin",
@@ -77,7 +80,7 @@ __all__ = [
     "BackupConfigurationError",
     "BackupPolicySnapshot",
     "ShellCommandRunner",
-    # DR recovery surface — backups module (lazy-loaded)
+    # DR recovery surface
     "ArtifactLike",
     "BackupRestoreBlocked",
     "RemoteMaterializer",
@@ -85,14 +88,28 @@ __all__ = [
     "RestoreResult",
     "RestoreSourceResolutionMode",
     "RestoreWarning",
-    # DR persistence surface (Django-free — lazy-loaded)
+    # DR persistence surface
     "BackupArtifactPersistence",
     "BackupPolicyPersistence",
     "PersistedBackupArtifact",
+    "PersistedBackupPolicy",
+    "PersistedBackupSnapshot",
+    "create_artifact",
+    "create_snapshot",
+    "ensure_default_policy",
+    "get_backup_artifact",
+    "get_authoritative_snapshot_for_artifact",
+    "has_any_policy",
+    "iter_expired_snapshots",
+    "iter_expired_unlinked_artifacts",
     "load_default_policy",
+    "refresh_snapshot",
     "register_backup_persistence",
     "resolve_admin_uploaded_restore_artifact",
+    "save_artifact",
     "save_default_policy",
+    "save_snapshot",
+    "update_artifact_after_restore",
     # Module wiring spec (from manifest)
     "ModuleWiringSpec",
     # Manifest/resolver types
@@ -124,5 +141,5 @@ def __getattr__(name: str) -> typing.Any:
 
 
 def __dir__() -> list[str]:
-    """Include lazy symbols in module dir()."""
+    """Return sorted module.__all__ for dir()."""
     return sorted(__all__)

@@ -410,12 +410,14 @@ def _resolve_name_via_getattr_chain(
     _visited: set[Path] | None = None,
 ) -> bool:
     """
-    Try to resolve *name* through a module's ``__getattr__`` delegation.
+    Try to resolve *name* through ``__getattr__`` or direct eager imports.
 
     Checks:
     1. Whether the module defines ``__getattr__``.
     2. Lazy frozenset literal assignments (``_LAZY_*_SYMBOLS``).
-    3. Sub-module aliases (``from X import Y as _alias``), recursively.
+    3. Direct-level eager imports that define *name* as a module-level
+       attribute but may not appear in ``__all__``.
+    4. Sub-module aliases (``from X import Y as _alias``), recursively.
 
     Guards against cycles via ``_visited``.
     """
@@ -430,17 +432,23 @@ def _resolve_name_via_getattr_chain(
     except SyntaxError:
         return False
 
+    # Collect all names defined in this module (from imports, defs, etc.)
+    full_names = _collect_defined_names_internal(tree)
+
     # Check if __getattr__ is defined
     has_getattr = any(
         isinstance(node, ast.FunctionDef) and node.name == "__getattr__"
         for node in ast.iter_child_nodes(tree)
     )
-    if not has_getattr:
-        return False
-
-    # Check lazy frozenset literals
-    if name in _collect_lazy_symbol_names(tree):
-        return True
+    if has_getattr:
+        # Check lazy frozenset literals (pre-existing lazy facade pattern)
+        if name in _collect_lazy_symbol_names(tree):
+            return True
+    else:
+        # Without __getattr__, check direct eager imports that define *name*
+        # as a module-level attribute but may not be in __all__ ∩ names.
+        if name in full_names:
+            return True
 
     # Check sub-module aliases recursively
     for _alias_name, alias_module in _collect_submodule_aliases(tree).items():
@@ -455,6 +463,43 @@ def _resolve_name_via_getattr_chain(
                 return True
 
     return False
+
+
+def _collect_defined_names_internal(tree: ast.AST) -> set[str]:
+    """
+    Collect all names assigned or imported in a module, including private.
+
+    This is a subset of ``_collect_defined_names`` that returns the raw
+    ``names`` set without filtering through ``__all__``.
+    """
+    names: set[str] = set()
+
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    names.add(target.id)
+                elif isinstance(target, ast.Tuple):
+                    for elt in target.elts:
+                        if isinstance(elt, ast.Name):
+                            names.add(elt.id)
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name):
+                names.add(node.target.id)
+        elif isinstance(node, ast.ImportFrom):
+            names.update(a.name for a in node.names if a.asname is None)
+            names.update(a.asname for a in node.names if a.asname is not None)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname:
+                    names.add(alias.asname)
+                else:
+                    local = alias.name.split(".")[0]
+                    names.add(local)
+
+    return names
 
 
 def _resolve_import(

@@ -1,6 +1,6 @@
-"""Tests for quickscale_core.dr_engine.persistence — SA89a Phase 1.
+"""Tests for quickscale_core.dr_engine.persistence — SA89a Phase 1 + SA89b Phase 1.
 
-Covers:
+SA89a Phase 1 covers:
 * ``register_backup_persistence`` — idempotent re-registration, different
   provider rejection.
 * ``resolve_admin_uploaded_restore_artifact`` — delegation to registered
@@ -11,21 +11,45 @@ Covers:
   ``BackupConfigurationError``.
 * ``_reset_backup_persistence_for_tests`` — correctly resets module state.
 
-These tests are Django-free and run entirely with mock provider instances.
+SA89b Phase 1 covers:
+* New delegator wrappers (get_backup_artifact, create_artifact, save_artifact,
+  update_artifact_after_restore, iter_expired_unlinked_artifacts,
+  get_authoritative_snapshot_for_artifact, get_backup_snapshot, create_snapshot,
+  save_snapshot, refresh_snapshot, iter_expired_snapshots, has_any_policy,
+  ensure_default_policy) — delegation and unregistered fail-hard.
+* Argument identity between wrapper and provider.
+* Not-found/exception parity.
+* Reverse-snapshot absence.
+* Iterator behavior.
+* Re-registration identity and reset.
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
 
 from quickscale_core.dr_engine.persistence import (
     _reset_backup_persistence_for_tests,
+    create_artifact,
+    create_snapshot,
+    ensure_default_policy,
+    get_authoritative_snapshot_for_artifact,
+    get_backup_artifact,
+    get_backup_snapshot,
+    has_any_policy,
+    iter_expired_snapshots,
+    iter_expired_unlinked_artifacts,
     load_default_policy,
+    refresh_snapshot,
     register_backup_persistence,
     resolve_admin_uploaded_restore_artifact,
+    save_artifact,
     save_default_policy,
+    save_snapshot,
+    update_artifact_after_restore,
 )
 from quickscale_core.dr_engine.primitives import (
     BackupConfigurationError,
@@ -211,3 +235,308 @@ class TestRegisterBackupPersistence:
         )
         with pytest.raises(BackupConfigurationError, match="not configured"):
             save_default_policy(policy)
+
+
+# ===================================================================
+# SA89b Phase 1 — delegator wrappers and provider edge coverage
+# ===================================================================
+
+
+class TestSharedFixture:
+    """Shared fixture for SA89b Phase 1 tests — registered mock providers."""
+
+    @pytest.fixture
+    def registered_providers(self) -> tuple[MagicMock, MagicMock]:
+        artifact_prov = MagicMock()
+        policy_prov = MagicMock()
+        register_backup_persistence(artifact_prov, policy_prov)
+        return (artifact_prov, policy_prov)
+
+
+class TestSa89bUnregisteredFailHard(TestSharedFixture):
+    """All SA89b Phase 1 methods raise BackupConfigurationError before registration."""
+
+    def test_get_backup_artifact_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            get_backup_artifact(1)
+
+    def test_create_artifact_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            create_artifact(filename="test")
+
+    def test_save_artifact_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            save_artifact(MagicMock(), update_fields=["status"])
+
+    def test_update_artifact_after_restore_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            update_artifact_after_restore(
+                MagicMock(), restored_at=datetime.now(timezone.utc)
+            )
+
+    def test_iter_expired_unlinked_artifacts_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            for _ in iter_expired_unlinked_artifacts(datetime.now(timezone.utc)):
+                pass
+
+    def test_get_authoritative_snapshot_for_artifact_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            get_authoritative_snapshot_for_artifact(MagicMock())
+
+    def test_get_backup_snapshot_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            get_backup_snapshot("snap-001")
+
+    def test_create_snapshot_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            create_snapshot(snapshot_id="snap-001")
+
+    def test_save_snapshot_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            save_snapshot(MagicMock(), update_fields=["status"])
+
+    def test_refresh_snapshot_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            refresh_snapshot(MagicMock())
+
+    def test_iter_expired_snapshots_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            for _ in iter_expired_snapshots(datetime.now(timezone.utc)):
+                pass
+
+    def test_has_any_policy_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            has_any_policy()
+
+    def test_ensure_default_policy_unregistered(self) -> None:
+        with pytest.raises(BackupConfigurationError, match="not configured"):
+            ensure_default_policy()
+
+
+class TestSa89bDelegation(TestSharedFixture):
+    """Delegate identity — each wrapper forwards exact arguments to the provider."""
+
+    def test_get_backup_artifact_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        result = get_backup_artifact(42)
+        assert result is artifact_prov.get_backup_artifact.return_value
+        artifact_prov.get_backup_artifact.assert_called_once_with(42)
+
+    def test_create_artifact_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        result = create_artifact(filename="test.dump", size_bytes=1024)
+        assert result is artifact_prov.create_artifact.return_value
+        artifact_prov.create_artifact.assert_called_once_with(
+            filename="test.dump", size_bytes=1024
+        )
+
+    def test_save_artifact_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        mock_art = MagicMock()
+        save_artifact(mock_art, update_fields=["status", "updated_at"])
+        artifact_prov.save_artifact.assert_called_once_with(
+            mock_art, ["status", "updated_at"]
+        )
+
+    def test_update_artifact_after_restore_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        mock_art = MagicMock()
+        restored_at = datetime.now(timezone.utc)
+        result = update_artifact_after_restore(mock_art, restored_at=restored_at)
+        assert result is artifact_prov.update_artifact_after_restore.return_value
+        artifact_prov.update_artifact_after_restore.assert_called_once_with(
+            mock_art, restored_at=restored_at
+        )
+
+    def test_iter_expired_unlinked_artifacts_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        list(iter_expired_unlinked_artifacts(cutoff))
+        artifact_prov.iter_expired_unlinked_artifacts.assert_called_once_with(cutoff)
+
+    def test_get_authoritative_snapshot_for_artifact_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        mock_art = MagicMock()
+        result = get_authoritative_snapshot_for_artifact(mock_art)
+        assert (
+            result is artifact_prov.get_authoritative_snapshot_for_artifact.return_value
+        )
+        artifact_prov.get_authoritative_snapshot_for_artifact.assert_called_once_with(
+            mock_art
+        )
+
+    def test_get_backup_snapshot_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        result = get_backup_snapshot("snap-abc")
+        assert result is artifact_prov.get_backup_snapshot.return_value
+        artifact_prov.get_backup_snapshot.assert_called_once_with("snap-abc")
+
+    def test_create_snapshot_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        result = create_snapshot(snapshot_id="snap-001", status="pending")
+        assert result is artifact_prov.create_snapshot.return_value
+        artifact_prov.create_snapshot.assert_called_once_with(
+            snapshot_id="snap-001", status="pending"
+        )
+
+    def test_save_snapshot_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        mock_snap = MagicMock()
+        save_snapshot(mock_snap, update_fields=["status", "updated_at"])
+        artifact_prov.save_snapshot.assert_called_once_with(
+            mock_snap, ["status", "updated_at"]
+        )
+
+    def test_refresh_snapshot_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        mock_snap = MagicMock()
+        refresh_snapshot(mock_snap)
+        artifact_prov.refresh_snapshot.assert_called_once_with(mock_snap)
+
+    def test_iter_expired_snapshots_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        artifact_prov, _ = registered_providers
+        cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+        list(iter_expired_snapshots(cutoff))
+        artifact_prov.iter_expired_snapshots.assert_called_once_with(cutoff)
+
+    def test_has_any_policy_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        _, policy_prov = registered_providers
+        policy_prov.has_any_policy.return_value = True
+        result = has_any_policy()
+        assert result is True
+        policy_prov.has_any_policy.assert_called_once_with()
+
+    def test_ensure_default_policy_delegates(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        _, policy_prov = registered_providers
+        mock_result = MagicMock()
+        policy_prov.ensure_default_policy.return_value = mock_result
+        result = ensure_default_policy()
+        assert result is mock_result
+        policy_prov.ensure_default_policy.assert_called_once_with()
+
+
+class TestSa89bEdgeCases(TestSharedFixture):
+    """Edge-case coverage for provider argument identity, iteration, and reset."""
+
+    def test_registration_identity_re_register_same_is_idempotent(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        art, pol = registered_providers
+        register_backup_persistence(art, pol)  # same instances — no error
+
+    def test_registration_identity_different_raises(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        art, pol = registered_providers
+        with pytest.raises(BackupConfigurationError, match="already configured"):
+            register_backup_persistence(MagicMock(), MagicMock())
+
+    def test_reset_clears_and_permits_re_register(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        _reset_backup_persistence_for_tests()
+        fresh_art = MagicMock()
+        fresh_pol = MagicMock()
+        register_backup_persistence(fresh_art, fresh_pol)
+        # After reset + re-register, delegation should work
+        result = get_backup_artifact(99)
+        assert result is fresh_art.get_backup_artifact.return_value
+
+    def test_get_backup_artifact_not_found_exception(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        """Provider raises BackupError when artifact not found."""
+        from quickscale_core.dr_engine.primitives import BackupError
+
+        artifact_prov, _ = registered_providers
+        artifact_prov.get_backup_artifact.side_effect = BackupError("not found: 42")
+        with pytest.raises(BackupError, match="not found"):
+            get_backup_artifact(42)
+
+    def test_get_backup_snapshot_not_found_exception(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        """Provider raises BackupError when snapshot not found."""
+        from quickscale_core.dr_engine.primitives import BackupError
+
+        artifact_prov, _ = registered_providers
+        artifact_prov.get_backup_snapshot.side_effect = BackupError(
+            "not found: snap-001"
+        )
+        with pytest.raises(BackupError, match="not found"):
+            get_backup_snapshot("snap-001")
+
+    def test_get_authoritative_snapshot_absent_returns_none(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        """Reverse-snapshot absence returns None, does not raise."""
+        artifact_prov, _ = registered_providers
+        artifact_prov.get_authoritative_snapshot_for_artifact.return_value = None
+        result = get_authoritative_snapshot_for_artifact(MagicMock())
+        assert result is None
+
+    def test_iter_expired_unlinked_artifacts_yields_provider_items(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        """Iterator forwards provider results."""
+        artifact_prov, _ = registered_providers
+        mock_item = MagicMock()
+        artifact_prov.iter_expired_unlinked_artifacts.return_value = iter([mock_item])
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        results = list(iter_expired_unlinked_artifacts(cutoff))
+        assert results == [mock_item]
+
+    def test_iter_expired_snapshots_yields_provider_items(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        """Iterator forwards provider results."""
+        artifact_prov, _ = registered_providers
+        mock_item = MagicMock()
+        artifact_prov.iter_expired_snapshots.return_value = iter([mock_item])
+        cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+        results = list(iter_expired_snapshots(cutoff))
+        assert results == [mock_item]
+
+    def test_update_artifact_after_restore_returns_warnings(
+        self, registered_providers: tuple[MagicMock, MagicMock]
+    ) -> None:
+        """Provider can return empty or populated warnings tuple."""
+        from quickscale_core.dr_engine.recovery import RestoreWarning
+
+        artifact_prov, _ = registered_providers
+        mock_art = MagicMock()
+        sample_warning = RestoreWarning(code="test_warning", message="test", details={})
+        artifact_prov.update_artifact_after_restore.return_value = (sample_warning,)
+        restored_at = datetime.now(timezone.utc)
+        result = update_artifact_after_restore(mock_art, restored_at=restored_at)
+        assert result == (sample_warning,)
+        # Also test empty case
+        artifact_prov.update_artifact_after_restore.return_value = ()
+        result_empty = update_artifact_after_restore(mock_art, restored_at=restored_at)
+        assert result_empty == ()
