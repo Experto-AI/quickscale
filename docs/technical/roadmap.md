@@ -67,11 +67,13 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
 >
 > **↪ HAND-OFF — Option A continuation authorized (multi-pass).** This gate has hit the review-cycle cap twice (withdrawn `e1d38bd5`, then the accepted partial), each round reopening a *new* bypass because it patched one shape at a time. The maintainer authorizes a **persistent, multi-pass continuation**: for each ticket, iterate implement→review→fix across *as many cycles as it takes* to genuinely close its finding — **do not stop at a review-cycle/convergence cap with it open, and never weaken/skip a test or withdraw code to force a green.** If truly non-convergent after sustained effort, stop and report the specific unresolved defect with a failing example rather than merging. **Enumerate the full evasion space for the ticket's finding up front, then design for completeness** (not shape-by-shape).
 >
+> **Checkpoint override (2026-07-15).** After another non-converging SA88a cycle, the maintainer explicitly selected “stop, record blocked checkpoint, and merge.” That choice overrides the no-stop instruction **for this checkpoint only**; future SA88a continuation must still close CR-SA88-REV-006 before SA88c or dependent work begins.
+>
 > **Shared context (both tickets):**
 > - **Work location:** Track 1 worktree `/home/victor/code/quickscale-wt-track1` (branch `wt-track1`). Run the roadmap start procedure (`git merge v87`) first. Commit checkpoints on `wt-track1`; **do not merge to `v87`** — the maintainer keeps the merge decision and the final independent review.
 > - **Shared file — coordinate:** both tickets edit the same analyzer, `quickscale_modules/orgs/tests/test_sa88_migration_operator_access_conformance.py` (~3,255 lines). They are *not* safely parallel on it: **land SA88a first, then rebase/continue SA88c on top** (REV-006's name-resolution layer is the natural foundation REV-007's write-analysis builds on). Seam-under-test `.../tenancy.py` must not change runtime behavior; related `test_tenancy.py`.
 > - **Hard requirements (both):** negative proofs must exercise the *actual* evasion shapes (not structural proxies); any test helper setting a ContextVar/GUC must restore both on exit (ContextVar `try`/`finally`; GUC `reset_db_current_org_id()` — prior withdrawal was CR-SA88-REV-005); prefer not introducing an executable GUC helper at all. Validation per ticket: full conformance suite green + MyPy + orgs lint, and a clean independent review of the finding.
-> - **Merged partial baseline (2026-07-14):** immediate-function wrapper ranges rejecting outer/nested-DML capture; manifest-independent migration discovery; explicit read-error proofs; CR-SA88-REV-002 and CR-SA88-REV-009 resolved; no ContextVar/GUC leak. Detail in [CHANGELOG.md §SA88](../../CHANGELOG.md).
+> - **Previously merged partial baseline (2026-07-14, already on `v87` before this checkpoint):** immediate-function wrapper ranges rejecting outer/nested-DML capture; manifest-independent migration discovery; explicit read-error proofs; CR-SA88-REV-002 and CR-SA88-REV-009 resolved; no ContextVar/GUC leak. Detail in [CHANGELOG.md §SA88](../../CHANGELOG.md).
 
 - [ ] **SA88a — Close CR-SA88-REV-006: canonical-import provenance in the call's active scope.** `Tier 1 · Track 1 · deps: none → co-gates SA84, SA86 with SA88c + SA88b`
   The gate must verify the called `operator_access_migration` resolves, *in the scope where it is called*, to the canonical orgs helper — not merely that a call to something so-named appears. Enumerate and cover the evasion space up front: `import ... as x`; `oam = operator_access_migration; oam(...)`; `from ...tenancy import *`; local rebinding; a counterfeit same-named helper imported/defined elsewhere.
@@ -79,22 +81,19 @@ SA84 and SA86 are the two remaining instances of one structural pattern, **arch-
   *Acceptance:* negative proofs prove each REV-006 evasion shape (alias, rebind, star-import, counterfeit same-named helper) is flagged; no ContextVar/GUC leak in any test helper; full conformance suite + MyPy + orgs lint green; independent review closes CR-SA88-REV-006.
   *(why →* arch-audit Finding 8 Option 1; independent review of the accepted partial; CR-SA88-REV-006, CR-SA88-REV-005*)*
 
-  **SA88a partial checkpoint (2026-07-14, agent usage limit reached mid-implementation).** Analyzer infrastructure added but not yet wired into `check_migration_source`:
+  **SA88a blocked checkpoint (2026-07-15, accepted for merge by explicit maintainer cap decision).** The provenance analyzer and direct proof inventory advanced substantially, but the second normal fix/re-review cycle remained `STATUS: partial`. SA88a stays open and **must not** be marked complete.
 
   **Done:**
-  - Canonical module/FQN constants (`_CANONICAL_TENANCY_MODULE`, `_CANONICAL_OPERATOR_ACCESS_FQN`)
-  - `_extract_attribute_fqn()` — dotted-name FQN resolver for AST `Attribute` chains
-  - `_collect_operator_access_bindings()` — comprehensive binding-event scanner covering canonical/non-canonical imports, assignment, annotation assignment, augmented assignment, named expressions, function/class defs, parameters, `for`/`except`/`with as` bindings, and `del`
-  - `_collect_operator_access_bindings_by_scope()` — collects scope-local binding tables per enclosing function
-  - `_is_bound_to_canonical_operator_access()` — resolves a named call against its latest binding at or before the call-site line, merging immediate-function and module scopes
+  - Replaced the dead partial helpers with a wired `BindingEvent`-based active-scope resolver covering straight-line canonical aliases/rebinds, counterfeit same-name imports/definitions, star-import restoration, module-final callback bindings, compile-time local-name ownership, stable source ordering, and counterfeit FQN roots.
+  - Added direct positive/negative proofs for the covered alias, rebind, root, scope, ordering, and parameter forms. Validation is green: 105 focused conformance tests, 972 broader orgs tests, MyPy, and orgs Ruff lint/format.
+  - Preserved runtime behavior: only `test_sa88_migration_operator_access_conformance.py` changed; no ContextVar/GUC helper or `tenancy.py` change was introduced.
 
-  **Pending (next pass):**
-  - Wire the provenance resolution into `_collect_operator_access_ranges_by_function()` or add a separate Detector 8 so `check_migration_source()` rejects non-canonical calls
-  - Add direct negative-proof test source stanzas and tests for each REV-006 evasion shape
-  - Full conformance suite + MyPy + orgs lint validation
-  - Independent review
+  **Pending/Blocking:**
+  - **CR-SA88-REV-006 (high/blocking, still-open):** redirected `global`/`nonlocal` writes can fall through to stale canonical bindings; mutually exclusive branches need all-path reaching-definition joins; relative `ImportFrom` provenance must require `level == 0`; import-alias identity must reject forms such as `import quickscale_modules_orgs.evil as quickscale_modules_orgs`.
+  - Direct proofs are still required for the remaining `global`/`nonlocal`, branch-join, deletion/restoration, relative-import, alias-identity, and same-line-order cases. The current green suite does not close these bypasses.
+  - SA88c, SA84, and SA86 remain dependency-blocked because SA88a has no clean independent review.
 
-  **Blocking continuation:** subagent API usage limit reached for the current session. The analyzer file is syntactically valid and baseline collection (66 conformance tests) is unaffected. Next implementer should continue on `wt-track1` (Track 1 worktree), run the roadmap start procedure, then wire and test the provenance layer against the full evasion inventory listed in the ticket body.
+  **Decisions needed:** none. At the Adaptive review cap the maintainer explicitly selected “stop, record blocked checkpoint, and merge,” overriding the earlier no-stop instruction for this checkpoint only; this records partial progress without a clean-gate or completion claim.
 - [ ] **SA88c — Close CR-SA88-REV-007: write-expression & control-flow coverage.** `Tier 1 · Track 1 · deps: SA88a (shared analyzer file — rebase on top) → co-gates SA84, SA86 with SA88a + SA88b`
   Save/write analysis must collect writes in `return`/`yield`/nested/comprehension/call-argument expressions (`return Model.objects.create(...)`, `yield obj.save()`, a save inside a comprehension) and model mutually-exclusive control flow — a write on one `if/else` branch guarded by the helper on only the *other* branch must still flag.
 
@@ -170,9 +169,9 @@ SA88c — REV-007 write/flow            │                                    S
 
 **Ordering.** SA88b is complete. SA88a → SA88c run in sequence on Track 1 (they share the analyzer file — SA88a's name-resolution layer is the foundation SA88c builds on). Both remaining Track 1 tickets must merge for a clean SA88 gate claim. Once SA88 is clean, Track 1 picks up SA84 and Track 2 picks up SA86, both consuming the merged helper. Track 3 runs SA89a → SA89b fully independently of the whole cluster.
 
-### Track readiness (2026-07-14)
+### Track readiness (2026-07-15)
 
-- **Track 1 — HAND-OFF READY (SA88a → SA88c).** Decision made: **Option A, multi-pass**, split one-per-finding for divide-and-conquer. SA88a (REV-006) is ready to pick up now; SA88c (REV-007) rebases on top once SA88a lands (shared analyzer file). Both carry a self-contained hand-off brief (work location, evasion space, hard requirements, multi-pass mandate) in the ticket bodies above. Track 1 co-gates SA84 and stays open until both merge.
+- **Track 1 — BLOCKED (SA88a CR-SA88-REV-006 remains high/blocking).** The 2026-07-15 partial checkpoint is accepted for merge by explicit maintainer cap decision, but independent review remains `STATUS: partial` on redirected `global`/`nonlocal` writes, branch joins, and import provenance. Continue SA88a from the blocked checkpoint; do not start SA88c until CR-SA88-REV-006 receives a clean independent review. Track 1 co-gates SA84 and remains open.
 - **Track 2 — BLOCKED (SA86 awaits SA88a + SA88c).** SA88b is complete: Forms passed clean in focused and full retained-role execution, and independent review closed SA88-QG-FORMS-001 as transient/environment-dependent. SA86 is next but remains gated on both Track 1 hardening tickets.
 - **Track 3 — SA89a complete; SA89b next.** The Finding 1 DR persistence port is fully implemented and reviewed. SA89a is closed; SA89b is next with no remaining blockers. Independent of the SA88/SA84/SA86 cluster.
 
