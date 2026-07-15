@@ -49,7 +49,33 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active and blocked work.
 
-**Integration baseline (SA82).** The SA82 unquarantined `make test-integration` gate is the accepted baseline for the remaining restricted-role cluster. Under it the only reds are **CRM (SA84)** and **listings (SA86)**; blog (SA83), forms (SA85), orgs (SA77), and notifications (SA79) are all closed — see [CHANGELOG.md](../../CHANGELOG.md).
+**Integration baseline (SA82).** The SA82 unquarantined `make test-integration` gate is the accepted baseline for the remaining restricted-role cluster. Under it the only red remaining is **CRM (SA84)**; blog (SA83), forms (SA85), listings (SA86), orgs (SA77), and notifications (SA79) are all closed — see [CHANGELOG.md](../../CHANGELOG.md).
+
+### Green-gate milestone — all quality make commands pass
+
+**Exit criteria (single definition of done).** On a fresh clone + fresh `migrate` (post-SA90 squash), `make check`, `make quality`, and `make ci` all exit 0, with `QUARANTINE_TICKETS` **empty** in `scripts/test_integration.sh` (no masked failures). `make check` is the umbrella gate — `lint` + `typecheck` + `test` (unit + integration) + `check-core-compat` + `check-module-core-imports` + `check-manifest-sync` + `check-org-context-primitives` + `check-csrf-exempt` (`Makefile:652`).
+
+**Only the integration suite shards by module.** `scripts/test_integration.sh` loops `quickscale_modules/*` sequentially (one pytest stage per module, each with its own per-file 80% / mean 90% coverage floor). `lint`, `typecheck`, and the `check-*` gates are repo-global — they do not parallelize per module. A single module runs in isolation via `make MODULE=<name> test -- --modules`.
+
+#### Per-module test gate (the parallelizable axis)
+
+- [ ] **SA84 — CRM restricted-role fixtures (67 fail).** `Tier 2 · Track 1 · deps: none` — the one open per-module blocker; full brief in the SA84 ticket under Track 1 below. Gate line: `make MODULE=crm test -- --modules` → 0 failures at the 80%/90% floors, no quarantine entry.
+- [x] blog (SA83) · forms (SA85) · listings (SA86) · orgs (SA77) · notifications (SA79) — green under the SA82 baseline (see [CHANGELOG.md](../../CHANGELOG.md)).
+
+#### Repo-global gates (run once at v87 integration, after per-module work lands)
+
+Assigned to **Track 2** (its module work — SA86, SA88b — is complete, so it owns the green-gate closeout). GATE-typecheck coordinates with Track 3 (SA89b).
+
+- [x] **GATE-lint** — `make lint` (Ruff) green. `Track 2`
+- [ ] **GATE-typecheck** — `make typecheck` (MyPy) green. `Track 2 · deps: SA89b (Track 3)` — blocked on SA89b removing the `mypy.ini:94` backups ignore; until then MyPy passes only on a suppressed baseline, so this gate is not truly green.
+- [ ] **GATE-check-suite** — `check-core-compat`, `check-module-core-imports`, `check-manifest-sync`, `check-org-context-primitives`, `check-csrf-exempt` all green. `Track 2`
+- [ ] **GATE-quality** — `make quality` (vulture / radon / pylint) within agreed thresholds. `Track 2`
+
+- [ ] **SA91 — Fork the per-module integration loop for true parallel execution.** `Tier 2 · Track 2 · deps: none`
+  `scripts/test_integration.sh` runs module stages serially (loop at `:414–442`). Fork each module's pytest stage and join exit codes + coverage. Contention points to resolve: the shared `COVERAGE_RESULTS_FILE` mktemp (`:57`) must become per-module and be merged before `check_overall_mean_coverage`; the per-module `QS_*_DB_USER` role setup (`:375–386`) and pre-created test databases must not collide across concurrent workers. Kept separate from the SA84 correctness work — this is CI-time speedup only, not a gate for green.
+
+  *Acceptance:* parallel run produces the identical pass/fail verdict and the identical overall-mean coverage as the serial run; no cross-worker DB collision under the restricted role.
+  *(why →* green-gate milestone; parallelize testing by module*)*
 
 ### Cross-cutting decision (re-based 2026-07-15) — eliminate the cross-org-migration class by squashing to a final-schema initial migration (arch-audit Finding 8)
 
@@ -86,12 +112,12 @@ SA84 and SA86 were originally framed as two instances of **arch-audit [Finding 8
 
 ### Track 2 — Module contracts & settings
 
-> **SA88b (forms diagnosis, SA88-QG-FORMS-001) — done 2026-07-14; detail in [CHANGELOG.md §SA88b](../../CHANGELOG.md).** Forms passed clean (196 passed / 8 skipped / 12 deselected / 0 failed); independent review closed SA88-QG-FORMS-001 as transient/environment-dependent, no product source changed. SA86 is Track 2's remaining work, now decoupled from Track 1 by the squash re-base.
+> **SA88b (forms diagnosis, SA88-QG-FORMS-001) — done 2026-07-14; detail in [CHANGELOG.md §SA88b](../../CHANGELOG.md).** Forms passed clean (196 passed / 8 skipped / 12 deselected / 0 failed); independent review closed SA88-QG-FORMS-001 as transient/environment-dependent, no product source changed. **SA86 — done 2026-07-15; detail in [CHANGELOG.md §SA86](../../CHANGELOG.md).** Listings restricted-role suite 134 passed/0 failed, 95.73% coverage, no quarantine. Track 2 is complete.
 
-- [ ] **SA86 — Fix listings' 6 restricted-role RLS fixture failures.** `Tier 1 · Track 2 · deps: none (decoupled from SA88 by the squash)` *(reassigned from Track 1, 2026-07-13; downgraded to Tier 1, 2026-07-15)*
-  Under the SA82 gate, listings showed 128 passed, 6 RLS failures — the fixture half of Finding 8, unaffected by SA90. Bucket the 6 failures, then route each cross-org *fixture* through the shared org-context helper; fix any runtime-query-bucket failure as a real isolation bug.
+- [x] **SA86 — Fix listings' 6 restricted-role RLS fixture failures.** `Tier 1 · Track 2 · deps: none (decoupled from SA88 by the squash)` *(completed 2026-07-15)*
+  All six original errors were fixture-time INSERT RLS failures under `quickscale_test_role`. Routed each cross-org fixture through the shared `org_scope` helper, which primes the `app.current_org_id` GUC for FORCE RLS (same pattern as SA83/SA85). The fix revealed one intentional cross-tenant `all_objects` admin query that required explicit `operator_access()` — not a production isolation defect. No production source isolation defect was found; all six were test-posture only (Finding 8 fixture half).
 
-  *Acceptance:* listings restricted-role suite passes clean (0 failures) under `make test-integration`, no quarantine entry.
+  *Acceptance:* focused restricted-role suite 134 passed/0 failed; full `make test-integration` listings stage 134 passed/0 failed at 95.73% coverage; no listings quarantine entry. The only full-gate blocker remains out-of-scope CRM SA84 (67 failures), not an SA86 blocker. Closes SA86.
   *(why →* CR-SA82-NT-005; arch-audit Finding 8 (fixture half)*)*
 
 ### Track 3 — Core/CLI plumbing
@@ -109,7 +135,7 @@ arch-audit **[Finding 1](../others/arch-audit.md)** (`dr-engine-module-circular-
   - **Resolved this checkpoint:** **SA89B-DOC-001 (medium/blocking)** — independent checkpoint review confirmed the roadmap/changelog no longer overclaim scanner completeness and are safe to merge as blocked status.
   - **Decisions needed:** none. At `review_cycles=2`, with blocker count unchanged at two medium findings, the maintainer selected **stop, record this truthful blocked checkpoint, and merge**. A future continuation must retain the finding IDs and pass fresh validation and independent review before completion.
   - **Advisory:** **SA89B-CR-004 (low/advisory)** remains open: the module-core compatibility checker can chase a submodule alias without proving matching parent `__getattr__` delegation.
-  - **Coverage note:** The final focused boundary suite passed 32/32 and the core suite passed 2,295 tests / 1 pre-existing skip. Repository-wide command reds remain unrelated baseline issues: backups MyPy errors, aggregate core coverage below the configured 90%, SA86 listings failures, and the local BYPASSRLS integration-role constraint.
+  - **Coverage note:** The final focused boundary suite passed 32/32 and the core suite passed 2,295 tests / 1 pre-existing skip. Repository-wide command reds observed in this pass remain unrelated baseline issues: backups MyPy errors, aggregate core coverage below the configured 90%, and the local BYPASSRLS integration-role constraint. The concurrent `v87` sync closed the previously observed SA86 listings failures.
   *(why →* arch-audit Finding 1 Option 2*)*
 
 Deferred with the (unscheduled) teams module, per both audits — **not ticketed:** arch-audit Finding 2 (`deletion-invariants-per-boundary`) and Finding 4 (`org-model-universe-hand-enumerated`).
@@ -120,21 +146,25 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
 SA90 — squash migrations +          SA88b — forms diagnosis ✓ DONE          SA89a — DR persistence protocol ✓ DONE
-  delete SA88 gate saga             (SA88-QG-FORMS-001)                     (Finding 1, no deps)
-  deps: none                             │                                       │
-      │                                  │                                       ▼
-      ▼                                  ▼                                   SA89b — DR orchestration port
-SA84 — CRM (67 fixtures)           SA86 — listings (6 fixtures)               deps: SA89a
-  deps: none                         deps: none
-  Track 1                            Track 2
+  delete SA88 gate saga             SA86 — listings ✓ DONE                    (Finding 1, no deps)
+  deps: none                            │                                        │
+      │                                 ▼                                        ▼
+      ▼                             Green-gate closeout:                     SA89b — DR orchestration port
+SA84 — CRM (67 fixtures)             GATE-lint / check-suite / quality          deps: SA89a
+  deps: none                         GATE-typecheck  deps: SA89b ────────────────┤
+  │                                  SA91 — parallel integration loop            │
+  │  (per-module gate)                 deps: none                                │
+  Track 1                            Track 2                               Track 3
 ```
 
-**Ordering.** The squash (SA90) eliminates the cross-org-migration class, so the SA88 gate saga (SA88a–e) is deleted, not completed. SA84 and SA86 survive as **fixture** cleanups and are now **independent** — no gate between them and their fixes. Track 1 runs SA90 → SA84; Track 2 runs SA86 (both parallel, no cross-track dependency). Track 3 runs SA89a → SA89b fully independently.
+**Ordering.** The squash (SA90) eliminates the cross-org-migration class, so the SA88 gate saga (SA88a–e) is deleted, not completed. SA84 and SA86 survived as **fixture** cleanups, independent of each other. Track 1 runs SA90 → SA84; SA86 is complete on Track 2. Track 3 runs SA89a → SA89b fully independently.
+
+**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join: the per-module gate (SA84, Track 1) plus the repo-global gates and the SA91 parallel-loop tooling (Track 2) must all land on `v87`, and GATE-typecheck additionally waits on SA89b (Track 3) to remove the `mypy.ini:94` backups ignore. Track 2, having finished its module work, owns the closeout; it can start GATE-lint / GATE-check-suite / GATE-quality / SA91 immediately and holds GATE-typecheck until SA89b merges.
 
 ### Track readiness (2026-07-15)
 
 - **Track 1 — READY (SA90, deps: none).** The squash-and-drop-backward-compat decision (see cross-cutting decision above) makes the whole cross-org-migration problem disappear: no static analyzer, no runtime boundary proofs, no gate. SA90 is fresh, dependency-free work; SA84 follows it and is unblocked by it. The retired SA88a–e findings (CR-SA88-REV-006/007, CR-SA88A1-REV-002/003/004) close as obsoleted-by-schema-squash.
-- **Track 2 — READY (SA86, deps: none).** SA88b is complete. SA86 is the fixture half of Finding 8 for listings and no longer waits on Track 1 — it can proceed in parallel.
+- **Track 2 — module work complete; owns green-gate closeout.** SA88b and SA86 are both done (listings restricted-role suite passes clean, 134 passed/0 failed, no quarantine entry). With its module work finished, Track 2 now owns the green-gate closeout: GATE-lint / GATE-check-suite / GATE-quality and the SA91 parallel-integration-loop tooling are startable immediately (deps: none); GATE-typecheck is held until Track 3's SA89b removes the `mypy.ini:94` backups ignore.
 - **Track 3 — BLOCKED (SA89b; maintainer-selected checkpoint, 2026-07-15).** The runtime/provider migration and incremental scanner improvements are validated, but implementation review remains `STATUS: partial` at the two-cycle cap. **SA89B-CR-001** still requires nearest-owner scope attribution and exact-count regressions; checkpoint review resolved **SA89B-DOC-001** and accepted the blocked-status wording for merge. The maintainer selected stop-and-merge with SA89b unchecked; no clean-gate or completion claim is made. Independent of the SA84/SA86 cluster.
 
 **Decision re-based (2026-07-15) — Track 1: squash migrations, delete the SA88 gate saga.** After the static-analyzer line and its runtime-oracle successor both proved to be chasing an artifact of schema evolution, the maintainer confirmed (no deployed DB to preserve) that squashing every module to a final-schema `0001_initial` eliminates the cross-org-*migration* class outright. **Why:** the backfills only exist because `organization_id` was added to populated tables; a fresh schema has no rows to backfill, so there is no invariant left to gate. RLS enforcement (SA59/SA82) is unchanged; the *fixture* failures (SA84/SA86) are a separate, ContextVar-level concern the squash does not touch. **Sub-decisions (maintainer-selected):** (1) squash-and-drop-compat over continue-oracle; (2) manually re-attach RLS `RunPython` to the squashed migrations (not auto-generated); (3) keep a ~30-line forward guardrail against reintroducing cross-org migration DML. This supersedes every SA88 decision below.
