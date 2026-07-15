@@ -145,20 +145,24 @@ Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
 SA90 — squash migrations +          SA88b — forms diagnosis ✓ DONE          SA89a — DR persistence protocol ✓ DONE
   delete SA88 gate saga             SA86 — listings ✓ DONE                    (Finding 1, no deps)
-  deps: none                                                                      │
-      │                                                                           ▼
-      ▼                                                                       SA89b — DR orchestration port
-SA84 — CRM (67 fixtures)                                                        deps: SA89a
-  deps: none
+  deps: none                            │                                        │
+      │                                 ▼                                        ▼
+      ▼                             Green-gate closeout:                     SA89b — DR orchestration port
+SA84 — CRM (67 fixtures)             GATE-lint / check-suite / quality          deps: SA89a
+  deps: none                         GATE-typecheck  deps: SA89b ────────────────┤
+  │                                  SA91 — parallel integration loop            │
+  │  (per-module gate)                 deps: none                                │
   Track 1                            Track 2                               Track 3
 ```
 
 **Ordering.** The squash (SA90) eliminates the cross-org-migration class, so the SA88 gate saga (SA88a–e) is deleted, not completed. SA84 and SA86 survived as **fixture** cleanups, independent of each other. Track 1 runs SA90 → SA84; SA86 is complete on Track 2. Track 3 runs SA89a → SA89b fully independently.
 
+**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join: the per-module gate (SA84, Track 1) plus the repo-global gates and the SA91 parallel-loop tooling (Track 2) must all land on `v87`, and GATE-typecheck additionally waits on SA89b (Track 3) to remove the `mypy.ini:94` backups ignore. Track 2, having finished its module work, owns the closeout; it can start GATE-lint / GATE-check-suite / GATE-quality / SA91 immediately and holds GATE-typecheck until SA89b merges.
+
 ### Track readiness (2026-07-15)
 
 - **Track 1 — READY (SA90, deps: none).** The squash-and-drop-backward-compat decision (see cross-cutting decision above) makes the whole cross-org-migration problem disappear: no static analyzer, no runtime boundary proofs, no gate. SA90 is fresh, dependency-free work; SA84 follows it and is unblocked by it. The retired SA88a–e findings (CR-SA88-REV-006/007, CR-SA88A1-REV-002/003/004) close as obsoleted-by-schema-squash.
-- **Track 2 — SA86 complete.** SA88b and SA86 are both done; no remaining open work on Track 2. Listings restricted-role suite passes clean (134 passed/0 failed), no quarantine entry.
+- **Track 2 — module work complete; owns green-gate closeout.** SA88b and SA86 are both done (listings restricted-role suite passes clean, 134 passed/0 failed, no quarantine entry). With its module work finished, Track 2 now owns the green-gate closeout: GATE-lint / GATE-check-suite / GATE-quality and the SA91 parallel-integration-loop tooling are startable immediately (deps: none); GATE-typecheck is held until Track 3's SA89b removes the `mypy.ini:94` backups ignore.
 - **Track 3 — SA89b blocked checkpoint; no decision pending.** SA89b's runtime/provider migration is implemented and validated, but independent review remains `STATUS: partial` on **SA89B-CR-001 (medium/blocking)**: the private-adapter boundary gate is still fail-open across indirect lexical scopes (a static-AST-completeness gap with a known fix — a pruning lexical-scope visitor). The maintainer selected stop-and-merge at the review cap; a future continuation implements the pruning visitor + direct control-flow/lambda/class negatives, reruns the invalidated gates, and obtains clean review. Independent of the SA84/SA86 cluster.
 
 **Decision re-based (2026-07-15) — Track 1: squash migrations, delete the SA88 gate saga.** After the static-analyzer line and its runtime-oracle successor both proved to be chasing an artifact of schema evolution, the maintainer confirmed (no deployed DB to preserve) that squashing every module to a final-schema `0001_initial` eliminates the cross-org-*migration* class outright. **Why:** the backfills only exist because `organization_id` was added to populated tables; a fresh schema has no rows to backfill, so there is no invariant left to gate. RLS enforcement (SA59/SA82) is unchanged; the *fixture* failures (SA84/SA86) are a separate, ContextVar-level concern the squash does not touch. **Sub-decisions (maintainer-selected):** (1) squash-and-drop-compat over continue-oracle; (2) manually re-attach RLS `RunPython` to the squashed migrations (not auto-generated); (3) keep a ~30-line forward guardrail against reintroducing cross-org migration DML. This supersedes every SA88 decision below.
