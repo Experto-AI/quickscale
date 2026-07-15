@@ -498,8 +498,8 @@ number rather than derived) — held on fail-loud, third station recorded.
    composite-FK failure together, as planned.
 3. ~~SA70 (Finding 2's first step)~~ — **done**.
 4. **Finding 8 Option 1 (shared RLS-context migration helper)** — highest-value now; sequence it
-   *ahead of or alongside* SA84–SA86 so the remaining three tickets share one diagnosis and seam instead of
-   minting inline `operator_access` copies (SA83 already resolved). Independent of Findings 1/2/4/7.
+   *ahead of or alongside* SA84/SA86 so the remaining two tickets share one diagnosis and seam instead of
+   minting inline `operator_access` copies (SA83 and SA85 already resolved). Independent of Findings 1/2/4/7.
 5. **Finding 1 Option 2 (persistence port)** — scheduled next planning cycle; independent of
    everything above.
 3. **Finding 7's remainder (Option 2)** — the "export the generator's emission mapping" sub-item
