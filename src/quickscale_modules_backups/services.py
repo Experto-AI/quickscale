@@ -15,7 +15,7 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 from tempfile import mkdtemp, mkstemp
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from quickscale_core.runtime import (  # noqa: F401
     _DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR,
@@ -185,7 +185,7 @@ def ensure_default_policy() -> BackupPolicy:
     """
     from quickscale_core.runtime import _ensure_default_policy_internal
 
-    return _ensure_default_policy_internal()
+    return cast(BackupPolicy, _ensure_default_policy_internal())
 
 
 def load_policy_snapshot() -> BackupPolicySnapshot:
@@ -205,7 +205,7 @@ def validate_policy_snapshot(policy: BackupPolicySnapshot) -> list[str]:
 
     Delegates to the engine-owned validation core.
     """
-    return _validate_policy_snapshot_internal(policy)
+    return cast(list[str], _validate_policy_snapshot_internal(policy))
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +402,7 @@ def prepare_admin_uploaded_restore_artifact(
     finally:
         _cleanup_admin_restore_upload_directory(staging_directory)
 
-    return trusted_artifact
+    return cast(BackupArtifact, trusted_artifact)
 
 
 def dispatch_background_restore(
@@ -584,7 +584,7 @@ def is_restore_stale(artifact: BackupArtifact) -> bool:
     threshold = django_timezone.now() - timedelta(
         minutes=STALE_RESTORE_THRESHOLD_MINUTES
     )
-    return artifact.restore_started_at < threshold
+    return cast(bool, artifact.restore_started_at < threshold)
 
 
 def reset_stale_restore(artifact: BackupArtifact) -> None:

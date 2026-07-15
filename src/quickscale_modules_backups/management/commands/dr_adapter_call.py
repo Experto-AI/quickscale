@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sys
+from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -26,7 +27,7 @@ class Command(BaseCommand):
 
     help = "Call a DR adapter function (CLI bridge, not for admin use)"
 
-    def add_arguments(self, parser) -> None:  # type: ignore[no-untyped-def]
+    def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
             "function_name",
             help="Registered adapter function name.",
@@ -41,7 +42,7 @@ class Command(BaseCommand):
             ),
         )
 
-    def _read_kwargs(self, args_json: str | None) -> dict:  # type: ignore[type-arg]
+    def _read_kwargs(self, args_json: str | None) -> dict:
         """Read keyword arguments from ``--args-json`` or stdin."""
         if args_json is not None:
             try:
