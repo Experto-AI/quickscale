@@ -1,6 +1,6 @@
 """Fresh-0001 contract tests for the Forms final-schema migration.
 
-Phase 3 SA90-MSQ: verifies the consolidated 0001 migration produces the
+Phase 3 SA92: verifies the consolidated 0001 migration produces the
 correct final schema — three parent UNIQUE constraints, four composite
 child FKs with ordered columns and NOT DEFERRABLE enforcement,
 required NOT NULL/PROTECT org ownership, FORCE RLS on all forms
