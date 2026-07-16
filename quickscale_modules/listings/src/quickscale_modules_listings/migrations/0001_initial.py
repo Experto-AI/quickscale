@@ -1,18 +1,30 @@
-"""T1.8: Squashed initial migration — NOT NULL organization contract.
+"""Initial migration for the QuickScale Listings module.
 
-Replaces the Phase F11.12b additive approach (0001 + 0002_org_ownership)
-with a single clean migration matching the D5 NOT NULL contract.
-
-Changes from the additive schema:
-- ``organization`` is NOT NULL / PROTECT (via ``tenant_org_fk()``)
-- No partial ``UniqueConstraint`` for ``(slug) WHERE organization IS NULL``
-  (unreachable when organization is NOT NULL)
-- ``slug`` has no global ``unique=True`` (per-org unique via constraint below)
-- Per-org slug uniqueness via ``(slug, organization)`` constraint
+Collapsed SA90-MSQ migration: final-schema 0001 with the Listing model
+(NOT NULL/PROTECT organization FK), indexes, per-org slug uniqueness,
+and FORCE RLS policy installation with NULLIF guard refresh.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import django.db.models.deletion
+import django.db.models.manager
 from django.db import migrations, models
+
+from quickscale_modules_orgs.tenancy import apply_force_rls, revert_force_rls
+
+LISTINGS_LISTING_RLS_POLICY = "listings_listing_org_isolation"
+LISTINGS_LISTING_TABLE = "quickscale_modules_listings_listing"
+_LISTINGS_RLS_TARGETS = ((LISTINGS_LISTING_TABLE, LISTINGS_LISTING_RLS_POLICY),)
+
+
+def _forward_rls(apps: Any, schema_editor: Any) -> None:
+    """Drop stale policy then re-create from the NULLIF-guarded template."""
+    del apps
+    revert_force_rls(schema_editor, _LISTINGS_RLS_TARGETS)
+    apply_force_rls(schema_editor, _LISTINGS_RLS_TARGETS)
 
 
 class Migration(migrations.Migration):
@@ -116,7 +128,20 @@ class Migration(migrations.Migration):
                 "verbose_name": "Listing",
                 "verbose_name_plural": "Listings",
                 "ordering": ["-published_date", "-created_at"],
+                "base_manager_name": "all_objects",
+                "indexes": [],
             },
+            managers=[
+                ("objects", django.db.models.manager.Manager()),
+                ("all_objects", django.db.models.manager.Manager()),
+            ],
+        ),
+        migrations.AddConstraint(
+            model_name="listing",
+            constraint=models.UniqueConstraint(
+                fields=["slug", "organization"],
+                name="listings_listing_slug_organization_unique",
+            ),
         ),
         migrations.AddIndex(
             model_name="listing",
@@ -132,11 +157,10 @@ class Migration(migrations.Migration):
             model_name="listing",
             index=models.Index(fields=["slug"], name="quickscale__slug_e91f04_idx"),
         ),
-        migrations.AddConstraint(
-            model_name="listing",
-            constraint=models.UniqueConstraint(
-                fields=["slug", "organization"],
-                name="listings_listing_slug_organization_unique",
-            ),
+        # Install FORCE RLS on Listing table with current NULLIF-guarded template.
+        migrations.RunPython(
+            code=_forward_rls,
+            reverse_code=migrations.RunPython.noop,
+            hints={"target_db": "default"},
         ),
     ]

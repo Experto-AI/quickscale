@@ -8,6 +8,16 @@ from django.utils import timezone
 from quickscale_modules_orgs.models import Organization
 from tests.models import ConcreteListing
 
+# ---------------------------------------------------------------------------
+# PostgreSQL detection for physical catalog checks
+# ---------------------------------------------------------------------------
+try:
+    from django.db import connection as _listing_db_conn
+
+    _LISTING_IS_POSTGRES = _listing_db_conn.vendor == "postgresql"
+except Exception:
+    _LISTING_IS_POSTGRES = False
+
 
 @pytest.mark.django_db
 class TestAbstractListingViaConcreteModel:
@@ -248,3 +258,96 @@ class TestListingModel:
             ConcreteListing.all_objects.first() is not None
             and AlternateListing.all_objects.first() is not None
         ), "Both subclass instances should exist"
+
+    def test_abstract_listing_index_names_do_not_collide(self):
+        """CR-SA90-MSQ-001: Two concrete AbstractListing subclasses must have
+        distinct resolved index names that are unique and fit within
+        Django's portable 30-character limit.
+
+        Unnamed indexes on abstract models cause Django to auto-generate
+        collision-safe names (``%(app_label)s_%(class)s_...``) that are
+        unique per concrete subclass and fit within the portable 30-char
+        maximum recommended for cross-database compatibility.
+        """
+        from tests.models import AlternateListing
+
+        concrete_names = {idx.name for idx in ConcreteListing._meta.indexes}
+        alternate_names = {idx.name for idx in AlternateListing._meta.indexes}
+        collision = concrete_names & alternate_names
+        assert not collision, (
+            f"ConcreteListing and AlternateListing share resolved index "
+            f"names: {collision}"
+        )
+        for name in concrete_names | alternate_names:
+            assert len(name) <= 30, (
+                f"Index name {name!r} is {len(name)} chars, expected <=30"
+            )
+
+    def test_abstract_listing_indexes_pass_system_checks(self):
+        """CR-SA90-MSQ-001: Django system checks pass for two subclasses
+        with collision-safe auto-generated index names.
+
+        Asserts zero index-related errors (models.E034, models.E035, etc.)
+        across the full system check suite.
+        """
+        from django.core.checks import run_checks
+        from tests.models import AlternateListing
+
+        # Force model-cls resolution for both subclasses by accessing _meta.
+        _ = ConcreteListing._meta.indexes  # noqa
+        _ = AlternateListing._meta.indexes  # noqa
+
+        errors = run_checks(include_deployment_checks=True)
+        # Fail on ANY index-related Django system check error
+        # (models.E034 index-name collision, models.E035 index too long,
+        # models.W006/W007/W008, etc.) https://docs.djangoproject.com/en/6.0/ref/checks/
+        index_errors = [
+            e
+            for e in (errors or [])
+            if e.id is not None
+            and e.id.startswith("models.E")
+            and ("index" in e.id.lower() or "index" in e.msg.lower())
+        ]
+        assert not index_errors, (
+            f"Django system check flagged index-related errors: "
+            f"{[(e.id, e.msg) for e in index_errors]}"
+        )
+
+    @pytest.mark.skipif(
+        not _LISTING_IS_POSTGRES,
+        reason="Physical index name check requires PostgreSQL.",
+    )
+    def test_listing_physical_index_names(self, db):
+        """CR-SA90-MSQ-001: Built-in Listing has exact baseline physical
+        index names on the fresh PostgreSQL schema.
+
+        Verifies that ``quickscale__publish_a4cb60_idx``,
+        ``quickscale__status_e05f2c_idx``, and ``quickscale__slug_e91f04_idx``
+        exist on the ``quickscale_modules_listings_listing`` table so that
+        ProjectState and the migration catalog remain unchanged.
+        """
+        from django.db import connection
+
+        table = "quickscale_modules_listings_listing"
+        expected = {
+            "quickscale__publish_a4cb60_idx",
+            "quickscale__status_e05f2c_idx",
+            "quickscale__slug_e91f04_idx",
+        }
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT indexname
+                FROM pg_indexes
+                WHERE tablename = %s
+                  AND indexname = ANY(%s)
+                """,
+                [table, list(expected)],
+            )
+            found = {row[0] for row in cursor.fetchall()}
+        missing = expected - found
+        assert not missing, (
+            f"Built-in Listing table {table} is missing physical indexes: "
+            f"{missing}.  Listing.Meta must override index names with the "
+            f"exact baseline to keep ProjectState unchanged."
+        )

@@ -33,13 +33,21 @@ urlpatterns = [
 python manage.py migrate
 ```
 
-### 4. Seed presets (optional)
+A fresh `migrate` on a clean database automatically creates the four built-in form
+presets (`contact`, `newsletter`, `feedback`, and `support`) as part of the initial
+data migration — no separate seed step needed on first install.
+
+### 4. Seed presets (idempotent recovery)
 
 ```bash
 python manage.py forms_seed_presets
 ```
 
-This seeds four ready-to-use forms: `contact`, `newsletter`, `feedback`, and `support`.
+The `forms_seed_presets` management command remains available as a safe,
+idempotent recovery tool. Running it after a fresh migrate is harmless — it
+detects existing presets and skips duplicates. Use it to re-create any preset
+that was manually deleted or to recover presets in an older database that was
+not created by the current squashed migration.
 
 ## Configuration
 

@@ -1,4 +1,10 @@
-"""Initial migration for the QuickScale notifications module."""
+"""Initial migration for the QuickScale Notifications module.
+
+Collapsed SA90-MSQ migration: final-schema 0001 with NotificationSettings,
+NotificationMessage, NotificationDelivery, and NotificationDeliveryEvent
+models.  The notifications module is a system-wide service with no
+tenant-scoped models.
+"""
 
 from django.db import migrations, models
 
@@ -71,10 +77,7 @@ class Migration(migrations.Migration):
                 (
                     "key",
                     models.CharField(
-                        default="default",
-                        editable=False,
-                        max_length=32,
-                        unique=True,
+                        default="default", editable=False, max_length=32, unique=True
                     ),
                 ),
                 ("enabled", models.BooleanField(default=True)),
