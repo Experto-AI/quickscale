@@ -37,8 +37,10 @@ echo "  5. Manifest sync gate (sync_module_manifests)"
 echo "  6. Org-context primitives gate (check_org_context_primitives)"
 echo "  7. CSRF-exempt gate (check_csrf_exempt_gate)"
 echo "  8. Type check (mypy)"
-echo "  9. Unit tests (core + CLI), then integration tests when PostgreSQL is available"
-echo " 10. E2E tests (optional, with --e2e flag)"
+echo "  9. Coverage policy helper tests"
+echo " 10. Combined coverage checks (core + CLI + backups module with dual-threshold policy)"
+echo " 11. Integration tests (requires PostgreSQL)"
+echo " 12. E2E tests (optional, with --e2e flag)"
             exit 0
             ;;
     esac
@@ -52,16 +54,16 @@ echo ""
 # Track overall status
 FAILED=false
 
-echo "[1/6] Installing dependencies..."
+echo "[1/11] Installing dependencies..."
 poetry install --with dev
 
 echo ""
-echo "[2/6] Running linters (ruff)..."
+echo "[2/11] Running linters (ruff)..."
 make lint -- --core --cli --modules
 echo "✓ Linting passed"
 
 echo ""
-echo "[3/6] Running module-vs-core compatibility check..."
+echo "[3/11] Running module-vs-core compatibility check..."
 make check-core-compat || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -73,7 +75,7 @@ fi
 echo "✓ Module-to-core compatibility passed"
 
 echo ""
-echo "[4/8] Running module-core import linter..."
+echo "[4/11] Running module-core import linter..."
 make check-module-core-imports || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -85,7 +87,7 @@ fi
 echo "✓ Module-core import linter passed"
 
 echo ""
-echo "[5/8] Running manifest sync gate..."
+echo "[5/11] Running manifest sync gate..."
 make check-manifest-sync || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -97,7 +99,7 @@ fi
 echo "✓ Manifest snapshots in sync"
 
 echo ""
-echo "[6/10] Running org-context primitives gate..."
+echo "[6/11] Running org-context primitives gate..."
 make check-org-context-primitives || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -109,7 +111,7 @@ fi
 echo "✓ No direct external use of privatized org-context primitives"
 
 echo ""
-echo "[7/10] Running CSRF-exempt gate..."
+echo "[7/11] Running CSRF-exempt gate..."
 make check-csrf-exempt || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -121,25 +123,38 @@ fi
 echo "✓ All csrf_exempt callsites are protected"
 
 echo ""
-echo "[8/10] Running type checks (mypy)..."
+echo "[8/11] Running type checks (mypy)..."
 make typecheck -- --core --cli --modules
 echo "✓ Type checks passed"
 
 echo ""
-echo "[9/10] Running unit tests..."
-./scripts/test_unit.sh || FAILED=true
+echo "[9/11] Running coverage policy helper tests..."
+make test-cov-policy || FAILED=true
 
 if [ "$FAILED" = true ]; then
     echo ""
     echo "╔════════════════════════════════════════╗"
-    echo "║   ✗ Unit Tests Failed                  ║"
+    echo "║   ✗ Coverage Policy Helper Tests Failed║"
     echo "╚════════════════════════════════════════╝"
     exit 1
 fi
-echo "✓ Unit tests passed"
+echo "✓ Coverage policy helper tests passed"
 
 echo ""
-echo "     Running integration tests (requires PostgreSQL)..."
+echo "[10/11] Running coverage checks (core + CLI + backups)..."
+make test-cov REQUIRE_BACKUPS_COVERAGE=1 || FAILED=true
+
+if [ "$FAILED" = true ]; then
+    echo ""
+    echo "╔════════════════════════════════════════╗"
+    echo "║   ✗ Coverage Checks Failed             ║"
+    echo "╚════════════════════════════════════════╝"
+    exit 1
+fi
+echo "✓ Combined coverage checks passed (90% equal-weight package mean, 80% per-file)"
+
+echo ""
+echo "[11/11] Running integration tests..."
 if command -v pg_isready >/dev/null 2>&1 && pg_isready -h localhost -q 2>/dev/null; then
     echo "PostgreSQL is available — running integration tests..."
     ./scripts/test_integration.sh || FAILED=true
@@ -179,7 +194,7 @@ fi
 # Optional E2E tests
 if [ "$RUN_E2E" = true ]; then
     echo ""
-    echo "[10/10] Running E2E tests (this may take several minutes)..."
+    echo "[12/12] Running E2E tests (this may take several minutes)..."
     ./scripts/test_e2e.sh || FAILED=true
 
     if [ "$FAILED" = true ]; then
@@ -192,7 +207,7 @@ if [ "$RUN_E2E" = true ]; then
     echo "✓ E2E tests passed"
 else
     echo ""
-    echo "[10/10] Skipping E2E tests (use --e2e to include)"
+    echo "[11/11] Skipping E2E tests (use --e2e to include)"
 fi
 
 echo ""
