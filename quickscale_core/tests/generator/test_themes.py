@@ -1,6 +1,5 @@
 """Tests for theme system functionality"""
 
-import os
 from pathlib import Path
 
 import pytest
@@ -21,67 +20,43 @@ class TestThemeInitialization:
         generator = ProjectGenerator()
         assert generator.theme == "showcase_react"
 
-    def test_explicit_theme(self, tmp_path: Path) -> None:
-        """Generator should accept explicit theme parameter"""
-        generator = ProjectGenerator(theme="showcase_html")
-        assert generator.theme == "showcase_html"
-
     def test_invalid_theme_name(self, tmp_path: Path) -> None:
         """Generator should reject invalid theme names"""
         with pytest.raises(ValueError, match="Invalid theme 'invalid_theme'"):
             ProjectGenerator(theme="invalid_theme")
 
     def test_available_themes_list(self, tmp_path: Path) -> None:
-        """Error message should list available themes"""
+        """Error message should list available themes (only showcase_react remains)"""
         with pytest.raises(ValueError, match="Available themes"):
             ProjectGenerator(theme="nonexistent")
+
+    def test_showcase_html_is_rejected(self) -> None:
+        """showcase_html should be rejected as a retired theme."""
+        with pytest.raises(ValueError, match="showcase_html"):
+            ProjectGenerator(theme="showcase_html")
 
 
 class TestThemeValidation:
     """Test theme directory validation"""
-
-    def test_showcase_html_theme_exists(self) -> None:
-        """showcase_html theme directory should exist"""
-        generator = ProjectGenerator(theme="showcase_html")
-        theme_dir = generator.template_dir / "themes" / "showcase_html"
-        assert theme_dir.exists()
 
     def test_htmx_theme_is_not_supported(self) -> None:
         """showcase_htmx should be rejected as an unsupported theme."""
         with pytest.raises(ValueError, match="showcase_htmx"):
             ProjectGenerator(theme="showcase_htmx")
 
-    def test_react_theme_placeholder_exists(self) -> None:
-        """showcase_react should have placeholder directory"""
-        generator = ProjectGenerator(theme="showcase_html")
+    def test_react_theme_directory_exists(self) -> None:
+        """showcase_react theme directory should exist"""
+        generator = ProjectGenerator(theme="showcase_react")
         theme_dir = generator.template_dir / "themes" / "showcase_react"
         assert theme_dir.exists()
-        readme = theme_dir / "README.md"
-        assert readme.exists()
 
 
 class TestThemeTemplateResolution:
     """Test theme-specific template path resolution"""
 
-    def test_theme_template_path_resolution(self) -> None:
-        """_get_theme_template_path should resolve theme-specific templates"""
-        generator = ProjectGenerator(theme="showcase_html")
-
-        # Theme-specific template
-        path = generator._get_theme_template_path("templates/base.html.j2")
-        assert "themes/showcase_html" in path
-
-    def test_theme_static_path_resolution(self) -> None:
-        """_get_theme_template_path should resolve theme-specific static files"""
-        generator = ProjectGenerator(theme="showcase_html")
-
-        # Theme-specific static file
-        path = generator._get_theme_template_path("static/css/style.css.j2")
-        assert "themes/showcase_html" in path
-
     def test_common_template_fallback(self) -> None:
         """_get_theme_template_path should fall back to common templates"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
 
         # This template lives in common/templates/admin/ (not in any theme dir),
         # so _get_theme_template_path should resolve it via the common fallback.
@@ -111,34 +86,6 @@ class TestProjectGenerationWithTheme:
         # Verify backend files exist
         assert (output_path / "manage.py").exists()
         assert (output_path / "pyproject.toml").exists()
-
-    def test_generate_with_explicit_theme(self, tmp_path: Path) -> None:
-        """Generate project with explicit showcase_html theme"""
-        generator = ProjectGenerator(theme="showcase_html")
-        project_name = "testproject"
-        output_path = tmp_path / project_name
-
-        generator.generate(project_name, output_path)
-
-        # Verify all files created
-        assert (output_path / "templates" / "base.html").exists()
-        assert (output_path / "templates" / "index.html").exists()
-        assert (output_path / "templates" / "components" / "navigation.html").exists()
-        assert (output_path / "static" / "css" / "style.css").exists()
-
-        base_html = (output_path / "templates" / "base.html").read_text()
-        index_html = (output_path / "templates" / "index.html").read_text()
-        navigation_html = (
-            output_path / "templates" / "components" / "navigation.html"
-        ).read_text()
-
-        assert 'class="qs-main"' in base_html
-        assert 'class="qs-topbar"' in navigation_html
-        assert 'class="dashboard-intro"' in index_html
-        assert (
-            "Your Django project has been successfully generated with QuickScale."
-            in index_html
-        )
 
     def test_generate_with_react_theme(self, tmp_path: Path) -> None:
         """Generate project with showcase_react theme"""
@@ -176,38 +123,21 @@ class TestProjectGenerationWithTheme:
         assert "FROM node:24-slim as frontend-builder" in dockerfile
         assert "pnpm run build" in dockerfile
 
-    @pytest.mark.parametrize(
-        ("theme", "project_name", "expects_frontend"),
-        [
-            ("showcase_html", "testproject_html", False),
-            ("showcase_react", "testproject_react", True),
-        ],
-    )
     def test_generated_makefile_respects_frontend_presence(
         self,
         tmp_path: Path,
-        theme: str,
-        project_name: str,
-        expects_frontend: bool,
     ) -> None:
-        """Generated Makefile should guard frontend targets based on frontend presence."""
-        generator = ProjectGenerator(theme=theme)
+        """Generated Makefile should include frontend targets for React theme."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "testproject_react"
         output_path = tmp_path / project_name
 
         generator.generate(project_name, output_path)
 
         makefile = (output_path / "Makefile").read_text()
 
-        if expects_frontend:
-            assert (output_path / "frontend" / "package.json").exists()
-            assert "cd frontend && pnpm test:coverage;" in makefile
-            return
-
-        assert not (output_path / "frontend" / "package.json").exists()
-        assert "No frontend/package.json found, skipping frontend install." in makefile
-        assert "No frontend/package.json found, skipping frontend lint." in makefile
-        assert "No frontend/package.json found, skipping frontend format." in makefile
-        assert "No frontend/package.json found, skipping frontend tests." in makefile
+        assert (output_path / "frontend" / "package.json").exists()
+        assert "cd frontend && pnpm test:coverage;" in makefile
 
     def test_react_theme_vite_config_has_consistent_filenames(
         self, tmp_path: Path
@@ -240,52 +170,6 @@ class TestProjectGenerationWithTheme:
         assert 'STORAGES["staticfiles"]' in production_settings
         assert "whitenoise.storage.CompressedStaticFilesStorage" in production_settings
 
-    def test_generated_output_matches_current_scaffold_contract(
-        self, tmp_path: Path
-    ) -> None:
-        """Generated project structure should match the current scaffold contract."""
-        generator = ProjectGenerator(theme="showcase_html")
-        project_name = "testproject"
-        output_path = tmp_path / project_name
-
-        generator.generate(project_name, output_path)
-
-        # Broad output contract for the generated project scaffold.
-        expected_files = [
-            "README.md",
-            "Makefile",
-            "manage.py",
-            "pyproject.toml",
-            ".gitignore",
-            ".dockerignore",
-            "Dockerfile",
-            "docker-compose.yml",
-            "railway.json",
-            ".env.example",
-            "scripts/lint.sh",
-            "templates/base.html",
-            "templates/index.html",
-            "static/css/style.css",
-            "static/images/favicon.svg",
-            f"{project_name}/__init__.py",
-            f"{project_name}/urls.py",
-            f"{project_name}/settings/base.py",
-            f"{project_name}/settings/local.py",
-            f"{project_name}/settings/production.py",
-            "tests/__init__.py",
-            "tests/conftest.py",
-            ".github/workflows/ci.yml",
-        ]
-
-        for file_path in expected_files:
-            assert (output_path / file_path).exists(), f"Missing file: {file_path}"
-
-        lint_script = output_path / "scripts" / "lint.sh"
-        assert os.access(lint_script, os.X_OK), (
-            "scripts/lint.sh should stay executable because the generated Makefile "
-            "invokes it directly"
-        )
-
 
 class TestBackwardCompatibility:
     """Test backward compatibility with existing code"""
@@ -300,20 +184,6 @@ class TestBackwardCompatibility:
         # Should generate successfully with default theme
         generator.generate(project_name, output_path)
         assert output_path.exists()
-
-    def test_generated_templates_identical_to_v060(self, tmp_path: Path) -> None:
-        """Generated templates should be identical to v0.60.0"""
-        generator = ProjectGenerator(theme="showcase_html")
-        project_name = "testproject"
-        output_path = tmp_path / project_name
-
-        generator.generate(project_name, output_path)
-
-        # Check template content (should have same structure as v0.60.0)
-        base_html = (output_path / "templates" / "base.html").read_text()
-        assert "<!DOCTYPE html>" in base_html
-        assert "<title>" in base_html
-        assert "{% block content %}" in base_html
 
 
 class TestReactThemeBuildCompatibility:
@@ -728,52 +598,46 @@ class TestSharedAdminTemplates:
         # A nonexistent template path is simply absent from the mapping
         assert "templates/admin/nonexistent_template.html" not in mapping
 
-    @pytest.mark.parametrize("theme", ["showcase_html", "showcase_react"])
-    def test_both_themes_render_shared_admin_overrides(
-        self, tmp_path: Path, theme: str
-    ) -> None:
-        """Admin index and app_index templates should appear for both themes."""
-        generator = ProjectGenerator(theme=theme)
-        output_path = tmp_path / f"{theme}_admin_shared"
-        generator.generate(f"{theme}_admin_shared", output_path)
+    def test_react_theme_renders_shared_admin_overrides(self, tmp_path: Path) -> None:
+        """Admin index and app_index templates should appear for React theme."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_admin_shared"
+        generator.generate("react_admin_shared", output_path)
 
         for rel_template in REACT_THEME_SHARED_DJANGO_TEMPLATES:
             output_rel = Path(rel_template).with_suffix("")  # Strip .j2
             assert (output_path / output_rel).exists(), (
                 f"Expected shared Django template {rel_template} to render to "
-                f"{output_rel} for theme {theme}."
+                f"{output_rel} for theme showcase_react."
             )
 
-    @pytest.mark.parametrize("theme", ["showcase_html", "showcase_react"])
     def test_shared_admin_templates_live_in_root_templates_dir(
-        self, tmp_path: Path, theme: str
+        self, tmp_path: Path
     ) -> None:
         """The source admin templates should live once in the shared location."""
-        generator = ProjectGenerator(theme=theme)
+        generator = ProjectGenerator(theme="showcase_react")
         template_dir = generator.template_dir
 
         shared_admin_dir = template_dir / "templates" / "admin"
         assert (shared_admin_dir / "index.html.j2").exists()
         assert (shared_admin_dir / "app_index.html.j2").exists()
 
-        # Theme directories should not keep duplicate admin copies.
-        for theme_name in ("showcase_html", "showcase_react"):
-            theme_admin_dir = (
-                template_dir / "themes" / theme_name / "templates" / "admin"
-            )
-            assert not theme_admin_dir.exists(), (
-                f"Theme {theme_name} should not have its own admin template "
-                "directory after consolidation."
-            )
+        # Theme directory should not keep duplicate admin copies.
+        theme_admin_dir = (
+            template_dir / "themes" / "showcase_react" / "templates" / "admin"
+        )
+        assert not theme_admin_dir.exists(), (
+            "Theme showcase_react should not have its own admin template "
+            "directory after consolidation."
+        )
 
-    @pytest.mark.parametrize("theme", ["showcase_html", "showcase_react"])
     def test_admin_override_content_survives_consolidation(
-        self, tmp_path: Path, theme: str
+        self, tmp_path: Path
     ) -> None:
         """Generated admin templates should preserve the backup-ops behavior."""
-        generator = ProjectGenerator(theme=theme)
-        output_path = tmp_path / f"{theme}_admin_content"
-        generator.generate(f"{theme}_admin_content", output_path)
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_admin_content"
+        generator.generate("react_admin_content", output_path)
 
         admin_index = (output_path / "templates" / "admin" / "index.html").read_text()
         app_index = (output_path / "templates" / "admin" / "app_index.html").read_text()

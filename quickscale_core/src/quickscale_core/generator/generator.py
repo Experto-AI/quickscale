@@ -57,7 +57,6 @@ REACT_THEME_SHARED_DJANGO_TEMPLATES: tuple[str, ...] = (
 #: directory in the generated project.
 _THEME_DEST_MAP: dict[str, str] = {
     "showcase_react": "frontend",
-    "showcase_html": "",
 }
 
 #: Subdirectory re-mappings within a theme's tree.
@@ -115,9 +114,7 @@ def _theme_non_jinja_emitted_paths(
     that the generator copies as-is.
 
     Only the ``showcase_react`` theme emits non-Jinja files (TypeScript source
-    files, PNG icons, etc.).  Non-Jinja files in ``showcase_html`` (e.g.
-    ``.gitkeep`` placeholders) are not emitted -- they only exist to keep empty
-    directories tracked in the repo.
+    files, PNG icons, etc.).
     """
     result: dict[str, str] = {}
     # Only the React theme has non-Jinja files that are emitted as project
@@ -289,16 +286,6 @@ def get_generator_emission_mapping(
         if parts[0] not in ("project_name", "github") and emitted in common_claimed:
             continue
 
-        # HTML-specific root-level templates that should only be emitted
-        # for the HTML theme.  The React theme has frontend/ equivalents.
-        if theme == "showcase_react" and parts[0] not in ("project_name", "github"):
-            # Skip static/ and templates/components/ — these are HTML-only
-            # assets that the React theme does not produce.
-            if emitted.startswith("static/") or emitted.startswith(
-                "templates/components/"
-            ):
-                continue
-
         if emitted in mapping:
             if mapping[emitted] == stem:
                 continue  # idempotent entry
@@ -373,7 +360,7 @@ class ProjectGenerator:
         )
 
         # Validate theme
-        available_themes = ["showcase_html", "showcase_react"]
+        available_themes = ["showcase_react"]
         if theme not in available_themes:
             raise ValueError(
                 f"Invalid theme '{theme}'. Available themes: {', '.join(available_themes)}"

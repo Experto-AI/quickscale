@@ -33,10 +33,6 @@ from {{ package_name }}.urls_modules import (
 from {{ package_name }}.views import (  # noqa: F401
     custom_404_view,
     orgs_react_shell_view,
-    {%- if theme == 'showcase_html' %}
-    social_embeds_view,
-    social_link_tree_view,
-    {%- endif %}
 )
 
 
@@ -47,9 +43,6 @@ def healthcheck(request: HttpRequest) -> HttpResponse:
     This endpoint is exempt from SECURE_SSL_REDIRECT in production settings.
     """
     return HttpResponse("OK", content_type="text/plain", status=200)
-
-
-{%- if theme == 'showcase_react' %}
 
 
 react_shell_view = TemplateView.as_view(template_name="index.html")
@@ -67,24 +60,15 @@ react_shell_urlpatterns = [
     re_path(r"^forms/?$", react_shell_view),
     re_path(r"^forms/[^/]+/?$", react_shell_view),
 ]
-{%- endif %}
 
 
 urlpatterns = [
     path("healthcheck/", healthcheck, name="healthcheck"),
     path("admin/", admin.site.urls),
 ]
-{%- if theme == 'showcase_react' %}
 urlpatterns += react_shell_urlpatterns
-{%- endif %}
-{%- if theme != 'showcase_react' %}
-urlpatterns += [
-    path("", TemplateView.as_view(template_name="index.html"), name="home"),
-]
-{%- endif %}
 urlpatterns += PRE_HOME_MODULE_URLPATTERNS
 urlpatterns += [
-{%- if theme == 'showcase_react' %}
     re_path(
         r"^social/?$",
         TemplateView.as_view(template_name="social/link_tree.html"),
@@ -95,11 +79,6 @@ urlpatterns += [
         TemplateView.as_view(template_name="social/embeds.html"),
         name="social-embeds",
     ),
-{%- endif %}
-{%- if theme == 'showcase_html' %}
-    re_path(r"^social/?$", social_link_tree_view, name="social-link-tree"),
-    re_path(r"^social/embeds/?$", social_embeds_view, name="social-embeds"),
-{%- endif %}
 ]
 urlpatterns += POST_HOME_MODULE_URLPATTERNS
 
@@ -122,23 +101,10 @@ if settings.DEBUG:
         ] + urlpatterns
     except ImportError:
         pass
-{%- if theme != 'showcase_react' %}
-    # In DEBUG mode, show custom 404 page instead of Django's technical 404
-    # This keeps shipped auth/billing guidance ahead of the generic fallback.
-    urlpatterns += [
-        # Catch auth and billing URLs first (more specific patterns)
-        re_path(r"^accounts/.*", custom_404_view),
-        re_path(r"^billing/.*", custom_404_view),
-        # Catch-all for any other 404s (must be last)
-        re_path(r".*", custom_404_view),
-    ]
-{%- endif %}
 
-{%- if theme == 'showcase_react' %}
 # React SPA catch-all: serve index.html for client-side routing.
 # This must be enabled in both local and production environments so
 # direct navigation to routes like /settings works on Railway.
 urlpatterns += [
     re_path(r".*", react_shell_view),
 ]
-{%- endif %}
