@@ -1,6 +1,6 @@
 """Fresh-0001 contract tests for the CRM final-schema migration.
 
-Phase 3 SA90-MSQ: verifies the consolidated 0001 migration produces the
+Phase 3 SA92: verifies the consolidated 0001 migration produces the
 correct final schema — parent UNIQUE constraints, composite child FKs
 with ordered columns and NOT DEFERRABLE enforcement, required
 NOT NULL/PROTECT org ownership, and FORCE RLS on all tenant-scoped

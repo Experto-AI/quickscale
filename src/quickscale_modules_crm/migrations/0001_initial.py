@@ -1,6 +1,6 @@
 """Initial migration for the QuickScale CRM module.
 
-Collapsed SA90-MSQ migration: final-schema 0001 with all 7 CRM models
+Collapsed SA92 migration: final-schema 0001 with all 7 CRM models
 (Tag, Company, Contact, Stage, Deal, ContactNote, DealNote).
 
 All tenant-scoped models inherit organization via TenantModel:
