@@ -99,6 +99,10 @@ jobs:
         run: |
           make lint -- --core --cli --modules
 
+      - name: Run worker pool harness tests (no PostgreSQL needed)
+        run: |
+          make test-integration-worker-pool
+
       - name: Run type checking (mypy)
         run: |
           make typecheck -- --core --cli --modules
