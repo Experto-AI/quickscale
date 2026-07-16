@@ -449,10 +449,7 @@ def test_generated_urls_template_places_react_shell_reservations_before_modules(
     react_shell_marker = "urlpatterns += react_shell_urlpatterns"
     pre_home_marker = "urlpatterns += PRE_HOME_MODULE_URLPATTERNS"
     post_home_marker = "urlpatterns += POST_HOME_MODULE_URLPATTERNS"
-    non_react_home_marker = (
-        'path("", TemplateView.as_view(template_name="index.html"), name="home"),'
-    )
-
+    # SA94: retired showcase_html removed the non-React home marker.
     assert react_shell_marker in content
     assert pre_home_marker in content
     assert post_home_marker in content
@@ -461,8 +458,6 @@ def test_generated_urls_template_places_react_shell_reservations_before_modules(
     assert r"^orgs/[^/]+/billing/" not in content
     assert r"^orgs/invitations/" not in content
     assert content.index(react_shell_marker) < content.index(pre_home_marker)
-    assert content.index(non_react_home_marker) < content.index(pre_home_marker)
-    assert content.index(post_home_marker) > content.index(non_react_home_marker)
 
     # CR-T120-002: Prove the final route-ownership contract.
     # React shell owns /crm (and /crm/ via the /?$ anchor in the regex).
