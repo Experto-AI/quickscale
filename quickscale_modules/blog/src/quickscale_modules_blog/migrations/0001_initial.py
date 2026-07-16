@@ -1,6 +1,6 @@
 """Initial migration for the QuickScale Blog module.
 
-Collapsed SA90-MSQ migration: final-schema 0001 with Category, Tag, AuthorProfile,
+Collapsed SA92 migration: final-schema 0001 with Category, Tag, AuthorProfile,
 BlogMediaAsset, and Post models.  NOT NULL/PROTECT organization FK via
 tenant_org_fk, all_objects base manager, dual-manager contract, indexes,
 per-org uniqueness constraints, and FORCE RLS policy installation with

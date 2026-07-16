@@ -1,4 +1,4 @@
-"""SA90-MSQ — Forward guardrail: no cross-table organization_id DML in migrations.
+"""SA92 — Forward guardrail: no cross-table organization_id DML in migrations.
 
 Scans ``schema_editor.execute()`` and ``migrations.RunSQL()`` (including
 ``reverse_sql``) across all module migrations.  Splits multi-statement

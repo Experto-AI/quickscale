@@ -1,6 +1,6 @@
 """Initial migration for the QuickScale Social module.
 
-Collapsed SA90-MSQ migration: final-schema 0001 with SocialLink and SocialEmbed
+Collapsed SA92 migration: final-schema 0001 with SocialLink and SocialEmbed
 models, NOT NULL/PROTECT organization FK (tenant_org_fk), resolution
 metadata fields, and FORCE RLS policy installation.
 

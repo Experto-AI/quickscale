@@ -1,6 +1,6 @@
 """Fresh-0001 contract tests for the Billing final-schema migration.
 
-Phase 3 SA90-MSQ: verifies the consolidated 0001 migration applies cleanly,
+Phase 3 SA92: verifies the consolidated 0001 migration applies cleanly,
 produces the correct final unique constraints, and installs FORCE RLS
 on tenant-scoped billing tables (CreditBalance, CreditTransaction,
 Subscription) while system-wide tables (Plan, WebhookEvent) do not

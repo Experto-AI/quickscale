@@ -1,6 +1,6 @@
 """Initial migration for the QuickScale Billing module.
 
-Collapsed SA90-MSQ migration: final-schema 0001 with Plan, CreditBalance,
+Collapsed SA92 migration: final-schema 0001 with Plan, CreditBalance,
 CreditTransaction, Subscription, and WebhookEvent models.  Includes all
 partial unique constraints for stripe idempotency, populated-value
 conditions, current-subscription uniqueness, and FORCE RLS with NULLIF

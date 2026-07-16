@@ -1,6 +1,6 @@
 """Initial migration for the QuickScale Orgs module.
 
-Collapsed SA90-MSQ migration: final-schema 0001 with Organization,
+Collapsed SA92 migration: final-schema 0001 with Organization,
 OrganizationMembership, OrganizationInvitation, and OrganizationTombstone
 models.  Includes is_system field and unique_system_org constraint.
 

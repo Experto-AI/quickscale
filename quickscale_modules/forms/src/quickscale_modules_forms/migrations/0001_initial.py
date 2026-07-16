@@ -1,6 +1,6 @@
 """Initial migration for the QuickScale Forms module.
 
-Collapsed SA90-MSQ migration: final-schema 0001 with Form, FormField,
+Collapsed SA92 migration: final-schema 0001 with Form, FormField,
 FormSubmission, and FormFieldValue models.  Operation order is
 schema → narrow preset bootstrap → RLS/composite FKs.
 
