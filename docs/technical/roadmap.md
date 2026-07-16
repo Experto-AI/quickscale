@@ -55,7 +55,7 @@ git merge --no-ff wt-track{N}
 
 **Exit criteria (single definition of done).** On a fresh clone + fresh `migrate` (post-SA92 squash), `make check`, `make quality`, `make ci`, and `make ci-e2e` all exit 0, with `QUARANTINE_TICKETS` **empty** in `scripts/test_integration.sh` (no masked failures). `make check` is the umbrella gate — `lint` + `typecheck` + `test` (unit + integration) + `check-core-compat` + `check-module-core-imports` + `check-manifest-sync` + `check-org-context-primitives` + `check-csrf-exempt` (`Makefile:652`). `make check` keeps its `-m "not e2e"` scoping; e2e runs in its own lane (`make test-e2e` / `make ci-e2e`, `.github/workflows/e2e.yml`) and is now part of "done" via SA93.
 
-**Only the integration suite shards by module.** `scripts/test_integration.sh` loops `quickscale_modules/*` sequentially (one pytest stage per module, each with its own per-file 80% / mean 90% coverage floor). `lint`, `typecheck`, and the `check-*` gates are repo-global — they do not parallelize per module. A single module runs in isolation via `make MODULE=<name> test -- --modules`.
+**Only the integration suite shards by module — and now runs in parallel.** `scripts/test_integration.sh` parallelizes module test runs through a configurable worker pool (QS_INTEGRATION_JOBS), with per-worker coverage-file isolation, deterministic replay order, and joined exit codes. Each worker runs one pytest stage per module with per-file 80% / mean 90% coverage floors. `lint`, `typecheck`, and the `check-*` gates are repo-global — they do not parallelize per module. A single module runs in isolation via `make MODULE=<name> test -- --modules`.
 
 #### Per-module test gate (the parallelizable axis)
 
@@ -66,7 +66,7 @@ git merge --no-ff wt-track{N}
 
 #### Repo-global gates (run once at v87 integration, after per-module work lands)
 
-GATE-lint, GATE-typecheck, GATE-check-suite, and **GATE-quality** are all **done** (2026-07-15; see [CHANGELOG.md](../../CHANGELOG.md)). Track 2's module work and its own gates are complete, so the remaining closeout — the **SA91** tooling and the new **SA93** (e2e in the green-gate) — is **reassigned to the freed Track 3** (idle after SA89a/b closed Finding 1). SA91 has no dependencies. SA93 now carries a hidden cross-track prerequisite — see SA93 entry below.
+GATE-lint, GATE-typecheck, GATE-check-suite, **GATE-quality**, and the reassigned **SA91** tooling are all **done** (see [CHANGELOG.md](../../CHANGELOG.md)). The remaining closeout is **SA93** (e2e in the green-gate), assigned to Track 3 after SA89a/b closed Finding 1. SA93 carries a hidden cross-track prerequisite — see its entry below.
 
 - [ ] **SA93 — Fold the e2e lane into the green-gate definition of done.** `Tier 1 · Track 3 · deps: blog+CRM integration green (previously unstated cross-track join prerequisite)`
   **Blocked checkpoint (2026-07-15; maintainer-selected stop-and-merge; not complete).**
@@ -145,12 +145,16 @@ The cross-org-*migration* half of arch-audit [Finding 8](../others/arch-audit.md
 
 **Reassigned closeout work (from Track 2, to use freed Track 3 capacity):**
 
-> **↪ Next up for Track 3 (hand off now): SA91.** It is unblocked (`deps: none`), non-gating, and independent of the SA93 cross-track wait — start it immediately rather than idling behind SA93.
+> **SA91 complete.** The parallel integration worker pool is validated and independently reviewed; SA93 remains Track 3's open closeout item.
 
-- [ ] **SA91 — Fork the per-module integration loop for true parallel execution.** `Tier 2 · Track 3 · deps: none`
-  `scripts/test_integration.sh` runs module stages serially (loop at `:414–442`). Fork each module's pytest stage and join exit codes + coverage. Contention points to resolve: the shared `COVERAGE_RESULTS_FILE` mktemp (`:57`) must become per-module and be merged before `check_overall_mean_coverage`; the per-module `QS_*_DB_USER` role setup (`:375–386`) and pre-created test databases must not collide across concurrent workers. CI-time speedup only — not a gate for the green-gate milestone.
+- [x] **SA91 — Fork the per-module integration loop for true parallel execution.** `Tier 2 · Track 3 · deps: none`
+  True parallel worker pool with `QS_INTEGRATION_JOBS` concurrency control (`1` = sequential, default = parallel), per-worker `COVERAGE_FILE` and result/log isolation, joined exit codes, and deterministic replay/merge. Worker temp dir cleaned on EXIT trap.
 
-  *Acceptance:* parallel run produces the identical pass/fail verdict and the identical overall-mean coverage as the serial run; no cross-worker DB collision under the restricted role.
+  **Completed (2026-07-16):** controlled clean-state runs with `QS_INTEGRATION_JOBS=1` and default parallelism produced identical verdicts and per-module coverage for all 12 modules, including the identical **93.79%** overall mean and unchanged CRM/SA84 baseline. Forty maintained worker-pool tests cover parsing/capping, production join/failure aggregation, replay/merge order, and signal-safe branched-process cleanup; the target runs in local CI, CI, and publish workflows. Independent review resolved **CR-SA91-REV-001/002/003/004/005/007** and found no cross-worker database collision.
+
+  **Advisory:** **CR-SA91-REV-006 (low)** remains open: bounded scheduling waits for the oldest tracked PID and can temporarily underutilize capacity. Correctness and failure propagation are unaffected.
+
+  *Acceptance:* parallel execution produces the identical pass/fail verdict and overall-mean coverage as sequential worker-pool mode; no cross-worker DB collision under the restricted role.
   *(why →* parallelize testing by module*)*
 
 - **GATE-quality** (done 2026-07-15, see [CHANGELOG.md](../../CHANGELOG.md)) and **SA93** (fold e2e into the green-gate) were also reassigned here; SA93 is defined in the green-gate section above and remains open (blocked checkpoint on the SA84/SA95 cross-track prerequisite).
@@ -165,7 +169,7 @@ Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track
 SA92 ✓ DONE (squash migrations)      SA94 — remove showcase_html theme     Finding 1 ✓ DONE (SA89a+SA89b)
   delete SA88 gate saga               deps: none (non-gating)               GATE-lint/typecheck/check/quality ✓
   deps: none                          (prior module work + gates COMPLETE)  SA93 — e2e in green-gate (blocked)
-      │                                                                       SA91 — parallel loop (non-gating)
+      │                                                                       SA91 — parallel loop ✓ DONE (non-gating)
       ▼
 SA84 — CRM (67 fixtures) ┐
 SA95 — blog regression   ┘ deps: none
@@ -181,9 +185,9 @@ SA95 — blog regression   ┘ deps: none
 
 - **Track 1 — CLEAN to continue on SA84/SA95; SA92 completed.** SA84 (CRM fixtures) and SA95 (blog regression) are both `deps: none` and can start now — this is the productive Track 1 work. **SA92 completed** (bounded guardrail strategy implemented and independently reviewed; CR-SA90-MSQ-002/003/005 and SA92-QG-001 resolved). Rerun SA84/SA95 suites on the post-squash `v87` to confirm no failure is a migration-state artifact. Retired SA88a–e findings (CR-SA88-REV-006/007, CR-SA88A1-REV-002/003/004) close as obsoleted-by-schema-squash.
 - **Track 2 — BLOCKED on work, not a decision.** Prior module work (SA86, SA88b) and its gates (GATE-lint/typecheck/check-suite) are done. **SA94** is the only open item, paused at the 2026-07-16 plan-review cap on **SA94-PLAN-CALLER-001** — a deterministic plan fix (add the DR `_build_context` and development `up` seams to the state-safety/validation phases with no-subprocess/no-mutation sentinels), **no maintainer decision required**. Revise the plan, obtain clean plan review, then execute the phased plan. Independent of the green-gate milestone.
-- **Track 3 — CLEAN to continue on SA91; SA93 blocked on cross-track work.** Finding 1 (DR persistence port, SA89a+SA89b) and all four GATEs are done. **SA91** (non-gating parallel-loop tooling, `deps: none`) is the productive Track 3 work now. **SA93** (e2e in green-gate) is a blocked checkpoint needing the deterministic CR-SA93-REV-002/004 fixes (no decision), then cannot complete until CRM (**SA84**) and blog (**SA95**) shards are green on `v87` — a cross-track dependency on Track 1. **SA89B-CR-004 (low/advisory)** remains independent, not gating.
+- **Track 3 — PARTIAL (SA91 complete; SA93 blocked on cross-track work).** Finding 1 (DR persistence port, SA89a+SA89b), all four GATEs, and **SA91** (parallel integration worker pool) are done. SA91 retains **CR-SA91-REV-006** as a low, non-blocking throughput advisory. **SA93** (e2e in green-gate) is a blocked checkpoint needing the deterministic CR-SA93-REV-002/004 fixes (no decision), then cannot complete until CRM (**SA84**) and blog (**SA95**) shards are green on `v87` — a cross-track dependency on Track 1. **SA89B-CR-004 (low/advisory)** remains independent, not gating.
 
-**Net — no remaining maintainer decisions. SA92 completed.** Track 1 → SA84 + SA95; Track 2 → revise the SA94 plan and re-review; Track 3 → SA91 in parallel. SA93 waits on SA84/SA95 landing green (green-gate cross-track join). The squash-migrations decision and bounded guardrail strategy are recorded in [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); reasoning trail in [CHANGELOG.md §SA88/§SA92](../../CHANGELOG.md).
+**Net — no remaining maintainer decisions. SA92 and SA91 completed.** Track 1 → SA84 + SA95; Track 2 → revise the SA94 plan and re-review; Track 3 → SA93's deterministic fixes while awaiting the SA84/SA95 cross-track join. The squash-migrations decision and bounded guardrail strategy are recorded in [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); reasoning trail in [CHANGELOG.md §SA88/§SA92](../../CHANGELOG.md).
 
 ---
 

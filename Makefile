@@ -44,7 +44,7 @@
 #   make clean                - Remove build artifacts
 
 .PHONY: setup bootstrap install \
-        test test-unit test-integration test-cov test-cov-policy test-e2e test-agent \
+        test test-unit test-integration test-cov test-cov-policy test-integration-worker-pool test-e2e test-agent \
         lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
         quality check ci ci-e2e \
         docs \
@@ -108,6 +108,7 @@ help:
 	@echo "  make test-cov             - Run tests with coverage report (aggregates DR-engine coverage from backups module when PostgreSQL is available)"
 	@echo "  make test-e2e             - Run E2E tests (needs Docker + Playwright)"
 	@echo "  make test-agent           - Run agentic flow adapter tests"
+	@echo "  make test-integration-worker-pool - Run worker pool harness tests (fast, no PostgreSQL needed)"
 	@echo ""
 	@echo "Quality Checks:"
 	@echo "  make lint                 - Check linting (no changes)"
@@ -442,6 +443,11 @@ test-cov:
 # behaviour before the main test-cov pipeline uses it.
 test-cov-policy:
 	@$(PYTHON) -m pytest scripts/test_ci_coverage_policy.py -q --tb=short
+
+# Run the QS_INTEGRATION_JOBS validation and worker-pool harness tests.
+# These are fast, self-contained, and do not require PostgreSQL.
+test-integration-worker-pool:
+	@$(PYTHON) -m pytest scripts/test_integration_worker_pool.py -q --tb=short
 
 # --- Lint / Format ---
 
