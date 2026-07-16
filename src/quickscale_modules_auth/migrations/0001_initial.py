@@ -1,6 +1,6 @@
 """Initial migration for the QuickScale Auth module.
 
-Collapsed SA90-MSQ migration: final-schema 0001 with User model extending
+Collapsed SA92 migration: final-schema 0001 with User model extending
 AbstractUser and UserManager.  The auth module is a system-wide service
 with no tenant-scoped models.
 """
