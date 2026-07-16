@@ -45,7 +45,7 @@ def generated_project_path(tmp_path: Path, sample_project_name: str) -> Path:
     output_path = tmp_path / sample_project_name
 
     # Generate project
-    generator = ProjectGenerator(theme="showcase_html")
+    generator = ProjectGenerator(theme="showcase_react")
     generator.generate(sample_project_name, output_path)
 
     # Return path for test assertions

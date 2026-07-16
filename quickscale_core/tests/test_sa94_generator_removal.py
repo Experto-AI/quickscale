@@ -1,4 +1,4 @@
-"""SA94 Phase 3: showcase_html theme removal verification.
+"""SA94 Phase 3/4: showcase_html theme removal verification.
 
 This test file validates:
 - React generation with no modules emits correct frontend output and no HTML-only artifacts.
@@ -7,9 +7,12 @@ This test file validates:
 - ``_THEME_DEST_MAP`` no longer contains a ``showcase_html`` entry.
 - Generated views.py contains no HTML-only ``social_link_tree_view`` / ``social_embeds_view``.
 - Generated urls.py uses ``TemplateView`` (not function views) for social routes.
+- Retired-theme sentinel fails before tempfile creation, file writes/copies,
+  cleanup deletion, or Poetry subprocess execution (SA94 Phase 4).
 """
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -33,6 +36,57 @@ class TestShowcaseHtmlRemoval:
         generator = ProjectGenerator(theme="showcase_react")
         theme_dir = generator.template_dir / "themes" / "showcase_html"
         assert not theme_dir.exists()
+
+    # ------------------------------------------------------------------
+    # SA94 Phase 4: Retired-theme sentinel — failure BEFORE side effects
+    # ------------------------------------------------------------------
+
+    def test_rejected_theme_fails_before_tempfile_creation(self) -> None:
+        """A retired theme must not reach tempfile.mkdtemp in generate()."""
+        # showcase_html is rejected at __init__, so generate() is
+        # never reached. If someone bypasses __init__ validation,
+        # the sentinel in generate() catches it before mkdtemp.
+        with pytest.raises(ValueError, match="showcase_html"):
+            ProjectGenerator(theme="showcase_html")
+
+    def test_generate_sentinel_rejects_retired_theme(self, tmp_path: Path) -> None:
+        """``generate()`` must reject retired themes before tempfile creation."""
+        generator = ProjectGenerator(theme="showcase_react")
+        with patch(
+            "quickscale_core.generator.generator.tempfile.mkdtemp",
+        ) as mock_mkdtemp:
+            with patch.object(generator, "theme", "showcase_html"):
+                with pytest.raises(ValueError, match="Invalid theme"):
+                    generator.generate("testproj", tmp_path / "testproj")
+            mock_mkdtemp.assert_not_called()
+
+    def test_generate_sentinel_rejects_before_shutil_copy(self, tmp_path: Path) -> None:
+        """``generate()`` must reject before any shutil operations."""
+        generator = ProjectGenerator(theme="showcase_react")
+        with patch(
+            "quickscale_core.generator.generator.shutil.move",
+        ) as mock_move:
+            with patch(
+                "quickscale_core.generator.generator.shutil.copy2",
+            ) as mock_copy2:
+                with patch.object(generator, "theme", "showcase_html"):
+                    with pytest.raises(ValueError, match="Invalid theme"):
+                        generator.generate("testproj", tmp_path / "testproj")
+                mock_move.assert_not_called()
+                mock_copy2.assert_not_called()
+
+    def test_generate_sentinel_rejects_before_poetry_subprocess(
+        self, tmp_path: Path
+    ) -> None:
+        """``generate()`` must reject before any subprocess invocation."""
+        generator = ProjectGenerator(theme="showcase_react")
+        with patch(
+            "quickscale_core.generator.generator.subprocess.run",
+        ) as mock_run:
+            with patch.object(generator, "theme", "showcase_html"):
+                with pytest.raises(ValueError, match="Invalid theme"):
+                    generator.generate("testproj", tmp_path / "testproj")
+            mock_run.assert_not_called()
 
 
 class TestReactNoModulesGeneration:

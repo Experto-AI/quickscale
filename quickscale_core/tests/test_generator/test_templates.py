@@ -49,7 +49,7 @@ def test_context() -> dict[str, str | list[str] | None]:
     return {
         "project_name": "testproject",
         "package_name": "testproject",
-        "theme": "showcase_html",
+        "theme": "showcase_react",
         "python_version": PYTHON_VERSION,
         "python_constraint": PYTHON_CONSTRAINT,
         "python_docker_tag": PYTHON_DOCKER_TAG,
@@ -3393,19 +3393,18 @@ class TestDevOpsTemplateRendering:
         assert "cd frontend && pnpm test:coverage;" in output
         assert "No frontend/package.json found, skipping frontend tests." in output
 
-    def test_readme_renders_make_first_workflow_for_html(
+    def test_readme_renders_make_first_workflow_for_react(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """HTML starter README should prefer make targets without implying a frontend."""
+        """React starter README should prefer make targets and reference frontend."""
         template = jinja_env.get_template("README.md.j2")
-        output = template.render({**test_context, "theme": "showcase_html"})
+        output = template.render({**test_context, "theme": "showcase_react"})
 
         assert "The generated root `Makefile` is the default local entrypoint" in output
         assert "make setup" in output
         assert "make test" in output
         assert "make lint" in output
         assert "make check" in output
-        assert "### Frontend Code Quality" not in output
         assert (
             "Node.js 24+ installed for the generated `frontend/` workspace"
             not in output
@@ -3923,7 +3922,7 @@ class TestDockerfileContent:
         copy_app_idx = next(i for i, line in enumerate(lines) if "COPY --chown" in line)
         assert poetry_install_idx < copy_app_idx
 
-    @pytest.mark.parametrize("theme", ["showcase_html", "showcase_react"])
+    @pytest.mark.parametrize("theme", ["showcase_react"])
     def test_collectstatic_uses_build_time_secret_key(
         self,
         jinja_env: Environment,

@@ -460,6 +460,14 @@ class ProjectGenerator:
             PermissionError: If output_path is not writable
 
         """
+        # SA94 retired-theme sentinel: reject retired themes before any
+        # tempfile creation, file writes/copies, cleanup, or subprocess.
+        available_themes = ["showcase_react"]
+        if self.theme not in available_themes:
+            raise ValueError(
+                f"Invalid theme '{self.theme}'. Available themes: {', '.join(available_themes)}"
+            )
+
         # Validate project name
         is_valid, error_msg = validate_project_name(project_slug)
         if not is_valid:
