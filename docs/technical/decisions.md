@@ -274,8 +274,9 @@ quickscale_core/generator/templates/
       ├── components.json.j2
       ├── tailwind.config.js.j2
       ├── vite.config.ts.j2
-      └── package.json.j2
-      └── static/                   # Static assets
+      ├── package.json.j2
+      └── public/
+          └── favicon.svg.j2         # Static assets
 ```
 
 Fresh generations copy `showcase_react/src/**` into the generated project's
@@ -1363,7 +1364,7 @@ and asserts every emitted file is classified.
    ``frontend/.prettierignore``, ``frontend/.prettierrc``,
    ``frontend/vitest.config.ts``, ``frontend/playwright.config.ts``,
    ``frontend/components.json``, ``frontend/tailwind.config.js``,
-   ``frontend/index.html``, ``frontend/public/favicon.svg``.
+   ``frontend/index.html``.
    Rationale: Unlike infrastructure frontend configs (``vite.config.ts``,
    ``tsconfig.json``, ``eslint.config.js``, ``postcss.config.js``,
    ``prettier.config.js``) which are in ``IN_PLACE_INFRASTRUCTURE_TARGETS``,
