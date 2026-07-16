@@ -92,19 +92,9 @@ GATE-lint, GATE-typecheck, GATE-check-suite, **GATE-quality**, and the reassigne
   *(Acceptance unchanged:* `make ci-e2e` exits 0 on a fresh clone; `e2e.yml` green on `v87`; exit-criteria prose lists the e2e lane.*)*
   *(why →* green-gate milestone; e2e was outside the definition of done*)*
 
-### Cross-cutting decision — eliminate the cross-org-migration class by squashing to a final-schema initial migration (arch-audit Finding 8)
-
-**Ratified and landed.** The full decision record is the SSOT in [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); the reasoning trail and the retired SA88 gate saga are in [CHANGELOG.md §SA88/§SA92](../../CHANGELOG.md). One-paragraph summary for planning:
-
-The cross-org-*migration* half of arch-audit [Finding 8](../others/arch-audit.md) (`module-rls-context-procedural`) was an artifact of schema evolution — `organization_id` added to populated tables forced `_backfill_*_org` `RunPython` steps that needed elevated RLS context. Pre-launch with **no deployed DB to carry forward**, we squashed every module to a final-schema `0001_initial` (`organization_id NOT NULL` from row zero). Nothing to backfill → the class is empty → the entire SA88 conformance-gate saga (seam + SA88a–e static analyzer + SA88d/SA88e runtime oracle, `operator_access_migration` helper, 7,144-line gate file) is **deleted, not completed**; retired findings CR-SA88-REV-006/007 and CR-SA88A1-REV-002/003/004 close as **obsoleted-by-schema-squash**. RLS enforcement (SA59/SA82, FORCE RLS under `quickscale_test_role`) is unchanged.
-
-**What this leaves for open work.** The *fixture* half survives (squashing does nothing to test fixtures). CRM triage confirmed 67 failures bucket **0 migration / 67 fixture / 0 runtime-query** (test-posture, no production isolation bug), so **SA84 (CRM) remains real work with `deps: none`**, decoupled from SA88. SA86 (listings) — same fixture cleanup — is done. **SA92 is complete** (see Track 1). The open Track 1 work is **SA84 next**, followed by **SA95**.
-
 ### Track 1 — Tenant-context surface
 
-- [x] **SA92 — Squash all module migrations to a final-schema initial migration; delete the SA88 gate saga.** `Tier 2 · Track 1 · deps: none`
-  **Completed (2026-07-16).** Nine modules squashed to one `0001_initial` each; 35 intermediates deleted; RLS re-attached per squashed migration (`pg_policies`/catalog/data parity exact against `v87`); SA88 gate saga retired. The 910-line handwritten Python/SQL forward guardrail was replaced by a bounded literal tripwire (maintainer-selected Option 1): a deliberately shallow regex smoke alarm for `UPDATE … SET organization_id` cross-table DML, documented as not a proof — the parity gate is the authoritative proof. CR-SA90-MSQ-002 (high/blocking) and CR-SA90-MSQ-003 (medium/blocking) resolved by deleting the undecidable scanner surface. CR-SA90-MSQ-005 (low/advisory) resolved (decisions.md already correctly states module policy ownership). SA92-QG-001 (blocking): three `test_models.py` tests implicitly depended on the removed data migration; fix applied and resolved. All four findings resolved by independent change review (STATUS ok, confidence 94, no blocking findings, caller parity satisfied, breaking changes none). Validation evidence: `make lint` pass; `make typecheck` pass; `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules` 858 passed, 11 skipped, 0 failed, 2 pre-existing warnings; 8/8 tripwire and 3/3 recovered tests pass. Advisories: CR-SA92-ADV-001 (low/advisory): alternate quoted/schema-qualified literal spellings remain outside the deliberately shallow regex; CR-SA92-ADV-002 (low/advisory): any future allowlist entry must be scoped to exact file-plus-statement identity before use. Closes SA92.
-  *(why →* arch-audit Finding 8; 2026-07-15 squash re-base*)*
+> **Migration-squash context (SA92, complete 2026-07-16).** The cross-org-*migration* half of arch-audit [Finding 8](../others/arch-audit.md) (`module-rls-context-procedural`) was eliminated by squashing every module to a final-schema `0001_initial` (`organization_id NOT NULL` from row zero) — nothing to backfill, so the SA88 gate saga was deleted, not completed. Full decision record: [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); reasoning trail in [CHANGELOG.md §SA88/§SA92](../../CHANGELOG.md). The **fixture** half survives (squashing does nothing to test fixtures): **SA84 (CRM, `deps: none`)** and **SA95 (blog)** are the remaining open Track 1 work; SA86 (listings) is done.
 
 - [ ] **SA84 — Fix CRM's 67 restricted-role RLS fixture failures (plus 20 skipped).** `Tier 2 · Track 1 · deps: none (decoupled from SA88 by the squash)`
   Under the SA82 gate, CRM showed 195 passed, 67 fixture-time RLS failures, 20 skipped (triage: 0 migration / 67 fixture / 0 runtime — test-posture, not a production isolation bug). These are ContextVar-seeded fixtures failing under NOBYPASSRLS and are unaffected by SA92. Route each cross-org *fixture* through the shared org-context helper rather than inlining `SET LOCAL`. Any runtime-query-bucket failure that surfaces is fixed as a real isolation bug (with its own regression test), not test-posture.
@@ -117,12 +107,6 @@ The cross-org-*migration* half of arch-audit [Finding 8](../others/arch-audit.md
 
   *Acceptance:* blog restricted-role suite passes clean (0 failures) under `make test-integration`, no quarantine entry; regression test pins the finalizer fix.
   *(why →* SA93-BLOCK-001; blog regression re-surfaced after SA83 closure*)*
-
-> **✅ Decision made (2026-07-16) — SA92 forward-guardrail strategy.** The maintainer selected Option 1: retire the 910-line scanner and replace it with a deliberately shallow, decidable literal tripwire (`UPDATE … SET organization_id` regex scan with explicit allowlist), documented as a smoke alarm, not a proof. CR-SA90-MSQ-002/003 resolved by deleting the undecidable surface. Implemented and merged as part of SA92 implementation (see SA92 entry above). The option analysis is preserved below for reference:
->
-> 1. **Retire the scanner; rely on the structural guarantee + parity gate, plus a deliberately shallow literal tripwire (selected).** The squash makes each `0001_initial` backfill-free *by construction*; the checked-in `pg_policies`/catalog/data parity gate already fails loud on any schema/RLS drift. Replace the 910-line analyzer with the originally-scoped ~30-line assertion: one migration file per module + a literal substring/regex scan for the `UPDATE … SET organization_id` cross-table DML shape with an explicit allowlist, documented as a *smoke alarm, not a proof*. Converges immediately; decidable; matches the ratified SA88 lesson (don't build the undecidable analyzer) and the "governance by gate, bounded" house style. CR-SA90-MSQ-002/003 dissolve because the fragile provenance surface is deleted, not hardened.
-> 2. **Runtime/behavioral guardrail (mirror the retired SA88e oracle).** Assert the property by *execution*: a seeded restricted-role `MigrationExecutor` run proving no migration performs cross-org writes. Escapes the static-lexing trap entirely and is consistent with arch-audit's "restricted-role gate is the real oracle." Heavier to build and largely redundant now that the class is empty by construction — reach for it only if a forward tripwire against *future* backfill migrations is judged worth the infra.
-> 3. **Drop the forward guardrail entirely.** Rely solely on squash-by-construction + parity gate + maintainer review of any new migration. Zero non-convergence surface, but no automated tripwire if a future migration reintroduces a backfill.
 
 ### Track 2 — Module contracts & settings
 
@@ -145,17 +129,7 @@ The cross-org-*migration* half of arch-audit [Finding 8](../others/arch-audit.md
 
 **Reassigned closeout work (from Track 2, to use freed Track 3 capacity):**
 
-> **SA91 complete.** The parallel integration worker pool is validated and independently reviewed; SA93 remains Track 3's open closeout item.
-
-- [x] **SA91 — Fork the per-module integration loop for true parallel execution.** `Tier 2 · Track 3 · deps: none`
-  True parallel worker pool with `QS_INTEGRATION_JOBS` concurrency control (`1` = sequential, default = parallel), per-worker `COVERAGE_FILE` and result/log isolation, joined exit codes, and deterministic replay/merge. Worker temp dir cleaned on EXIT trap.
-
-  **Completed (2026-07-16):** controlled clean-state runs with `QS_INTEGRATION_JOBS=1` and default parallelism produced identical verdicts and per-module coverage for all 12 modules, including the identical **93.79%** overall mean and unchanged CRM/SA84 baseline. Forty maintained worker-pool tests cover parsing/capping, production join/failure aggregation, replay/merge order, and signal-safe branched-process cleanup; the target runs in local CI, CI, and publish workflows. Independent review resolved **CR-SA91-REV-001/002/003/004/005/007** and found no cross-worker database collision.
-
-  **Advisory:** **CR-SA91-REV-006 (low)** remains open: bounded scheduling waits for the oldest tracked PID and can temporarily underutilize capacity. Correctness and failure propagation are unaffected.
-
-  *Acceptance:* parallel execution produces the identical pass/fail verdict and overall-mean coverage as sequential worker-pool mode; no cross-worker DB collision under the restricted role.
-  *(why →* parallelize testing by module*)*
+> **SA91 complete (2026-07-16)** — parallel integration worker pool validated and independently reviewed; identical verdicts/coverage vs sequential mode, no cross-worker DB collision. Detail in [CHANGELOG.md §SA91](../../CHANGELOG.md). Non-gating (CI-time speedup only). Residual **CR-SA91-REV-006 (low/advisory)** open: bounded scheduling can temporarily underutilize capacity — correctness/failure-propagation unaffected. SA93 remains Track 3's open closeout item.
 
 - **GATE-quality** (done 2026-07-15, see [CHANGELOG.md](../../CHANGELOG.md)) and **SA93** (fold e2e into the green-gate) were also reassigned here; SA93 is defined in the green-gate section above and remains open (blocked checkpoint on the SA84/SA95 cross-track prerequisite).
 
