@@ -26,6 +26,112 @@ MIG_0001 = "0001_initial"
 ORGS_MIG_LATEST = ("quickscale_modules_orgs", "0001_initial")
 
 
+# ---------------------------------------------------------------------------
+# PostgreSQL expression normalization (CR-SA90-MSQ-003)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_pg_expr(expr: str | None) -> str:
+    """Normalize a PostgreSQL expression for exact comparison.
+
+    Normalizes only PostgreSQL syntactic formatting (whitespace,
+    case of keywords and unquoted names) while preserving the content
+    and case of single-quoted string literals and double-quoted
+    identifiers.  Strips balanced outer parentheses that PostgreSQL's
+    ``pg_policies`` view wraps around the entire expression.
+
+    CR-SA90-MSQ-003: Both case normalization and whitespace collapse
+    are quote-aware — ``.lower()`` and whitespace substitution are only
+    applied outside string literals and quoted identifiers so that
+    literal content, identifier casing, and whitespace inside quotes
+    are preserved exactly.
+    """
+    if expr is None:
+        return ""
+    s = expr.strip()
+    while len(s) > 1 and s.startswith("(") and s.endswith(")"):
+        depth = 0
+        outer_balanced = True
+        for i, ch in enumerate(s):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            if depth == 0 and i < len(s) - 1:
+                outer_balanced = False
+                break
+        if outer_balanced:
+            s = s[1:-1].strip()
+        else:
+            break
+    # Quote-aware lowercasing AND whitespace collapse
+    result: list[str] = []
+    in_sq = False
+    in_dq = False
+    for ch in s:
+        if ch == "'" and not in_dq:
+            in_sq = not in_sq
+        elif ch == '"' and not in_sq:
+            in_dq = not in_dq
+        if in_sq or in_dq:
+            result.append(ch)
+        else:
+            result.append(ch.lower())
+    s = "".join(result)
+    # Quote-aware whitespace collapse
+    result2: list[str] = []
+    in_sq = False
+    in_dq = False
+    prev_was_space = False
+    for ch in s:
+        if ch == "'" and not in_dq:
+            in_sq = not in_sq
+        elif ch == '"' and not in_sq:
+            in_dq = not in_dq
+        if in_sq or in_dq:
+            result2.append(ch)
+            prev_was_space = False
+        else:
+            if ch.isspace():
+                if not prev_was_space:
+                    result2.append(" ")
+                prev_was_space = True
+            else:
+                result2.append(ch)
+                prev_was_space = False
+    s = "".join(result2).strip()
+    return s
+
+
+# Expected normalized RLS predicates (same _FORCE_RLS_FORWARD_SQL template)
+_EXPECTED_BILLING_FORALL_QUAL = _normalize_pg_expr(
+    "((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = organization_id)"
+)
+_EXPECTED_BILLING_FORALL_WC = _EXPECTED_BILLING_FORALL_QUAL
+_EXPECTED_BILLING_SELECT_QUAL = _normalize_pg_expr(
+    "(((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = organization_id) "
+    "OR (NULLIF(current_setting('app.operator_access'::text, true), ''::text) = 'on'::text))"
+)
+
+# Expected normalized partial-index predicates (from pg_get_expr output).
+# Derived from the migration's UniqueConstraint conditions as rendered by
+# PostgreSQL 18, normalized for version-robust comparison.
+_EXPECTED_PARTIAL_PREDICATES: dict[str, str] = {
+    "quickscale_billing_unique_stripe_subscription_id_when_populated": _normalize_pg_expr(
+        "(stripe_subscription_id IS NOT NULL) AND (NOT (((stripe_subscription_id)::text = ''::text) AND (stripe_subscription_id IS NOT NULL)))"
+    ),
+    "quickscale_billing_unique_stripe_checkout_session_id_present": _normalize_pg_expr(
+        "(stripe_checkout_session_id IS NOT NULL) AND (NOT (((stripe_checkout_session_id)::text = ''::text) AND (stripe_checkout_session_id IS NOT NULL)))"
+    ),
+    "quickscale_billing_unique_current_subscription_per_organization": _normalize_pg_expr(
+        "((status)::text = ANY ((ARRAY['incomplete'::character varying, 'trialing'::character varying, 'active'::character varying, 'past_due'::character varying, 'unpaid'::character varying, 'paused'::character varying])::text[]))"
+    ),
+    "quickscale_billing_unique_stripe_event_id_per_type": _normalize_pg_expr(
+        "(stripe_event_id IS NOT NULL) AND (NOT ((stripe_event_id)::text = ''::text))"
+    ),
+}
+
+
 def test_initial_migration_applies_cleanly() -> None:
     """The consolidated 0001 migration applies cleanly from a fresh state."""
     executor = MigrationExecutor(connection)
@@ -208,53 +314,38 @@ def test_force_rls_installed_on_tenant_scoped_billing_tables() -> None:
 )
 def test_billing_partial_unique_constraints_have_correct_predicates() -> None:
     """Physical partial unique constraints have the correct ``WHERE``
-    predicates in ``pg_constraint``."""
+    predicates.
+
+    CR-SA90-MSQ-003: Uses exact normalized comparison via
+    ``pg_get_expr``, not permissive fragment matching.
+    """
     executor = MigrationExecutor(connection)
     executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
 
-    # Maps constraint name → expected predicate expressions.
-    # Uses normalized fragments (not imported from migration constants).
-    partial_constraints: dict[str, list[str]] = {
-        "quickscale_billing_unique_stripe_subscription_id_when_populated": [
-            "stripe_subscription_id IS NOT NULL"
-        ],
-        "quickscale_billing_unique_stripe_checkout_session_id_present": [
-            "stripe_checkout_session_id IS NOT NULL"
-        ],
-        "quickscale_billing_unique_current_subscription_per_organization": [
-            "status",
-            "incomplete",
-            "trialing",
-            "active",
-            "past_due",
-            "unpaid",
-            "paused",
-        ],
-        "quickscale_billing_unique_stripe_event_id_per_type": [
-            "stripe_event_id IS NOT NULL"
-        ],
-    }
-
     with connection.cursor() as cursor:
-        for constraint_name, expected_fragments in partial_constraints.items():
+        for (
+            constraint_name,
+            expected_normalized,
+        ) in _EXPECTED_PARTIAL_PREDICATES.items():
             cursor.execute(
-                "SELECT indexdef FROM pg_indexes WHERE indexname = %s",
+                """
+                SELECT pg_get_expr(i.indpred, i.indrelid) AS predicate
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indexrelid
+                WHERE c.relname = %s
+                """,
                 [constraint_name],
             )
             row = cursor.fetchone()
             assert row is not None, (
-                f"Partial unique index {constraint_name} not found in pg_indexes"
+                f"Partial unique index {constraint_name} not found in pg_index"
             )
-            indexdef = row[0]
-            assert "WHERE" in indexdef, (
-                f"Index {constraint_name} definition has no WHERE predicate: {indexdef}"
+            actual_normalized = _normalize_pg_expr(row[0])
+            assert actual_normalized == expected_normalized, (
+                f"Index {constraint_name} predicate mismatch.\n"
+                f"  Actual normalized:   {actual_normalized!r}\n"
+                f"  Expected normalized: {expected_normalized!r}"
             )
-            pred_part = indexdef.split("WHERE", 1)[1].strip()
-            for fragment in expected_fragments:
-                assert fragment in pred_part, (
-                    f"Index {constraint_name} predicate {pred_part!r} "
-                    f"missing expected fragment {fragment!r}"
-                )
 
 
 # ---------------------------------------------------------------------------
@@ -422,6 +513,10 @@ def test_billing_rls_policy_has_org_predicate() -> None:
     The FOR ALL policy must reference current_setting or organization_id
     in both USING and WITH CHECK.  The _select policy must have an
     operator_access OR clause.
+
+    CR-SA90-MSQ-003: Exact normalized predicate comparison — the
+    normalized form must match the expected canonical expression from
+    ``_FORCE_RLS_FORWARD_SQL``, not merely contain permissive fragments.
     """
     executor = MigrationExecutor(connection)
     executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_0001)])
@@ -464,14 +559,35 @@ def test_billing_rls_policy_has_org_predicate() -> None:
             ), (
                 f"FOR ALL {polname} WITH CHECK lacks current_setting/org_id: {with_check}"
             )
+            # CR-SA90-MSQ-003: exact normalized predicate comparison
+            nqual = _normalize_pg_expr(qual)
+            assert nqual == _EXPECTED_BILLING_FORALL_QUAL, (
+                f"{table}/{polname} normalized qual {nqual!r} "
+                f"does not match expected {_EXPECTED_BILLING_FORALL_QUAL!r}"
+            )
+            nwc = _normalize_pg_expr(with_check)
+            assert nwc == _EXPECTED_BILLING_FORALL_WC, (
+                f"{table}/{polname} normalized with_check {nwc!r} "
+                f"does not match expected {_EXPECTED_BILLING_FORALL_WC!r}"
+            )
 
             sname, scmd, squal, swc = select_pol[0]
             assert scmd in ("SELECT", "s"), f"SELECT {sname} cmd={scmd!r}"
             assert swc is None, f"SELECT {sname} has unexpected WITH CHECK"
-            if squal is not None:
-                assert "operator_access" in squal.lower(), (
-                    f"SELECT {sname} USING lacks operator_access: {squal}"
-                )
+            # CR-SA90-MSQ-003: assert squal is not None BEFORE comparison
+            # so NULL predicates cannot silently pass exact-match checks.
+            assert squal is not None, (
+                f"SELECT {sname} has NULL USING — must have a predicate"
+            )
+            assert "operator_access" in squal.lower(), (
+                f"SELECT {sname} USING lacks operator_access: {squal}"
+            )
+            # CR-SA90-MSQ-003: exact normalized predicate comparison
+            nsqual = _normalize_pg_expr(squal)
+            assert nsqual == _EXPECTED_BILLING_SELECT_QUAL, (
+                f"{table}/{sname} normalized SELECT qual {nsqual!r} "
+                f"does not match expected {_EXPECTED_BILLING_SELECT_QUAL!r}"
+            )
 
         # System tables must have no policies at all
         for table in (
@@ -486,3 +602,115 @@ def test_billing_rls_policy_has_org_predicate() -> None:
             assert count == 0, (
                 f"System table {table} has {count} policies; expected none"
             )
+
+
+# ---------------------------------------------------------------------------
+# CR-SA90-MSQ-003: negative controls for _normalize_pg_expr
+# ---------------------------------------------------------------------------
+
+
+def test_billing_normalize_pg_expr_null_qual() -> None:
+    """NULL input normalizes to empty string."""
+    assert _normalize_pg_expr(None) == "", "NULL qual should normalize to ''"
+
+
+def test_billing_normalize_pg_expr_extra_clause_detected() -> None:
+    """Tampered predicate with extra clause must NOT match canonical."""
+    tampered = (
+        "((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = organization_id "
+        "AND extra_condition = true)"
+    )
+    n = _normalize_pg_expr(tampered)
+    assert n != _EXPECTED_BILLING_FORALL_QUAL, (
+        "Extra clause should produce a different normalized form"
+    )
+
+
+def test_billing_normalize_pg_expr_literal_case_preserved() -> None:
+    """Changing literal case must NOT match the canonical form."""
+    n_modified = _normalize_pg_expr(
+        "(((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = organization_id) "
+        "OR (NULLIF(current_setting('app.operator_access'::text, true), ''::text) = 'ON'::text))"
+    )
+    assert n_modified != _EXPECTED_BILLING_SELECT_QUAL, (
+        "Uppercase literal should produce different normalized form"
+    )
+
+
+def test_billing_normalize_pg_expr_identifier_case_preserved() -> None:
+    """A double-quoted identifier with mixed case must be preserved."""
+    n = _normalize_pg_expr(
+        "((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = \"Organization_Id\")"
+    )
+    assert '"organization_id"' not in n, (
+        "Double-quoted 'Organization_Id' should NOT be lowercased by normalizer"
+    )
+
+
+def test_billing_normalize_pg_expr_whitespace_in_quotes_preserved() -> None:
+    """Extra whitespace inside a single-quoted literal must NOT be
+    collapsed, producing a different normalized form."""
+    with_extra_space = (
+        "((NULLIF(current_setting('app.current_org_id'::text, true), "
+        "' '::text))::uuid = organization_id)"
+    )
+    n = _normalize_pg_expr(with_extra_space)
+    assert n != _EXPECTED_BILLING_FORALL_QUAL, (
+        "Whitespace inside a quoted literal must produce a different normalized form"
+    )
+
+
+def test_billing_normalize_pg_expr_parentheses_in_quotes_preserved() -> None:
+    """Extra parentheses inside a single-quoted literal must NOT be
+    stripped or altered by the normalizer."""
+    with_paren_in_literal = (
+        "((NULLIF(current_setting('app.current_org_id'::text, true), "
+        "'(default)'::text))::uuid = organization_id)"
+    )
+    n = _normalize_pg_expr(with_paren_in_literal)
+    assert n != _EXPECTED_BILLING_FORALL_QUAL, (
+        "Parentheses inside a quoted literal must produce a different normalized form"
+    )
+
+
+def test_billing_partial_predicate_altered_status_set() -> None:
+    """An altered status ARRAY in the current-subscription partial
+    predicate must NOT match the expected canonical form."""
+    # Snapshot constraint name so we know which expected value to tamper.
+    status_constraint = (
+        "quickscale_billing_unique_current_subscription_per_organization"
+    )
+    expected = _EXPECTED_PARTIAL_PREDICATES[status_constraint]
+
+    # Tamper: remove 'paused' and add 'expired'
+    tampered_sql = (
+        "((status)::text = ANY "
+        "((ARRAY['incomplete'::character varying, 'trialing'::character varying, "
+        "'active'::character varying, 'past_due'::character varying, "
+        "'unpaid'::character varying, 'expired'::character varying])::text[]))"
+    )
+    n_tampered = _normalize_pg_expr(tampered_sql)
+    assert n_tampered != expected, (
+        "Altered status set (removed paused, added expired) must NOT match "
+        "the expected canonical predicate"
+    )
+
+
+def test_billing_partial_predicate_extra_status() -> None:
+    """Adding an extra status to the ARRAY must NOT match the canonical."""
+    status_constraint = (
+        "quickscale_billing_unique_current_subscription_per_organization"
+    )
+    expected = _EXPECTED_PARTIAL_PREDICATES[status_constraint]
+
+    tampered_sql = (
+        "((status)::text = ANY "
+        "((ARRAY['incomplete'::character varying, 'trialing'::character varying, "
+        "'active'::character varying, 'past_due'::character varying, "
+        "'unpaid'::character varying, 'paused'::character varying, "
+        "'expired'::character varying])::text[]))"
+    )
+    n_tampered = _normalize_pg_expr(tampered_sql)
+    assert n_tampered != expected, (
+        "Extra status in ARRAY must NOT match the expected canonical predicate"
+    )

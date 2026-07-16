@@ -1233,7 +1233,7 @@ The SA46 CI gate continues to enforce the pairing requirement across all `csrf_e
 
 4. **SA88 gate saga retired:** `test_sa88_migration_operator_access_conformance.py` (7,144 lines) deleted. `operator_access_migration` helper retired from `orgs/tenancy.py`. `apply_force_rls`/`revert_force_rls` are preserved (they are needed for RLS policy management, not migration context elevation).
 
-5. **Forward guardrail added:** Unit test (`test_sa92_migration_squash_guardrail.py`) asserts that no module migration contains cross-table org-id DML (`UPDATE ... SET organization_id` referencing another table), so the eliminated class cannot silently return.
+5. **Forward guardrail replaced with bounded literal tripwire (maintainer-selected Option 1, 2026-07-16):** The previous 910-line handwritten Python/SQL scanner was replaced by a deliberately shallow, decidable smoke alarm. The bounded tripwire (`test_sa92_migration_squash_guardrail.py`) performs a single regex scan for the `UPDATE … SET organization_id` cross-table DML shape with an explicit allowlist, documented as not a soundness proof. The authoritative proof remains the checked-in `pg_policies`/catalog/data parity gate against `v87`. This resolves the non-convergence trap the scanner had hit across two review cycles: CR-SA90-MSQ-002 (high/blocking) and CR-SA90-MSQ-003 (medium/blocking) are resolved because the undecidable provenance-analysis surface is deleted, not hardened.
 
 6. **Preserved surfaces:**
    - Forms four presets / 16 fields preserved identically (fresh `migrate` now auto-creates them via initial data migration).
@@ -1241,11 +1241,16 @@ The SA46 CI gate continues to enforce the pairing requirement across all `csrf_e
    - Listings index names pinned to exact baseline.
    - Canonical catalog/RLS/data hashes are stable external evidence captured in review/merge artifacts, not self-referentially recorded in committed docs.
 
-**Acceptance evidence (Phase 6):**
+**Acceptance evidence (Phase 6 — review completed and SA92 closed):**
 - All nine modules: `make lint`, MyPy type-checking, and focused module tests pass.
-- `make test-integration` raw exit 1 solely for the exact known-baseline failures: SA84 (CRM, 67 failures) and SA86 (listings, 6 failures). Zero new or changed failure signatures.
+- `make test-integration` raw exit 1 solely for the exact known-baseline failure: SA84 (CRM, 67 failures). SA86 (listings, 6 failures) is closed. Zero new or changed failure signatures.
 - Overall coverage 93.73%.
-- SA92 is merged as a blocked checkpoint after the maintainer-selected review-cap stop. **CR-SA90-MSQ-002 (high/blocking)** and **CR-SA90-MSQ-003 (medium/blocking)** remain open; **CR-SA90-MSQ-005 (low/advisory)** also remains. Fixes, affected validation reruns, and clean independent review are required before checking SA92. SA84 remains open; SA86 is closed (completed per v87).
+- **Independent change review completed (2026-07-16).** Adaptive-change-review returned STATUS ok, confidence 94, no blocking findings, caller parity satisfied, breaking changes none. All four findings resolved: SA92-QG-001 (blocking test setup gap), CR-SA90-MSQ-002 (high/blocking), CR-SA90-MSQ-003 (medium/blocking), and CR-SA90-MSQ-005 (low/advisory) — all confirmed resolved.
+- Validation evidence: `make lint` pass; `make typecheck` pass; `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules` 858 passed, 11 skipped, 0 failed, 2 pre-existing warnings; 8/8 tripwire and 3/3 recovered tests pass.
+- Two low/advisory findings recorded in the review:
+  - **CR-SA92-ADV-001 (low/advisory):** The bounded literal tripwire regex intentionally omits alternate quoted/schema-qualified table identifier spellings. This is an accepted scope limitation of the deliberately shallow smoke alarm.
+  - **CR-SA92-ADV-002 (low/advisory):** Any future allowlist entry must be scoped to exact file-plus-statement identity before use.
+- SA84 remains open; SA86 is closed. Closes SA92.
 
 **Constraint:** This decision supersedes and replaces the SA88 seam-plus-gate approach (SA88/SA88a–e) documented above. The SA88 historical text is retained for the reasoning trail only and must not be cited as current policy.
 
