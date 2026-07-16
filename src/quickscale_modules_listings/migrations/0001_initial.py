@@ -1,6 +1,6 @@
 """Initial migration for the QuickScale Listings module.
 
-Collapsed SA90-MSQ migration: final-schema 0001 with the Listing model
+Collapsed SA92 migration: final-schema 0001 with the Listing model
 (NOT NULL/PROTECT organization FK), indexes, per-org slug uniqueness,
 and FORCE RLS policy installation with NULLIF guard refresh.
 """

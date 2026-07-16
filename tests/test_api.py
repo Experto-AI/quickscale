@@ -279,16 +279,19 @@ class TestPublishListingApi:
         staff_user,
     ):
         """Test API handles duplicate generated slug as conflict (same org)"""
+        from quickscale_modules_orgs.current_org import org_scope
+
         # Get the personal org from the staff user so both listings share it.
         personal_org = Organization.objects.get(
             memberships__user=staff_user, is_personal=True
         )
-        Listing.objects.create(
-            title="Duplicate Title",
-            description="Existing description",
-            status="published",
-            organization=personal_org,
-        )
+        with org_scope(personal_org):
+            Listing.objects.create(
+                title="Duplicate Title",
+                description="Existing description",
+                status="published",
+                organization=personal_org,
+            )
         _login_with_org(client, staff_user)
 
         response = client.post(

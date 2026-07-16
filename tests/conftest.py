@@ -68,17 +68,20 @@ def listing_factory(db):
         status="draft",
         **kwargs,
     ):
+        from quickscale_modules_orgs.current_org import org_scope
+
         if "organization" not in kwargs:
             kwargs["organization"] = Organization.objects.get_system_org()
-        listing = ConcreteListing.objects.create(
-            title=title,
-            slug=slug,
-            description=description,
-            price=price,
-            location=location,
-            status=status,
-            **kwargs,
-        )
+        with org_scope(kwargs["organization"]):
+            listing = ConcreteListing.objects.create(
+                title=title,
+                slug=slug,
+                description=description,
+                price=price,
+                location=location,
+                status=status,
+                **kwargs,
+            )
         return listing
 
     return create_listing
@@ -202,6 +205,29 @@ def org_b_admin(db, org_b):
         role=OrgRole.ADMIN,
     )
     return user
+
+
+# ---------------------------------------------------------------------------
+# SA83 — listings test context lifecycle fixtures for restricted-role tests
+# ---------------------------------------------------------------------------
+# These fixtures protect restricted-role test sequences from stale PostgreSQL
+# GUC state by resetting the ``app.current_org_id`` ContextVar before and
+# after every test so no stale tenant context leaks between test functions.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _reset_current_org_context():
+    """Reset the current org ContextVar before and after each test.
+
+    Prevents stale ``app.current_org_id`` GUC state from leaking between
+    tests when the connection-layer priming wrapper (AF9) is active.
+    """
+    from quickscale_modules_orgs.current_org import reset_current_org_id
+
+    reset_current_org_id()
+    yield
+    reset_current_org_id()
 
 
 # ---------------------------------------------------------------------------
