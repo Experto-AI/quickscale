@@ -1,5 +1,11 @@
-# Generated migration for QuickScale Auth Module
+"""Initial migration for the QuickScale Auth module.
 
+Collapsed SA90-MSQ migration: final-schema 0001 with User model extending
+AbstractUser and UserManager.  The auth module is a system-wide service
+with no tenant-scoped models.
+"""
+
+import django.contrib.auth.models
 import django.utils.timezone
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import migrations, models
@@ -122,5 +128,8 @@ class Migration(migrations.Migration):
                 "db_table": "quickscale_auth_user",
                 "ordering": ["-date_joined"],
             },
+            managers=[
+                ("objects", django.contrib.auth.models.UserManager()),
+            ],
         ),
     ]
