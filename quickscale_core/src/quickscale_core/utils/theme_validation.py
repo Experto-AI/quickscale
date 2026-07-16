@@ -246,12 +246,15 @@ def _extract_config_theme(raw: dict) -> str | None:
             or set to ``showcase_react``).
     """
     project = raw.get("project")
+    # Narrow type for static analysis — the caller guarantees this is a
+    # dict (checked by _validate_source_theme before calling this helper).
+    assert isinstance(project, dict)
     # Must distinguish "key absent" (valid schema default) from
     # "key present with value null" (invalid — the user explicitly
     # wrote ``project.theme: null`` or ``project.theme:`` in YAML).
-    if "theme" not in project:  # type: ignore[union-attr]
+    if "theme" not in project:
         return None
-    theme = project["theme"]  # type: ignore[union-attr]
+    theme = project["theme"]
     if theme is None:
         raise ThemeValidationError(
             f"project.theme is explicitly set to null in "
