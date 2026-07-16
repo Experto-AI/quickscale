@@ -8,9 +8,7 @@ plus the central tenant-table registry used by the AF1 conformance gate.
 from __future__ import annotations
 
 from typing import Any
-from collections.abc import Iterator
 from enum import Enum, auto
-import contextlib
 from django.db import models
 
 
@@ -638,101 +636,6 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
     # Drop existing policies then re-create with the current template.
     revert_force_rls(schema_editor, tuple(existing_targets))
     apply_force_rls(schema_editor, tuple(existing_targets))
-
-
-# ---------------------------------------------------------------------------
-# SA88 — Migration operator-access helper
-# ---------------------------------------------------------------------------
-# Context manager for migration backfills that need to read organization_id
-# across FORCE RLS boundaries.  Sets the PostgreSQL ``app.operator_access``
-# GUC to ``'on'`` via ``SET LOCAL`` on the schema_editor's connection so
-# that FORCE RLS policies allow queries matching any organization_id.
-#
-# No-op on non-PostgreSQL databases.  Fails hard (RuntimeError) on
-# PostgreSQL when called outside an active transaction.atomic() block,
-# because ``SET LOCAL`` is otherwise a silent no-op.
-#
-# Lexically restoring: saves the prior GUC value on entry and restores
-# it in ``finally``, so nested usage or sequential context managers
-# within the same transaction each independently capture and restore.
-# Body exceptions do not prevent GUC restoration.
-#
-# Usage from a migration::
-#
-#     from quickscale_modules_orgs.tenancy import operator_access_migration
-#
-#     def forward(apps, schema_editor):
-#         with operator_access_migration(schema_editor):
-#             schema_editor.execute(
-#                 "UPDATE ... SET organization_id = "
-#                 "(SELECT ... FROM ...) "
-#             )
-# ---------------------------------------------------------------------------
-
-
-@contextlib.contextmanager
-def operator_access_migration(schema_editor: Any) -> Iterator[None]:
-    """Context manager enabling PostgreSQL operator_access for migration backfills.
-
-    Sets the PostgreSQL GUC ``app.operator_access = 'on'`` via ``SET LOCAL``
-    on the *schema_editor*'s connection, enabling cross-tenant reads through
-    FORCE RLS policies (the ``_select`` OR clause in the SA14.5 policy template).
-
-    The prior GUC value is saved on entry and lexically restored in
-    ``finally`` via ``set_config(..., is_local=true)`` on the same connection,
-    so nested usage and sequential contexts each independently capture and
-    restore.  Any exception raised by the enclosed body propagates normally
-    after GUC restoration.
-
-    **Requires an active atomic block** on PostgreSQL — ``SET LOCAL`` is
-    otherwise a silent no-op, which would defeat the purpose.  Raises
-    :class:`RuntimeError` if called on PostgreSQL outside an active
-    ``transaction.atomic()`` block.
-
-    **No-op on non-PostgreSQL databases** — the body executes without
-    any GUC manipulation.
-
-    Args:
-        schema_editor: The Django schema editor from a migration.
-
-    Yields:
-        None
-    """
-    if schema_editor.connection.vendor != "postgresql":
-        yield
-        return
-
-    if not schema_editor.connection.in_atomic_block:
-        raise RuntimeError(
-            "operator_access_migration() requires an active atomic block "
-            "on PostgreSQL (SET LOCAL is otherwise a silent no-op)."
-        )
-
-    # Capture the prior GUC value through the schema_editor's connection
-    # (not the global Django connection) for lexical restoration.
-    # Uses a raw cursor (bypassing schema_editor.execute) to read the
-    # GUC without side effects.
-    with schema_editor.connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT COALESCE(NULLIF("
-            "current_setting('app.operator_access', true), ''), '')",
-        )
-        (prior,) = cursor.fetchone()
-
-    # Enable operator_access via SET LOCAL (transaction-scoped).
-    schema_editor.execute("SET LOCAL app.operator_access = 'on'")
-    try:
-        yield
-    finally:
-        # Lexical restoration: restore the prior GUC value through the
-        # supplied connection.  Uses set_config(..., is_local=true) so
-        # that restoration is immediate, transaction-local, and does
-        # not leak into sibling or outer scope.
-        with schema_editor.connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT set_config('app.operator_access', %s, true)",
-                [prior],
-            )
 
 
 # ---------------------------------------------------------------------------

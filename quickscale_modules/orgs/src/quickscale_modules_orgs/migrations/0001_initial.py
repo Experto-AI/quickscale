@@ -1,4 +1,18 @@
-"""Initial migration for the QuickScale organizations module."""
+"""Initial migration for the QuickScale Orgs module.
+
+Collapsed SA92 migration: final-schema 0001 with Organization,
+OrganizationMembership, OrganizationInvitation, and OrganizationTombstone
+models.  Includes is_system field and unique_system_org constraint.
+
+The orgs module is the control-plane for tenancy — its own models are
+EXCLUDED_REVIEWED in the tenant-table registry, and it runs before any
+enrolled tables exist, so a FORCE RLS policy refresh here would be a
+guaranteed no-op and is therefore removed.  Each tenant module's own
+0001 migration remains authoritative for RLS installation on its own
+tables.
+"""
+
+from __future__ import annotations
 
 import uuid
 
@@ -32,6 +46,10 @@ class Migration(migrations.Migration):
                 ("stripe_customer_id", models.CharField(blank=True, max_length=255)),
                 ("is_personal", models.BooleanField(default=False)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "is_system",
+                    models.BooleanField(default=False),
+                ),
             ],
             options={
                 "ordering": ["name"],
@@ -150,5 +168,62 @@ class Migration(migrations.Migration):
                 "ordering": ["organization_id", "user_id"],
                 "unique_together": {("user", "organization")},
             },
+        ),
+        migrations.CreateModel(
+            name="OrganizationTombstone",
+            fields=[
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                (
+                    "organization_id",
+                    models.UUIDField(
+                        unique=True,
+                        verbose_name="purged organization UUID",
+                        help_text="The UUID of the purged organization (not a FK — the org row is gone).",
+                    ),
+                ),
+                (
+                    "purged_at",
+                    models.DateTimeField(auto_now_add=True),
+                ),
+                (
+                    "purged_by_user_id",
+                    models.CharField(
+                        max_length=255,
+                        blank=True,
+                        default="",
+                        verbose_name="purged by user ID",
+                        help_text="Operator identifier who triggered the purge, if known.",
+                    ),
+                ),
+                (
+                    "reason",
+                    models.TextField(
+                        blank=True,
+                        default="",
+                        help_text="Optional human-readable reason for the purge.",
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "organization tombstone",
+                "verbose_name_plural": "organization tombstones",
+                "ordering": ["-purged_at"],
+            },
+        ),
+        migrations.AddConstraint(
+            model_name="organization",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("is_system", True)),
+                fields=("is_system",),
+                name="unique_system_org",
+            ),
         ),
     ]
