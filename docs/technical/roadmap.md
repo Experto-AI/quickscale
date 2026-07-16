@@ -158,7 +158,7 @@ SA84 and SA86 were originally framed as two instances of **arch-audit [Finding 8
 
 > **Finding 1 closed.** arch-audit **[Finding 1](../others/arch-audit.md)** (`dr-engine-module-circular-lattice`, DR persistence port) is closed: SA89a (persistence protocol in `core` + `restore_admin_uploaded_backup` port, done 2026-07-14) and SA89b (orchestration port closeout — declarative reverse import ban + modules-absent runtime proof, custom boundary scanner deleted, done 2026-07-15). Detail in [CHANGELOG.md §SA89a/§SA89b](../../CHANGELOG.md). **SA89B-CR-004 (low/advisory)** remains open against `check_module_core_compatibility.py` independently — not gating.
 
-**Reassigned closeout work (from Track 2, to use freed Track 3 capacity — all `deps: none`):**
+**Reassigned closeout work (from Track 2, to use freed Track 3 capacity):**
 
 > **↪ Next up for Track 3 (hand off now): SA91.** It is unblocked (`deps: none`), non-gating, and independent of the SA93 cross-track wait — start it immediately rather than idling behind SA93.
 
