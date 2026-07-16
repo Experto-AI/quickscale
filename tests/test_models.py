@@ -14,6 +14,7 @@ from quickscale_modules_crm.models import (
     Stage,
     Tag,
 )
+from quickscale_modules_orgs.current_org import org_scope
 
 
 @pytest.mark.django_db
@@ -22,16 +23,26 @@ class TestTagModel:
 
     def test_create_tag(self, org_a):
         """Test creating a tag"""
-        tag = Tag.all_objects.create(name="VIP", organization=org_a)
+        with org_scope(org_a):
+            tag = Tag.all_objects.create(name="VIP", organization=org_a)
         assert tag.name == "VIP"
         assert str(tag) == "VIP"
         assert tag.created_at is not None
 
     def test_tag_unique_name(self, org_a):
         """Test that tag names are unique within the same owner bucket."""
-        Tag.all_objects.create(name="VIP", organization=org_a)
-        with pytest.raises(IntegrityError):
+        from django.db import transaction
+
+        # Successful setup inside org_scope.
+        with org_scope(org_a):
             Tag.all_objects.create(name="VIP", organization=org_a)
+
+        # Expected failing write inside nested transaction.atomic()
+        # savepoint so the outer scope remains usable.
+        with pytest.raises(IntegrityError):
+            with org_scope(org_a):
+                with transaction.atomic():
+                    Tag.all_objects.create(name="VIP", organization=org_a)
 
     def test_tag_unique_name_field_is_no_longer_field_level_unique(self):
         """Tag.name is no longer field-level unique; uniqueness is via constraint."""
@@ -46,15 +57,23 @@ class TestTagModel:
 
     def test_tag_same_name_different_orgs_allowed(self, org_a, org_b):
         """Same tag name is allowed across different organizations."""
-        tag_a = Tag.all_objects.create(name="VIP", organization=org_a)
-        tag_b = Tag.all_objects.create(name="VIP", organization=org_b)
+        with org_scope(org_a):
+            tag_a = Tag.all_objects.create(name="VIP", organization=org_a)
+        with org_scope(org_b):
+            tag_b = Tag.all_objects.create(name="VIP", organization=org_b)
         assert tag_a.pk != tag_b.pk
 
     def test_tag_duplicate_name_same_org_blocked(self, org_a):
         """Duplicate tag name within the same org is blocked at DB level."""
-        Tag.all_objects.create(name="VIP", organization=org_a)
-        with pytest.raises(IntegrityError):
+        from django.db import transaction
+
+        with org_scope(org_a):
             Tag.all_objects.create(name="VIP", organization=org_a)
+
+        with pytest.raises(IntegrityError):
+            with org_scope(org_a):
+                with transaction.atomic():
+                    Tag.all_objects.create(name="VIP", organization=org_a)
 
 
 @pytest.mark.django_db
@@ -63,12 +82,13 @@ class TestCompanyModel:
 
     def test_create_company(self, org_a):
         """Test creating a company"""
-        company = Company.all_objects.create(
-            name="Acme Corp",
-            industry="Technology",
-            website="https://acme.com",
-            organization=org_a,
-        )
+        with org_scope(org_a):
+            company = Company.all_objects.create(
+                name="Acme Corp",
+                industry="Technology",
+                website="https://acme.com",
+                organization=org_a,
+            )
         assert company.name == "Acme Corp"
         assert company.industry == "Technology"
         assert str(company) == "Acme Corp"
@@ -85,26 +105,28 @@ class TestContactModel:
 
     def test_create_contact(self, company):
         """Test creating a contact"""
-        contact = Contact.all_objects.create(
-            first_name="Jane",
-            last_name="Smith",
-            email="jane@example.com",
-            phone="+1234567890",
-            company=company,
-            organization=company.organization,
-        )
+        with org_scope(company.organization):
+            contact = Contact.all_objects.create(
+                first_name="Jane",
+                last_name="Smith",
+                email="jane@example.com",
+                phone="+1234567890",
+                company=company,
+                organization=company.organization,
+            )
         assert contact.full_name == "Jane Smith"
         assert str(contact) == "Jane Smith"
 
     def test_contact_default_status(self, company):
         """Test contact default status is 'new'"""
-        contact = Contact.all_objects.create(
-            first_name="Test",
-            last_name="User",
-            email="test@example.com",
-            company=company,
-            organization=company.organization,
-        )
+        with org_scope(company.organization):
+            contact = Contact.all_objects.create(
+                first_name="Test",
+                last_name="User",
+                email="test@example.com",
+                company=company,
+                organization=company.organization,
+            )
         assert contact.status == "new"
 
     def test_contact_tags(self, contact, tag):
@@ -120,9 +142,10 @@ class TestStageModel:
 
     def test_create_stage(self, org_a):
         """Test creating a stage"""
-        stage = Stage.all_objects.create(
-            name="Negotiation", order=2, organization=org_a
-        )
+        with org_scope(org_a):
+            stage = Stage.all_objects.create(
+                name="Negotiation", order=2, organization=org_a
+            )
         assert stage.name == "Negotiation"
         assert stage.order == 2
         assert str(stage) == "Negotiation"
@@ -130,15 +153,19 @@ class TestStageModel:
     def test_stage_ordering(self, org_a):
         """Test stages are ordered by order field"""
         Stage.all_objects.filter(organization=org_a).delete()
-        stage3 = Stage.all_objects.create(name="C", order=3, organization=org_a)
-        stage1 = Stage.all_objects.create(name="A", order=1, organization=org_a)
-        stage2 = Stage.all_objects.create(name="B", order=2, organization=org_a)
-        stages = list(Stage.all_objects.filter(organization=org_a))
+        with org_scope(org_a):
+            stage3 = Stage.all_objects.create(name="C", order=3, organization=org_a)
+            stage1 = Stage.all_objects.create(name="A", order=1, organization=org_a)
+            stage2 = Stage.all_objects.create(name="B", order=2, organization=org_a)
+            stages = list(Stage.all_objects.filter(organization=org_a))
         assert stages == [stage1, stage2, stage3]
 
     def test_stage_terminal_semantic_defaults_to_null_and_stays_hidden(self, org_a):
         """Stage terminal semantics should stay nullable and non-editable by default."""
-        stage = Stage.all_objects.create(name="Qualified", order=2, organization=org_a)
+        with org_scope(org_a):
+            stage = Stage.all_objects.create(
+                name="Qualified", order=2, organization=org_a
+            )
         field = Stage._meta.get_field("terminal_semantic")
 
         assert stage.terminal_semantic is None
@@ -150,23 +177,28 @@ class TestStageModel:
 
     def test_stage_terminal_semantic_must_be_unique_when_present(self, org_a):
         """Only one stage per terminal semantic should be allowed per org."""
+        from django.db import transaction
+
         Stage.all_objects.filter(organization=org_a).delete()
 
-        Stage.all_objects.create(
-            name="Closed-Won",
-            order=3,
-            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
-            organization=org_a,
-        )
-        Stage.all_objects.create(name="Negotiation", order=2, organization=org_a)
-
-        with pytest.raises(IntegrityError):
+        with org_scope(org_a):
             Stage.all_objects.create(
-                name="Deal Signed",
-                order=9,
+                name="Closed-Won",
+                order=3,
                 terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
                 organization=org_a,
             )
+            Stage.all_objects.create(name="Negotiation", order=2, organization=org_a)
+
+        with pytest.raises(IntegrityError):
+            with org_scope(org_a):
+                with transaction.atomic():
+                    Stage.all_objects.create(
+                        name="Deal Signed",
+                        order=9,
+                        terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                        organization=org_a,
+                    )
 
     def test_stage_terminal_semantic_constraints_exist(self):
         """Stage has two partial UniqueConstraints for owner-bucket uniqueness."""
@@ -179,18 +211,20 @@ class TestStageModel:
         Stage.all_objects.filter(organization=org_a).delete()
         Stage.all_objects.filter(organization=org_b).delete()
 
-        stage_a = Stage.all_objects.create(
-            name="Closed-Won",
-            order=3,
-            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
-            organization=org_a,
-        )
-        stage_b = Stage.all_objects.create(
-            name="Deal Signed",
-            order=9,
-            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
-            organization=org_b,
-        )
+        with org_scope(org_a):
+            stage_a = Stage.all_objects.create(
+                name="Closed-Won",
+                order=3,
+                terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                organization=org_a,
+            )
+        with org_scope(org_b):
+            stage_b = Stage.all_objects.create(
+                name="Deal Signed",
+                order=9,
+                terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                organization=org_b,
+            )
         assert stage_a.pk != stage_b.pk
 
 
@@ -200,15 +234,16 @@ class TestDealModel:
 
     def test_create_deal(self, contact, stage, user):
         """Test creating a deal"""
-        deal = Deal.all_objects.create(
-            title="Enterprise Deal",
-            contact=contact,
-            amount=Decimal("50000.00"),
-            stage=stage,
-            probability=75,
-            owner=user,
-            organization=contact.organization,
-        )
+        with org_scope(contact.organization):
+            deal = Deal.all_objects.create(
+                title="Enterprise Deal",
+                contact=contact,
+                amount=Decimal("50000.00"),
+                stage=stage,
+                probability=75,
+                owner=user,
+                organization=contact.organization,
+            )
         assert deal.title == "Enterprise Deal"
         assert deal.amount == Decimal("50000.00")
         assert str(deal) == "Enterprise Deal"
@@ -219,12 +254,13 @@ class TestDealModel:
 
     def test_deal_default_probability(self, contact, stage):
         """Test deal default probability is 50"""
-        deal = Deal.all_objects.create(
-            title="Test Deal",
-            contact=contact,
-            stage=stage,
-            organization=contact.organization,
-        )
+        with org_scope(contact.organization):
+            deal = Deal.all_objects.create(
+                title="Test Deal",
+                contact=contact,
+                stage=stage,
+                organization=contact.organization,
+            )
         assert deal.probability == 50
 
     def test_deal_tags(self, deal, tag):
@@ -240,12 +276,13 @@ class TestContactNoteModel:
 
     def test_create_contact_note(self, contact, user):
         """Test creating a contact note"""
-        note = ContactNote.objects.create(
-            contact=contact,
-            created_by=user,
-            text="Discussed pricing",
-            organization=contact.organization,
-        )
+        with org_scope(contact.organization):
+            note = ContactNote.objects.create(
+                contact=contact,
+                created_by=user,
+                text="Discussed pricing",
+                organization=contact.organization,
+            )
         assert note.text == "Discussed pricing"
         assert note.contact == contact
         assert note.created_by == user
@@ -262,12 +299,13 @@ class TestDealNoteModel:
 
     def test_create_deal_note(self, deal, user):
         """Test creating a deal note"""
-        note = DealNote.objects.create(
-            deal=deal,
-            created_by=user,
-            text="Follow up required",
-            organization=deal.organization,
-        )
+        with org_scope(deal.organization):
+            note = DealNote.objects.create(
+                deal=deal,
+                created_by=user,
+                text="Follow up required",
+                organization=deal.organization,
+            )
         assert note.text == "Follow up required"
         assert note.deal == deal
         assert note.created_by == user

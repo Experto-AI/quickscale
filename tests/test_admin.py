@@ -23,6 +23,7 @@ from quickscale_modules_crm.models import (
     Tag,
 )
 from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+from quickscale_modules_orgs.current_org import org_scope
 
 
 def _set_active_org(client: Any, org_id: uuid.UUID) -> None:
@@ -309,10 +310,12 @@ class TestOperatorPathHTTPAccess:
         response = admin_client.get("/admin/quickscale_modules_crm/deal/")
         assert response.status_code == 200
 
-    def test_superuser_can_filter_tag_by_organization(self, admin_client, org_a, tag):
+    def test_superuser_can_filter_tag_by_organization(self, admin_client, org_a):
         """Platform operator can filter Tag changelist by organization."""
-        tag.organization = org_a
-        tag.save(update_fields=["organization"])
+        from quickscale_modules_crm.models import Tag
+
+        with org_scope(org_a):
+            tag = Tag.all_objects.create(name="Org-A Tag", organization=org_a)
         _set_active_org(admin_client, org_a.id)
         response = admin_client.get(
             f"/admin/quickscale_modules_crm/tag/?organization={org_a.pk}"
@@ -320,12 +323,14 @@ class TestOperatorPathHTTPAccess:
         assert response.status_code == 200
         assert tag.name in response.content.decode()
 
-    def test_superuser_can_filter_company_by_organization(
-        self, admin_client, org_a, company
-    ):
+    def test_superuser_can_filter_company_by_organization(self, admin_client, org_a):
         """Platform operator can filter Company changelist by organization."""
-        company.organization = org_a
-        company.save(update_fields=["organization"])
+        from quickscale_modules_crm.models import Company
+
+        with org_scope(org_a):
+            company = Company.all_objects.create(
+                name="Org-A Corp", industry="Tech", organization=org_a
+            )
         _set_active_org(admin_client, org_a.id)
         response = admin_client.get(
             f"/admin/quickscale_modules_crm/company/?organization={org_a.pk}"
@@ -342,11 +347,13 @@ class TestOperatorPathHTTPAccess:
         assert 'name="organization"' in content
 
     def test_superuser_change_form_shows_organization_readonly(
-        self, admin_client, org_a, tag
+        self, admin_client, org_a
     ):
         """Platform operator change forms must show organization read-only."""
-        tag.organization = org_a
-        tag.save(update_fields=["organization"])
+        from quickscale_modules_crm.models import Tag
+
+        with org_scope(org_a):
+            tag = Tag.all_objects.create(name="Readonly Tag", organization=org_a)
         _set_active_org(admin_client, org_a.id)
         response = admin_client.get(
             f"/admin/quickscale_modules_crm/tag/{tag.pk}/change/"
@@ -367,52 +374,84 @@ class TestF1110Phase1AdminReadOnlyOrganizationOnChange:
     but cannot reassign it.
     """
 
-    def test_tag_admin_organization_readonly_on_change(self, org_a, tag):
+    def test_tag_admin_organization_readonly_on_change(self, org_a):
         """TagAdmin change form includes organization in readonly_fields."""
         from quickscale_modules_crm.admin import TagAdmin
 
-        tag.organization = org_a
-        tag.save(update_fields=["organization"])
+        with org_scope(org_a):
+            tag = Tag.all_objects.create(name="Readonly Tag", organization=org_a)
         tag_admin = TagAdmin(Tag, admin.site)
         request = RequestFactory().get("/admin/")
         readonly = tag_admin.get_readonly_fields(request, obj=tag)
         assert "organization" in readonly
 
-    def test_company_admin_organization_readonly_on_change(self, org_a, company):
+    def test_company_admin_organization_readonly_on_change(self, org_a):
         """CompanyAdmin change form includes organization in readonly_fields."""
-        company.organization = org_a
-        company.save(update_fields=["organization"])
+        with org_scope(org_a):
+            company = Company.all_objects.create(
+                name="Readonly Corp", organization=org_a
+            )
         company_admin = CompanyAdmin(Company, admin.site)
         request = RequestFactory().get("/admin/")
         readonly = company_admin.get_readonly_fields(request, obj=company)
         assert "organization" in readonly
 
-    def test_contact_admin_organization_readonly_on_change(self, org_a, contact):
+    def test_contact_admin_organization_readonly_on_change(self, org_a):
         """ContactAdmin change form includes organization in readonly_fields."""
         from quickscale_modules_crm.admin import ContactAdmin
 
-        contact.organization = org_a
-        contact.save(update_fields=["organization"])
+        with org_scope(org_a):
+            company = Company.all_objects.create(
+                name="Readonly Corp", organization=org_a
+            )
+            contact = Contact.all_objects.create(
+                first_name="Readonly",
+                last_name="Contact",
+                email="readonly@org-a.com",
+                company=company,
+                organization=org_a,
+            )
         contact_admin = ContactAdmin(Contact, admin.site)
         request = RequestFactory().get("/admin/")
         readonly = contact_admin.get_readonly_fields(request, obj=contact)
         assert "organization" in readonly
 
-    def test_stage_admin_organization_readonly_on_change(self, org_a, stage):
+    def test_stage_admin_organization_readonly_on_change(self, org_a):
         """StageAdmin change form includes organization in readonly_fields."""
-        stage.organization = org_a
-        stage.save(update_fields=["organization"])
+        with org_scope(org_a):
+            stage = Stage.all_objects.create(
+                name="Readonly Stage", order=1, organization=org_a
+            )
         stage_admin = StageAdmin(Stage, admin.site)
         request = RequestFactory().get("/admin/")
         readonly = stage_admin.get_readonly_fields(request, obj=stage)
         assert "organization" in readonly
 
-    def test_deal_admin_organization_readonly_on_change(self, org_a, deal):
+    def test_deal_admin_organization_readonly_on_change(self, org_a):
         """DealAdmin change form includes organization in readonly_fields."""
         from quickscale_modules_crm.admin import DealAdmin
 
-        deal.organization = org_a
-        deal.save(update_fields=["organization"])
+        with org_scope(org_a):
+            company = Company.all_objects.create(
+                name="Readonly Corp", organization=org_a
+            )
+            contact = Contact.all_objects.create(
+                first_name="Readonly",
+                last_name="DealContact",
+                email="readonly-deal@org-a.com",
+                company=company,
+                organization=org_a,
+            )
+            stage = Stage.all_objects.create(
+                name="Readonly Stage", order=1, organization=org_a
+            )
+            deal = Deal.all_objects.create(
+                title="Readonly Deal",
+                contact=contact,
+                amount="1000.00",
+                stage=stage,
+                organization=org_a,
+            )
         deal_admin = DealAdmin(Deal, admin.site)
         request = RequestFactory().get("/admin/")
         readonly = deal_admin.get_readonly_fields(request, obj=deal)
@@ -442,8 +481,10 @@ class TestF1110AdminTagFormLevelValidation:
         """
         from quickscale_modules_crm.models import Company, Tag
 
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        foreign_tag = Tag.objects.create(name="Foreign Tag", organization=org_b)
+        with org_scope(org_a):
+            company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        with org_scope(org_b):
+            foreign_tag = Tag.objects.create(name="Foreign Tag", organization=org_b)
 
         _inline_mgmt = {
             "notes-TOTAL_FORMS": "0",
@@ -482,8 +523,9 @@ class TestF1110AdminTagFormLevelValidation:
         """ContactAdmin add form accepts a same-org tag selection."""
         from quickscale_modules_crm.models import Company, Tag
 
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        same_org_tag = Tag.objects.create(name="Same-Org Tag", organization=org_a)
+        with org_scope(org_a):
+            company = Company.objects.create(name="Org-A Corp", organization=org_a)
+            same_org_tag = Tag.objects.create(name="Same-Org Tag", organization=org_a)
 
         _inline_mgmt = {
             "notes-TOTAL_FORMS": "0",
@@ -518,7 +560,8 @@ class TestF1110AdminTagFormLevelValidation:
         """ContactAdmin add form accepts a submission with no tags."""
         from quickscale_modules_crm.models import Company
 
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
+        with org_scope(org_a):
+            company = Company.objects.create(name="Org-A Corp", organization=org_a)
 
         _inline_mgmt = {
             "notes-TOTAL_FORMS": "0",
@@ -563,16 +606,20 @@ class TestF1110AdminTagFormLevelValidation:
             Tag,
         )
 
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Test",
-            last_name="Contact",
-            email="deal-test@example.com",
-            company=company,
-            organization=org_a,
-        )
-        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
-        foreign_tag = Tag.objects.create(name="Foreign Tag", organization=org_b)
+        with org_scope(org_a):
+            company = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact = Contact.objects.create(
+                first_name="Test",
+                last_name="Contact",
+                email="deal-test@example.com",
+                company=company,
+                organization=org_a,
+            )
+            stage = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+        with org_scope(org_b):
+            foreign_tag = Tag.objects.create(name="Foreign Tag", organization=org_b)
 
         _deal_inline_mgmt = {
             "notes-TOTAL_FORMS": "0",
@@ -614,16 +661,19 @@ class TestF1110AdminTagFormLevelValidation:
             Tag,
         )
 
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Test",
-            last_name="Contact",
-            email="deal-same-org@example.com",
-            company=company,
-            organization=org_a,
-        )
-        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
-        same_org_tag = Tag.objects.create(name="Same-Org Tag", organization=org_a)
+        with org_scope(org_a):
+            company = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact = Contact.objects.create(
+                first_name="Test",
+                last_name="Contact",
+                email="deal-same-org@example.com",
+                company=company,
+                organization=org_a,
+            )
+            stage = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+            same_org_tag = Tag.objects.create(name="Same-Org Tag", organization=org_a)
 
         _deal_inline_mgmt = {
             "notes-TOTAL_FORMS": "0",
@@ -660,15 +710,18 @@ class TestF1110AdminTagFormLevelValidation:
             Stage,
         )
 
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Test",
-            last_name="Contact",
-            email="deal-no-tags@example.com",
-            company=company,
-            organization=org_a,
-        )
-        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        with org_scope(org_a):
+            company = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact = Contact.objects.create(
+                first_name="Test",
+                last_name="Contact",
+                email="deal-no-tags@example.com",
+                company=company,
+                organization=org_a,
+            )
+            stage = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
 
         _deal_inline_mgmt = {
             "notes-TOTAL_FORMS": "0",
@@ -697,18 +750,24 @@ class TestF1110AdminTagFormLevelValidation:
 
 @pytest.mark.django_db
 class TestCRT15001ContactNoteTimestampAdminRegression:
-    """CR-T15-001 — Admin/operator ContactNote creation must refresh last_contacted_at
-    even when the tenant contextvar is not set."""
+    """CR-T15-001 — Admin/operator ContactNote creation must refresh
+    last_contacted_at under org-scoped context.
 
-    def test_contact_note_save_updates_timestamp_without_contextvar(self, db, company):
+    The admin path always has ``request.org`` set (via ``TenantModelAdmin`` /
+    ``_org_db_context``), so ``app.current_org_id`` is always non-None.
+    This test proves the post-save ``all_objects`` bypass in
+    ``ContactNote.save()`` updates ``last_contacted_at`` even when standard
+    ``ContactNote.objects`` uses the default tenant-scoped manager.
+    """
+
+    def test_contact_note_save_updates_timestamp_under_admin_org_scope(
+        self, db, company
+    ):
         """ContactNote.save() updates Contact.last_contacted_at via all_objects
-        bypass even when the tenant contextvar is not set."""
+        bypass when the admin org-scoped context is active."""
         from django.contrib.auth import get_user_model
         from quickscale_modules_crm.models import Contact, ContactNote
-        from quickscale_modules_orgs.current_org import reset_current_org_id
-
-        # Ensure contextvar is explicitly unset (simulating admin/operator path).
-        reset_current_org_id()
+        from quickscale_modules_orgs.current_org import org_scope
 
         user_model = get_user_model()
         operator = user_model.objects.create_superuser(
@@ -716,23 +775,31 @@ class TestCRT15001ContactNoteTimestampAdminRegression:
             email="op-ts-test@example.com",
             password="pass",
         )
-        contact = Contact.objects.create(
-            first_name="Timestamp",
-            last_name="Test",
-            email="ts-test@example.com",
-            company=company,
-            organization=company.organization,
-        )
-        assert contact.last_contacted_at is None
+        # Wrap both Contact and ContactNote creation in org_scope to
+        # simulate the admin path where TenantModelAdmin._org_db_context
+        # always provides org-scoped context. The all_objects bypass in
+        # ContactNote.save() is the CR-T15-001 regression fix.
+        with org_scope(company.organization):
+            contact = Contact.objects.create(
+                first_name="Timestamp",
+                last_name="Test",
+                email="ts-test@example.com",
+                company=company,
+                organization=company.organization,
+            )
+            assert contact.last_contacted_at is None
 
-        ContactNote.objects.create(
-            contact=contact,
-            created_by=operator,
-            text="Regression test for CR-T15-001 — no contextvar",
-            organization=contact.organization,
-        )
+            ContactNote.objects.create(
+                contact=contact,
+                created_by=operator,
+                text="Regression test for CR-T15-001 — admin org scope",
+                organization=contact.organization,
+            )
 
-        contact.refresh_from_db()
+            # Refresh inside the same org_scope so FORCE RLS allows the
+            # SELECT. The all_objects bypass in ContactNote.save() updates
+            # last_contacted_at without TenantManager filtering.
+            contact.refresh_from_db()
         assert contact.last_contacted_at is not None, (
             "last_contacted_at must be updated via all_objects bypass"
         )
@@ -757,14 +824,15 @@ class TestContactNoteAdminSameOrgValidation:
         """
         from quickscale_modules_crm.models import Company, Contact
 
-        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
-        contact_b = Contact.objects.create(
-            first_name="Foreign",
-            last_name="Contact",
-            email="foreign@org-b.com",
-            company=company_b,
-            organization=org_b,
-        )
+        with org_scope(org_b):
+            company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+            contact_b = Contact.objects.create(
+                first_name="Foreign",
+                last_name="Contact",
+                email="foreign@org-b.com",
+                company=company_b,
+                organization=org_b,
+            )
 
         response = admin_client.post(
             "/admin/quickscale_modules_crm/contactnote/add/",
@@ -787,14 +855,15 @@ class TestContactNoteAdminSameOrgValidation:
         """ContactNoteAdmin add form accepts a contact from the same organization."""
         from quickscale_modules_crm.models import Company, Contact
 
-        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact_a = Contact.objects.create(
-            first_name="Same",
-            last_name="Org",
-            email="same@org-a.com",
-            company=company_a,
-            organization=org_a,
-        )
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Same",
+                last_name="Org",
+                email="same@org-a.com",
+                company=company_a,
+                organization=org_a,
+            )
 
         response = admin_client.post(
             "/admin/quickscale_modules_crm/contactnote/add/",
@@ -813,14 +882,15 @@ class TestContactNoteAdminSameOrgValidation:
         """ContactNoteAdmin add form requires organization to be set."""
         from quickscale_modules_crm.models import Company, Contact
 
-        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact_a = Contact.objects.create(
-            first_name="Require",
-            last_name="OrgTest",
-            email="require-org@org-a.com",
-            company=company_a,
-            organization=org_a,
-        )
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Require",
+                last_name="OrgTest",
+                email="require-org@org-a.com",
+                company=company_a,
+                organization=org_a,
+            )
 
         response = admin_client.post(
             "/admin/quickscale_modules_crm/contactnote/add/",
@@ -854,22 +924,24 @@ class TestDealNoteAdminSameOrgValidation:
             Stage,
         )
 
-        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact_a = Contact.objects.create(
-            first_name="Contact",
-            last_name="A",
-            email="contact-a@org-a.com",
-            company=company_a,
-            organization=org_a,
-        )
-        stage_a = Stage.objects.create(name="Stage A", order=1, organization=org_a)
-        deal_b = Deal.objects.create(
-            title="Foreign Deal",
-            contact=contact_a,
-            amount=1000,
-            stage=stage_a,
-            organization=org_b,
-        )
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Contact",
+                last_name="A",
+                email="contact-a@org-a.com",
+                company=company_a,
+                organization=org_a,
+            )
+            stage_a = Stage.objects.create(name="Stage A", order=1, organization=org_a)
+        with org_scope(org_b):
+            deal_b = Deal.objects.create(
+                title="Foreign Deal",
+                contact=contact_a,
+                amount=1000,
+                stage=stage_a,
+                organization=org_b,
+            )
 
         response = admin_client.post(
             "/admin/quickscale_modules_crm/dealnote/add/",
@@ -897,22 +969,25 @@ class TestDealNoteAdminSameOrgValidation:
             Stage,
         )
 
-        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact_a = Contact.objects.create(
-            first_name="Contact",
-            last_name="A",
-            email="contact-a-same@org-a.com",
-            company=company_a,
-            organization=org_a,
-        )
-        stage_a = Stage.objects.create(name="Stage A Same", order=2, organization=org_a)
-        deal_a = Deal.objects.create(
-            title="Same-Org Deal",
-            contact=contact_a,
-            amount=2000,
-            stage=stage_a,
-            organization=org_a,
-        )
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Contact",
+                last_name="A",
+                email="contact-a-same@org-a.com",
+                company=company_a,
+                organization=org_a,
+            )
+            stage_a = Stage.objects.create(
+                name="Stage A Same", order=2, organization=org_a
+            )
+            deal_a = Deal.objects.create(
+                title="Same-Org Deal",
+                contact=contact_a,
+                amount=2000,
+                stage=stage_a,
+                organization=org_a,
+            )
 
         response = admin_client.post(
             "/admin/quickscale_modules_crm/dealnote/add/",
@@ -935,24 +1010,25 @@ class TestDealNoteAdminSameOrgValidation:
             Stage,
         )
 
-        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact_a = Contact.objects.create(
-            first_name="Require",
-            last_name="OrgTest",
-            email="dealnote-req-org@org-a.com",
-            company=company_a,
-            organization=org_a,
-        )
-        stage_a = Stage.objects.create(
-            name="Stage Req Org", order=3, organization=org_a
-        )
-        deal_a = Deal.objects.create(
-            title="Deal Require Org",
-            contact=contact_a,
-            amount=3000,
-            stage=stage_a,
-            organization=org_a,
-        )
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Require",
+                last_name="OrgTest",
+                email="dealnote-req-org@org-a.com",
+                company=company_a,
+                organization=org_a,
+            )
+            stage_a = Stage.objects.create(
+                name="Stage Req Org", order=3, organization=org_a
+            )
+            deal_a = Deal.objects.create(
+                title="Deal Require Org",
+                contact=contact_a,
+                amount=3000,
+                stage=stage_a,
+                organization=org_a,
+            )
 
         response = admin_client.post(
             "/admin/quickscale_modules_crm/dealnote/add/",
@@ -980,7 +1056,9 @@ class TestContactAdminInlineNoteCreatedBy:
         """ContactAdmin POST with inline ContactNote creates note with created_by."""
         from quickscale_modules_crm.models import Company, Contact, ContactNote
 
-        company = Company.all_objects.create(name="Test Corp", organization=org_a)
+        with org_scope(org_a):
+            company = Company.all_objects.create(name="Test Corp", organization=org_a)
+        _set_active_org(admin_client, org_a.id)
 
         response = admin_client.post(
             "/admin/quickscale_modules_crm/contact/add/",
@@ -1007,11 +1085,13 @@ class TestContactAdminInlineNoteCreatedBy:
             f"Expected redirect, got {response.status_code}"
         )
 
-        # Verify the note was created with created_by set
-        # Use all_objects to bypass TenantManager auto-scoping
-        # (no org context is active after the POST response)
-        contact = Contact.all_objects.get(email="inline-contact@example.com")
-        note = ContactNote.all_objects.get(contact=contact)
+        # Verify the note was created with created_by set.
+        # Wrap in org_scope so the DB GUC (app.current_org_id) is set
+        # for the query — FORCE RLS blocks SELECT when the GUC is empty
+        # (the admin view's org_scope transaction has already committed).
+        with org_scope(org_a):
+            contact = Contact.all_objects.get(email="inline-contact@example.com")
+            note = ContactNote.all_objects.get(contact=contact)
         assert note.created_by is not None
         assert note.created_by.is_superuser
         assert note.text == "Test inline note from admin"
@@ -1023,14 +1103,16 @@ class TestContactAdminInlineNoteCreatedBy:
         """ContactAdmin change form with new inline ContactNote stamps created_by."""
         from quickscale_modules_crm.models import Company, Contact, ContactNote
 
-        company = Company.all_objects.create(name="Test Corp", organization=org_a)
-        contact = Contact.all_objects.create(
-            first_name="Existing",
-            last_name="Contact",
-            email="existing-contact@example.com",
-            company=company,
-            organization=org_a,
-        )
+        with org_scope(org_a):
+            company = Company.all_objects.create(name="Test Corp", organization=org_a)
+            contact = Contact.all_objects.create(
+                first_name="Existing",
+                last_name="Contact",
+                email="existing-contact@example.com",
+                company=company,
+                organization=org_a,
+            )
+        _set_active_org(admin_client, org_a.id)
 
         response = admin_client.post(
             f"/admin/quickscale_modules_crm/contact/{contact.pk}/change/",
@@ -1055,11 +1137,14 @@ class TestContactAdminInlineNoteCreatedBy:
             f"Expected redirect, got {response.status_code}"
         )
 
-        # Verify the note was created with created_by set
-        # Use all_objects to bypass TenantManager auto-scoping
-        note = ContactNote.all_objects.get(
-            contact=contact, text="New note on existing contact"
-        )
+        # Verify the note was created with created_by set.
+        # Wrap in org_scope so the DB GUC is set — FORCE RLS blocks
+        # SELECT when app.current_org_id is empty (the admin view's
+        # org_scope transaction has already committed).
+        with org_scope(org_a):
+            note = ContactNote.all_objects.get(
+                contact=contact, text="New note on existing contact"
+            )
         assert note.created_by is not None
         assert note.created_by.is_superuser
 
@@ -1078,17 +1163,19 @@ class TestDealAdminInlineNoteCreatedBy:
             Stage,
         )
 
-        company = Company.all_objects.create(name="Test Corp", organization=org_a)
-        contact = Contact.all_objects.create(
-            first_name="Deal",
-            last_name="Contact",
-            email="deal-contact-inline@example.com",
-            company=company,
-            organization=org_a,
-        )
-        stage = Stage.all_objects.create(
-            name="Prospecting", order=1, organization=org_a
-        )
+        with org_scope(org_a):
+            company = Company.all_objects.create(name="Test Corp", organization=org_a)
+            contact = Contact.all_objects.create(
+                first_name="Deal",
+                last_name="Contact",
+                email="deal-contact-inline@example.com",
+                company=company,
+                organization=org_a,
+            )
+            stage = Stage.all_objects.create(
+                name="Prospecting", order=1, organization=org_a
+            )
+        _set_active_org(admin_client, org_a.id)
 
         response = admin_client.post(
             "/admin/quickscale_modules_crm/deal/add/",
@@ -1113,10 +1200,13 @@ class TestDealAdminInlineNoteCreatedBy:
             f"Expected redirect, got {response.status_code}"
         )
 
-        # Verify the note was created with created_by set
-        # Use all_objects to bypass TenantManager auto-scoping
-        deal = Deal.all_objects.get(title="Test Deal with Note")
-        note = DealNote.all_objects.get(deal=deal)
+        # Verify the note was created with created_by set.
+        # Wrap in org_scope so the DB GUC is set — FORCE RLS blocks
+        # SELECT when app.current_org_id is empty (the admin view's
+        # org_scope transaction has already committed).
+        with org_scope(org_a):
+            deal = Deal.all_objects.get(title="Test Deal with Note")
+            note = DealNote.all_objects.get(deal=deal)
         assert note.created_by is not None
         assert note.created_by.is_superuser
         assert note.text == "Test inline deal note"
