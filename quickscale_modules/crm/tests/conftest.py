@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from decimal import Decimal
 
 import pytest
@@ -19,6 +20,7 @@ from quickscale_modules_crm.models import (
 )
 from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
 from quickscale_modules_orgs.current_org import (
+    org_scope,
     reset_current_org_id,
     set_current_org_id,
 )
@@ -29,10 +31,64 @@ from quickscale_modules_orgs.models import (
 )
 
 
+# ---------------------------------------------------------------------------
+# SA84-REV-001 — per-test state reset matching the proven forms pattern
+# ---------------------------------------------------------------------------
+# Reset ContextVar, DB GUCs (app.current_org_id, app.operator_access, ROLE),
+# AF9 priming memo, and cache before and after each test so that per-test
+# state never leaks across test boundaries (REV-001).
+# ---------------------------------------------------------------------------
+
+
 @pytest.fixture(autouse=True)
-def _reset_crm_org_contextvar() -> None:
-    """Reset the org contextvar before each test to prevent cross-test leakage."""
+def _reset_crm_test_state() -> Iterator[None]:
+    """Reset per-test state: ContextVar, DB GUCs, and cache.
+
+    Mirrors the proven forms module reset pattern (``forms/tests/conftest.py``).
+    ContextVars persist across tests within the same thread; this fixture
+    clears the org ContextVar before each test so the baseline is always
+    ``None`` (fail-closed).  Also clears PostgreSQL GUCs ``app.current_org_id``,
+    ``app.operator_access``, resets the DB role to session default, clears the
+    AF9 per-transaction priming memo, and clears the Django cache.
+
+    Tests without the ``db`` marker safely skip DB GUC resets.
+    """
+
     reset_current_org_id()
+    from django.db import connection
+
+    if connection.vendor == "postgresql":
+        try:
+            with connection.cursor() as cur:
+                cur.execute("RESET app.current_org_id")
+                cur.execute("RESET app.operator_access")
+                cur.execute("RESET ROLE")
+        except RuntimeError:
+            # Database access not allowed (test without db marker).
+            pass
+    if hasattr(connection, "_af9_primed_for_txn"):
+        del connection._af9_primed_for_txn
+    if hasattr(connection, "_af9_primed_atomic"):
+        del connection._af9_primed_atomic
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    # Post-yield symmetric teardown.
+    reset_current_org_id()
+    if connection.vendor == "postgresql":
+        try:
+            with connection.cursor() as cur:
+                cur.execute("RESET app.current_org_id")
+                cur.execute("RESET app.operator_access")
+                cur.execute("RESET ROLE")
+        except RuntimeError:
+            pass
+    if hasattr(connection, "_af9_primed_for_txn"):
+        del connection._af9_primed_for_txn
+    if hasattr(connection, "_af9_primed_atomic"):
+        del connection._af9_primed_atomic
+    cache.clear()
 
 
 @pytest.fixture
@@ -128,11 +184,14 @@ def authenticated_client(staff_user):
         """APIClient that sets session org and ContextVar for org scoping."""
 
         def request(self, **kwargs):
-            set_current_org_id(personal_org_id)
-            try:
+            # Use the public org_scope contract so both the Python ContextVar
+            # AND the transaction-local GUC (app.current_org_id) are restored
+            # after each synthetic request — not only the ContextVar.
+            # SA84-REV-001: prior code cleared only the ContextVar via
+            # reset_current_org_id(), leaving the SET LOCAL GUC active in
+            # pytest's outer transaction.
+            with org_scope(personal_org):
                 return super().request(**kwargs)
-            finally:
-                reset_current_org_id()
 
     client = OrgEnrichedAPIClient()
     client.force_login(staff_user)
@@ -154,112 +213,174 @@ def non_staff_authenticated_client(user):
 
 @pytest.fixture
 def tag(db, staff_user):
-    """Create a test tag stamped with the staff user's personal org (Phase 2)."""
+    """Create a test tag stamped with the staff user's personal org (Phase 2).
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
+    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    to be set for INSERTs under the restricted test role).
+    """
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
         is_personal=True, memberships__user=staff_user
     )
-    return Tag.objects.create(name="VIP", organization=personal_org)
+    with org_scope(personal_org):
+        return Tag.objects.create(name="VIP", organization=personal_org)
 
 
 @pytest.fixture
 def company(db, staff_user):
-    """Create a test company stamped with the staff user's personal org (Phase 2)."""
+    """Create a test company stamped with the staff user's personal org (Phase 2).
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
+    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    to be set for INSERTs under the restricted test role).
+    """
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
         is_personal=True, memberships__user=staff_user
     )
-    return Company.objects.create(
-        name="Acme Corp",
-        industry="Technology",
-        website="https://acme.example.com",
-        organization=personal_org,
-    )
+    with org_scope(personal_org):
+        return Company.objects.create(
+            name="Acme Corp",
+            industry="Technology",
+            website="https://acme.example.com",
+            organization=personal_org,
+        )
 
 
 @pytest.fixture
 def contact(db, company):
-    """Create a test contact stamped with the company's org (Phase 2)."""
-    return Contact.objects.create(
-        first_name="John",
-        last_name="Doe",
-        email="john.doe@example.com",
-        phone="+1234567890",
-        title="Sales Manager",
-        company=company,
-        organization=company.organization,
-    )
+    """Create a test contact stamped with the company's org (Phase 2).
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
+    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    to be set for INSERTs under the restricted test role).
+    """
+
+    with org_scope(company.organization):
+        return Contact.objects.create(
+            first_name="John",
+            last_name="Doe",
+            email="john.doe@example.com",
+            phone="+1234567890",
+            title="Sales Manager",
+            company=company,
+            organization=company.organization,
+        )
 
 
 @pytest.fixture
 def stage(db, staff_user):
-    """Create a test stage stamped with the staff user's personal org (Phase 2)."""
+    """Create a test stage stamped with the staff user's personal org (Phase 2).
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
+    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    to be set for INSERTs under the restricted test role).
+    """
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
         is_personal=True, memberships__user=staff_user
     )
-    return Stage.objects.create(name="Prospecting", order=1, organization=personal_org)
+    with org_scope(personal_org):
+        return Stage.objects.create(
+            name="Prospecting", order=1, organization=personal_org
+        )
 
 
 @pytest.fixture
 def closed_won_stage(db, staff_user):
-    """Create Closed-Won stage stamped with personal org (Phase 2)."""
+    """Create Closed-Won stage stamped with personal org (Phase 2).
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
+    duration of the fixture body (SA84).
+    """
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
         is_personal=True, memberships__user=staff_user
     )
-    return Stage.objects.create(name="Closed-Won", order=3, organization=personal_org)
+    with org_scope(personal_org):
+        return Stage.objects.create(
+            name="Closed-Won", order=3, organization=personal_org
+        )
 
 
 @pytest.fixture
 def closed_lost_stage(db, staff_user):
-    """Create Closed-Lost stage stamped with personal org (Phase 2)."""
+    """Create Closed-Lost stage stamped with personal org (Phase 2).
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
+    duration of the fixture body (SA84).
+    """
     from quickscale_modules_orgs.models import Organization
 
     personal_org = Organization.objects.get(
         is_personal=True, memberships__user=staff_user
     )
-    return Stage.objects.create(name="Closed-Lost", order=4, organization=personal_org)
+    with org_scope(personal_org):
+        return Stage.objects.create(
+            name="Closed-Lost", order=4, organization=personal_org
+        )
 
 
 @pytest.fixture
 def deal(db, contact, stage, user):
-    """Create a test deal stamped with the contact's org (Phase 2)."""
-    return Deal.objects.create(
-        title="Enterprise Deal",
-        contact=contact,
-        amount=Decimal("50000.00"),
-        stage=stage,
-        probability=75,
-        owner=user,
-        organization=contact.organization,
-    )
+    """Create a test deal stamped with the contact's org (Phase 2).
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
+    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    to be set for INSERTs under the restricted test role).
+    """
+
+    with org_scope(contact.organization):
+        return Deal.objects.create(
+            title="Enterprise Deal",
+            contact=contact,
+            amount=Decimal("50000.00"),
+            stage=stage,
+            probability=75,
+            owner=user,
+            organization=contact.organization,
+        )
 
 
 @pytest.fixture
 def contact_note(db, contact, user):
-    """Create a test contact note"""
-    return ContactNote.objects.create(
-        contact=contact,
-        created_by=user,
-        text="Discussed pricing options",
-        organization=contact.organization,
-    )
+    """Create a test contact note
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
+    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    to be set for INSERTs under the restricted test role).
+    """
+
+    with org_scope(contact.organization):
+        return ContactNote.objects.create(
+            contact=contact,
+            created_by=user,
+            text="Discussed pricing options",
+            organization=contact.organization,
+        )
 
 
 @pytest.fixture
 def deal_note(db, deal, user):
-    """Create a test deal note"""
-    return DealNote.objects.create(
-        deal=deal,
-        created_by=user,
-        text="Follow up next week",
-        organization=deal.organization,
-    )
+    """Create a test deal note
+
+    Wrapped in ``org_scope`` so the ContextVar and DB GUC are set for the
+    duration of the fixture body (SA84 — FORCE RLS requires ``app.current_org_id``
+    to be set for INSERTs under the restricted test role).
+    """
+
+    with org_scope(deal.organization):
+        return DealNote.objects.create(
+            deal=deal,
+            created_by=user,
+            text="Follow up next week",
+            organization=deal.organization,
+        )
 
 
 # ---------------------------------------------------------------------------
