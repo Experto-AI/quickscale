@@ -16,6 +16,7 @@ from quickscale_modules_crm.serializers import (
     StageSerializer,
     TagSerializer,
 )
+from quickscale_modules_orgs.current_org import org_scope
 
 
 @pytest.mark.django_db
@@ -64,7 +65,8 @@ class TestTagSerializer:
         request.user = staff_user
         request.org = personal_org
 
-        Tag.objects.create(name="VIP", organization=personal_org)
+        with org_scope(personal_org):
+            Tag.objects.create(name="VIP", organization=personal_org)
         serializer = TagSerializer(data={"name": "VIP"}, context={"request": request})
         assert not serializer.is_valid()
         assert "name" in serializer.errors
@@ -82,7 +84,8 @@ class TestTagSerializer:
         personal_org = Organization.objects.get(
             is_personal=True, memberships__user=staff_user
         )
-        Tag.objects.create(name="Hot Lead", organization=personal_org)
+        with org_scope(personal_org):
+            Tag.objects.create(name="Hot Lead", organization=personal_org)
         serializer = TagSerializer(tag, data={"name": "Hot Lead"}, partial=True)
         assert not serializer.is_valid()
         assert "name" in serializer.errors
@@ -93,7 +96,8 @@ class TestTagSerializer:
 
         from quickscale_modules_crm.models import Tag
 
-        Tag.objects.create(name="VIP", organization=org_a)
+        with org_scope(org_a):
+            Tag.objects.create(name="VIP", organization=org_a)
 
         factory = APIRequestFactory()
         request = factory.post(f"/orgs/{org_b.slug}/crm/api/tags/")
@@ -107,7 +111,8 @@ class TestTagSerializer:
         """Renaming a tag to a name that exists only in another org is allowed."""
         from quickscale_modules_crm.models import Tag
 
-        Tag.objects.create(name="Renamed", organization=org_a)
+        with org_scope(org_a):
+            Tag.objects.create(name="Renamed", organization=org_a)
         serializer = TagSerializer(tag, data={"name": "Renamed"}, partial=True)
         assert serializer.is_valid(), serializer.errors
 
@@ -173,12 +178,13 @@ class TestStageSerializer:
 
     def test_stage_serializer_hides_terminal_semantic(self, org_a):
         """Stage serializer output should not expose terminal semantics."""
-        stage = Stage.objects.create(
-            name="Closed-Won",
-            order=3,
-            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
-            organization=org_a,
-        )
+        with org_scope(org_a):
+            stage = Stage.objects.create(
+                name="Closed-Won",
+                order=3,
+                terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                organization=org_a,
+            )
 
         serializer = StageSerializer(stage)
 
@@ -188,9 +194,12 @@ class TestStageSerializer:
         """Stage serializer should ignore attempts to set hidden terminal semantics."""
         from rest_framework.test import APIRequestFactory
 
+        from quickscale_modules_orgs.current_org import set_current_org_id
+
         factory = APIRequestFactory()
         request = factory.post("/crm/api/stages/")
         request.org = org_a
+        set_current_org_id(org_a.id)
 
         serializer = StageSerializer(
             data={
@@ -214,18 +223,20 @@ class TestStageSerializer:
         semantic (e.g. both have a 'won' stage).  terminal_semantic must
         stay hidden in both outputs.
         """
-        stage_a = Stage.objects.create(
-            name="Closed-Won-A",
-            order=3,
-            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
-            organization=org_a,
-        )
-        stage_b = Stage.objects.create(
-            name="Closed-Won-B",
-            order=3,
-            terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
-            organization=org_b,
-        )
+        with org_scope(org_a):
+            stage_a = Stage.objects.create(
+                name="Closed-Won-A",
+                order=3,
+                terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                organization=org_a,
+            )
+        with org_scope(org_b):
+            stage_b = Stage.objects.create(
+                name="Closed-Won-B",
+                order=3,
+                terminal_semantic=Stage.TERMINAL_SEMANTIC_WON,
+                organization=org_b,
+            )
 
         serializer_a = StageSerializer(stage_a)
         serializer_b = StageSerializer(stage_b)
@@ -422,8 +433,10 @@ class TestF115Phase2SerializerHelperOrgScoping:
 
     These tests verify that serializer helper methods (counts, tag names)
     scope their related queries to the active organization when serializing
-    on an org-scoped SaaS route, while solo routes preserve legacy unscoped
-    behavior.
+    on an org-scoped SaaS route, while solo routes scope to the caller's
+    personal org (SA84-REV-002: removed the false ``operator_access`` /
+    ``unscoped`` premise — the real solo middleware always sets
+    ``request.org`` and the ContextVar).
 
     Coverage matrix:
     - CompanySerializer.get_contact_count() is org-scoped
@@ -441,29 +454,32 @@ class TestF115Phase2SerializerHelperOrgScoping:
 
         from quickscale_modules_crm.models import Company, Contact
 
-        company = Company.objects.create(name="Shared Corp", organization=org_a)
-        # Create org-A contact
-        Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga@example.com",
-            company=company,
-            organization=org_a,
-        )
-        # Create org-B contact referencing the same company (cross-org reference)
-        Contact.objects.create(
-            first_name="Org-B",
-            last_name="Contact",
-            email="orgb@example.com",
-            company=company,
-            organization=org_b,
-        )
+        with org_scope(org_a):
+            company = Company.objects.create(name="Shared Corp", organization=org_a)
+            Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga@example.com",
+                company=company,
+                organization=org_a,
+            )
+        with org_scope(org_b):
+            Contact.objects.create(
+                first_name="Org-B",
+                last_name="Contact",
+                email="orgb@example.com",
+                company=company,
+                organization=org_b,
+            )
+
+        from quickscale_modules_orgs.current_org import set_current_org_id
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/companies/")
         request.user = org_a_admin
         request.org = org_a  # Simulate TenantMiddleware
 
+        set_current_org_id(org_a.id)
         serializer = CompanySerializer(company, context={"request": request})
         # Should only count org-A contacts (1), not org-B contacts
         assert serializer.data["contact_count"] == 1
@@ -476,45 +492,50 @@ class TestF115Phase2SerializerHelperOrgScoping:
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
-        stage = Stage.objects.create(name="Shared Stage", order=1, organization=org_a)
-        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
-        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
-        contact_a = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-deal@example.com",
-            company=company_a,
-            organization=org_a,
-        )
-        contact_b = Contact.objects.create(
-            first_name="Org-B",
-            last_name="Contact",
-            email="orgb-deal@example.com",
-            company=company_b,
-            organization=org_b,
-        )
-        # Create org-A deal
-        Deal.objects.create(
-            title="Org-A Deal",
-            contact=contact_a,
-            amount=Decimal("1000.00"),
-            stage=stage,
-            organization=org_a,
-        )
-        # Create org-B deal referencing the same stage (cross-org reference)
-        Deal.objects.create(
-            title="Org-B Deal",
-            contact=contact_b,
-            amount=Decimal("2000.00"),
-            stage=stage,
-            organization=org_b,
-        )
+        with org_scope(org_a):
+            stage = Stage.objects.create(
+                name="Shared Stage", order=1, organization=org_a
+            )
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-deal@example.com",
+                company=company_a,
+                organization=org_a,
+            )
+            Deal.objects.create(
+                title="Org-A Deal",
+                contact=contact_a,
+                amount=Decimal("1000.00"),
+                stage=stage,
+                organization=org_a,
+            )
+        with org_scope(org_b):
+            company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+            contact_b = Contact.objects.create(
+                first_name="Org-B",
+                last_name="Contact",
+                email="orgb-deal@example.com",
+                company=company_b,
+                organization=org_b,
+            )
+            Deal.objects.create(
+                title="Org-B Deal",
+                contact=contact_b,
+                amount=Decimal("2000.00"),
+                stage=stage,
+                organization=org_b,
+            )
+
+        from quickscale_modules_orgs.current_org import set_current_org_id
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/stages/")
         request.user = org_a_admin
         request.org = org_a  # Simulate TenantMiddleware
 
+        set_current_org_id(org_a.id)
         serializer = StageSerializer(stage, context={"request": request})
         # Should only count org-A deals (1), not org-B deals
         assert serializer.data["deal_count"] == 1
@@ -529,38 +550,45 @@ class TestF115Phase2SerializerHelperOrgScoping:
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
-        company = Company.objects.create(name="Shared Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Shared",
-            last_name="Contact",
-            email="shared@example.com",
-            company=company,
-            organization=org_a,
-        )
-        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
-        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
-        # Create org-A deal
-        Deal.objects.create(
-            title="Org-A Deal",
-            contact=contact,
-            amount=Decimal("1000.00"),
-            stage=stage_a,
-            organization=org_a,
-        )
-        # Create org-B deal referencing the same contact (cross-org reference)
-        Deal.objects.create(
-            title="Org-B Deal",
-            contact=contact,
-            amount=Decimal("2000.00"),
-            stage=stage_b,
-            organization=org_b,
-        )
+        with org_scope(org_a):
+            company = Company.objects.create(name="Shared Corp", organization=org_a)
+            contact = Contact.objects.create(
+                first_name="Shared",
+                last_name="Contact",
+                email="shared@example.com",
+                company=company,
+                organization=org_a,
+            )
+            stage_a = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+            Deal.objects.create(
+                title="Org-A Deal",
+                contact=contact,
+                amount=Decimal("1000.00"),
+                stage=stage_a,
+                organization=org_a,
+            )
+        with org_scope(org_b):
+            stage_b = Stage.objects.create(
+                name="Org-B Stage", order=1, organization=org_b
+            )
+            Deal.objects.create(
+                title="Org-B Deal",
+                contact=contact,
+                amount=Decimal("2000.00"),
+                stage=stage_b,
+                organization=org_b,
+            )
+
+        from quickscale_modules_orgs.current_org import set_current_org_id
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/contacts/")
         request.user = org_a_admin
         request.org = org_a  # Simulate TenantMiddleware
 
+        set_current_org_id(org_a.id)
         serializer = ContactDetailSerializer(contact, context={"request": request})
         # Should only count org-A deals (1), not org-B deals
         assert serializer.data["deal_count"] == 1
@@ -573,23 +601,28 @@ class TestF115Phase2SerializerHelperOrgScoping:
 
         from quickscale_modules_crm.models import Company, Contact, Tag
 
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-tags@example.com",
-            company=company,
-            organization=org_a,
-        )
-        tag_a = Tag.objects.create(name="Org-A-Tag", organization=org_a)
-        tag_b = Tag.objects.create(name="Org-B-Tag", organization=org_b)
+        with org_scope(org_a):
+            company = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-tags@example.com",
+                company=company,
+                organization=org_a,
+            )
+            tag_a = Tag.objects.create(name="Org-A-Tag", organization=org_a)
+        with org_scope(org_b):
+            tag_b = Tag.objects.create(name="Org-B-Tag", organization=org_b)
         contact.tags.add(tag_a, tag_b)
+
+        from quickscale_modules_orgs.current_org import set_current_org_id
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/contacts/")
         request.user = org_a_admin
         request.org = org_a  # Simulate TenantMiddleware
 
+        set_current_org_id(org_a.id)
         serializer = ContactListSerializer(contact, context={"request": request})
         # Should only include org-A tags
         assert "Org-A-Tag" in serializer.data["tag_names"]
@@ -605,112 +638,138 @@ class TestF115Phase2SerializerHelperOrgScoping:
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage, Tag
 
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-deal-tags@example.com",
-            company=company,
-            organization=org_a,
-        )
-        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
-        deal = Deal.objects.create(
-            title="Org-A Deal",
-            contact=contact,
-            amount=Decimal("1000.00"),
-            stage=stage,
-            organization=org_a,
-        )
-        tag_a = Tag.objects.create(name="Org-A-Deal-Tag", organization=org_a)
-        tag_b = Tag.objects.create(name="Org-B-Deal-Tag", organization=org_b)
+        with org_scope(org_a):
+            company = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-deal-tags@example.com",
+                company=company,
+                organization=org_a,
+            )
+            stage = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+            deal = Deal.objects.create(
+                title="Org-A Deal",
+                contact=contact,
+                amount=Decimal("1000.00"),
+                stage=stage,
+                organization=org_a,
+            )
+            tag_a = Tag.objects.create(name="Org-A-Deal-Tag", organization=org_a)
+        with org_scope(org_b):
+            tag_b = Tag.objects.create(name="Org-B-Deal-Tag", organization=org_b)
         deal.tags.add(tag_a, tag_b)
+
+        from quickscale_modules_orgs.current_org import set_current_org_id
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/deals/")
         request.user = org_a_admin
         request.org = org_a  # Simulate TenantMiddleware
 
+        set_current_org_id(org_a.id)
         serializer = DealListSerializer(deal, context={"request": request})
         # Should only include org-A tags
         assert "Org-A-Deal-Tag" in serializer.data["tag_names"]
         assert "Org-B-Deal-Tag" not in serializer.data["tag_names"]
 
     @override_settings(QUICKSCALE_MODE="solo")
-    def test_solo_route_serializer_helpers_are_unscoped(self, staff_user, org_a, org_b):
-        """Solo route serializer helpers return all data (parity preserved)."""
+    def test_solo_route_serializer_helpers_scope_to_personal_org(
+        self, staff_user, org_a
+    ):
+        """Solo route serializer helpers scope to caller's personal org (Phase 2).
+
+        SA84-REV-002: the real solo middleware always sets ``request.org`` and
+        the ContextVar to the caller's personal org.  Solo routes are therefore
+        scoped to the personal org — not "unscoped" — and ``operator_access``
+        is never used for a normal staff caller.
+        """
         from decimal import Decimal
 
         from rest_framework.test import APIRequestFactory
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage, Tag
+        from quickscale_modules_orgs.current_org import set_current_org_id
+        from quickscale_modules_orgs.models import Organization
 
-        company = Company.objects.create(name="Shared Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Shared",
-            last_name="Contact",
-            email="shared@example.com",
-            company=company,
-            organization=org_a,
+        personal_org = Organization.objects.get(
+            is_personal=True, memberships__user=staff_user
         )
-        stage = Stage.objects.create(name="Shared Stage", order=1, organization=org_a)
-        deal = Deal.objects.create(
-            title="Shared Deal",
-            contact=contact,
-            amount=Decimal("1000.00"),
-            stage=stage,
-            organization=org_a,
-        )
-        tag_a = Tag.objects.create(name="Org-A-Tag", organization=org_a)
-        tag_b = Tag.objects.create(name="Org-B-Tag", organization=org_b)
-        contact.tags.add(tag_a, tag_b)
-        deal.tags.add(tag_a, tag_b)
 
-        # Create cross-org references
-        Contact.objects.create(
-            first_name="Org-B",
-            last_name="Contact",
-            email="orgb@example.com",
-            company=company,
-            organization=org_b,
-        )
-        Deal.objects.create(
-            title="Org-B Deal",
-            contact=contact,
-            amount=Decimal("2000.00"),
-            stage=stage,
-            organization=org_b,
-        )
+        # Create personal-org data that SHOULD be visible.
+        with org_scope(personal_org):
+            company = Company.objects.create(
+                name="Personal Corp", organization=personal_org
+            )
+            contact = Contact.objects.create(
+                first_name="Personal",
+                last_name="Contact",
+                email="personal@example.com",
+                company=company,
+                organization=personal_org,
+            )
+            stage = Stage.objects.create(
+                name="Personal Stage", order=1, organization=personal_org
+            )
+            deal = Deal.objects.create(
+                title="Personal Deal",
+                contact=contact,
+                amount=Decimal("1000.00"),
+                stage=stage,
+                organization=personal_org,
+            )
+            personal_tag = Tag.objects.create(
+                name="Personal-Tag", organization=personal_org
+            )
+
+        # Create cross-org data that should NOT be visible when scoped
+        # to the personal org.
+        with org_scope(org_a):
+            cross_tag = Tag.objects.create(name="Cross-Tag", organization=org_a)
+            Contact.objects.create(
+                first_name="Cross",
+                last_name="Contact",
+                email="cross@example.com",
+                company=company,
+                organization=org_a,
+            )
+            Deal.objects.create(
+                title="Cross Deal",
+                contact=contact,
+                amount=Decimal("2000.00"),
+                stage=stage,
+                organization=org_a,
+            )
+
+        contact.tags.add(personal_tag, cross_tag)
+        deal.tags.add(personal_tag, cross_tag)
 
         factory = APIRequestFactory()
         request = factory.get("/crm/api/contacts/")
         request.user = staff_user
-        # No request.org on solo routes
+        request.org = personal_org  # Realistic solo middleware behavior
+        set_current_org_id(personal_org.id)
 
-        # CompanySerializer: contact_count should include all contacts
         company_serializer = CompanySerializer(company, context={"request": request})
-        assert company_serializer.data["contact_count"] == 2  # org-A + org-B
-
-        # StageSerializer: deal_count should include all deals
         stage_serializer = StageSerializer(stage, context={"request": request})
-        assert stage_serializer.data["deal_count"] == 2  # org-A + org-B
-
-        # ContactDetailSerializer: deal_count should include all deals
         contact_serializer = ContactDetailSerializer(
             contact, context={"request": request}
         )
-        assert contact_serializer.data["deal_count"] == 2  # org-A + org-B
-
-        # ContactListSerializer: tag_names should include all tags
         contact_list_serializer = ContactListSerializer(
             contact, context={"request": request}
         )
-        assert "Org-A-Tag" in contact_list_serializer.data["tag_names"]
-        assert "Org-B-Tag" in contact_list_serializer.data["tag_names"]
-
-        # DealListSerializer: tag_names should include all tags
         deal_serializer = DealListSerializer(deal, context={"request": request})
-        assert "Org-A-Tag" in deal_serializer.data["tag_names"]
-        assert "Org-B-Tag" in deal_serializer.data["tag_names"]
+
+        # All serializer helpers should see only personal-org data.
+        assert company_serializer.data["contact_count"] == 1
+        assert stage_serializer.data["deal_count"] == 1
+        assert contact_serializer.data["deal_count"] == 1
+        assert "Personal-Tag" in contact_list_serializer.data["tag_names"]
+        assert "Cross-Tag" not in contact_list_serializer.data["tag_names"]
+        assert "Personal-Tag" in deal_serializer.data["tag_names"]
+        assert "Cross-Tag" not in deal_serializer.data["tag_names"]
 
 
 @pytest.mark.django_db
@@ -719,8 +778,9 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
 
     These tests verify that org-scoped contact/deal reads do not serialize
     foreign-org related objects (company, contact, stage, tags) in the
-    serialized output.  On solo routes, all related objects are serialized
-    (legacy parity preserved).
+    serialized output.  On solo routes the caller's personal org is the
+    active scope (SA84-REV-002/005), so foreign-org related objects are
+    also hidden — the old "unscoped solo" premise is superseded.
 
     Coverage matrix:
     - ContactListSerializer.company_name is empty for foreign-org companies
@@ -741,14 +801,18 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
 
         from quickscale_modules_crm.models import Company, Contact
 
-        foreign_company = Company.objects.create(name="Org-B Corp", organization=org_b)
-        contact = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga@example.com",
-            company=foreign_company,
-            organization=org_a,
-        )
+        with org_scope(org_b):
+            foreign_company = Company.objects.create(
+                name="Org-B Corp", organization=org_b
+            )
+        with org_scope(org_a):
+            contact = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga@example.com",
+                company=foreign_company,
+                organization=org_a,
+            )
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/contacts/")
@@ -766,14 +830,18 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
 
         from quickscale_modules_crm.models import Company, Contact
 
-        foreign_company = Company.objects.create(name="Org-B Corp", organization=org_b)
-        contact = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-detail@example.com",
-            company=foreign_company,
-            organization=org_a,
-        )
+        with org_scope(org_b):
+            foreign_company = Company.objects.create(
+                name="Org-B Corp", organization=org_b
+            )
+        with org_scope(org_a):
+            contact = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-detail@example.com",
+                company=foreign_company,
+                organization=org_a,
+            )
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/contacts/")
@@ -798,16 +866,18 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         from quickscale_modules_crm.models import Company, Contact, Tag
         from quickscale_modules_orgs.current_org import set_current_org_id
 
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-tags@example.com",
-            company=company,
-            organization=org_a,
-        )
-        tag_a = Tag.objects.create(name="Org-A-Tag", organization=org_a)
-        tag_b = Tag.objects.create(name="Org-B-Tag", organization=org_b)
+        with org_scope(org_a):
+            company = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-tags@example.com",
+                company=company,
+                organization=org_a,
+            )
+            tag_a = Tag.objects.create(name="Org-A-Tag", organization=org_a)
+        with org_scope(org_b):
+            tag_b = Tag.objects.create(name="Org-B-Tag", organization=org_b)
         contact.tags.add(tag_a, tag_b)
 
         factory = APIRequestFactory()
@@ -831,24 +901,28 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
-        foreign_company = Company.objects.create(name="Org-B Corp", organization=org_b)
-        foreign_contact = Contact.objects.create(
-            first_name="Org-B",
-            last_name="Contact",
-            email="orgb@example.com",
-            company=foreign_company,
-            organization=org_b,
-        )
-        foreign_stage = Stage.objects.create(
-            name="Org-B Stage", order=1, organization=org_b
-        )
-        deal = Deal.objects.create(
-            title="Org-A Deal",
-            contact=foreign_contact,
-            amount=Decimal("1000.00"),
-            stage=foreign_stage,
-            organization=org_a,
-        )
+        with org_scope(org_b):
+            foreign_company = Company.objects.create(
+                name="Org-B Corp", organization=org_b
+            )
+            foreign_contact = Contact.objects.create(
+                first_name="Org-B",
+                last_name="Contact",
+                email="orgb@example.com",
+                company=foreign_company,
+                organization=org_b,
+            )
+            foreign_stage = Stage.objects.create(
+                name="Org-B Stage", order=1, organization=org_b
+            )
+        with org_scope(org_a):
+            deal = Deal.objects.create(
+                title="Org-A Deal",
+                contact=foreign_contact,
+                amount=Decimal("1000.00"),
+                stage=foreign_stage,
+                organization=org_a,
+            )
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/deals/")
@@ -870,24 +944,28 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
-        foreign_company = Company.objects.create(name="Org-B Corp", organization=org_b)
-        foreign_contact = Contact.objects.create(
-            first_name="Org-B",
-            last_name="Contact",
-            email="orgb-detail@example.com",
-            company=foreign_company,
-            organization=org_b,
-        )
-        foreign_stage = Stage.objects.create(
-            name="Org-B Stage", order=1, organization=org_b
-        )
-        deal = Deal.objects.create(
-            title="Org-A Deal",
-            contact=foreign_contact,
-            amount=Decimal("1000.00"),
-            stage=foreign_stage,
-            organization=org_a,
-        )
+        with org_scope(org_b):
+            foreign_company = Company.objects.create(
+                name="Org-B Corp", organization=org_b
+            )
+            foreign_contact = Contact.objects.create(
+                first_name="Org-B",
+                last_name="Contact",
+                email="orgb-detail@example.com",
+                company=foreign_company,
+                organization=org_b,
+            )
+            foreign_stage = Stage.objects.create(
+                name="Org-B Stage", order=1, organization=org_b
+            )
+        with org_scope(org_a):
+            deal = Deal.objects.create(
+                title="Org-A Deal",
+                contact=foreign_contact,
+                amount=Decimal("1000.00"),
+                stage=foreign_stage,
+                organization=org_a,
+            )
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/deals/")
@@ -915,24 +993,28 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage, Tag
         from quickscale_modules_orgs.current_org import set_current_org_id
 
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-deal-tags@example.com",
-            company=company,
-            organization=org_a,
-        )
-        stage = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
-        deal = Deal.objects.create(
-            title="Org-A Deal",
-            contact=contact,
-            amount=Decimal("1000.00"),
-            stage=stage,
-            organization=org_a,
-        )
-        tag_a = Tag.objects.create(name="Org-A-Deal-Tag", organization=org_a)
-        tag_b = Tag.objects.create(name="Org-B-Deal-Tag", organization=org_b)
+        with org_scope(org_a):
+            company = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-deal-tags@example.com",
+                company=company,
+                organization=org_a,
+            )
+            stage = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+            deal = Deal.objects.create(
+                title="Org-A Deal",
+                contact=contact,
+                amount=Decimal("1000.00"),
+                stage=stage,
+                organization=org_a,
+            )
+            tag_a = Tag.objects.create(name="Org-A-Deal-Tag", organization=org_a)
+        with org_scope(org_b):
+            tag_b = Tag.objects.create(name="Org-B-Deal-Tag", organization=org_b)
         deal.tags.add(tag_a, tag_b)
 
         factory = APIRequestFactory()
@@ -954,15 +1036,17 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
 
         from quickscale_modules_crm.models import Company, Contact
 
-        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
-        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
-        contact = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-update@example.com",
-            company=company_a,
-            organization=org_a,
-        )
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-update@example.com",
+                company=company_a,
+                organization=org_a,
+            )
+        with org_scope(org_b):
+            company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
 
         factory = APIRequestFactory()
         request = factory.patch(f"/orgs/{org_a.slug}/crm/api/contacts/{contact.id}/")
@@ -986,23 +1070,29 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
-        company = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-deal-update@example.com",
-            company=company,
-            organization=org_a,
-        )
-        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
-        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
-        deal = Deal.objects.create(
-            title="Org-A Deal",
-            contact=contact,
-            amount=Decimal("1000.00"),
-            stage=stage_a,
-            organization=org_a,
-        )
+        with org_scope(org_a):
+            company = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-deal-update@example.com",
+                company=company,
+                organization=org_a,
+            )
+            stage_a = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+            deal = Deal.objects.create(
+                title="Org-A Deal",
+                contact=contact,
+                amount=Decimal("1000.00"),
+                stage=stage_a,
+                organization=org_a,
+            )
+        with org_scope(org_b):
+            stage_b = Stage.objects.create(
+                name="Org-B Stage", order=1, organization=org_b
+            )
 
         factory = APIRequestFactory()
         request = factory.patch(f"/orgs/{org_a.slug}/crm/api/deals/{deal.id}/")
@@ -1031,22 +1121,26 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         personal_org = Organization.objects.get(
             is_personal=True, memberships__user=staff_user
         )
-        same_org_company = Company.objects.create(
-            name="Personal Corp", organization=personal_org
-        )
-        foreign_company = Company.objects.create(name="Org-B Corp", organization=org_b)
-        contact = Contact.objects.create(
-            first_name="Personal",
-            last_name="Contact",
-            email="personal-update@example.com",
-            company=same_org_company,
-            organization=personal_org,
-        )
+        with org_scope(personal_org):
+            same_org_company = Company.objects.create(
+                name="Personal Corp", organization=personal_org
+            )
+            contact = Contact.objects.create(
+                first_name="Personal",
+                last_name="Contact",
+                email="personal-update@example.com",
+                company=same_org_company,
+                organization=personal_org,
+            )
+        with org_scope(org_b):
+            foreign_company = Company.objects.create(
+                name="Org-B Corp", organization=org_b
+            )
 
         factory = APIRequestFactory()
         request = factory.patch("/crm/api/contacts/1/")
         request.user = staff_user
-        request.org = personal_org  # type: ignore[attr-defined]
+        request.org = personal_org
 
         serializer = ContactDetailSerializer(
             contact,
@@ -1072,38 +1166,40 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         personal_org = Organization.objects.get(
             is_personal=True, memberships__user=staff_user
         )
-        same_org_company = Company.objects.create(
-            name="Personal Corp", organization=personal_org
-        )
-        same_org_contact = Contact.objects.create(
-            first_name="Personal",
-            last_name="Contact",
-            email="personal-deal@example.com",
-            company=same_org_company,
-            organization=personal_org,
-        )
-        foreign_contact = Contact.objects.create(
-            first_name="Org-B",
-            last_name="Contact",
-            email="orgb-deal@example.com",
-            company=Company.objects.create(name="Org-B Corp", organization=org_b),
-            organization=org_b,
-        )
-        same_org_stage = Stage.objects.create(
-            name="Personal Stage", order=1, organization=personal_org
-        )
-        deal = Deal.objects.create(
-            title="Personal Deal",
-            contact=same_org_contact,
-            amount=Decimal("1000.00"),
-            stage=same_org_stage,
-            organization=personal_org,
-        )
+        with org_scope(personal_org):
+            same_org_company = Company.objects.create(
+                name="Personal Corp", organization=personal_org
+            )
+            same_org_contact = Contact.objects.create(
+                first_name="Personal",
+                last_name="Contact",
+                email="personal-deal@example.com",
+                company=same_org_company,
+                organization=personal_org,
+            )
+            same_org_stage = Stage.objects.create(
+                name="Personal Stage", order=1, organization=personal_org
+            )
+            deal = Deal.objects.create(
+                title="Personal Deal",
+                contact=same_org_contact,
+                amount=Decimal("1000.00"),
+                stage=same_org_stage,
+                organization=personal_org,
+            )
+        with org_scope(org_b):
+            foreign_contact = Contact.objects.create(
+                first_name="Org-B",
+                last_name="Contact",
+                email="orgb-deal@example.com",
+                company=Company.objects.create(name="Org-B Corp", organization=org_b),
+                organization=org_b,
+            )
 
         factory = APIRequestFactory()
         request = factory.patch("/crm/api/deals/1/")
         request.user = staff_user
-        request.org = personal_org  # type: ignore[attr-defined]
+        request.org = personal_org
 
         serializer = DealDetailSerializer(
             deal,
@@ -1127,34 +1223,36 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
         personal_org = Organization.objects.get(
             is_personal=True, memberships__user=staff_user
         )
-        same_org_company = Company.objects.create(
-            name="Personal Corp", organization=personal_org
-        )
-        same_org_contact = Contact.objects.create(
-            first_name="Personal",
-            last_name="Contact",
-            email="personal-deal-stage@example.com",
-            company=same_org_company,
-            organization=personal_org,
-        )
-        foreign_stage = Stage.objects.create(
-            name="Org-B Stage", order=1, organization=org_b
-        )
-        same_org_stage = Stage.objects.create(
-            name="Personal Stage", order=1, organization=personal_org
-        )
-        deal = Deal.objects.create(
-            title="Personal Deal",
-            contact=same_org_contact,
-            amount=Decimal("1000.00"),
-            stage=same_org_stage,
-            organization=personal_org,
-        )
+        with org_scope(personal_org):
+            same_org_company = Company.objects.create(
+                name="Personal Corp", organization=personal_org
+            )
+            same_org_contact = Contact.objects.create(
+                first_name="Personal",
+                last_name="Contact",
+                email="personal-deal-stage@example.com",
+                company=same_org_company,
+                organization=personal_org,
+            )
+            same_org_stage = Stage.objects.create(
+                name="Personal Stage", order=1, organization=personal_org
+            )
+            deal = Deal.objects.create(
+                title="Personal Deal",
+                contact=same_org_contact,
+                amount=Decimal("1000.00"),
+                stage=same_org_stage,
+                organization=personal_org,
+            )
+        with org_scope(org_b):
+            foreign_stage = Stage.objects.create(
+                name="Org-B Stage", order=1, organization=org_b
+            )
 
         factory = APIRequestFactory()
         request = factory.patch("/crm/api/deals/1/")
         request.user = staff_user
-        request.org = personal_org  # type: ignore[attr-defined]
+        request.org = personal_org
 
         serializer = DealDetailSerializer(
             deal,
@@ -1192,7 +1290,8 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
 
         from quickscale_modules_crm.models import Company
 
-        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+        with org_scope(org_b):
+            company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
 
         factory = APIRequestFactory()
         request = factory.post(f"/orgs/{org_a.slug}/crm/api/contacts/")
@@ -1217,8 +1316,10 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
 
         from quickscale_modules_crm.models import Company, Tag
 
-        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
-        tag_b = Tag.objects.create(name="Org-B-Tag", organization=org_b)
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+        with org_scope(org_b):
+            tag_b = Tag.objects.create(name="Org-B-Tag", organization=org_b)
 
         factory = APIRequestFactory()
         request = factory.post(f"/orgs/{org_a.slug}/crm/api/contacts/")
@@ -1246,15 +1347,19 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
 
         from quickscale_modules_crm.models import Company, Contact, Stage
 
-        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
-        contact_b = Contact.objects.create(
-            first_name="Org-B",
-            last_name="Contact",
-            email="orgb-deal-create@example.com",
-            company=company_b,
-            organization=org_b,
-        )
-        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        with org_scope(org_b):
+            company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+            contact_b = Contact.objects.create(
+                first_name="Org-B",
+                last_name="Contact",
+                email="orgb-deal-create@example.com",
+                company=company_b,
+                organization=org_b,
+            )
+        with org_scope(org_a):
+            stage_a = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
 
         factory = APIRequestFactory()
         request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/")
@@ -1281,15 +1386,19 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
 
         from quickscale_modules_crm.models import Company, Contact, Stage
 
-        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact_a = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-deal-stage-create@example.com",
-            company=company_a,
-            organization=org_a,
-        )
-        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-deal-stage-create@example.com",
+                company=company_a,
+                organization=org_a,
+            )
+        with org_scope(org_b):
+            stage_b = Stage.objects.create(
+                name="Org-B Stage", order=1, organization=org_b
+            )
 
         factory = APIRequestFactory()
         request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/")
@@ -1316,16 +1425,20 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
 
         from quickscale_modules_crm.models import Company, Contact, Stage, Tag
 
-        company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
-        contact_a = Contact.objects.create(
-            first_name="Org-A",
-            last_name="Contact",
-            email="orga-deal-tag-create@example.com",
-            company=company_a,
-            organization=org_a,
-        )
-        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
-        tag_b = Tag.objects.create(name="Org-B-Deal-Tag", organization=org_b)
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-deal-tag-create@example.com",
+                company=company_a,
+                organization=org_a,
+            )
+            stage_a = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+        with org_scope(org_b):
+            tag_b = Tag.objects.create(name="Org-B-Deal-Tag", organization=org_b)
 
         factory = APIRequestFactory()
         request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/")
@@ -1361,23 +1474,26 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
             is_personal=True, memberships__user=staff_user
         )
 
-        company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
-        contact_b = Contact.objects.create(
-            first_name="Org-B",
-            last_name="Contact",
-            email="orgb-solo@example.com",
-            company=company_b,
-            organization=org_b,
-        )
-        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
-        tag_b = Tag.objects.create(name="Org-B-Tag", organization=org_b)
+        with org_scope(org_b):
+            company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+            contact_b = Contact.objects.create(
+                first_name="Org-B",
+                last_name="Contact",
+                email="orgb-solo@example.com",
+                company=company_b,
+                organization=org_b,
+            )
+            stage_b = Stage.objects.create(
+                name="Org-B Stage", order=1, organization=org_b
+            )
+            tag_b = Tag.objects.create(name="Org-B-Tag", organization=org_b)
 
         factory = APIRequestFactory()
 
         # Contact create with foreign-org company on solo route
         contact_request = factory.post("/crm/api/contacts/")
         contact_request.user = staff_user
-        contact_request.org = personal_org  # type: ignore[attr-defined]
+        contact_request.org = personal_org
 
         contact_serializer = ContactDetailSerializer(
             data={
@@ -1394,11 +1510,12 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         # Contact create with foreign-org tags on solo route
         contact_request2 = factory.post("/crm/api/contacts/")
         contact_request2.user = staff_user
-        contact_request2.org = personal_org  # type: ignore[attr-defined]
+        contact_request2.org = personal_org
 
-        same_org_company = Company.objects.create(
-            name="Personal Corp", organization=personal_org
-        )
+        with org_scope(personal_org):
+            same_org_company = Company.objects.create(
+                name="Personal Corp", organization=personal_org
+            )
 
         contact_tag_serializer = ContactDetailSerializer(
             data={
@@ -1416,7 +1533,7 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         # Deal create with foreign-org contact on solo route
         deal_request = factory.post("/crm/api/deals/")
         deal_request.user = staff_user
-        deal_request.org = personal_org  # type: ignore[attr-defined]
+        deal_request.org = personal_org
 
         deal_contact_serializer = DealDetailSerializer(
             data={
@@ -1433,15 +1550,16 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         # Deal create with foreign-org stage on solo route
         deal_request2 = factory.post("/crm/api/deals/")
         deal_request2.user = staff_user
-        deal_request2.org = personal_org  # type: ignore[attr-defined]
+        deal_request2.org = personal_org
 
-        same_org_contact = Contact.objects.create(
-            first_name="Personal",
-            last_name="Contact",
-            email="personal@example.com",
-            company=same_org_company,
-            organization=personal_org,
-        )
+        with org_scope(personal_org):
+            same_org_contact = Contact.objects.create(
+                first_name="Personal",
+                last_name="Contact",
+                email="personal@example.com",
+                company=same_org_company,
+                organization=personal_org,
+            )
 
         deal_stage_serializer = DealDetailSerializer(
             data={
@@ -1458,11 +1576,12 @@ class TestF118SerializerCreatePathRelatedFieldValidation:
         # Deal create with foreign-org tags on solo route
         deal_request3 = factory.post("/crm/api/deals/")
         deal_request3.user = staff_user
-        deal_request3.org = personal_org  # type: ignore[attr-defined]
+        deal_request3.org = personal_org
 
-        same_org_stage = Stage.objects.create(
-            name="Personal Stage", order=1, organization=personal_org
-        )
+        with org_scope(personal_org):
+            same_org_stage = Stage.objects.create(
+                name="Personal Stage", order=1, organization=personal_org
+            )
 
         deal_tag_serializer = DealDetailSerializer(
             data={
@@ -1500,7 +1619,10 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
         from quickscale_modules_crm.models import Stage
         from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
 
-        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+        with org_scope(org_b):
+            stage_b = Stage.objects.create(
+                name="Org-B Stage", order=1, organization=org_b
+            )
 
         factory = APIRequestFactory()
         request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/")
@@ -1520,14 +1642,19 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
 
         from quickscale_modules_crm.models import Stage
         from quickscale_modules_crm.serializers import BulkUpdateStageSerializer
+        from quickscale_modules_orgs.current_org import set_current_org_id
 
-        stage_a = Stage.objects.create(name="Org-A Stage", order=1, organization=org_a)
+        with org_scope(org_a):
+            stage_a = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
 
         factory = APIRequestFactory()
         request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/")
         request.user = org_a_admin
         request.org = org_a
 
+        set_current_org_id(org_a.id)
         serializer = BulkUpdateStageSerializer(
             data={"deal_ids": [1], "stage_id": stage_a.id},
             context={"request": request},
@@ -1552,9 +1679,10 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
         other_org = Organization.objects.create(
             name="Other Org", slug="other-org-serial"
         )
-        other_stage = Stage.objects.create(
-            name="Other Stage", order=1, organization=other_org
-        )
+        with org_scope(other_org):
+            other_stage = Stage.objects.create(
+                name="Other Stage", order=1, organization=other_org
+            )
 
         factory = APIRequestFactory()
         request = factory.post(f"/orgs/{org_a.slug}/crm/api/deals/bulk-update-stage/")
@@ -1580,12 +1708,15 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
         personal_org = Organization.objects.get(
             is_personal=True, memberships__user=staff_user
         )
-        stage_b = Stage.objects.create(name="Org-B Stage", order=1, organization=org_b)
+        with org_scope(org_b):
+            stage_b = Stage.objects.create(
+                name="Org-B Stage", order=1, organization=org_b
+            )
 
         factory = APIRequestFactory()
         request = factory.post("/crm/api/deals/bulk-update-stage/")
         request.user = staff_user
-        request.org = personal_org  # type: ignore[attr-defined]
+        request.org = personal_org
 
         serializer = BulkUpdateStageSerializer(
             data={"deal_ids": [1], "stage_id": stage_b.id},
@@ -1606,14 +1737,15 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
         personal_org = Organization.objects.get(
             is_personal=True, memberships__user=staff_user
         )
-        stage = Stage.objects.create(
-            name="Personal Stage", order=1, organization=personal_org
-        )
+        with org_scope(personal_org):
+            stage = Stage.objects.create(
+                name="Personal Stage", order=1, organization=personal_org
+            )
 
         factory = APIRequestFactory()
         request = factory.post("/crm/api/deals/bulk-update-stage/")
         request.user = staff_user
-        request.org = personal_org  # type: ignore[attr-defined]
+        request.org = personal_org
 
         serializer = BulkUpdateStageSerializer(
             data={"deal_ids": [1], "stage_id": stage.id},

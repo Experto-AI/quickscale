@@ -9,6 +9,7 @@ from rest_framework import status
 
 from quickscale_modules_crm.models import Deal, Stage
 from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+from quickscale_modules_orgs.current_org import org_scope
 
 
 DASHBOARD_TEST_MIDDLEWARE = [
@@ -984,7 +985,7 @@ class TestCRMPageSizeFailHard:
             ImproperlyConfigured,
             match="CRM_CONTACTS_PER_PAGE",
         ):
-            paginator.get_page_size(None)  # type: ignore[arg-type]
+            paginator.get_page_size(None)
 
     @override_settings(CRM_CONTACTS_PER_PAGE="not-a-number")
     def test_contact_page_size_non_numeric_setting_raises_improperly_configured(
@@ -1000,7 +1001,7 @@ class TestCRMPageSizeFailHard:
             ImproperlyConfigured,
             match="CRM_CONTACTS_PER_PAGE",
         ):
-            paginator.get_page_size(None)  # type: ignore[arg-type]
+            paginator.get_page_size(None)
 
     @override_settings(CRM_DEALS_PER_PAGE=None)
     def test_deal_page_size_missing_setting_raises_improperly_configured(
@@ -1016,7 +1017,7 @@ class TestCRMPageSizeFailHard:
             ImproperlyConfigured,
             match="CRM_DEALS_PER_PAGE",
         ):
-            paginator.get_page_size(None)  # type: ignore[arg-type]
+            paginator.get_page_size(None)
 
     @override_settings(CRM_DEALS_PER_PAGE="not-a-number")
     def test_deal_page_size_non_numeric_setting_raises_improperly_configured(
@@ -1032,7 +1033,7 @@ class TestCRMPageSizeFailHard:
             ImproperlyConfigured,
             match="CRM_DEALS_PER_PAGE",
         ):
-            paginator.get_page_size(None)  # type: ignore[arg-type]
+            paginator.get_page_size(None)
 
 
 @pytest.mark.django_db
@@ -1050,7 +1051,10 @@ class TestFlatRouteCreateStamping:
         client.force_login(org_a_admin)
         _activate_org_in_session(client, org_a)
 
-        before = Tag.objects.count()
+        # Scope the pre-request count explicitly to org_a so that FORCE RLS
+        # allows the TenantManager-scoped query (SA84-REV-001).
+        with org_scope(org_a):
+            before = Tag.objects.count()
         response = client.post(
             "/crm/api/tags/",
             data={"name": "Flat-Route Tag"},
@@ -1058,9 +1062,11 @@ class TestFlatRouteCreateStamping:
         )
 
         assert response.status_code == status.HTTP_201_CREATED
-        created = Tag.all_objects.get(pk=response.data["id"])
+        with org_scope(org_a):
+            created = Tag.all_objects.get(pk=response.data["id"])
         assert created.organization_id == org_a.id
-        assert Tag.all_objects.count() == before + 1
+        with org_scope(org_a):
+            assert Tag.all_objects.count() == before + 1
 
 
 @pytest.mark.django_db
@@ -1283,24 +1289,27 @@ class TestF1110StandaloneNoteSoloParentValidation:
         )
 
         # Create a contact in the user's personal org (foreign to staff_user).
-        company = Company.objects.create(
-            name="User Corp", organization=personal_org_user
-        )
-        foreign_contact = Contact.objects.create(
-            first_name="Foreign",
-            last_name="SoloContact",
-            email="foreign-solo-contact@example.com",
-            company=company,
-            organization=personal_org_user,
-        )
+        with org_scope(personal_org_user):
+            company = Company.objects.create(
+                name="User Corp", organization=personal_org_user
+            )
+            foreign_contact = Contact.objects.create(
+                first_name="Foreign",
+                last_name="SoloContact",
+                email="foreign-solo-contact@example.com",
+                company=company,
+                organization=personal_org_user,
+            )
 
-        before = ContactNote.all_objects.count()
         client.force_login(staff_user)
 
         staff_personal_org = Organization.objects.get(
             is_personal=True, memberships__user=staff_user
         )
         _activate_org_in_session(client, staff_personal_org)
+
+        with org_scope(staff_personal_org):
+            before = ContactNote.all_objects.count()
 
         response = client.post(
             "/crm/api/contact-notes/",
@@ -1313,7 +1322,12 @@ class TestF1110StandaloneNoteSoloParentValidation:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "contact" in response.data
-        assert ContactNote.all_objects.count() == before
+        # Verify no ContactNote was created in either implicated org
+        # (SA84-REV-001: check each org separately).
+        with org_scope(staff_personal_org):
+            assert ContactNote.all_objects.count() == before
+        with org_scope(personal_org_user):
+            assert ContactNote.all_objects.count() == 0
 
     # -- ContactNote: same-org contact accepted -------------------------------
 
@@ -1326,14 +1340,17 @@ class TestF1110StandaloneNoteSoloParentValidation:
             is_personal=True, memberships__user=staff_user
         )
 
-        company = Company.objects.create(name="Staff Corp", organization=personal_org)
-        contact = Contact.objects.create(
-            first_name="Same",
-            last_name="SoloOrg",
-            email="same-org-solo@example.com",
-            company=company,
-            organization=personal_org,
-        )
+        with org_scope(personal_org):
+            company = Company.objects.create(
+                name="Staff Corp", organization=personal_org
+            )
+            contact = Contact.objects.create(
+                first_name="Same",
+                last_name="SoloOrg",
+                email="same-org-solo@example.com",
+                company=company,
+                organization=personal_org,
+            )
 
         client.force_login(staff_user)
         _activate_org_in_session(client, personal_org)
@@ -1349,7 +1366,8 @@ class TestF1110StandaloneNoteSoloParentValidation:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["text"] == "Same-org solo note"
-        created = ContactNote.all_objects.get(pk=response.data["id"])
+        with org_scope(personal_org):
+            created = ContactNote.all_objects.get(pk=response.data["id"])
         assert created.contact_id == contact.id
 
     # -- DealNote: foreign-org deal rejected ----------------------------------
@@ -1372,34 +1390,37 @@ class TestF1110StandaloneNoteSoloParentValidation:
         )
 
         # Create a deal in the user's personal org (foreign to staff_user).
-        company = Company.objects.create(
-            name="User Corp", organization=personal_org_user
-        )
-        contact = Contact.objects.create(
-            first_name="User",
-            last_name="DealContact",
-            email="user-deal-solo@example.com",
-            company=company,
-            organization=personal_org_user,
-        )
-        stage = Stage.objects.create(
-            name="User Stage", order=1, organization=personal_org_user
-        )
-        foreign_deal = Deal.objects.create(
-            title="User Deal",
-            contact=contact,
-            amount=Decimal("1000.00"),
-            stage=stage,
-            organization=personal_org_user,
-        )
+        with org_scope(personal_org_user):
+            company = Company.objects.create(
+                name="User Corp", organization=personal_org_user
+            )
+            contact = Contact.objects.create(
+                first_name="User",
+                last_name="DealContact",
+                email="user-deal-solo@example.com",
+                company=company,
+                organization=personal_org_user,
+            )
+            stage = Stage.objects.create(
+                name="User Stage", order=1, organization=personal_org_user
+            )
+            foreign_deal = Deal.objects.create(
+                title="User Deal",
+                contact=contact,
+                amount=Decimal("1000.00"),
+                stage=stage,
+                organization=personal_org_user,
+            )
 
-        before = DealNote.all_objects.count()
         client.force_login(staff_user)
 
         staff_personal_org = Organization.objects.get(
             is_personal=True, memberships__user=staff_user
         )
         _activate_org_in_session(client, staff_personal_org)
+
+        with org_scope(staff_personal_org):
+            before = DealNote.all_objects.count()
 
         response = client.post(
             "/crm/api/deal-notes/",
@@ -1412,7 +1433,12 @@ class TestF1110StandaloneNoteSoloParentValidation:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "deal" in response.data
-        assert DealNote.all_objects.count() == before
+        # Verify no DealNote was created in either implicated org
+        # (SA84-REV-001: check each org separately).
+        with org_scope(staff_personal_org):
+            assert DealNote.all_objects.count() == before
+        with org_scope(personal_org_user):
+            assert DealNote.all_objects.count() == 0
 
     # -- DealNote: same-org deal accepted -------------------------------------
 
@@ -1433,24 +1459,27 @@ class TestF1110StandaloneNoteSoloParentValidation:
             is_personal=True, memberships__user=staff_user
         )
 
-        company = Company.objects.create(name="Staff Corp", organization=personal_org)
-        contact = Contact.objects.create(
-            first_name="Staff",
-            last_name="DealContact",
-            email="staff-deal-solo@example.com",
-            company=company,
-            organization=personal_org,
-        )
-        stage = Stage.objects.create(
-            name="Staff Stage", order=1, organization=personal_org
-        )
-        deal = Deal.objects.create(
-            title="Staff Deal",
-            contact=contact,
-            amount=Decimal("5000.00"),
-            stage=stage,
-            organization=personal_org,
-        )
+        with org_scope(personal_org):
+            company = Company.objects.create(
+                name="Staff Corp", organization=personal_org
+            )
+            contact = Contact.objects.create(
+                first_name="Staff",
+                last_name="DealContact",
+                email="staff-deal-solo@example.com",
+                company=company,
+                organization=personal_org,
+            )
+            stage = Stage.objects.create(
+                name="Staff Stage", order=1, organization=personal_org
+            )
+            deal = Deal.objects.create(
+                title="Staff Deal",
+                contact=contact,
+                amount=Decimal("5000.00"),
+                stage=stage,
+                organization=personal_org,
+            )
 
         client.force_login(staff_user)
         _activate_org_in_session(client, personal_org)
@@ -1466,5 +1495,6 @@ class TestF1110StandaloneNoteSoloParentValidation:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["text"] == "Same-org solo deal note"
-        created = DealNote.all_objects.get(pk=response.data["id"])
+        with org_scope(personal_org):
+            created = DealNote.all_objects.get(pk=response.data["id"])
         assert created.deal_id == deal.id
