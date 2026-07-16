@@ -425,6 +425,100 @@ def test_crm_tables_have_force_rls_enabled() -> None:
             )
 
 
+# ---------------------------------------------------------------------------
+# Canonical RLS predicate normalization (for exact predicate comparison)
+# ---------------------------------------------------------------------------
+# Derived from tenancy.py _FORCE_RLS_FORWARD_SQL template and live
+# PostgreSQL 18 pg_policies output ("orginal" form includes ::text casts
+# that PostgreSQL adds automatically on string literals).
+# ---------------------------------------------------------------------------
+
+
+def _normalize_pg_expr(expr: str | None) -> str:
+    """Normalize a PostgreSQL expression for exact comparison.
+
+    Normalizes only PostgreSQL syntactic formatting (whitespace,
+    case of keywords and unquoted names) while preserving the content
+    and case of single-quoted string literals and double-quoted
+    identifiers.  Strips balanced outer parentheses that PostgreSQL's
+    ``pg_policies`` view wraps around the entire expression.
+
+    CR-SA90-MSQ-003: Both case normalization and whitespace collapse
+    are quote-aware — ``.lower()`` and ``\\s+`` substitution are only
+    applied outside string literals and quoted identifiers so that
+    literal content, identifier casing, and whitespace inside quotes
+    are preserved exactly.
+    """
+    if expr is None:
+        return ""
+    s = expr.strip()
+    # Strip balanced outer parentheses
+    while len(s) > 1 and s.startswith("(") and s.endswith(")"):
+        depth = 0
+        outer_balanced = True
+        for i, ch in enumerate(s):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            if depth == 0 and i < len(s) - 1:
+                outer_balanced = False
+                break
+        if outer_balanced:
+            s = s[1:-1].strip()
+        else:
+            break
+    # Quote-aware lowercasing AND whitespace collapse
+    result: list[str] = []
+    in_sq = False
+    in_dq = False
+    for i, ch in enumerate(s):
+        if ch == "'" and not in_dq:
+            in_sq = not in_sq
+        elif ch == '"' and not in_sq:
+            in_dq = not in_dq
+        if in_sq or in_dq:
+            result.append(ch)
+        else:
+            result.append(ch.lower())
+    s = "".join(result)
+    # Quote-aware whitespace collapse
+    result2: list[str] = []
+    in_sq = False
+    in_dq = False
+    prev_was_space = False
+    for ch in s:
+        if ch == "'" and not in_dq:
+            in_sq = not in_sq
+        elif ch == '"' and not in_sq:
+            in_dq = not in_dq
+        if in_sq or in_dq:
+            result2.append(ch)
+            prev_was_space = False
+        else:
+            if ch.isspace():
+                if not prev_was_space:
+                    result2.append(" ")
+                prev_was_space = True
+            else:
+                result2.append(ch)
+                prev_was_space = False
+    s = "".join(result2).strip()
+    return s
+
+
+# Expected normalized RLS predicates derived from tenancy.py
+# _FORCE_RLS_FORWARD_SQL as rendered by PostgreSQL 18 pg_policies view.
+_EXPECTED_CRM_FORALL_QUAL = _normalize_pg_expr(
+    "((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = organization_id)"
+)
+_EXPECTED_CRM_FORALL_WC = _EXPECTED_CRM_FORALL_QUAL
+_EXPECTED_CRM_SELECT_QUAL = _normalize_pg_expr(
+    "(((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = organization_id) "
+    "OR (NULLIF(current_setting('app.operator_access'::text, true), ''::text) = 'on'::text))"
+)
+
+
 @pytest.mark.skipif(
     not _CRM_IS_POSTGRES,
     reason="Policy predicate check requires PostgreSQL.",
@@ -443,6 +537,10 @@ def test_crm_rls_policy_has_org_predicate() -> None:
     The ``pg_policies`` view exposes ``cmd``, ``qual``, ``with_check``,
     and ``roles`` as plain text, avoiding ``pg_get_expr`` compatibility
     issues with psycopg3.
+
+    CR-SA90-MSQ-003: Exact normalized predicate comparison — the
+    normalized form must match the expected canonical expression from
+    ``_FORCE_RLS_FORWARD_SQL``, not merely contain permissive fragments.
     """
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -512,6 +610,17 @@ def test_crm_rls_policy_has_org_predicate() -> None:
             ), (
                 f"FOR ALL {polname} WITH CHECK lacks current_setting/org_id: {with_check}"
             )
+            # CR-SA90-MSQ-003: exact normalized predicate comparison
+            nqual = _normalize_pg_expr(qual)
+            assert nqual == _EXPECTED_CRM_FORALL_QUAL, (
+                f"{table}/{polname} normalized qual {nqual!r} "
+                f"does not match expected {_EXPECTED_CRM_FORALL_QUAL!r}"
+            )
+            nwc = _normalize_pg_expr(with_check)
+            assert nwc == _EXPECTED_CRM_FORALL_WC, (
+                f"{table}/{polname} normalized with_check {nwc!r} "
+                f"does not match expected {_EXPECTED_CRM_FORALL_WC!r}"
+            )
 
             # --- SELECT (operator read-only) policy ---
             sname, scmd, squal, swith_check, sroles = select_pol[0]
@@ -522,10 +631,101 @@ def test_crm_rls_policy_has_org_predicate() -> None:
             # Absence of write bypass: SELECT policy must have NULL with_check
             # (no write permission means no WITH CHECK needed)
             assert swith_check is None, f"SELECT {sname} has unexpected WITH CHECK"
-            if squal is not None:
-                assert "operator_access" in squal.lower(), (
-                    f"SELECT {sname} USING lacks operator_access: {squal}"
-                )
+            # CR-SA90-MSQ-003: assert squal is not None BEFORE comparison
+            # so NULL predicates cannot silently pass exact-match checks.
+            assert squal is not None, (
+                f"SELECT {sname} has NULL USING — must have a predicate"
+            )
+            assert "operator_access" in squal.lower(), (
+                f"SELECT {sname} USING lacks operator_access: {squal}"
+            )
+            # CR-SA90-MSQ-003: exact normalized predicate comparison
+            nsqual = _normalize_pg_expr(squal)
+            assert nsqual == _EXPECTED_CRM_SELECT_QUAL, (
+                f"{table}/{sname} normalized SELECT qual {nsqual!r} "
+                f"does not match expected {_EXPECTED_CRM_SELECT_QUAL!r}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# CR-SA90-MSQ-003: negative controls for _normalize_pg_expr
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_pg_expr_null_qual() -> None:
+    """NULL input normalizes to empty string — avoids false exact-match
+    with a real predicate."""
+    assert _normalize_pg_expr(None) == "", "NULL qual should normalize to ''"
+
+
+def test_normalize_pg_expr_extra_clause_detected() -> None:
+    """A tampered predicate with an extra clause must NOT match the
+    expected canonical form."""
+    tampered = (
+        "((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = organization_id "
+        "AND extra_condition = true)"
+    )
+    n = _normalize_pg_expr(tampered)
+    assert n != _EXPECTED_CRM_FORALL_QUAL, (
+        "Extra clause should produce a different normalized form"
+    )
+
+
+def test_normalize_pg_expr_literal_case_preserved() -> None:
+    """Changing the case of literal content (inside single quotes) must
+    produce a different normalized form because ``_normalize_pg_expr``
+    preserves quoted content."""
+    # Use 'ON' (uppercase) instead of 'on' (lowercase)
+    # Re-normalize — the quote-aware normalizer should preserve 'ON' vs 'on'
+    n_modified = _normalize_pg_expr(
+        "(((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = organization_id) "
+        "OR (NULLIF(current_setting('app.operator_access'::text, true), ''::text) = 'ON'::text))"
+    )
+    # This should differ from the expected (which uses 'on')
+    assert n_modified != _EXPECTED_CRM_SELECT_QUAL, (
+        "Uppercase literal content should produce different normalized form"
+    )
+
+
+def test_normalize_pg_expr_identifier_case_preserved() -> None:
+    """A double-quoted identifier with mixed case must be preserved."""
+    # organization_id with a quoted mixed-case form
+    n = _normalize_pg_expr(
+        "((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = \"Organization_Id\")"
+    )
+    assert '"organization_id"' not in n, (
+        "Double-quoted 'Organization_Id' should NOT be lowercased by normalizer"
+    )
+    assert '"organization_id"' not in _EXPECTED_CRM_FORALL_QUAL, (
+        "Canonical form uses bare unquoted organization_id, not quoted form"
+    )
+
+
+def test_normalize_pg_expr_whitespace_in_quotes_preserved() -> None:
+    """Extra whitespace inside a single-quoted literal must NOT be
+    collapsed, producing a different normalized form."""
+    # Normalized canonical uses ''::text (no interior space)
+    with_extra_space = (
+        "((NULLIF(current_setting('app.current_org_id'::text, true), "
+        "' '::text))::uuid = organization_id)"
+    )
+    n = _normalize_pg_expr(with_extra_space)
+    assert n != _EXPECTED_CRM_FORALL_QUAL, (
+        "Whitespace inside a quoted literal must produce a different normalized form"
+    )
+
+
+def test_normalize_pg_expr_parentheses_in_quotes_preserved() -> None:
+    """Extra parentheses inside a single-quoted literal must NOT be
+    stripped or altered by the normalizer."""
+    with_paren_in_literal = (
+        "((NULLIF(current_setting('app.current_org_id'::text, true), "
+        "'(default)'::text))::uuid = organization_id)"
+    )
+    n = _normalize_pg_expr(with_paren_in_literal)
+    assert n != _EXPECTED_CRM_FORALL_QUAL, (
+        "Parentheses inside a quoted literal must produce a different normalized form"
+    )
 
 
 # ---------------------------------------------------------------------------
