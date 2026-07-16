@@ -421,3 +421,59 @@ def test_classification_no_duplicate_conflicts() -> None:
                 f"{', '.join(sorted(conflicting_tuples))} — remove it from "
                 f"one of the two classifications"
             )
+
+
+# ---------------------------------------------------------------------------
+# CR-SA94-REV-B-002: Reverse conformance — no stale INTENTIONALLY_UNMANAGED
+# entries that reference a deleted HTML-only (or otherwise absent) path
+# ---------------------------------------------------------------------------
+
+
+def test_intentionally_unmanaged_entries_correspond_to_emitted_paths() -> None:
+    """Every ``INTENTIONALLY_UNMANAGED`` entry must correspond to an emitted path.
+
+    This is the reverse of ``test_taxonomy_classifies_every_emitted_template``
+    for the ``INTENTIONALLY_UNMANAGED`` tuple specifically.  Stale entries
+    (classifying a path no template emits) are detected and reported.
+
+    Managed tuples (fresh-first / in-place) may reference files that are
+    expected on the donor but not necessarily emitted by the generator
+    (e.g. ``middleware.py``, ``sitemaps.py`` as optional donor files), so
+    this reverse check scopes only to ``INTENTIONALLY_UNMANAGED`` where
+    every entry should correspond to a current generated file.
+    """
+    emitted_paths = set(_template_emitted_paths().keys())
+    stale: list[str] = []
+
+    for path in sorted(INTENTIONALLY_UNMANAGED):
+        # Direct match
+        if path in emitted_paths:
+            continue
+        # {package}/ prefix match
+        if path.startswith("{package}/") and path in emitted_paths:
+            continue
+        # Package-relative match: check {package}/<path>
+        if not path.startswith("{package}/"):
+            pkg_prefixed = "{package}/" + path
+            if pkg_prefixed in emitted_paths:
+                continue
+        # Directory-level match: any emitted file starts with this path + "/"
+        if any(ep.startswith(path + "/") for ep in emitted_paths):
+            continue
+        # The path itself is an emitted directory
+        if any(ep == path for ep in emitted_paths):
+            continue
+        stale.append(path)
+
+    if stale:
+        lines = [
+            f"\n{len(stale)} stale INTENTIONALLY_UNMANAGED entr(y/ies) without a "
+            "matching emitted path:"
+        ]
+        for path in stale:
+            lines.append(f"  {path}")
+        lines.append(
+            "Remove each stale entry from INTENTIONALLY_UNMANAGED, or confirm the "
+            "entry is still valid and add a template that emits the path."
+        )
+        pytest.fail("\n".join(lines))

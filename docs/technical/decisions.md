@@ -1336,17 +1336,23 @@ and asserts every emitted file is classified.
    **Category U3 — Django HTML templates:**
    ``templates/404.html``, ``templates/500.html``, ``templates/base.html``,
    ``templates/index.html``, ``templates/admin/index.html``,
-   ``templates/admin/app_index.html``, ``templates/components/navigation.html``,
+   ``templates/admin/app_index.html``,
    ``templates/social/link_tree.html``, ``templates/social/embeds.html``.
    Rationale: User-editable Django templates.  Unlike infrastructure files
    (``Dockerfile``, ``start.sh``), they are not copy targets during migration.
    Fresh-first preserves the recipient's templates; in-place does not touch
-   them.  Theme-specific template overrides (social, components) are
-   user-owned once generated.
+   them.  Theme-specific template overrides (social) are
+   user-owned once generated.  ``templates/components/navigation.html`` was
+   removed as stale (the former ``showcase_html`` theme was retired in SA94;
+   ``showcase_react`` does not emit a ``templates/components/navigation.html``
+   template).
 
    **Category U4 — Static assets:**
-   ``static/css/style.css``, ``static/images/favicon.svg``.
-   Rationale: User-owned static files.  Generated once; not migration targets.
+   ``frontend/public/favicon.svg``.
+   Rationale: User-owned static file.  Generated once; not a migration target.
+   ``static/css/style.css`` and ``static/images/favicon.svg`` were removed as
+   stale (they were only emitted by the former ``showcase_html`` theme,
+   retired in SA94).
 
    **Category U5 — Test scaffolding:**
    ``tests/__init__.py``, ``tests/conftest.py``, ``tests/test_example.py``.

@@ -22,6 +22,11 @@ from quickscale_core.utils.project_identity import (
     ProjectIdentity,
     resolve_project_identity,
 )
+from quickscale_core.utils.theme_validation import (
+    SOLE_VALID_THEME,
+    ThemeValidationError,
+    validate_theme_preflight,
+)
 
 BetaMigrationMode = Literal["fresh-first", "in-place"]
 CheckStatus = Literal["passed", "failed", "skipped"]
@@ -149,7 +154,6 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     "templates/index.html",
     "templates/admin/index.html",
     "templates/admin/app_index.html",
-    "templates/components/navigation.html",
     "templates/social/link_tree.html",
     "templates/social/embeds.html",
     # ---- User test scaffolding ----
@@ -722,6 +726,45 @@ def _validate_required_paths(
         ):
             continue
         passed = False
+    return passed
+
+
+def _validate_theme_preflight_checks(
+    report: BetaMigrationReport,
+    *,
+    donor_path: Path,
+    recipient_path: Path,
+) -> bool:
+    """Validate theme preflight for both donor and recipient.
+
+    Calls :func:`validate_theme_preflight` on both project roots before any
+    identity loading, subprocess probes, or mutation steps.  Fails closed
+    with explicit preflight check records and blockers when either project
+    has a retired theme, malformed YAML, or missing ``project`` section.
+    """
+    passed = True
+
+    for label, project_path in (("donor", donor_path), ("recipient", recipient_path)):
+        try:
+            validate_theme_preflight(project_path)
+        except ThemeValidationError as exc:
+            detail = str(exc)
+            _append_check(
+                report,
+                name=f"{label}-theme-preflight",
+                status="failed",
+                detail=detail,
+            )
+            _append_blocker(report, f"{label} theme validation failed: {detail}")
+            passed = False
+        else:
+            _append_check(
+                report,
+                name=f"{label}-theme-preflight",
+                status="passed",
+                detail=f"{label} theme preflight passed (sole supported theme: {SOLE_VALID_THEME}).",
+            )
+
     return passed
 
 
@@ -1389,7 +1432,15 @@ def _prepare_beta_migration_report(
             detail="Validated input paths and required static files for the selected workflow.",
         )
 
+    # CR-SA94-REV-B-001: validate_theme_preflight for donor and recipient
+    # before any snapshot loading, subprocess probes, or mutation steps.
+    theme_ok = True
     if donor_ok and recipient_ok and not report.blockers:
+        theme_ok = _validate_theme_preflight_checks(
+            report, donor_path=inputs.donor, recipient_path=inputs.recipient
+        )
+
+    if donor_ok and recipient_ok and not report.blockers and theme_ok:
         try:
             donor_snapshot = _load_project_snapshot(inputs.donor)
         except (

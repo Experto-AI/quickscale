@@ -2064,6 +2064,336 @@ def test_verification_command_timeout_blocks_with_actionable_diagnostic(
 
 
 # ---------------------------------------------------------------------------
+# CR-SA94-REV-B-001: Theme preflight blocks on retired/malformed sources
+# ---------------------------------------------------------------------------
+
+
+def _write_project_with_theme(
+    root: Path,
+    *,
+    slug: str,
+    package: str,
+    marker: str,
+    theme: str,
+    modules: tuple[str, ...] = (),
+    path_dependencies: tuple[str, ...] = (),
+    include_docker_files: bool = True,
+    include_use_modules_hook: bool = True,
+    include_frontend_infra_files: bool = True,
+) -> Path:
+    """Create a full project skeleton (like ``_write_project``) and set the given theme."""
+    root = _write_project(
+        root,
+        slug=slug,
+        package=package,
+        marker=marker,
+        modules=modules,
+        path_dependencies=path_dependencies,
+        include_docker_files=include_docker_files,
+        include_use_modules_hook=include_use_modules_hook,
+        include_frontend_infra_files=include_frontend_infra_files,
+    )
+    # Override quickscale.yml with the desired theme
+    modules_block = ""
+    if modules:
+        module_lines = "\n".join(f"  {module}: {{}}" for module in modules)
+        modules_block = f"modules:\n{module_lines}\n"
+    quickscale_content = (
+        'version: "1"\n'
+        "project:\n"
+        f"  slug: {slug}\n"
+        f"  package: {package}\n"
+        f"  theme: {theme}\n"
+        f"{modules_block}"
+        "docker:\n"
+        "  start: false\n"
+        "  build: false\n"
+    )
+    (root / "quickscale.yml").write_text(quickscale_content)
+    return root
+
+
+def _write_malformed_config_project(root: Path, *, slug: str, package: str) -> Path:
+    """Create a full project skeleton and replace quickscale.yml with malformed YAML."""
+    root = _write_project(
+        root,
+        slug=slug,
+        package=package,
+        marker="malformed",
+    )
+    (root / "quickscale.yml").write_text("{invalid: yaml: unquoted: yes")
+    return root
+
+
+def _assert_theme_preflight_blocks(
+    report,
+    *,
+    donor_label: str = "donor",
+    recipient_label: str = "recipient",
+) -> None:
+    """Assert that theme preflight blocked the migration with correct check records."""
+    assert report.status == "blocked"
+    # Must not have loaded any snapshots
+    assert report.donor is None, (
+        f"donor snapshot must be None when theme preflight blocks, got {report.donor}"
+    )
+    assert report.recipient is None, (
+        f"recipient snapshot must be None when theme preflight blocks, got {report.recipient}"
+    )
+    # Must have preflight checks for the failing side(s)
+    donor_failed = any(
+        check.name == f"{donor_label}-theme-preflight" and check.status == "failed"
+        for check in report.preflight_checks
+    )
+    recipient_failed = any(
+        check.name == f"{recipient_label}-theme-preflight" and check.status == "failed"
+        for check in report.preflight_checks
+    )
+    assert donor_failed or recipient_failed, (
+        "Expected at least one theme preflight check to fail"
+    )
+    # No changed files
+    assert report.changed_files == [], (
+        f"No files should be changed: {report.changed_files}"
+    )
+    assert report.verification_results == [], (
+        f"No verification should have run: {report.verification_results}"
+    )
+
+
+class TestRetiredThemeBlocksFreshFirst:
+    """Retired ``showcase_html`` theme must block fresh-first preflight."""
+
+    def test_donor_retired_blocks_plan(self, tmp_path: Path) -> None:
+        """Retired theme on donor blocks fresh-first planning."""
+        donor = _write_project_with_theme(
+            tmp_path / "donor",
+            slug="donor-app",
+            package="donor_app",
+            marker="donor",
+            theme="showcase_html",
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="recipient-app",
+            package="recipient_app",
+            marker="recipient",
+        )
+        report = plan_beta_migration(
+            BetaMigrationInput(
+                mode="fresh-first", donor=donor, recipient=recipient, dry_run=True
+            )
+        )
+        _assert_theme_preflight_blocks(report, donor_label="donor")
+
+    def test_recipient_retired_blocks_plan(self, tmp_path: Path) -> None:
+        """Retired theme on recipient blocks fresh-first planning."""
+        donor = _write_project(
+            tmp_path / "donor", slug="donor-app", package="donor_app", marker="donor"
+        )
+        recipient = _write_project_with_theme(
+            tmp_path / "recipient",
+            slug="recipient-app",
+            package="recipient_app",
+            marker="recipient",
+            theme="showcase_html",
+        )
+        report = plan_beta_migration(
+            BetaMigrationInput(
+                mode="fresh-first", donor=donor, recipient=recipient, dry_run=True
+            )
+        )
+        _assert_theme_preflight_blocks(report, donor_label="recipient")
+
+    def test_both_retired_both_reported(self, tmp_path: Path) -> None:
+        """Both projects with retired theme should produce both failure checks."""
+        donor = _write_project_with_theme(
+            tmp_path / "donor",
+            slug="donor-app",
+            package="donor_app",
+            marker="donor",
+            theme="showcase_html",
+        )
+        recipient = _write_project_with_theme(
+            tmp_path / "recipient",
+            slug="recipient-app",
+            package="recipient_app",
+            marker="recipient",
+            theme="showcase_html",
+        )
+        report = plan_beta_migration(
+            BetaMigrationInput(
+                mode="fresh-first", donor=donor, recipient=recipient, dry_run=True
+            )
+        )
+        _assert_theme_preflight_blocks(report, donor_label="donor")
+        # Both checks should be present
+        donor_failed = any(
+            check.name == "donor-theme-preflight" and check.status == "failed"
+            for check in report.preflight_checks
+        )
+        recipient_failed = any(
+            check.name == "recipient-theme-preflight" and check.status == "failed"
+            for check in report.preflight_checks
+        )
+        assert donor_failed, "Donor theme preflight must also report failure"
+        assert recipient_failed, "Recipient theme preflight must also report failure"
+
+    def test_run_retired_donor_zero_side_effects(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Running migration with retired donor must block before any subprocess/mutation."""
+        calls = _install_verification_success_stub(monkeypatch)
+        donor = _write_project_with_theme(
+            tmp_path / "donor",
+            slug="donor-app",
+            package="donor_app",
+            marker="donor",
+            theme="showcase_html",
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="recipient-app",
+            package="recipient_app",
+            marker="recipient",
+        )
+        report = run_beta_migration(
+            BetaMigrationInput(
+                mode="fresh-first", donor=donor, recipient=recipient, dry_run=False
+            )
+        )
+        _assert_theme_preflight_blocks(report, donor_label="donor")
+        # Verify zero subprocess calls
+        assert calls == [], f"No subprocess calls should have been made: {calls}"
+
+
+class TestMalformedConfigBlocksFreshFirst:
+    """Malformed quickscale.yml must block fresh-first preflight."""
+
+    def test_donor_malformed_blocks_plan(self, tmp_path: Path) -> None:
+        """Malformed donor config blocks fresh-first planning."""
+        donor = _write_malformed_config_project(
+            tmp_path / "donor", slug="donor-app", package="donor_app"
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="recipient-app",
+            package="recipient_app",
+            marker="recipient",
+        )
+        report = plan_beta_migration(
+            BetaMigrationInput(
+                mode="fresh-first", donor=donor, recipient=recipient, dry_run=True
+            )
+        )
+        _assert_theme_preflight_blocks(report, donor_label="donor")
+
+    def test_recipient_malformed_blocks_plan(self, tmp_path: Path) -> None:
+        """Malformed recipient config blocks fresh-first planning."""
+        donor = _write_project(
+            tmp_path / "donor", slug="donor-app", package="donor_app", marker="donor"
+        )
+        recipient = _write_malformed_config_project(
+            tmp_path / "recipient", slug="recipient-app", package="recipient_app"
+        )
+        report = plan_beta_migration(
+            BetaMigrationInput(
+                mode="fresh-first", donor=donor, recipient=recipient, dry_run=True
+            )
+        )
+        _assert_theme_preflight_blocks(report, donor_label="recipient")
+
+    def test_run_malformed_donor_zero_side_effects(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Running migration with malformed donor must block before any subprocess/mutation."""
+        calls = _install_verification_success_stub(monkeypatch)
+        donor = _write_malformed_config_project(
+            tmp_path / "donor", slug="donor-app", package="donor_app"
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="recipient-app",
+            package="recipient_app",
+            marker="recipient",
+        )
+        report = run_beta_migration(
+            BetaMigrationInput(
+                mode="fresh-first", donor=donor, recipient=recipient, dry_run=False
+            )
+        )
+        _assert_theme_preflight_blocks(report, donor_label="donor")
+        assert calls == [], f"No subprocess calls should have been made: {calls}"
+
+
+class TestRetiredThemeBlocksInPlace:
+    """Retired theme must block in-place preflight before any checks."""
+
+    def test_donor_retired_blocks_plan(self, tmp_path: Path) -> None:
+        """Retired theme on donor blocks in-place planning."""
+        donor = _write_project_with_theme(
+            tmp_path / "donor",
+            slug="donor-app",
+            package="donor_app",
+            marker="donor",
+            theme="showcase_html",
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="recipient-app",
+            package="recipient_app",
+            marker="recipient",
+        )
+        report = plan_beta_migration(
+            BetaMigrationInput(
+                mode="in-place", donor=donor, recipient=recipient, dry_run=False
+            )
+        )
+        _assert_theme_preflight_blocks(report, donor_label="donor")
+
+    def test_recipient_retired_blocks_plan(self, tmp_path: Path) -> None:
+        """Retired theme on recipient blocks in-place planning."""
+        donor = _write_project(
+            tmp_path / "donor", slug="donor-app", package="donor_app", marker="donor"
+        )
+        recipient = _write_project_with_theme(
+            tmp_path / "recipient",
+            slug="recipient-app",
+            package="recipient_app",
+            marker="recipient",
+            theme="showcase_html",
+        )
+        report = plan_beta_migration(
+            BetaMigrationInput(
+                mode="in-place", donor=donor, recipient=recipient, dry_run=False
+            )
+        )
+        _assert_theme_preflight_blocks(report, donor_label="recipient")
+
+
+class TestMalformedConfigBlocksInPlace:
+    """Malformed config must block in-place preflight before any checks."""
+
+    def test_donor_malformed_blocks_plan(self, tmp_path: Path) -> None:
+        """Malformed donor config blocks in-place planning."""
+        donor = _write_malformed_config_project(
+            tmp_path / "donor", slug="donor-app", package="donor_app"
+        )
+        recipient = _write_project(
+            tmp_path / "recipient",
+            slug="recipient-app",
+            package="recipient_app",
+            marker="recipient",
+        )
+        report = plan_beta_migration(
+            BetaMigrationInput(
+                mode="in-place", donor=donor, recipient=recipient, dry_run=False
+            )
+        )
+        _assert_theme_preflight_blocks(report, donor_label="donor")
+
+
+# ---------------------------------------------------------------------------
 # SA62 regression: module-dependency-sync validated writer rejects invalid TOML
 # ---------------------------------------------------------------------------
 
