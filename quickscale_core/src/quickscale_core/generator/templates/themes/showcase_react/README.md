@@ -4,11 +4,9 @@ This is the React frontend for {{ project_name }}, built with QuickScale.
 
 ## Shipped Surface
 
-This directory comes from QuickScale's current `showcase_react` starter theme. In the
-current release line, QuickScale ships two starter themes only:
-
-- `showcase_react` - React + TypeScript + shadcn/ui (this frontend)
-- `showcase_html` - server-rendered HTML + CSS
+This directory comes from QuickScale's current `showcase_react` starter theme.
+`showcase_react` is the sole QuickScale starter theme; the former `showcase_html`
+(server-rendered HTML + CSS) secondary option was removed in SA94.
 
 Fresh `showcase_react` generations also include dormant PostHog starter support in
 `src/lib/analytics.ts` and Django-owned public social entrypoints at `/social` and

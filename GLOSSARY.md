@@ -164,9 +164,10 @@ quickscale/
 ### Showcase Theme
 **Definition**: Minimal starter theme demonstrating QuickScale's frontend capabilities with minimal code, designed as a foundation for custom development.
 
-**Available Themes**:
+**Current Theme**:
 - `showcase_react` - React + TypeScript + Vite + shadcn/ui (default, v0.74.0+)
-- `showcase_html` - Pure HTML + CSS (secondary starter option)
+
+The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA94. Existing generated projects that used it keep their user-owned files.
 
 **Characteristics**:
 - Minimal code (ready for customization)
@@ -216,7 +217,7 @@ quickscale/
 **Definition**: Complete frontend scaffolding for generated projects, ranging from minimal starters to full vertical applications. Unlike modules, themes are one-time generation (not updated after creation).
 
 **Categories**:
-1. **Showcase Themes** - Minimal foundations (React default, HTML secondary option)
+1. **Showcase Themes** - Minimal foundations (React-only since SA94; the former HTML secondary option `showcase_html` has been removed)
 2. **Vertical Themes** - Complete industry apps when they are explicitly implemented and documented
 
 **Distribution**: Generator templates (one-time copy)
@@ -225,7 +226,7 @@ quickscale/
 - Themes: Frontend-focused, one-time generation, not updated automatically after project creation
 - Modules: Backend-focused, ongoing updates via git subtree
 
-**Examples**: `showcase_react`, `showcase_html`
+**Examples**: `showcase_react` (the former `showcase_html` option was removed in SA94)
 
 **See**: [decisions.md - Theme Architecture](./docs/technical/decisions.md#module-theme-architecture)
 

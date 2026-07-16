@@ -162,7 +162,7 @@ Billing now has a public-ready implementation line in `quickscale_modules/billin
 
 **Current Shipped Theme Surface:**
 
-QuickScale currently ships starter themes only:
+QuickScale currently ships one starter theme only:
 
 1. `showcase_react` — **React + TypeScript + shadcn/ui (default)** ✅
   - Empty foundation for custom development
@@ -171,14 +171,16 @@ QuickScale currently ships starter themes only:
   - Fresh generations also auto-generate Django-owned public social entrypoints at
     `/social` and `/social/embeds` that hydrate the shared React bundle outside the
     SPA router
-  - Those public pages are fresh-generation scaffolding only; existing projects and
-    non-React themes keep manual adoption for any equivalent public pages, while the
-    backend-managed social transport endpoints and settings wiring remain theme-agnostic
+  - Those public pages are fresh-generation scaffolding only; existing projects keep
+    manual adoption for any equivalent public pages, while the backend-managed social
+    transport endpoints and settings wiring remain theme-agnostic
 
-2. `showcase_html` — Pure HTML + CSS (secondary option)
-  - Empty server-rendered foundation with no frontend build toolchain
-  - Fresh generations do not scaffold `/social` or `/social/embeds` public
-    pages
+The former `showcase_html` theme (server-rendered HTML + CSS secondary starter) has been removed
+as part of SA94. It never gained adoption but carried ongoing maintenance cost. The plan/apply CLI
+no longer offers `showcase_html` as a selection; `showcase_react` is the sole supported and
+configured theme. Existing generated projects that used `showcase_html` keep their user-owned
+files — no automatic rewrite is performed. Any desired/state/recovery reference to `showcase_html`
+fails closed before operational side effects.
 
 Planned vertical themes such as CRM remain roadmap work. They are not part of the
 current shipped generator surface until a release note and this file explicitly add
@@ -235,16 +237,10 @@ as a valid public `quickscale plan` / `quickscale.yml` / `quickscale apply` sele
 
 **Workflow:**
 ```bash
-# Create project with default React theme (empty foundation)
+# Create project with React theme (sole theme)
 quickscale plan myproject
-# → Theme defaults to: showcase_react (React + shadcn/ui)
+# → Theme is always: showcase_react (React + shadcn/ui)
 # → Select modules to embed: auth, blog
-quickscale apply
-
-# Create project with HTML theme (simpler alternative)
-quickscale plan myproject
-# → Select showcase_html during the interactive theme prompt
-# → Uses pure HTML + CSS instead of React
 quickscale apply
 
 # Vertical themes such as CRM remain planned work, not current CLI syntax
@@ -254,55 +250,51 @@ quickscale apply
 ```
 quickscale_core/generator/templates/
 └── themes/
-    ├── showcase_react/        # React + shadcn/ui (DEFAULT) ✅
-  │   ├── src/
-  │   │   ├── components/
-  │   │   │   ├── social/
-  │   │   │   └── ui/               # shadcn/ui components
-  │   │   ├── hooks/
-  │   │   │   ├── useModules.ts
-  │   │   │   └── usePublicSocialSurface.ts
-  │   │   ├── lib/
-  │   │   │   ├── analytics.ts      # Dormant PostHog starter helper
-  │   │   │   └── utils.ts          # shadcn/ui utilities
-  │   │   ├── pages/
-  │   │   │   ├── SocialEmbedsPublicPage.tsx
-  │   │   │   └── SocialLinkTreePublicPage.tsx
-  │   │   ├── App.tsx
-  │   │   └── main.tsx
-    │   ├── templates/
-  │   │   ├── index.html.j2         # SPA entry point
-  │   │   └── social/
-  │   │       ├── embeds.html.j2    # Django-owned public embed route
-  │   │       └── link_tree.html.j2 # Django-owned public social route
-  │   ├── components.json.j2
-  │   ├── tailwind.config.js.j2
-  │   ├── vite.config.ts.j2
-  │   └── package.json.j2
-    │   └── static/                   # Static assets
-    ├── showcase_html/         # Pure HTML + CSS (secondary)
-    │   ├── templates/         # No scaffolded public /social pages
-    │   └── static/
+    └── showcase_react/        # React + shadcn/ui (DEFAULT) ✅
+      ├── src/
+      │   ├── components/
+      │   │   ├── social/
+      │   │   └── ui/               # shadcn/ui components
+      │   ├── hooks/
+      │   │   ├── useModules.ts
+      │   │   └── usePublicSocialSurface.ts
+      │   ├── lib/
+      │   │   ├── analytics.ts      # Dormant PostHog starter helper
+      │   │   └── utils.ts          # shadcn/ui utilities
+      │   ├── pages/
+      │   │   ├── SocialEmbedsPublicPage.tsx
+      │   │   └── SocialLinkTreePublicPage.tsx
+      │   ├── App.tsx
+      │   └── main.tsx
+      ├── templates/
+      │   ├── index.html.j2         # SPA entry point
+      │   └── social/
+      │       ├── embeds.html.j2    # Django-owned public embed route
+      │       └── link_tree.html.j2 # Django-owned public social route
+      ├── components.json.j2
+      ├── tailwind.config.js.j2
+      ├── vite.config.ts.j2
+      └── package.json.j2
+      └── static/                   # Static assets
 ```
 
 Fresh generations copy `showcase_react/src/**` into the generated project's
 `frontend/src/` directory and copy `showcase_react/templates/**` into Django
   `templates/`. Only fresh `showcase_react` generations auto-scaffold the Django-owned
-  public `/social` and `/social/embeds` pages. `showcase_html` does not ship those
-  public routes/templates, and non-React themes must adopt any equivalent
-  public pages manually. QuickScale does not currently ship any vertical theme template
-  trees.
+  public `/social` and `/social/embeds` pages. With the removal of `showcase_html`
+  (SA94), `showcase_react` is the sole theme; the `showcase_html` theme and its
+  server-rendered stubs no longer ship. QuickScale does not currently ship any
+  vertical theme template trees.
 
 
 **Key Characteristics:**
 - ❌ NOT runtime dependencies (just generated code)
 - ❌ NO updates after generation (user owns completely)
 - ✅ One-time scaffolding, user owns completely
-- ✅ `showcase_react` and `showcase_html` are the current shipped starter themes
+- ✅ `showcase_react` is the sole shipped starter theme; `showcase_html` has been
+  removed (SA94)
 - ✅ Fresh `showcase_react` generations include dormant analytics starter support and
   Django-owned public social pages
-- ✅ Fresh `showcase_html` generations do not scaffold public social pages; non-React
-  themes rely on manual adoption for that public page surface
 - ✅ Generated starter output surfaces billing as a module flag only (`modules.billing`);
   the generated SPA does not currently include billing dashboard cards, sidebar navigation entries,
   org-dashboard billing cards/links, module paths for billing, or full-document links into
@@ -760,10 +752,8 @@ disable_error_code = var-annotated
 - [ ] Update embed command docstring with module description
 - [ ] Add module-specific "Next steps" instructions in embed output
 
-**5. Template Integration (showcase_html theme):**
-- [ ] Add module section to `navigation.html.j2` (installed/not-installed states)
-- [ ] Add module to "Installed Modules" section in `index.html.j2`
-- [ ] Update "no modules installed" condition to include new module
+**5. Template Integration (showcase_react theme):**
+- [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure; the former `showcase_html` theme templates (`navigation.html.j2`, `index.html.j2`) have been removed as part of SA94
 
 **6. Testing:**
 - [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
@@ -876,7 +866,7 @@ The authoritative current CLI command surface now lives in [implementation_contr
 - Categories and tags for organization
 - Featured images with automatic thumbnail generation
 - RSS feed for content syndication
-- Responsive templates for showcase_html theme
+- Responsive templates for the sole showcase_react theme (former showcase_html theme removed in SA94)
 
 **Features Deferred**:
 - Comments (use third-party like Disqus/Commento)
@@ -886,7 +876,7 @@ The authoritative current CLI command surface now lives in [implementation_contr
 
 **Distribution**: Split branch pattern (`splits/simple-blog`), added via `quickscale plan` and `quickscale apply`
 
-**Theme Support**: showcase_html, showcase_react
+**Theme Support**: showcase_react (showcase_html was removed in SA94)
 
 ---
 

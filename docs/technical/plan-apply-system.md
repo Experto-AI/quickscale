@@ -98,7 +98,7 @@ version: 0.87.0
 project:
   slug: myapp
   package: myapp
-  theme: showcase_html
+  theme: showcase_react
 
 modules:
   auth:
@@ -133,7 +133,7 @@ version: 0.87.0
 project:
   slug: myapp
   package: myapp
-  theme: showcase_html
+  theme: showcase_react
   created_at: "2025-11-28T10:00:00"
   last_applied: "2025-11-28T10:30:00"
 

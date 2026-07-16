@@ -210,20 +210,15 @@ quickscale apply
 
 **Theme Selection**:
 
-QuickScale supports multiple frontend themes. Choose your theme during the `plan` wizard:
+QuickScale uses the `showcase_react` React + TypeScript SPA as its sole theme. The former `showcase_html` (pure HTML + CSS) secondary option has been removed as part of SA94. Plans created before the removal that specified `showcase_html` will fail closed on apply; switch to `showcase_react` or create a fresh configuration.
 
 ```bash
-# Create configuration interactively
+# Create configuration - theme is always showcase_react
 quickscale plan myapp
-# → Select theme during wizard (showcase_html, showcase_react)
-# → Generates quickscale.yml
+# → Generates quickscale.yml with theme: showcase_react
 ```
 
-**Available themes**:
-- `showcase_html` - Pure HTML + CSS; fresh starter output does not scaffold public `/social` or `/social/embeds` pages
-- `showcase_react` - React + TypeScript SPA (default); fresh generations auto-generate Django-owned public `/social` and `/social/embeds` pages
-
-**Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization. The backend-managed social transport remains theme-agnostic, but only fresh `showcase_react` auto-generates the public page files; existing projects and non-React themes must adopt those public pages manually if they want them.
+**Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization. The backend-managed social transport remains theme-agnostic, but only fresh `showcase_react` auto-generates the public page files; existing projects must adopt those public pages manually if they want them.
 
 **Typical flow** to create and run a generated project:
 
@@ -363,17 +358,17 @@ quickscale plan myapp --overwrite
 ```
 
 The wizard guides you through:
-1. **Theme selection**: Choose from available themes (showcase_html, showcase_react). Fresh `showcase_react` generations scaffold Django-owned public `/social` and `/social/embeds` pages; `showcase_html` does not scaffold those public pages.
+1. **Theme selection**: The sole theme is `showcase_react` (the former `showcase_html` option has been removed in SA94). Fresh `showcase_react` generations scaffold Django-owned public `/social` and `/social/embeds` pages.
 2. **Module selection**: Select optional modules to include. In the current implementation line, implemented first-party modules include analytics, auth, backups, billing, blog, crm, forms, listings, notifications, social, and storage. Billing now participates in public `quickscale plan`, `quickscale.yml`, and `quickscale apply` flows, and fresh starter output links into the billing module's Django-owned `/billing/pricing/` (public) and `/billing/dashboard/` (authenticated) pages without generating a starter-owned billing React page. `quickscale apply` requires `auth` whenever billing is selected. The `teams` directory remains placeholder inventory only.
 3. **Docker configuration**: Configure Docker build/start options and optional first-start superuser creation
 
 **Generated `quickscale.yml` example**:
 ```yaml
-version: 0.87.0
+version: "1"
 project:
   slug: myapp
   package: myapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   blog: {}
   listings: {}

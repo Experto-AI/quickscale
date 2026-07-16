@@ -119,7 +119,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 | **MODULES & DISTRIBUTION** |
 | `quickscale_modules/` (split branch distribution) | IN | Modules distribute via git subtree split branches. Embed via `quickscale plan --add <name>` plus `quickscale apply`. |
 | Billing module (`quickscale_modules.billing`) | IN | Desired-state config lives in `quickscale.yml`; Stripe secrets remain env-only; billing ships module-owned pricing/dashboard routes and uses `debit_user` plus `WebhookEvent` as the stable credit-consumption and webhook gates. |
-| Themes (React default + HTML secondary option) | IN | `showcase_react` and `showcase_html` ship as generator templates with one-time copy during apply. |
+| Themes (React sole theme) | IN | `showcase_react` is the sole shipped starter theme. The former `showcase_html` theme (server-rendered HTML + CSS secondary option) has been removed (SA94). |
 | `quickscale_themes/` packaged themes | NOT CURRENT | Theme package distribution is out of contract unless a later release documents it explicitly. |
 | YAML declarative configuration (`quickscale.yml`) | IN | Shipped as part of the plan/apply system. |
 | State tracking (`.quickscale/state.yml`) | IN (consolidated Phase 2 / M2) | Sole authoritative applied-state store with consolidated sub-sections for module-tracking metadata and managed-file drift records. Advisory lock serializes concurrent `apply`. `quickscale status` reports drift and compatibility diagnostics. |

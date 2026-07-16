@@ -29,7 +29,7 @@ QuickScale's answer is a generator plus reusable first-party modules:
 The current QuickScale contract is implementation-led:
 
 - **Generator**: `quickscale plan`, then entering the generated directory and running `quickscale apply`, produces a standalone Django project with production foundations.
-- **Starter themes**: `showcase_react` is the default frontend and `showcase_html` remains the server-rendered secondary option.
+- **Starter themes**: `showcase_react` is the sole frontend theme (the former `showcase_html` server-rendered secondary option was removed in SA94).
 - **First-party modules**: The shipped module line now includes auth, backups, blog, crm, forms, listings, notifications, social, and storage.
 - **Update model**: Modules follow the documented git-subtree workflow, while generated theme files remain user-owned code.
 

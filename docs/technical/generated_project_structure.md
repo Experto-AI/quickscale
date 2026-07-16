@@ -12,11 +12,10 @@ QuickScale currently generates a standalone Django project with production found
 
 Key rules:
 - The generated project is user-owned code.
-- `showcase_react` is the default starter theme.
-- `showcase_html` remains the secondary starter option.
-- Fresh generations include a root `Makefile` with generic `setup`, `lint`, `format`, `test`, `check`, and `ci` entrypoints; frontend-only targets guard on `frontend/package.json` and skip cleanly for `showcase_html`.
+- `showcase_react` is the sole starter theme (the former `showcase_html` server-rendered secondary option has been removed in SA94).
+- Fresh generations include a root `Makefile` with generic `setup`, `lint`, `format`, `test`, `check`, and `ci` entrypoints; frontend-only targets guard on `frontend/package.json`.
 - Fresh generations also ship `scripts/lint.sh` as the shared helper surface behind `make lint` and `make check`.
-- Fresh `showcase_react` generations auto-scaffold Django-owned public `/social` and `/social/embeds` pages; `showcase_html` does not scaffold those public pages.
+- Fresh `showcase_react` generations auto-scaffold Django-owned public `/social` and `/social/embeds` pages.
 - Generated starter output surfaces billing as a module flag only (`modules.billing`); the generated SPA does not currently include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards/links, module paths for billing, or full-document links into billing Django pages — the D1 org-switch blocker is now resolved; see `docs/technical/decisions.md` §D1. Teams placeholder routes, navigation, cards, and flags remain excluded.
 - Modules embed into the generated project and can later be updated through the documented git-subtree workflow.
 - QuickScale does not generate a maintainer-style `quickscale_modules/` workspace inside client projects.
@@ -63,8 +62,7 @@ Notes:
 - `.quickscale/<name>.lock` advisory lock files serialize concurrent `apply` operations.
 - `Makefile` is always generated at the project root and is the preferred local entrypoint for setup, lint, format, test, check, and ci workflows.
 - `scripts/lint.sh` is generated alongside the root `Makefile` and backs the shared `make lint` and `make check` workflows.
-- Frontend-specific Makefile targets run only when `frontend/package.json` exists; on `showcase_html` they report a skip instead of failing.
-- `frontend/` is omitted for the HTML starter when the user selects `showcase_html`.
+- Frontend-specific Makefile targets run only when `frontend/package.json` exists.
 
 ### Generated Project with Embedded Modules
 
@@ -90,7 +88,7 @@ myapp/
 Notes:
 - Embedded modules are runtime dependencies that land in `modules/`.
 - `quickscale apply` owns the managed backend and runtime wiring for installed modules.
-- The managed social backend transport remains theme-agnostic, but only fresh `showcase_react` starters auto-scaffold the public `/social` and `/social/embeds` pages; non-React themes keep manual adoption for any equivalent public pages.
+- The managed social backend transport remains theme-agnostic, but only fresh `showcase_react` starters auto-scaffold the public `/social` and `/social/embeds` pages.
 - Existing projects keep ownership of user-edited theme routes, navigation, and page files unless documentation for a specific release explicitly says otherwise.
 
 ### Current Simplifications
@@ -168,35 +166,11 @@ Notes:
 - Fresh `showcase_react` generations include `frontend/src/lib/analytics.ts` as dormant PostHog starter wiring. It initializes only when `VITE_POSTHOG_KEY` contains a real key.
 - Fresh `showcase_react` generations also include `frontend/src/pages/SocialLinkTreePublicPage.tsx` and `frontend/src/pages/SocialEmbedsPublicPage.tsx`, plus Django `templates/social/*.html` wrappers that keep `/social` and `/social/embeds` under Django ownership while hydrating the shared React bundle through `window.__QUICKSCALE__.publicPage`.
 - Fresh `showcase_react` generations surface billing as a module flag only (`modules.billing`). The generated SPA does not currently include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards, module paths for billing, or full-document links into billing Django pages — the D1 org-switch blocker is now resolved; see `docs/technical/decisions.md` §D1. QuickScale does not generate a starter-owned `BillingPage.tsx`.
-- That public-page scaffolding is fresh-generation-only; existing projects and non-React themes must manually adopt any equivalent public pages they want.
+- That public-page scaffolding is fresh-generation-only; existing projects must manually adopt any equivalent public pages they want.
 
-### HTML Starter Output
+### HTML Starter Output (Removed)
 
-When the user selects `showcase_html`, the frontend stays server-rendered.
-
-```
-myapp/
-├── manage.py
-├── quickscale.yml
-├── Makefile
-├── myapp/
-├── templates/
-│   ├── base.html
-│   └── index.html
-├── static/
-│   ├── css/
-│   └── images/
-├── Dockerfile
-├── docker-compose.yml
-├── pyproject.toml
-├── poetry.lock
-└── ...
-```
-
-Notes:
-- Fresh `showcase_html` generations do not scaffold Django-owned public `/social` or `/social/embeds` pages.
-- Fresh `showcase_html` generations surface billing as server-rendered cards and navigation links into the billing module's Django-owned `/billing/pricing/` and `/billing/dashboard/` pages.
-- Enabling the `social` module still wires the backend-managed transport surface, but non-React themes must manually adopt any public page surface they want.
+The `showcase_html` (server-rendered HTML + CSS) starter theme has been removed as part of SA94. `showcase_react` is the sole supported theme. Existing generated projects that used `showcase_html` keep their user-owned files — no automatic rewrite is performed. Any desired/state/recovery reference to `showcase_html` fails closed before operational side effects.
 
 ### State and Module Metadata
 
