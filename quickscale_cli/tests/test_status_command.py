@@ -48,7 +48,7 @@ class TestStatusWithState:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -61,7 +61,7 @@ class TestStatusWithState:
 
             assert result.exit_code == 0
             assert "testapp" in result.output
-            assert "showcase_html" in result.output
+            assert "showcase_react" in result.output
 
     def test_status_shows_applied_modules(self):
         """Test that status shows applied modules"""
@@ -75,7 +75,7 @@ class TestStatusWithState:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -112,7 +112,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -140,7 +140,7 @@ class TestStatusPendingChanges:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -157,7 +157,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -184,7 +184,7 @@ docker:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -207,7 +207,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -239,7 +239,7 @@ class TestStatusJsonOutput:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -268,7 +268,7 @@ class TestStatusJsonOutput:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -304,7 +304,7 @@ class TestStatusJsonOutput:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -320,7 +320,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
   blog:
@@ -356,7 +356,7 @@ class TestStatusDriftDetection:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -383,7 +383,7 @@ class TestStatusDriftDetection:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -425,7 +425,7 @@ class TestStatusFileHashDrift:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -485,7 +485,7 @@ class TestStatusVersionDrift:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -532,7 +532,7 @@ class TestStatusVersionDrift:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -577,7 +577,7 @@ class TestStatusM2DriftDiagnostics:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -606,7 +606,7 @@ class TestStatusM2DriftDiagnostics:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -642,7 +642,7 @@ class TestStatusM2DriftDiagnostics:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                         },
                         "modules": {},
                         "managed_files": [],
@@ -667,7 +667,7 @@ class TestStatusM2DriftDiagnostics:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                         },
                         "modules": {},
                     },
@@ -702,7 +702,7 @@ class TestStatusM2DriftDiagnostics:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                         },
                         "modules": {
                             "auth": {
@@ -739,7 +739,7 @@ class TestStatusM2DriftDiagnostics:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                         },
                         "modules": {
                             "auth": {
@@ -776,7 +776,7 @@ class TestStatusM2DriftDiagnostics:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                         },
                         "modules": {},
                     },
@@ -810,7 +810,7 @@ class TestStatusM2DriftDiagnostics:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                         },
                         "modules": {
                             "missing_mod": {

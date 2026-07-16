@@ -43,7 +43,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -67,7 +67,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
     allow_registration: false
@@ -94,7 +94,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   notifications:
     sender_name: QuickScale
@@ -128,7 +128,7 @@ docker:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -159,7 +159,7 @@ class TestPlanAddShowsCurrentModules:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -182,7 +182,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -213,7 +213,7 @@ class TestPlanAddSelectsNewModules:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -236,7 +236,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -274,7 +274,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -302,7 +302,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -337,7 +337,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   storage:
     backend: s3
@@ -366,7 +366,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -397,7 +397,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -429,7 +429,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -459,7 +459,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   storage:
     backend: s3
@@ -490,7 +490,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -648,7 +648,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -679,7 +679,7 @@ class TestPlanAddAllModulesInstalled:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -705,7 +705,7 @@ class TestPlanAddAllModulesInstalled:
                             "project:",
                             "    slug: testapp",
                             "    package: testapp",
-                            "    theme: showcase_html",
+                            "    theme: showcase_react",
                             "modules:",
                             modules_block,
                             "docker:",
