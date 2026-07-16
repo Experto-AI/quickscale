@@ -141,6 +141,18 @@ fi
 echo "✓ Coverage policy helper tests passed"
 
 echo ""
+make test-integration-worker-pool || FAILED=true
+
+if [ "$FAILED" = true ]; then
+    echo ""
+    echo "╔════════════════════════════════════════╗"
+    echo "║   ✗ Worker Pool Harness Tests Failed   ║"
+    echo "╚════════════════════════════════════════╝"
+    exit 1
+fi
+echo "✓ Worker pool harness tests passed"
+
+echo ""
 echo "[10/11] Running coverage checks (core + CLI + backups)..."
 make test-cov REQUIRE_BACKUPS_COVERAGE=1 || FAILED=true
 

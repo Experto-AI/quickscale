@@ -655,11 +655,12 @@ def test_get_system_org_raises_on_wrong_slug_system_row() -> None:
     Uses bulk_create to bypass model validation, simulating a corrupt row
     that predates the invariant enforcement (e.g. from an older schema or
     raw SQL bypass).
-
-    The forms module migration 0005 may have pre-created the System org,
-    so we update that row to be corrupt rather than risking a unique
-    constraint violation.
     """
+
+    # Ensure the System org exists before corrupting it.  The historical
+    # data migration that pre-created __system__ was removed by the SA92
+    # migration squash, so we create it explicitly here.
+    Organization.objects.get_system_org()
 
     # Update the existing System org directly (avoiding delete FK issues
     # with forms seed data) to create the corrupt scenario.
@@ -680,6 +681,11 @@ def test_get_system_org_raises_on_reserved_slug_non_system() -> None:
     that predates the invariant enforcement (e.g. from an older schema or
     raw SQL bypass).
     """
+    # Ensure the System org exists before corrupting it.  The historical
+    # data migration that pre-created __system__ was removed by the SA92
+    # migration squash, so we create it explicitly here.
+    Organization.objects.get_system_org()
+
     # Update the existing System org so its is_system=False while keeping
     # the slug (creates the corrupt scenario without delete FK issues).
     Organization.objects.filter(slug=SYSTEM_ORG_SLUG, is_system=True).update(
@@ -700,6 +706,11 @@ def test_get_system_org_raises_on_personal_system_org() -> None:
     that predates the invariant enforcement (e.g. from an older schema or
     raw SQL bypass).
     """
+    # Ensure the System org exists before corrupting it.  The historical
+    # data migration that pre-created __system__ was removed by the SA92
+    # migration squash, so we create it explicitly here.
+    Organization.objects.get_system_org()
+
     # Mark the existing System org as personal to create corrupt scenario.
     Organization.objects.filter(is_system=True, slug=SYSTEM_ORG_SLUG).update(
         is_personal=True,

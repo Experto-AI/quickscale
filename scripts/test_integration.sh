@@ -22,6 +22,8 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 VENV_BIN="$REPO_ROOT/.venv/bin"
 # shellcheck source=./_python_requirement.sh
 source "$REPO_ROOT/scripts/_python_requirement.sh"
+# shellcheck source=./_qs_jobs.sh
+source "$REPO_ROOT/scripts/_qs_jobs.sh"
 REQUIRED_PYTHON_VERSION="$(quickscale_min_python_version "$REPO_ROOT")"
 POETRY_AVAILABLE=false
 
@@ -58,9 +60,19 @@ COVERAGE_RESULTS_FILE="$(mktemp)"
 
 cleanup_temp_files() {
   rm -f "$COVERAGE_RESULTS_FILE"
+  if [ -n "${WORKER_TEMP_DIR:-}" ] && [ -d "$WORKER_TEMP_DIR" ]; then
+    rm -rf "$WORKER_TEMP_DIR"
+  fi
 }
 
 trap cleanup_temp_files EXIT
+
+# SA91 — INT/TERM/HUP signal cleanup: terminate worker subprocess trees,
+# reap workers, then clean temp files.  The EXIT trap handles the common
+# cleanup path; these signal traps add worker-tree termination before exit.
+trap '_handle_worker_signal TERM 143' TERM
+trap '_handle_worker_signal INT 130' INT
+trap '_handle_worker_signal HUP 129' HUP
 
 if command -v poetry >/dev/null 2>&1; then
   POETRY_AVAILABLE=true
@@ -147,6 +159,14 @@ show_help() {
   echo "  --full            Show full pytest output (per-file lines + coverage details)"
   echo "  --verbose, -v     Alias for --full"
   echo "  --help, -h        Show this help message"
+  echo ""
+  echo "Environment:"
+  echo "  QS_INTEGRATION_JOBS   Concurrency limit for module test workers."
+  echo "                        0 or unset = unlimited (all eligible modules run concurrently)."
+  echo "                        1 = serial (one module at a time)."
+  echo "                        Positive N = at most N workers at once."
+  echo "                        Must be a non-negative decimal integer with no leading zeros."
+  echo "                        Values exceeding the number of eligible test modules are capped."
   echo ""
   echo "Required environment (PostgreSQL 18):"
   echo "  - PostgreSQL running on localhost:5432"
@@ -411,35 +431,99 @@ echo "📦 Testing quickscale_modules..."
 # stays active against the NOBYPASSRLS role.  Set the SA14.4 hatch explicitly
 # per-suite when BYPASSRLS-dependent tests need to run.
 if [ -d "quickscale_modules" ]; then
+  # Parse QS_INTEGRATION_JOBS concurrency setting (SA91).
+  #   0 or unset = unlimited (all eligible modules run concurrently)
+  #   positive N = bound to N concurrent workers
+  #   1 = effectively serial, still through the same worker subshell path
+  # Validation rejects non-decimal, leading-zero, and overflowing values.
+  # Capping to eligible worker count happens after WORKER_ORDER is built.
+  QS_JOBS="$(qs_validate_jobs "${QS_INTEGRATION_JOBS:-}" 2>/dev/null)" || {
+    # Re-run without suppressing stderr for the user-facing error message
+    qs_validate_jobs "${QS_INTEGRATION_JOBS:-}" >/dev/null
+    exit 1
+  }
+
+  # Create temp directory for per-worker state (SA91 — parallel execution)
+  WORKER_TEMP_DIR="$(mktemp -d)"
+  declare -a WORKER_PIDS=()
+  declare -a WORKER_NAMES=()
+  declare -a WORKER_ORDER=()
+
+  # First pass: build WORKER_ORDER so we know the eligible worker count
+  # before launching any workers.  Positive QS_JOBS values that exceed the
+  # eligible count are capped so a request for 100 workers on 12 modules
+  # does not leave leftover slots idle.
+  _qs_build_worker_order "$REPO_ROOT/quickscale_modules"
+
+  # Cap QS_JOBS at the eligible worker count for positive values.
+  _qs_cap_at_eligible "${#WORKER_ORDER[@]}"
+
   for mod in quickscale_modules/*; do
     if [ -d "$mod" ]; then
       mod_name=$(basename "$mod")
       if [ -d "$mod/tests" ]; then
+        # WORKER_ORDER already populated in first pass; second pass launches
+        # workers with the (possibly capped) QS_JOBS bound.
+
         quarantine_flag=""
         if is_quarantined "$mod_name"; then
           quarantine_flag="$(get_quarantine_ticket "$mod_name")"
-          echo "  → Testing module: $mod_name [quarantined: ${quarantine_flag}]"
-        else
-          echo "  → Testing module: $mod_name"
         fi
+
         # Package name format: quickscale_modules_<name> (underscores, not hyphens)
         pkg_name="quickscale_modules_${mod_name}"
-        # Use ROOT poetry environment with PYTHONPATH pointing to module
-        # Coverage uses package name (importable), not filesystem path
-        if ! run_pytest_stage \
-          "module ${mod_name}" \
-          "$pkg_name" \
-          false \
-          "$quarantine_flag" \
-          run_with_pythonpath "$(build_module_pythonpath "$mod")${PYTHONPATH:+:$PYTHONPATH}" run_repo_tool pytest "$mod/tests/" \
-            -m "not e2e" -p pytest_django --ds=tests.settings; then
-          EXIT_CODE=1
-        fi
+        worker_results="$WORKER_TEMP_DIR/results_${mod_name}"
+        worker_log="$WORKER_TEMP_DIR/log_${mod_name}"
+
+        # Launch worker in a background subshell — same path for all
+        # concurrency levels (QS_INTEGRATION_JOBS=1 runs one at a time
+        # through the wait/remove loop below; 0 runs all concurrently).
+        (
+          if [ -n "$quarantine_flag" ]; then
+            echo "  → Testing module: $mod_name [quarantined: ${quarantine_flag}]"
+          else
+            echo "  → Testing module: $mod_name"
+          fi
+
+          # Each worker uses its own COVERAGE_RESULTS_FILE and COVERAGE_FILE
+          # so concurrent coverage-append writes and .coverage data file
+          # access do not collide across workers.
+          COVERAGE_RESULTS_FILE="$worker_results"
+          # COVERAGE_FILE must be exported so that coverage.py (run as a
+          # subprocess via pytest-cov and the `coverage report` command)
+          # reads it from os.environ rather than defaulting to the shared
+          # `.coverage` path, which would race across parallel workers.
+          export COVERAGE_FILE="$WORKER_TEMP_DIR/.coverage.${mod_name}"
+          run_pytest_stage \
+            "module ${mod_name}" \
+            "$pkg_name" \
+            false \
+            "$quarantine_flag" \
+            run_with_pythonpath "$(build_module_pythonpath "$mod")${PYTHONPATH:+:$PYTHONPATH}" run_repo_tool pytest "$mod/tests/" \
+              -m "not e2e" -p pytest_django --ds=tests.settings
+        ) > "$worker_log" 2>&1 &
+
+        WORKER_NAMES+=("$mod_name")
+        WORKER_PIDS+=($!)
+
+        # Enforce concurrency bound: when at the limit, wait for the
+        # oldest running worker to free a slot before launching more.
+        _qs_enforce_worker_bound "$QS_JOBS" || EXIT_CODE=1
       else
         echo "  → Skipping $mod_name (no tests/ directory)"
       fi
     fi
   done
+
+  # Wait for remaining workers and capture exit codes
+  _qs_join_workers || EXIT_CODE=1
+
+  # Replay captured worker output in original module order so the
+  # deterministic summary structure is preserved.
+  _qs_replay_worker_logs "$WORKER_TEMP_DIR"
+
+  # Merge per-module coverage results before the overall-mean check.
+  _qs_merge_worker_results "$WORKER_TEMP_DIR" "$COVERAGE_RESULTS_FILE"
 else
   echo "  → No quickscale_modules directory found"
 fi
