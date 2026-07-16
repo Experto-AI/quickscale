@@ -1,6 +1,6 @@
 """Initial migration for the QuickScale Notifications module.
 
-Collapsed SA90-MSQ migration: final-schema 0001 with NotificationSettings,
+Collapsed SA92 migration: final-schema 0001 with NotificationSettings,
 NotificationMessage, NotificationDelivery, and NotificationDeliveryEvent
 models.  The notifications module is a system-wide service with no
 tenant-scoped models.
