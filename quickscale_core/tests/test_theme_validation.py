@@ -110,6 +110,34 @@ def test_config_theme_absent_with_default_passes(tmp_path: Path) -> None:
     validate_theme_preflight(tmp_path)
 
 
+# CR-SA94-RESYNC-001: explicit null must be rejected.
+def test_config_theme_explicit_null_raises(tmp_path: Path) -> None:
+    """Explicit 'project.theme: null' must be rejected (not silently defaulted)."""
+    _write_yml(
+        tmp_path / "quickscale.yml",
+        {
+            "version": "1",
+            "project": {"slug": "myapp", "package": "myapp", "theme": None},
+        },
+    )
+    with pytest.raises(ThemeValidationError) as excinfo:
+        validate_theme_preflight(tmp_path)
+    assert "null" in str(excinfo.value)
+    assert SOLE_VALID_THEME in str(excinfo.value)
+
+
+def test_config_theme_explicit_null_yaml_empty_value_raises(tmp_path: Path) -> None:
+    """YAML 'project.theme:' (empty value, parsed as null) must be rejected."""
+    config_path = tmp_path / "quickscale.yml"
+    config_path.write_text(
+        "version: '1'\nproject:\n  slug: myapp\n  package: myapp\n  theme:\n"
+    )
+    with pytest.raises(ThemeValidationError) as excinfo:
+        validate_theme_preflight(tmp_path)
+    assert "null" in str(excinfo.value)
+    assert SOLE_VALID_THEME in str(excinfo.value)
+
+
 # ---------------------------------------------------------------------------
 # State only
 # ---------------------------------------------------------------------------

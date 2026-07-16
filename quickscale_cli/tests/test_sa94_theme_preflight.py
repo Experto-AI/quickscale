@@ -11,7 +11,7 @@ correctly.  They do not exercise every downstream code path.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import click
 import pytest
@@ -56,6 +56,23 @@ def html_project(tmp_path: Path) -> Path:
             "slug": "myapp",
             "package": "myapp",
             "theme": "showcase_html",
+        },
+    }
+    config_path = tmp_path / "quickscale.yml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(yaml.dump(config, default_flow_style=False, sort_keys=False))
+    return tmp_path
+
+
+@pytest.fixture
+def null_project(tmp_path: Path) -> Path:
+    """Create a minimal project directory with explicit project.theme: null."""
+    config = {
+        "version": "1",
+        "project": {
+            "slug": "myapp",
+            "package": "myapp",
+            "theme": None,
         },
     }
     config_path = tmp_path / "quickscale.yml"
@@ -118,6 +135,14 @@ class TestCorePreflight:
     def test_non_existent_project_passes(self, tmp_path: Path) -> None:
         """Preflight passes when no sources exist."""
         validate_theme_preflight(tmp_path)
+
+    # CR-SA94-RESYNC-001: explicit null must be rejected.
+    def test_null_theme_raises(self, null_project: Path) -> None:
+        """Explicit project.theme: null must be rejected."""
+        with pytest.raises(ThemeValidationError) as exc:
+            validate_theme_preflight(null_project)
+        assert "null" in str(exc.value)
+        assert SOLE_VALID_THEME in str(exc.value)
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +312,36 @@ class TestDrPreflight:
             # The preflight itself passed without error.
             assert exc.value.code == 1
 
+    # CR-SA94-RESYNC-001: explicit null must be rejected before Docker probes.
+    def test_build_context_null_rejected(
+        self, null_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_build_context must reject null theme before any Docker probe."""
+        from quickscale_cli.commands.dr_commands import _build_context
+
+        mock_docker = Mock()
+        with monkeypatch.context() as mp:
+            mp.setattr(
+                "quickscale_cli.commands.dr_commands.Path.cwd",
+                lambda: null_project,
+            )
+            mp.setattr(
+                "quickscale_cli.commands.dr_commands._validate_project_and_docker",
+                mock_docker,
+            )
+            with pytest.raises(click.ClickException) as exc:
+                _build_context(
+                    "local-to-railway-develop",
+                    source_service=None,
+                    target_service=None,
+                    source_railway_environment=None,
+                    target_railway_environment=None,
+                    include_target=False,
+                )
+            assert "null" in str(exc.value)
+            assert SOLE_VALID_THEME in str(exc.value)
+        mock_docker.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # Development up sentinel
@@ -328,6 +383,30 @@ class TestDevUpPreflight:
         assert result.exit_code != 0
         # Error must NOT be theme-related
         assert "showcase_html" not in (result.output or "")
+
+    # CR-SA94-RESYNC-001: explicit null must be rejected before Docker probes.
+    def test_up_null_rejected(
+        self, null_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """up() must reject null theme before any Docker/project probe."""
+        from quickscale_cli.commands.development_commands import up
+
+        mock_docker = Mock()
+        runner = CliRunner()
+        with monkeypatch.context() as mp:
+            mp.setattr(
+                "quickscale_cli.commands.development_commands.Path.cwd",
+                lambda: null_project,
+            )
+            mp.setattr(
+                "quickscale_cli.commands.development_commands._validate_project_and_docker",
+                mock_docker,
+            )
+            result = runner.invoke(up, [])
+        assert result.exit_code != 0
+        assert "null" in (result.output or "")
+        assert SOLE_VALID_THEME in (result.output or "")
+        mock_docker.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

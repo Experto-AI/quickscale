@@ -239,11 +239,27 @@ def _extract_config_theme(raw: dict) -> str | None:
 
     Returns ``None`` when the ``theme`` key is absent (the schema-level
     default ``showcase_react`` applies).
+
+    Raises:
+        ThemeValidationError: When ``project.theme`` is explicitly set
+            to ``null`` (which is invalid — the key should be omitted
+            or set to ``showcase_react``).
     """
     project = raw.get("project")
-    theme = project.get("theme")  # type: ignore[union-attr]
-    if theme is None:
+    # Must distinguish "key absent" (valid schema default) from
+    # "key present with value null" (invalid — the user explicitly
+    # wrote ``project.theme: null`` or ``project.theme:`` in YAML).
+    if "theme" not in project:  # type: ignore[union-attr]
         return None
+    theme = project["theme"]  # type: ignore[union-attr]
+    if theme is None:
+        raise ThemeValidationError(
+            f"project.theme is explicitly set to null in "
+            f"{_CONFIG_LABEL}. Remove the 'theme' line to use the "
+            f"default '{SOLE_VALID_THEME}', or set it to "
+            f"'{SOLE_VALID_THEME}'.",
+            source_label=_CONFIG_LABEL,
+        )
     return str(theme)
 
 

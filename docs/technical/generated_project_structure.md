@@ -44,7 +44,6 @@ myapp/
 │   ├── tailwind.config.js
 │   └── vite.config.ts
 ├── templates/
-├── static/
 ├── scripts/
 │   └── lint.sh
 ├── Dockerfile
@@ -142,6 +141,8 @@ myapp/
 │   │   ├── pages/
 │   │   ├── App.tsx
 │   │   └── main.tsx
+│   ├── public/
+│   │   └── favicon.svg
 │   ├── components.json
 │   ├── package.json
 │   ├── tailwind.config.js
@@ -151,8 +152,6 @@ myapp/
 │   └── social/
 │       ├── embeds.html
 │       └── link_tree.html
-├── static/
-│   └── images/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pyproject.toml
@@ -209,4 +208,4 @@ If you intentionally adopt a manual inheritance or extraction pattern:
 | Legacy compatibility inputs | `.quickscale/config.yml`, `.quickscale/file_hashes.yml` (read-through imported when `state.yml` lacks consolidated sections; ignored when present) |
 | Project generation | `quickscale_core/generator/` templates and generator logic |
 | Embedded modules | `modules/<name>/` inside the generated project |
-| Starter theme assets | project `frontend/`, `templates/`, and `static/` directories |
+| Starter theme assets | project `frontend/` and `templates/` directories |
