@@ -520,14 +520,7 @@ class TestPlanNewProjectConfigureModules:
                 plan,
                 ["myapp", "--configure-modules"],
                 input=(
-                    "\n"
-                    "2\n"
-                    "storage\n"
-                    "n\n"
-                    "local\n"
-                    "/media/\n"
-                    "https://cdn.example.com/media\n"
-                    "y\n"
+                    "\n\nstorage\nn\nlocal\n/media/\nhttps://cdn.example.com/media\ny\n"
                 ),
             )
 

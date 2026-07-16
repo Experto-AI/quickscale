@@ -113,7 +113,7 @@ def _init_apply_git_repo(project_path: Path) -> None:
         "project:\n"
         "  slug: myapp\n"
         "  package: myapp\n"
-        "  theme: showcase_html\n"
+        "  theme: showcase_react\n"
         "docker:\n"
         "  start: false\n"
     )
@@ -122,7 +122,7 @@ def _init_apply_git_repo(project_path: Path) -> None:
         "project:\n"
         "  slug: myapp\n"
         "  package: myapp\n"
-        "  theme: showcase_html\n"
+        "  theme: showcase_react\n"
         '  created_at: "2025-01-01T00:00:00"\n'
         '  last_applied: "2025-01-01T00:00:00"\n'
         "modules: {}\n"
@@ -310,7 +310,7 @@ class TestGenerateProject:
         mock_config = Mock()
         mock_config.project.slug = "myapp"
         mock_config.project.package = "myapp"
-        mock_config.project.theme = "showcase_html"
+        mock_config.project.theme = "showcase_react"
         mock_config.modules = {}
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is True
@@ -334,7 +334,7 @@ class TestGenerateProject:
         mock_config = Mock()
         mock_config.project.slug = "myapp"
         mock_config.project.package = "myapp"
-        mock_config.project.theme = "showcase_html"
+        mock_config.project.theme = "showcase_react"
         mock_config.modules = {}
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
@@ -346,7 +346,7 @@ class TestGenerateProject:
         mock_config = Mock()
         mock_config.project.slug = "myapp"
         mock_config.project.package = "myapp"
-        mock_config.project.theme = "showcase_html"
+        mock_config.project.theme = "showcase_react"
         mock_config.modules = {}
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
@@ -358,7 +358,7 @@ class TestGenerateProject:
         mock_config = Mock()
         mock_config.project.slug = "myapp"
         mock_config.project.package = "myapp"
-        mock_config.project.theme = "showcase_html"
+        mock_config.project.theme = "showcase_react"
         mock_config.modules = {}
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
@@ -750,7 +750,7 @@ class TestLoadAndValidateConfig:
         """Test valid config loading"""
         config = tmp_path / "quickscale.yml"
         config.write_text(
-            'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n  theme: showcase_html\ndocker:\n  start: false\n'
+            'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n  theme: showcase_react\ndocker:\n  start: false\n'
         )
         result = _load_and_validate_config(config)
         assert result.project.slug == "myapp"
@@ -763,7 +763,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  backups:\n"
             "docker:\n"
@@ -782,7 +782,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  teams:\n"
             "docker:\n"
@@ -800,7 +800,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  billing:\n"
             "docker:\n"
@@ -824,7 +824,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             "  billing:\n"
@@ -858,7 +858,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  orgs:\n"
             "docker:\n"
@@ -882,7 +882,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             "  orgs:\n"
@@ -909,7 +909,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             "  crm:\n"
@@ -943,7 +943,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  crm:\n"
             "docker:\n"
@@ -967,7 +967,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  backups:\n"
             "    target_mode: private_remote\n"
@@ -1009,7 +1009,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             "    registration_enabled: true\n"
@@ -1037,7 +1037,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  notifications:\n"
             "    sender_email: ops@example.com\n"
@@ -1066,7 +1066,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  notifications:\n"
             "    sender_name: Ops\n"
@@ -1092,7 +1092,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  notifications:\n"
             "    sender_name: QuickScale\n"
@@ -1120,7 +1120,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  notifications:\n"
             "    sender_name: QuickScale\n"
@@ -1144,7 +1144,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  analytics:\n"
             "    provider: PostHog\n"
@@ -1182,7 +1182,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  analytics:\n"
             "    posthog_api_key_env_var: ops-posthog-api-key\n"
@@ -1205,7 +1205,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             "  social:\n"
@@ -1237,7 +1237,7 @@ class TestLoadAndValidateConfig:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  social:\n"
             "    link_tree_enabled: false\n"
@@ -1271,7 +1271,7 @@ class TestPrepareApplyContext:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "docker:\n"
             "  start: false\n"
         )
@@ -1281,7 +1281,7 @@ class TestPrepareApplyContext:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  teams:\n"
             '    version: "0.1.0"\n'
@@ -1300,7 +1300,7 @@ class TestPrepareApplyContext:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             "docker:\n"
@@ -1312,7 +1312,7 @@ class TestPrepareApplyContext:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             '    version: "0.70.0"\n'
@@ -1336,7 +1336,7 @@ class TestPrepareApplyContext:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             "docker:\n"
@@ -1348,7 +1348,7 @@ class TestPrepareApplyContext:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             '  created_at: "2025-01-01T00:00:00"\n'
             '  last_applied: "2025-01-01T00:00:00"\n'
             "modules:\n"
@@ -1413,7 +1413,7 @@ class TestDisplayConfigSummary:
         """Test config summary display with modules"""
         config = Mock()
         config.project.slug = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock(), "blog": Mock()}
         config.docker.start = True
         config.docker.build = True
@@ -1423,7 +1423,7 @@ class TestDisplayConfigSummary:
         """Test config summary display without modules"""
         config = Mock()
         config.project.slug = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {}
         config.docker.start = False
         config.docker.build = False
@@ -1890,7 +1890,7 @@ class TestCommitPendingConfigChanges:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             '  created_at: "2025-01-01T00:00:00"\n'
             '  last_applied: "2025-01-02T00:00:00"\n'
             "modules:\n"
@@ -2131,7 +2131,7 @@ class TestProvenancePersistence:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock(options={})}
         delta = Mock()
         delta.config_deltas = {}
@@ -2172,7 +2172,7 @@ class TestProvenancePersistence:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -2188,7 +2188,7 @@ class TestProvenancePersistence:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock(options={})}
         delta = Mock()
         delta.config_deltas = {}
@@ -2213,7 +2213,7 @@ class TestProvenancePersistence:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock(options={})}
         delta = Mock()
         delta.config_deltas = {}
@@ -2261,7 +2261,7 @@ class TestProvenancePersistence:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock(options={})}
         delta = Mock()
         delta.config_deltas = {}
@@ -2317,7 +2317,7 @@ class TestProvenancePersistence:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {}
         delta = Mock()
         delta.config_deltas = {}
@@ -2348,7 +2348,7 @@ class TestProvenancePersistence:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {}
         delta = Mock()
         delta.config_deltas = {}
@@ -2382,7 +2382,7 @@ class TestProvenancePersistence:
         ctx.qs_config = Mock()
         ctx.qs_config.project.slug = "myapp"
         ctx.qs_config.project.package = "myapp"
-        ctx.qs_config.project.theme = "showcase_html"
+        ctx.qs_config.project.theme = "showcase_react"
         ctx.qs_config.modules = {}
         ctx.existing_state = None
         ctx.delta = Mock()
@@ -2393,7 +2393,7 @@ class TestProvenancePersistence:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
             ),
             modules={},
         )
@@ -2529,7 +2529,7 @@ class TestSaveProjectState:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock(options={"key": "val"})}
         delta = Mock()
         delta.config_deltas = {}
@@ -2553,7 +2553,7 @@ class TestSaveProjectState:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -2565,7 +2565,7 @@ class TestSaveProjectState:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"blog": Mock(options={})}
         delta = Mock()
         delta.config_deltas = {}
@@ -2592,7 +2592,7 @@ class TestSaveProjectState:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 project_contract="0.87.0",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
@@ -2603,7 +2603,7 @@ class TestSaveProjectState:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {}
         delta = Mock()
         delta.config_deltas = {}
@@ -2620,7 +2620,7 @@ class TestSaveProjectState:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {}
         delta = Mock()
         delta.config_deltas = {}
@@ -2634,7 +2634,7 @@ class TestSaveProjectState:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {
             "backups": Mock(
                 options={
@@ -2683,7 +2683,7 @@ class TestSaveProjectState:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock(options={})}
         delta = Mock()
         delta.config_deltas = {}
@@ -2887,7 +2887,7 @@ class TestDisplayNextSteps:
             "Fresh showcase_react generations keep Django-owned public pages" in output
         )
         assert (
-            "showcase_html and existing generated projects only receive the managed backend transport automatically"
+            "showcase_react and existing generated projects only receive the managed backend transport automatically"
             in output
         )
         assert "manual theme adoption" in output
@@ -4091,7 +4091,7 @@ class TestExecuteApplySteps:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -5441,7 +5441,7 @@ class TestCR001PrepareApplyContextLegacyReadThrough:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             "docker:\n"
@@ -5456,7 +5456,7 @@ class TestCR001PrepareApplyContextLegacyReadThrough:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             '  created_at: "2025-01-01T00:00:00"\n'
             '  last_applied: "2025-01-01T00:00:00"\n'
             "modules:\n"
@@ -5511,7 +5511,7 @@ class TestCR001RefreshContextAfterLockLegacyReadThrough:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             '  created_at: "2025-01-01T00:00:00"\n'
             '  last_applied: "2025-01-01T00:00:00"\n'
             "modules:\n"
@@ -5544,7 +5544,7 @@ class TestCR001RefreshContextAfterLockLegacyReadThrough:
         qs_config = Mock()
         qs_config.project.slug = "myapp"
         qs_config.project.package = "myapp"
-        qs_config.project.theme = "showcase_html"
+        qs_config.project.theme = "showcase_react"
         qs_config.modules = {"auth": Mock(options={})}
         qs_config.docker.start = False
         qs_config.docker.build = False
@@ -5585,7 +5585,7 @@ class TestCR001RefreshContextAfterLockLegacyReadThrough:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             '  created_at: "2025-01-01T00:00:00"\n'
             '  last_applied: "2025-01-01T00:00:00"\n'
             "modules: {}\n"
@@ -5599,7 +5599,7 @@ class TestCR001RefreshContextAfterLockLegacyReadThrough:
         qs_config = Mock()
         qs_config.project.slug = "myapp"
         qs_config.project.package = "myapp"
-        qs_config.project.theme = "showcase_html"
+        qs_config.project.theme = "showcase_react"
         qs_config.modules = {}
         qs_config.docker.start = False
         qs_config.docker.build = False
@@ -5646,7 +5646,7 @@ class TestCR002PostLockGateReEvaluation:
                 project=ProjectState(
                     slug="myapp",
                     package="myapp",
-                    theme="showcase_html",
+                    theme="showcase_react",
                     created_at="2025-01-01T00:00:00",
                     last_applied="2025-06-17T00:00:00",
                 ),
@@ -5680,7 +5680,7 @@ class TestCR002PostLockGateReEvaluation:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -5720,7 +5720,7 @@ class TestCR002PostLockGateReEvaluation:
                 project=ProjectState(
                     slug="myapp",
                     package="myapp",
-                    theme="showcase_html",
+                    theme="showcase_react",
                     created_at="2025-01-01T00:00:00",
                     last_applied="2025-06-17T00:00:00",
                 ),
@@ -5760,7 +5760,7 @@ class TestCR002PostLockGateReEvaluation:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -5804,7 +5804,7 @@ class TestCR002PostLockGateReEvaluation:
                 project=ProjectState(
                     slug="myapp",
                     package="myapp",
-                    theme="showcase_html",
+                    theme="showcase_react",
                     created_at="2025-01-01T00:00:00",
                     last_applied="2025-06-17T00:00:00",
                 ),
@@ -5837,7 +5837,7 @@ class TestCR002PostLockGateReEvaluation:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -5935,7 +5935,7 @@ class TestCRF12_3B_002RecoveryRerunMigrationGate:
                 project=ProjectState(
                     slug="myapp",
                     package="myapp",
-                    theme="showcase_html",
+                    theme="showcase_react",
                     created_at="2025-01-01T00:00:00",
                     last_applied="2025-06-21T00:00:00",
                 ),
@@ -6019,7 +6019,7 @@ class TestPhase3NoOpProvenanceRepair:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -6036,7 +6036,7 @@ class TestPhase3NoOpProvenanceRepair:
         qs_config = Mock()
         qs_config.project.slug = "myapp"
         qs_config.project.package = "myapp"
-        qs_config.project.theme = "showcase_html"
+        qs_config.project.theme = "showcase_react"
         qs_config.modules = {"auth": Mock(options={})}
 
         # Delta shows no changes (no-op scenario)
@@ -6095,7 +6095,7 @@ class TestPhase3NoOpProvenanceRepair:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -6112,7 +6112,7 @@ class TestPhase3NoOpProvenanceRepair:
         qs_config = Mock()
         qs_config.project.slug = "myapp"
         qs_config.project.package = "myapp"
-        qs_config.project.theme = "showcase_html"
+        qs_config.project.theme = "showcase_react"
         qs_config.modules = {"auth": Mock(options={})}
 
         # Delta shows no changes (no-op scenario)
@@ -6161,7 +6161,7 @@ class TestPhase3NoOpProvenanceRepair:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
             ),
             modules={
                 "auth": ModuleState(
@@ -6206,7 +6206,7 @@ class TestPhase3NoOpProvenanceRepair:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
             ),
             modules={
                 "auth": ModuleState(
@@ -6264,7 +6264,7 @@ class TestProvenanceTripleConsistency:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock(options={})}
         delta = Mock()
         delta.config_deltas = {}
@@ -6312,7 +6312,7 @@ class TestProvenanceTripleConsistency:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -6330,7 +6330,7 @@ class TestProvenanceTripleConsistency:
         qs_config = Mock()
         qs_config.project.slug = "myapp"
         qs_config.project.package = "myapp"
-        qs_config.project.theme = "showcase_html"
+        qs_config.project.theme = "showcase_react"
         qs_config.modules = {"auth": Mock(options={})}
 
         delta = Mock()
@@ -6399,7 +6399,7 @@ class TestProvenanceRepairMightBeNeeded:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -6430,7 +6430,7 @@ class TestProvenanceRepairMightBeNeeded:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -6461,7 +6461,7 @@ class TestProvenanceRepairMightBeNeeded:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -6530,7 +6530,7 @@ class TestHandleDeltaPendingProvenanceRepair:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -6593,7 +6593,7 @@ class TestCallerParityAcrossProvenancePaths:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock(options={})}
         delta = Mock()
         delta.config_deltas = {}
@@ -6656,7 +6656,7 @@ class TestCallerParityAcrossProvenancePaths:
                     "project:",
                     "  slug: myapp",
                     "  package: myapp",
-                    "  theme: showcase_html",
+                    "  theme: showcase_react",
                     '  created_at: "2025-01-01T00:00:00"',
                     '  last_applied: "2025-01-01T00:00:00"',
                     "modules:",
@@ -6742,7 +6742,7 @@ class TestCallerParityAcrossProvenancePaths:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -6760,7 +6760,7 @@ class TestCallerParityAcrossProvenancePaths:
         qs_config = Mock()
         qs_config.project.slug = "myapp"
         qs_config.project.package = "myapp"
-        qs_config.project.theme = "showcase_html"
+        qs_config.project.theme = "showcase_react"
         qs_config.modules = {"auth": Mock(options={})}
 
         delta = Mock()
@@ -6816,7 +6816,7 @@ class TestCallerParityAcrossProvenancePaths:
         config = Mock()
         config.project.slug = "myapp"
         config.project.package = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock(options={})}
         delta = Mock()
         delta.config_deltas = {}
@@ -6848,7 +6848,7 @@ class TestCallerParityAcrossProvenancePaths:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -6866,7 +6866,7 @@ class TestCallerParityAcrossProvenancePaths:
         qs_config = Mock()
         qs_config.project.slug = "myapp"
         qs_config.project.package = "myapp"
-        qs_config.project.theme = "showcase_html"
+        qs_config.project.theme = "showcase_react"
         qs_config.modules = {"auth": Mock(options={})}
 
         repair_delta = Mock()
@@ -7104,7 +7104,7 @@ class TestApplyFailureSummaryParity:
                     project=ProjectState(
                         slug="myapp",
                         package="myapp",
-                        theme="showcase_html",
+                        theme="showcase_react",
                     ),
                 ),
             ),
@@ -7226,7 +7226,7 @@ class TestApplyFailureSummaryParity:
         ctx.qs_config = Mock()
         ctx.qs_config.project.slug = "myapp"
         ctx.qs_config.project.package = "myapp"
-        ctx.qs_config.project.theme = "showcase_html"
+        ctx.qs_config.project.theme = "showcase_react"
         ctx.qs_config.modules = {}
         ctx.existing_state = None
         ctx.delta = Mock()
@@ -7237,7 +7237,7 @@ class TestApplyFailureSummaryParity:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
             ),
             modules={},
         )
@@ -7289,7 +7289,7 @@ class TestApplyFailureSummaryParity:
         ctx.qs_config = Mock()
         ctx.qs_config.project.slug = "myapp"
         ctx.qs_config.project.package = "myapp"
-        ctx.qs_config.project.theme = "showcase_html"
+        ctx.qs_config.project.theme = "showcase_react"
         ctx.qs_config.modules = {}
         ctx.existing_state = None
         ctx.delta = Mock()
@@ -7300,7 +7300,7 @@ class TestApplyFailureSummaryParity:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
             ),
             modules={},
         )
@@ -7481,7 +7481,7 @@ class TestApplyFailureSummaryParity:
                     project=ProjectState(
                         slug="myapp",
                         package="myapp",
-                        theme="showcase_html",
+                        theme="showcase_react",
                     ),
                 ),
             ),
@@ -7551,7 +7551,7 @@ class TestApplyFailureSummaryParity:
                     project=ProjectState(
                         slug="myapp",
                         package="myapp",
-                        theme="showcase_html",
+                        theme="showcase_react",
                     ),
                 ),
             ),
@@ -7629,7 +7629,7 @@ class TestApplyFailureSummaryParity:
                     project=ProjectState(
                         slug="myapp",
                         package="myapp",
-                        theme="showcase_html",
+                        theme="showcase_react",
                     ),
                 ),
             ),
@@ -7711,7 +7711,7 @@ class TestApplyFailureSummaryParity:
                     project=ProjectState(
                         slug="myapp",
                         package="myapp",
-                        theme="showcase_html",
+                        theme="showcase_react",
                     ),
                 ),
             ),
@@ -7797,7 +7797,7 @@ class TestApplyFailureSummaryParity:
                     project=ProjectState(
                         slug="myapp",
                         package="myapp",
-                        theme="showcase_html",
+                        theme="showcase_react",
                     ),
                 ),
             ),
@@ -7886,7 +7886,7 @@ class TestApplyFailureSummaryParity:
                     project=ProjectState(
                         slug="myapp",
                         package="myapp",
-                        theme="showcase_html",
+                        theme="showcase_react",
                     ),
                 ),
             ),
@@ -7980,7 +7980,7 @@ class TestApplyFailureSummaryParity:
                     project=ProjectState(
                         slug="myapp",
                         package="myapp",
-                        theme="showcase_html",
+                        theme="showcase_react",
                     ),
                 ),
             ),
@@ -8078,7 +8078,7 @@ class TestApplyFailureSummaryParity:
                     project=ProjectState(
                         slug="myapp",
                         package="myapp",
-                        theme="showcase_html",
+                        theme="showcase_react",
                     ),
                 ),
             ),
@@ -8180,7 +8180,7 @@ class TestApplyFailureSummaryParity:
                     project=ProjectState(
                         slug="myapp",
                         package="myapp",
-                        theme="showcase_html",
+                        theme="showcase_react",
                     ),
                 ),
             ),
@@ -8273,7 +8273,7 @@ class TestPopulateConsolidatedTrackingFromLegacy:
         """
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(name="auth", version="0.62.0"),
             },
@@ -8295,7 +8295,7 @@ class TestPopulateConsolidatedTrackingFromLegacy:
 
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(name="auth", version="0.62.0"),
             },
@@ -8313,7 +8313,7 @@ class TestPopulateConsolidatedTrackingFromLegacy:
 
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={},
         )
 
@@ -8335,7 +8335,7 @@ class TestPopulateConsolidatedTrackingFromLegacy:
 
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(
                     name="auth",
@@ -8369,7 +8369,7 @@ class TestPopulateConsolidatedTrackingFromLegacy:
 
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(
                     name="auth",

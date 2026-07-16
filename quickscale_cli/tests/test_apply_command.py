@@ -82,6 +82,7 @@ class TestApplyCommandBasic:
             assert (
                 "Configuration error" in result.output
                 or "Invalid YAML" in result.output
+                or "Theme validation failed" in result.output
             )
 
     def test_apply_missing_required_fields(self):
@@ -137,7 +138,10 @@ project:
             result = runner.invoke(apply, ["quickscale.yml"])
 
             assert result.exit_code != 0
-            assert "Configuration error" in result.output
+            assert (
+                "Configuration error" in result.output
+                or "Theme validation failed" in result.output
+            )
 
     def test_apply_unknown_module(self):
         """Test apply with unknown module in config"""
@@ -514,7 +518,7 @@ version: "1"
 project:
   slug: myapp
   package: myapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
   billing:
@@ -552,7 +556,7 @@ version: "1"
 project:
   slug: myapp
   package: myapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
   crm:
@@ -818,7 +822,7 @@ version: "1"
 project:
   slug: myapp
   package: myapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -836,7 +840,7 @@ docker:
             # Should show configuration summary
             assert result.exit_code != 0
             assert "myapp" in result.output
-            assert "showcase_html" in result.output
+            assert "showcase_react" in result.output
             assert "auth" in result.output
 
 
@@ -866,8 +870,11 @@ docker:
             )
 
             assert result.exit_code != 0
-            assert "Configuration error" in result.output
-            assert "Unknown theme 'showcase_htmx'" in result.output
+            assert (
+                "Configuration error" in result.output
+                or "Theme validation failed" in result.output
+            )
+            assert "showcase_htmx" in result.output
 
     def test_apply_showcase_react_generates_frontend(self):
         """Test that showcase_react theme generates frontend directory"""
@@ -956,7 +963,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -982,7 +989,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -1012,7 +1019,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -1035,7 +1042,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -1066,7 +1073,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -1088,7 +1095,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -1126,7 +1133,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -1154,7 +1161,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -1185,7 +1192,7 @@ docker:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-01-01T00:00:00",
                             "last_applied": "2025-01-01T00:00:00",
                         },
@@ -1209,7 +1216,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -1252,7 +1259,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -1267,7 +1274,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
   created_at: "2025-01-01T00:00:00"
   last_applied: "2025-01-01T00:00:00"
 modules:
@@ -1319,7 +1326,7 @@ class TestApplyManagedWiringStrictContext:
 
         error_output = capsys.readouterr().err
         assert "Managed wiring regeneration failed" in error_output
-        assert "Failed to load module options from quickscale.yml" in error_output
+        assert "contains invalid YAML" in error_output
 
     def test_regeneration_fails_on_malformed_state_yaml(self, tmp_path, capsys):
         project = tmp_path / "myapp"
@@ -1331,7 +1338,7 @@ class TestApplyManagedWiringStrictContext:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             "docker:\n"
@@ -1348,9 +1355,7 @@ class TestApplyManagedWiringStrictContext:
 
         error_output = capsys.readouterr().err
         assert "Managed wiring regeneration failed" in error_output
-        assert (
-            "Failed to load module options from .quickscale/state.yml" in error_output
-        )
+        assert "contains invalid YAML" in error_output
 
     def test_regeneration_fails_on_managed_wiring_write_exception(
         self, tmp_path, capsys
@@ -1363,7 +1368,7 @@ class TestApplyManagedWiringStrictContext:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             "docker:\n"
@@ -1417,7 +1422,7 @@ class TestApplyDriftDetection:
                 project=ProjectState(
                     slug="myapp",
                     package="myapp",
-                    theme="showcase_html",
+                    theme="showcase_react",
                 ),
                 modules={
                     "auth": ModuleState(name="auth", version="0.62.0"),
@@ -1466,7 +1471,7 @@ class TestApplyDriftDetection:
                 project=ProjectState(
                     slug="myapp",
                     package="myapp",
-                    theme="showcase_html",
+                    theme="showcase_react",
                 ),
                 modules={
                     "auth": ModuleState(name="auth", version="0.62.0"),
@@ -1588,7 +1593,7 @@ class TestApplyAF5ResumeCheckpointPreserved:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-06-01T00:00:00",
             ),
@@ -1604,7 +1609,7 @@ class TestApplyAF5ResumeCheckpointPreserved:
                     "project": {
                         "slug": "myapp",
                         "package": "myapp",
-                        "theme": "showcase_html",
+                        "theme": "showcase_react",
                         "created_at": "2025-01-01T00:00:00",
                         "last_applied": "2025-06-01T00:00:00",
                     },
@@ -1627,7 +1632,7 @@ class TestApplyAF5ResumeCheckpointPreserved:
             project=SimpleNamespace(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
             ),
             modules={},
         )
@@ -1679,7 +1684,7 @@ class TestApplyAF5ResumeCheckpointPreserved:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-06-01T00:00:00",
             ),
@@ -1695,7 +1700,7 @@ class TestApplyAF5ResumeCheckpointPreserved:
                     "project": {
                         "slug": "myapp",
                         "package": "myapp",
-                        "theme": "showcase_html",
+                        "theme": "showcase_react",
                         "created_at": "2025-01-01T00:00:00",
                         "last_applied": "2025-06-01T00:00:00",
                     },
@@ -1713,7 +1718,7 @@ class TestApplyAF5ResumeCheckpointPreserved:
             project=SimpleNamespace(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
             ),
             modules={},
         )

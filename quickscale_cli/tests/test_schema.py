@@ -24,13 +24,13 @@ version: "1"
 project:
   slug: myapp
   package: myapp
-  theme: showcase_html
+  theme: showcase_react
 """
         config = validate_config(yaml_content)
 
         assert config.version == "1"
         assert config.project.slug == "myapp"
-        assert config.project.theme == "showcase_html"
+        assert config.project.theme == "showcase_react"
         assert config.modules == {}
         assert config.docker.start is True
         assert config.docker.build is True
@@ -43,7 +43,7 @@ version: "1"
 project:
   slug: myproject
   package: myproject
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
     registration_enabled: true
@@ -73,7 +73,7 @@ version: "1"
 project:
   slug: myproject
   package: myproject
-  theme: showcase_html
+  theme: showcase_react
 modules:
   crm:
     enable_api: true
@@ -109,7 +109,7 @@ version: "1"
 project:
   slug: myproject
   package: myproject
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
     {invalid_option}:{option_value}
@@ -129,7 +129,7 @@ version: "1"
 project:
   slug: myproject
   package: myproject
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
     email_verification: false
@@ -149,7 +149,7 @@ version: "1"
 project:
   slug: myapp
   package: myapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
   listings:
@@ -248,8 +248,8 @@ modules:
         }
 
     def test_all_valid_themes(self):
-        """Test that all valid themes are accepted"""
-        for theme in ["showcase_html", "showcase_react"]:
+        """Test that all valid themes are accepted (SA94: only showcase_react)."""
+        for theme in ["showcase_react"]:
             yaml_content = f"""
 version: "1"
 project:
@@ -318,7 +318,7 @@ version: "1"
         yaml_content = """
 version: "1"
 project:
-  theme: showcase_html
+  theme: showcase_react
 """
         with pytest.raises(ConfigValidationError) as exc:
             validate_config(yaml_content)
@@ -364,7 +364,7 @@ project:
             validate_config(yaml_content)
 
         assert "Unknown theme 'unknown_theme'" in str(exc.value)
-        assert "Available themes" in str(exc.value)
+        assert "Only 'showcase_react' is supported" in str(exc.value)
 
     def test_removed_htmx_theme(self):
         """Test error for removed HTMX placeholder theme."""
@@ -379,8 +379,7 @@ project:
             validate_config(yaml_content)
 
         assert "Unknown theme 'showcase_htmx'" in str(exc.value)
-        assert "showcase_html" in str(exc.value)
-        assert "showcase_react" in str(exc.value)
+        assert "Only 'showcase_react' is supported" in str(exc.value)
 
     def test_unknown_module(self):
         """Test error for unknown module"""
@@ -671,7 +670,9 @@ class TestGenerateYaml:
         """Test generating YAML from minimal config"""
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectConfig(
+                slug="myapp", package="myapp", theme="showcase_react"
+            ),
             modules={},
             docker=DockerConfig(start=True, build=True),
         )
@@ -680,13 +681,15 @@ class TestGenerateYaml:
         # Parse it back and verify
         parsed = validate_config(yaml_output)
         assert parsed.project.slug == "myapp"
-        assert parsed.project.theme == "showcase_html"
+        assert parsed.project.theme == "showcase_react"
 
     def test_generate_config_with_modules(self):
         """Test generating YAML with modules"""
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectConfig(
+                slug="myapp", package="myapp", theme="showcase_react"
+            ),
             modules={
                 "auth": ModuleConfig(
                     name="auth",

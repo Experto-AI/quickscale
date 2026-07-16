@@ -58,7 +58,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
     social_providers:
@@ -92,7 +92,7 @@ class TestPlanReconfigureWithState:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -105,7 +105,7 @@ class TestPlanReconfigureWithState:
             result = runner.invoke(plan, ["--reconfigure"], input="n\nn\nn\n")
 
             assert "testapp" in result.output
-            assert "showcase_html" in result.output
+            assert "showcase_react" in result.output
 
     def test_plan_reconfigure_shows_theme_locked(self) -> None:
         """Test that --reconfigure shows theme is locked"""
@@ -119,7 +119,7 @@ class TestPlanReconfigureWithState:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -146,7 +146,7 @@ class TestPlanReconfigureWithState:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -189,7 +189,7 @@ class TestPlanReconfigureShowsModules:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -210,7 +210,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -234,7 +234,7 @@ docker:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -256,7 +256,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
   blog:
@@ -286,7 +286,7 @@ class TestPlanReconfigureDocker:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -320,7 +320,7 @@ class TestPlanReconfigureAddModules:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -351,7 +351,7 @@ class TestPlanReconfigureAddModules:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -373,7 +373,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -405,7 +405,7 @@ docker:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -427,7 +427,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
 docker:
@@ -472,7 +472,7 @@ docker:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -499,7 +499,7 @@ docker:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                         },
                         "modules": {
                             "auth": None,
@@ -533,7 +533,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -573,7 +573,7 @@ class TestPlanReconfigureSavesConfig:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -603,7 +603,7 @@ class TestPlanReconfigureSavesConfig:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -632,7 +632,7 @@ class TestPlanReconfigureSavesConfig:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -657,7 +657,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   storage:
     backend: s3
@@ -686,7 +686,7 @@ docker:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -712,7 +712,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   storage:
     backend: s3
@@ -743,7 +743,7 @@ docker:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -768,7 +768,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   storage:
     backend: local
@@ -893,7 +893,7 @@ class TestConfigureSelectedModulesEmptyNewModules:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -918,7 +918,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   storage:
     backend: s3

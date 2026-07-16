@@ -116,6 +116,10 @@ from quickscale_core.project_state import (
     check_version_drift,
     compute_file_hashes,
 )
+from quickscale_core.utils.theme_validation import (
+    ThemeValidationError,
+    validate_theme_preflight,
+)
 from quickscale_core.utils.git_utils import (
     is_working_directory_clean,
     resolve_remote_ref,
@@ -2718,7 +2722,7 @@ def _display_next_steps_impl(
             + f"{SOCIAL_LINK_TREE_PATH} and {SOCIAL_EMBEDS_PATH}"
         )
         click.echo(
-            "  showcase_html and existing generated projects only receive the managed "
+            "  showcase_react and existing generated projects only receive the managed "
             "backend transport automatically; use manual theme adoption if you want "
             "those public pages."
         )
@@ -3800,8 +3804,29 @@ def apply(
       15. Finalize authoritative state
       16. Display next steps
     """
+    # Run read-only theme preflight before any mutation.
+    config_path = Path(config)
+    project_root = config_path.resolve().parent
+    try:
+        validate_theme_preflight(project_root)
+    except ThemeValidationError as exc:
+        click.secho(
+            "\n❌ Theme validation failed:",
+            fg="red",
+            err=True,
+            bold=True,
+        )
+        for line in str(exc).splitlines():
+            click.echo(f"  • {line}", err=True)
+        click.echo(
+            "\n💡 Update project.theme to 'showcase_react' in all present "
+            "configuration files before running 'quickscale apply'.",
+            err=True,
+        )
+        raise click.Abort()
+
     # Prepare context
-    ctx = _prepare_apply_context(Path(config))
+    ctx = _prepare_apply_context(config_path)
 
     # Display configuration summary
     _display_config_summary(ctx.qs_config)
