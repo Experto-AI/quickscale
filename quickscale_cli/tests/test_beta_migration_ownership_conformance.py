@@ -79,7 +79,7 @@ def _template_emitted_paths() -> dict[str, str]:
         pytest.skip(f"Template tree not found at {_TEMPLATES_ROOT}")
 
     combined: dict[str, str] = {}
-    for theme in ("showcase_html", "showcase_react"):
+    for theme in ("showcase_react",):
         mapping = get_generator_emission_mapping(
             _TEMPLATES_ROOT,
             theme=theme,

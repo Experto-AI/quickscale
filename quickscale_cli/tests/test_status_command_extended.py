@@ -171,7 +171,7 @@ class TestLoadConfig:
         """Load valid config"""
         config = tmp_path / "quickscale.yml"
         config.write_text(
-            'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n  theme: showcase_html\n'
+            'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n  theme: showcase_react\n'
             "docker:\n  start: false\n"
         )
         result = _load_config(config)
@@ -198,7 +198,7 @@ class TestDisplayFunctions:
         """Display project information"""
         state = Mock()
         state.project.slug = "myapp"
-        state.project.theme = "showcase_html"
+        state.project.theme = "showcase_react"
         state.project.created_at = "2025-01-01T00:00:00"
         state.project.last_applied = "2025-01-01T12:00:00"
         _display_project_info(state)
@@ -236,7 +236,7 @@ class TestDisplayFunctions:
         config = Mock()
         config.version = "1"
         config.project.slug = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock(options={})}
         config.docker.start = False
         config.docker.build = False
@@ -244,7 +244,7 @@ class TestDisplayFunctions:
         state = Mock()
         state.version = "1"
         state.project.slug = "myapp"
-        state.project.theme = "showcase_html"
+        state.project.theme = "showcase_react"
         state.modules = {}
 
         with patch(
@@ -338,7 +338,7 @@ class TestBuildJsonOutput:
         state = Mock()
         state.version = "1"
         state.project.slug = "myapp"
-        state.project.theme = "showcase_html"
+        state.project.theme = "showcase_react"
         state.project.created_at = "2025-01-01"
         state.project.last_applied = "2025-01-01"
         module = Mock()
@@ -350,7 +350,7 @@ class TestBuildJsonOutput:
         config = Mock()
         config.version = "1"
         config.project.slug = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {"auth": Mock()}
         config.docker.start = False
         config.docker.build = False
@@ -425,7 +425,7 @@ class TestDisplayTextStatus:
         """Display with state but no config"""
         state = Mock()
         state.project.slug = "myapp"
-        state.project.theme = "showcase_html"
+        state.project.theme = "showcase_react"
         state.project.created_at = "2025-01-01"
         state.project.last_applied = "2025-01-01"
         state.modules = {}
@@ -451,7 +451,7 @@ class TestDisplayTextStatus:
         config = Mock()
         config.version = "1"
         config.project.slug = "myapp"
-        config.project.theme = "showcase_html"
+        config.project.theme = "showcase_react"
         config.modules = {}
         config.docker.start = False
         config.docker.build = False
@@ -498,7 +498,7 @@ class TestStatusCommandExtended:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -515,7 +515,7 @@ class TestStatusCommandExtended:
                 )
             with open("quickscale.yml", "w") as f:
                 f.write(
-                    'version: "1"\nproject:\n  slug: testapp\n  package: testapp\n  theme: showcase_html\nmodules:\n  auth:\ndocker:\n  start: false\n'
+                    'version: "1"\nproject:\n  slug: testapp\n  package: testapp\n  theme: showcase_react\nmodules:\n  auth:\ndocker:\n  start: false\n'
                 )
             os.makedirs("modules/auth", exist_ok=True)
             with open("modules/auth/module.yml", "w") as f:
@@ -535,7 +535,7 @@ class TestStatusCommandExtended:
                     "project:\n"
                     "  slug: testapp\n"
                     "  package: testapp\n"
-                    "  theme: showcase_html\n"
+                    "  theme: showcase_react\n"
                     "modules:\n"
                     "  billing:\n"
                     "docker:\n"
@@ -560,7 +560,7 @@ class TestStatusCommandExtended:
                     "project:\n"
                     "  slug: testapp\n"
                     "  package: testapp\n"
-                    "  theme: showcase_html\n"
+                    "  theme: showcase_react\n"
                     "modules:\n"
                     "  teams:\n"
                 )
@@ -584,7 +584,7 @@ class TestStatusCommandExtended:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                         },
                         "modules": {
                             "auth": {
@@ -627,7 +627,7 @@ class TestStateFileHasConsolidatedSections:
         state_dir.mkdir()
         (state_dir / "state.yml").write_text(
             "version: '1'\n"
-            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_react\n"
             "modules: {}\n"
             "managed_files: []\n"
         )
@@ -639,7 +639,7 @@ class TestStateFileHasConsolidatedSections:
         state_dir.mkdir()
         (state_dir / "state.yml").write_text(
             "version: '1'\n"
-            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             "    version: '1.0'\n"
@@ -655,7 +655,7 @@ class TestStateFileHasConsolidatedSections:
         state_dir.mkdir()
         (state_dir / "state.yml").write_text(
             "version: '1'\n"
-            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_react\n"
             "modules: {}\n"
         )
         assert _state_file_has_consolidated_sections(state_dir) is False
@@ -682,7 +682,7 @@ class TestComputeDriftDiagnostics:
         state_dir.mkdir()
         (state_dir / "state.yml").write_text(
             "version: '1'\n"
-            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_react\n"
             "modules: {}\n"
         )
 
@@ -710,7 +710,7 @@ class TestComputeDriftDiagnostics:
         state_dir.mkdir()
         (state_dir / "state.yml").write_text(
             "version: '1'\n"
-            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_react\n"
             "modules: {}\n"
         )
         # Create a legacy config.yml.
@@ -989,7 +989,7 @@ class TestContractVintageInDiagnostics:
         state_dir.mkdir()
         (state_dir / "state.yml").write_text(
             "version: '1'\n"
-            "project:\n  slug: x\n  package: x\n  theme: showcase_html\n"
+            "project:\n  slug: x\n  package: x\n  theme: showcase_react\n"
             "  project_contract: '0.86.0'\n"
             "modules: {}\n"
         )

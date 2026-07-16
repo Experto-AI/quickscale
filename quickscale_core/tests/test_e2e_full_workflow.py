@@ -283,7 +283,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
         project_name = "forms_install_smoke"
         project_path = tmp_path / project_name
 
-        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
         assert (project_path / "poetry.lock").exists()
 
         embedded_module_path = project_path / "modules" / "forms"
@@ -350,7 +350,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
         project_name = "ready_modules_install_smoke"
         project_path = tmp_path / project_name
 
-        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
         assert (project_path / "poetry.lock").exists()
 
         initial_pyproject = tomllib.loads((project_path / "pyproject.toml").read_text())
@@ -484,16 +484,16 @@ class TestFullE2EWorkflow:
             screenshot_name="homepage_screenshot_react_default.png",
         )
 
-    def test_complete_html_project_lifecycle(
+    def test_complete_react_with_database_lifecycle(
         self, tmp_path, e2e_postgres_url, e2e_page
     ):
         """
-        Test complete explicit HTML lifecycle: generate → install → migrate → serve → browse.
+        Test complete React lifecycle with database: generate → install → migrate → serve → browse.
         """
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator(theme="showcase_html")
-        project_name = "e2e_html_project"
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "e2e_react_db_project"
         project_path = tmp_path / project_name
 
         generator.generate(project_name, project_path)
@@ -503,15 +503,15 @@ class TestFullE2EWorkflow:
             postgres_url=e2e_postgres_url,
             page=e2e_page,
             tmp_path=tmp_path,
-            build_frontend=False,
-            screenshot_name="homepage_screenshot_html.png",
+            build_frontend=True,
+            screenshot_name="homepage_screenshot_react.png",
         )
 
     def test_docker_compose_configuration(self, tmp_path):
         """Verify docker-compose.yml is valid and can be parsed by docker compose."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "docker_test"
         project_path = tmp_path / project_name
 
@@ -536,7 +536,7 @@ class TestFullE2EWorkflow:
         """Verify the generated project's test suite runs successfully."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "test_runner_project"
         project_path = tmp_path / project_name
 
@@ -577,7 +577,7 @@ class TestFullE2EWorkflow:
         """
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "sa15_conformance"
         project_path = tmp_path / project_name
 
@@ -794,7 +794,7 @@ class TestFullE2EWorkflow:
 
         project_name = "quality_ruff_check"
         project_path = tmp_path / project_name
-        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
 
         result = self._run_repo_poetry_command(
             ["ruff", "check", str(project_path)],
@@ -810,7 +810,7 @@ class TestFullE2EWorkflow:
 
         project_name = "quality_ruff_format"
         project_path = tmp_path / project_name
-        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
 
         result = self._run_repo_poetry_command(
             ["ruff", "format", "--check", str(project_path)],
@@ -826,7 +826,7 @@ class TestFullE2EWorkflow:
 
         project_name = "quality_mypy"
         project_path = tmp_path / project_name
-        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
 
         current_pythonpath = os.environ.get("PYTHONPATH", "")
         pythonpath = (
@@ -961,7 +961,7 @@ class TestFullE2EWorkflow:
         """Verify GitHub Actions CI workflow is valid YAML."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "ci_test"
         project_path = tmp_path / project_name
 
@@ -1833,24 +1833,25 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         # visible in test logs.
         _ = subtree_branch
 
-    def test_auth_module_embed_html_theme(self, tmp_path, e2e_postgres_url):
-        """Validate the full auth embed workflow for the showcase_html theme.
+    def test_auth_module_embed_backend_only(self, tmp_path, e2e_postgres_url):
+        """Validate the full auth embed workflow for the React theme (backend-only).
 
         Auth implies orgs per its manifest, so both modules are embedded.
+        Frontend build is skipped for this variant.
         """
         from quickscale_core.generator import ProjectGenerator
 
-        project_name = "embed_auth_html"
+        project_name = "embed_auth_backend"
         project_path = tmp_path / project_name
 
-        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
 
         subtree_branch = self._embed_auth_and_orgs_via_subtree(project_path)
 
         self._run_module_embed_lifecycle(
             project_path=project_path,
             project_name=project_name,
-            theme="showcase_html",
+            theme="showcase_react",
             postgres_url=e2e_postgres_url,
             build_frontend=False,
             subtree_branch=subtree_branch,
@@ -1888,7 +1889,7 @@ class TestDockerIntegration:
         """Verify Dockerfile can be built successfully."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "dockerfile_test"
         project_path = tmp_path / project_name
 
@@ -1908,7 +1909,7 @@ class TestDockerIntegration:
         """Verify .gitignore includes common patterns."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "gitignore_test"
         project_path = tmp_path / project_name
 
@@ -1936,7 +1937,7 @@ class TestProductionReadiness:
         """Verify production security settings exist."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "security_test"
         project_path = tmp_path / project_name
 
@@ -1956,7 +1957,7 @@ class TestProductionReadiness:
         """Verify environment variable configuration exists."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "env_test"
         project_path = tmp_path / project_name
 

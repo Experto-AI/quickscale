@@ -36,7 +36,7 @@ def _write_project_with_auth(project_path: Path) -> None:
                 "project": {
                     "slug": "myproject",
                     "package": "myproject",
-                    "theme": "showcase_html",
+                    "theme": "showcase_react",
                     "created_at": "2024-01-01T00:00:00",
                     "last_applied": "2024-01-01T00:00:00",
                 },
@@ -75,7 +75,7 @@ def _write_project_with_auth(project_path: Path) -> None:
                 "project": {
                     "slug": "myproject",
                     "package": "myproject",
-                    "theme": "showcase_html",
+                    "theme": "showcase_react",
                 },
                 "modules": {
                     "auth": {"registration_enabled": True},

@@ -50,7 +50,7 @@ def _minimal_state() -> QuickScaleState:
         project=ProjectState(
             slug="myapp",
             package="myapp",
-            theme="showcase_html",
+            theme="showcase_react",
             created_at="2025-01-01T00:00:00",
             last_applied="2025-06-01T00:00:00",
         ),
@@ -64,7 +64,7 @@ def _minimal_ledger_dict() -> dict[str, Any]:
         "project": {
             "slug": "myapp",
             "package": "myapp",
-            "theme": "showcase_html",
+            "theme": "showcase_react",
             "created_at": "2025-01-01T00:00:00",
             "last_applied": "2025-06-01T00:00:00",
         },
@@ -131,7 +131,7 @@ class TestLedgerPresentValidNoStepProgress:
         state = result.applied_state
         assert state.project.slug == "myapp"
         assert state.project.package == "myapp"
-        assert state.project.theme == "showcase_html"
+        assert state.project.theme == "showcase_react"
         assert state.version == "1"
 
 
@@ -818,7 +818,7 @@ class TestRecoveryLedgerGitIndexCheckpoint:
             "project": {
                 "slug": "myapp",
                 "package": "myapp",
-                "theme": "showcase_html",
+                "theme": "showcase_react",
                 "created_at": "2025-01-01T00:00:00",
                 "last_applied": "2025-06-01T00:00:00",
             },

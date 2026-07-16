@@ -21,7 +21,6 @@ on:
       - 'quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2'
       - 'quickscale_core/src/quickscale_core/generator/templates/github/workflows/ci.yml.j2'
       - 'quickscale_core/tests/test_generator/test_templates.py'
-      - 'quickscale_core/tests/test_html_theme_integration.py'
       - 'quickscale_core/tests/test_react_theme_integration.py'
       - 'quickscale_core/tests/test_integration.py'
       - 'quickscale_core/tests/test_e2e_full_workflow.py'
@@ -181,7 +180,7 @@ jobs:
     - name: Generate test project
       run: |
         cd /tmp
-        printf '\n2\n\ny\ny\nn\ny\n' | poetry -P $GITHUB_WORKSPACE run quickscale plan test_docker_project
+        printf '\n1\n\ny\ny\nn\ny\n' | poetry -P $GITHUB_WORKSPACE run quickscale plan test_docker_project
         cd /tmp/test_docker_project
         printf 'y\n' | poetry -P $GITHUB_WORKSPACE run quickscale apply quickscale.yml --no-docker
 

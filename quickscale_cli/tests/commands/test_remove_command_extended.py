@@ -45,7 +45,7 @@ def _write_valid_remove_project(project_path: Path) -> None:
                 "project": {
                     "slug": "myproject",
                     "package": "myproject",
-                    "theme": "showcase_html",
+                    "theme": "showcase_react",
                     "created_at": "2025-01-01T00:00:00",
                     "last_applied": "2025-01-01T00:00:00",
                 },
@@ -84,7 +84,7 @@ def _write_valid_remove_project(project_path: Path) -> None:
                 "project": {
                     "slug": "myproject",
                     "package": "myproject",
-                    "theme": "showcase_html",
+                    "theme": "showcase_react",
                 },
                 "modules": {
                     "auth": {"registration_enabled": True},
@@ -110,7 +110,7 @@ def _write_apply_recovery_state(project_path: Path, module_names: list[str]) -> 
                 "project": {
                     "slug": "myproject",
                     "package": "myproject",
-                    "theme": "showcase_html",
+                    "theme": "showcase_react",
                     "created_at": "2025-01-01T00:00:00",
                     "last_applied": "2025-01-02T00:00:00",
                 },
@@ -476,7 +476,7 @@ class TestRemoveCommandIntegration:
                     "project": {
                         "slug": "myproject",
                         "package": "myproject",
-                        "theme": "showcase_html",
+                        "theme": "showcase_react",
                         "created_at": "2025-01-01T00:00:00",
                         "last_applied": "2025-01-02T00:00:00",
                     },

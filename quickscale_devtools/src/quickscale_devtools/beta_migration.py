@@ -152,9 +152,6 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     "templates/components/navigation.html",
     "templates/social/link_tree.html",
     "templates/social/embeds.html",
-    # ---- User static assets (showcase_html only) ----
-    "static/css/style.css",
-    "static/images/favicon.svg",
     # ---- User test scaffolding ----
     "tests/__init__.py",
     "tests/conftest.py",

@@ -129,7 +129,7 @@ def _make_project(tmp_path: Path, project_name: str = "myproject") -> Path:
         f"project:\n"
         f"  slug: {project_name}\n"
         f"  package: {project_name}\n"
-        f"  theme: showcase_html\n"
+        f"  theme: showcase_react\n"
         f"docker:\n"
         f"  start: false\n"
     )
@@ -2205,10 +2205,7 @@ class TestSocialModuleConfig:
         assert "_error_payload" in managed_social_views
         assert "JsonResponse" in managed_social_views
         assert "fresh showcase_react keeps /social and /social/embeds" in output
-        assert (
-            "showcase_html and existing generated projects require manual theme adoption"
-            in output
-        )
+        assert "existing generated projects require manual theme adoption" in output
 
 
 # ============================================================================

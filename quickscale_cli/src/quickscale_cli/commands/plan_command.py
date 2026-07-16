@@ -1201,7 +1201,7 @@ def plan(
 
     \b
     New project wizard:
-    - Theme selection (showcase_html, showcase_react)
+    - Theme selection (showcase_react)
       - Module selection (auth, blog, listings, etc.)
             - Docker configuration (start, build, create superuser)
 
