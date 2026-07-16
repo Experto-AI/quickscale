@@ -245,3 +245,46 @@ def test_error_source_label_is_present(tmp_path: Path) -> None:
         validate_theme_preflight(tmp_path)
     assert excinfo.value.source_label is not None
     assert "quickscale.yml" in str(excinfo.value.source_label)
+
+
+# ---------------------------------------------------------------------------
+# CR-SA94-REV-A-001: Missing / non-mapping project section fails closed
+# ---------------------------------------------------------------------------
+
+
+def test_config_missing_project_raises(tmp_path: Path) -> None:
+    """Config without a 'project' key must fail closed (not default to React)."""
+    _write_yml(tmp_path / "quickscale.yml", {"version": "1"})
+    with pytest.raises(ThemeValidationError) as excinfo:
+        validate_theme_preflight(tmp_path)
+    assert "missing the required 'project' section" in str(excinfo.value)
+
+
+def test_config_non_dict_project_raises(tmp_path: Path) -> None:
+    """Config where 'project' is not a dict must fail closed."""
+    _write_yml(
+        tmp_path / "quickscale.yml",
+        {"version": "1", "project": "not-a-dict"},
+    )
+    with pytest.raises(ThemeValidationError) as excinfo:
+        validate_theme_preflight(tmp_path)
+    assert "missing the required 'project' section" in str(excinfo.value)
+
+
+def test_state_missing_project_raises(tmp_path: Path) -> None:
+    """State file without a 'project' key must fail closed."""
+    _write_yml(tmp_path / ".quickscale" / "state.yml", {"version": "1"})
+    with pytest.raises(ThemeValidationError) as excinfo:
+        validate_theme_preflight(tmp_path)
+    assert "missing the required 'project' section" in str(excinfo.value)
+
+
+def test_recovery_missing_project_raises(tmp_path: Path) -> None:
+    """Recovery file without a 'project' key must fail closed."""
+    _write_yml(
+        tmp_path / ".quickscale" / "apply-recovery.yml",
+        {"version": "1"},
+    )
+    with pytest.raises(ThemeValidationError) as excinfo:
+        validate_theme_preflight(tmp_path)
+    assert "missing the required 'project' section" in str(excinfo.value)

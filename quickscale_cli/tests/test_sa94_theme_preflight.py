@@ -11,6 +11,7 @@ correctly.  They do not exercise every downstream code path.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import click
 import pytest
@@ -326,4 +327,239 @@ class TestDevUpPreflight:
             result = runner.invoke(up, [])
         assert result.exit_code != 0
         # Error must NOT be theme-related
+        assert "showcase_html" not in (result.output or "")
+
+
+# ---------------------------------------------------------------------------
+# CR-SA94-REV-A-002: Apply preflight with custom config path and output root
+# ---------------------------------------------------------------------------
+
+
+class TestApplyCustomConfigPreflight:
+    """Verify apply_command preflight validates the supplied config file
+    directly (regardless of filename) and state/recovery under the
+    *actual* output root."""
+
+    def test_apply_custom_config_filename_html_rejected(
+        self, html_project: Path
+    ) -> None:
+        """Apply with a custom-named config file must still reject HTML."""
+        from quickscale_cli.commands.apply_command import apply
+
+        # Create a custom-named config (not quickscale.yml) with HTML theme
+        custom_config = html_project / "my-custom-config.yml"
+        custom_config.write_bytes((html_project / "quickscale.yml").read_bytes())
+        # Remove the standard quickscale.yml so preflight must read custom name
+        (html_project / "quickscale.yml").unlink()
+
+        runner = CliRunner()
+        result = runner.invoke(apply, [str(custom_config)])
+        assert result.exit_code != 0
+        assert "showcase_html" in (result.output or "")
+
+    def test_apply_custom_config_html_with_react_state_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Apply must check output-root state even when the supplied
+        config itself is valid React.  The output root is determined by
+        the project slug, not by the config file location."""
+        from quickscale_cli.commands.apply_command import apply
+
+        # Mock CWD to tmp_path so output_root = tmp_path/slug
+        monkeypatch.chdir(tmp_path)
+
+        # Config in a subdirectory with a custom name.  Parent name
+        # ("configs") does NOT match slug ("myapp"), so output root
+        # will be tmp_path/myapp (cwd/slug).
+        config_dir = tmp_path / "configs"
+        config_dir.mkdir()
+        config_path = config_dir / "custom-config.yml"
+        config_path.write_text(
+            yaml.dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": SOLE_VALID_THEME,
+                    },
+                },
+                default_flow_style=False,
+                sort_keys=False,
+            )
+        )
+
+        # State at the ACTUAL output root (tmp_path/myapp) with retired
+        # theme — this must be caught even though the config is valid.
+        output_root = tmp_path / "myapp"
+        (output_root / ".quickscale").mkdir(parents=True, exist_ok=True)
+        (output_root / ".quickscale" / "state.yml").write_text(
+            yaml.dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": "showcase_html",
+                    },
+                },
+                default_flow_style=False,
+                sort_keys=False,
+            )
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(apply, [str(config_path)])
+        assert result.exit_code != 0
+        assert "showcase_html" in (result.output or "")
+        assert "retired" in (result.output or "")
+
+
+# ---------------------------------------------------------------------------
+# CR-SA94-REV-A-003: Standalone embed / remove preflight sentinel
+# ---------------------------------------------------------------------------
+
+
+class TestStandaloneEmbedPreflight:
+    """Verify standalone embed_module rejects retired theme before
+    git/remote/subtree mutation."""
+
+    def test_embed_module_html_rejected(self, html_project: Path) -> None:
+        """Standalone embed_module must reject HTML before any git ops."""
+        from quickscale_cli.commands.module_commands import embed_module
+
+        with patch(
+            "quickscale_cli.commands.module_commands._validate_git_environment"
+        ) as mock_git:
+            result = embed_module(
+                module="auth",
+                project_path=html_project,
+                non_interactive=True,
+            )
+        assert result is False
+        # Git validation must NOT have been called — preflight failed first.
+        mock_git.assert_not_called()
+
+    def test_embed_module_react_accepted(self, react_project: Path) -> None:
+        """Standalone embed_module with React passes preflight (fails on
+        later git validation, not theme)."""
+        from quickscale_cli.commands.module_commands import embed_module
+
+        with patch(
+            "quickscale_cli.commands.module_commands._validate_git_environment",
+            return_value=False,
+        ) as mock_git:
+            result = embed_module(
+                module="auth",
+                project_path=react_project,
+                non_interactive=True,
+            )
+        assert result is False
+        # Fails on git validation, not theme
+        mock_git.assert_called_once()
+
+
+class TestRemoveCommandPreflight:
+    """Verify remove command rejects retired theme before any mutation."""
+
+    def _make_removable_project(self, project_path: Path, theme: str) -> None:
+        """Create a minimal project structure that remove can process."""
+        # Package directory (needed for _resolve_project_package)
+        pkg = project_path / "myapp"
+        pkg.mkdir(exist_ok=True)
+        (pkg / "__init__.py").write_text("")
+        (pkg / "settings").mkdir(exist_ok=True)
+        (pkg / "settings" / "__init__.py").write_text("")
+        (pkg / "settings" / "modules.py").write_text("")
+        (pkg / "urls_modules.py").write_text("")
+        (pkg / "quickscale_managed").mkdir(exist_ok=True)
+        (pkg / "quickscale_managed" / "__init__.py").write_text("")
+
+        # Desired config with the specified theme
+        (project_path / "quickscale.yml").write_text(
+            yaml.dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": theme,
+                    },
+                },
+                default_flow_style=False,
+                sort_keys=False,
+            )
+        )
+
+    def test_remove_html_config_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Remove command must fail when config has retired theme."""
+        from quickscale_cli.commands.remove_command import remove
+
+        self._make_removable_project(tmp_path, "showcase_html")
+
+        runner = CliRunner()
+        with monkeypatch.context() as mp:
+            mp.setattr(
+                "quickscale_cli.commands.remove_command.Path.cwd",
+                lambda: tmp_path,
+            )
+            result = runner.invoke(remove, ["auth"])
+        assert result.exit_code != 0
+        assert "showcase_html" in (result.output or "")
+
+    def test_remove_html_state_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Remove must reject retired theme in state even when config
+        has React."""
+        from quickscale_cli.commands.remove_command import remove
+
+        self._make_removable_project(tmp_path, SOLE_VALID_THEME)
+
+        # State has retired theme
+        (tmp_path / ".quickscale").mkdir(exist_ok=True)
+        (tmp_path / ".quickscale" / "state.yml").write_text(
+            yaml.dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": "showcase_html",
+                    },
+                },
+                default_flow_style=False,
+                sort_keys=False,
+            )
+        )
+
+        runner = CliRunner()
+        with monkeypatch.context() as mp:
+            mp.setattr(
+                "quickscale_cli.commands.remove_command.Path.cwd",
+                lambda: tmp_path,
+            )
+            result = runner.invoke(remove, ["auth"])
+        assert result.exit_code != 0
+        assert "showcase_html" in (result.output or "")
+
+    def test_remove_react_state_accepted(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Remove with React state passes preflight (may fail later on
+        module-not-found, not theme)."""
+        from quickscale_cli.commands.remove_command import remove
+
+        self._make_removable_project(tmp_path, SOLE_VALID_THEME)
+
+        runner = CliRunner()
+        with monkeypatch.context() as mp:
+            mp.setattr(
+                "quickscale_cli.commands.remove_command.Path.cwd",
+                lambda: tmp_path,
+            )
+            result = runner.invoke(remove, ["auth"])
+        # May fail on other issues but NOT on theme validation
         assert "showcase_html" not in (result.output or "")

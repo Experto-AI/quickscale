@@ -95,7 +95,11 @@ class TestApplyCommandBasic:
             result = runner.invoke(apply, ["quickscale.yml"])
 
             assert result.exit_code != 0
-            assert "Configuration error" in result.output
+            assert (
+                "Configuration error" in result.output
+                or "Theme validation failed" in result.output
+                or "missing the required" in result.output
+            )
 
 
 class TestApplyConfigValidation:
@@ -141,6 +145,7 @@ project:
             assert (
                 "Configuration error" in result.output
                 or "Theme validation failed" in result.output
+                or "Invalid theme" in result.output
             )
 
     def test_apply_unknown_module(self):
@@ -873,6 +878,7 @@ docker:
             assert (
                 "Configuration error" in result.output
                 or "Theme validation failed" in result.output
+                or "Invalid theme" in result.output
             )
             assert "showcase_htmx" in result.output
 

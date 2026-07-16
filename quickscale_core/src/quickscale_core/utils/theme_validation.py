@@ -175,6 +175,17 @@ def _validate_source_theme(
             source_label=source_label,
         )
 
+    # SA94 Barrier A: fail closed when the ``project`` section is missing
+    # or is not a mapping.  A missing or non-mapping ``project`` means
+    # the file is structurally invalid and must not silently default
+    # to React.
+    project = raw.get("project")
+    if not isinstance(project, dict):
+        raise ThemeValidationError(
+            f"{source_label} is missing the required 'project' section",
+            source_label=source_label,
+        )
+
     try:
         theme = extract_theme(raw)
     except ThemeValidationError:
@@ -223,13 +234,14 @@ def _validate_source_theme(
 def _extract_config_theme(raw: dict) -> str | None:
     """Extract theme from a parsed quickscale.yml mapping.
 
-    Returns ``None`` when the ``project`` section or ``theme`` key is
-    absent (the schema-level default ``showcase_react`` applies).
+    The caller (:func:`_validate_source_theme`) guarantees that
+    ``raw["project"]`` is a :class:`dict`.
+
+    Returns ``None`` when the ``theme`` key is absent (the schema-level
+    default ``showcase_react`` applies).
     """
     project = raw.get("project")
-    if not isinstance(project, dict):
-        return None
-    theme = project.get("theme")
+    theme = project.get("theme")  # type: ignore[union-attr]
     if theme is None:
         return None
     return str(theme)
@@ -238,14 +250,15 @@ def _extract_config_theme(raw: dict) -> str | None:
 def _extract_state_theme(raw: dict) -> str | None:
     """Extract theme from a parsed state.yml or recovery-ledger mapping.
 
+    The caller (:func:`_validate_source_theme`) guarantees that
+    ``raw["project"]`` is a :class:`dict`.
+
     State and recovery files are expected to carry a ``project`` section
     with an explicit ``theme`` field.  Returns ``None`` when absent
     (which will be treated as a validation error by the caller).
     """
     project = raw.get("project")
-    if not isinstance(project, dict):
-        return None
-    theme = project.get("theme")
+    theme = project.get("theme")  # type: ignore[union-attr]
     if theme is None:
         return None
     return str(theme)
