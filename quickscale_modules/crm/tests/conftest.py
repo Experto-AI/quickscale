@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from decimal import Decimal
 
 import pytest
@@ -30,65 +29,9 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
 )
 
-
-# ---------------------------------------------------------------------------
-# SA84-REV-001 — per-test state reset matching the proven forms pattern
-# ---------------------------------------------------------------------------
-# Reset ContextVar, DB GUCs (app.current_org_id, app.operator_access, ROLE),
-# AF9 priming memo, and cache before and after each test so that per-test
-# state never leaks across test boundaries (REV-001).
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _reset_crm_test_state() -> Iterator[None]:
-    """Reset per-test state: ContextVar, DB GUCs, and cache.
-
-    Mirrors the proven forms module reset pattern (``forms/tests/conftest.py``).
-    ContextVars persist across tests within the same thread; this fixture
-    clears the org ContextVar before each test so the baseline is always
-    ``None`` (fail-closed).  Also clears PostgreSQL GUCs ``app.current_org_id``,
-    ``app.operator_access``, resets the DB role to session default, clears the
-    AF9 per-transaction priming memo, and clears the Django cache.
-
-    Tests without the ``db`` marker safely skip DB GUC resets.
-    """
-
-    reset_current_org_id()
-    from django.db import connection
-
-    if connection.vendor == "postgresql":
-        try:
-            with connection.cursor() as cur:
-                cur.execute("RESET app.current_org_id")
-                cur.execute("RESET app.operator_access")
-                cur.execute("RESET ROLE")
-        except RuntimeError:
-            # Database access not allowed (test without db marker).
-            pass
-    if hasattr(connection, "_af9_primed_for_txn"):
-        del connection._af9_primed_for_txn
-    if hasattr(connection, "_af9_primed_atomic"):
-        del connection._af9_primed_atomic
-    from django.core.cache import cache
-
-    cache.clear()
-    yield
-    # Post-yield symmetric teardown.
-    reset_current_org_id()
-    if connection.vendor == "postgresql":
-        try:
-            with connection.cursor() as cur:
-                cur.execute("RESET app.current_org_id")
-                cur.execute("RESET app.operator_access")
-                cur.execute("RESET ROLE")
-        except RuntimeError:
-            pass
-    if hasattr(connection, "_af9_primed_for_txn"):
-        del connection._af9_primed_for_txn
-    if hasattr(connection, "_af9_primed_atomic"):
-        del connection._af9_primed_atomic
-    cache.clear()
+# SA97: shared per-test state reset fixture replaces the private
+# ``_reset_crm_test_state`` copy.  See ``tests_shared/reset_state.py``.
+from tests_shared.reset_state import reset_test_state  # noqa: F401
 
 
 @pytest.fixture

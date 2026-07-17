@@ -1535,6 +1535,45 @@ work, not manual maintainer operations against external infrastructure.
 
 ---
 
+### Test-Commons Ownership Rule (SA97) {#test-commons-ownership-sa97}
+
+**Decision (SA97, ratified 2026-07-17):** Define the boundary between
+org-context runtime helpers and cross-module test plumbing, citing the
+`apply_force_rls`/`revert_force_rls` seam (SA92) as the existing house pattern
+for a working shared-commons precedent.
+
+**Ownership:**
+
+1. **`quickscale_modules/orgs/` owns org-context runtime helpers** — the
+   `reset_current_org_id()`, `org_scope()`, and `operator_access()` public
+   API surface is owned by the orgs module and lives in
+   `quickscale_modules_orgs.current_org`.  No test code may maintain a
+   private copy of these helpers.
+2. **`tests_shared/` owns cross-module test plumbing** — reusable fixture
+   modules (e.g. `isolation.py`, `reset_state.py`) and any future
+   cross-module test infrastructure live under `tests_shared/`.  No module
+   conftest may maintain a private copy of the per-test state-reset
+   contract or any sanctioned cross-module test utility that already exists
+   in `tests_shared/`.
+
+**Precedent — SA92 `apply_force_rls`/`revert_force_rls`:** The
+`apply_force_rls`/`revert_force_rls` seam is the house pattern for a working
+shared-commons relationship.  Orgs owns the RLS policy-management helper,
+each tenant module calls it during its own migration, and no module
+maintains a private copy.  SA97 extends this same principle to the test
+plumbing layer.
+
+**Enforcement:** Any module conftest that defines a fixture whose
+documentation or identifier references resetting `app.current_org_id`,
+`SET ROLE`, AF9 priming memo, or the Django cache should instead import
+the shared `reset_test_state` fixture from `tests_shared.reset_state`.
+New cross-module test utilities must be placed in `tests_shared/` rather
+than duplicated across module conftests.
+
+**Related docs:** [roadmap.md §SA97](./roadmap.md) | [CHANGELOG.md §SA97](../../CHANGELOG.md)
+
+---
+
 ## Prohibitions (Critical - DO NOT)
 
 **Database:**

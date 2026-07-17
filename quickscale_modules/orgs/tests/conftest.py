@@ -18,7 +18,6 @@ from typing import Any, cast
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.core.cache import cache
 from django.test import Client
 
 # SA14.4: NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
@@ -30,21 +29,10 @@ from django.test import Client
 # conftest module-level code runs after Django setup. The boot guard already
 # ran during setup — use a restricted (NOBYPASSRLS) DB role for testing.
 
-from quickscale_modules_orgs.current_org import reset_current_org_id
 
-
-@pytest.fixture(autouse=True)
-def _reset_test_state() -> Iterator[None]:
-    """Reset per-test state: ContextVar and cache.
-
-    ContextVars persist across tests within the same thread; this fixture
-    clears the org ContextVar before each test so the baseline is always
-    ``None`` (fail-closed).
-    """
-    reset_current_org_id()
-    cache.clear()
-    yield
-    cache.clear()
+# SA97: shared per-test state reset fixture replaces the private
+# ``_reset_test_state`` copy.  See ``tests_shared/reset_state.py``.
+from tests_shared.reset_state import reset_test_state  # noqa: F401
 
 
 @pytest.fixture

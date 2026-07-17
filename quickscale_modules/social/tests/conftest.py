@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Generator
+from collections.abc import Generator
 import os
 from pathlib import Path
 import sys
@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, cast
 import django
 import pytest
 from django.contrib.auth import get_user_model
-from django.core.cache import cache
 from django.test import Client
 
 if TYPE_CHECKING:
@@ -36,20 +35,9 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.settings")
 django.setup()
 
 
-@pytest.fixture(autouse=True)
-def _reset_test_state() -> Iterator[None]:
-    """Reset per-test state: cache and ContextVar.
-
-    ContextVars persist across tests within the same thread; this fixture
-    clears the org ContextVar before each test so the baseline is always
-    ``None`` (fail-closed).
-    """
-    from quickscale_modules_orgs.current_org import reset_current_org_id
-
-    reset_current_org_id()
-    cache.clear()
-    yield
-    cache.clear()
+# SA97: shared per-test state reset fixture replaces the private
+# ``_reset_test_state`` copy.  See ``tests_shared/reset_state.py``.
+from tests_shared.reset_state import reset_test_state  # noqa: E402, F401
 
 
 @pytest.fixture

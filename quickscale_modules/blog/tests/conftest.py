@@ -169,33 +169,11 @@ def org_b_admin(db, org_b):
     return user
 
 
-# ---------------------------------------------------------------------------
-# SA83 — blog test context lifecycle fixtures for restricted-role tests
-# ---------------------------------------------------------------------------
-# These fixtures protect restricted-role anonymous list/feed request
-# sequences from stale PostgreSQL GUC state by:
-#
-# 1. Resetting the ``app.current_org_id`` ContextVar before and after
-#    every test so no stale tenant context leaks between test functions.
-# 2. Providing ``blog_org_scope`` — a thin wrapper around the unified
-#    ``org_scope()`` context manager — so tests can explicitly scope
-#    data creation and request execution without GUC leakage across
-#    ``SET ROLE`` / ``RESET ROLE`` boundaries.
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _reset_current_org_context():
-    """Reset the current org ContextVar before and after each test.
-
-    Prevents stale ``app.current_org_id`` GUC state from leaking between
-    tests when the connection-layer priming wrapper (AF9) is active.
-    """
-    from quickscale_modules_orgs.current_org import reset_current_org_id
-
-    reset_current_org_id()
-    yield
-    reset_current_org_id()
+# SA97: shared per-test state reset fixture replaces the private
+# ``_reset_current_org_context`` copy.  Blog's previous ContextVar-only
+# reset is upgraded to the full superset (GUCs, AF9 memo, cache).
+# See ``tests_shared/reset_state.py``.
+from tests_shared.reset_state import reset_test_state  # noqa: E402, F401
 
 
 @pytest.fixture

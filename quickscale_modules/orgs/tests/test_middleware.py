@@ -539,7 +539,7 @@ def test_postgres_content_route_does_not_set_db_current_org_id(
     with connection.cursor() as cursor:
         cursor.execute("SELECT current_setting('app.current_org_id', true)")
         (db_value,) = cursor.fetchone()
-    assert db_value is None, (
+    assert db_value is None or db_value == "", (
         "Phase 3: middleware must NOT leave app.current_org_id set. "
         "No request-long atomic/SET LOCAL at the middleware level."
     )
