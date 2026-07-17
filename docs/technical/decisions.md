@@ -1241,7 +1241,7 @@ The SA46 CI gate continues to enforce the pairing requirement across all `csrf_e
 - Two low/advisory findings recorded in the review:
   - **CR-SA92-ADV-001 (low/advisory):** The bounded literal tripwire regex intentionally omits alternate quoted/schema-qualified table identifier spellings. This is an accepted scope limitation of the deliberately shallow smoke alarm.
   - **CR-SA92-ADV-002 (low/advisory):** Any future allowlist entry must be scoped to exact file-plus-statement identity before use.
-- SA84 remains open; SA86 is closed. Closes SA92.
+- SA84 closed; SA86 closed. The unquarantined integration gate is green with empty quarantine. See [roadmap.md §Green-gate milestone](./roadmap.md#green-gate-milestone).
 
 **Constraint:** This decision supersedes and replaces the SA88 seam-plus-gate approach (SA88/SA88a–e) documented above. The SA88 historical text is retained for the reasoning trail only and must not be cited as current policy.
 
@@ -1532,6 +1532,45 @@ roadmap.md checklist entry — the roadmap tracks repo-local implementation
 work, not manual maintainer operations against external infrastructure.
 
 **Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Red flags](../others/arch-audit.md) | [beta-site-migration.md](../planning/beta-site-migration.md)
+
+---
+
+### Test-Commons Ownership Rule (SA97) {#test-commons-ownership-sa97}
+
+**Decision (SA97, ratified 2026-07-17):** Define the boundary between
+org-context runtime helpers and cross-module test plumbing, citing the
+`apply_force_rls`/`revert_force_rls` seam (SA92) as the existing house pattern
+for a working shared-commons precedent.
+
+**Ownership:**
+
+1. **`quickscale_modules/orgs/` owns org-context runtime helpers** — the
+   `reset_current_org_id()`, `org_scope()`, and `operator_access()` public
+   API surface is owned by the orgs module and lives in
+   `quickscale_modules_orgs.current_org`.  No test code may maintain a
+   private copy of these helpers.
+2. **`tests_shared/` owns cross-module test plumbing** — reusable fixture
+   modules (e.g. `isolation.py`, `reset_state.py`) and any future
+   cross-module test infrastructure live under `tests_shared/`.  No module
+   conftest may maintain a private copy of the per-test state-reset
+   contract or any sanctioned cross-module test utility that already exists
+   in `tests_shared/`.
+
+**Precedent — SA92 `apply_force_rls`/`revert_force_rls`:** The
+`apply_force_rls`/`revert_force_rls` seam is the house pattern for a working
+shared-commons relationship.  Orgs owns the RLS policy-management helper,
+each tenant module calls it during its own migration, and no module
+maintains a private copy.  SA97 extends this same principle to the test
+plumbing layer.
+
+**Enforcement:** Any module conftest that defines a fixture whose
+documentation or identifier references resetting `app.current_org_id`,
+`SET ROLE`, AF9 priming memo, or the Django cache should instead import
+the shared `reset_test_state` fixture from `tests_shared.reset_state`.
+New cross-module test utilities must be placed in `tests_shared/` rather
+than duplicated across module conftests.
+
+**Related docs:** [roadmap.md §SA97](./roadmap.md) | [CHANGELOG.md §SA97](../../CHANGELOG.md)
 
 ---
 

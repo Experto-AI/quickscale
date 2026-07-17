@@ -41,9 +41,7 @@ def django_db_setup(django_db_blocker):
         call_command("migrate", "--run-syncdb", verbosity=0)
 
 
-from collections.abc import Iterator  # noqa: E402
 from django.contrib.auth import get_user_model  # noqa: E402
-from django.core.cache import cache  # noqa: E402
 from rest_framework.test import APIClient  # noqa: E402
 
 from quickscale_modules_forms.models import (  # noqa: E402
@@ -56,76 +54,9 @@ from quickscale_modules_forms.models import (  # noqa: E402
 User = get_user_model()
 
 
-# ---------------------------------------------------------------------------
-# SA85 Phase 1 — reset per-test state: ContextVar and cache
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _reset_test_state() -> Iterator[None]:
-    """Reset per-test state: ContextVar, DB GUCs, and cache.
-
-    ContextVars persist across tests within the same thread; this fixture
-    clears the org ContextVar before each test so the baseline is always
-    ``None`` (fail-closed).  Also clears the PostgreSQL GUCs
-    ``app.current_org_id``, ``app.operator_access``, and resets the DB
-    role to the session default after any test that changes them.
-    Cache is cleared to prevent cross-test leaks.
-
-    CR-SA85-REV-006: restore direct setter state and reset
-    role/current-org/operator GUCs in every boundary finally block.
-
-    Tests without the ``db`` marker (e.g. ``test_apps.py``,
-    ``test_throttles.py``) do not have database access; DB GUC
-    resets are safely skipped in that case.
-    """
-    from quickscale_modules_orgs.current_org import reset_current_org_id
-
-    reset_current_org_id()
-    # Reset DB-side GUCs if PostgreSQL is the backend and database
-    # access is available (tests without the ``db`` marker may not
-    # have database access).
-    from django.db import connection
-
-    if connection.vendor == "postgresql":
-        try:
-            with connection.cursor() as cur:
-                cur.execute("RESET app.current_org_id")
-                cur.execute("RESET app.operator_access")
-                cur.execute("RESET ROLE")
-        except RuntimeError:
-            # Database access not allowed (test without db marker).
-            pass
-    # Clear AF9 per-transaction priming memo (connection-level attributes)
-    # so a stale memo from a prior test does not suppress re-priming
-    # in a new transaction (CR-SA85-REV-006).
-    if hasattr(connection, "_af9_primed_for_txn"):
-        del connection._af9_primed_for_txn
-    if hasattr(connection, "_af9_primed_atomic"):
-        del connection._af9_primed_atomic
-    cache.clear()
-    yield
-    # Post-yield teardown: restore ContextVar, GUCs, and AF9 memo so
-    # a test that alters them does not leak state into the next test
-    # (CR-SA85-REV-006).
-    from quickscale_modules_orgs.current_org import reset_current_org_id
-
-    reset_current_org_id()
-    from django.db import connection
-
-    if connection.vendor == "postgresql":
-        try:
-            with connection.cursor() as cur:
-                cur.execute("RESET app.current_org_id")
-                cur.execute("RESET app.operator_access")
-                cur.execute("RESET ROLE")
-        except RuntimeError:
-            pass
-    if hasattr(connection, "_af9_primed_for_txn"):
-        del connection._af9_primed_for_txn
-    if hasattr(connection, "_af9_primed_atomic"):
-        del connection._af9_primed_atomic
-    cache.clear()
+# SA97: shared per-test state reset fixture replaces the private
+# ``_reset_test_state`` copy.  See ``tests_shared/reset_state.py``.
+from tests_shared.reset_state import reset_test_state  # noqa: E402, F401
 
 
 @pytest.fixture
