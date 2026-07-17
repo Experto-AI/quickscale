@@ -65,23 +65,24 @@ RUFF_CACHE_DIR ?= .ruff_cache/make
 
 # Section flags must be passed after `--` so GNU make does not treat them as its
 # own options, e.g. `make lint -- --modules` or `make typecheck -- --core`.
-SECTION_FLAG_ARGS := $(filter --quickscale -q --core -c --cli -l --module --modules -m,$(MAKECMDGOALS))
+SECTION_FLAG_ARGS := $(filter --quickscale -q --core -c --cli -l --devtools -d --module --modules -m,$(MAKECMDGOALS))
 ifneq ($(strip $(SECTION_FLAG_ARGS)),)
   $(eval $(SECTION_FLAG_ARGS):;@:)
 endif
 
 define map_section
-$(if $(filter --quickscale -q,$(1)),quickscale,$(if $(filter --core -c,$(1)),core,$(if $(filter --cli -l,$(1)),cli,$(if $(filter --module --modules -m,$(1)),modules,))))
+$(if $(filter --quickscale -q,$(1)),quickscale,$(if $(filter --core -c,$(1)),core,$(if $(filter --cli -l,$(1)),cli,$(if $(filter --devtools -d,$(1)),devtools,$(if $(filter --module --modules -m,$(1)),modules,)))))
 endef
 
 RAW_SECTION_VARS := $(strip $(SECTIONS) $(SECTION))
 SECTION_VARS := $(foreach section,$(RAW_SECTION_VARS),$(if $(filter module,$(section)),modules,$(section)))
 SELECTED_SECTIONS := $(strip $(foreach arg,$(SECTION_FLAG_ARGS),$(call map_section,$(arg))))
-ACTIVE_SECTIONS := $(if $(SECTION_VARS),$(SECTION_VARS),$(if $(SELECTED_SECTIONS),$(SELECTED_SECTIONS),quickscale core cli modules))
+DEFAULT_SECTIONS := quickscale core cli devtools modules
+ACTIVE_SECTIONS := $(if $(SECTION_VARS),$(SECTION_VARS),$(if $(SELECTED_SECTIONS),$(SELECTED_SECTIONS),$(DEFAULT_SECTIONS)))
 MODULE_DIRS := $(if $(MODULE),quickscale_modules/$(MODULE),$(wildcard quickscale_modules/*))
 
 # Source directories for linting and type checking
-SRC_DIRS := quickscale/src quickscale_core/src quickscale_cli/src
+SRC_DIRS := quickscale/src quickscale_core/src quickscale_cli/src quickscale_devtools/src
 
 # Test directories
 TEST_DIRS := quickscale_core/tests quickscale_cli/tests
@@ -124,7 +125,7 @@ help:
 	@echo "  make ci-e2e               - Run CI checks including E2E tests"
 	@echo ""
 	@echo "Section Flags:"
-	@echo "  Pass flags after \`--\`: --quickscale/-q, --core/-c, --cli/-l, --modules/-m"
+	@echo "  Pass flags after \`--\`: --quickscale/-q, --core/-c, --cli/-l, --devtools/-d, --modules/-m"
 	@echo "  Examples: make lint -- -m | make typecheck -- --core | make check -- --cli --modules"
 	@echo "  Variable alternative: SECTION=modules or SECTIONS=\"core modules\""
 	@echo "  Optional: MODULE=blog limits the modules scope to one module"
@@ -252,7 +253,7 @@ beta-migrate-in-place:
 # Run all tests
 test:
 	@set -e; \
-	if [ "$(strip $(ACTIVE_SECTIONS))" = "quickscale core cli modules" ] && [ -z "$(MODULE)" ]; then \
+	if [ "$(strip $(ACTIVE_SECTIONS))" = "$(strip $(DEFAULT_SECTIONS))" ] && [ -z "$(MODULE)" ]; then \
 		$(MAKE) test-unit && $(MAKE) test-integration; \
 		exit 0; \
 	fi; \
@@ -469,6 +470,11 @@ lint:
 		$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) quickscale_cli/src quickscale_cli/tests; \
 		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) --check quickscale_cli/src quickscale_cli/tests; \
 	fi; \
+	if [ -n "$(filter devtools,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Linting quickscale_devtools..."; \
+		$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) quickscale_devtools/src; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) --check quickscale_devtools/src; \
+	fi; \
 	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
 		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
 			echo "Error: MODULE=$(MODULE) does not exist."; \
@@ -512,6 +518,11 @@ lint-fix:
 		$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) quickscale_cli/src quickscale_cli/tests --fix; \
 		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) quickscale_cli/src quickscale_cli/tests; \
 	fi; \
+	if [ -n "$(filter devtools,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Lint-fixing quickscale_devtools..."; \
+		$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) quickscale_devtools/src --fix; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) quickscale_devtools/src; \
+	fi; \
 	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
 		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
 			echo "Error: MODULE=$(MODULE) does not exist."; \
@@ -551,6 +562,10 @@ typecheck:
 	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Type checking quickscale_cli..."; \
 		$(PYTHON) -m mypy quickscale_cli/src --show-error-codes; \
+	fi; \
+	if [ -n "$(filter devtools,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Type checking quickscale_devtools..."; \
+		$(PYTHON) -m mypy quickscale_devtools/src --show-error-codes; \
 	fi; \
 	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
 		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
@@ -610,6 +625,10 @@ format:
 	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Formatting quickscale_cli..."; \
 		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) quickscale_cli/src quickscale_cli/tests; \
+	fi; \
+	if [ -n "$(filter devtools,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Formatting quickscale_devtools..."; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) quickscale_devtools/src; \
 	fi; \
 	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
 		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
