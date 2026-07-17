@@ -29,4 +29,4 @@ ignore = [
 ]
 
 [lint.isort]
-known-first-party = ["quickscale_core", "quickscale_cli", "quickscale_modules_auth", "quickscale_modules_blog", "quickscale_modules_listings", "quickscale_modules_crm"]
+known-first-party = ["quickscale_core", "quickscale_cli", "quickscale_devtools", "quickscale_modules_auth", "quickscale_modules_blog", "quickscale_modules_listings", "quickscale_modules_crm"]
