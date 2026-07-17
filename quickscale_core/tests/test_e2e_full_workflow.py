@@ -308,7 +308,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
             'quickscale-module-forms = {path = "./modules/forms", develop = true}'
             in pyproject_content
         )
-        assert 'django-filter = "^25.2"' in pyproject_content
+        assert 'django-filter = "^26.1"' in pyproject_content
         assert 'djangorestframework = "^3.16.1"' in pyproject_content
 
         assert _install_module_dependencies(project_path, "forms") is True
@@ -652,7 +652,10 @@ class TestFullE2EWorkflow:
         test_settings = project_path / project_name / "settings" / "test_e2e.py"
         parsed = urllib.parse.urlparse(e2e_postgres_url)
         db_host = parsed.hostname or "localhost"
-        db_port = parsed.port or "5432"
+        db_port = str(parsed.port or "5432")
+        db_name = parsed.path.lstrip("/") if parsed.path else "test_db"
+        db_user = parsed.username or "test_user"
+        db_password = parsed.password or "test_password"
 
         test_settings.write_text(
             f'"""E2E conformance test settings — includes orgs + unprotected test app."""\n'
@@ -668,9 +671,9 @@ class TestFullE2EWorkflow:
             f"DATABASES = {{\n"
             f"    'default': {{\n"
             f"        'ENGINE': 'django.db.backends.postgresql',\n"
-            f"        'NAME': 'test_db',\n"
-            f"        'USER': 'test_user',\n"
-            f"        'PASSWORD': 'test_password',\n"
+            f"        'NAME': '{db_name}',\n"
+            f"        'USER': '{db_user}',\n"
+            f"        'PASSWORD': '{db_password}',\n"
             f"        'HOST': '{db_host}',\n"
             f"        'PORT': '{db_port}',\n"
             f"    }}\n"
@@ -1264,13 +1267,21 @@ class TestFullE2EWorkflow:
     def _configure_test_database(
         self, project_path: Path, project_name: str, postgres_url: str
     ):
-        """Configure generated project to use test PostgreSQL database."""
+        """Configure generated project to use test PostgreSQL database.
+
+        Database name, user, password, host, and port are all extracted
+        from *postgres_url* — no fixed defaults — ensuring every caller
+        gets a fully isolated per-test database.
+        """
         # Create a test settings file that uses the test database
         test_settings = project_path / project_name / "settings" / "test_e2e.py"
 
         parsed = urllib.parse.urlparse(postgres_url)
         db_host = parsed.hostname or "localhost"
-        db_port = parsed.port or "5432"
+        db_port = str(parsed.port or "5432")
+        db_name = parsed.path.lstrip("/") if parsed.path else "test_db"
+        db_user = parsed.username or "test_user"
+        db_password = parsed.password or "test_password"
 
         settings_content = f'''"""E2E test settings - uses test PostgreSQL."""
 from .base import *
@@ -1278,9 +1289,9 @@ from .base import *
 DATABASES = {{
     'default': {{
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'test_db',
-        'USER': 'test_user',
-        'PASSWORD': 'test_password',
+        'NAME': '{db_name}',
+        'USER': '{db_user}',
+        'PASSWORD': '{db_password}',
         'HOST': '{db_host}',
         'PORT': '{db_port}',
     }}

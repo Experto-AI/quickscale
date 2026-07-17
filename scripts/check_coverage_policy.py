@@ -49,10 +49,21 @@ PACKAGE_PREFIXES: tuple[str, ...] = tuple(p + "/" for p in KNOWN_PACKAGES)
 
 
 def _classify_file(filepath: str) -> str | None:
-    """Classify *filepath* into a known package, or return ``None``."""
-    for prefix, pkg in zip(PACKAGE_PREFIXES, KNOWN_PACKAGES):
-        if filepath.startswith(prefix):
-            return pkg
+    """
+    Classify *filepath* into a known package, or return ``None``.
+
+    Rejects non-canonical paths that contain parent traversal (``..``)
+    or self-reference (``./``) components.  Pathlib normalises ``./``
+    away from ``parts``, so we check the raw string first.
+    """
+    # Pathlib normalises the leading "./" away, so check before parsing.
+    if filepath.startswith("./") or filepath.startswith(".\\"):
+        return None
+    parts = Path(filepath).parts
+    if ".." in parts:
+        return None
+    if parts and parts[0] in KNOWN_PACKAGES:
+        return parts[0]
     return None
 
 
@@ -77,9 +88,16 @@ def load_coverage_json(path: Path) -> dict[str, Any] | None:
         return None
 
     try:
-        data: dict[str, Any] = json.loads(raw)
+        data: Any = json.loads(raw)
     except json.JSONDecodeError as exc:
         print(f"ERROR: Invalid JSON in {path}: {exc}", file=sys.stderr)
+        return None
+
+    if not isinstance(data, dict):
+        print(
+            f"ERROR: Coverage JSON root is not a dict (got {type(data).__name__})",
+            file=sys.stderr,
+        )
         return None
 
     for key in ("files", "totals"):
@@ -209,7 +227,15 @@ def check_policy(
     unknown_paths: list[str] = []
 
     for filepath in sorted(files):
-        summary = files[filepath].get("summary")
+        entry = files[filepath]
+        if not isinstance(entry, dict):
+            print(
+                f"ERROR: File entry for {filepath!r} is not a dict (got {type(entry).__name__})",
+                file=sys.stderr,
+            )
+            return 2
+
+        summary = entry.get("summary")
 
         validated = _validate_file_summary(summary, filepath)
         if validated is None:
@@ -244,6 +270,17 @@ def check_policy(
     if not found_packages:
         print(
             "ERROR: No recognised-package files found in coverage data.",
+            file=sys.stderr,
+        )
+        return 2
+
+    # -- Require both core and CLI -------------------------------------------
+    missing: list[str] = [pkg for pkg in KNOWN_PACKAGES if pkg not in found_packages]
+    if missing:
+        print(
+            "ERROR: Coverage data missing required package(s): "
+            f"{', '.join(missing)}. "
+            "Both quickscale_core and quickscale_cli must have measured files.",
             file=sys.stderr,
         )
         return 2

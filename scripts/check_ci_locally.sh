@@ -54,16 +54,22 @@ echo ""
 # Track overall status
 FAILED=false
 
-echo "[1/11] Installing dependencies..."
+# Determine stage count: E2E adds one extra stage (12 total)
+TOTAL_STAGES=11
+if [ "$RUN_E2E" = true ]; then
+    TOTAL_STAGES=12
+fi
+
+echo "[1/${TOTAL_STAGES}] Installing dependencies..."
 poetry install --with dev
 
 echo ""
-echo "[2/11] Running linters (ruff)..."
+echo "[2/${TOTAL_STAGES}] Running linters (ruff)..."
 make lint -- --core --cli --modules
 echo "✓ Linting passed"
 
 echo ""
-echo "[3/11] Running module-vs-core compatibility check..."
+echo "[3/${TOTAL_STAGES}] Running module-vs-core compatibility check..."
 make check-core-compat || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -75,7 +81,7 @@ fi
 echo "✓ Module-to-core compatibility passed"
 
 echo ""
-echo "[4/11] Running module-core import linter..."
+echo "[4/${TOTAL_STAGES}] Running module-core import linter..."
 make check-module-core-imports || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -87,7 +93,7 @@ fi
 echo "✓ Module-core import linter passed"
 
 echo ""
-echo "[5/11] Running manifest sync gate..."
+echo "[5/${TOTAL_STAGES}] Running manifest sync gate..."
 make check-manifest-sync || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -99,7 +105,7 @@ fi
 echo "✓ Manifest snapshots in sync"
 
 echo ""
-echo "[6/11] Running org-context primitives gate..."
+echo "[6/${TOTAL_STAGES}] Running org-context primitives gate..."
 make check-org-context-primitives || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -111,7 +117,7 @@ fi
 echo "✓ No direct external use of privatized org-context primitives"
 
 echo ""
-echo "[7/11] Running CSRF-exempt gate..."
+echo "[7/${TOTAL_STAGES}] Running CSRF-exempt gate..."
 make check-csrf-exempt || FAILED=true
 if [ "$FAILED" = true ]; then
     echo ""
@@ -123,12 +129,12 @@ fi
 echo "✓ All csrf_exempt callsites are protected"
 
 echo ""
-echo "[8/11] Running type checks (mypy)..."
+echo "[8/${TOTAL_STAGES}] Running type checks (mypy)..."
 make typecheck -- --core --cli --modules
 echo "✓ Type checks passed"
 
 echo ""
-echo "[9/11] Running coverage policy helper tests..."
+echo "[9/${TOTAL_STAGES}] Running coverage policy helper tests..."
 make test-cov-policy || FAILED=true
 
 if [ "$FAILED" = true ]; then
@@ -153,7 +159,7 @@ fi
 echo "✓ Worker pool harness tests passed"
 
 echo ""
-echo "[10/11] Running coverage checks (core + CLI + backups)..."
+echo "[10/${TOTAL_STAGES}] Running coverage checks (core + CLI + backups)..."
 make test-cov REQUIRE_BACKUPS_COVERAGE=1 || FAILED=true
 
 if [ "$FAILED" = true ]; then
@@ -166,7 +172,7 @@ fi
 echo "✓ Combined coverage checks passed (90% equal-weight package mean, 80% per-file)"
 
 echo ""
-echo "[11/11] Running integration tests..."
+echo "[11/${TOTAL_STAGES}] Running integration tests..."
 if command -v pg_isready >/dev/null 2>&1 && pg_isready -h localhost -q 2>/dev/null; then
     echo "PostgreSQL is available — running integration tests..."
     ./scripts/test_integration.sh || FAILED=true
@@ -206,7 +212,7 @@ fi
 # Optional E2E tests
 if [ "$RUN_E2E" = true ]; then
     echo ""
-    echo "[12/12] Running E2E tests (this may take several minutes)..."
+    echo "[12/${TOTAL_STAGES}] Running E2E tests (this may take several minutes)..."
     ./scripts/test_e2e.sh || FAILED=true
 
     if [ "$FAILED" = true ]; then
@@ -219,7 +225,7 @@ if [ "$RUN_E2E" = true ]; then
     echo "✓ E2E tests passed"
 else
     echo ""
-    echo "[11/11] Skipping E2E tests (use --e2e to include)"
+    echo "Skipping E2E tests (use --e2e to include)"
 fi
 
 echo ""

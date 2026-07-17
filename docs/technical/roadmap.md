@@ -70,22 +70,33 @@ All per-module restricted-role gates pass green under the SA82 baseline with an 
 GATE-lint, GATE-typecheck, GATE-check-suite, **GATE-quality**, and the **SA91** parallel worker pool are all **done** (see [CHANGELOG.md](../../CHANGELOG.md)). The remaining closeout is **SA93** (e2e in the green-gate), on Track 3. Both of its former cross-track prerequisites (SA84 CRM, SA95 blog) are now met.
 
 - [ ] **SA93 — Fold the e2e lane into the green-gate definition of done.** `Tier 1 · Track 3 · deps: none remaining (SA84 CRM + SA95 blog prerequisites met)`
-  **Blocked checkpoint (2026-07-15; maintainer-selected stop-and-merge; not complete). No maintainer decision required to continue — the remaining work is deterministic fixes plus a rerun.**
+  **Blocked checkpoint (2026-07-17; maintainer-selected stop-and-merge; not complete). No maintainer decision remains — continuation is the exact broad rerun and independent review.**
 
-  **Done:**
+  **Implemented/evidence available (not final closure):**
   - Added the combined core/CLI/backups coverage path, `scripts/check_coverage_policy.py`, maintained helper tests, and focused DR-engine lock/path/sidecar tests.
-  - The broad pre-review QG run reached the then-current coverage stage: its statement-weighted report was **92.02%** with **0/83 per-file offenders** (`_lock 97%`, `_paths 100%`, `_sidecar 94%`); integration then failed in blog and CRM, so E2E did not run.
-  - Review follow-up corrected the intended policy to an **equal-weight core/CLI package mean**, deferred pytest's weighted threshold so the helper is the final authority, and wired `make test-cov-policy` into the local CI path. Post-fix focused evidence is **24/24 helper tests passed**, Ruff passed, and `bash -n scripts/check_ci_locally.sh` passed.
+  - Implemented **CR-SA93-REV-002** fail-closed coverage parsing: validate JSON roots and file records, require both core and CLI package populations, reject non-canonical traversal paths, and cover malformed/missing-package/traversal cases. Focused evidence: **37/37 helper tests passed**, Ruff passed, and `bash -n scripts/check_ci_locally.sh` passed.
+  - Implemented **CR-SA93-REV-004** conditional CI stage totals: non-E2E runs use 11 numbered stages, E2E runs use 12, and the skip message is unnumbered.
+  - Removed the Stage-12 environment/test blockers exposed by the first broad rerun: aligned the forms `django-filter` expectation, isolated each Core E2E database through pytest-docker, removed the ambient `localhost:5432` dependency, hardened CLI Docker cleanup/readiness and development-command database-role handling, and repaired the no-modules React TypeScript contract. The explicit maintainer decision is recorded in the implementation: `QuickScaleModules.auth` is always typed/defaulted false while runtime availability still gates visibility.
+  - Phase evidence is green: **35/35 Core E2E**, **29/29 CLI E2E**, **470/470 CLI unit tests**, **82/82 React template/integration tests**, the original Docker/apply migration test, and a real no-modules `pnpm` type-check/build proof all passed with no relevant E2E skips. These component results do not replace the required exact root gate.
+  - The final exact `make ci-e2e` attempt reached the normalized 12-stage flow: dependency installation passed; Ruff lint checks passed; Ruff format-check then stopped Stage 2 on one formatting-only diff in `quickscale_core/tests/generator/test_themes.py`. Stages 3–12 were therefore not reached in that exact run.
+  - The checkpoint commit hook subsequently applied Ruff formatting to the staged Python delta and completed `ruff check` plus `ruff format` successfully. This removes the observed formatting defect, but the exact root gate has not been rerun and final disposition remains pending validation/review.
   - Independent review resolved **CR-SA93-REV-001** (equal-package arithmetic/final authority) and **CR-SA93-REV-003** (maintained helper-test collection).
 
   **Pending/Blocking:**
-  - **CR-SA93-REV-002 (high/blocking):** coverage JSON validation is not fully fail-closed. Scalar/null roots and non-dict file records can raise; reports missing either expected package can pass; prefix-only classification accepts non-canonical traversal paths. Add root/container/record validation, require both packages, reject non-canonical paths, and add malformed/missing-package/traversal proofs.
-  - **CR-SA93-REV-004 (medium/blocking):** `scripts/check_ci_locally.sh` advertises 12 stages but uses inconsistent `/11` denominators and duplicates `[11/11]` on the non-E2E path. Normalize conditional stage totals and make the E2E-skip message unnumbered before relying on stage-number evidence.
-  - **SA93-BLOCK-002 (high/blocking):** core and CLI E2E remain unexecuted because the deterministic CR-SA93-REV-002/004 fixes have not yet landed. The post-review 12-stage flow has not received a broad rerun on the fully-green per-module baseline; only the focused post-fix evidence above is current. Per-module integration is green (all modules closed), so a sanitized `make ci-e2e` rerun is the remaining gate.
+  - **SA93-BLOCK-002 (high/blocking):** exact root-gate closure remains unproven because the latest `make ci-e2e` stopped at Stage 2 before coverage, integration, and E2E. Rerun exact `make ci-e2e` with sufficient timeout and require exit 0 with all 12 stages, both E2E suites, unchanged thresholds, and an empty quarantine.
+  - **Final review/CI evidence:** independently review the complete SA93 delta (including CR-SA93-REV-002/004, database isolation, CLI lifecycle behavior, and the generated React contract), then verify `.github/workflows/e2e.yml` is green on `v87` before marking SA93 complete.
+  - **SA93-ADV-001 (low/advisory):** pytest reports a future pytest-10 warning for the class-scoped fixture pattern in `TestReactThemePnpmIntegration.test_pnpm_install_succeeds`; it does not block the current gate but should be normalized before a pytest 10 upgrade.
 
   **Resolved prerequisites:** SA93-BLOCK-001 (blog + CRM integration fixture-finalizer failures) is resolved — blog closed by **SA95** (2026-07-17, no reproducible defect on post-SA92 v87) and CRM closed by **SA84** (2026-07-17, 263 pass/21 skip/0 fail, review STATUS ok). Both former cross-track prerequisites for SA93 are met. Preserve the exact unquarantined `make ci-e2e` contract; quarantine and threshold weakening are not acceptable.
 
-  **Clean continuation:** fix CR-SA93-REV-002/004 → resync `wt-track3` → rerun exact `make ci-e2e` → verify both E2E suites execute and `e2e.yml` is green on `v87` → independent final review → mark SA93 complete.
+  **Clean continuation:** no design or maintainer decision is pending. Resume with the exact worktree sequence below, then independently review the full SA93 delta, verify `e2e.yml` is green on `v87`, and update CHANGELOG/roadmap before marking SA93 complete.
+
+  ```bash
+  cd /home/victor/code/quickscale-wt-track3
+  git status                 # must be clean
+  git merge v87              # resync the merged checkpoint
+  make ci-e2e                # allow sufficient time for all 12 stages
+  ```
 
   *(Acceptance:* `make ci-e2e` exits 0 on a fresh clone; `e2e.yml` green on `v87`; exit-criteria prose lists the e2e lane.*)*
   *(why →* green-gate milestone; e2e was outside the definition of done*)*
@@ -159,7 +170,7 @@ Prior development tickets all closed — SA88b (forms diagnosis), SA86 (listings
 
 > **Finding 1 closed.** arch-audit **[Finding 1](../others/arch-audit.md)** (`dr-engine-module-circular-lattice`, DR persistence port) is closed by SA89a + SA89b — see [CHANGELOG.md §SA89a/§SA89b](../../CHANGELOG.md). **SA89B-CR-004 (low/advisory)** remains open against `check_module_core_compatibility.py` independently — not gating.
 
-Finding 1 (DR persistence port, SA89a+SA89b), all four GATEs, and **SA91** (parallel integration worker pool) are complete — see [CHANGELOG.md](../../CHANGELOG.md). SA91 retains **CR-SA91-REV-006** (low/advisory, throughput only). The single open item is **SA93** (fold e2e into the green-gate), defined in the green-gate section above — a blocked checkpoint needing the deterministic CR-SA93-REV-002/004 fixes plus a broad `make ci-e2e` rerun. **No cross-track prerequisites remain** (SA84 complete, SA95 closed); **no maintainer decision is required.**
+Finding 1 (DR persistence port, SA89a+SA89b), all four GATEs, and **SA91** (parallel integration worker pool) are complete — see [CHANGELOG.md](../../CHANGELOG.md). SA91 retains **CR-SA91-REV-006** (low/advisory, throughput only). The single open item is **SA93** (fold e2e into the green-gate), defined in the green-gate section above — its implementation and component E2E evidence are present, but exact root-gate closure and independent final review remain open. **No cross-track prerequisite or maintainer decision remains.**
 
 Deferred with the (unscheduled) teams module, per both audits — **not ticketed:** arch-audit Finding 2 (`deletion-invariants-per-boundary`) and Finding 4 (`org-model-universe-hand-enumerated`).
 
@@ -181,17 +192,17 @@ SA96-T1 ── module sweep ✓      SA96-T2 ── module sweep ✓          SA
         SA96-PUBLISH ── build → publish-test → publish-prod          deps: SA96-GATE
 ```
 
-**Critical path.** Both pre-publish module sweeps are now complete: **SA96-T1** (Track 1) and **SA96-T2** (Track 2) are done. **SA93** (Track 3 e2e closeout) remains as the sole open item. All three feed the **SA96-GATE** cross-track join; **SA96-PUBLISH** follows the join. The remaining work is SA93 (deterministic CR-SA93-REV-002/004 fixes + `make ci-e2e` rerun).
+**Critical path.** Both pre-publish module sweeps are complete: **SA96-T1** (Track 1) and **SA96-T2** (Track 2). **SA93** remains the sole open input to the **SA96-GATE** cross-track join; **SA96-PUBLISH** follows that join. The remaining SA93 path is exact `make ci-e2e` → independent review → green `e2e.yml` evidence on `v87` → close SA93.
 
-**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join (SA96-GATE). It cannot start until both module sweeps re-verify green **and** SA93 lands. SA93's cross-track blockers are already resolved (SA84 complete, SA95 closed); independent review leaves CR-SA93-REV-002/004 open in the post-fix local-CI path. See the SA93 entry above for the exact Done / Pending-Blocking ledger.
+**Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join (SA96-GATE). It cannot start until both completed module sweeps and SA93 are present. SA93's cross-track blockers are resolved, component Core/CLI E2E is green, and the remaining root-gate path is the exact rerun and independent review recorded above.
 
 ### Track readiness (2026-07-17)
 
 - **Track 1 — SA96-T1 complete (all modules green).** All prior dev tickets (SA92, SA84, SA86) closed. The pre-publish module sweep (SA96-T1) completed: six focused suites 1108 passed/43 skipped/0 failed; maintained full integration 2456 passed/86 skipped/0 failed/errors; 94.40% equal-weight mean, no file below 80%, empty quarantine; independent review STATUS ok/no findings.
 - **Track 2 — SA96-T2 completed (2026-07-17).** All prior dev tickets (SA94, SA88b, SA86, SA95) closed. The per-module re-verification sweep (forms · listings · notifications · orgs · social · storage) is complete with no remediation, blockers, quarantine, or source/test changes. Every per-file value ≥80%, every package mean ≥90%. Storage exceeded expectations at 97.73% (lowest helpers.py 97.60%) — no additional tests were needed. See the checked SA96-T2 entry above for the full evidence table.
-- **Track 3 — SA93 open (clean to continue, no blockers).** Finding 1, all four GATEs, and SA91 complete. **SA93** (e2e in green-gate) needs the deterministic CR-SA93-REV-002/004 fixes plus a broad `make ci-e2e` rerun — **no maintainer decision and no cross-track prerequisite remain.** SA91 retains CR-SA91-REV-006 (low/advisory); SA89B-CR-004 (low/advisory) remains independent — neither gates.
+- **Track 3 — BLOCKED CHECKPOINT (SA93 open).** Finding 1, all four GATEs, and SA91 are complete. SA93 implementation, hook-applied formatting, and component E2E evidence are present; continuation needs exact `make ci-e2e`, independent review, and green `e2e.yml` evidence. **No maintainer decision and no cross-track prerequisite remain.** SA91 retains CR-SA91-REV-006 (low/advisory); SA89B-CR-004 (low/advisory) and SA93-ADV-001 (low/advisory) are non-gating.
 
-**Net — no maintainer decisions pending.** Both pre-publish module sweeps are complete (SA96-T1 and SA96-T2); SA93 continues as the sole remaining open item. All three join at **SA96-GATE** (the green-gate: `make check`/`quality`/`ci`/`ci-e2e` all green with empty quarantine), which is the definition of "publishable"; **SA96-PUBLISH** then runs the staged PyPI ladder. The squash-migrations decision and bounded guardrail strategy are recorded in [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); reasoning trail in [CHANGELOG.md](../../CHANGELOG.md).
+**Net — no maintainer decisions pending.** Both pre-publish module sweeps are complete (SA96-T1 and SA96-T2); SA93 continues as the sole remaining open item. Rerun exact `make ci-e2e`, independently review the full SA93 delta, and prove E2E success on `v87`; then SA96-GATE can run the four-command publishability join and SA96-PUBLISH can proceed. The squash-migrations decision and bounded guardrail strategy are recorded in [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); reasoning trail in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 

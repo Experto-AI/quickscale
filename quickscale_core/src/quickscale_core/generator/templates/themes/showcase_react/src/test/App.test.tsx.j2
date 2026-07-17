@@ -37,10 +37,8 @@ function applyRuntimeConfig(
       analytics: '/analytics/',
     },
 {% endraw %}{%- else %}
-{% raw %}    modules: {
-{% endraw %}
-{%- if 'auth' in selected_modules %}
-      auth: false,{%- endif %}
+    modules: {
+      auth: false,
 {%- if 'blog' in selected_modules %}
       blog: false,{%- endif %}
 {%- if 'listings' in selected_modules %}

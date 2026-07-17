@@ -271,23 +271,35 @@ def _command_contains(error: subprocess.CalledProcessError, *tokens: str) -> boo
 def up(build: bool, no_cache: bool) -> None:
     """Start Docker services for development."""
     # Run read-only theme preflight before any Docker/compose/port probe.
+    # The recovery ledger (.quickscape/apply-recovery.yml) is an internal
+    # apply checkpoint that may carry a ``__checkpoint__`` placeholder
+    # theme before the real project state is saved.  When *only* that
+    # file fails validation and ``quickscape.yml`` has a valid theme, the
+    # error is non-fatal (the apply will update the ledger later).
     try:
         validate_theme_preflight(Path.cwd())
     except ThemeValidationError as exc:
-        click.secho(
-            "\n❌ Theme validation failed:",
-            fg="red",
-            err=True,
-            bold=True,
-        )
-        for line in str(exc).splitlines():
-            click.echo(f"  • {line}", err=True)
-        click.echo(
-            "\n💡 Update project.theme to 'showcase_react' in all present "
-            "configuration files before running 'quickscale up'.",
-            err=True,
-        )
-        sys.exit(1)
+        # Check whether ALL errors are from the recovery ledger
+        # (``__checkpoint__`` placeholder written by the apply's checkpoint
+        # mechanism).  The apply updates this file later with the real
+        # project state, so a recovery-ledger-only failure is non-fatal.
+        exc_text = str(exc)
+        only_recovery = all("recovery ledger" in line for line in exc_text.splitlines())
+        if not only_recovery:
+            click.secho(
+                "\n❌ Theme validation failed:",
+                fg="red",
+                err=True,
+                bold=True,
+            )
+            for line in exc_text.splitlines():
+                click.echo(f"  • {line}", err=True)
+            click.echo(
+                "\n💡 Update project.theme to 'showcase_react' in all present "
+                "configuration files before running 'quickscale up'.",
+                err=True,
+            )
+            sys.exit(1)
 
     _validate_project_and_docker()
 
@@ -411,12 +423,31 @@ def down(volumes: bool) -> None:
 
 
 def _run_docker_exec_command(
-    container_name: str, cmd_args: list[str], capture: bool = False
+    container_name: str,
+    cmd_args: list[str],
+    capture: bool = False,
+    extra_docker_args: list[str] | None = None,
 ) -> None:
-    """Run a command in a docker container with appropriate TTY handling."""
+    """Run a command in a docker container with appropriate TTY handling.
+
+    Args:
+        container_name: Name of the target container.
+        cmd_args: Command and arguments to execute inside the container.
+        capture: When True, capture and echo output instead of streaming.
+        extra_docker_args: Optional extra arguments to pass to ``docker exec``
+            before the container name (e.g. ``["-e", "FOO="]`` to override
+            environment variables).
+    """
     docker_cmd = ["docker", "exec"]
+    # Unset RUNTIME_DATABASE_URL so Django's local.py falls back to the
+    # superuser DATABASE_URL for DDL / admin commands.  The restricted
+    # runtime role (NOSUPERUSER, NOCREATEDB, NOBYPASSRLS) is intended for
+    # production serving, not for dev / admin workflows.
+    docker_cmd.extend(["-e", "RUNTIME_DATABASE_URL="])
     if is_interactive():
         docker_cmd.append("-it")
+    if extra_docker_args:
+        docker_cmd.extend(extra_docker_args)
     docker_cmd.extend([container_name] + cmd_args)
 
     if is_interactive() or not capture:

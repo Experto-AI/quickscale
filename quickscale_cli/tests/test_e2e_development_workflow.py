@@ -24,9 +24,18 @@ from click.testing import CliRunner
 from quickscale_cli.main import cli
 from quickscale_cli.utils.docker_utils import (
     DockerComposePluginRequiredError,
+    get_container_status,
     get_docker_compose_command,
+    wait_for_port_release,
 )
 from quickscale_core.generator import ProjectGenerator
+
+# Bypass the apply command's destructive/remote confirmation gate so
+# that E2E tests do not require interactive input for that prompt.
+# Docker and migration steps still execute normally after bypass.
+import quickscale_cli.commands.apply_command as _apply_mod
+
+_apply_mod._AF5_DESTRUCTIVE_CONFIRM_BYPASS = True
 
 
 @pytest.mark.e2e
@@ -39,6 +48,53 @@ class TestDevelopmentCommandsE2E:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.bind(("127.0.0.1", 0))
             return int(sock.getsockname()[1])
+
+    @staticmethod
+    def _wait_for_container_running(
+        container_name: str, timeout: float = 30.0, interval: float = 1.0
+    ) -> bool:
+        """Wait for a container to be in a running state."""
+        elapsed = 0.0
+        while elapsed < timeout:
+            status = get_container_status(container_name)
+            if status and "up" in status.lower():
+                return True
+            time.sleep(interval)
+            elapsed += interval
+        return False
+
+    @staticmethod
+    def _emit_container_diagnostics(project_path: str, port: int | None = None) -> None:
+        """Emit container/compose status and backend logs for debugging."""
+        import os
+
+        print(f"\n--- Container diagnostics (PORT={port}) ---", flush=True)
+        # Show all containers for this project
+        subprocess.run(
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--filter",
+                "name=e2e_cli_test",
+                "--format",
+                "table {{.Names}}\t{{.Status}}\t{{.Ports}}",
+            ],
+        )
+        # Show docker compose ps if project path is given
+        if os.path.isdir(project_path):
+            try:
+                subprocess.run(
+                    [*get_docker_compose_command(), "ps"],
+                    cwd=project_path,
+                )
+            except Exception:
+                pass
+        # Show backend logs (last 20 lines)
+        subprocess.run(
+            ["docker", "logs", "--tail", "20", "e2e_cli_test_backend"],
+        )
+        print("--- End diagnostics ---\n", flush=True)
 
     @pytest.fixture(autouse=True)
     def cleanup_before_test(self):
@@ -56,8 +112,8 @@ class TestDevelopmentCommandsE2E:
                 capture_output=True,
                 timeout=10,
             )
-            # Wait a moment for ports to be released
-            time.sleep(1)
+            # Wait for Docker's proxy process to release ports
+            wait_for_port_release(8000, timeout=5.0)
         except Exception:
             pass  # Best effort cleanup
 
@@ -137,17 +193,18 @@ class TestDevelopmentCommandsE2E:
             assert result.exit_code == 0, f"up failed: {result.output}"
             assert "Services started successfully!" in result.output
 
-            # Wait for containers to be fully up
-            time.sleep(5)
+            # Wait for backend container to be running (bounded poll)
+            if not self._wait_for_container_running(
+                "e2e_cli_test_backend", timeout=40.0
+            ):
+                self._emit_container_diagnostics(str(project_path))
+                assert False, "Backend container did not become running within 40s"
 
             # Step 2: Check service status
             result = runner.invoke(cli, ["ps"], env=docker_env)
             assert result.exit_code == 0, f"ps failed: {result.output}"
 
-            # Step 3: Wait for database to be ready and run migrations
-            # The containers need time to fully initialize
-            time.sleep(10)
-
+            # Step 3: Run migrations (backend + compose already waited for db health)
             result = runner.invoke(
                 cli, ["manage", "migrate", "--noinput"], env=docker_env
             )
@@ -239,17 +296,26 @@ class TestDevelopmentCommandsE2E:
             # First up
             result = runner.invoke(cli, ["up"], env=docker_env)
             assert result.exit_code == 0
-            time.sleep(3)
+            # Bounded poll instead of fixed sleep
+            if not self._wait_for_container_running(
+                "e2e_cli_test_backend", timeout=40.0
+            ):
+                self._emit_container_diagnostics(str(project_path))
+                assert False, "Backend container did not become running within 40s"
 
             # Down
             result = runner.invoke(cli, ["down"], env=docker_env)
             assert result.exit_code == 0
-            time.sleep(2)
+            wait_for_port_release(int(docker_env.get("PORT", "8000")), timeout=5.0)
 
             # Second up (verify can restart)
             result = runner.invoke(cli, ["up"], env=docker_env)
             assert result.exit_code == 0
-            time.sleep(3)
+            if not self._wait_for_container_running(
+                "e2e_cli_test_backend", timeout=40.0
+            ):
+                self._emit_container_diagnostics(str(project_path))
+                assert False, "Backend container (2nd up) did not become running"
 
             # Final cleanup
             result = runner.invoke(cli, ["down"], env=docker_env)
@@ -273,7 +339,11 @@ class TestDevelopmentCommandsE2E:
             result = runner.invoke(cli, ["up", "--build"], env=docker_env)
             assert result.exit_code == 0
             assert "Services started successfully!" in result.output
-            time.sleep(3)
+            if not self._wait_for_container_running(
+                "e2e_cli_test_backend", timeout=40.0
+            ):
+                self._emit_container_diagnostics(str(project_path))
+                assert False, "Backend container did not become running within 40s"
 
             # Cleanup
             runner.invoke(cli, ["down"], env=docker_env)
@@ -294,7 +364,11 @@ class TestDevelopmentCommandsE2E:
         try:
             # Start services
             runner.invoke(cli, ["up"], env=docker_env)
-            time.sleep(3)
+            if not self._wait_for_container_running(
+                "e2e_cli_test_backend", timeout=40.0
+            ):
+                self._emit_container_diagnostics(str(project_path))
+                assert False, "Backend container did not become running within 40s"
 
             # Down with volumes
             result = runner.invoke(cli, ["down", "--volumes"], env=docker_env)
@@ -317,7 +391,11 @@ class TestDevelopmentCommandsE2E:
         try:
             # Start services
             runner.invoke(cli, ["up"], env=docker_env)
-            time.sleep(3)
+            if not self._wait_for_container_running(
+                "e2e_cli_test_backend", timeout=40.0
+            ):
+                self._emit_container_diagnostics(str(project_path))
+                assert False, "Backend container did not become running within 40s"
 
             # Test logs with tail
             result = runner.invoke(cli, ["logs", "--tail", "5"], env=docker_env)
@@ -397,12 +475,16 @@ class TestDevelopmentCommandsE2E:
             # Start services
             result = runner.invoke(cli, ["up"], env=docker_env)
             assert result.exit_code == 0
-            time.sleep(5)
 
-            # Wait for DB to be ready
-            time.sleep(10)
+            # Wait for backend container to be running (bounded poll)
+            if not self._wait_for_container_running(
+                "e2e_cli_test_backend", timeout=40.0
+            ):
+                self._emit_container_diagnostics(str(test_project))
+                assert False, "Backend container did not become running within 40s"
 
-            # Run migrations first
+            # Run migrations first (up already ran initial migrate, but
+            # this verifies the manage command can apply pending migrations)
             result = runner.invoke(
                 cli, ["manage", "migrate", "--noinput"], env=docker_env
             )

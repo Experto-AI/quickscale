@@ -1053,10 +1053,10 @@ class TestReactThemeModuleActivationMatrix:
         # D1 Option B: billing card removed until session-sync contract exists
         assert "key: 'billing'" not in dashboard
         assert "name: 'Billing'" not in dashboard
-        assert "modulePaths.billing" not in dashboard
+        assert "_modulePaths.billing" not in dashboard
         # buildModuleInfo still exists for remaining modules
         assert "buildModuleInfo(" in dashboard
-        assert "modulePaths as unknown as Record<string, string>" in dashboard
+        assert "_modulePaths as unknown as Record<string, string>" in dashboard
         self._assert_no_hardcoded_billing_paths(dashboard)
 
     def test_react_theme_billing_sidebar_nav_entry(self, tmp_path):
@@ -1198,12 +1198,12 @@ class TestReactThemeModuleActivationMatrix:
         assert "href: '/admin/quickscale_modules_notifications/'" in dashboard
         assert "key: 'social'" in dashboard
         assert "name: 'Social'" in dashboard
-        assert "modulePaths.social" in dashboard
+        assert "_modulePaths.social" in dashboard
         # D1 Option B: billing dashboard card removed
         assert "key: 'billing'" not in dashboard
         assert "name: 'Billing'" not in dashboard
-        assert "modulePaths.billing" not in dashboard
-        assert "modulePaths.crm" in dashboard
+        assert "_modulePaths.billing" not in dashboard
+        assert "_modulePaths.crm" in dashboard
         assert "actionLabel: 'Open workspace'" in dashboard
         assert "key: 'teams'" not in dashboard
         assert "reloadDocument={mod.reloadDocument}" in dashboard

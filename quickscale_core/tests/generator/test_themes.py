@@ -344,6 +344,45 @@ class TestSelectedModulesReactTheme:
                 "selected_modules is empty."
             )
 
+        # Verify auth is always typed in QuickScaleModules interface even
+        # when selected_modules is empty (SA93 Phase 3A).
+        use_modules = (
+            output_path / "frontend" / "src" / "hooks" / "useModules.ts"
+        ).read_text()
+        modules_interface = use_modules.split("interface QuickScaleModules {", 1)[
+            1
+        ].split("\n}", 1)[0]
+        assert "auth: boolean" in modules_interface, (
+            "auth must always be present in QuickScaleModules interface."
+        )
+        for unselected in ("blog", "crm", "listings", "social", "analytics"):
+            assert f"{unselected}: boolean" not in modules_interface, (
+                f"Non-auth module '{unselected}' must not appear in QuickScaleModules "
+                "when selected_modules is empty."
+            )
+
+        # Verify defaultConfig.modules always has auth: false
+        default_config = use_modules.split(
+            "const defaultConfig: QuickScaleConfig = {", 1
+        )[1].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
+        assert "auth: false" in default_config, (
+            "defaultConfig.modules must always have auth: false."
+        )
+        # Non-auth modules must not appear in defaultConfig when empty
+        for unselected in ("blog", "listings", "crm"):
+            assert f"{unselected}: false" not in default_config, (
+                f"Non-auth module '{unselected}' must not appear in defaultConfig "
+                "when selected_modules is empty."
+            )
+
+        # Verify QuickScaleModulePaths is empty (no module with paths selected)
+        module_paths_interface = use_modules.split(
+            "interface QuickScaleModulePaths {", 1
+        )[1].split("\n}", 1)[0]
+        assert module_paths_interface.strip() == "", (
+            "QuickScaleModulePaths must be empty when no modules with paths are selected."
+        )
+
         # Core pages that are not module-gated must still be present so the
         # generated app remains usable with no modules selected.
         for rel_path in (
@@ -401,12 +440,11 @@ class TestSelectedModulesReactTheme:
             1
         ].split("\n}", 1)[0]
 
-        for module_key in ("blog", "crm", "billing"):
+        for module_key in ("auth", "blog", "crm", "billing"):
             assert f"{module_key}: boolean" in modules_block, (
-                f"Selected module '{module_key}' missing from QuickScaleModules."
+                f"Expected module '{module_key}' in QuickScaleModules (auth is always typed)."
             )
         for module_key in (
-            "auth",
             "listings",
             "forms",
             "storage",
@@ -424,6 +462,72 @@ class TestSelectedModulesReactTheme:
         # D1 Option B: billing path removed from module paths until session-sync contract exists
         assert "billing: string" not in module_paths_block
         assert "social: string" not in module_paths_block
+
+    def test_always_typed_auth_in_default_config_and_interface(
+        self, tmp_path: Path
+    ) -> None:
+        """Auth is always typed in QuickScaleModules and defaultConfig has auth:false.
+
+        SA93 Phase 3A: QuickScaleModules.auth: boolean is unconditional,
+        defaultConfig.modules.auth=false is unconditional, and the runtime
+        merge (defaultConfig + runtimeConfig) ensures auth is always present
+        even when the window.__QUICKSCALE__ payload omits it.
+        """
+        # --- Empty selection ---
+        empty_gen = ProjectGenerator(theme="showcase_react", selected_modules=[])
+        empty_out = tmp_path / "react_auth_always_empty"
+        empty_gen.generate("react_auth_always_empty", empty_out)
+
+        empty_modules = (
+            empty_out / "frontend" / "src" / "hooks" / "useModules.ts"
+        ).read_text()
+
+        modules_iface = empty_modules.split("interface QuickScaleModules {", 1)[
+            1
+        ].split("\n}", 1)[0]
+        assert "auth: boolean" in modules_iface, (
+            "auth must be typed in QuickScaleModules even when selected_modules=[]."
+        )
+        for unselected in ("blog", "crm", "listings", "analytics"):
+            assert f"{unselected}: boolean" not in modules_iface, (
+                f"Non-auth module '{unselected}' must be absent when selected_modules=[]."
+            )
+
+        default = empty_modules.split("const defaultConfig: QuickScaleConfig = {", 1)[
+            1
+        ].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
+        assert "auth: false" in default, (
+            "defaultConfig.modules must have auth:false when selected_modules=[]."
+        )
+        for unselected in ("blog: false", "crm: false", "listings: false"):
+            assert unselected not in default, (
+                f"Non-auth default '{unselected}' must be absent when selected_modules=[]."
+            )
+
+        # --- Partial selection (auth + blog) ---
+        partial_gen = ProjectGenerator(
+            theme="showcase_react", selected_modules=["auth", "blog"]
+        )
+        partial_out = tmp_path / "react_auth_always_partial"
+        partial_gen.generate("react_auth_always_partial", partial_out)
+
+        partial_modules = (
+            partial_out / "frontend" / "src" / "hooks" / "useModules.ts"
+        ).read_text()
+
+        partial_iface = partial_modules.split("interface QuickScaleModules {", 1)[
+            1
+        ].split("\n}", 1)[0]
+        assert "auth: boolean" in partial_iface
+        assert "blog: boolean" in partial_iface
+        assert "crm: boolean" not in partial_iface
+
+        partial_default = partial_modules.split(
+            "const defaultConfig: QuickScaleConfig = {", 1
+        )[1].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
+        assert "auth: false" in partial_default
+        assert "blog: false" in partial_default
+        assert "crm: false" not in partial_default
 
     def test_app_tsx_routes_only_emit_selected_module_paths(
         self, tmp_path: Path
