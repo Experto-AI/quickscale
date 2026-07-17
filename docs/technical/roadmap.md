@@ -66,7 +66,7 @@ git merge --no-ff wt-track{N}
 
 #### Repo-global gates (run once at v87 integration, after per-module work lands)
 
-GATE-lint, GATE-typecheck, GATE-check-suite, **GATE-quality**, and the reassigned **SA91** tooling are all **done** (see [CHANGELOG.md](../../CHANGELOG.md)). The remaining closeout is **SA93** (e2e in the green-gate), assigned to Track 3 after SA89a/b closed Finding 1. SA93 carries a hidden cross-track prerequisite — see its entry below.
+GATE-lint, GATE-typecheck, GATE-check-suite, **GATE-quality**, and the reassigned **SA91** tooling are all **done** (see [CHANGELOG.md](../../CHANGELOG.md)). The remaining closeout is **SA93** (e2e in the green-gate), assigned to Track 3 after SA89a/b closed Finding 1. SA93 originally carried a cross-track prerequisite — see its entry below. Both prerequisites are now met.
 
 - [ ] **SA93 — Fold the e2e lane into the green-gate definition of done.** `Tier 1 · Track 3 · deps: blog+CRM integration green (previously unstated cross-track join prerequisite)`
   **Blocked checkpoint (2026-07-15; maintainer-selected stop-and-merge; not complete).**
@@ -81,7 +81,7 @@ GATE-lint, GATE-typecheck, GATE-check-suite, **GATE-quality**, and the reassigne
   - **CR-SA93-REV-002 (high/blocking):** coverage JSON validation is not fully fail-closed. Scalar/null roots and non-dict file records can raise; reports missing either expected package can pass; prefix-only classification accepts non-canonical traversal paths. Add root/container/record validation, require both packages, reject non-canonical paths, and add malformed/missing-package/traversal proofs.
   - **CR-SA93-REV-004 (medium/blocking):** `scripts/check_ci_locally.sh` advertises 12 stages but uses inconsistent `/11` denominators and duplicates `[11/11]` on the non-E2E path. Normalize conditional stage totals and make the E2E-skip message unnumbered before relying on stage-number evidence.
   - **SA93-BLOCK-001 (high/blocking, historical — resolved):** the prior SA93 pre-review run failed in both Blog and CRM integration shards with `pytest-django` fixture-finalizer errors. Blog was resolved by **SA95** (closed 2026-07-17 — no reproducible defect found on post-SA92 v87). **CRM (SA84, Track 1) has since completed** (2026-07-17, 263 pass/21 skip/0 fail, review STATUS ok). Both cross-track prerequisites are now met; BLOCK-001 is resolved.
-  - **SA93-BLOCK-002 (high/blocking):** core and CLI E2E remain unexecuted because integration fails first. The current post-review 12-stage flow has not received a broad rerun; only the focused post-fix evidence above is current.
+  - **SA93-BLOCK-002 (high/blocking):** core and CLI E2E remain unexecuted because the deterministic CR-SA93-REV-002/004 fixes have not yet landed. The current post-review 12-stage flow has not received a broad rerun on the fully-green per-module baseline; only the focused post-fix evidence above is current. Per-module integration is green — the prior blog and CRM integration failure was resolved by SA84 and SA95 — but a sanitized `make ci-e2e` rerun is still required once CR-SA93-REV-002/004 are in place.
 
   **Decisions needed (resolved 2026-07-16):**
   - Blog-regression ownership is **decided**: it is a dedicated ticket, **SA95** (Track 2), and — together with the now-completed **SA84** (CRM, Track 1) — was the cross-track prerequisite for SA93. Preserve the exact unquarantined `make ci-e2e` contract; quarantine and threshold weakening are not acceptable.
@@ -136,7 +136,7 @@ GATE-lint, GATE-typecheck, GATE-check-suite, **GATE-quality**, and the reassigne
 
 > **SA91 complete (2026-07-16)** — parallel integration worker pool validated and independently reviewed; identical verdicts/coverage vs sequential mode, no cross-worker DB collision. Detail in [CHANGELOG.md §SA91](../../CHANGELOG.md). Non-gating (CI-time speedup only). Residual **CR-SA91-REV-006 (low/advisory)** open: bounded scheduling can temporarily underutilize capacity — correctness/failure-propagation unaffected. SA93 remains Track 3's open closeout item.
 
-- **GATE-quality** (done 2026-07-15, see [CHANGELOG.md](../../CHANGELOG.md)) and **SA93** (fold e2e into the green-gate) were also reassigned here; SA93 is defined in the green-gate section above and remains open (blocked checkpoint on the SA84/SA95 cross-track prerequisite; both cross-track prerequisites are now met — SA84 complete, SA95 closed).
+- **GATE-quality** (done 2026-07-15, see [CHANGELOG.md](../../CHANGELOG.md)) and **SA93** (fold e2e into the green-gate) were also reassigned here; SA93 is defined in the green-gate section above and remains open (both cross-track prerequisites are now met — SA84 complete, SA95 closed; CR-SA93-REV-002/004 and a broad `make ci-e2e` rerun remain).
 
 Deferred with the (unscheduled) teams module, per both audits — **not ticketed:** arch-audit Finding 2 (`deletion-invariants-per-boundary`) and Finding 4 (`org-model-universe-hand-enumerated`).
 
