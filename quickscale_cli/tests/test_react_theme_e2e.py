@@ -493,6 +493,59 @@ class TestReactThemePnpmIntegration:
         )
         assert result.returncode == 0, f"pnpm build failed: {result.stderr}"
 
+    def test_pnpm_type_check_and_build_empty_modules(self, tmp_path, pnpm_available):
+        """
+        Verify TypeScript type-check and build succeed with selected_modules=[].
+
+        SA93 Phase 3A: Generated output with no modules selected must pass
+        strict TypeScript compilation. This covers QuickScaleModules.auth
+        always being typed with noUnusedLocals/noUnusedParameters flags.
+        """
+        generator = ProjectGenerator(theme="showcase_react", selected_modules=[])
+        project_name = "empty_modules_typecheck_test"
+        project_path = tmp_path / project_name
+
+        generator.generate(project_name, project_path)
+        frontend_path = project_path / "frontend"
+
+        # Install dependencies
+        install_result = subprocess.run(
+            ["pnpm", "install"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert install_result.returncode == 0, (
+            f"pnpm install failed: {install_result.stderr}"
+        )
+
+        # Type-check must pass (strict TypeScript with noUnusedLocals)
+        typecheck_result = subprocess.run(
+            ["pnpm", "run", "type-check"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert typecheck_result.returncode == 0, (
+            f"Type-check failed with selected_modules=[]:\n"
+            f"{typecheck_result.stdout}\n{typecheck_result.stderr}"
+        )
+
+        # Full build (tsc + vite) must pass
+        build_result = subprocess.run(
+            ["pnpm", "run", "build"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        assert build_result.returncode == 0, (
+            f"Build failed with selected_modules=[]:\n"
+            f"{build_result.stdout}\n{build_result.stderr}"
+        )
+
 
 @pytest.mark.e2e
 class TestReactThemeDockerIntegration:

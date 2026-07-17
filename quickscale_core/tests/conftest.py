@@ -54,6 +54,13 @@ def generated_project_path(tmp_path: Path, sample_project_name: str) -> Path:
     # Cleanup is automatic with tmp_path
 
 
+def _generate_unique_db_name() -> str:
+    """Generate a unique database name for per-test database isolation."""
+    import uuid
+
+    return f"qs_test_{uuid.uuid4().hex[:12]}"
+
+
 def pytest_configure(config):
     """Register custom markers"""
     config.addinivalue_line(
@@ -106,11 +113,67 @@ def postgres_service(docker_ip, docker_services):
 
 
 @pytest.fixture
-def postgres_url(postgres_service):
-    """Provide PostgreSQL connection URL for tests."""
+def unique_db_name() -> str:
+    """Generate a unique database name for per-test isolation."""
+    return _generate_unique_db_name()
+
+
+@pytest.fixture
+def per_test_db(postgres_service, unique_db_name):
+    """Create a unique PostgreSQL database and drop it after the test.
+
+    Uses the session-scoped docker PostgreSQL container but creates an
+    isolated database per requesting test, eliminating cross-test
+    contamination from shared fixed database names.
+    """
+    import psycopg2
+
+    host = postgres_service["host"]
+    port = postgres_service["port"]
+    user = postgres_service["user"]
+    password = postgres_service["password"]
+    db_name = unique_db_name
+
+    conn = psycopg2.connect(
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        dbname="postgres",
+    )
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        cur.execute(f'CREATE DATABASE "{db_name}"')
+
+    yield {
+        "host": host,
+        "port": port,
+        "user": user,
+        "password": password,
+        "database": db_name,
+    }
+
+    # Teardown: terminate connections and drop the database
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT pg_terminate_backend(pg_stat_activity.pid) "
+            "FROM pg_stat_activity "
+            "WHERE pg_stat_activity.datname = %s "
+            "AND pid <> pg_backend_pid()",
+            (db_name,),
+        )
+        cur.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
+
+    conn.close()
+
+
+@pytest.fixture
+def postgres_url(per_test_db):
+    """Provide PostgreSQL connection URL with a unique per-test database."""
     return (
-        f"postgresql://{postgres_service['user']}:{postgres_service['password']}"
-        f"@{postgres_service['host']}:{postgres_service['port']}/{postgres_service['database']}"
+        f"postgresql://{per_test_db['user']}:{per_test_db['password']}"
+        f"@{per_test_db['host']}:{per_test_db['port']}/{per_test_db['database']}"
     )
 
 

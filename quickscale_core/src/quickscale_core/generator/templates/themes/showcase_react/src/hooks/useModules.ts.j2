@@ -32,7 +32,8 @@ interface QuickScaleModules {
   billing: boolean
   social: boolean
 {% endraw %}{%- else %}
-{%- for key, line in optional_module_entries %}{% if key in selected_modules %}{{ line }}{% endif %}{% endfor %}
+{% raw %}  auth: boolean
+{% endraw %}{%- for key, line in optional_module_entries %}{% if key != 'auth' and key in selected_modules %}{{ line }}{% endif %}{% endfor %}
 {%- endif %}
 {%- raw %}
 }
@@ -102,7 +103,8 @@ const defaultConfig: QuickScaleConfig = {
     billing: false,
     social: false,
 {% endraw %}{%- else %}
-{%- for key, line in optional_module_entries %}{% if key in selected_modules %}    {{ key }}: false,
+    auth: false,
+{%- for key, line in optional_module_entries %}{% if key != 'auth' and key in selected_modules %}    {{ key }}: false,
 {% endif %}{% endfor %}
 {%- endif %}
 {%- raw %}

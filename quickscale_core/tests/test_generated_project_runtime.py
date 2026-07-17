@@ -124,16 +124,28 @@ def _install_project_dependencies(project_path: Path) -> None:
 def _write_postgres_test_settings(
     project_path: Path,
     project_name: str,
+    postgres_url: str,
     cache_database: bool = False,
 ) -> None:
     """Write a test settings module that uses PostgreSQL.
 
-    Requires a running PostgreSQL instance reachable via the env vars below.
-    This replaces the former SQLite fallback — see AF13 in the roadmap.
+    Requires a running PostgreSQL instance reachable via *postgres_url*.
+    The connection details are embedded directly into the generated
+    settings file so that subprocesses do not depend on ambient
+    QS_SMOKE_DB_* environment variables.
 
     When *cache_database* is True, uses DatabaseCache instead of
     LocMemCache so that ``createcachetable`` can be exercised (SA63).
     """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(postgres_url)
+    db_name = parsed.path.lstrip("/") if parsed.path else "test_db"
+    db_user = parsed.username or "test_user"
+    db_password = parsed.password or "test_password"
+    db_host = parsed.hostname or "localhost"
+    db_port = str(parsed.port or 5432)
+
     cache_backend = (
         "django.core.cache.backends.db.DatabaseCache"
         if cache_database
@@ -145,19 +157,17 @@ def _write_postgres_test_settings(
 
     settings_content = (
         '"""Runtime smoke test settings — uses PostgreSQL."""\n'
-        "import os\n"
         "\n"
         "from .base import *  # noqa: F401, F403\n"
         "\n"
         "DATABASES = {\n"
         '    "default": {\n'
         '        "ENGINE": "django.db.backends.postgresql",\n'
-        '        "NAME": os.environ.get("QS_SMOKE_DB_NAME", '
-        '"test_quickscale_smoke"),\n'
-        '        "USER": os.environ.get("QS_SMOKE_DB_USER", "postgres"),\n'
-        '        "PASSWORD": os.environ.get("QS_SMOKE_DB_PASSWORD", ""),\n'
-        '        "HOST": os.environ.get("QS_SMOKE_DB_HOST", "localhost"),\n'
-        '        "PORT": os.environ.get("QS_SMOKE_DB_PORT", "5432"),\n'
+        f'        "NAME": "{db_name}",\n'
+        f'        "USER": "{db_user}",\n'
+        f'        "PASSWORD": "{db_password}",\n'
+        f'        "HOST": "{db_host}",\n'
+        f'        "PORT": "{db_port}",\n'
         "    }\n"
         "}\n"
         "\n"
@@ -220,15 +230,22 @@ def _write_postgres_test_settings(
     settings_path.write_text(settings_content)
 
 
-def _create_test_database() -> None:
-    """Create the test database if it does not exist."""
+def _create_test_database(postgres_url: str) -> None:
+    """Create the test database if it does not exist.
+
+    The database name and connection parameters are extracted from
+    *postgres_url* rather than relying on ambient QS_SMOKE_DB_* env vars.
+    """
     import psycopg2  # type: ignore[import-untyped]
 
-    db_name = os.environ.get("QS_SMOKE_DB_NAME", "test_quickscale_smoke")
-    db_user = os.environ.get("QS_SMOKE_DB_USER", "postgres")
-    db_password = os.environ.get("QS_SMOKE_DB_PASSWORD", "")
-    db_host = os.environ.get("QS_SMOKE_DB_HOST", "localhost")
-    db_port = os.environ.get("QS_SMOKE_DB_PORT", "5432")
+    from urllib.parse import urlparse
+
+    parsed = urlparse(postgres_url)
+    db_name = parsed.path.lstrip("/") if parsed.path else "test_db"
+    db_user = parsed.username or "test_user"
+    db_password = parsed.password or "test_password"
+    db_host = parsed.hostname or "localhost"
+    db_port = parsed.port or 5432
 
     conn = psycopg2.connect(
         host=db_host,
@@ -246,8 +263,11 @@ def _create_test_database() -> None:
 
 
 def _run_migrations(project_path: Path, project_name: str) -> None:
-    """Run database migrations against the PostgreSQL test database."""
-    _create_test_database()
+    """Run database migrations against the PostgreSQL test database.
+
+    The test database must already exist (created by the ``per_test_db``
+    fixture or equivalent).
+    """
     result = subprocess.run(
         ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
         cwd=project_path,
@@ -403,7 +423,9 @@ class TestGeneratedProjectRuntimeSmoke:
     """
 
     @pytest.mark.e2e
-    def test_embedded_auth_module_boots_and_serves_login(self, tmp_path: Path) -> None:
+    def test_embedded_auth_module_boots_and_serves_login(
+        self, tmp_path: Path, postgres_url: str
+    ) -> None:
         """A generated project with embedded auth should boot, migrate, and serve an auth route.
 
         Requires a successful HTTP outcome (2xx/3xx) for an auth-module route so that
@@ -489,7 +511,7 @@ class TestGeneratedProjectRuntimeSmoke:
         # a superuser PostgreSQL role (common in dev/test environments).
         # The env var must remain set through Phase 7 (dev server boot)
         # because Django loads AppConfig.ready() at server startup too.
-        _write_postgres_test_settings(project_path, project_name)
+        _write_postgres_test_settings(project_path, project_name, postgres_url)
         _allow_bypass_rls = os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS")
         os.environ["QUICKSCALE_ALLOW_BYPASSRLS"] = "1"
         try:
@@ -517,7 +539,9 @@ class TestGeneratedProjectRuntimeSmoke:
                 os.environ.pop("QUICKSCALE_ALLOW_BYPASSRLS", None)
 
     @pytest.mark.e2e
-    def test_no_redis_createcachetable_succeeds(self, tmp_path: Path) -> None:
+    def test_no_redis_createcachetable_succeeds(
+        self, tmp_path: Path, postgres_url: str
+    ) -> None:
         """A generated project with DatabaseCache must run createcachetable successfully.
 
         SA63 regression: the createcachetable step must complete without
@@ -528,6 +552,9 @@ class TestGeneratedProjectRuntimeSmoke:
         dependencies, writes a test settings module with DatabaseCache,
         and runs ``python manage.py createcachetable`` — proving the
         no-Redis deploy-script path works through a real Django boot.
+
+        The per-test database is created automatically by the
+        ``postgres_url`` fixture.
         """
         from quickscale_core.generator import ProjectGenerator
 
@@ -542,11 +569,13 @@ class TestGeneratedProjectRuntimeSmoke:
         _install_project_dependencies(project_path)
 
         # Write test settings with DatabaseCache (no-Redis production profile).
-        _write_postgres_test_settings(project_path, project_name, cache_database=True)
+        _write_postgres_test_settings(
+            project_path, project_name, postgres_url, cache_database=True
+        )
 
         # Run createcachetable with QUICKSCALE_ALLOW_BYPASSRLS set
         # (simulating the start.sh environment).
-        _create_test_database()
+        # The database already exists (created by the postgres_url fixture).
         result = subprocess.run(
             ["poetry", "run", "python", "manage.py", "createcachetable"],
             cwd=project_path,
@@ -566,7 +595,7 @@ class TestGeneratedProjectRuntimeSmoke:
 
     @pytest.mark.e2e
     def test_production_settings_createcachetable_with_orgs_bypass_hatch(
-        self, tmp_path: Path
+        self, tmp_path: Path, postgres_url: str
     ) -> None:
         """Generated project with orgs module and production settings must pass
         createcachetable through the env-var bridge (CR-SA63-002).
@@ -653,28 +682,19 @@ class TestGeneratedProjectRuntimeSmoke:
         # Phase 5: Install dependencies.
         _install_project_dependencies(project_path)
 
-        # Phase 6: Create the test database.
-        _create_test_database()
+        # Phase 6: Use the per-test database (already created by the
+        # postgres_url fixture).
 
         # Phase 7: Run createcachetable with production settings and the
         # bridge env pair (simulating the start.sh.j2 createcachetable
         # invocation).
-        db_user = os.environ.get("QS_SMOKE_DB_USER", "postgres")
-        db_password = os.environ.get("QS_SMOKE_DB_PASSWORD", "")
-        db_host = os.environ.get("QS_SMOKE_DB_HOST", "localhost")
-        db_port = os.environ.get("QS_SMOKE_DB_PORT", "5432")
-        db_name = os.environ.get("QS_SMOKE_DB_NAME", "test_quickscale_smoke")
-        database_url = (
-            f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-        )
-
         # Build subprocess env from a copy so we can strip ambient REDIS_URL.
         # The test must prove DatabaseCache/no-Redis path (CR-SA63-002).
         subprocess_env = {
             **os.environ,
             "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
             "SECRET_KEY": "qs-sa63-test-production-secret-key-not-for-real-use",
-            "DATABASE_URL": database_url,
+            "DATABASE_URL": postgres_url,
             "RUNTIME_DATABASE_URL": "",
             "QUICKSCALE_ALLOW_BYPASSRLS": "1",
             "ALLOWED_HOSTS": "localhost,127.0.0.1",
@@ -698,7 +718,7 @@ class TestGeneratedProjectRuntimeSmoke:
 
     @pytest.mark.e2e
     def test_production_settings_createcachetable_with_orgs_privileged_command(
-        self, tmp_path: Path
+        self, tmp_path: Path, postgres_url: str
     ) -> None:
         """Generated project with orgs module must pass createcachetable via
         the ``QUICKSCALE_PRIVILEGED_COMMAND`` contract (no bypass hatch,
@@ -785,20 +805,11 @@ class TestGeneratedProjectRuntimeSmoke:
         # Phase 5: Install dependencies.
         _install_project_dependencies(project_path)
 
-        # Phase 6: Create the test database.
-        _create_test_database()
+        # Phase 6: Use the per-test database (already created by the
+        # postgres_url fixture).
 
         # Phase 7: Run createcachetable with the actual start.sh.j2
         # privileged-command bridge — no QUICKSCALE_ALLOW_BYPASSRLS.
-        db_user = os.environ.get("QS_SMOKE_DB_USER", "postgres")
-        db_password = os.environ.get("QS_SMOKE_DB_PASSWORD", "")
-        db_host = os.environ.get("QS_SMOKE_DB_HOST", "localhost")
-        db_port = os.environ.get("QS_SMOKE_DB_PORT", "5432")
-        db_name = os.environ.get("QS_SMOKE_DB_NAME", "test_quickscale_smoke")
-        database_url = (
-            f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-        )
-
         # Build subprocess env from a copy so we can strip ambient REDIS_URL.
         # The test must prove DatabaseCache/no-Redis path via privileged
         # command (CR-SA68-001).
@@ -806,7 +817,7 @@ class TestGeneratedProjectRuntimeSmoke:
             **os.environ,
             "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
             "SECRET_KEY": "qs-sa68-test-production-secret-key-not-for-real-use",
-            "DATABASE_URL": database_url,
+            "DATABASE_URL": postgres_url,
             "RUNTIME_DATABASE_URL": "",
             "QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable",
             "ALLOWED_HOSTS": "localhost,127.0.0.1",

@@ -413,6 +413,171 @@ class TestCheckCoveragePolicy:
         finally:
             _cleanup(path)
 
+    # -- Non-dict root ----------------------------------------------------
+
+    def test_null_root_fails_closed(self) -> None:
+        """Coverage JSON with null root returns exit 2."""
+        fd, path = tempfile.mkstemp(suffix=".json", prefix="cov_test_")
+        os.close(fd)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(None, fh)
+        try:
+            assert check_policy(path) == 2
+        finally:
+            _cleanup(path)
+
+    def test_array_root_fails_closed(self) -> None:
+        """Coverage JSON with array root returns exit 2."""
+        fd, path = tempfile.mkstemp(suffix=".json", prefix="cov_test_")
+        os.close(fd)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump([], fh)
+        try:
+            assert check_policy(path) == 2
+        finally:
+            _cleanup(path)
+
+    def test_string_root_fails_closed(self) -> None:
+        """Coverage JSON with string root returns exit 2."""
+        fd, path = tempfile.mkstemp(suffix=".json", prefix="cov_test_")
+        os.close(fd)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump("oops", fh)
+        try:
+            assert check_policy(path) == 2
+        finally:
+            _cleanup(path)
+
+    # -- Non-dict file records --------------------------------------------
+
+    def test_non_dict_file_entry_null_fails_closed(self) -> None:
+        """File entry that is null exits 2."""
+        files = {
+            "quickscale_core/src/foo.py": {
+                "summary": {
+                    "covered_lines": 95,
+                    "num_statements": 100,
+                    "percent_covered": 95.0,
+                },
+            },
+            "quickscale_cli/src/bar.py": None,
+        }
+        totals = {"covered_lines": 95, "num_statements": 100}
+        path = _make_cov_json(files, totals)
+        try:
+            assert check_policy(path) == 2
+        finally:
+            _cleanup(path)
+
+    def test_non_dict_file_entry_list_fails_closed(self) -> None:
+        """File entry that is a list exits 2."""
+        files = {
+            "quickscale_core/src/foo.py": {
+                "summary": {
+                    "covered_lines": 95,
+                    "num_statements": 100,
+                    "percent_covered": 95.0,
+                },
+            },
+            "quickscale_cli/src/bar.py": [1, 2, 3],
+        }
+        totals = {"covered_lines": 95, "num_statements": 100}
+        path = _make_cov_json(files, totals)
+        try:
+            assert check_policy(path) == 2
+        finally:
+            _cleanup(path)
+
+    # -- Missing required package -----------------------------------------
+
+    def test_missing_core_package_fails_closed(self) -> None:
+        """Coverage data without quickscale_core files exits 2."""
+        files = {
+            "quickscale_cli/src/only.py": {
+                "summary": {
+                    "covered_lines": 90,
+                    "num_statements": 100,
+                    "percent_covered": 90.0,
+                },
+            },
+        }
+        totals = {"covered_lines": 90, "num_statements": 100}
+        path = _make_cov_json(files, totals)
+        try:
+            assert check_policy(path) == 2
+        finally:
+            _cleanup(path)
+
+    def test_missing_cli_package_fails_closed(self) -> None:
+        """Coverage data without quickscale_cli files exits 2."""
+        files = {
+            "quickscale_core/src/only.py": {
+                "summary": {
+                    "covered_lines": 95,
+                    "num_statements": 100,
+                    "percent_covered": 95.0,
+                },
+            },
+        }
+        totals = {"covered_lines": 95, "num_statements": 100}
+        path = _make_cov_json(files, totals)
+        try:
+            assert check_policy(path) == 2
+        finally:
+            _cleanup(path)
+
+    # -- Non-canonical traversal paths ------------------------------------
+
+    def test_parent_traversal_path_rejected(self) -> None:
+        """Path with ``..`` traversal is rejected with exit 2."""
+        files = {
+            "quickscale_core/src/foo.py": {
+                "summary": {
+                    "covered_lines": 95,
+                    "num_statements": 100,
+                    "percent_covered": 95.0,
+                },
+            },
+            "quickscale_core/../quickscale_cli/src/bar.py": {
+                "summary": {
+                    "covered_lines": 90,
+                    "num_statements": 100,
+                    "percent_covered": 90.0,
+                },
+            },
+        }
+        totals = {"covered_lines": 185, "num_statements": 200}
+        path = _make_cov_json(files, totals)
+        try:
+            assert check_policy(path) == 2
+        finally:
+            _cleanup(path)
+
+    def test_self_reference_path_rejected(self) -> None:
+        """Path with ``./`` self-reference is rejected with exit 2."""
+        files = {
+            "./quickscale_core/src/foo.py": {
+                "summary": {
+                    "covered_lines": 95,
+                    "num_statements": 100,
+                    "percent_covered": 95.0,
+                },
+            },
+            "quickscale_cli/src/bar.py": {
+                "summary": {
+                    "covered_lines": 90,
+                    "num_statements": 100,
+                    "percent_covered": 90.0,
+                },
+            },
+        }
+        totals = {"covered_lines": 185, "num_statements": 200}
+        path = _make_cov_json(files, totals)
+        try:
+            assert check_policy(path) == 2
+        finally:
+            _cleanup(path)
+
     # -- Wiring / marker assertion ----------------------------------------
 
     def test_makefile_uses_not_e2e_marker(self) -> None:
@@ -511,3 +676,61 @@ class TestMakefileCoveragePipeline:
         assert "overall_exit=$$policy_exit" in section.replace(" ", "").replace("\t", ""), (
             "Phase 4 failure must set overall_exit when it is still 0"
         )
+
+
+class TestCheckCILocallyStageNumbering:
+    """Structural assertions for ``check_ci_locally.sh`` stage numbering."""
+
+    SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "..", "scripts", "check_ci_locally.sh")
+
+    def _read_script(self) -> str:
+        with open(self.SCRIPT_PATH, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_has_total_stages_variable(self) -> None:
+        """Script defines a TOTAL_STAGES variable for dynamic stage counting."""
+        content = self._read_script()
+        assert "TOTAL_STAGES=" in content, (
+            "Script must define TOTAL_STAGES for dynamic stage numbering"
+        )
+
+    def test_no_hardcoded_denominators(self) -> None:
+        """
+        No main-stage echos use hardcoded ``[N/11]`` or ``[N/12]``.
+
+        All stage-numbered echos must use ``${TOTAL_STAGES}`` so the
+        denominator adapts to --e2e vs non-E2E mode.
+        """
+        content = self._read_script()
+        for line in content.splitlines():
+            stripped = line.strip()
+            # Only look at echo lines that appear to be stage headers
+            if stripped.startswith("echo ") and "[1/" in stripped:
+                # Assert no hardcoded /11 or /12
+                assert "/11" not in stripped, f"Hardcoded /11 denominator found: {stripped!r}"
+                assert "/12" not in stripped, f"Hardcoded /12 denominator found: {stripped!r}"
+
+    def test_e2e_skip_message_unnumbered(self) -> None:
+        """The E2E-skip message (non-E2E path) has no stage-number prefix."""
+        content = self._read_script()
+        found = False
+        for line in content.splitlines():
+            if "Skipping E2E tests" in line and "echo" in line:
+                assert "[" not in line, (
+                    f"E2E-skip message must not have a stage-number prefix: {line.strip()!r}"
+                )
+                found = True
+        assert found, "E2E-skip echo message not found"
+
+    def test_e2e_stage_uses_variable_denominator(self) -> None:
+        """The E2E test stage header uses ``${TOTAL_STAGES}`` for its denominator."""
+        content = self._read_script()
+        found_dynamic = False
+        for line in content.splitlines():
+            if "Running E2E tests" in line and "echo" in line:
+                # Must use ${TOTAL_STAGES} not a hardcoded number
+                assert "${TOTAL_STAGES}" in line, (
+                    f"E2E stage header must use ${{TOTAL_STAGES}}, got: {line.strip()!r}"
+                )
+                found_dynamic = True
+        assert found_dynamic, "E2E stage header echo not found"

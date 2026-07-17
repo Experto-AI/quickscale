@@ -4219,7 +4219,7 @@ class TestSelectedModulesTemplateSafety:
     def test_app_test_tsx_empty_selected_modules(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """selected_modules=[]: only core config, no module flags."""
+        """selected_modules=[]: auth flag always present, no other modules."""
         template = jinja_env.get_template(
             "themes/showcase_react/src/test/App.test.tsx.j2"
         )
@@ -4229,8 +4229,9 @@ class TestSelectedModulesTemplateSafety:
             "selected_modules": [],
         }
         output = template.render(context)
-        # No module flags
-        assert "auth: false" not in output
+        # Auth is always typed (SA93 Phase 3A)
+        assert "auth: false" in output
+        # No other module flags
         assert "blog: false" not in output
         assert "social: false" not in output
         # No module paths
@@ -4270,9 +4271,9 @@ class TestSelectedModulesTemplateSafety:
         assert "import { SocialEmbedsPublicPage }" in output_social
         assert "import { SocialLinkTreePublicPage }" in output_social
         assert "describe('public social pages'" in output_social
-        # buildProjectConfig should only have social, not unrelated modules
+        # buildProjectConfig should have auth (always typed) and social
         assert "social: true" in output_social
-        assert "auth: false" not in output_social
+        assert "auth: false" in output_social
         # modulePaths should only have social
         assert "social: surface" in output_social
         assert "crm:" not in output_social

@@ -29,8 +29,7 @@ function buildProjectConfig(surface: 'link_tree' | 'embeds'): QuickScaleConfig {
       analytics: false,
       billing: false,
 {%- else %}
-{%- if 'auth' in selected_modules %}      auth: false,
-{%- endif %}
+      auth: false,
 {%- if 'blog' in selected_modules %}      blog: false,
 {%- endif %}
 {%- if 'listings' in selected_modules %}      listings: false,

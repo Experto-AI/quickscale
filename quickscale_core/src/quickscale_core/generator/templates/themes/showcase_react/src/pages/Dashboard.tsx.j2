@@ -13,15 +13,15 @@
   ('listings', 'Listings', 'Store',
    'Generic listings with filtering for marketplace verticals',
    '/listings', None, None),
-  ('crm', 'CRM', 'Briefcase',
-   'Contact management, companies, deals, and pipeline tracking',
-   'modulePaths.crm', 'actionLabel', "'Open workspace'"),
+   ('crm', 'CRM', 'Briefcase',
+    'Contact management, companies, deals, and pipeline tracking',
+    '_modulePaths.crm', 'actionLabel', "'Open workspace'"),
   ('forms', 'Forms', 'ClipboardList',
    'Dynamic form builder with spam protection and submission management',
    '/forms/contact', None, None),
-  ('social', 'Social', 'Share2',
-   'Managed social link-tree and embed feeds exposed through fixed public routes.',
-   'modulePaths.social', 'reloadDocument', 'true'),
+   ('social', 'Social', 'Share2',
+    'Managed social link-tree and embed feeds exposed through fixed public routes.',
+    '_modulePaths.social', 'reloadDocument', 'true'),
   ('storage', 'Storage', 'HardDrive',
    'Shared media storage infrastructure for local and S3-compatible backends',
    '/settings', None, None),
@@ -31,9 +31,9 @@
   ('notifications', 'Notifications', 'Bell',
     'Transactional email settings, message history, and delivery event visibility.',
     '/admin/quickscale_modules_notifications/', 'reloadDocument', 'true'),
-  ('analytics', 'Analytics', 'BarChart2',
-   'PostHog-backed event tracking with server-side capture, session identity, and frontend page-view instrumentation.',
-   'modulePaths.analytics', 'reloadDocument', 'true'),
+   ('analytics', 'Analytics', 'BarChart2',
+    'PostHog-backed event tracking with server-side capture, session identity, and frontend page-view instrumentation.',
+    '_modulePaths.analytics', 'reloadDocument', 'true'),
 ] -%}
 {% raw -%}
 import { motion } from 'motion/react'
@@ -68,7 +68,7 @@ type ModuleCard = {
 }
 
 const buildModuleInfo = (
-  modulePaths: Record<string, string>,
+  _modulePaths: Record<string, string>,
 ): ModuleCard[] => [
 {% endraw -%}
 {%- for key, name, icon, desc, href, extra_key, extra_val in all_module_cards %}
@@ -104,8 +104,8 @@ const gettingStarted = [
 
 export function Dashboard() {
   const modules = useModules()
-  const { modulePaths } = useProjectConfig()
-  const installedModules = buildModuleInfo(modulePaths as unknown as Record<string, string>).filter((m) => modules[m.key])
+  const { modulePaths: _modulePaths } = useProjectConfig()
+  const installedModules = buildModuleInfo(_modulePaths as unknown as Record<string, string>).filter((m) => modules[m.key])
   // Use raw module installation state so billing-only generations don't falsely
   // render "No Modules Installed" (billing has module flag but no starter card).
   const hasModules = Object.values(modules).some(Boolean)
