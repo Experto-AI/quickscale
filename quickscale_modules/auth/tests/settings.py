@@ -26,7 +26,7 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("QS_AUTH_DB_NAME", "test_quickscale_auth"),
-        "USER": os.environ.get("QS_AUTH_DB_USER", "postgres"),
+        "USER": os.environ.get("QS_AUTH_DB_USER", "quickscale_test_role"),
         "PASSWORD": os.environ.get("QS_AUTH_DB_PASSWORD", ""),
         "HOST": os.environ.get("QS_AUTH_DB_HOST", "localhost"),
         "PORT": os.environ.get("QS_AUTH_DB_PORT", "5432"),
