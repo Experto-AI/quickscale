@@ -24,6 +24,10 @@ from quickscale_core.utils.project_identity import (
     ProjectIdentityResolutionError,
     resolve_project_identity,
 )
+from quickscale_core.utils.theme_validation import (
+    ThemeValidationError,
+    validate_theme_preflight,
+)
 
 
 class ManagedWiringContextError(ValueError):
@@ -97,6 +101,12 @@ def regenerate_managed_wiring(
     Returns:
         (success, message)
     """
+    # Run read-only theme preflight before any mutation.
+    try:
+        validate_theme_preflight(project_path)
+    except ThemeValidationError as exc:
+        return False, str(exc)
+
     package_name = project_package
     if package_name is None:
         try:

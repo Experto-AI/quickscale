@@ -122,22 +122,8 @@ class TestErrorHandlerConfiguration:
             "Should point to custom_500_view"
         )
 
-    def test_debug_404_routes_include_billing_but_exclude_teams(
-        self, generated_project_path: Path, project_name: str
-    ) -> None:
-        """Test that HTML starter debug routes keep shipped auth/billing guidance only."""
-        urls_file = generated_project_path / project_name / "urls.py"
-        content = urls_file.read_text()
-
-        assert 're_path(r"^accounts/.*", custom_404_view)' in content, (
-            "Should keep auth-specific debug guidance"
-        )
-        assert 're_path(r"^billing/.*", custom_404_view)' in content, (
-            "Should add billing debug routes"
-        )
-        assert 're_path(r"^teams/.*", custom_404_view)' not in content, (
-            "Should not add teams placeholder debug routes"
-        )
+    # SA94: retired showcase_html removed the HTML-only debug 404 routes
+    # (re_path for accounts/billing debug guidance).
 
 
 class TestModuleInstallationHints:

@@ -64,7 +64,7 @@ class TestDevelopmentCommandsE2E:
     @pytest.fixture
     def test_project(self, tmp_path):
         """Generate a test project and return its path."""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "e2e_cli_test"
         project_path = tmp_path / project_name
 
@@ -192,9 +192,9 @@ class TestDevelopmentCommandsE2E:
         env = {"PORT": str(port)}
 
         with runner.isolated_filesystem(temp_dir=tmp_path):
-            # package(default) -> theme=2(showcase_html) -> modules(skip)
+            # package(default) -> theme=1(showcase_react) -> modules(skip)
             # -> docker.start=Y -> docker.build=Y -> create_superuser=Y -> save=Y
-            plan_input = "\n2\n\nY\nY\nY\nY\n"
+            plan_input = "\n1\n\nY\nY\nY\nY\n"
             result = runner.invoke(cli, ["plan", project_name], input=plan_input)
             assert result.exit_code == 0, f"plan failed: {result.output}"
 
@@ -432,7 +432,7 @@ class TestDevelopmentCommandsIntegration:
     @pytest.fixture
     def generated_project(self, tmp_path):
         """Generate and prepare a project for testing."""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "integration_test"
         project_path = tmp_path / project_name
 

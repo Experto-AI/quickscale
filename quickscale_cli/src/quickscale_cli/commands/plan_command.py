@@ -35,11 +35,14 @@ from quickscale_core.schema.config_schema import (
 )
 from quickscale_core.schema.state_schema import QuickScaleState, StateManager
 from quickscale_core.utils.file_utils import validate_project_name
+from quickscale_core.utils.theme_validation import (
+    ThemeValidationError,
+    validate_theme_preflight,
+)
 
 # Available themes for selection
 AVAILABLE_THEMES = [
     ("showcase_react", "React + TypeScript + shadcn/ui (default, production-ready)"),
-    ("showcase_html", "Pure HTML + CSS (simpler alternative)"),
 ]
 
 
@@ -646,6 +649,25 @@ def _handle_add_modules(
         existing_config: Current configuration if available
 
     """
+    # Run read-only theme preflight before any mutation.
+    try:
+        validate_theme_preflight(project_path)
+    except ThemeValidationError as exc:
+        click.secho(
+            "\n❌ Theme validation failed before module add:",
+            fg="red",
+            err=True,
+            bold=True,
+        )
+        for line in str(exc).splitlines():
+            click.echo(f"  • {line}", err=True)
+        click.echo(
+            "\n💡 Only 'showcase_react' is supported. "
+            "Update project.theme in quickscale.yml to 'showcase_react'.",
+            err=True,
+        )
+        raise click.Abort()
+
     click.echo("\n🔧 Adding modules to existing project")
     click.echo(f"   Project: {project_path}")
 
@@ -821,6 +843,25 @@ def _handle_reconfigure(
         existing_config: Current configuration if available
 
     """
+    # Run read-only theme preflight before any mutation.
+    try:
+        validate_theme_preflight(project_path)
+    except ThemeValidationError as exc:
+        click.secho(
+            "\n❌ Theme validation failed before reconfigure:",
+            fg="red",
+            err=True,
+            bold=True,
+        )
+        for line in str(exc).splitlines():
+            click.echo(f"  • {line}", err=True)
+        click.echo(
+            "\n💡 Only 'showcase_react' is supported. "
+            "Update project.theme in quickscale.yml to 'showcase_react'.",
+            err=True,
+        )
+        raise click.Abort()
+
     click.echo("\n🔧 Reconfiguring existing project")
     click.echo(f"   Project: {project_path}")
 
@@ -1160,7 +1201,7 @@ def plan(
 
     \b
     New project wizard:
-    - Theme selection (showcase_html, showcase_react)
+    - Theme selection (showcase_react)
       - Module selection (auth, blog, listings, etc.)
             - Docker configuration (start, build, create superuser)
 
@@ -1256,6 +1297,26 @@ def plan(
     if not click.confirm("\n💾 Save configuration?", default=True):
         click.echo("❌ Cancelled")
         raise click.Abort()
+
+    # Run read-only theme preflight before saving (checks state/recovery
+    # files only — the config file is about to be written/overwritten so
+    # any existing config content is irrelevant).
+    project_root = output_path.parent
+    state_path = project_root / ".quickscale" / "state.yml"
+    recovery_path = project_root / ".quickscale" / "apply-recovery.yml"
+    if state_path.exists() or recovery_path.exists():
+        try:
+            validate_theme_preflight(project_root)
+        except ThemeValidationError as exc:
+            click.secho(
+                "\n❌ Theme validation failed before saving configuration:",
+                fg="red",
+                err=True,
+                bold=True,
+            )
+            for line in str(exc).splitlines():
+                click.echo(f"  • {line}", err=True)
+            raise click.Abort()
 
     # Save with validation
     _save_config_with_validation(yaml_content, output_path)

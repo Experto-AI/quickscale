@@ -116,6 +116,11 @@ from quickscale_core.project_state import (
     check_version_drift,
     compute_file_hashes,
 )
+from quickscale_core.utils.theme_validation import (
+    SOLE_VALID_THEME,
+    ThemeValidationError,
+    validate_theme_preflight,
+)
 from quickscale_core.utils.git_utils import (
     is_working_directory_clean,
     resolve_remote_ref,
@@ -2718,7 +2723,7 @@ def _display_next_steps_impl(
             + f"{SOCIAL_LINK_TREE_PATH} and {SOCIAL_EMBEDS_PATH}"
         )
         click.echo(
-            "  showcase_html and existing generated projects only receive the managed "
+            "  showcase_react and existing generated projects only receive the managed "
             "backend transport automatically; use manual theme adoption if you want "
             "those public pages."
         )
@@ -3800,8 +3805,86 @@ def apply(
       15. Finalize authoritative state
       16. Display next steps
     """
+    # Run read-only theme preflight before any mutation.
+    #
+    # CR-SA94-REV-A-002: we validate the supplied config file's theme
+    # directly (regardless of filename) AND preflight state/recovery
+    # under the *actual* output root rather than the config parent.
+    config_path = Path(config)
+
+    # 1. Read-only raw-YAML parse of the supplied config so we can
+    #    validate its theme and extract the project slug for output-root
+    #    resolution without triggering config normalization (schema
+    #    validation, sanitisation, implied-materialisation, etc.).
+    raw_yaml: dict | None = None
+    try:
+        _raw = yaml.safe_load(config_path.read_text())
+        if isinstance(_raw, dict):
+            raw_yaml = _raw
+    except Exception:
+        pass  # Defer detailed error to _load_and_validate_config below.
+
+    # 2. Validate the supplied config's theme.
+    if raw_yaml is not None:
+        project_raw = raw_yaml.get("project")
+        if project_raw is not None and not isinstance(project_raw, dict):
+            # project key exists but is not a mapping -- structurally
+            # invalid config; let _load_and_validate_config surface the
+            # schema error rather than duplicating it here.
+            pass
+        elif isinstance(project_raw, dict):
+            theme = project_raw.get("theme")
+            if theme is not None and theme != SOLE_VALID_THEME:
+                if theme == "showcase_html":
+                    hint = (
+                        f"Theme 'showcase_html' has been retired. "
+                        f"Change 'project.theme' to '{SOLE_VALID_THEME}'."
+                    )
+                else:
+                    hint = (
+                        f"Only '{SOLE_VALID_THEME}' is supported. "
+                        f"Change 'project.theme' to '{SOLE_VALID_THEME}'."
+                    )
+                click.secho(
+                    f"\n❌ Invalid theme '{theme}' in {config_path.name}. {hint}",
+                    fg="red",
+                    err=True,
+                )
+                raise click.Abort()
+
+    # 3. Determine the output root so state/recovery preflight checks
+    #    the right directory (not just the config parent).
+    slug: str = ""
+    if raw_yaml is not None:
+        project_raw = raw_yaml.get("project")
+        if isinstance(project_raw, dict):
+            slug = str(project_raw.get("slug") or "")
+    resolve_root = (
+        config_path.resolve().parent
+        if not slug
+        else _determine_output_path(config_path, slug)
+    )
+
+    try:
+        validate_theme_preflight(resolve_root)
+    except ThemeValidationError as exc:
+        click.secho(
+            "\n❌ Theme validation failed:",
+            fg="red",
+            err=True,
+            bold=True,
+        )
+        for line in str(exc).splitlines():
+            click.echo(f"  • {line}", err=True)
+        click.echo(
+            "\n💡 Update project.theme to 'showcase_react' in all present "
+            "configuration files before running 'quickscale apply'.",
+            err=True,
+        )
+        raise click.Abort()
+
     # Prepare context
-    ctx = _prepare_apply_context(Path(config))
+    ctx = _prepare_apply_context(config_path)
 
     # Display configuration summary
     _display_config_summary(ctx.qs_config)

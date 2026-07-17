@@ -26,7 +26,7 @@ version: "1"
 project:
   slug: testapp
   package: testapp
-  theme: showcase_html
+  theme: showcase_react
 docker:
   start: false
 """
@@ -51,7 +51,7 @@ docker:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -91,7 +91,7 @@ class TestGetAppliedModules:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },
@@ -142,7 +142,7 @@ class TestGetAppliedModules:
                         "project": {
                             "slug": "testapp",
                             "package": "testapp",
-                            "theme": "showcase_html",
+                            "theme": "showcase_react",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
                         },

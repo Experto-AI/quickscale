@@ -37,7 +37,7 @@ def _write_minimal_project(
         "project": {
             "slug": package_name,
             "package": package_name,
-            "theme": "showcase_html",
+            "theme": "showcase_react",
         },
         "docker": {"start": False},
         "modules": modules or {},

@@ -141,14 +141,14 @@ class TestPlanThemeSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\nshowcase_html\n\ny\ny\nn\ny\n",
+                input="\nshowcase_react\n\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
 
             with open("myapp/quickscale.yml") as f:
                 content = f.read()
-            assert "showcase_html" in content
+            assert "showcase_react" in content
 
 
 class TestPlanModuleSelection:

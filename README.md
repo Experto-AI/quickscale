@@ -116,7 +116,7 @@ Running `quickscale plan myapp`, entering the generated directory, and then runn
 - ✅ **Poetry** for dependency management
 - ✅ **One-Command Deployment**: Deploy to Railway with `quickscale deploy railway` - fully automated setup
 
-**Alternative**: Use `quickscale plan myapp --theme showcase_html` for pure HTML/CSS (simpler projects).
+**Note**: The `showcase_html` (pure HTML/CSS) theme option was removed in SA94. `showcase_react` is the sole supported theme.
 
 **See the complete project structure:** [scaffolding.md - Generated Project Output](./docs/technical/scaffolding.md#5-generated-project-output)
 

@@ -19,6 +19,10 @@ import click
 
 from quickscale_cli.commands.development_commands import _validate_project_and_docker
 from quickscale_core.contracts.module_options import get_env_var_portability
+from quickscale_core.utils.theme_validation import (
+    ThemeValidationError,
+    validate_theme_preflight,
+)
 from quickscale_core.dr_engine.primitives import (
     _ENV_VAR_MANIFEST_FILENAME,
     _PROMOTION_VERIFICATION_FILENAME,
@@ -179,6 +183,18 @@ def _build_context(
     target_railway_environment: str | None,
     include_target: bool,
 ) -> DisasterRecoveryContext:
+    # Run read-only theme preflight before any validation or probe.
+    try:
+        validate_theme_preflight(Path.cwd())
+    except ThemeValidationError as exc:
+        raise click.ClickException(
+            "Theme validation failed for DR command:\n"
+            + "\n".join(f"  • {line}" for line in str(exc).splitlines())
+            + "\n\n"
+            "Update project.theme to 'showcase_react' in all present "
+            "configuration files before running DR commands."
+        ) from exc
+
     _validate_project_and_docker()
     route = _resolve_route(route_label)
     _validate_route_services(

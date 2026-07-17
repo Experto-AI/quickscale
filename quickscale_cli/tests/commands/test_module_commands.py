@@ -1147,7 +1147,7 @@ class TestUpdateSingleModule:
                     "project:",
                     "  slug: myproject",
                     "  package: myproject",
-                    "  theme: showcase_html",
+                    "  theme: showcase_react",
                     '  created_at: "2025-01-01T00:00:00"',
                     '  last_applied: "2025-01-01T00:00:00"',
                     "modules:",
@@ -1169,7 +1169,7 @@ class TestUpdateSingleModule:
                     "project:",
                     "  slug: myproject",
                     "  package: myproject",
-                    "  theme: showcase_html",
+                    "  theme: showcase_react",
                     "modules:",
                     "  blog:",
                     "    enable_rss: false",
@@ -1235,7 +1235,7 @@ class TestUpdateSingleModule:
                     "project:",
                     "  slug: myproject",
                     "  package: myproject",
-                    "  theme: showcase_html",
+                    "  theme: showcase_react",
                     '  created_at: "2025-01-01T00:00:00"',
                     '  last_applied: "2025-01-01T00:00:00"',
                     "modules:",
@@ -1698,7 +1698,7 @@ class TestUpdateVersionDriftWarning:
                 project=ProjectState(
                     slug="myapp",
                     package="myapp",
-                    theme="showcase_html",
+                    theme="showcase_react",
                 ),
                 modules={
                     "auth": ModuleState(name="auth", version="0.62.0"),
@@ -1743,7 +1743,7 @@ class TestUpdateVersionDriftWarning:
                 project=ProjectState(
                     slug="myapp",
                     package="myapp",
-                    theme="showcase_html",
+                    theme="showcase_react",
                 ),
                 modules={
                     "auth": ModuleState(name="auth", version="0.62.0"),
@@ -1952,7 +1952,7 @@ class TestUpdatePathProvenancePersistence:
                     "project:",
                     "  slug: myproject",
                     "  package: myproject",
-                    "  theme: showcase_html",
+                    "  theme: showcase_react",
                     '  created_at: "2025-01-01T00:00:00"',
                     '  last_applied: "2025-01-01T00:00:00"',
                     "modules:",
@@ -2071,7 +2071,7 @@ class TestUpdatePathProvenancePersistence:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth: {}\n"
         )
@@ -2085,7 +2085,7 @@ class TestUpdatePathProvenancePersistence:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2024-06-15T10:30:00'\n"
             "  last_applied: '2024-12-01T14:45:00'\n"
         )
@@ -2149,7 +2149,7 @@ class TestUpdatePathProvenancePersistence:
         persisted = yaml.safe_load(state_path.read_text())
         assert persisted["project"]["slug"] == "myproject"
         assert persisted["project"]["package"] == "myproject"
-        assert persisted["project"]["theme"] == "showcase_html"
+        assert persisted["project"]["theme"] == "showcase_react"
         # Timestamps preserved from the original state.yml.
         assert persisted["project"]["created_at"] == "2024-06-15T10:30:00"
         assert persisted["project"]["last_applied"] == "2024-12-01T14:45:00"
@@ -2172,7 +2172,7 @@ class TestUpdatePathProvenancePersistence:
                     "project:",
                     "  slug: myproject",
                     "  package: myproject",
-                    "  theme: showcase_html",
+                    "  theme: showcase_react",
                     "modules:",
                     "  auth:",
                     "    name: auth",
@@ -2248,7 +2248,7 @@ class TestUpdatePathProvenancePersistence:
                     "project:",
                     "  slug: myproject",
                     "  package: myproject",
-                    "  theme: showcase_html",
+                    "  theme: showcase_react",
                     "modules:",
                     "  auth:",
                     "    name: auth",
@@ -2319,7 +2319,7 @@ class TestUpdatePathDependencySync:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2025-01-01T00:00:00'\n"
             "  last_applied: '2025-01-01T00:00:00'\n"
             "modules:\n"
@@ -2398,7 +2398,7 @@ class TestUpdatePathDependencySync:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2025-01-01T00:00:00'\n"
             "  last_applied: '2025-01-01T00:00:00'\n"
             "modules:\n"
@@ -2462,7 +2462,7 @@ class TestUpdatePathDependencySync:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2025-01-01T00:00:00'\n"
             "  last_applied: '2025-01-01T00:00:00'\n"
             "modules:\n"
@@ -2535,7 +2535,7 @@ class TestUpdatePathDependencySync:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2025-01-01T00:00:00'\n"
             "  last_applied: '2025-01-01T00:00:00'\n"
             "modules:\n"
@@ -2605,7 +2605,7 @@ class TestUpdatePathDependencySync:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2025-01-01T00:00:00'\n"
             "  last_applied: '2025-01-01T00:00:00'\n"
             "modules:\n"
@@ -2696,7 +2696,7 @@ class TestSyncStateModuleVersionTriple:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -2759,7 +2759,7 @@ class TestCallerParityUpdateSyncHelper:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
             ),
@@ -2820,7 +2820,7 @@ class TestAF5RecoveryLedgerRegression:
                     "project": {
                         "slug": "myapp",
                         "package": "myapp",
-                        "theme": "showcase_html",
+                        "theme": "showcase_react",
                         "created_at": "2025-01-01T00:00:00",
                         "last_applied": "2025-06-01T00:00:00",
                     },
@@ -2852,7 +2852,7 @@ class TestAF5RecoveryLedgerRegression:
                     "project": {
                         "slug": "myapp",
                         "package": "myapp",
-                        "theme": "showcase_html",
+                        "theme": "showcase_react",
                         "created_at": "2025-01-01T00:00:00",
                         "last_applied": "2025-06-01T00:00:00",
                     },
@@ -2905,7 +2905,7 @@ class TestAF5RecoveryLedgerRegression:
                     "project": {
                         "slug": "myapp",
                         "package": "myapp",
-                        "theme": "showcase_html",
+                        "theme": "showcase_react",
                         "created_at": "2025-01-01T00:00:00",
                         "last_applied": "2025-06-01T00:00:00",
                     },

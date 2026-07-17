@@ -20,7 +20,7 @@ class TestProjectGeneratorInit:
 
     def test_init_with_default_template_dir(self) -> None:
         """Should initialize with default template directory"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
 
         assert generator.template_dir.exists()
         assert generator.template_dir.name == "templates"
@@ -32,10 +32,10 @@ class TestProjectGeneratorInit:
         custom_dir.mkdir()
 
         # Create required themes directory structure
-        themes_dir = custom_dir / "themes" / "showcase_html"
+        themes_dir = custom_dir / "themes" / "showcase_react"
         themes_dir.mkdir(parents=True)
 
-        generator = ProjectGenerator(template_dir=custom_dir, theme="showcase_html")
+        generator = ProjectGenerator(template_dir=custom_dir, theme="showcase_react")
 
         assert generator.template_dir == custom_dir
 
@@ -52,21 +52,21 @@ class TestProjectGeneratorValidation:
 
     def test_generate_with_invalid_name(self, tmp_path: Path) -> None:
         """Should raise ValueError for invalid project name"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
 
         with pytest.raises(ValueError, match="Invalid project name"):
             generator.generate("123invalid", tmp_path / "output")
 
     def test_generate_with_keyword_name(self, tmp_path: Path) -> None:
         """Should raise ValueError for Python keyword"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
 
         with pytest.raises(ValueError, match="Invalid project name"):
             generator.generate("class", tmp_path / "output")
 
     def test_generate_with_reserved_name(self, tmp_path: Path) -> None:
         """Should raise ValueError for reserved name"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
 
         with pytest.raises(ValueError, match="Invalid project name"):
             generator.generate("test", tmp_path / "output")
@@ -77,7 +77,7 @@ class TestProjectGeneratorPathChecks:
 
     def test_generate_to_existing_path(self, tmp_path: Path) -> None:
         """Should raise FileExistsError if output path exists"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         existing_dir = tmp_path / "existing"
         existing_dir.mkdir()
 
@@ -86,7 +86,7 @@ class TestProjectGeneratorPathChecks:
 
     def test_generate_to_unwritable_parent(self, tmp_path: Path) -> None:
         """Should raise PermissionError for unwritable parent directory"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
 
         # Create a directory and make it read-only
         readonly_dir = tmp_path / "readonly"
@@ -102,7 +102,7 @@ class TestProjectGeneratorPathChecks:
 
     def test_generate_creates_parent_directory(self, tmp_path: Path) -> None:
         """Should create parent directory if it does not exist"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "myproject"
 
         # Create a nested path where intermediate directories don't exist
@@ -127,14 +127,13 @@ class TestProjectGeneratorGeneration:
     @pytest.mark.parametrize(
         ("theme", "project_name"),
         [
-            ("showcase_html", "testproject_html"),
             ("showcase_react", "testproject_react"),
         ],
     )
     def test_generate_emits_root_makefile_for_supported_themes(
         self, tmp_path: Path, theme: str, project_name: str
     ) -> None:
-        """Supported themes should always emit the generated root Makefile."""
+        """React theme should always emit the generated root Makefile."""
         generator = ProjectGenerator(theme=theme)
         output_path = tmp_path / project_name
 
@@ -146,7 +145,7 @@ class TestProjectGeneratorGeneration:
 
     def test_generate_creates_project_structure(self, tmp_path: Path) -> None:
         """Should create complete project structure"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "testproject"
         output_path = tmp_path / project_name
 
@@ -173,13 +172,15 @@ class TestProjectGeneratorGeneration:
         assert (output_path / project_name / "settings" / "local.py").exists()
         assert (output_path / project_name / "settings" / "production.py").exists()
 
-        # Check templates and static files
+        # Check templates exist (React theme emits templates/ not static/)
         assert (output_path / "templates" / "index.html").exists()
-        assert (output_path / "static" / "css" / "style.css").exists()
+        assert (output_path / "templates" / "base.html").exists()
+        # React theme does not emit root static/css/
+        assert (output_path / "frontend" / "package.json").exists()
 
     def test_manage_py_is_executable(self, tmp_path: Path) -> None:
         """Should make manage.py executable"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "testproject"
         output_path = tmp_path / project_name
 
@@ -190,7 +191,7 @@ class TestProjectGeneratorGeneration:
 
     def test_generated_files_contain_project_name(self, tmp_path: Path) -> None:
         """Generated files should contain the project name"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "myapp"
         output_path = tmp_path / project_name
 
@@ -207,7 +208,7 @@ class TestProjectGeneratorGeneration:
         self, tmp_path: Path
     ) -> None:
         """Generated urls_modules.py should expose raw placeholder buckets."""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "myapp"
         output_path = tmp_path / project_name
 
@@ -233,7 +234,7 @@ class TestProjectGeneratorGeneration:
 
     def test_generated_python_files_are_valid(self, tmp_path: Path) -> None:
         """Generated Python files should be syntactically valid"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "validproject"
         output_path = tmp_path / project_name
 
@@ -427,7 +428,7 @@ class TestProjectGeneratorAtomicCreation:
     def test_rollback_on_template_error(self, tmp_path: Path) -> None:
         """Should clean up temp directory if template rendering fails"""
         # Create generator with nonexistent template
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
 
         # Monkey-patch to force an error during generation
         original_method = generator._generate_project
@@ -454,7 +455,7 @@ class TestProjectGeneratorMultipleProjects:
 
     def test_generate_multiple_projects(self, tmp_path: Path) -> None:
         """Should be able to generate multiple projects"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
 
         projects = ["project1", "project2", "project3"]
 
@@ -478,13 +479,13 @@ class TestProjectGeneratorThemeValidation:
         template_dir.mkdir()
 
         with pytest.raises(ValueError, match="Theme directory not found"):
-            ProjectGenerator(template_dir=template_dir, theme="showcase_html")
+            ProjectGenerator(template_dir=template_dir, theme="showcase_react")
 
     def test_init_rejects_removed_htmx_theme(self, tmp_path: Path) -> None:
         """ValueError raised for removed showcase_htmx theme."""
         template_dir = tmp_path / "mytemplates"
         template_dir.mkdir()
-        (template_dir / "themes" / "showcase_html").mkdir(parents=True)
+        (template_dir / "themes" / "showcase_react").mkdir(parents=True)
 
         with pytest.raises(ValueError, match="Invalid theme 'showcase_htmx'"):
             ProjectGenerator(template_dir=template_dir, theme="showcase_htmx")
@@ -494,15 +495,15 @@ class TestProjectGeneratorThemeValidation:
     ) -> None:
         """Theme-specific template is preferred over common template."""
         template_dir = tmp_path / "templates"
-        theme_dir = template_dir / "themes" / "showcase_html"
+        theme_dir = template_dir / "themes" / "showcase_react"
         theme_dir.mkdir(parents=True)
         (theme_dir / "mytemplate.html.j2").write_text("{{ project_name }}")
 
-        generator = ProjectGenerator(template_dir=template_dir, theme="showcase_html")
+        generator = ProjectGenerator(template_dir=template_dir, theme="showcase_react")
 
         assert (
             generator._get_theme_template_path("mytemplate.html.j2")
-            == "themes/showcase_html/mytemplate.html.j2"
+            == "themes/showcase_react/mytemplate.html.j2"
         )
 
     def test_returns_common_path_when_only_common_template_exists(
@@ -510,13 +511,13 @@ class TestProjectGeneratorThemeValidation:
     ) -> None:
         """Returns common/ path when theme template is absent but common exists."""
         template_dir = tmp_path / "templates"
-        theme_dir = template_dir / "themes" / "showcase_html"
+        theme_dir = template_dir / "themes" / "showcase_react"
         theme_dir.mkdir(parents=True)
         common_dir = template_dir / "common"
         common_dir.mkdir()
         (common_dir / "fallback.html.j2").write_text("fallback content")
 
-        generator = ProjectGenerator(template_dir=template_dir, theme="showcase_html")
+        generator = ProjectGenerator(template_dir=template_dir, theme="showcase_react")
 
         assert (
             generator._get_theme_template_path("fallback.html.j2")
@@ -528,13 +529,13 @@ class TestProjectGeneratorThemeValidation:
     ) -> None:
         """Raises FileNotFoundError with attempted paths when template is missing."""
         template_dir = tmp_path / "templates"
-        (template_dir / "themes" / "showcase_html").mkdir(parents=True)
+        (template_dir / "themes" / "showcase_react").mkdir(parents=True)
 
-        generator = ProjectGenerator(template_dir=template_dir, theme="showcase_html")
+        generator = ProjectGenerator(template_dir=template_dir, theme="showcase_react")
 
         with pytest.raises(
             FileNotFoundError,
-            match="Template 'some_root_template.j2' not found for theme 'showcase_html'",
+            match="Template 'some_root_template.j2' not found for theme 'showcase_react'",
         ):
             generator._get_theme_template_path("some_root_template.j2")
 
@@ -546,7 +547,7 @@ class TestProjectGeneratorErrorPaths:
         self, tmp_path: Path
     ) -> None:
         """PermissionError raised when parent dir creation fails with OSError."""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "nonexistent_parent" / "subdir" / "myproject"
 
         with patch(
@@ -560,7 +561,7 @@ class TestProjectGeneratorErrorPaths:
         self, tmp_path: Path
     ) -> None:
         """PermissionError raised via os.access check returning False."""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         parent_dir = tmp_path / "existing_parent"
         parent_dir.mkdir()
         output_path = parent_dir / "myproject"
@@ -573,7 +574,7 @@ class TestProjectGeneratorErrorPaths:
         self, tmp_path: Path, capsys: pytest.CaptureFixture
     ) -> None:
         """Prints warning when poetry executable is not found; does not raise."""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_path = tmp_path / "fakeproject"
         project_path.mkdir()
 
@@ -587,7 +588,7 @@ class TestProjectGeneratorErrorPaths:
         self, tmp_path: Path, capsys: pytest.CaptureFixture
     ) -> None:
         """Prints warning when poetry lock returns non-zero exit code; does not raise."""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_path = tmp_path / "fakeproject"
         project_path.mkdir()
 
@@ -605,7 +606,7 @@ class TestProjectGeneratorErrorPaths:
         self, tmp_path: Path, capsys: pytest.CaptureFixture
     ) -> None:
         """No output when poetry lock runs successfully."""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_path = tmp_path / "fakeproject"
         project_path.mkdir()
 
@@ -654,57 +655,39 @@ class TestSa90MappingDrivenGeneration:
 
     def test_mapping_no_duplicate_destinations(self) -> None:
         """The mapping must never contain duplicate emitted paths."""
-        for theme in ("showcase_html", "showcase_react"):
-            mapping = get_generator_emission_mapping(
-                self._get_template_dir(), theme=theme
-            )
-            assert len(mapping) == len(set(mapping.keys())), (
-                f"Duplicate destinations in mapping for theme={theme}"
-            )
-
-    def test_mapping_different_per_theme(self) -> None:
-        """Each supported theme produces a distinct emitted-path set."""
-        html_map = get_generator_emission_mapping(
-            self._get_template_dir(), theme="showcase_html"
+        mapping = get_generator_emission_mapping(
+            self._get_template_dir(), theme="showcase_react"
         )
+        assert len(mapping) == len(set(mapping.keys())), (
+            "Duplicate destinations in mapping for showcase_react"
+        )
+
+    def test_mapping_react_has_frontend_files(self) -> None:
+        """React theme mapping must include frontend/ files."""
         react_map = get_generator_emission_mapping(
             self._get_template_dir(), theme="showcase_react"
         )
-        assert html_map != react_map
-        # React maps frontend/ files; HTML does not
         assert any(k.startswith("frontend/") for k in react_map), (
             "React theme should include frontend/ files"
         )
-        assert not any(k.startswith("frontend/") for k in html_map), (
-            "HTML theme should not include frontend/ files"
-        )
-        # HTML maps static/ files that React does not
-        assert any(k.startswith("static/") for k in html_map), (
-            "HTML theme should include static/ files"
-        )
         assert not any(k.startswith("static/") for k in react_map), (
             "React theme should not include static/ files"
-        )
-        # HTML maps templates/components/ that React does not
-        assert any("templates/components/" in k for k in html_map), (
-            "HTML theme should include templates/components/"
         )
         assert not any("templates/components/" in k for k in react_map), (
             "React theme should not include templates/components/"
         )
 
     def test_mapping_shared_django_templates_present(self) -> None:
-        """Both themes must map shared Django templates (admin overrides)."""
-        for theme in ("showcase_html", "showcase_react"):
-            mapping = get_generator_emission_mapping(
-                self._get_template_dir(), theme=theme
-            )
-            assert "templates/admin/index.html" in mapping, (
-                f"admin/index.html missing from {theme} mapping"
-            )
-            assert "templates/admin/app_index.html" in mapping, (
-                f"admin/app_index.html missing from {theme} mapping"
-            )
+        """React theme must map shared Django templates (admin overrides)."""
+        mapping = get_generator_emission_mapping(
+            self._get_template_dir(), theme="showcase_react"
+        )
+        assert "templates/admin/index.html" in mapping, (
+            "admin/index.html missing from showcase_react mapping"
+        )
+        assert "templates/admin/app_index.html" in mapping, (
+            "admin/app_index.html missing from showcase_react mapping"
+        )
 
     # ------------------------------------------------------------------
     # selected_modules filtering in the mapping
@@ -758,26 +741,6 @@ class TestSa90MappingDrivenGeneration:
     # ------------------------------------------------------------------
     # Generated-tree completeness: every mapped file exists on disk
     # ------------------------------------------------------------------
-
-    def test_generated_tree_matches_mapping_html(self, tmp_path: Path) -> None:
-        """Generated HTML project must contain every file in the mapping."""
-        template_dir = self._get_template_dir()
-        project_name = "validname"
-        mapping = get_generator_emission_mapping(
-            template_dir,
-            theme="showcase_html",
-            package_name=project_name,
-        )
-        gen = ProjectGenerator(template_dir=template_dir, theme="showcase_html")
-        output = tmp_path / "test_html_map"
-        gen.generate(project_name, output)
-
-        missing = [
-            ep for ep in mapping if ep != "poetry.lock" and not (output / ep).exists()
-        ]
-        assert not missing, (
-            f"HTML generated project missing {len(missing)} file(s): {missing[:10]}"
-        )
 
     def test_generated_tree_matches_mapping_react(self, tmp_path: Path) -> None:
         """Generated React project must contain every file in the mapping."""
@@ -841,7 +804,7 @@ class TestSa90MappingDrivenGeneration:
         docstring.
         """
         template_dir = self._get_template_dir()
-        gen = ProjectGenerator(template_dir=template_dir, theme="showcase_html")
+        gen = ProjectGenerator(template_dir=template_dir, theme="showcase_react")
         output = tmp_path / "test_exec"
         gen.generate("validname", output)
 
@@ -853,7 +816,7 @@ class TestSa90MappingDrivenGeneration:
     def test_non_executable_files_not_executable(self, tmp_path: Path) -> None:
         """Non-executable mapped files must NOT have exec mode."""
         template_dir = self._get_template_dir()
-        gen = ProjectGenerator(template_dir=template_dir, theme="showcase_html")
+        gen = ProjectGenerator(template_dir=template_dir, theme="showcase_react")
         output = tmp_path / "test_noexec"
         gen.generate("validname", output)
 
@@ -902,28 +865,18 @@ class TestSa90MappingDrivenGeneration:
     # Union mapping for SA66 (no duplicates, covers all themes)
     # ------------------------------------------------------------------
 
-    def test_union_mapping_covers_both_themes(self) -> None:
-        """Union of per-theme mappings must not have intra-theme duplicates
-        and must include theme-specific files from both themes."""
-        html_map = get_generator_emission_mapping(
-            self._get_template_dir(), theme="showcase_html"
-        )
+    def test_react_mapping_has_expected_files(self) -> None:
+        """React theme mapping must contain expected files."""
         react_map = get_generator_emission_mapping(
             self._get_template_dir(), theme="showcase_react"
         )
-
-        # HTML-specific files
-        assert "templates/components/navigation.html" in html_map
-        assert "static/css/style.css" in html_map
-        assert "static/images/favicon.svg" in html_map
 
         # React-specific files
         assert "frontend/src/App.tsx" in react_map
         assert "frontend/src/main.tsx" in react_map
         assert "frontend/package.json" in react_map
 
-        # Shared files appear in both
-        assert "Makefile" in html_map
+        # Shared files should be present
         assert "Makefile" in react_map
 
 
@@ -950,11 +903,6 @@ class TestSa90ExactManifestParity:
     )
 
     _VARIANTS: dict[str, dict] = {
-        "html_default": {
-            "theme": "showcase_html",
-            "selected_modules": None,
-            "project_name": "testproject",
-        },
         "react_default": {
             "theme": "showcase_react",
             "selected_modules": None,
@@ -1084,7 +1032,7 @@ class TestSa90ExactManifestParity:
         (no non-determinism beyond poetry.lock)."""
         import tempfile
 
-        cfg = self._VARIANTS["html_default"]
+        cfg = self._VARIANTS["react_default"]
         generator = ProjectGenerator(theme=cfg["theme"])
 
         def _capture(out_dir: Path) -> dict[str, str]:
@@ -1104,7 +1052,7 @@ class TestSa90ExactManifestParity:
             tree1 = _capture(base / "run1")
             tree2 = _capture(base / "run2")
             assert tree1 == tree2, (
-                "Two successive generations of html_default produced different trees"
+                "Two successive generations of react_default produced different trees"
             )
         finally:
             import shutil

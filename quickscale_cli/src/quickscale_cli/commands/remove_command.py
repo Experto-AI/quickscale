@@ -27,6 +27,10 @@ from quickscale_core.advisory_lock import (
     AdvisoryLockContentionError,
 )
 from quickscale_core.project_state import ProjectStateManager
+from quickscale_core.utils.theme_validation import (
+    ThemeValidationError,
+    validate_theme_preflight,
+)
 
 
 _APPLY_RECOVERY_FILENAME = "apply-recovery.yml"
@@ -739,6 +743,27 @@ def remove(module_name: str, force: bool, keep_data: bool) -> None:
     module and re-embed with new options.
     """
     project_path = Path.cwd()
+
+    # CR-SA94-REV-A-003: Run read-only theme preflight before any
+    # state loading, filesystem probe, or mutation.  The shared
+    # regenerate_managed_wiring guard also runs preflight internally.
+    try:
+        validate_theme_preflight(project_path)
+    except ThemeValidationError as exc:
+        click.secho(
+            "\n❌ Theme validation failed for module removal:\n"
+            + "\n".join(f"  • {line}" for line in str(exc).splitlines()),
+            fg="red",
+            err=True,
+            bold=True,
+        )
+        click.echo(
+            "\n💡 Update project.theme to 'showcase_react' in all present "
+            "configuration files before removing modules.",
+            err=True,
+        )
+        raise click.Abort()
+
     state_manager = StateManager(project_path)
     plan = _build_removal_plan(project_path, module_name, state_manager)
 

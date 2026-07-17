@@ -9,6 +9,10 @@ from pathlib import Path
 import click
 
 from quickscale_core.schema.config_schema import QuickScaleConfig
+from quickscale_core.utils.theme_validation import (
+    ThemeValidationError,
+    validate_theme_preflight,
+)
 from quickscale_cli.utils.docker_utils import (
     DockerComposePluginRequiredError,
     get_docker_compose_command,
@@ -266,6 +270,25 @@ def _command_contains(error: subprocess.CalledProcessError, *tokens: str) -> boo
 @click.option("--no-cache", is_flag=True, help="Build without using cache")
 def up(build: bool, no_cache: bool) -> None:
     """Start Docker services for development."""
+    # Run read-only theme preflight before any Docker/compose/port probe.
+    try:
+        validate_theme_preflight(Path.cwd())
+    except ThemeValidationError as exc:
+        click.secho(
+            "\n❌ Theme validation failed:",
+            fg="red",
+            err=True,
+            bold=True,
+        )
+        for line in str(exc).splitlines():
+            click.echo(f"  • {line}", err=True)
+        click.echo(
+            "\n💡 Update project.theme to 'showcase_react' in all present "
+            "configuration files before running 'quickscale up'.",
+            err=True,
+        )
+        sys.exit(1)
+
     _validate_project_and_docker()
 
     # Load config to check for default build behavior

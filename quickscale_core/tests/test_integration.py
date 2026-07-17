@@ -14,7 +14,7 @@ class TestProjectGenerationIntegration:
 
     def test_generate_and_validate_project(self, tmp_path):
         """Generate project and verify it's a valid Django project"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "integration_test"
         output_path = tmp_path / project_name
 
@@ -48,7 +48,7 @@ class TestProjectGenerationIntegration:
 
     def test_generated_project_imports(self, tmp_path):
         """Verify generated Python files can be imported"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "importtest"
         output_path = tmp_path / project_name
 
@@ -74,7 +74,7 @@ class TestProjectGenerationIntegration:
 
     def test_multiple_projects_independent(self, tmp_path):
         """Multiple generated projects should be independent"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
 
         project1 = "project_one"
         project2 = "project_two"
@@ -101,7 +101,7 @@ class TestProjectGenerationIntegration:
 
     def test_cicd_files_generated(self, tmp_path):
         """Generated project should include CI/CD files"""
-        generator = ProjectGenerator(theme="showcase_html")
+        generator = ProjectGenerator(theme="showcase_react")
         project_name = "cicdtest"
         output_path = tmp_path / project_name
 

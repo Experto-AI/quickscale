@@ -39,7 +39,7 @@ def _write_quickscale_config(project_path: Path, include_auth: bool) -> None:
                 "project:",
                 "  slug: myproject",
                 "  package: myproject",
-                "  theme: showcase_html",
+                "  theme: showcase_react",
                 "modules:",
                 modules_block.rstrip("\n"),
                 "docker:",
@@ -60,7 +60,7 @@ def _write_quickscale_config_with_modules(
         "project": {
             "slug": "myproject",
             "package": "myproject",
-            "theme": "showcase_html",
+            "theme": "showcase_react",
         },
         "modules": {module_name: {} for module_name in module_names},
         "docker": {"start": False},
@@ -77,7 +77,7 @@ def _write_initial_state(project_path: Path) -> None:
         "project": {
             "slug": "myproject",
             "package": "myproject",
-            "theme": "showcase_html",
+            "theme": "showcase_react",
             "created_at": "2025-01-01T00:00:00",
             "last_applied": "2025-01-01T00:00:00",
         },
@@ -106,7 +106,7 @@ def _write_initial_state_with_modules(
         "project": {
             "slug": "myproject",
             "package": "myproject",
-            "theme": "showcase_html",
+            "theme": "showcase_react",
             "created_at": "2025-01-01T00:00:00",
             "last_applied": "2025-01-01T00:00:00",
         },
@@ -147,7 +147,7 @@ def _write_non_consolidated_state_with_modules(
         "project": {
             "slug": "myproject",
             "package": "myproject",
-            "theme": "showcase_html",
+            "theme": "showcase_react",
             "created_at": "2025-01-01T00:00:00",
             "last_applied": "2025-01-01T00:00:00",
         },
@@ -248,7 +248,7 @@ def _write_apply_recovery_state_with_modules(
         "project": {
             "slug": "myproject",
             "package": "myproject",
-            "theme": "showcase_html",
+            "theme": "showcase_react",
             "created_at": "2025-01-01T00:00:00",
             "last_applied": "2025-01-02T00:00:00",
         },
@@ -315,7 +315,7 @@ def _write_backups_quickscale_config(
         "project": {
             "slug": "myproject",
             "package": "myproject",
-            "theme": "showcase_html",
+            "theme": "showcase_react",
         },
         "modules": {"backups": backups_options},
         "docker": {"start": False},
@@ -332,7 +332,7 @@ def _write_blog_quickscale_config(base_path: Path, *, enable_rss: bool) -> None:
         "project": {
             "slug": "myproject",
             "package": "myproject",
-            "theme": "showcase_html",
+            "theme": "showcase_react",
         },
         "modules": {"blog": {"enable_rss": enable_rss}},
         "docker": {"start": False},
@@ -349,7 +349,7 @@ def _write_blog_state(project_path: Path, *, enable_rss: bool) -> None:
         "project": {
             "slug": "myproject",
             "package": "myproject",
-            "theme": "showcase_html",
+            "theme": "showcase_react",
             "created_at": "2025-01-01T00:00:00",
             "last_applied": "2025-01-01T00:00:00",
         },
@@ -817,7 +817,7 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
             "project": {
                 "slug": "myproject",
                 "package": "myproject",
-                "theme": "showcase_html",
+                "theme": "showcase_react",
             },
             "modules": {
                 "auth": {},
@@ -837,7 +837,7 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
             "project": {
                 "slug": "myproject",
                 "package": "myproject",
-                "theme": "showcase_html",
+                "theme": "showcase_react",
                 "created_at": "2025-01-01T00:00:00",
                 "last_applied": "2025-01-01T00:00:00",
             },

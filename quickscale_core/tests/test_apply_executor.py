@@ -59,7 +59,7 @@ def _minimal_state() -> QuickScaleState:
         project=ProjectState(
             slug="myapp",
             package="myapp",
-            theme="showcase_html",
+            theme="showcase_react",
             created_at="2025-01-01T00:00:00",
             last_applied="2025-06-01T00:00:00",
         ),
@@ -215,7 +215,7 @@ class TestApplyExecutorGetCheckpoint:
                 "project": {
                     "slug": "myapp",
                     "package": "myapp",
-                    "theme": "showcase_html",
+                    "theme": "showcase_react",
                     "created_at": "2025-01-01T00:00:00",
                     "last_applied": "2025-06-01T00:00:00",
                 },
@@ -233,7 +233,7 @@ class TestApplyExecutorGetCheckpoint:
                 "project": {
                     "slug": "myapp",
                     "package": "myapp",
-                    "theme": "showcase_html",
+                    "theme": "showcase_react",
                     "created_at": "2025-01-01T00:00:00",
                     "last_applied": "2025-06-01T00:00:00",
                 },
@@ -282,7 +282,7 @@ class TestApplyExecutorFindFirstUnsatisfied:
                 "project": {
                     "slug": "myapp",
                     "package": "myapp",
-                    "theme": "showcase_html",
+                    "theme": "showcase_react",
                     "created_at": "2025-01-01T00:00:00",
                     "last_applied": "2025-06-01T00:00:00",
                 },
@@ -422,7 +422,7 @@ class TestApplyExecutorRecoverySkip:
                 "project": {
                     "slug": "myapp",
                     "package": "myapp",
-                    "theme": "showcase_html",
+                    "theme": "showcase_react",
                     "created_at": "2025-01-01T00:00:00",
                     "last_applied": "2025-06-01T00:00:00",
                 },
@@ -720,7 +720,7 @@ class TestAF5Phase3FaultInjection:
                 "project": {
                     "slug": "myapp",
                     "package": "myapp",
-                    "theme": "showcase_html",
+                    "theme": "showcase_react",
                     "created_at": "2025-01-01T00:00:00",
                     "last_applied": "2025-06-01T00:00:00",
                 },

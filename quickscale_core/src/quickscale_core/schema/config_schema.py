@@ -99,7 +99,7 @@ class QuickScaleConfig:
 VALID_TOP_LEVEL_KEYS = {"version", "project", "modules", "docker"}
 VALID_PROJECT_KEYS = {"slug", "package", "theme"}
 VALID_DOCKER_KEYS = {"start", "build", "create_superuser"}
-VALID_THEMES = {"showcase_html", "showcase_react"}
+VALID_THEMES = {"showcase_react"}
 AVAILABLE_MODULES = set(get_discovered_module_names())
 READY_MODULES = set(get_discovered_module_names())
 
@@ -421,10 +421,18 @@ def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str, 
     theme = project_data.get("theme", "showcase_react")
     if theme not in VALID_THEMES:
         line = _find_line_number(yaml_content, "theme")
+        if theme == "showcase_html":
+            suggestion = (
+                "'showcase_html' has been retired. Use 'showcase_react' instead."
+            )
+        else:
+            suggestion = (
+                "Only 'showcase_react' is supported. Use 'showcase_react' instead."
+            )
         raise ConfigValidationError(
             f"Unknown theme '{theme}'",
             line=line,
-            suggestion=f"Available themes: {', '.join(sorted(VALID_THEMES))}",
+            suggestion=suggestion,
         )
 
     return project_slug, package_name, theme

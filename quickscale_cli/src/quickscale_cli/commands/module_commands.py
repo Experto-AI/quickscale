@@ -49,6 +49,10 @@ from quickscale_core.utils.git_utils import (
     run_git_subtree_pull,
     run_git_subtree_push,
 )
+from quickscale_core.utils.theme_validation import (
+    ThemeValidationError,
+    validate_theme_preflight,
+)
 
 from .module_config import (
     APPLY_MODULE_EXECUTION_MODE,
@@ -546,6 +550,28 @@ def embed_module(
         import os
 
         os.chdir(project_path)
+
+        # CR-SA94-REV-A-003: Run read-only theme preflight before any
+        # git, remote, auth, subtree, filesystem, or state mutation.
+        # This rejects retired-theme / malformed-source projects before
+        # any probe or mutation occurs.  The shared
+        # regenerate_managed_wiring guard also runs preflight internally.
+        try:
+            validate_theme_preflight(project_path)
+        except ThemeValidationError as exc:
+            click.secho(
+                "\n❌ Theme validation failed for module embed:\n"
+                + "\n".join(f"  • {line}" for line in str(exc).splitlines()),
+                fg="red",
+                err=True,
+                bold=True,
+            )
+            click.echo(
+                "\n💡 Update project.theme to 'showcase_react' in all present "
+                "configuration files before embedding modules.",
+                err=True,
+            )
+            return False
 
         # Validation steps
         if not _validate_git_environment():

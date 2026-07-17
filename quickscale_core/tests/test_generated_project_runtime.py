@@ -427,10 +427,10 @@ class TestGeneratedProjectRuntimeSmoke:
         )
         from quickscale_core.generator import ProjectGenerator
 
-        # Phase 1: Generate project scaffold (HTML theme — no frontend build).
+        # Phase 1: Generate project scaffold (React theme — with frontend).
         project_name = "runtime_smoke_auth"
         project_path = tmp_path / project_name
-        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
 
         assert (project_path / "manage.py").exists()
         assert (project_path / "pyproject.toml").exists()
@@ -455,7 +455,7 @@ class TestGeneratedProjectRuntimeSmoke:
         self._write_quickscale_yml_with_modules(
             project_path,
             project_name,
-            "showcase_html",
+            "showcase_react",
             {"auth": auth_options, "orgs": orgs_options},
         )
 
@@ -533,7 +533,7 @@ class TestGeneratedProjectRuntimeSmoke:
 
         project_name = "runtime_smoke_cache"
         project_path = tmp_path / project_name
-        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
 
         assert (project_path / "manage.py").exists()
         assert (project_path / "pyproject.toml").exists()
@@ -599,8 +599,8 @@ class TestGeneratedProjectRuntimeSmoke:
         project_name = "runtime_sa63_prod"
         project_path = tmp_path / project_name
 
-        # Phase 1: Generate project scaffold (HTML theme — no frontend build).
-        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        # Phase 1: Generate project scaffold (React theme — with frontend).
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
         assert (project_path / "manage.py").exists()
         assert (project_path / "pyproject.toml").exists()
 
@@ -624,7 +624,7 @@ class TestGeneratedProjectRuntimeSmoke:
         self._write_quickscale_yml_with_modules(
             project_path,
             project_name,
-            "showcase_html",
+            "showcase_react",
             {"auth": auth_options, "orgs": orgs_options},
         )
 
@@ -731,8 +731,8 @@ class TestGeneratedProjectRuntimeSmoke:
         project_name = "runtime_sa68_privcmd"
         project_path = tmp_path / project_name
 
-        # Phase 1: Generate project scaffold (HTML theme — no frontend build).
-        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        # Phase 1: Generate project scaffold (React theme — with frontend).
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
         assert (project_path / "manage.py").exists()
         assert (project_path / "pyproject.toml").exists()
 
@@ -756,7 +756,7 @@ class TestGeneratedProjectRuntimeSmoke:
         self._write_quickscale_yml_with_modules(
             project_path,
             project_name,
-            "showcase_html",
+            "showcase_react",
             {"auth": auth_options, "orgs": orgs_options},
         )
 
@@ -849,7 +849,7 @@ class TestGeneratedProjectRuntimeSmoke:
 
         project_name = "runtime_collectstatic"
         project_path = tmp_path / project_name
-        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
 
         assert (project_path / "manage.py").exists()
         assert (project_path / "pyproject.toml").exists()

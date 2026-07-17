@@ -1,201 +1,39 @@
 {
   "_provenance": {
-    "description": "Independent exact path/hash/mode manifests for four generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name='testproject').  poetry.lock is excluded — it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
+    "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name='testproject').  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "variants": {
-      "html_default":     {"theme": "showcase_html",   "selected_modules": null,                      "project_name": "testproject"},
-      "react_default":    {"theme": "showcase_react",  "selected_modules": null,                      "project_name": "testproject"},
-      "react_empty":      {"theme": "showcase_react",  "selected_modules": [],                        "project_name": "testproject"},
-      "react_selected":   {"theme": "showcase_react",  "selected_modules": ["blog","forms","social"], "project_name": "testproject"}
+      "react_default": {
+        "theme": "showcase_react",
+        "selected_modules": null,
+        "project_name": "testproject"
+      },
+      "react_empty": {
+        "theme": "showcase_react",
+        "selected_modules": [],
+        "project_name": "testproject"
+      },
+      "react_selected": {
+        "theme": "showcase_react",
+        "selected_modules": [
+          "blog",
+          "forms",
+          "social"
+        ],
+        "project_name": "testproject"
+      }
     },
     "baseline_evidence": {
       "pre_refactor": "/tmp/baseline-old-v2.json",
       "post_refactor": "/tmp/baseline-new-v2.json",
-      "pre_post_delta": "Zero path/content/mode delta for all four variant categories — validated during prior implementation pass."
+      "pre_post_delta": "Zero path/content/mode delta for all three React variant categories \u2014 validated during prior implementation pass. html_default variant removed in SA94 Phase 4."
     },
     "normalization_notes": [
       "Only project_name='testproject' is used; package_name substitution is applied by the generator.",
       "poetry.lock is absent from every variant (dynamic artifact, not checked in).",
       "Executable modes (mode: '775') reflect actual os.stat after generation: manage.py and scripts/lint.sh are executable.",
-      "start.sh is intentionally non-executable (mode: '664') — see _EXECUTABLE_EMITTED exclusion in test_generator.py."
+      "start.sh is intentionally non-executable (mode: '664') \u2014 see _EXECUTABLE_EMITTED exclusion in test_generator.py.",
+      "html_default (showcase_html) variant removed in SA94 Phase 4 \u2014 React is the sole emitted theme surface."
     ]
-  },
-  "html_default": {
-    ".dockerignore": {
-      "mode": "664",
-      "sha256": "fcdbc08af6f071a6d442d300efd1c6151554aba60017f411e843b557f46e2d05"
-    },
-    ".editorconfig": {
-      "mode": "664",
-      "sha256": "37d5024d9b24b97197aa28d9c1783aa228a961b8e53ebb94687ccb8817034632"
-    },
-    ".env": {
-      "mode": "664",
-      "sha256": "9ed31cf3b2f3051de42af2987978eefa8dba416e26e7c94777f846e27c396479"
-    },
-    ".env.example": {
-      "mode": "664",
-      "sha256": "d483010199957d719c5e32d51b6c0688087835295abb27570b47ebff507e9481"
-    },
-    ".github/workflows/ci.yml": {
-      "mode": "664",
-      "sha256": "35903890d1afccb9447fd2e647f416209ab319e22abf1e38831df8e8630a25b7"
-    },
-    ".gitignore": {
-      "mode": "664",
-      "sha256": "be8506e56e6898e60c96639cc7bb22f121e188fd2e87820e1589537e629b518d"
-    },
-    ".pre-commit-config.yaml": {
-      "mode": "664",
-      "sha256": "3176f845c89d33d1231f707ac046e8888d75aa6eab8faeeb100729adbd516fd1"
-    },
-    "Dockerfile": {
-      "mode": "664",
-      "sha256": "85f30c808abcc8ef90e48c62ceb2a2c14af7a1cac16367a9b91407ca87c4f219"
-    },
-    "Makefile": {
-      "mode": "664",
-      "sha256": "8a68f238d58d0e38f8bc7e2a2f4911c4a7206f15b90b814f1c9bb71e993b679d"
-    },
-    "OPERATIONS.md": {
-      "mode": "664",
-      "sha256": "c8e6c725e79496c1be09afb5e0360e72518eeaa314edb6b2b6f97c48bad456ee"
-    },
-    "README.md": {
-      "mode": "664",
-      "sha256": "1c78358b51b293359ec4854fb4a01e0b0285da230b192aa8cacc826e8c9b8cea"
-    },
-    "db/init.sql": {
-      "mode": "664",
-      "sha256": "ec11a8e596fa16508ca1b6d402e009c46291b6d6a6c064f7dc524767b768a0d8"
-    },
-    "docker-compose.yml": {
-      "mode": "664",
-      "sha256": "b729f0263597efbe1376b3361c076430a663d347905bfc39cc88236af1b7f44e"
-    },
-    "manage.py": {
-      "mode": "775",
-      "sha256": "189e769f429a8771484025641b731ae40ee19b8ef3201f32eff987bd7732db19"
-    },
-    "pyproject.toml": {
-      "mode": "664",
-      "sha256": "b6d5e04f20e5fe89d2546b7741790700dda911c4b02190bd7379a2cfc3592f65"
-    },
-    "railway.json": {
-      "mode": "664",
-      "sha256": "49b638e8e76569556ece0b31806570802f809c90b00d04c9d2fb1a4c4f9ca70e"
-    },
-    "scripts/lint.sh": {
-      "mode": "775",
-      "sha256": "dd3fd6f657358e601778812c9adda6c37497cc99eb33a4fe0d4a1563a41cd269"
-    },
-    "start.sh": {
-      "mode": "664",
-      "sha256": "3c44ee4af7faa02cfad6f85e464323c656c394631217b3ca1fc2a0180fc1db55"
-    },
-    "static/css/style.css": {
-      "mode": "664",
-      "sha256": "5a676d76e4d6c24f03eecb592dce24a2110dba1ae0a05f20307dd247e2cdb8cc"
-    },
-    "static/images/favicon.svg": {
-      "mode": "664",
-      "sha256": "1eae6aa63c28fd105aa01467a58fdc1509de5bcd61d7542f9a1319bec1e5fd84"
-    },
-    "templates/404.html": {
-      "mode": "664",
-      "sha256": "56e8e586a57fe99f9c577dcc62ba355a0a286199565529225015865c1c7f1061"
-    },
-    "templates/500.html": {
-      "mode": "664",
-      "sha256": "919268fa0c9742970c8874b5e536059e86cf64e4b5a244d6ca554ed326e42dfa"
-    },
-    "templates/admin/app_index.html": {
-      "mode": "664",
-      "sha256": "7ebc7fec7377bc7c3c564e7841af734f24ed0410e79eed616f64a444c975e0a2"
-    },
-    "templates/admin/index.html": {
-      "mode": "664",
-      "sha256": "63cf742973016584a0bc1f3ca6eb6098f25939892a8045f30c9fc7a6b95baaa9"
-    },
-    "templates/base.html": {
-      "mode": "664",
-      "sha256": "2f82c3c8cce9bebc43a0b8ff56ae25cee06b955d0db2b1ba4a87b79aaea3fbd0"
-    },
-    "templates/components/navigation.html": {
-      "mode": "664",
-      "sha256": "3f49228911f3830095c8986486f75d7c10d848a6cbf39269ed9bf55570b6ea27"
-    },
-    "templates/index.html": {
-      "mode": "664",
-      "sha256": "923d26b6fb06bde0b70242d8febcacc11025dd41eb3e0dafd625ea79b6cf03bf"
-    },
-    "templates/social/embeds.html": {
-      "mode": "664",
-      "sha256": "e7ff7be213174c511fa32d2c8e0927657bbd0fb88c23a7b5149f71d624091674"
-    },
-    "templates/social/link_tree.html": {
-      "mode": "664",
-      "sha256": "20fa4f955ff477ff870245245585fa6a11512079caf25ad29254a7a1f2e479c8"
-    },
-    "testproject/__init__.py": {
-      "mode": "664",
-      "sha256": "2beb99c082e6fb5a9050e3af97126e6b9a6d4495df624c28bd02610a9805286b"
-    },
-    "testproject/asgi.py": {
-      "mode": "664",
-      "sha256": "5ae84d756c5ee43499fa3976830ea1fb981a51f126808e57c832f4a1f23f7d3d"
-    },
-    "testproject/context_processors.py": {
-      "mode": "664",
-      "sha256": "502f5f2207754d1adf2befb4446df19f91d91ef912d59194c0137f66379aa8cf"
-    },
-    "testproject/settings/__init__.py": {
-      "mode": "664",
-      "sha256": "c8c9c4f7977a8f9ddc6e552d974d4cce1dabd811a36e3dc5b977419043d5db4c"
-    },
-    "testproject/settings/base.py": {
-      "mode": "664",
-      "sha256": "2d46e2d9f579d4ac55c2b5b9e93a6189c567edbe3b688d27d31dd37f3a294056"
-    },
-    "testproject/settings/local.py": {
-      "mode": "664",
-      "sha256": "3cb8254542b994413dd7b39d3ea399b33c4be2c5116d0b1d739b72921eefb449"
-    },
-    "testproject/settings/modules.py": {
-      "mode": "664",
-      "sha256": "bf792c1befae52ea0703b98c03bbe6f30655a0170a5af9752129061fe393abc6"
-    },
-    "testproject/settings/production.py": {
-      "mode": "664",
-      "sha256": "2845eb3e46f3f455210a44dc7dcbac47f88d6f68c9c146e6e3e4da9d06e1d03b"
-    },
-    "testproject/urls.py": {
-      "mode": "664",
-      "sha256": "5c93e8a8169e6b437a1fea21d3aa0b6ed76e72b07ca2f5534a854b6b4138bfb2"
-    },
-    "testproject/urls_modules.py": {
-      "mode": "664",
-      "sha256": "2ec1b29c982773cc901fd4a4b2593133917efd475a45d3da8bbf26d2e7ff0c18"
-    },
-    "testproject/views.py": {
-      "mode": "664",
-      "sha256": "3856662f1140e7f487add05f2bbd0d16f45c4940556e0d25698269752f814290"
-    },
-    "testproject/wsgi.py": {
-      "mode": "664",
-      "sha256": "4182c4a8da6d994db632b8115eb0983fbceb3a6d35d866b185fa64a57ba50b56"
-    },
-    "tests/__init__.py": {
-      "mode": "664",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    "tests/conftest.py": {
-      "mode": "664",
-      "sha256": "27ca6a3a5f2773a95d423ac4bb6a574c432c883b25f83e1d2b387789ee4d13c7"
-    },
-    "tests/test_example.py": {
-      "mode": "664",
-      "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
-    }
   },
   "react_default": {
     ".dockerignore": {
@@ -612,7 +450,7 @@
     },
     "testproject/urls.py": {
       "mode": "664",
-      "sha256": "93aaee86fa8a263b1309f5437438d0f68792260106d42f9ed1c86f3df396e7c6"
+      "sha256": "f38893ed71ac8b913b913760c2badc0cf53c4ea0f0a12d9a30281332926601c0"
     },
     "testproject/urls_modules.py": {
       "mode": "664",
@@ -1014,7 +852,7 @@
     },
     "testproject/urls.py": {
       "mode": "664",
-      "sha256": "93aaee86fa8a263b1309f5437438d0f68792260106d42f9ed1c86f3df396e7c6"
+      "sha256": "f38893ed71ac8b913b913760c2badc0cf53c4ea0f0a12d9a30281332926601c0"
     },
     "testproject/urls_modules.py": {
       "mode": "664",
@@ -1448,7 +1286,7 @@
     },
     "testproject/urls.py": {
       "mode": "664",
-      "sha256": "93aaee86fa8a263b1309f5437438d0f68792260106d42f9ed1c86f3df396e7c6"
+      "sha256": "f38893ed71ac8b913b913760c2badc0cf53c4ea0f0a12d9a30281332926601c0"
     },
     "testproject/urls_modules.py": {
       "mode": "664",

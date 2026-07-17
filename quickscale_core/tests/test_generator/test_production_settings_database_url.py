@@ -19,7 +19,7 @@ def prod_test_context() -> dict[str, str]:
     return {
         "project_name": "testproject",
         "package_name": "testproject",
-        "theme": "showcase_html",
+        "theme": "showcase_react",
         "python_version": PYTHON_VERSION,
         "python_constraint": PYTHON_CONSTRAINT,
         "python_docker_tag": PYTHON_DOCKER_TAG,

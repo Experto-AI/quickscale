@@ -289,7 +289,7 @@ class TestComputeDeltaWithManifests:
             project=ProjectConfig(
                 slug="testproject",
                 package="testproject",
-                theme="showcase_html",
+                theme="showcase_react",
             ),
             modules={
                 "crm": ModuleConfig(
@@ -308,7 +308,7 @@ class TestComputeDeltaWithManifests:
             project=ProjectState(
                 slug="testproject",
                 package="testproject",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2024-01-01T00:00:00",
                 last_applied="2024-01-01T00:00:00",
             ),
@@ -342,7 +342,7 @@ class TestComputeDeltaWithManifests:
             project=ProjectConfig(
                 slug="testproject",
                 package="testproject",
-                theme="showcase_html",
+                theme="showcase_react",
             ),
             modules={
                 "auth": ModuleConfig(
@@ -361,7 +361,7 @@ class TestComputeDeltaWithManifests:
             project=ProjectState(
                 slug="testproject",
                 package="testproject",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2024-01-01T00:00:00",
                 last_applied="2024-01-01T00:00:00",
             ),

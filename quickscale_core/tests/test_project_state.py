@@ -138,7 +138,7 @@ class TestCheckVersionDrift:
     def test_returns_empty_when_state_and_config_agree(self) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(name="auth", version="0.62.0"),
             },
@@ -156,7 +156,7 @@ class TestCheckVersionDrift:
     def test_returns_warning_when_versions_differ(self) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(name="auth", version="0.62.0"),
                 "billing": ModuleState(name="billing", version="1.0.0"),
@@ -186,7 +186,7 @@ class TestCheckVersionDrift:
     def test_ignores_modules_only_in_one_source(self) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "only_in_state": ModuleState(name="only_in_state"),
             },
@@ -207,7 +207,7 @@ class TestCheckVersionDrift:
 
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
         )
         assert check_version_drift(state, None) == []
         assert check_version_drift(None, None) == []
@@ -237,7 +237,7 @@ class TestProjectStateManager:
 
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
         )
         manager.save_state(state)
         assert manager.load_state() is not None
@@ -380,7 +380,7 @@ class TestProjectStateManager:
     def test_verify_consistency_reports_drift(self, tmp_path: Path) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(name="auth", version="0.62.0"),
             },
@@ -405,7 +405,7 @@ class TestProjectStateManager:
     def test_verify_consistency_empty_when_files_agree(self, tmp_path: Path) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(name="auth", version="0.62.0"),
             },
@@ -500,7 +500,7 @@ class TestStateYmlFormatUnchanged:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 created_at="2025-12-01T10:00:00",
                 last_applied="2025-12-01T11:00:00",
             ),
@@ -601,14 +601,14 @@ class TestQuickScaleStateConsolidatedModules:
     def test_empty_modules_is_consolidated(self) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
         )
         assert state.has_consolidated_modules is True
 
     def test_all_modules_consolidated(self) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(
                     name="auth",
@@ -623,7 +623,7 @@ class TestQuickScaleStateConsolidatedModules:
     def test_mixed_modules_not_consolidated(self) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(
                     name="auth",
@@ -644,7 +644,7 @@ class TestStateManagerConsolidatedSections:
         manager = StateManager(tmp_path)
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(
                     name="auth",
@@ -669,7 +669,7 @@ class TestStateManagerConsolidatedSections:
         manager = StateManager(tmp_path)
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             managed_files={
                 "myapp/settings/modules.py": ManagedFileRecord(
                     path="myapp/settings/modules.py",
@@ -698,7 +698,7 @@ class TestStateManagerConsolidatedSections:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
             '    version: "0.62.0"\n'
@@ -716,7 +716,7 @@ class TestStateManagerConsolidatedSections:
         manager = StateManager(tmp_path)
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(name="auth", version="0.62.0"),
             },
@@ -742,7 +742,7 @@ class TestProjectStateManagerReadThroughImport:
         # Write legacy state.yml without consolidated tracking.
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(name="auth", version="0.62.0"),
             },
@@ -775,7 +775,7 @@ class TestProjectStateManagerReadThroughImport:
         # Write consolidated state.yml.
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(
                     name="auth",
@@ -814,7 +814,7 @@ class TestProjectStateManagerReadThroughImport:
         # Write legacy state.yml without managed_files.
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
         )
         manager.save_state(state)
 
@@ -840,7 +840,7 @@ class TestProjectStateManagerReadThroughImport:
         # Write state.yml with no modules.
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
         )
         manager.save_state(state)
 
@@ -1040,7 +1040,7 @@ class TestStateManagerErrorPaths:
         manager = StateManager(tmp_path)
         manager.state_dir.mkdir(parents=True, exist_ok=True)
         manager.state_file.write_text(
-            'version: "1"\nproject:\n  package: myapp\n  theme: showcase_html\n'
+            'version: "1"\nproject:\n  package: myapp\n  theme: showcase_react\n'
         )
         with pytest.raises(StateError, match="project.slug must be a non-empty string"):
             manager.load()
@@ -1049,7 +1049,7 @@ class TestStateManagerErrorPaths:
         manager = StateManager(tmp_path)
         manager.state_dir.mkdir(parents=True, exist_ok=True)
         manager.state_file.write_text(
-            'version: "1"\nproject:\n  slug: myapp\n  theme: showcase_html\n'
+            'version: "1"\nproject:\n  slug: myapp\n  theme: showcase_react\n'
         )
         with pytest.raises(
             StateError, match="project.package must be a non-empty string"
@@ -1075,7 +1075,7 @@ class TestStateManagerErrorPaths:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules: not-a-mapping\n"
         )
         with pytest.raises(
@@ -1091,7 +1091,7 @@ class TestStateManagerErrorPaths:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules:\n"
             "  auth: not-a-mapping\n"
         )
@@ -1107,7 +1107,7 @@ class TestStateManagerErrorPaths:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "managed_files:\n"
             "  - path: myapp/settings.py\n"
             "    hash: abc123\n"
@@ -1127,7 +1127,7 @@ class TestStateManagerErrorPaths:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "managed_files:\n"
             "  myapp/settings.py:\n"
             "    hash: def456\n"
@@ -1149,7 +1149,7 @@ class TestStateManagerErrorPaths:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "managed_files:\n"
             "  - not-a-dict\n"
             "  - path: ok.py\n"
@@ -1170,7 +1170,7 @@ class TestStateManagerErrorPaths:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "managed_files:\n"
             "  bad_entry: not-a-dict\n"
             "  ok.py:\n"
@@ -1191,7 +1191,7 @@ class TestStateManagerErrorPaths:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "managed_files:\n"
             "  - hash: abc\n"  # missing path
             "  - path: ok.py\n"
@@ -1219,7 +1219,7 @@ class TestStateManagerUpdateAndVerify:
             project=ProjectState(
                 slug="myapp",
                 package="myapp",
-                theme="showcase_html",
+                theme="showcase_react",
                 last_applied="2020-01-01T00:00:00",
             ),
         )
@@ -1239,7 +1239,7 @@ class TestStateManagerUpdateAndVerify:
         manager = StateManager(tmp_path)
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
         )
         manager.save(state)
 
@@ -1255,7 +1255,7 @@ class TestStateManagerUpdateAndVerify:
         manager = StateManager(tmp_path)
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(name="auth", version="0.62.0"),
             },
@@ -1271,7 +1271,7 @@ class TestStateManagerUpdateAndVerify:
         manager = StateManager(tmp_path)
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(name="auth", version="0.62.0"),
             },
@@ -1294,21 +1294,21 @@ class TestQuickScaleStateConsolidatedProperties:
     def test_has_consolidated_managed_files_always_true(self) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
         )
         assert state.has_consolidated_managed_files is True
 
     def test_has_consolidated_modules_empty_is_true(self) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
         )
         assert state.has_consolidated_modules is True
 
     def test_has_consolidated_modules_with_tracking(self) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(
                     name="auth",
@@ -1324,7 +1324,7 @@ class TestQuickScaleStateConsolidatedProperties:
     def test_has_consolidated_modules_without_tracking(self) -> None:
         state = QuickScaleState(
             version="1",
-            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_react"),
             modules={
                 "auth": ModuleState(name="auth", version="0.62.0"),
             },
@@ -1364,12 +1364,12 @@ class TestResolveAuthoritativeProjectMetadata:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules: {}\n"
         )
         manager = ProjectStateManager(tmp_path)
         result = manager.resolve_authoritative_project_metadata()
-        assert result == ("myproject", "myproject", "showcase_html")
+        assert result == ("myproject", "myproject", "showcase_react")
 
     def test_returns_none_when_no_source_available(self, tmp_path: Path) -> None:
         """Returns None when neither state.yml nor quickscale.yml exists."""
@@ -1438,7 +1438,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules: {}\n"
         )
         # Existing state.yml with authoritative timestamps but no consolidated
@@ -1452,7 +1452,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2024-06-15T10:30:00'\n"
             "  last_applied: '2024-12-01T14:45:00'\n"
         )
@@ -1472,7 +1472,7 @@ class TestMaterializeAuthoritativeState:
         assert result is not None
         assert result.project.slug == "myproject"
         assert result.project.package == "myproject"
-        assert result.project.theme == "showcase_html"
+        assert result.project.theme == "showcase_react"
         # Timestamps preserved from raw state.yml — not fabricated.
         assert result.project.created_at == "2024-06-15T10:30:00"
         assert result.project.last_applied == "2024-12-01T14:45:00"
@@ -1543,7 +1543,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2024-06-15T10:30:00'\n"
             "  last_applied: '2024-12-01T14:45:00'\n"
             "modules: {}\n"
@@ -1554,7 +1554,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules: {}\n"
         )
         manager = ProjectStateManager(tmp_path)
@@ -1584,7 +1584,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules: {}\n"
         )
         # No state.yml exists.
@@ -1612,14 +1612,14 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
         )
         (tmp_path / "quickscale.yml").write_text(
             "version: '1'\n"
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules: {}\n"
         )
         manager = ProjectStateManager(tmp_path)
@@ -1643,7 +1643,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2024-06-15T10:30:00'\n"
         )
         (tmp_path / "quickscale.yml").write_text(
@@ -1651,7 +1651,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules: {}\n"
         )
         manager = ProjectStateManager(tmp_path)
@@ -1678,7 +1678,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2024-06-15T10:30:00'\n"
             "  last_applied: '2024-12-01T14:45:00'\n"
         )
@@ -1687,7 +1687,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules: {}\n"
         )
         # Malformed YAML in legacy config.yml.
@@ -1715,7 +1715,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2024-06-15T10:30:00'\n"
             "  last_applied: '2024-12-01T14:45:00'\n"
         )
@@ -1724,7 +1724,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules: {}\n"
         )
         # Valid YAML but not a valid module config: missing default_remote.
@@ -1751,7 +1751,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2024-06-15T10:30:00'\n"
             "  last_applied: '2024-12-01T14:45:00'\n"
         )
@@ -1760,7 +1760,7 @@ class TestMaterializeAuthoritativeState:
             "project:\n"
             "  slug: myproject\n"
             "  package: myproject\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "modules: {}\n"
         )
         # Malformed YAML in legacy file_hashes.yml.
@@ -1812,7 +1812,7 @@ class TestReadRawProjectTimestamps:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  last_applied: '2024-12-01T14:45:00'\n"
         )
         manager = ProjectStateManager(tmp_path)
@@ -1826,7 +1826,7 @@ class TestReadRawProjectTimestamps:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2024-06-15T10:30:00'\n"
         )
         manager = ProjectStateManager(tmp_path)
@@ -1840,7 +1840,7 @@ class TestReadRawProjectTimestamps:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: '2024-06-15T10:30:00'\n"
             "  last_applied: '2024-12-01T14:45:00'\n"
         )
@@ -1864,7 +1864,7 @@ class TestReadRawProjectTimestamps:
             "project:\n"
             "  slug: myapp\n"
             "  package: myapp\n"
-            "  theme: showcase_html\n"
+            "  theme: showcase_react\n"
             "  created_at: 12345\n"
             "  last_applied: 67890\n"
         )

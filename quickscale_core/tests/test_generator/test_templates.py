@@ -49,7 +49,7 @@ def test_context() -> dict[str, str | list[str] | None]:
     return {
         "project_name": "testproject",
         "package_name": "testproject",
-        "theme": "showcase_html",
+        "theme": "showcase_react",
         "python_version": PYTHON_VERSION,
         "python_constraint": PYTHON_CONSTRAINT,
         "python_docker_tag": PYTHON_DOCKER_TAG,
@@ -630,20 +630,8 @@ class TestTemplateLoading:
         template = jinja_env.get_template("project_name/asgi.py.j2")
         assert template is not None
 
-    def test_base_html_loads(self, jinja_env: Environment) -> None:
-        """Test base HTML template loads without errors."""
-        template = jinja_env.get_template("templates/base.html.j2")
-        assert template is not None
-
-    def test_index_html_loads(self, jinja_env: Environment) -> None:
-        """Test index HTML template loads without errors."""
-        template = jinja_env.get_template("templates/index.html.j2")
-        assert template is not None
-
-    def test_style_css_loads(self, jinja_env: Environment) -> None:
-        """Test CSS stylesheet template loads without errors."""
-        template = jinja_env.get_template("static/css/style.css.j2")
-        assert template is not None
+    # SA94: retired showcase_html removed base.html.j2, index.html.j2, style.css.j2.
+    # These templates were part of the retired showcase_html theme.
 
 
 class TestTemplateRendering:
@@ -738,35 +726,7 @@ class TestTemplateRendering:
         assert output is not None
         assert "testproject" in output
 
-    def test_base_html_renders(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test base HTML template renders with project name."""
-        template = jinja_env.get_template("templates/base.html.j2")
-        output = template.render(test_context)
-        assert output is not None
-        assert "testproject" in output
-        assert "<!DOCTYPE html>" in output
-
-    def test_index_html_renders(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test index HTML template renders with project name."""
-        template = jinja_env.get_template("templates/index.html.j2")
-        output = template.render(test_context)
-        assert output is not None
-        assert "testproject" in output
-        assert "Welcome to" in output
-
-    def test_style_css_renders(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test CSS stylesheet template renders with project name."""
-        template = jinja_env.get_template("static/css/style.css.j2")
-        output = template.render(test_context)
-        assert output is not None
-        assert "testproject" in output
-        assert "body {" in output
+    # SA94: retired showcase_html removed base.html.j2, index.html.j2, style.css.j2.
 
 
 class TestPythonSyntaxValidity:
@@ -3014,117 +2974,9 @@ class TestLocalSettingsRuntimeDatabaseUrl:
             )
 
 
-class TestHTMLTemplateStructure:
-    """Verify HTML templates contain required structural elements."""
-
-    def test_base_html_has_doctype(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test base HTML template includes DOCTYPE declaration."""
-        template = jinja_env.get_template("templates/base.html.j2")
-        output = template.render(test_context)
-        assert "<!DOCTYPE html>" in output
-
-    def test_base_html_has_meta_viewport(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test base HTML template includes responsive viewport meta tag."""
-        template = jinja_env.get_template("templates/base.html.j2")
-        output = template.render(test_context)
-        assert 'name="viewport"' in output
-        assert "width=device-width" in output
-
-    def test_base_html_has_blocks(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test base HTML template includes extensible blocks."""
-        template = jinja_env.get_template("templates/base.html.j2")
-        output = template.render(test_context)
-        assert "{% block title %}" in output or "<title>" in output
-        assert "{% block content %}" in output
-        assert "{% block extra_js %}" in output
-        assert "{% block extra_css %}" in output
-
-    def test_base_html_links_to_css(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test base HTML template links to stylesheet."""
-        template = jinja_env.get_template("templates/base.html.j2")
-        output = template.render(test_context)
-        assert "style.css" in output
-
-    def test_index_html_extends_base(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test index HTML template extends base template."""
-        # Verify template loads successfully
-        jinja_env.get_template("templates/index.html.j2")
-        # Read the raw template file to check extends directive
-        import pathlib
-
-        assert isinstance(jinja_env.loader, FileSystemLoader)
-
-        template_path = (
-            pathlib.Path(jinja_env.loader.searchpath[0]) / "templates" / "index.html.j2"
-        )
-        source = template_path.read_text()
-        assert "{% extends" in source or "{%raw%}{% extends" in source
-        assert "base.html" in source
-
-    def test_index_html_has_welcome_message(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test index HTML template includes welcome message."""
-        template = jinja_env.get_template("templates/index.html.j2")
-        output = template.render(test_context)
-        assert "Welcome to testproject" in output
-
-    def test_index_html_has_next_steps(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test index HTML template includes next steps guidance."""
-        template = jinja_env.get_template("templates/index.html.j2")
-        output = template.render(test_context)
-        assert "Next Steps" in output
-        assert "manage.py" in output
-
-
-class TestCSSTemplateStructure:
-    """Verify CSS templates contain required styling rules."""
-
-    def test_css_has_body_styles(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test CSS template includes body element styling."""
-        template = jinja_env.get_template("static/css/style.css.j2")
-        output = template.render(test_context)
-        assert "body {" in output
-        assert "font-family:" in output
-
-    def test_css_has_responsive_design(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test CSS template includes responsive media queries."""
-        template = jinja_env.get_template("static/css/style.css.j2")
-        output = template.render(test_context)
-        assert "@media" in output
-        assert "max-width" in output
-
-    def test_css_has_header_styles(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test CSS template includes header element styling."""
-        template = jinja_env.get_template("static/css/style.css.j2")
-        output = template.render(test_context)
-        assert "header" in output
-
-    def test_css_has_footer_styles(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test CSS template includes footer element styling."""
-        template = jinja_env.get_template("static/css/style.css.j2")
-        output = template.render(test_context)
-        assert "footer" in output
+# SA94: TestHTMLTemplateStructure and TestCSSTemplateStructure removed.
+# These classes tested templates from the retired showcase_html theme
+# (base.html.j2, index.html.j2, style.css.j2).
 
 
 class TestMissingVariableErrors:
@@ -3393,26 +3245,22 @@ class TestDevOpsTemplateRendering:
         assert "cd frontend && pnpm test:coverage;" in output
         assert "No frontend/package.json found, skipping frontend tests." in output
 
-    def test_readme_renders_make_first_workflow_for_html(
+    def test_readme_renders_make_first_workflow_for_react(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """HTML starter README should prefer make targets without implying a frontend."""
+        """React starter README should prefer make targets and reference frontend."""
         template = jinja_env.get_template("README.md.j2")
-        output = template.render({**test_context, "theme": "showcase_html"})
+        output = template.render({**test_context, "theme": "showcase_react"})
 
         assert "The generated root `Makefile` is the default local entrypoint" in output
         assert "make setup" in output
         assert "make test" in output
         assert "make lint" in output
         assert "make check" in output
-        assert "### Frontend Code Quality" not in output
-        assert (
-            "Node.js 24+ installed for the generated `frontend/` workspace"
-            not in output
-        )
-        assert "pnpm available for frontend setup and checks" not in output
-        assert "make lint-frontend" not in output
-        assert "make test-frontend" not in output
+        assert "Node.js 24+ installed for the generated `frontend/` workspace" in output
+        assert "pnpm available for frontend setup and checks" in output
+        assert "make lint-frontend" in output
+        assert "make test-frontend" in output
 
     def test_readme_renders_react_frontend_workflow(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -3923,7 +3771,7 @@ class TestDockerfileContent:
         copy_app_idx = next(i for i, line in enumerate(lines) if "COPY --chown" in line)
         assert poetry_install_idx < copy_app_idx
 
-    @pytest.mark.parametrize("theme", ["showcase_html", "showcase_react"])
+    @pytest.mark.parametrize("theme", ["showcase_react"])
     def test_collectstatic_uses_build_time_secret_key(
         self,
         jinja_env: Environment,

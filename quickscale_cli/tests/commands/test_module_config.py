@@ -207,7 +207,7 @@ class TestAuthModuleConfig:
 
         error_output = capsys.readouterr().err
         assert "Managed wiring regeneration failed" in error_output
-        assert "Failed to resolve project identity from quickscale.yml" in error_output
+        assert "contains invalid YAML" in error_output
 
     def test_apply_auth_configuration_aborts_when_identity_unresolved(
         self, tmp_path, capsys
@@ -244,7 +244,7 @@ class TestAuthModuleConfig:
         project.mkdir()
         (project / "myproject").mkdir()  # package directory
         (project / "quickscale.yml").write_text(
-            'version: "1"\nproject: {slug: myproject, package: myproject, theme: showcase_html}\n'
+            'version: "1"\nproject: {slug: myproject, package: myproject, theme: showcase_react}\n'
             "modules: {}\ndocker: {start: false}\n"
         )
 

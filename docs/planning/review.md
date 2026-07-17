@@ -304,7 +304,7 @@ QuickScale is a production-ready Django SaaS project generator targeting solo de
 
 **Rationale for Preservation**: These choices are well-documented in decisions.md, align with modern best practices, and have proven stable. Changing them would break existing projects and undermine the "production-ready foundations" value proposition.
 
-**Alternative Themes Remain Optional**: `showcase_html` provides pure HTML/CSS alternative without React dependency.
+**Alternative Themes Removed**: The `showcase_html` (pure HTML/CSS) theme was removed in SA94. `showcase_react` is the sole theme.
 
 ---
 
