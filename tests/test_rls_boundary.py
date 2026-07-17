@@ -313,3 +313,139 @@ class TestCrmRlsBoundaryRestrictedRole:
                 )
             finally:
                 cursor.execute("RESET ROLE")
+
+
+# ---------------------------------------------------------------------------
+# SA84 Phase 2 — authenticated-client fail-closed restoration
+# ---------------------------------------------------------------------------
+# Proves that OrgEnrichedAPIClient.request() restores the Python ContextVar,
+# the DB GUC app.current_org_id, and RLS row invisibility after each
+# synthetic request, using the same authenticated_client for two sequential
+# requests in one pytest outer transaction (CR-PLAN-SA84-001).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestAuthenticatedClientFailClosedRestoration:
+    """Prove authenticated client requests restore fail-closed org state.
+
+    SA84 Phase 2 regression test for CR-PLAN-SA84-001:
+    ``OrgEnrichedAPIClient.request()`` must reset fixture-seeded current-org
+    before entering ``org_scope`` so the Python ContextVar, DB GUC
+    ``app.current_org_id``, and RLS row invisibility are all restored to
+    fail-closed (None / empty / zero rows) after each request.
+    """
+
+    def test_repeated_requests_restore_contextvar_guc_and_row_invisibility(
+        self,
+        authenticated_client,
+        tag,
+        staff_personal_org,
+    ) -> None:
+        """Two sequential requests, same client, same transaction.
+
+        After each request, before opening another scope, assert:
+        1. ``get_current_org_id() is None`` (ContextVar reset).
+        2. ``current_setting('app.current_org_id', true)`` is empty.
+        3. A known personal-org Tag is invisible in an unscoped DB-backed
+           query (FORCE RLS blocks with no org context).
+        4. The same Tag is visible within ``org_scope`` as a positive
+           control.
+        """
+        from django.db import connection
+
+        from quickscale_modules_orgs.current_org import (
+            get_current_org_id,
+            org_scope,
+        )
+
+        _CRM_TAG_TABLE = "quickscale_modules_crm_tag"
+        _CRM_TAG_NAME = "VIP"
+
+        # ------------------------------------------------------------------
+        # First request
+        # ------------------------------------------------------------------
+        authenticated_client.get("/crm/api/tags/")
+        # Response content is not the subject of this regression test —
+        # we are proving post-request restoration invariants.
+
+        # 1. ContextVar must be None (fail-closed).
+        assert get_current_org_id() is None, (
+            "ContextVar should be None after first request (fail-closed)"
+        )
+
+        # 2. DB GUC app.current_org_id must be empty (fail-closed).
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT current_setting('app.current_org_id', true)")
+            (guc_value,) = cursor.fetchone()
+            assert guc_value == "", (
+                f"GUC app.current_org_id should be empty after first "
+                f"request, got {guc_value!r}"
+            )
+
+        # 3. Tag invisible without org context (unscoped DB cursor query
+        #    under FORCE RLS — no AF9 priming because ContextVar is None).
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {_CRM_TAG_TABLE} WHERE name = %s",
+                [_CRM_TAG_NAME],
+            )
+            (count,) = cursor.fetchone()
+            assert count == 0, (
+                "Tag should be invisible without org context after "
+                "first request (FORCE RLS fail-closed)"
+            )
+
+        # 4. Positive control: tag visible under org_scope.
+        with org_scope(staff_personal_org):
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM {_CRM_TAG_TABLE} WHERE name = %s",
+                    [_CRM_TAG_NAME],
+                )
+                (count,) = cursor.fetchone()
+                assert count == 1, (
+                    "Tag should be visible under org_scope after "
+                    "first request (positive control)"
+                )
+
+        # ------------------------------------------------------------------
+        # Second request — same client, same pytest outer transaction
+        # ------------------------------------------------------------------
+        authenticated_client.get("/crm/api/tags/")
+
+        # Same invariants after second request.
+        assert get_current_org_id() is None, (
+            "ContextVar should be None after second request (fail-closed)"
+        )
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT current_setting('app.current_org_id', true)")
+            (guc_value,) = cursor.fetchone()
+            assert guc_value == "", (
+                f"GUC app.current_org_id should be empty after second "
+                f"request, got {guc_value!r}"
+            )
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {_CRM_TAG_TABLE} WHERE name = %s",
+                [_CRM_TAG_NAME],
+            )
+            (count,) = cursor.fetchone()
+            assert count == 0, (
+                "Tag should be invisible without org context after "
+                "second request (FORCE RLS fail-closed)"
+            )
+
+        with org_scope(staff_personal_org):
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM {_CRM_TAG_TABLE} WHERE name = %s",
+                    [_CRM_TAG_NAME],
+                )
+                (count,) = cursor.fetchone()
+                assert count == 1, (
+                    "Tag should be visible under org_scope after "
+                    "second request (positive control)"
+                )

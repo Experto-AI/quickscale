@@ -670,8 +670,9 @@ class TestContactViewSet:
 
         assert response.status_code == status.HTTP_201_CREATED
 
-        contact.refresh_from_db()
-        assert contact.last_contacted_at is not None
+        with org_scope(contact.organization):
+            contact.refresh_from_db()
+            assert contact.last_contacted_at is not None
 
 
 @pytest.mark.django_db
@@ -760,8 +761,9 @@ class TestDealViewSet:
         assert response.data["updated"] == 1
 
         # Verify stage was updated
-        deal.refresh_from_db()
-        assert deal.stage == closed_won_stage
+        with org_scope(deal.organization):
+            deal.refresh_from_db()
+            assert deal.stage == closed_won_stage
 
     def test_mark_won_prefers_terminal_semantic_over_exact_name(
         self, authenticated_client, contact, user, staff_personal_org
@@ -795,9 +797,10 @@ class TestDealViewSet:
         assert response.data["updated"] == 1
 
         # Verify deal was marked won
-        deal.refresh_from_db()
-        assert deal.stage == semantic_stage
-        assert deal.probability == 100
+        with org_scope(staff_personal_org):
+            deal.refresh_from_db()
+            assert deal.stage == semantic_stage
+            assert deal.probability == 100
 
     def test_mark_lost_prefers_terminal_semantic_over_exact_name(
         self, authenticated_client, contact, user, staff_personal_org
@@ -834,9 +837,10 @@ class TestDealViewSet:
         assert response.data["updated"] == 1
 
         # Verify deal was marked lost
-        deal.refresh_from_db()
-        assert deal.stage == semantic_stage
-        assert deal.probability == 0
+        with org_scope(staff_personal_org):
+            deal.refresh_from_db()
+            assert deal.stage == semantic_stage
+            assert deal.probability == 0
 
     def test_mark_won_self_heals_missing_terminal_semantic_with_canonical_stage(
         self, authenticated_client, contact, user, staff_personal_org
@@ -867,10 +871,11 @@ class TestDealViewSet:
         )
 
         assert response.status_code == status.HTTP_200_OK
-        deal.refresh_from_db()
-        # Phase 2: mark_won finds the canonical "Closed-Won" stage by name.
-        assert deal.stage == canonical_stage
-        assert deal.probability == 100
+        with org_scope(staff_personal_org):
+            deal.refresh_from_db()
+            # Phase 2: mark_won finds the canonical "Closed-Won" stage by name.
+            assert deal.stage == canonical_stage
+            assert deal.probability == 100
 
     def test_mark_lost_self_heals_missing_terminal_semantic_with_canonical_stage(
         self, authenticated_client, contact, user, staff_personal_org
@@ -901,10 +906,11 @@ class TestDealViewSet:
         )
 
         assert response.status_code == status.HTTP_200_OK
-        deal.refresh_from_db()
-        # Phase 2: mark_lost finds the canonical "Closed-Lost" stage by name.
-        assert deal.stage == canonical_stage
-        assert deal.probability == 0
+        with org_scope(staff_personal_org):
+            deal.refresh_from_db()
+            # Phase 2: mark_lost finds the canonical "Closed-Lost" stage by name.
+            assert deal.stage == canonical_stage
+            assert deal.probability == 0
 
 
 @pytest.mark.django_db
@@ -1259,9 +1265,10 @@ class TestF1110Phase1SoloRoutePersonalOrgTerminalStageResolution:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["updated"] == 1
-        deal.refresh_from_db()
-        assert deal.stage == personal_won_stage
-        assert deal.probability == 100
+        with org_scope(personal_org):
+            deal.refresh_from_db()
+            assert deal.stage == personal_won_stage
+            assert deal.probability == 100
 
 
 @pytest.mark.django_db
