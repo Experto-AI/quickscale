@@ -414,6 +414,14 @@ docs updated in the same delta).
   tech-audit finding: SA88's CRM triage bucketed 0 runtime-query failures (67 fixture-time), confirming
   no production-severity NOBYPASSRLS read-path gap. Not tech-audit findings per this document's
   roadmap-tracked convention; recorded here for status accuracy.
+- 2026-07-17 (roadmap cleanup, status refresh — no fresh audit) — **the restricted-role cluster is
+  fully drained; the SA82 integration gate is green.** SA92 (final-schema migration squash) emptied
+  the cross-org-migration class; **SA84 (CRM) completed 2026-07-17** (263 passed/21 skipped/0 failed,
+  independent review STATUS ok) and **SA86 (listings) closed 2026-07-15**, draining the fixture half.
+  arch-audit **Finding 8 (`module-rls-context-procedural`) is now closed** (see arch-audit
+  Reconciliation log tail). The only open roadmap item is **SA93** (fold the e2e lane into the
+  green-gate), a Track 3 blocked checkpoint on deterministic fixes — not a tech-audit finding. This
+  document remains at **zero open findings**; recorded here for status accuracy.
 
 ## Notes (not violations, watch items)
 
