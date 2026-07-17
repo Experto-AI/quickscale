@@ -1241,7 +1241,7 @@ The SA46 CI gate continues to enforce the pairing requirement across all `csrf_e
 - Two low/advisory findings recorded in the review:
   - **CR-SA92-ADV-001 (low/advisory):** The bounded literal tripwire regex intentionally omits alternate quoted/schema-qualified table identifier spellings. This is an accepted scope limitation of the deliberately shallow smoke alarm.
   - **CR-SA92-ADV-002 (low/advisory):** Any future allowlist entry must be scoped to exact file-plus-statement identity before use.
-- SA84 remains open; SA86 is closed. Closes SA92.
+- SA84 closed; SA86 closed. The unquarantined integration gate is green with empty quarantine. See [roadmap.md §Green-gate milestone](./roadmap.md#green-gate-milestone).
 
 **Constraint:** This decision supersedes and replaces the SA88 seam-plus-gate approach (SA88/SA88a–e) documented above. The SA88 historical text is retained for the reasoning trail only and must not be cited as current policy.
 

@@ -442,10 +442,7 @@ SA96-GATE → SA96-PUBLISH critical path.
 
 ### Red flags (out of scope — fix now)
 
-> None open this pass. One doc-staleness note, not promoted: `decisions.md:1237` still describes
-> `make test-integration` exiting 1 "solely for the exact known-baseline failure: SA84 (CRM, 67
-> failures)" — SA84 closed 2026-07-17 and the gate is green; the sentence should be updated with
-> the next decisions.md edit.
+> None open this pass.
 
 Lenses scanned with no qualifying finding this pass: data/state integrity (SA92 squash verified
 invariant-preserving), trust boundaries (SA68/boot-guard re-verified; theme preflight is
