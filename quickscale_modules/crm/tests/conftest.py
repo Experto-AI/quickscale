@@ -184,12 +184,15 @@ def authenticated_client(staff_user):
         """APIClient that sets session org and ContextVar for org scoping."""
 
         def request(self, **kwargs):
-            # Use the public org_scope contract so both the Python ContextVar
-            # AND the transaction-local GUC (app.current_org_id) are restored
-            # after each synthetic request — not only the ContextVar.
+            # Reset fixture-seeded current-org so org_scope enters from a
+            # fail-closed baseline (ContextVar=None).  On exit, org_scope
+            # restores to None — proving the Python ContextVar, DB GUC, and
+            # RLS row invisibility are restored after each synthetic request
+            # (CR-PLAN-SA84-001).
             # SA84-REV-001: prior code cleared only the ContextVar via
             # reset_current_org_id(), leaving the SET LOCAL GUC active in
             # pytest's outer transaction.
+            reset_current_org_id()
             with org_scope(personal_org):
                 return super().request(**kwargs)
 

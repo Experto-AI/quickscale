@@ -1602,14 +1602,15 @@ class TestF119Phase1BulkUpdateStageSerializerOrgScoping:
     """F11.9 Phase 1 — Prove BulkUpdateStageSerializer rejects foreign-org stages.
 
     These tests verify that the BulkUpdateStageSerializer validates stage_id
-    against the current organization on org-scoped SaaS routes, while solo
-    routes preserve legacy unscoped behavior.
+    against the active organization on both org-scoped SaaS routes and solo
+    routes. Solo routes scope to the caller's personal org (SA84-REV-005).
 
     Coverage matrix:
     - Org-scoped route: foreign-org stage_id is rejected
     - Org-scoped route: same-org stage_id is accepted
-    - Org-scoped route: NULL-org legacy stage_id is accepted
-    - Solo route: any stage_id is accepted (parity preserved)
+    - Org-scoped route: foreign-org stage_id is rejected (null-org legacy superseded)
+    - Solo route: foreign-org stage_id is rejected (personal-org scoping)
+    - Solo route: same-org stage_id is accepted
     """
 
     def test_org_scoped_rejects_foreign_org_stage(self, org_a, org_b, org_a_admin):
