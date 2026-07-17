@@ -16,14 +16,25 @@ on:
       - 'quickscale_modules/backups/**'
       - 'quickscale_cli/src/quickscale_cli/commands/plan_command.py'
       - 'quickscale_cli/src/quickscale_cli/commands/apply_command.py'
+      - 'quickscale_cli/src/quickscale_cli/commands/development_commands.py'
+      - 'quickscale_cli/src/quickscale_cli/utils/docker_utils.py'
       - 'quickscale_cli/tests/test_apply_command_extended.py'
+      - 'quickscale_core/src/quickscale_core/generator/**'
       - 'quickscale_cli/tests/test_module_lifecycle_cycle.py'
+      - 'quickscale_cli/tests/test_e2e_development_workflow.py'
+      - 'quickscale_cli/tests/test_react_theme_e2e.py'
       - 'quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2'
       - 'quickscale_core/src/quickscale_core/generator/templates/github/workflows/ci.yml.j2'
       - 'quickscale_core/tests/test_generator/test_templates.py'
       - 'quickscale_core/tests/test_react_theme_integration.py'
       - 'quickscale_core/tests/test_integration.py'
       - 'quickscale_core/tests/test_e2e_full_workflow.py'
+      - 'quickscale_core/tests/test_generated_project_runtime.py'
+      - 'quickscale_core/tests/generator/test_themes.py'
+      - 'quickscale_core/tests/fixtures/sa90_emission_manifests.json'
+      - 'Makefile'
+      - 'scripts/check_ci_locally.sh'
+      - 'scripts/test_e2e.sh'
       - '.github/workflows/ci.yml'
       - '.github/workflows/e2e.yml'
 
@@ -31,21 +42,6 @@ jobs:
   e2e-tests:
     name: Full E2E Tests (PostgreSQL + Playwright)
     runs-on: ubuntu-24.04
-
-    services:
-      postgres:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_DB: test_db
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
     - name: Checkout code
@@ -109,22 +105,12 @@ jobs:
       run: |
         poetry run playwright install --with-deps chromium
 
-    - name: Verify PostgreSQL connection
-      run: |
-        PGPASSWORD=test_password psql -h localhost -U test_user -d test_db -c "SELECT version();"
-
-    - name: Run E2E tests
+    - name: Run E2E tests (Core + CLI via maintained runner)
       env:
         # Playwright configuration
         PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
       run: |
-        poetry run pytest quickscale_core/tests/ -m e2e \
-          --verbose \
-          --tb=short \
-          --maxfail=3 \
-          --cov=quickscale_core \
-          --cov-report=xml:quickscale_core/coverage.xml \
-          --cov-report=term-missing
+        ./scripts/test_e2e.sh
 
     - name: Upload E2E test screenshots
       if: failure()
@@ -135,27 +121,6 @@ jobs:
           **/screenshots/
           **/*screenshot*.png
         retention-days: 7
-
-    - name: Upload E2E coverage
-      uses: codecov/codecov-action@v5
-      if: always()
-      with:
-        files: ./quickscale_core/coverage.xml
-        flags: e2e
-        name: codecov-e2e
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      continue-on-error: true
-
-    - name: Upload test results
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: e2e-test-results
-        path: |
-          quickscale_core/htmlcov/
-          quickscale_core/coverage.xml
-        retention-days: 30
 
   docker-build-test:
     name: Test Generated Project Docker Build
