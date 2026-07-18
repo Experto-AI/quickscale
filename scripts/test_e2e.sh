@@ -20,7 +20,7 @@
 #   --help            Show this help message
 #
 
-set -e
+set -euo pipefail
 
 # Color output
 RED='\033[0;31m'
@@ -74,6 +74,60 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CORE_DIR="$PROJECT_ROOT/quickscale_core"
 CLI_DIR="$PROJECT_ROOT/quickscale_cli"
 
+# Every invocation gets an isolated Docker scope.  The process suffix keeps
+# two otherwise-identical lanes independent, while QS_E2E_LANE makes the
+# scope recognizable in concurrent worker logs and docker ps output.
+sanitize_scope() {
+    local value="$1"
+    value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]_' '_')"
+    value="${value#-}"
+    value="${value%-}"
+    printf '%s' "${value:-lane}"
+}
+
+E2E_LANE="$(sanitize_scope "${QS_E2E_LANE:-${QS_E2E_WORKER:-lane}}")"
+E2E_CONTAINER_PREFIX_BASE="$(sanitize_scope "${QS_E2E_CONTAINER_PREFIX:-qs-e2e-${E2E_LANE}}")"
+E2E_CONTAINER_PREFIX_BASE="${E2E_CONTAINER_PREFIX_BASE:0:35}"
+E2E_CONTAINER_PREFIX="$(sanitize_scope "${E2E_CONTAINER_PREFIX_BASE}-${BASHPID}")"
+# Docker Compose project names are limited to a portable, shell-safe subset;
+# keep the generated scope short enough for container-name diagnostics too.
+E2E_CONTAINER_PREFIX="${E2E_CONTAINER_PREFIX:0:50}"
+if [ -n "${QS_E2E_COMPOSE_PROJECT_NAME:-}" ]; then
+    E2E_COMPOSE_PROJECT_BASE="$(sanitize_scope "$QS_E2E_COMPOSE_PROJECT_NAME")"
+    E2E_COMPOSE_PROJECT_BASE="${E2E_COMPOSE_PROJECT_BASE:0:35}"
+    E2E_COMPOSE_PROJECT_NAME="$(sanitize_scope "${E2E_COMPOSE_PROJECT_BASE}-${BASHPID}")"
+else
+    E2E_COMPOSE_PROJECT_NAME="$E2E_CONTAINER_PREFIX"
+fi
+E2E_COMPOSE_PROJECT_NAME="${E2E_COMPOSE_PROJECT_NAME:0:50}"
+
+find_free_port() {
+    python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'
+}
+
+if [ -n "${QS_E2E_APP_PORT:-}" ]; then
+    case "$QS_E2E_APP_PORT" in
+        *[!0-9]*|"")
+            echo -e "${RED}Error: QS_E2E_APP_PORT must be a numeric host port${NC}"
+            exit 1
+            ;;
+    esac
+    E2E_APP_PORT="$QS_E2E_APP_PORT"
+else
+    E2E_APP_PORT="$(find_free_port)"
+fi
+
+if [ "$E2E_APP_PORT" -lt 1 ] || [ "$E2E_APP_PORT" -gt 65535 ]; then
+    echo -e "${RED}Error: QS_E2E_APP_PORT must be between 1 and 65535${NC}"
+    exit 1
+fi
+
+export QS_E2E_LANE="$E2E_LANE"
+export QS_E2E_CONTAINER_PREFIX="$E2E_CONTAINER_PREFIX"
+export QS_E2E_COMPOSE_PROJECT_NAME="$E2E_COMPOSE_PROJECT_NAME"
+export QS_E2E_APP_PORT="$E2E_APP_PORT"
+export COMPOSE_PROJECT_NAME="$E2E_COMPOSE_PROJECT_NAME"
+
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║   QuickScale E2E Test Runner           ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
@@ -82,6 +136,9 @@ if [ "$SHOW_FULL_OUTPUT" = true ]; then
 else
     echo "Output mode: dots"
 fi
+echo "Lane: $E2E_LANE"
+echo "App host port: $E2E_APP_PORT"
+echo "Docker scope: $E2E_COMPOSE_PROJECT_NAME"
 echo ""
 
 # Check if we're in the project root
@@ -94,29 +151,36 @@ fi
 # Always run from project root using centralized poetry environment
 cd "$PROJECT_ROOT"
 
+cleanup_scoped_containers() {
+    local container_ids
+
+    # Compose labels cover pytest-docker and generated-project services.  The
+    # name filter also catches generated services with explicit container_name
+    # values, without ever touching another lane's containers.
+    container_ids="$(docker ps -aq --filter "label=com.docker.compose.project=$E2E_COMPOSE_PROJECT_NAME" 2>/dev/null || true)"
+    if [ -n "$container_ids" ]; then
+        printf '%s\n' "$container_ids" | xargs -r docker rm -f 2>/dev/null || true
+    fi
+    container_ids="$(docker ps -aq --filter "name=$E2E_CONTAINER_PREFIX" 2>/dev/null || true)"
+    if [ -n "$container_ids" ]; then
+        printf '%s\n' "$container_ids" | xargs -r docker rm -f 2>/dev/null || true
+    fi
+}
+
 # Cleanup function
 cleanup() {
     if [ "$CLEANUP" = true ]; then
         echo -e "\n${YELLOW}Cleaning up Docker containers (pytest-docker handles this)...${NC}"
-        # pytest-docker automatically cleans up containers, but we'll ensure any orphaned containers are removed
-        cd "$CORE_DIR/tests"
-        docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
-
-        # Cleanup any test containers that might be lingering
-        docker ps -a | grep -E '(test|e2e_cli_test).*_(db|backend|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
-
-        # Stop containers on test ports
-        docker ps | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
-        docker ps -a | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+        # Use the lane's Compose project and container prefix only.
+        (cd "$CORE_DIR/tests" && docker compose -f docker-compose.test.yml down -v --remove-orphans 2>/dev/null || true)
+        cleanup_scoped_containers
 
         echo -e "${GREEN}✓ Cleanup complete${NC}"
-
-        # Return to project root
-        cd "$PROJECT_ROOT"
     else
         echo -e "\n${YELLOW}Skipping cleanup (--no-cleanup specified)${NC}"
-        echo -e "${BLUE}To manually cleanup, run:${NC}"
-        echo "  docker ps -a | grep pytest | awk '{print \$1}' | xargs docker rm -f"
+        echo -e "${BLUE}To manually cleanup this lane, run:${NC}"
+        echo "  docker ps -aq --filter label=com.docker.compose.project=$E2E_COMPOSE_PROJECT_NAME | xargs -r docker rm -f"
+        echo "  docker ps -aq --filter name=$E2E_CONTAINER_PREFIX | xargs -r docker rm -f"
     fi
 }
 
@@ -133,16 +197,10 @@ fi
 echo -e "${GREEN}✓ Docker is running${NC}"
 echo ""
 
-# Step 1b: Pre-cleanup - stop any existing test containers to free ports
+# Step 1b: Pre-cleanup - remove only this lane's stale containers
 echo -e "${BLUE}[1b/5] Cleaning up any orphaned test containers...${NC}"
-# Stop and remove any pytest containers that might be lingering from previous runs
-docker ps -a --filter "name=pytest" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
-# Stop containers on commonly used test ports
-docker ps --format "{{.ID}} {{.Ports}}" | grep -E ':(5432|5433|8000)->' | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
-docker ps -a --format "{{.ID}} {{.Ports}}" | grep -E ':(5432|5433|8000)->' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
-# Also cleanup test containers by name pattern
-docker ps -a | grep -E '(test|e2e_cli_test).*_(db|backend|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
-# Wait briefly for ports to be released
+cleanup_scoped_containers
+# Keep the existing short stabilization delay for single-lane teardown.
 sleep 1
 echo -e "${GREEN}✓ Pre-cleanup complete${NC}"
 echo ""
@@ -196,11 +254,8 @@ echo ""
 
 # Cleanup core test containers before running CLI tests
 echo -e "${BLUE}Cleaning up Core E2E test containers...${NC}"
-# Stop any containers from core E2E tests (pytest-docker containers)
-docker ps -a | grep -E 'test.*_(db|backend|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
-# Also stop any containers on ports 8000 and 5432
-docker ps | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
-docker ps -a | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+# Remove only the current lane's Compose services and explicit-name services.
+cleanup_scoped_containers
 # Wait for ports to be released
 sleep 2
 echo -e "${GREEN}✓ Core test containers cleaned up${NC}"
