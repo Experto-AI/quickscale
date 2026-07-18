@@ -111,9 +111,54 @@ Pre-release re-verification: **SA96-T1 (Track 1) and SA96-T2 (Track 2) module sw
   *(Acceptance:* all 12 modules green in isolation; SA96-GATE four-command run exits 0 with empty quarantine; release published and verified on PyPI.*)*
   *(why →* pre-publish assurance; green-gate is the definition of "publishable"*)*
 
-### Track 1 — Tenant-context surface — no open work (idle)
+### Track 1 — Tenant-context surface — TP (test-parallelization) suite open
 
-All Track 1 tickets are closed — SA92 (migration squash), SA84 (CRM restricted-role), SA86 (listings), **SA96-T1** module sweep, Finding 8, plus the two audit-remediation tickets **SA97** (arch-audit Finding 9 test-plumbing half) and **SA99** (arch-audit Finding 7 devtools→ruff/mypy), both completed 2026-07-17. See [CHANGELOG.md](../../CHANGELOG.md). Track 1 is idle and available for reassignment.
+Prior Track 1 tickets are closed — SA92 (migration squash), SA84 (CRM restricted-role), SA86 (listings), **SA96-T1** module sweep, Finding 8, plus the two audit-remediation tickets **SA97** (arch-audit Finding 9 test-plumbing half) and **SA99** (arch-audit Finding 7 devtools→ruff/mypy), both completed 2026-07-17. See [CHANGELOG.md](../../CHANGELOG.md).
+
+Track 1 was idle and has been assigned the **TP (test-parallelization)** suite below — first position on this green track. Goal: shorten the SDLC feedback loop (and let an AI assistant run partial tests concurrently) by parallelizing the long-running quality gates. Motivation and full analysis: the parallelization audit summarized under *(why →* …*)* on each ticket. **The integration suite is already parallel (SA91, `QS_INTEGRATION_JOBS`)** — these tickets cover the surfaces that are *not* yet parallel: the serial static-gate chain, the un-xdist'd unit suites, and the strictly-serial E2E lane. None are on the SA96 release critical path; they are pure cycle-time improvements and must not regress any existing gate's pass/fail set or coverage thresholds.
+
+- [ ] **TP1 — Fan out the independent static gates in `check_ci_locally.sh`.** `Tier 2 · Track 1 · deps: none`
+  `scripts/check_ci_locally.sh` runs stages 2–9 strictly serially, but they share no mutable state and have no data dependency on each other: `make lint` (stage 2), the five repo gates `check-core-compat` / `check-module-core-imports` / `check-manifest-sync` / `check-org-context-primitives` / `check-csrf-exempt` (stages 3–7), `make typecheck` (stage 8), `make test-cov-policy` + `make test-integration-worker-pool` (stage 9). Only the DB-dependent stages 10 (`test-cov`) and 11 (`test-integration`) must stay after them.
+  - Launch stages 2–9 as concurrent background jobs, capture each job's exit code and buffered output, `wait` on all, then replay output in a deterministic (declaration) order and fail the script if any job failed. Reuse the existing subshell/`wait`/exit-aggregation pattern from `scripts/_qs_jobs.sh` (`_qs_join_workers`, `_qs_replay_worker_logs`) rather than inventing a new one — source it if practical, or mirror its structure.
+  - Preserve the current fail-fast *semantics* at the script level (overall non-zero exit if any gate fails, banner on failure) even though gates now run concurrently rather than short-circuiting. Keep stage numbering/labels legible in the replayed output.
+  - Gate the fan-out behind an opt-out env var (e.g. `QS_CI_PARALLEL=0` → current serial behavior) so the serial path remains available for debugging, mirroring how `QS_INTEGRATION_JOBS=1` forces serial in the integration runner.
+  - Verify: `make ci` still exits 0 on a clean tree and non-zero when any single gate is broken (inject a lint error, a mypy error, and a manifest-sync drift in separate runs); confirm each failure is attributed to the right gate in the replayed output; confirm wall-clock drops versus serial.
+  *(why →* parallelization audit Tier 3 "orchestration" item — 8 independent read-only gates run serially in the pre-push script; safest available speedup, no test-code changes*)*
+
+- [ ] **TP2 — Add `pytest-xdist` and run the unit suites with `-n auto`.** `Tier 2 · Track 1 · deps: none`
+  Unit suites (`make test-unit`, core + CLI) run serially; `pytest-xdist` is not installed. Per-test DB isolation already exists (`quickscale_core/tests/conftest.py` → `unique_db_name` / `per_test_db`, `qs_test_<uuid>` databases), so worker-level parallelism is safe for DB-backed unit tests; pure-unit tests are trivially safe.
+  - Add `pytest-xdist` to `[tool.poetry.group.dev.dependencies]` in the root `pyproject.toml` (next to `pytest`, `pytest-cov`), then `poetry lock` + `poetry install --with dev`.
+  - Add `-n auto` to the `test-unit` core and CLI pytest invocations in the `Makefile` (`test-unit` target, ~lines 303–318). Keep coverage correct under xdist: `pytest-cov` already supports parallel workers via its subprocess hook, but confirm the `--cov` + `--cov-report=xml` outputs still aggregate (xdist workers write to the same coverage data through pytest-cov's combine step — validate, don't assume). Do **not** touch `test-cov` in this ticket (its `--cov-append` phase ordering is handled separately in TP2b).
+  - Make the worker count overridable (e.g. honor a `PYTEST_XDIST_AUTO` / explicit `-n` passthrough) so CI can pin it; `-n auto` locally, bounded in CI runners if needed.
+  - Verify: `make test-unit` pass/fail set is identical with and without `-n auto` (diff the collected+result set); coverage percentage is unchanged (must still satisfy the CLI `--cov-fail-under=90`); wall-clock drops on a multi-core host.
+  *(why →* parallelization audit Tier 2 — unit suites are pure-CPU and near-linearly shrinkable; isolation precondition already met*)*
+
+- [ ] **TP2b — Convert `test-cov` from `--cov-append` phase-ordering to `coverage combine` so it is xdist-safe.** `Tier 2 · Track 1 · deps: TP2`
+  `make test-cov` (`Makefile` `test-cov` target, ~lines 362–443) relies on ordered `--cov-append` across Phase 1 (core+CLI) and Phase 2 (backups module), which is not safe to parallelize as-is. Rework to the standard parallel-safe flow: each phase writes an isolated data file (`COVERAGE_FILE` per phase, as the SA91 integration workers already do), then a single `coverage combine` + `coverage report`/`html`/`json` before the Phase 4 policy check (`scripts/check_coverage_policy.py`).
+  - Preserve the existing dual-threshold policy (90% equal-weight package mean + 80% per-file) and the `REQUIRE_BACKUPS_COVERAGE` behavior exactly.
+  - Only after this lands may `-n auto` be added to the `test-cov` phase invocations (do it in this ticket, guarded/validated).
+  - Verify: combined coverage numbers match the pre-change `test-cov` output within rounding on the same tree; `make test-cov REQUIRE_BACKUPS_COVERAGE=1` still enforces the backups requirement; policy check passes/fails identically.
+  *(why →* parallelization audit Tier 2 caveat — append ordering blocks xdist on the coverage suite; combine is the standard fix*)*
+
+- [ ] **TP3a — Namespace E2E host ports so lanes/workers no longer collide on 5432/8000.** `Tier 2 · Track 1 · deps: none`
+  `scripts/test_e2e.sh` and the generated projects assume fixed host ports (Postgres 5432, app 8000) — the cleanup greps (`:(5432|5433|8000)->`) and the Core→CLI teardown+`sleep 2` exist precisely because two E2E runs cannot coexist. `pytest-docker` already returns a mapped port via `docker_services.port_for("postgres", 5432)` in `quickscale_core/tests/conftest.py`, but the app port and the cleanup logic are still hard-coded.
+  - Introduce dynamic/per-lane host-port allocation for the generated project's app server and any test Postgres not managed by pytest-docker; thread the chosen port through the E2E fixtures and any generated-project startup the tests drive. Replace fixed-port cleanup greps with label/name-scoped container cleanup (filter by a per-run container name prefix) so one lane never kills another's containers.
+  - Keep the current single-lane behavior working unchanged when only one lane runs.
+  - Verify: run two `test_e2e.sh`-style lanes concurrently by hand and confirm via `docker ps` there is no 5432/8000 contention and neither lane tears down the other's containers; single-lane `make test-e2e` still passes.
+  *(why →* parallelization audit Tier 1 — fixed host ports are the sole blocker to any E2E concurrency; this is the enabling refactor*)*
+
+- [ ] **TP3b — Run Core-E2E and CLI-E2E as two concurrent lanes in `test_e2e.sh`.** `Tier 2 · Track 1 · deps: TP3a`
+  With ports namespaced (TP3a), split the currently-serial Core-E2E → teardown → CLI-E2E flow in `scripts/test_e2e.sh` into two lanes launched concurrently (reuse the `_qs_join_workers`/`_qs_replay_worker_logs` join+replay pattern), aggregate exit codes, and drop the inter-suite `sleep 2` teardown that only existed to free shared ports.
+  - Preserve per-lane cleanup traps and the final pass/fail banner + non-zero exit on any lane failure. Keep `--headed`, `--no-cleanup`, `--full` flags working (pass through to both lanes).
+  - Gate concurrency behind an opt-out (e.g. `QS_E2E_PARALLEL=0`) for debugging, consistent with TP1.
+  - Verify: `make test-e2e` and `make ci-e2e` exit 0 on a clean tree; injecting a failure into only the CLI lane still fails the overall run and is attributed correctly; wall-clock drops versus the serial Core→CLI sequence.
+  *(why →* parallelization audit Tier 1 — E2E is the dominant SDLC cost and Core/CLI lanes are independent once ports are namespaced*)*
+
+- [ ] **TP4 — Document the AI-assistant fast partial-test recipes.** `Tier 1 · Track 1 · deps: none · docs-only (review-only closeout)`
+  The repo already supports targeted, safe partial runs that an AI assistant should prefer during iteration, but they are underused/undocumented as a coherent workflow: section flags (`make lint -- --core`, `make typecheck -- --cli`, `make test-unit -- --core`), single-module reruns (`make MODULE=<name> test -- --modules`), and bounded integration concurrency (`QS_INTEGRATION_JOBS=<N> make test-integration`).
+  - Add a short "Fast feedback loop for AI-assisted / incremental development" subsection to `docs/technical/development.md` (or the closest testing doc): the iterate → pre-merge → E2E-last ladder, the targeted-rerun recipes above, and the new `QS_CI_PARALLEL` / `QS_E2E_PARALLEL` knobs once TP1/TP3b land (cross-reference, don't block on them).
+  - Verify: every command in the doc runs as written on a clean tree.
+  *(why →* parallelization audit Tier 4 — scoped partial runs already exist; the gap is discoverability for the incremental-dev loop*)*
 
 ### Track 2 — Module contracts & settings — SA98 open (audit remediation)
 
@@ -146,7 +191,8 @@ Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track
 SA92/SA84/SA86 ✓ (dev tickets)      SA94/SA88b/SA86/SA95 ✓ (dev tickets)    Finding 1 ✓ (SA89a+SA89b)
 SA96-T1 ── module sweep ✓            SA96-T2 ── module sweep ✓               GATE-lint/typecheck/check/quality ✓
 SA97 ✓ + SA99 ✓ (audit remed.)      SA98 ── sanitizer consolidation         SA91 ✓ (parallel loop, non-gating)
-IDLE — no open work                          (F9 runtime half) deps: SA97 ✓   SA93 ── e2e in green-gate (open)
+TP1/TP2/TP2b/TP3a/TP3b/TP4                   (F9 runtime half) deps: SA97 ✓   SA93 ── e2e in green-gate (open)
+ (test-parallelization; off critical path)
                                              │                               SA100 ── TA58/TA59 theme preflight
                                              │                                       (separate follow-up)
                        ┌─────────────────────┴───────────────────────────────────────┐
@@ -162,11 +208,11 @@ IDLE — no open work                          (F9 runtime half) deps: SA97 ✓ 
 
 ### Track readiness (2026-07-17)
 
-- **Track 1 — IDLE; no open work.** All release tickets closed (SA92, SA84, SA86, SA96-T1) and both audit-remediation tickets — **SA97** (arch Finding 9 test-plumbing half) and **SA99** (arch Finding 7 devtools→ruff/mypy) — completed 2026-07-17. Evidence in [CHANGELOG.md](../../CHANGELOG.md). Available for reassignment.
+- **Track 1 — ASSIGNED the TP (test-parallelization) suite; first position on this green track.** All prior release tickets closed (SA92, SA84, SA86, SA96-T1) and both audit-remediation tickets — **SA97** (arch Finding 9 test-plumbing half) and **SA99** (arch Finding 7 devtools→ruff/mypy) — completed 2026-07-17. Now carries **TP1** (static-gate fan-out), **TP2**/**TP2b** (unit xdist + coverage-combine), **TP3a**/**TP3b** (E2E port-namespacing + concurrent lanes), and **TP4** (AI fast-loop docs). All Tier 1–2, none on the SA96 release critical path — pure SDLC cycle-time work; must not regress any gate's pass/fail set or coverage thresholds. Evidence for closed work in [CHANGELOG.md](../../CHANGELOG.md).
 - **Track 2 — CLEAN to continue; SA98 open.** Release tickets closed (SA94, SA88b, SA86, SA95, SA96-T2). Carries **SA98** (arch Finding 9 sanitizer half); its SA97 dependency is satisfied (landed on `v87`). SA98 records a self-contained sanitizer-home decision (the commons rule covers runtime org-context helpers and test plumbing, not a view-layer sanitizer) — within-track, not a maintainer blocker. Evidence in [CHANGELOG.md](../../CHANGELOG.md).
 - **Track 3 — NOT BLOCKED ON A DECISION; SA93 external evidence + SA100 open.** Finding 1, all four GATEs, and SA91 are complete. SA93 implementation, exact local gate, workflow parity, and independent source review are green; continuation is merge-back → authorized push/dispatch → green `e2e.yml` evidence on `v87` → close SA93. **SA100** is a separate audit-remediation follow-up. SA91 retains CR-SA91-REV-006 (low/advisory); SA89B-CR-004 and SA93-ADV-001..004 are non-gating low advisories.
 
-**Net — no maintainer decisions pending.** Both pre-publish module sweeps are complete. SA93 remains the sole release-path input; SA98 and SA100 are independent audit remediation. Exact local `make ci-e2e` and independent source review are green. Merge this checkpoint, have an authorized operator push/dispatch `v87`, retain the green run evidence, then close SA93. After SA93 closes, SA96-GATE can run the four-command publishability join and SA96-PUBLISH can proceed. The squash-migrations decision and bounded guardrail strategy are recorded in [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); reasoning trail in [CHANGELOG.md](../../CHANGELOG.md).
+**Net — all three tracks have assigned work (Track 1 carries the off-critical-path TP test-parallelization suite); no maintainer decisions pending.** Both pre-publish module sweeps are complete. SA93 remains the sole release-path input; SA98 and SA100 are independent audit remediation, while SA97 and SA99 are complete. Exact local `make ci-e2e` and independent SA93 source review are green. Merge this checkpoint, have an authorized operator push/dispatch `v87`, retain the green run evidence, then close SA93. After SA93 closes, SA96-GATE can run the four-command publishability join and SA96-PUBLISH can proceed. The squash-migrations decision and bounded guardrail strategy are recorded in [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); reasoning trail in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
