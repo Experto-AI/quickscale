@@ -63,6 +63,10 @@
 # Default Python command (uses root Poetry environment)
 PYTHON ?= poetry run python
 RUFF_CACHE_DIR ?= .ruff_cache/make
+# Unit-test worker count. Use ``0`` for a true serial run; ``auto`` is the
+# default for local development, while CI can pin an explicit worker count.
+PYTEST_XDIST_WORKERS ?= auto
+PYTEST_XDIST_ARGS := $(if $(filter 0 off serial none,$(PYTEST_XDIST_WORKERS)),,-n $(PYTEST_XDIST_WORKERS) --dist loadfile)
 
 # Section flags must be passed after `--` so GNU make does not treat them as its
 # own options, e.g. `make lint -- --modules` or `make typecheck -- --core`.
@@ -104,6 +108,8 @@ help:
 	@echo "Testing:"
 	@echo "  make test                 - Run all tests (unit + integration)"
 	@echo "  make test-unit            - Run DB-free unit tests only (core + CLI)"
+	@echo "  PYTEST_XDIST_WORKERS=0 make test-unit - Run unit tests serially for parity/debugging"
+	@echo "  PYTEST_XDIST_WORKERS=N make test-unit - Pin the xdist worker count (default: auto)"
 	@echo "  make test -- --modules    - Run tests only for quickscale_modules/*"
 	@echo "  make test-unit -- --core  - Run unit tests only for quickscale_core"
 	@echo "  make test-integration     - Run integration tests for quickscale_modules/* (requires PostgreSQL)"
@@ -310,15 +316,17 @@ test-unit:
 	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Unit testing quickscale_core..."; \
 		$(PYTHON) -m pytest quickscale_core/tests -q --tb=short -m "not integration and not e2e" \
+			$(PYTEST_XDIST_ARGS) \
 			--cov=quickscale_core --cov-report=xml:quickscale_core/coverage.xml; \
 	fi; \
 	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Unit testing quickscale_cli..."; \
 		$(PYTHON) -m pytest quickscale_cli/tests -q --tb=short -m "not integration and not e2e" \
+			$(PYTEST_XDIST_ARGS) \
 			--cov=quickscale_cli --cov-report=term-missing --cov-report=html \
 			--cov-report=xml:quickscale_cli/coverage.xml --cov-fail-under=90; \
 	fi; \
-	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
+	if [ -n "$(filter modules,$(SECTION_VARS) $(SELECTED_SECTIONS))" ]; then \
 		echo ""; \
 		echo "❌ Module test suites have moved from test-unit to test-integration."; \
 		echo ""; \
