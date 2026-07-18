@@ -104,37 +104,10 @@ closed by SA100; no security or data-path composition with any watch item or cro
 
 ## Findings detail
 
-**TA58 — `up-recovery-ledger-theme-exemption-overbroad` (S4, quick win).**
-Location: `quickscale_cli/src/quickscale_cli/commands/development_commands.py:281-303` (`up`).
-Deployment reality: CLI/dev tool. Defect: the SA93 checkpoint commit `022a88fb` softened the SA94
-theme preflight for `quickscale up` — when *all* preflight errors mention "recovery ledger", the
-error is silently ignored (`only_recovery = all("recovery ledger" in line ...)`). The comment
-justifies this only for the `__checkpoint__` placeholder the apply executor writes
-(`quickscale_core/apply/executor.py:301-303`), but the string-match exempts **any** single-line
-recovery-ledger error: a stale ledger carrying retired `showcase_html`, or a ledger missing
-`project.theme` entirely, now passes `up` with **no message at all** — violating
-`theme_validation.py`'s declared invariant ("config-first identity fallback must not mask an
-invalid … recovery source"). Empirically confirmed (REPL, this pass): the retired-theme ledger
-error is one line containing "(recovery ledger)", so `only_recovery=True`. Refutation attempted:
-no layer-up guard re-validates theme on the `up` path; no test anywhere pins the exemption (grep:
-zero hits for the behavior in `quickscale_cli/tests/`); the blessing is a *pre-review* checkpoint
-(roadmap explicitly lists "independently review the complete SA93 delta" as pending) — none
-survived. Multi-line ledger errors (e.g. YAML parse failures) stay fatal, so the hole is
-narrow — hence S4, not S3. Fix: key the exemption on the placeholder, not the source label —
-have `validate_theme_preflight` (or a variant flag) treat only `theme == "__checkpoint__"` in the
-recovery ledger as exempt, or plumb per-error `theme` attributes through the aggregate error and
-check `exc.theme == "__checkpoint__"`. Also fix the two `.quickscape` typos in the adjacent
-comments. Verification: a test that `up` fails (with remediation text) on a recovery ledger
-carrying `showcase_html`, and proceeds on one carrying `__checkpoint__`. Age: introduced
-2026-07-17 (`022a88fb`, SA93 checkpoint) — initially filed as a candidate to fold into SA93's
-pending review; SA93 independent review is now complete; TA58 is tracked as a separate SA100
-follow-up on Track 3 and does not block the SA93/SA96 release path.
-
-**TA59 — `theme-validation-dead-probe-constant` (S4).**
-`quickscale_core/src/quickscale_core/utils/theme_validation.py:70-73` — `_RECOVERY_PROBE_PATHS`
-is defined ("paths whose presence triggers the preflight recovery-ledger check") but referenced
-nowhere in the repo; the preflight probes `_RECOVERY_FILE` directly. Delete the constant (or wire
-it if a probe was intended). Trivial.
+No open findings. TA58 and TA59 (both S4, opened in the 2026-07-17 delta pass) were closed by
+SA100 on 2026-07-18 — see the Reconciliation log below and the SA100 entry in
+[CHANGELOG.md](../../CHANGELOG.md). Per this document's convention, closed findings live only in
+the log; their prior full text is preserved in version control.
 
 ---
 
