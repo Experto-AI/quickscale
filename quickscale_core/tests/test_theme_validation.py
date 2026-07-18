@@ -220,6 +220,43 @@ def test_recovery_html_config_react_state_react_raises(tmp_path: Path) -> None:
     assert "showcase_html" in str(excinfo.value)
 
 
+def test_recovery_checkpoint_requires_opt_in(tmp_path: Path) -> None:
+    """The recovery checkpoint placeholder remains invalid by default."""
+    _write_yml(
+        tmp_path / ".quickscale" / "apply-recovery.yml",
+        _state_data(theme="__checkpoint__"),
+    )
+    with pytest.raises(ThemeValidationError) as excinfo:
+        validate_theme_preflight(tmp_path)
+    assert "__checkpoint__" in str(excinfo.value)
+
+
+def test_recovery_checkpoint_opt_in_passes(tmp_path: Path) -> None:
+    """The explicit opt-in permits the placeholder in the recovery ledger."""
+    _write_yml(tmp_path / "quickscale.yml", _react_config())
+    _write_yml(tmp_path / ".quickscale" / "state.yml", _state_data())
+    _write_yml(
+        tmp_path / ".quickscale" / "apply-recovery.yml",
+        _state_data(theme="__checkpoint__"),
+    )
+    validate_theme_preflight(tmp_path, allow_recovery_checkpoint=True)
+
+
+@pytest.mark.parametrize("state_path", ["quickscale.yml", ".quickscale/state.yml"])
+def test_recovery_checkpoint_opt_in_does_not_allow_config_or_state(
+    tmp_path: Path, state_path: str
+) -> None:
+    """The opt-in must not weaken desired or applied-state validation."""
+    if state_path == "quickscale.yml":
+        data = _react_config(theme="__checkpoint__")
+    else:
+        data = _state_data(theme="__checkpoint__")
+    _write_yml(tmp_path / state_path, data)
+    with pytest.raises(ThemeValidationError) as excinfo:
+        validate_theme_preflight(tmp_path, allow_recovery_checkpoint=True)
+    assert "__checkpoint__" in str(excinfo.value)
+
+
 # ---------------------------------------------------------------------------
 # Malformed files
 # ---------------------------------------------------------------------------

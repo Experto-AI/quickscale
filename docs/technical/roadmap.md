@@ -56,7 +56,7 @@ git merge --no-ff wt-track{N}
 **Open workstreams before release:**
 1. **SA93** (e2e in the green-gate) on Track 3 — the sole open input to the green-gate join.
 2. **SA96-GATE → SA96-PUBLISH** (green-gate join → staged PyPI publish), deps on SA93.
-3. **Audit remediation** in Track 2/3 capacity — remaining: tech-audit TA58/TA59 (SA100, Track 3, separate post-SA93-review follow-up). Arch-audit Finding 9 is complete through SA97+SA98, and Finding 7's cheap sub-item (SA99) is complete — see [CHANGELOG.md](../../CHANGELOG.md). Arch Findings 2 and 4 stay deferred with the (unscheduled) teams module — **not ticketed**.
+3. **Audit remediation status** — SA97+SA98 complete arch-audit Finding 9, SA99 completes Finding 7's cheap sub-item, and SA100 completes tech-audit TA58/TA59; all are independent of the release critical path. See [CHANGELOG.md](../../CHANGELOG.md). Arch Findings 2 and 4 stay deferred with the (unscheduled) teams module — **not ticketed**.
 
 ### Green-gate milestone — all quality make commands pass
 
@@ -69,30 +69,14 @@ git merge --no-ff wt-track{N}
 All per-module restricted-role gates (CRM/SA84, blog/SA83+SA95, forms/SA85, listings/SA86, orgs/SA77, notifications/SA79) and repo-global gates (GATE-lint, GATE-typecheck, GATE-check-suite, GATE-quality, SA91 parallel worker pool) are **complete**. Only **SA93** (e2e in the green-gate) remains on Track 3 — both former cross-track prerequisites (SA84 CRM, SA95 blog) are met. See [CHANGELOG.md](../../CHANGELOG.md).
 
 - [ ] **SA93 — Fold the e2e lane into the green-gate definition of done.** `Tier 1 · Track 3 · deps: none remaining (SA84 CRM + SA95 blog prerequisites met)`
-  **Blocked checkpoint (2026-07-17; maintainer-selected stop-and-merge; not complete). No design decision remains — continuation is merge-back, authorized push/dispatch of `v87`, and retention of the green run URL/ref/SHA.**
+  **Blocked on external evidence only (SA93-EVID-001). No design or maintainer decision remains — continuation is merge-back → authorized push/dispatch of `v87` → retention of the green run URL/ref/SHA.**
 
-  Fresh local gate and review evidence is recorded in [CHANGELOG.md §SA93 continuation](../../CHANGELOG.md#sa93-continuation). Prior implemented/landed evidence (deterministic fixes, component E2E green, review CR-SA93-REV-001/002/003/004 resolved) is also recorded there.
-
-  **Done:**
-  - **SA93-BLOCK-002:** exact `make ci-e2e` exits 0 locally with all 12 stages, Core 35, CLI 29, all 12 integration modules, 91.90% combined coverage, every file at least 80%, unchanged thresholds, and an empty quarantine.
-  - Independent review confirmed the database-isolation, CLI-lifecycle, generated-React, manifest-parity, and local/remote runner contracts. **CR-SA93-REV-005** and **CR-SA93-REV-006** are resolved: bounded production trigger paths invoke the maintained Core+CLI runner, and stale coverage-artifact promises were retired.
-  - The **CR-SA93-REV-007** checkpoint correction restores the stable advisory summaries below; the **SA93-DOC-001** correction adds the missing changelog anchor fragment.
+  Implementation, exact local gate, independent review, and all resolved prerequisites are recorded in [CHANGELOG.md §SA93 continuation](../../CHANGELOG.md#sa93-continuation) (local `make ci-e2e` green — 12 stages, 91.90% combined coverage, empty quarantine; reviews CR-SA93-REV-001..007 resolved; blog/CRM cross-track prerequisites met via SA95/SA84). Preserve the exact unquarantined `make ci-e2e` contract — quarantine and threshold weakening are not acceptable.
 
   **Pending/Blocking:**
-  - **SA93-EVID-001 (high/blocking):** external GitHub Actions evidence for `v87` is absent — origin has no `v87` ref, no GH auth is configured, and the API has no run. Cannot close SA93 without a successful remote run on the merged `v87` commit.
-  - **Final CI evidence:** after merge-back, push the intended `v87` ref through an authorized operator, dispatch `.github/workflows/e2e.yml`, and retain the successful run URL, conclusion, ref, and SHA before marking SA93 complete.
+  - **SA93-EVID-001 (high/blocking):** external GitHub Actions evidence for `v87` is absent — origin has no `v87` ref, no GH auth is configured, and the API has no run. After merge-back, an authorized operator must push the `v87` ref, dispatch `.github/workflows/e2e.yml`, and retain the successful run URL/conclusion/ref/SHA before SA93 is marked complete. This is required evidence, not permission to weaken acceptance.
 
-  **Advisory:**
-  - **SA93-ADV-001 (low/advisory):** pytest reports a future pytest-10 warning for the class-scoped fixture pattern in `TestReactThemePnpmIntegration.test_pnpm_install_succeeds`; normalize it before a pytest 10 upgrade.
-  - **SA93-ADV-002 (low/advisory):** local validation reports database access during application initialization and an orgs test-database teardown warning; investigate without weakening the gate.
-  - **SA93-ADV-003 (low/advisory):** the worker-pool harness runs between numbered stages 9 and 10 without a stage/substage label; improve auditability when next maintaining the script.
-  - **SA93-ADV-004 (low/advisory):** coverage-threshold overrides accept non-finite `NaN`/`Inf` values and can fail open; reject non-finite overrides in a separate hardening task.
-
-  **Decisions needed:** no design or maintainer decision remains. An authorized operator must decide when to push the merged local `v87` ref and dispatch the remote workflow; this operational action is required evidence, not permission to weaken acceptance.
-
-  **Resolved prerequisites:** SA93-BLOCK-001 (blog + CRM integration fixture-finalizer failures) is resolved — blog closed by **SA95** (2026-07-17, no reproducible defect on post-SA92 v87) and CRM closed by **SA84** (2026-07-17, 263 pass/21 skip/0 fail, review STATUS ok). Both former cross-track prerequisites for SA93 are met. Preserve the exact unquarantined `make ci-e2e` contract; quarantine and threshold weakening are not acceptable.
-
-  **Clean continuation:** merge this reviewed blocked checkpoint to local `v87`, then have an authorized operator push that ref and dispatch `e2e.yml`. Record the green run URL/ref/SHA, update CHANGELOG/roadmap, and only then mark SA93 complete.
+  **Advisory (open, non-gating — defer as separate hardening):** SA93-ADV-001 (pytest-10 class-scoped fixture warning in `TestReactThemePnpmIntegration.test_pnpm_install_succeeds`); SA93-ADV-002 (app-init DB access + orgs teardown warning); SA93-ADV-003 (unlabelled worker-pool substage between stages 9–10); SA93-ADV-004 (non-finite `NaN`/`Inf` coverage-threshold overrides fail open).
 
   *(Acceptance:* `make ci-e2e` exits 0 on a fresh clone; `e2e.yml` green on `v87`; independent review passes; exit-criteria prose lists the e2e lane.*)*
   *(why →* green-gate milestone; e2e was outside the definition of done*)*
@@ -170,15 +154,16 @@ Prior development tickets closed — SA88b (forms diagnosis), SA86 (listings), S
   - No SA98-specific blockers or findings. The unrelated repository-wide coverage/dead-code/complexity baseline remains outside this ticket; broad `make check`/`make quality` failures were not fixed here, and no E2E claim is made.
   *(why →* arch-audit Finding 9 — one-sided fixes to a duplicated sanitizer are XSS-class drift on public pages*)*
 
-### Track 3 — Core/CLI plumbing — SA93/SA100 open
+### Track 3 — Core/CLI plumbing — SA93 externally blocked; SA100 complete
 
-arch-audit **Finding 1** is closed (SA89a+SA89b, DR persistence port). All four GATEs and **SA91** (parallel worker pool) are complete. The single open release-path item is **SA93** (e2e in green-gate): implementation, component E2E, exact local gate, and independent source-review evidence are present; the sole remaining blocker is SA93-EVID-001 (no remote `v87` ref or successful GH Actions run). **SA100** (tech-audit TA58/TA59) remains separate Track 3 audit remediation and does not block the release path. **No cross-track prerequisite or maintainer decision remains.**
+arch-audit **Finding 1** is closed (SA89a+SA89b, DR persistence port). All four GATEs and **SA91** (parallel worker pool) are complete. The single open release-path item is **SA93** (e2e in green-gate): implementation, component E2E, exact local gate, and independent source-review evidence are present; the sole remaining blocker is SA93-EVID-001 (no remote `v87` ref or successful GH Actions run). **SA100** (tech-audit TA58/TA59) is a separate completed Track 3 audit remediation and does not block the release path. **No cross-track prerequisite or maintainer decision remains.**
 
-- [ ] **SA100 — Fix the `up` recovery-ledger theme exemption + remove the dead probe constant.** `Tier 1 · Track 3 · deps: none (SA93 review complete; separate follow-up)`
-  Two S4 tech-audit findings, both in the theme-preflight surface the SA93 checkpoint touched — [tech-audit](../others/tech-audit.md) TA58/TA59. SA93's independent review is complete, so implement and review this audit remediation as a separate follow-up rather than reopening the capped SA93 delta.
-  - **TA58** (`development_commands.py:281-303`, `up`): the exemption keys on any single-line `"recovery ledger"` error, so a stale ledger carrying retired `showcase_html` or missing `project.theme` passes `up` silently — broader than the `__checkpoint__` placeholder rationale. Fix: key the exemption on `theme == "__checkpoint__"` (via a `validate_theme_preflight` variant flag or a per-error `theme` attribute on the aggregate error), not on the source label. Also fix the two `.quickscape` typos in the adjacent comments.
-  - **TA59** (`quickscale_core/utils/theme_validation.py:70-73`): delete the dead `_RECOVERY_PROBE_PATHS` constant (referenced nowhere; the preflight probes `_RECOVERY_FILE` directly).
-  - Verify: a test that `up` **fails** (with remediation text) on a recovery ledger carrying `showcase_html`, and **proceeds** on one carrying `__checkpoint__`.
+- [x] **SA100 — Fix the `up` recovery-ledger theme exemption + remove the dead probe constant.** `Tier 1 · Track 3 · deps: none (SA93 review complete; separate follow-up)`
+  Implementation and closeout review are complete. Adaptive-change-review pass 1 returned **STATUS ok** with no findings and caller parity passed; 53 targeted tests passed, Ruff check/format and `git diff --check` passed, numeric coverage was not generated, and blockers are none.
+  Two S4 tech-audit findings, both in the theme-preflight surface the SA93 checkpoint touched — [tech-audit](../others/tech-audit.md) TA58/TA59. SA93's independent review is complete, and this audit remediation was implemented and independently reviewed as a separate follow-up rather than reopening the capped SA93 delta.
+  - **TA58** (`development_commands.py:281-303`, `up`): the exemption now keys on `theme == "__checkpoint__"` (via a `validate_theme_preflight` variant flag or a per-error `theme` attribute on the aggregate error), not on the source label; stale ledgers carrying retired `showcase_html` or missing `project.theme` retain fail-closed remediation, and the two adjacent `.quickscape` comment typos were fixed.
+  - **TA59** (`quickscale_core/utils/theme_validation.py:70-73`): the dead `_RECOVERY_PROBE_PATHS` constant was deleted; the preflight probes `_RECOVERY_FILE` directly.
+  - Verification: `up` fails with remediation text for a recovery ledger carrying `showcase_html` and proceeds for one carrying `__checkpoint__`.
   *(why →* tech-audit TA58 (declared-invariant / quick win) + TA59 (dead code); TA58 softened a barrier SA94 had just erected*)*
 
 Deferred with the (unscheduled) teams module, per both audits — **not ticketed:** arch-audit Finding 2 (`deletion-invariants-per-boundary`) and Finding 4 (`org-model-universe-hand-enumerated`).
@@ -193,26 +178,26 @@ SA96-T1 ── module sweep ✓            SA96-T2 ── module sweep ✓      
 SA97 ✓ + SA99 ✓ (audit remed.)      SA98 ✓ (sanitizer consolidation)         SA91 ✓ (parallel loop, non-gating)
 TP1/TP2/TP2b/TP3a/TP3b/TP4                   (F9 runtime half) deps: SA97 ✓   SA93 ── e2e in green-gate (open)
  (test-parallelization; off critical path)
-                                             │                               SA100 ── TA58/TA59 theme preflight
-                                             │                                       (separate follow-up)
+                                             │                               SA100 ✓ ── TA58/TA59 theme preflight
+                                             │                                         (complete; separate follow-up)
                        ┌─────────────────────┴───────────────────────────────────────┐
-                       ▼   (SA98 ✓ / SA100 off the release critical path — independent; SA97 ✓ landed)
+                       ▼   (SA98 ✓ / SA100 ✓; both off the release critical path — independent; SA97 ✓ landed)
         SA96-GATE ── green-gate join (make check/quality/ci/ci-e2e)  deps: SA96-T1 + SA96-T2 + SA93
                        ▼
         SA96-PUBLISH ── build → publish-test → publish-prod          deps: SA96-GATE
 ```
 
-**Critical path.** Both pre-publish module sweeps are complete: **SA96-T1** (Track 1) and **SA96-T2** (Track 2). **SA93** is the sole open input to **SA96-GATE**; **SA96-PUBLISH** follows. The remaining SA93 path is merge-back → authorized push/dispatch → green `e2e.yml` evidence on `v87` (SA93-EVID-001) → close SA93. **SA98** is complete and **SA100** remains an independent audit-remediation ticket; neither blocks SA96-GATE. SA97 and SA99 are also complete (see [CHANGELOG.md](../../CHANGELOG.md)).
+**Critical path.** Both pre-publish module sweeps are complete: **SA96-T1** (Track 1) and **SA96-T2** (Track 2). **SA93** is the sole open input to **SA96-GATE**; **SA96-PUBLISH** follows. The remaining SA93 path is merge-back → authorized push/dispatch → green `e2e.yml` evidence on `v87` (SA93-EVID-001) → close SA93. **SA98** and **SA100** are complete independent audit-remediation tickets; neither blocks SA96-GATE. SA97 and SA99 are also complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 **Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join (SA96-GATE). It cannot start until both module sweeps and SA93 are complete. SA93's cross-track blockers are resolved; component Core/CLI E2E, exact local `make ci-e2e`, and independent source review are green. The only remaining blocker is SA93-EVID-001 (no remote `v87` run).
 
-### Track readiness (2026-07-17)
+### Track readiness (2026-07-18)
 
 - **Track 1 — ASSIGNED the TP (test-parallelization) suite; first position on this green track.** All prior release tickets closed (SA92, SA84, SA86, SA96-T1) and both audit-remediation tickets — **SA97** (arch Finding 9 test-plumbing half) and **SA99** (arch Finding 7 devtools→ruff/mypy) — completed 2026-07-17. Now carries **TP1** (static-gate fan-out), **TP2**/**TP2b** (unit xdist + coverage-combine), **TP3a**/**TP3b** (E2E port-namespacing + concurrent lanes), and **TP4** (AI fast-loop docs). All Tier 1–2, none on the SA96 release critical path — pure SDLC cycle-time work; must not regress any gate's pass/fail set or coverage thresholds. Evidence for closed work in [CHANGELOG.md](../../CHANGELOG.md).
 - **Track 2 — CLEAN; SA98 complete.** Release tickets and audit remediation are closed (SA94, SA88b, SA86, SA95, SA96-T2, and SA98). SA97+SA98 close arch-audit Finding 9, including the shared sanitizer home and test-plumbing commons. Evidence in [CHANGELOG.md](../../CHANGELOG.md).
-- **Track 3 — NOT BLOCKED ON A DECISION; SA93 external evidence + SA100 open.** Finding 1, all four GATEs, and SA91 are complete. SA93 implementation, exact local gate, workflow parity, and independent source review are green; continuation is merge-back → authorized push/dispatch → green `e2e.yml` evidence on `v87` → close SA93. **SA100** is a separate audit-remediation follow-up. SA91 retains CR-SA91-REV-006 (low/advisory); SA89B-CR-004 and SA93-ADV-001..004 are non-gating low advisories.
+- **Track 3 — NOT BLOCKED ON A DECISION; SA93 external evidence + SA100 complete.** Finding 1, all four GATEs, SA91, and SA100 are complete. SA93 implementation, exact local gate, workflow parity, and independent source review are green; continuation is merge-back → authorized push/dispatch → green `e2e.yml` evidence on `v87` → close SA93. SA100 is a separate audit-remediation follow-up. SA91 retains CR-SA91-REV-006 (low/advisory); SA89B-CR-004 and SA93-ADV-001..004 are non-gating low advisories.
 
-**Net — all three tracks have assigned work (Track 1 carries the off-critical-path TP test-parallelization suite); no maintainer decisions pending.** Both pre-publish module sweeps are complete. SA93 remains the sole release-path input; SA98 is complete and SA100 remains independent audit remediation, while SA97 and SA99 are also complete. Exact local `make ci-e2e` and independent SA93 source review are green. Merge this checkpoint, have an authorized operator push/dispatch `v87`, retain the green run evidence, then close SA93. After SA93 closes, SA96-GATE can run the four-command publishability join and SA96-PUBLISH can proceed. The squash-migrations decision and bounded guardrail strategy are recorded in [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); reasoning trail in [CHANGELOG.md](../../CHANGELOG.md).
+**Net — all three tracks have assigned work (Track 1 carries the off-critical-path TP test-parallelization suite); no maintainer decisions pending.** Both pre-publish module sweeps are complete. SA93 remains the sole release-path input and is externally blocked; **SA98** and **SA100** are complete independent audit remediation, while SA97 and SA99 are also complete. Exact local `make ci-e2e` and independent SA93 source review are green. Merge this checkpoint, have an authorized operator push/dispatch `v87`, retain the green run evidence, then close SA93. After SA93 closes, SA96-GATE can run the four-command publishability join and SA96-PUBLISH can proceed. The squash-migrations decision and bounded guardrail strategy are recorded in [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); reasoning trail in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 

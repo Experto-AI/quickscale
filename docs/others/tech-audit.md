@@ -95,12 +95,10 @@ server **is** running on localhost:5432 this pass (first time). Audit tools run:
 
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |----|----------|----------|-------|--------|------------|--------|
-| TA58 | S4 | correctness / declared-invariant | `quickscale up` recovery-ledger theme exemption is broader than its `__checkpoint__` rationale | Trivial (quick win) | High (empirically confirmed) | open |
-| TA59 | S4 | dead code | `theme_validation._RECOVERY_PROBE_PATHS` is defined but never used | Trivial | High | open |
 
-Counts: **S1: 0 · S2: 0 · S3: 0 · S4: 2.**
-Chain pass (§3.9): ran — no chains (TA58 affects only dev-CLI `up` messaging; no security or
-data-path composition with any watch item or crown jewel).
+Counts: **S1: 0 · S2: 0 · S3: 0 · S4: 0.**
+Chain pass (§3.9): ran — no chains. The two S4 findings from the latest delta pass were
+closed by SA100; no security or data-path composition with any watch item or crown jewel.
 
 ---
 
@@ -266,7 +264,7 @@ streaming S3 upload preserved), N+1/perf (listings gained indexes; no new hot-pa
 secrets (no credential material committed; role provisioning unchanged), data handling (squash
 verified — fresh-only posture ratified, seeds preserved in `0001_initial`, hash-parity proof),
 dependency CVEs (lockfile metadata-only change; low confidence without a scanner), CLI archetype
-(preflights fail-closed except TA58; no new destructive paths), generator archetype (theme
+(preflights fail-closed after the SA100 TA58 correction; no new destructive paths), generator archetype (theme
 retirement coherent template↔schema↔CLI↔docs; emission mapping centralized and gated by SA66).
 
 ---
@@ -301,9 +299,9 @@ retirement coherent template↔schema↔CLI↔docs; emission mapping centralized
 - **React `QuickScaleModules.auth` is always typed/defaulted `false`:** recorded maintainer
   decision inside SA93 (runtime availability still gates visibility) — not a defect.
 - **SA93 remains a blocked checkpoint (SA93-EVID-001):** external GitHub Actions evidence on the
-merged `v87` ref is the sole remaining blocker; local `make ci-e2e` gate, independent review, and
-component E2E are complete. TA58/TA59 are tracked as SA100 on Track 3 — an independent follow-up
-that does not block the SA93/SA96 release path.
+  merged `v87` ref is the sole remaining blocker; local `make ci-e2e` gate, independent review, and
+  component E2E are complete. TA58/TA59 were closed by SA100 on Track 3 — an independent follow-up
+  that did not block the SA93/SA96 release path.
 - **Two same-named `ImproperlyConfigured` classes coexist** (SA69 decision recorded): carried.
 - **`test_update_auto_commits_each_module_e2e` mocks `_sync_module_dependencies`** — carried.
 - **SA47 sole-member self-removal orphans the org (deliberate):** carried.
@@ -471,3 +469,8 @@ that does not block the SA93/SA96 release path.
   retiring the standing no-DB-checks caveat. Watch items updated: mypy-backups weakening
   resolved; auth-orgs version-cap item retired by SA81; SA83-SA86 bucket-3 triage closed. Fourth
   consecutive pass in which the checkpoint lane carried the pass's defect (Structural smells).
+- 2026-07-18 (SA100 closeout) — **TA58 and TA59: resolved.** SA100's source changes were accepted;
+  the full change-review pass returned **STATUS ok**, with no findings and a caller-parity pass.
+  Validation evidence: 53 targeted tests in 0.25s, Ruff check/format, and `git diff --check` all
+  passed. Numeric coverage was not generated. No blockers remain. Findings-table counts updated
+  (S4: 2→0, total: 2→0).

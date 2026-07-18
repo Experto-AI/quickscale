@@ -176,7 +176,7 @@ QuickScale currently ships one starter theme only:
     transport endpoints and settings wiring remain theme-agnostic
 
 The former `showcase_html` theme (server-rendered HTML + CSS secondary starter) has been removed
-as part of SA94. It never gained adoption but carried ongoing maintenance cost. The plan/apply CLI
+The plan/apply CLI
 no longer offers `showcase_html` as a selection; `showcase_react` is the sole supported and
 configured theme. Existing generated projects that used `showcase_html` keep their user-owned
 files — no automatic rewrite is performed. Any desired/state/recovery reference to `showcase_html`
@@ -282,8 +282,8 @@ quickscale_core/generator/templates/
 Fresh generations copy `showcase_react/src/**` into the generated project's
 `frontend/src/` directory and copy `showcase_react/templates/**` into Django
   `templates/`. Only fresh `showcase_react` generations auto-scaffold the Django-owned
-  public `/social` and `/social/embeds` pages. With the removal of `showcase_html`
-  (SA94), `showcase_react` is the sole theme; the `showcase_html` theme and its
+  public `/social` and `/social/embeds` pages. With the removal of `showcase_html`,
+  `showcase_react` is the sole theme; the `showcase_html` theme and its
   server-rendered stubs no longer ship. QuickScale does not currently ship any
   vertical theme template trees.
 
@@ -293,7 +293,7 @@ Fresh generations copy `showcase_react/src/**` into the generated project's
 - ❌ NO updates after generation (user owns completely)
 - ✅ One-time scaffolding, user owns completely
 - ✅ `showcase_react` is the sole shipped starter theme; `showcase_html` has been
-  removed (SA94)
+  removed
 - ✅ Fresh `showcase_react` generations include dormant analytics starter support and
   Django-owned public social pages
 - ✅ Generated starter output surfaces billing as a module flag only (`modules.billing`);
@@ -647,8 +647,8 @@ workflow coverage are aligned to it.
 - ✅ Derivation types are frozen dataclasses (immutable after construction)
 - ✅ All field types are YAML-safe (scalars, lists, dicts)
 - ✅ `ModuleDerivationSchema` is a companion to `ModuleManifest`, not a replacement
-- ✅ YAML loading from `module.yml` shipped (SA6.1)
-- ✅ Runtime derivation execution shipped for analytics and listings (SA6.2); other modules remain imperative pending migration
+- ✅ YAML loading from `module.yml` is supported
+- ✅ Runtime derivation execution is active for analytics and listings; other modules remain imperative pending migration
 - ❌ No contract-file deletion yet for unmigrated modules (deferred to per-module migration phases)
 
 ---
@@ -754,7 +754,7 @@ disable_error_code = var-annotated
 - [ ] Add module-specific "Next steps" instructions in embed output
 
 **5. Template Integration (showcase_react theme):**
-- [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure; the former `showcase_html` theme templates (`navigation.html.j2`, `index.html.j2`) have been removed as part of SA94
+- [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure; the former `showcase_html` theme templates (`navigation.html.j2`, `index.html.j2`) have been removed
 
 **6. Testing:**
 - [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
@@ -867,7 +867,7 @@ The authoritative current CLI command surface now lives in [implementation_contr
 - Categories and tags for organization
 - Featured images with automatic thumbnail generation
 - RSS feed for content syndication
-- Responsive templates for the sole showcase_react theme (former showcase_html theme removed in SA94)
+- Responsive templates for the sole showcase_react theme (the former showcase_html theme has been removed)
 
 **Features Deferred**:
 - Comments (use third-party like Disqus/Commento)
@@ -877,7 +877,7 @@ The authoritative current CLI command surface now lives in [implementation_contr
 
 **Distribution**: Split branch pattern (`splits/simple-blog`), added via `quickscale plan` and `quickscale apply`
 
-**Theme Support**: showcase_react (showcase_html was removed in SA94)
+**Theme Support**: showcase_react (showcase_html has been removed)
 
 ---
 
@@ -994,9 +994,9 @@ implicit env-var/stdout-JSON coupling.
 
 **Rule:** Update the narrow owner first when changing its slice. Update decisions.md in the same change when the repository-wide ownership map, policy, or tie-breakers change.
 
-## Unit/Integration Gate Split (SA59.4)
+## Unit/Integration Gate Split
 
-**Decision (SA59.4, ratified 2026-07-12):** The test suite is split into two independent gates — a DB-free unit gate and a PostgreSQL 18 integration gate. This split ensures fast, environment-independent feedback for core/CLI unit tests while module integration tests run against a restricted `NOBYPASSRLS` role for tenant-isolation coverage.
+**Rule:** The test suite is split into two independent gates — a DB-free unit gate and a PostgreSQL 18 integration gate. This split ensures fast, environment-independent feedback for core/CLI unit tests while module integration tests run against a restricted `NOBYPASSRLS` role for tenant-isolation coverage.
 
 **Gate responsibilities:**
 
@@ -1008,8 +1008,8 @@ implicit env-var/stdout-JSON coupling.
 **Key properties:**
 
 - The unit gate (`make test-unit`) is DB-free and runs core + CLI tests only. It requires no PostgreSQL and no special database role. The blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is removed from the unit-only path.
-- The integration gate (`make test-integration`) runs module suites against a `NOBYPASSRLS` role in both `ci.yml` and `publish.yml`. The SA58 boot guard (RLS role check) stays active. Developers set the SA14.4 hatch (`QUICKSCALE_ALLOW_BYPASSRLS=1`) explicitly per-suite when BYPASSRLS-dependent tests need to run.
-- Non-quarantined module-suite regressions fail the gate. Known restricted-role failures are tracked individually (SA77 for orgs, SA79 for notifications) with a ticketed quarantine mechanism (SA76) that excludes quarantined entries from the exit code and coverage mean.
+- The integration gate (`make test-integration`) runs module suites against a `NOBYPASSRLS` role in both `ci.yml` and `publish.yml`. The boot guard (RLS role check) stays active. Developers set the `QUICKSCALE_ALLOW_BYPASSRLS=1` hatch explicitly per-suite when BYPASSRLS-dependent tests need to run.
+- Non-quarantined module-suite regressions fail the gate. Known restricted-role failures are tracked individually with a ticketed quarantine mechanism that excludes quarantined entries from the exit code and coverage mean.
 - `make test` runs both gates sequentially as a combined check.
 
 **Related docs:** [validation_policy.md](./validation_policy.md) | [roadmap.md §Track 1](./roadmap.md)
@@ -1044,9 +1044,9 @@ This legacy anchor now routes to [implementation_contract.md](./implementation_c
 
 ---
 
-### Launcher One-Shot Command-Env Contract (SA68) {#launcher-one-shot-command-env-contract-sa68}
+### Launcher One-Shot Command-Env Contract {#launcher-one-shot-command-env-contract}
 
-**Decision (SA68):** Generated project startup scripts
+**Rule:** Generated project startup scripts
 and settings use two mutually exclusive one-shot environment variables to
 select the database connection and bootstrap mode. These variables are always
 set as inline command prefixes — never as persistent environment configuration.
@@ -1157,11 +1157,11 @@ alias.
 - ✅ **DRF baseline** (`rest_framework.views.APIView` with `SessionAuthentication` for automated CSRF enforcement; permission class per endpoint) — the default for any new JSON endpoint that does not need organization-role scoping. `AllowAny` is used when the view performs its own auth checks (the billing-module pattern); `IsAuthenticated` is the default for endpoints where all requests require an authenticated user. Used by billing, CRM, and forms.
 - ✅ **`OrgApiBaseView`** — for endpoints that need organization-role/membership scoping specifically. Chosen as a second sanctioned base rather than reimplementing org-role checks as a DRF permission class, because that logic is tenant-isolation-adjacent (see §multitenant-saas-architecture) and rewriting working, tested code for stylistic consistency alone carries regression risk for no user-visible benefit.
 - ❌ A plain-`View` + `@csrf_exempt` + manual `_enforce_csrf()` idiom is not a third sanctioned option and is not grandfathered as legacy — this project removes workarounds rather than permanently tolerating them alongside the sanctioned shape.
-- ❌ Signature-verified webhooks (Stripe, etc.) are a different trust class and are exempt from this rule — they use `csrf_exempt` because the calling party cannot present a CSRF token; verified instead by the SA46 pairing gate (`scripts/check_csrf_exempt_gate.py`).
+- ❌ Signature-verified webhooks (Stripe, etc.) are a different trust class and are exempt from this rule — they use `csrf_exempt` because the calling party cannot present a CSRF token; verified instead by the pairing gate (`scripts/check_csrf_exempt_gate.py`).
 
-**Narrow documented exception — blog dual-auth function views:** The blog module ships two function views (`upload_media_api` and `publish_post_api` in `quickscale_modules_blog.views`) that use `@_typed_csrf_exempt` (a type-preserving wrapper around `csrf_exempt`) paired with `authenticate_blog_api_request()` for session-or-Bearer-token authentication. This path is not a class-based view and does not subclass either sanctioned base; it is a deliberately narrow exception justified by the function-view architecture and the dual auth model (session + token). The SA46 CI gate (`scripts/check_csrf_exempt_gate.py`) explicitly recognizes `authenticate_blog_api_request` as an approved verification helper, so this exception is enforced rather than silent. No new function-view endpoints may use this exception without explicit approval.
+**Narrow documented exception — blog dual-auth function views:** The blog module ships two function views (`upload_media_api` and `publish_post_api` in `quickscale_modules_blog.views`) that use `@_typed_csrf_exempt` (a type-preserving wrapper around `csrf_exempt`) paired with `authenticate_blog_api_request()` for session-or-Bearer-token authentication. This path is not a class-based view and does not subclass either sanctioned base; it is a deliberately narrow exception justified by the function-view architecture and the dual auth model (session + token). The CSRF CI gate (`scripts/check_csrf_exempt_gate.py`) explicitly recognizes `authenticate_blog_api_request` as an approved verification helper, so this exception is enforced rather than silent. No new function-view endpoints may use this exception without explicit approval.
 
-The SA46 CI gate continues to enforce the pairing requirement across all `csrf_exempt` callsites.
+The CSRF CI gate continues to enforce the pairing requirement across all `csrf_exempt` callsites.
 
 **Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../others/arch-audit.md)
 
@@ -1182,70 +1182,46 @@ The SA46 CI gate continues to enforce the pairing requirement across all `csrf_e
 
 **Chosen shape:**
 - ✅ Single Railway project (one app + one PostgreSQL 18 service); Railway bill is flat regardless of tenant count
-- ✅ Shared database + shared schema; isolation enforced by PostgreSQL FORCE RLS on the 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) plus ContextVar-driven `TenantManager` scoping — the authoritative registry overview is derived from model markers (SA15.3)
+- ✅ Shared database + shared schema; isolation enforced by PostgreSQL FORCE RLS on the 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) plus ContextVar-driven `TenantManager` scoping — the authoritative registry overview is derived from model markers
 - ✅ Billing unit: `Subscription → Organization` (not per-user)
 - ✅ URL routing: flat routes only — `/crm/`, `/blog/`; no `/orgs/<slug>/` content routes
 - ✅ Users may belong to multiple organizations; org-switcher in the React UI
 - ✅ Module access is differentiated by credits plus ORM-backed `Plan.features` gates
 
-**RLS enforcement rule (critical, updated by SA2.1 + SA2.2 + CR-SA68-001):**
+**RLS enforcement rule (critical):**
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
 - Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named privileged command paths intentionally use the superuser `DATABASE_URL`
-- **Always-on boot guard (SA2.1, CR-SA68-001):** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
+- **Always-on boot guard:** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
   1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate`, `createcachetable`) — the deployment `start.sh` unsets `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The sanctioned command set is defined by `_PRIVILEGED_COMMANDS` in `apps.py`; every new sanctioned command is added there.
   2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — environment-variable escape hatch for intentional single-tenant or development use.
 - `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` and `createcachetable`; `runserver`/`gunicorn` must still use the restricted runtime role
 
 **Isolation architecture rules (permanent):**
-- Registry authority: the marker-based derived registry overview (:func:`get_derived_registry_overview`) is the authoritative human-readable view of the shipped tenant-table surface. The derived view is purely marker-driven (``tenant_excluded`` attributes, ``TenantManager``/``TenantModel`` detection, and implicit M2M through inference) with no fallback to the literal ``TENANT_TABLE_REGISTRY`` (SA15.3 follow-up). The literal ``TENANT_TABLE_REGISTRY`` remains in place as a cross-check target so CI can confirm the two views stay in agreement. Its 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) each carry a direct ``organization_id``, ``objects = TenantManager()``, ``all_objects = TenantManager(super_scope=True)``, and a live FORCE-RLS policy.
+- Registry authority: the marker-based derived registry overview (:func:`get_derived_registry_overview`) is the authoritative human-readable view of the shipped tenant-table surface. The derived view is purely marker-driven (``tenant_excluded`` attributes, ``TenantManager``/``TenantModel`` detection, and implicit M2M through inference) with no fallback to the literal ``TENANT_TABLE_REGISTRY``. The literal ``TENANT_TABLE_REGISTRY`` remains in place as a cross-check target so CI can confirm the two views stay in agreement. Its 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) each carry a direct ``organization_id``, ``objects = TenantManager()``, ``all_objects = TenantManager(super_scope=True)``, and a live FORCE-RLS policy.
 - Child tables: every tenant-owned child/detail table must denormalize `organization_id` directly onto the row and use a direct FORCE-RLS policy referencing that column; parent-join RLS policies are not used. This is the project default for all future tables.
 - Ambient scoping: request-scoped tenant reads flow through `request.org` → ContextVar (`app.current_org_id`) → `TenantManager`; the authoritative tenant-facing API is ambient manager scoping, not `.for_org(...)` query chaining.
 - Operator access: management commands and operator paths use `operator_access(reason=...)` for audited elevated access. When a command or admin path truly needs an unfiltered queryset, it may read from model `all_objects` explicitly under that contract.
 - Org ownership: System org owns all published-public content (blog feed, public listings, social links). Anonymous visitors see System-org rows; solo authenticated = personal org; saas authenticated = active org.
 - Teardown policy: `on_delete=PROTECT` on all tenant-owned FKs + explicit `purge_organization` management command for ordered, FK-safe delete — GDPR-capable, no accidental cascade.
-- **Composite-FK deferability policy (SA60, ratified 2026-07-12):** every Option C composite FK (the child-table `organization_id` + local-key pair added by the `_ADD_COMPOSITE_FK_SQL` helper in `orgs/tenancy.py`) is `NOT DEFERRABLE`. Empirically verified on PostgreSQL 18: `SET CONSTRAINTS <name> IMMEDIATE` on a `NOT DEFERRABLE` FK is a no-op, so the constraint is already effectively immediate — `NOT DEFERRABLE` is the fail-fast choice consistent with the [fail-hard principle](#fail-hard-principle) and requires no `SET CONSTRAINTS ALL DEFERRED` carve-out for fixture/loaddata restores. `forms/migrations/0007_new_organization_ownership.py`'s inlined `DEFERRABLE INITIALLY DEFERRED` SQL was the lone outlier and has been migrated to `NOT DEFERRABLE` (SA60). The forms and CRM migration tests were updated to match the `NOT DEFERRABLE` contract; the `SET CONSTRAINTS ... IMMEDIATE` calls in those tests are retained as harmless no-ops. A conformance test (SA60) validates that every Option C composite FK is `NOT DEFERRABLE`.
-- **`tenant_excluded` marker precedence (SA60, ratified 2026-07-12):** in `is_tenant_model()` (`orgs/tenancy.py:1548+`), an explicit `tenant_excluded = "reason"` marker on a model takes precedence over manager/base-class detection (`TenantManager`/`TenantModel` inheritance) — a model marked excluded is never classified as tenant-scoped even if it also inherits tenant machinery. This is a doc-only ratification of already-shipped behavior; no code change.
-- **Intentional CASCADE exception (SA35):** `OrganizationInvitation.invited_by` remains `on_delete=CASCADE` because a pending invitation is an action attributed to its sender—if the sender's account is deleted, the invitation has no meaningful sender identity and dissolving it along with the sender is the correct behavior. This is a narrow, documented exception to the general SET_NULL/PROTECT rule for user-FKs in tenant-scoped models. Every other user-FK in `quickscale_modules_*` is SET_NULL or PROTECT (enforced by a conformance test in the orgs cross-module test harness at ``orgs/tests/test_sa35_conformance.py``).
-- **Last-owner `pre_delete` backstop refusal mechanism (SA70, ratified 2026-07-12):** the new orgs `pre_delete` receiver on the `User` model raises (does not silently return/no-op) when the deletion would orphan a shared organization's last owner, matching the [fail-hard principle](#fail-hard-principle) that governs the rest of this cycle's hardening work — a caller (admin bulk-delete, management command, a future GDPR erasure path) must see a loud failure rather than believe a refused delete succeeded.
-- **~~Cross-org migration RLS-context contract + conformance oracle (SA88, ratified 2026-07-15)~~ SUPERSEDED (see §Migration-Squash Decision (SA92) below).** The cross-org-migration RLS-context problem was an artifact of schema evolution — `organization_id` added to populated tables required backfill `RunPython` steps that needed elevated RLS context. Since the project is pre-launch with no deployed database to preserve, every module's migration history is squashed to a single final-schema `0001_initial` with `organization_id NOT NULL` from row zero. This eliminates all backfill steps and the entire cross-org-migration class. The SA88 gate saga (SA88a–e), `operator_access_migration` helper, and 7,144-line conformance gate file are retired. SA88 prose retained below for the historical reasoning trail only — it is no longer active policy and must not be cited as a current constraint.
-  > Original SA88 text preserved for historical trail: any data migration that reads or writes `organization_id` across organizations under FORCE RLS must acquire elevated context through the single orgs-owned helper `operator_access_migration(schema_editor)` (`orgs/tenancy.py`) — never an inline `SET LOCAL app.operator_access`/raw GUC manipulation. Conformance is proven by **(1)** a thin static gate (cross-org DML classification + raw-GUC ban + a per-migration boundary-proof registration check) and **(2)** seeded restricted-role `MigrationExecutor` boundary proofs (≥2 organizations, asserting correct org-value inheritance under `quickscale_test_role`/NOBYPASSRLS). Static *provenance* analysis (statically proving the called symbol resolves to the canonical helper across all Python aliasing/rebind/control-flow shapes) is **explicitly rejected as the gate oracle**: it is undecidable in the general case and proved non-convergent across four review cycles, and the PostgreSQL FORCE RLS engine under the restricted role is the authoritative behavioral oracle (SA59/SA82). This applies the "governance by gate" house style with a runtime rather than static oracle; per-migration inline copying of `operator_access` remains a rejected §0 fix-regression.
+- **Composite-FK deferability policy:** every Option C composite FK (the child-table `organization_id` + local-key pair added by the `_ADD_COMPOSITE_FK_SQL` helper in `orgs/tenancy.py`) is `NOT DEFERRABLE`. On PostgreSQL 18, `SET CONSTRAINTS <name> IMMEDIATE` on a `NOT DEFERRABLE` FK is a no-op, so the constraint is already effectively immediate — `NOT DEFERRABLE` is the fail-fast choice consistent with the [fail-hard principle](#fail-hard-principle) and requires no `SET CONSTRAINTS ALL DEFERRED` carve-out for fixture/loaddata restores. A conformance test validates that every Option C composite FK is `NOT DEFERRABLE`.
+- **`tenant_excluded` marker precedence:** in `is_tenant_model()` (`orgs/tenancy.py`), an explicit `tenant_excluded = "reason"` marker on a model takes precedence over manager/base-class detection (`TenantManager`/`TenantModel` inheritance) — a model marked excluded is never classified as tenant-scoped even if it also inherits tenant machinery.
+- **Intentional CASCADE exception:** `OrganizationInvitation.invited_by` remains `on_delete=CASCADE` because a pending invitation is an action attributed to its sender—if the sender's account is deleted, the invitation has no meaningful sender identity and dissolving it along with the sender is the correct behavior. This is a narrow, documented exception to the general SET_NULL/PROTECT rule for user-FKs in tenant-scoped models. Every other user-FK in `quickscale_modules_*` is SET_NULL or PROTECT (enforced by a conformance test in the orgs cross-module test harness).
+- **Last-owner `pre_delete` backstop refusal mechanism:** the orgs `pre_delete` receiver on the `User` model raises (does not silently return/no-op) when the deletion would orphan a shared organization's last owner, matching the [fail-hard principle](#fail-hard-principle) — a caller (admin bulk-delete, management command, a future GDPR erasure path) must see a loud failure rather than believe a refused delete succeeded.
+### Migration-Squash Decision {#migration-squash-decision}
 
-### Migration-Squash Decision (SA92) {#migration-squash-decision-sa92}
+**Rule:** The project has no deployed database to preserve, so every module's migration history is a single final-schema `0001_initial` with `organization_id NOT NULL` from row zero. This is a fresh-only posture — there is no cross-org backfill migration class. The rules below are standing constraints for anyone adding or changing migrations.
 
-**Decision (SA92, ratified 2026-07-15, implemented Phases 1–6):** Eliminate the entire cross-org-migration class by squashing every module's migration history to a single final-schema `0001_initial` with `organization_id NOT NULL` from row zero. This is a fresh-only compatibility posture — no deployed database exists to carry forward, so old migration history is discarded rather than `--squash`-chained.
+**Standing rules:**
 
-**What was done:**
+1. **One `0001_initial` per module.** Each of the nine modules (orgs, auth, blog, crm, forms, listings, billing, social, notifications) carries its final model state in a single initial migration. Do not add backfill `RunPython` steps for `organization_id`; new tenant tables ship with `organization_id NOT NULL` from creation.
 
-1. **Nine modules squashed to one `0001_initial` each:** orgs, auth, blog, crm, forms, listings, billing, social, notifications. Each carries the final model state with `organization_id` as `NOT NULL` from creation. 35 intermediate migrations deleted (including `orgs/0004`–`orgs/0010`, `auth/0002`, `crm/0002`–`crm/0022`, `forms/0002`–`forms/0007`, `listings/0002`–`listings/0005`, and all billing/social/notifications intermediates).
+2. **Each tenant module installs its own RLS.** Every tenant module's `0001_initial` carries its own `RunPython(apply_force_rls, ...)` and is authoritative for its own FORCE-RLS policy. The orgs module installs no module-table policy (it runs before enrolled tables exist). `apply_force_rls`/`revert_force_rls` in `orgs/tenancy.py` are the only supported RLS-management entrypoints.
 
-2. **RLS manually re-attached:** Each tenant module's squashed migration carries its own `RunPython(apply_force_rls, ...)` call. The orgs module does NOT install any module-table policy because it runs before enrolled tables exist; each tenant module's `0001_initial` is authoritative for its own policy installation. Verified by diffing `pg_policies` against the `v87` baseline: 21 FORCE-RLS tables / 42 policies match identically. Canonical hashes equal `v87`: catalog `4e1d047a`, RLS `246d65cf`, data `28ac5aac`.
+3. **No raw cross-table `organization_id` DML in migrations.** A bounded tripwire test regex-scans for the `UPDATE … SET organization_id` cross-table shape against an explicit allowlist; it is a smoke check, not a soundness proof. Correctness is proven by the `pg_policies`/catalog/data parity gate against the baseline (21 FORCE-RLS tables / 42 policies). Any new allowlist entry must be scoped to exact file-plus-statement identity.
 
-3. **Backfill steps dropped:** All `_backfill_*_org` `RunPython` steps (crm `0006`/`0009`, forms `0007`) are removed — a fresh database has no rows to backfill.
+4. **Preserved schema surfaces — keep matching the baseline:** forms' four presets / 16 fields (auto-created via initial data migration), the five parent UNIQUE constraints and six composite FKs, and listings' pinned index names.
 
-4. **SA88 gate saga retired:** `test_sa88_migration_operator_access_conformance.py` (7,144 lines) deleted. `operator_access_migration` helper retired from `orgs/tenancy.py`. `apply_force_rls`/`revert_force_rls` are preserved (they are needed for RLS policy management, not migration context elevation).
-
-5. **Forward guardrail replaced with bounded literal tripwire (maintainer-selected Option 1, 2026-07-16):** The previous 910-line handwritten Python/SQL scanner was replaced by a deliberately shallow, decidable smoke alarm. The bounded tripwire (`test_sa92_migration_squash_guardrail.py`) performs a single regex scan for the `UPDATE … SET organization_id` cross-table DML shape with an explicit allowlist, documented as not a soundness proof. The authoritative proof remains the checked-in `pg_policies`/catalog/data parity gate against `v87`. This resolves the non-convergence trap the scanner had hit across two review cycles: CR-SA90-MSQ-002 (high/blocking) and CR-SA90-MSQ-003 (medium/blocking) are resolved because the undecidable provenance-analysis surface is deleted, not hardened.
-
-6. **Preserved surfaces:**
-   - Forms four presets / 16 fields preserved identically (fresh `migrate` now auto-creates them via initial data migration).
-   - Five parent UNIQUE constraints and six composite FKs preserved.
-   - Listings index names pinned to exact baseline.
-   - Canonical catalog/RLS/data hashes are stable external evidence captured in review/merge artifacts, not self-referentially recorded in committed docs.
-
-**Acceptance evidence (Phase 6 — review completed and SA92 closed):**
-- All nine modules: `make lint`, MyPy type-checking, and focused module tests pass.
-- `make test-integration` raw exit 1 solely for the exact known-baseline failure: SA84 (CRM, 67 failures). SA86 (listings, 6 failures) is closed. Zero new or changed failure signatures.
-- Overall coverage 93.73%.
-- **Independent change review completed (2026-07-16).** Adaptive-change-review returned STATUS ok, confidence 94, no blocking findings, caller parity satisfied, breaking changes none. All four findings resolved: SA92-QG-001 (blocking test setup gap), CR-SA90-MSQ-002 (high/blocking), CR-SA90-MSQ-003 (medium/blocking), and CR-SA90-MSQ-005 (low/advisory) — all confirmed resolved.
-- Validation evidence: `make lint` pass; `make typecheck` pass; `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules` 858 passed, 11 skipped, 0 failed, 2 pre-existing warnings; 8/8 tripwire and 3/3 recovered tests pass.
-- Two low/advisory findings recorded in the review:
-  - **CR-SA92-ADV-001 (low/advisory):** The bounded literal tripwire regex intentionally omits alternate quoted/schema-qualified table identifier spellings. This is an accepted scope limitation of the deliberately shallow smoke alarm.
-  - **CR-SA92-ADV-002 (low/advisory):** Any future allowlist entry must be scoped to exact file-plus-statement identity before use.
-- SA84 closed; SA86 closed. The unquarantined integration gate is green with empty quarantine. See [roadmap.md §Green-gate milestone](./roadmap.md#green-gate-milestone).
-
-**Constraint:** This decision supersedes and replaces the SA88 seam-plus-gate approach (SA88/SA88a–e) documented above. The SA88 historical text is retained for the reasoning trail only and must not be cited as current policy.
-
-**Related docs:** [roadmap.md §SA92](./roadmap.md) | [CHANGELOG.md §SA92](../../CHANGELOG.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [CHANGELOG.md](../../CHANGELOG.md)
 
 **Rejected alternatives (do not re-introduce):**
 - ❌ **Per-client Railway deployment** — linear operational overhead per tenant; not a SaaS platform
@@ -1280,7 +1256,7 @@ Django superusers may activate a debug session that scopes the entire request to
 
 ### Generated-File Ownership (Beta-Migration Taxonomy) {#generated-file-ownership-taxonomy}
 
-**Decision (SA66):** The beta-migration maintainer tooling
+**Rule:** The beta-migration maintainer tooling
 (``quickscale_devtools/beta_migration.py``) carries a file taxonomy that
 classifies every generator-emitted file by its migration path.  The taxonomy
 is a set of explicit tuple literals; a conformance gate
@@ -1303,7 +1279,7 @@ and asserts every emitted file is classified.
 2. **``start.sh`` is an in-place infrastructure target.**  The in-place
    migration path delivers template-derived infrastructure files
    (``Dockerfile``, ``docker-compose.yml``, etc.) into the existing beta site.
-   ``start.sh`` is managed the same way so the SA63 createcachetable env-pair
+   ``start.sh`` is managed the same way so the createcachetable env-pair
    fix reaches beta sites through the in-place path (the path that existing
    sites actually use).  Classified under ``IN_PLACE_INFRASTRUCTURE_TARGETS``.
 
@@ -1349,7 +1325,7 @@ and asserts every emitted file is classified.
    Fresh-first preserves the recipient's templates; in-place does not touch
    them.  Theme-specific template overrides (social) are
    user-owned once generated.  ``templates/components/navigation.html`` was
-   removed as stale (the former ``showcase_html`` theme was retired in SA94;
+   removed as stale (the former ``showcase_html`` theme was retired;
    ``showcase_react`` does not emit a ``templates/components/navigation.html``
    template).
 
@@ -1358,7 +1334,7 @@ and asserts every emitted file is classified.
    Rationale: User-owned static file.  Generated once; not a migration target.
    ``static/css/style.css`` and ``static/images/favicon.svg`` were removed as
    stale (they were only emitted by the former ``showcase_html`` theme,
-   retired in SA94).
+   now retired).
 
    **Category U5 — Test scaffolding:**
    ``tests/__init__.py``, ``tests/conftest.py``, ``tests/test_example.py``.
@@ -1487,7 +1463,7 @@ and asserts every emitted file is classified.
    gate (rule 6) also checks ``MODE_REQUIRED_SPECS`` entries against
    ``INTENTIONALLY_UNMANAGED``.
 
-**Related docs:** [roadmap.md SA66](./roadmap.md) | [arch-audit.md Finding 7](../others/arch-audit.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Finding 7](../others/arch-audit.md)
 
 ---
 
@@ -1515,9 +1491,9 @@ grant itself.
 
 **What stays in scope (and is not affected by this decision):** everything
 this repo *can* verify mechanically — the generator templates themselves,
-the beta-migration file taxonomy and its conformance gate (SA66, ✅ landed),
-and the launcher env-pair contract's correctness in the templates it emits
-(SA63/SA68, ✅ landed). Those are the actual defect classes; this decision
+the beta-migration file taxonomy and its conformance gate,
+and the launcher env-pair contract's correctness in the templates it emits.
+Those are the actual defect classes; this decision
 only scopes out the one step no in-repo mechanism can perform: confirming a
 human maintainer applied the fix to a live external deployment.
 
@@ -1535,11 +1511,11 @@ work, not manual maintainer operations against external infrastructure.
 
 ---
 
-### Test-Commons Ownership Rule (SA97) {#test-commons-ownership-sa97}
+### Test-Commons Ownership Rule {#test-commons-ownership}
 
-**Decision (SA97, ratified 2026-07-17):** Define the boundary between
+**Rule:** Define the boundary between
 org-context runtime helpers and cross-module test plumbing, citing the
-`apply_force_rls`/`revert_force_rls` seam (SA92) as the existing house pattern
+`apply_force_rls`/`revert_force_rls` seam as the existing house pattern
 for a working shared-commons precedent.
 
 **Ownership:**
@@ -1556,11 +1532,11 @@ for a working shared-commons precedent.
    contract or any sanctioned cross-module test utility that already exists
    in `tests_shared/`.
 
-**Precedent — SA92 `apply_force_rls`/`revert_force_rls`:** The
+**Precedent — `apply_force_rls`/`revert_force_rls`:** The
 `apply_force_rls`/`revert_force_rls` seam is the house pattern for a working
 shared-commons relationship.  Orgs owns the RLS policy-management helper,
 each tenant module calls it during its own migration, and no module
-maintains a private copy.  SA97 extends this same principle to the test
+maintains a private copy.  This same principle extends to the test
 plumbing layer.
 
 **Enforcement:** Any module conftest that defines a fixture whose
@@ -1570,7 +1546,7 @@ the shared `reset_test_state` fixture from `tests_shared.reset_state`.
 New cross-module test utilities must be placed in `tests_shared/` rather
 than duplicated across module conftests.
 
-**Related docs:** [roadmap.md §SA97](./roadmap.md) | [CHANGELOG.md §SA97](../../CHANGELOG.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [CHANGELOG.md](../../CHANGELOG.md)
 
 ---
 
@@ -1639,7 +1615,7 @@ surface.
 
 ## Package Structure
 
-**Standalone Module Installation — Not Supported:** Individual `quickscale_modules/*` packages (`auth`, `orgs`, `billing`, etc.) are never installed or resolved on their own outside the monorepo. They're only meant to run interconnected, wired together by the `quickscale` CLI's bundle generation (`quickscale plan`/`quickscale apply`) into a generated project. The root `pyproject.toml` is the single source of truth for dependency resolution — it wires every module in as a `path = "...", develop = true` dependency and resolves them all together into one `poetry.lock`. Do not add per-module `poetry.lock` files, sibling-module version-range dependencies (e.g. a module pyproject declaring `quickscale-module-orgs = ">=x,<y"` instead of relying on the root-level path wiring), or any other standalone-install machinery for a module package — confirmed 2026-07-13; tracked cleanup of pre-existing dead lockfiles/constraints in [roadmap.md SA81](./roadmap.md).
+**Standalone Module Installation — Not Supported:** Individual `quickscale_modules/*` packages (`auth`, `orgs`, `billing`, etc.) are never installed or resolved on their own outside the monorepo. They're only meant to run interconnected, wired together by the `quickscale` CLI's bundle generation (`quickscale plan`/`quickscale apply`) into a generated project. The root `pyproject.toml` is the single source of truth for dependency resolution — it wires every module in as a `path = "...", develop = true` dependency and resolves them all together into one `poetry.lock`. Do not add per-module `poetry.lock` files, sibling-module version-range dependencies (e.g. a module pyproject declaring `quickscale-module-orgs = ">=x,<y"` instead of relying on the root-level path wiring), or any other standalone-install machinery for a module package.
 
 **Namespace Packaging Notes (maintainer reference, not current generated-project contract):**
 - ✅ `quickscale_modules/`, `quickscale_themes/`: PEP 420 namespaces (no `__init__.py` at root)

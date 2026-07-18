@@ -271,35 +271,32 @@ def _command_contains(error: subprocess.CalledProcessError, *tokens: str) -> boo
 def up(build: bool, no_cache: bool) -> None:
     """Start Docker services for development."""
     # Run read-only theme preflight before any Docker/compose/port probe.
-    # The recovery ledger (.quickscape/apply-recovery.yml) is an internal
+    # The recovery ledger (.quickscale/apply-recovery.yml) is an internal
     # apply checkpoint that may carry a ``__checkpoint__`` placeholder
-    # theme before the real project state is saved.  When *only* that
-    # file fails validation and ``quickscape.yml`` has a valid theme, the
-    # error is non-fatal (the apply will update the ledger later).
+    # theme before the real project state is saved. The validator's explicit
+    # up-only opt-in accepts that placeholder; all other recovery themes fail
+    # closed with remediation.
     try:
-        validate_theme_preflight(Path.cwd())
+        validate_theme_preflight(
+            Path.cwd(),
+            allow_recovery_checkpoint=True,
+        )
     except ThemeValidationError as exc:
-        # Check whether ALL errors are from the recovery ledger
-        # (``__checkpoint__`` placeholder written by the apply's checkpoint
-        # mechanism).  The apply updates this file later with the real
-        # project state, so a recovery-ledger-only failure is non-fatal.
         exc_text = str(exc)
-        only_recovery = all("recovery ledger" in line for line in exc_text.splitlines())
-        if not only_recovery:
-            click.secho(
-                "\n❌ Theme validation failed:",
-                fg="red",
-                err=True,
-                bold=True,
-            )
-            for line in exc_text.splitlines():
-                click.echo(f"  • {line}", err=True)
-            click.echo(
-                "\n💡 Update project.theme to 'showcase_react' in all present "
-                "configuration files before running 'quickscale up'.",
-                err=True,
-            )
-            sys.exit(1)
+        click.secho(
+            "\n❌ Theme validation failed:",
+            fg="red",
+            err=True,
+            bold=True,
+        )
+        for line in exc_text.splitlines():
+            click.echo(f"  • {line}", err=True)
+        click.echo(
+            "\n💡 Update project.theme to 'showcase_react' in all present "
+            "configuration files before running 'quickscale up'.",
+            err=True,
+        )
+        sys.exit(1)
 
     _validate_project_and_docker()
 
