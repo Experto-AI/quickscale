@@ -14,8 +14,9 @@ Run with: pytest -m e2e
 Note: Requires Docker to be running
 """
 
-import subprocess
+import os
 import socket
+import subprocess
 import time
 
 import pytest
@@ -64,9 +65,19 @@ class TestDevelopmentCommandsE2E:
         return False
 
     @staticmethod
-    def _emit_container_diagnostics(project_path: str, port: int | None = None) -> None:
+    def _container_prefix() -> str:
+        """Return the per-lane project/container prefix for this E2E run."""
+        return os.environ.get("QS_E2E_CONTAINER_PREFIX", "e2e_cli_test")
+
+    def _backend_container_name(self) -> str:
+        """Return the generated backend container name for this E2E lane."""
+        return f"{self._container_prefix()}_backend"
+
+    def _emit_container_diagnostics(
+        self, project_path: str, port: int | None = None
+    ) -> None:
         """Emit container/compose status and backend logs for debugging."""
-        import os
+        container_prefix = self._container_prefix()
 
         print(f"\n--- Container diagnostics (PORT={port}) ---", flush=True)
         # Show all containers for this project
@@ -76,7 +87,7 @@ class TestDevelopmentCommandsE2E:
                 "ps",
                 "-a",
                 "--filter",
-                "name=e2e_cli_test",
+                f"name={container_prefix}",
                 "--format",
                 "table {{.Names}}\t{{.Status}}\t{{.Ports}}",
             ],
@@ -92,28 +103,38 @@ class TestDevelopmentCommandsE2E:
                 pass
         # Show backend logs (last 20 lines)
         subprocess.run(
-            ["docker", "logs", "--tail", "20", "e2e_cli_test_backend"],
+            ["docker", "logs", "--tail", "20", self._backend_container_name()],
         )
         print("--- End diagnostics ---\n", flush=True)
 
     @pytest.fixture(autouse=True)
     def cleanup_before_test(self):
-        """Ensure all e2e_cli_test containers are stopped before each test."""
+        """Ensure this lane's containers are stopped before each test."""
+        container_prefix = self._container_prefix()
         try:
-            # Stop and remove any existing containers with our test project name
-            subprocess.run(
-                ["docker", "ps", "-a", "-q", "--filter", "name=e2e_cli_test"],
+            container_ids = subprocess.run(
+                [
+                    "docker",
+                    "ps",
+                    "-a",
+                    "-q",
+                    "--filter",
+                    f"name={container_prefix}",
+                ],
                 capture_output=True,
                 text=True,
-            )
-            # Force remove all containers with our project name
-            subprocess.run(
-                ["docker", "rm", "-f", "e2e_cli_test_backend", "e2e_cli_test_db"],
-                capture_output=True,
                 timeout=10,
             )
+            if container_ids.stdout.strip():
+                subprocess.run(
+                    ["docker", "rm", "-f", *container_ids.stdout.split()],
+                    capture_output=True,
+                    timeout=10,
+                )
             # Wait for Docker's proxy process to release ports
-            wait_for_port_release(8000, timeout=5.0)
+            wait_for_port_release(
+                int(os.environ.get("QS_E2E_APP_PORT", "8000")), timeout=5.0
+            )
         except Exception:
             pass  # Best effort cleanup
 
@@ -121,7 +142,7 @@ class TestDevelopmentCommandsE2E:
     def test_project(self, tmp_path):
         """Generate a test project and return its path."""
         generator = ProjectGenerator(theme="showcase_react")
-        project_name = "e2e_cli_test"
+        project_name = self._container_prefix()
         project_path = tmp_path / project_name
 
         generator.generate(project_name, project_path)
@@ -162,7 +183,10 @@ class TestDevelopmentCommandsE2E:
     @pytest.fixture
     def docker_env(self) -> dict[str, str]:
         """Provide isolated environment for Docker e2e commands"""
-        return {"PORT": str(self._get_free_port())}
+        return {
+            "PORT": os.environ.get("QS_E2E_APP_PORT", str(self._get_free_port())),
+            "QS_E2E_CONTAINER_PREFIX": self._container_prefix(),
+        }
 
     def test_full_development_workflow(
         self, test_project, ensure_docker_running, docker_env
@@ -195,7 +219,7 @@ class TestDevelopmentCommandsE2E:
 
             # Wait for backend container to be running (bounded poll)
             if not self._wait_for_container_running(
-                "e2e_cli_test_backend", timeout=40.0
+                self._backend_container_name(), timeout=40.0
             ):
                 self._emit_container_diagnostics(str(project_path))
                 assert False, "Backend container did not become running within 40s"
@@ -244,7 +268,7 @@ class TestDevelopmentCommandsE2E:
     ):
         """Apply with Docker auto-start should run migrations via backend container."""
         runner = CliRunner()
-        project_name = f"e2e_apply_docker_{int(time.time())}"
+        project_name = f"{self._container_prefix()}_apply_{int(time.time())}"
         port = self._get_free_port()
         env = {"PORT": str(port)}
 
@@ -298,7 +322,7 @@ class TestDevelopmentCommandsE2E:
             assert result.exit_code == 0
             # Bounded poll instead of fixed sleep
             if not self._wait_for_container_running(
-                "e2e_cli_test_backend", timeout=40.0
+                self._backend_container_name(), timeout=40.0
             ):
                 self._emit_container_diagnostics(str(project_path))
                 assert False, "Backend container did not become running within 40s"
@@ -312,7 +336,7 @@ class TestDevelopmentCommandsE2E:
             result = runner.invoke(cli, ["up"], env=docker_env)
             assert result.exit_code == 0
             if not self._wait_for_container_running(
-                "e2e_cli_test_backend", timeout=40.0
+                self._backend_container_name(), timeout=40.0
             ):
                 self._emit_container_diagnostics(str(project_path))
                 assert False, "Backend container (2nd up) did not become running"
@@ -340,7 +364,7 @@ class TestDevelopmentCommandsE2E:
             assert result.exit_code == 0
             assert "Services started successfully!" in result.output
             if not self._wait_for_container_running(
-                "e2e_cli_test_backend", timeout=40.0
+                self._backend_container_name(), timeout=40.0
             ):
                 self._emit_container_diagnostics(str(project_path))
                 assert False, "Backend container did not become running within 40s"
@@ -365,7 +389,7 @@ class TestDevelopmentCommandsE2E:
             # Start services
             runner.invoke(cli, ["up"], env=docker_env)
             if not self._wait_for_container_running(
-                "e2e_cli_test_backend", timeout=40.0
+                self._backend_container_name(), timeout=40.0
             ):
                 self._emit_container_diagnostics(str(project_path))
                 assert False, "Backend container did not become running within 40s"
@@ -392,7 +416,7 @@ class TestDevelopmentCommandsE2E:
             # Start services
             runner.invoke(cli, ["up"], env=docker_env)
             if not self._wait_for_container_running(
-                "e2e_cli_test_backend", timeout=40.0
+                self._backend_container_name(), timeout=40.0
             ):
                 self._emit_container_diagnostics(str(project_path))
                 assert False, "Backend container did not become running within 40s"
@@ -478,7 +502,7 @@ class TestDevelopmentCommandsE2E:
 
             # Wait for backend container to be running (bounded poll)
             if not self._wait_for_container_running(
-                "e2e_cli_test_backend", timeout=40.0
+                self._backend_container_name(), timeout=40.0
             ):
                 self._emit_container_diagnostics(str(test_project))
                 assert False, "Backend container did not become running within 40s"
