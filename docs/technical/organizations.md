@@ -9,7 +9,7 @@ The organizations module enables a QuickScale-generated app to be sold as a SaaS
 
 QuickScale supports two deployment modes — **Solo** and **SaaS** — resolved at runtime via a single settings flag. Both modes use the same schema and codebase. Solo mode is a constrained configuration of the organization system, not a separate architecture.
 
-**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes, migration/promote commands, and ORM-backed plan feature gating), and fresh `showcase_react` org pages for generated projects. The shipped tenant-table surface is registry-backed: **21 ENROLLED models** across CRM (7), Forms (4), Billing (3), Blog (4), Listings (1), and Social (2) each carry a direct `organization_id`, use the shared `TenantManager` / `TenantManager(super_scope=True)` contract, and ship with live FORCE-RLS policies. `TenantMiddleware` plus the AF9 execute-wrapper derive `app.current_org_id` from the request/session ContextVar path so tenant-scoped ORM and PostgreSQL enforcement stay aligned. Reviewed exclusions (org control-plane models, `Plan`, `WebhookEvent`, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract by design. The authoritative human-readable overview of the shipped tenant-table surface is the marker-based derived registry view (:func:`get_derived_registry_overview` in ``quickscale_modules_orgs.tenancy``). The derived view is purely marker-driven — every excluded concrete model carries an explicit ``tenant_excluded`` class attribute. The literal ``TENANT_TABLE_REGISTRY`` is retained as a cross-check target for CI parity assertions.
+**Current implementation note**: the repository currently ships the organizations foundation plus the server-rendered org-management Django surface: core org models/admin wiring, Solo/SaaS runtime branching, request-scoped org resolution, RBAC guards, self-service org creation, the org dashboard, member management, org settings, invite send/revoke on the org admin members surface, the slugless public invitation accept flow that resumes after auth and redeems only when the normalized email matches, the current org-billing bridge (authoritative org billing ownership fields, flat billing pages/APIs in both Solo and SaaS modes, migration/promote commands, and ORM-backed plan feature gating), and fresh `showcase_react` org pages for generated projects. The shipped tenant-table surface is registry-backed: **21 ENROLLED models** across CRM (7), Forms (4), Billing (3), Blog (4), Listings (1), and Social (2) each carry a direct `organization_id`, use the shared `TenantManager` / `TenantManager(super_scope=True)` contract, and ship with live FORCE-RLS policies. `TenantMiddleware` plus the execute-wrapper derive `app.current_org_id` from the request/session ContextVar path so tenant-scoped ORM and PostgreSQL enforcement stay aligned. Reviewed exclusions (org control-plane models, `Plan`, `WebhookEvent`, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract by design. The authoritative human-readable overview of the shipped tenant-table surface is the marker-based derived registry view (:func:`get_derived_registry_overview` in ``quickscale_modules_orgs.tenancy``). The derived view is purely marker-driven — every excluded concrete model carries an explicit ``tenant_excluded`` class attribute. The literal ``TENANT_TABLE_REGISTRY`` is retained as a cross-check target for CI parity assertions.
 
 ---
 
@@ -61,7 +61,7 @@ The orgs module now ships a single URL module. The deployment mode changes reque
 urlpatterns += [path('', include('quickscale_modules_orgs.urls'))]
 ```
 
-The same org views serve both modes. Org-management pages keep `org_slug` where needed (`/orgs/<slug>/...`), while tenant content routes no longer use org-scoped URL kwargs. The active org is resolved from middleware-established context.
+The same org views serve both modes. Org-management pages keep `org_slug` where needed (`/orgs/<slug>/...`), while tenant content routes do not use org-scoped URL kwargs. The active org is resolved from middleware-established context.
 
 ### Upgrade Path: Solo → SaaS
 
@@ -73,7 +73,7 @@ QUICKSCALE_MODE = 'saas'
 python manage.py promote_to_saas
 ```
 
-`promote_to_saas` now ships as part of the current org/billing bridge. It keeps existing personal organizations, fills blank personal-org slugs from the owner username, suffixes collisions deterministically, and prints the required `QUICKSCALE_MODE = 'saas'` settings change instead of mutating settings files directly.
+`promote_to_saas` ships as part of the org/billing bridge. It keeps existing personal organizations, fills blank personal-org slugs from the owner username, suffixes collisions deterministically, and prints the required `QUICKSCALE_MODE = 'saas'` settings change instead of mutating settings files directly.
 
 ---
 
@@ -162,12 +162,12 @@ A user account is global (one email, one login). A user's role is org-scoped. Re
 
 ### Architecture
 
-One Railway project: one application service and one PostgreSQL 18 service. All organizations share the same database and the same schema. `TenantMiddleware` resolves the active org, the AF9 execute-wrapper derives `app.current_org_id` from the current-org ContextVar, and the tenant registry marks the shipped repo surface explicitly. Today that surface contains **21 ENROLLED models** across CRM, Forms, Billing, Blog, Listings, and Social; each enrolled table has a direct `organization_id` column and a live FORCE-RLS policy. Reviewed exclusions (org control-plane models, system-wide billing metadata, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract intentionally. The authoritative human-readable overview of the shipped tenant-table surface is the marker-based derived registry view (:func:`get_derived_registry_overview` in ``quickscale_modules_orgs.tenancy``). The derived view is purely marker-driven — every excluded concrete model carries an explicit ``tenant_excluded`` class attribute. The literal ``TENANT_TABLE_REGISTRY`` is retained as a cross-check target for CI parity assertions.
+One Railway project: one application service and one PostgreSQL 18 service. All organizations share the same database and the same schema. `TenantMiddleware` resolves the active org, the execute-wrapper derives `app.current_org_id` from the current-org ContextVar, and the tenant registry marks the shipped repo surface explicitly. Today that surface contains **21 ENROLLED models** across CRM, Forms, Billing, Blog, Listings, and Social; each enrolled table has a direct `organization_id` column and a live FORCE-RLS policy. Reviewed exclusions (org control-plane models, system-wide billing metadata, `AuthorProfile`, abstract bases, test-only models, auth `User`, backups operational models, and notifications operational models) remain outside the tenant-table contract intentionally. The authoritative human-readable overview of the shipped tenant-table surface is the marker-based derived registry view (:func:`get_derived_registry_overview` in ``quickscale_modules_orgs.tenancy``). The derived view is purely marker-driven — every excluded concrete model carries an explicit ``tenant_excluded`` class attribute. The literal ``TENANT_TABLE_REGISTRY`` is retained as a cross-check target for CI parity assertions.
 
 ```
 Railway project
 ├── app service (Django + Gunicorn)
-│   └── TenantMiddleware + AF9 execute_wrapper
+│   └── TenantMiddleware + execute_wrapper
 │       → resolves request.org, sets the current-org ContextVar, primes `app.current_org_id`
 └── postgres service (PostgreSQL 18)
     └── Active RLS — all ENROLLED tenant tables:
@@ -190,14 +190,14 @@ QuickScale's isolation model is structurally equivalent to Supabase's. Both are 
 | Dimension | Supabase | QuickScale |
 |---|---|---|
 | Isolation unit | User (`auth.uid()`) or custom JWT claim | Organization (`app.current_org_id`) |
-| Context carrier | JWT claim, injected per-transaction by PostgREST | PostgreSQL GUC, derived from ContextVar by execute_wrapper (AF9) |
-| Policy syntax | `USING (auth.uid() = user_id)` | `USING (organization_id = NULLIF(current_setting('app.current_org_id',true),'')::uuid)` (after AF11) |
+| Context carrier | JWT claim, injected per-transaction by PostgREST | PostgreSQL GUC, derived from ContextVar by execute_wrapper |
+| Policy syntax | `USING (auth.uid() = user_id)` | `USING (organization_id = NULLIF(current_setting('app.current_org_id',true),'')::uuid)` |
 | Admin bypass | `service_role` (BYPASSRLS) | No shipped runtime BYPASSRLS admin path; admin/debug stays on the restricted runtime role via explicit org selection / VIEW-AS |
 | Debug impersonation | Dashboard "Impersonate User" button | VIEW-AS feature (shipped) |
-| Policy tester | Dashboard UI | `isolation-conformance` CI job (AF10) |
+| Policy tester | Dashboard UI | `isolation-conformance` CI job |
 | Deployment | Supabase managed cloud | Self-hosted Railway (one app + one Postgres service) |
 
-The primary engineering difference is injection mechanism: Supabase's PostgREST sets the GUC from JWT claims before every query (automatic); QuickScale's shipped AF9 execute-wrapper derives the GUC from the ContextVar at every transaction start (equivalent guarantee, different wiring).
+The primary engineering difference is injection mechanism: Supabase's PostgREST sets the GUC from JWT claims before every query (automatic); QuickScale's shipped execute-wrapper derives the GUC from the ContextVar at every transaction start (equivalent guarantee, different wiring).
 
 QuickScale adds the Solo/SaaS deployment mode distinction that Supabase (as a per-project service) does not need to model.
 
@@ -492,7 +492,7 @@ Path routing (not subdomain). The org slug is part of the org-management surface
 
 **Note**: The billing module uses flat routes exclusively in both modes (`/billing/dashboard/`, `/billing/pricing/`, `/api/billing/...`). No org-scoped billing URL tree exists — the org is resolved from `request.org` (set by middleware from session or personal-org fallback), not from a URL slug.
 
-**Note (T1.5 / T1.6 / T1.7 / T1.8)**: CRM, blog, forms, listings, and billing all use flat server routes in the shipped contract. The active organization is resolved from `request.org` / the current-org ContextVar, not from a URL slug.
+**Note**: CRM, blog, forms, listings, and billing all use flat server routes in the shipped contract. The active organization is resolved from `request.org` / the current-org ContextVar, not from a URL slug.
 ```
 
 ### Solo Mode
@@ -547,7 +547,7 @@ No `OrgLayout` or org switcher is rendered. Billing remains Django-page navigati
 
 Subdomain routing (`acme.myapp.com`) is not in scope, but the architecture is designed to support it with no changes to views or models.
 
-`TenantMiddleware` currently resolves the org from the session (`ACTIVE_ORG_SESSION_KEY`) in SaaS mode and from the authenticated user's personal org in Solo mode; the shipped middleware no longer carries content-route slug fallback. To support subdomains, only the initial SaaS resolution step changes — instead of reading the session first, the middleware would read the subdomain from `request.get_host()`:
+`TenantMiddleware` currently resolves the org from the session (`ACTIVE_ORG_SESSION_KEY`) in SaaS mode and from the authenticated user's personal org in Solo mode; the middleware carries no content-route slug fallback. To support subdomains, only the initial SaaS resolution step changes — instead of reading the session first, the middleware would read the subdomain from `request.get_host()`:
 
 ```python
 # Current (session-based SaaS resolution):
@@ -567,9 +567,9 @@ Everything downstream (`request.org`, the current-org ContextVar, permission che
 
 ## TenantMiddleware
 
-The current middleware implementation (shipped in T1.20 form) uses **session-based org resolution** for SaaS mode and personal-org resolution for Solo mode. It populates `request.org` plus the current-org ContextVar, but it does **not** hold a request-long transaction or issue `SET LOCAL` directly.
+The middleware uses **session-based org resolution** for SaaS mode and personal-org resolution for Solo mode. It populates `request.org` plus the current-org ContextVar, but it does **not** hold a request-long transaction or issue `SET LOCAL` directly.
 
-The pre-T1.20 middleware carried slug/fallback resolution paths for content routes. The shipped middleware no longer does that: org-management URLs (`/orgs/...` and `/api/orgs/...`) bypass tenant resolution so the orgs views can own access control, while all other SaaS requests either resolve an active session org or fail closed.
+The middleware carries no slug/fallback resolution paths for content routes: org-management URLs (`/orgs/...` and `/api/orgs/...`) bypass tenant resolution so the orgs views can own access control, while all other SaaS requests either resolve an active session org or fail closed.
 
 Key behaviours (current):
 - **SaaS mode + active session org** → resolves the org from the session key, validates membership, and sets `request.org` + the current-org ContextVar.
@@ -578,7 +578,7 @@ Key behaviours (current):
 - **VIEW-AS debug override** → a superuser debug session org takes priority over the normal Solo/SaaS branch.
 - **Org-management path bypass** → `/orgs/...` and `/api/orgs/...` requests owned by the orgs module bypass middleware tenant resolution so the views can own access control.
 
-**Connection/RLS note**: DB-level `app.current_org_id` priming is now caller-managed (`tenant_context(...)`, `org_scope(...)`, or the AF9 execute-wrapper path where applicable). When deployment topology requires session-level `SET` instead of transaction-local `SET LOCAL`, document that explicitly in `docs/deployment/railway.md`.
+**Connection/RLS note**: DB-level `app.current_org_id` priming is now caller-managed (`tenant_context(...)`, `org_scope(...)`, or the execute-wrapper path where applicable). When deployment topology requires session-level `SET` instead of transaction-local `SET LOCAL`, document that explicitly in `docs/deployment/railway.md`.
 
 ---
 
@@ -615,7 +615,7 @@ Supabase ships a dashboard "Impersonate User" button so operators can see the ap
 - Only `is_superuser=True` users can set the session key; the middleware ignores it for non-superusers.
 - The debug session uses the same restricted runtime role (`NOBYPASSRLS`) as all other tenant paths — RLS remains fully enforced. The operator sees exactly what an Acme Corp member sees.
 - Every debug activation is audit-logged: who activated it, which org, when, from which path.
-- Depends on the shipped AF9 GUC/ContextVar wiring so the debug session sees the same restricted-role row set as an ordinary tenant request.
+- Depends on the shipped GUC/ContextVar wiring so the debug session sees the same restricted-role row set as an ordinary tenant request.
 
 ### Implementation Scope
 

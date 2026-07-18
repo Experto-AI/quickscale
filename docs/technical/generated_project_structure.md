@@ -12,7 +12,7 @@ QuickScale currently generates a standalone Django project with production found
 
 Key rules:
 - The generated project is user-owned code.
-- `showcase_react` is the sole starter theme (the former `showcase_html` server-rendered secondary option has been removed).
+- `showcase_react` is the sole starter theme; no server-rendered HTML theme is offered.
 - Fresh generations include a root `Makefile` with generic `setup`, `lint`, `format`, `test`, `check`, and `ci` entrypoints; frontend-only targets guard on `frontend/package.json`.
 - Fresh generations also ship `scripts/lint.sh` as the shared helper surface behind `make lint` and `make check`.
 - Fresh `showcase_react` generations auto-scaffold Django-owned public `/social` and `/social/embeds` pages.
@@ -169,7 +169,7 @@ Notes:
 
 ### HTML Starter Output (Removed)
 
-The `showcase_html` (server-rendered HTML + CSS) starter theme has been removed. `showcase_react` is the sole supported theme. Existing generated projects that used `showcase_html` keep their user-owned files — no automatic rewrite is performed. Any desired/state/recovery reference to `showcase_html` fails closed before operational side effects.
+`showcase_react` is the sole supported theme; no server-rendered HTML + CSS theme is offered. Existing generated projects keep their user-owned files — apply performs no automatic rewrite. Any desired/state/recovery reference to `showcase_html` fails closed before operational side effects.
 
 ### State and Module Metadata
 
