@@ -72,7 +72,7 @@ Use this pattern only when you are intentionally maintaining shared code across 
 | Social Module | `quickscale_modules.social` | `quickscale_modules_social` |
 | Storage Module | `quickscale_modules.storage` | `quickscale_modules_storage` |
 | React Starter | generated frontend assets | user-owned project code |
-| HTML Starter (removed in SA94) | generated Django templates (historical) | user-owned project code (existing projects) |
+| HTML Starter (removed) | generated Django templates (historical) | user-owned project code (existing projects) |
 
 Rules:
 - Dotted import paths map to underscore-qualified Django app labels where needed.
