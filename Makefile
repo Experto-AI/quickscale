@@ -372,10 +372,25 @@ test-agent:
 test-cov:
 	@set -e; \
 	overall_exit=0; \
-	rm -f .coverage; \
+	coverage_dir=$$(mktemp -d "$${TMPDIR:-/tmp}/quickscale-test-cov.XXXXXX"); \
+	phase1_file="$$coverage_dir/combined.phase1"; \
+	phase2_file="$$coverage_dir/combined.phase2"; \
+	combined_file="$$coverage_dir/combined"; \
+	cleanup_coverage() { rm -rf "$$coverage_dir"; }; \
+	record_failure() { \
+		failure_exit="$$1"; \
+		if [ "$$overall_exit" -eq 0 ]; then \
+			overall_exit="$$failure_exit"; \
+		fi; \
+	}; \
+	trap cleanup_coverage EXIT; \
+	trap 'exit 130' INT; \
+	trap 'exit 143' TERM; \
+	trap 'exit 129' HUP; \
 	echo "📦 Phase 1 — Running core + CLI unit tests with coverage..."; \
 	set +e; \
-	$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short -m "not e2e" \
+	COVERAGE_FILE="$$phase1_file" $(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short -m "not e2e" \
+		$(PYTEST_XDIST_ARGS) \
 		--cov=quickscale_core \
 		--cov=quickscale_cli \
 		--cov-report= \
@@ -384,8 +399,17 @@ test-cov:
 	set -e; \
 	if [ $$phase1_exit -ne 0 ]; then \
 		echo "⚠️  Phase 1 — Core/CLI tests had failures (exit $$phase1_exit) — coverage data still captured"; \
-		overall_exit=$$phase1_exit; \
+		record_failure "$$phase1_exit"; \
 	fi; \
+	phase1_missing=false; \
+	if [ ! -f "$$phase1_file" ]; then \
+		echo "❌ Phase 1 — Expected coverage data file is missing: $$phase1_file"; \
+		record_failure 1; \
+		phase1_missing=true; \
+	fi; \
+	backups_required=false; \
+	if [ -n "$(REQUIRE_BACKUPS_COVERAGE)" ]; then backups_required=true; fi; \
+	required_backups_missing=false; \
 	pg_available=false; \
 	dr_tools_missing=false; \
 	for tool in pg_dump pg_restore; do \
@@ -404,7 +428,7 @@ test-cov:
 		pg_available=true; \
 	fi; \
 	if [ "$$pg_available" = true ]; then \
-		echo "📦 Phase 2 — Running backups-module tests with coverage append..."; \
+		echo "📦 Phase 2 — Running backups-module tests with isolated coverage..."; \
 		mod="quickscale_modules/backups"; \
 		module_pythonpath="$$mod:."; \
 		if [ -d "$$mod/src" ]; then \
@@ -414,39 +438,87 @@ test-cov:
 			if [ "$$sibling" != "$$mod" ] && [ -d "$$sibling/src" ]; then \
 				module_pythonpath="$$module_pythonpath:$$sibling/src"; \
 			fi; \
-		done; \
+		 done; \
 		set +e; \
-		PYTHONPATH="$$module_pythonpath" $(PYTHON) -m pytest "$$mod/tests/" \
+		PYTHONPATH="$$module_pythonpath" COVERAGE_FILE="$$phase2_file" $(PYTHON) -m pytest "$$mod/tests/" \
 			-q --tb=short -o "addopts=" -m "not e2e" -p pytest_django --ds=tests.settings \
-			--cov=quickscale_core --cov-append \
-			--cov-report=; \
+			$(PYTEST_XDIST_ARGS) \
+			--cov=quickscale_core \
+			--cov-report= \
+			--cov-fail-under=0; \
 		phase2_exit=$$?; \
 		set -e; \
 		if [ $$phase2_exit -ne 0 ]; then \
 			echo "⚠️  Phase 2 — Backups-module tests had failures (exit $$phase2_exit) — coverage data still captured"; \
-			[ $$overall_exit -eq 0 ] && overall_exit=$$phase2_exit; \
+			record_failure "$$phase2_exit"; \
+		fi; \
+		if [ ! -f "$$phase2_file" ]; then \
+			echo "❌ Phase 2 — Expected coverage data file is missing: $$phase2_file"; \
+			if [ $$phase2_exit -eq 0 ]; then record_failure 1; fi; \
+			if [ "$$backups_required" = true ]; then required_backups_missing=true; fi; \
 		fi; \
 	else \
 		if [ -n "$(REQUIRE_BACKUPS_COVERAGE)" ]; then \
 			echo "❌ REQUIRE_BACKUPS_COVERAGE is set but PostgreSQL or DR toolchain is not available."; \
 			echo "   Ensure PostgreSQL 18 is running on localhost:5432 and the QS_BACKUPS_DB_*"; \
 			echo "   environment variables point to a valid LOGIN CREATEDB NOINHERIT NOBYPASSRLS role."; \
-			exit 1; \
+			record_failure 1; \
+			required_backups_missing=true; \
 		fi; \
-		echo "ℹ️ Phase 2 — PostgreSQL or DR toolchain not available — skipping module coverage append (backups)"; \
+		echo "ℹ️ Phase 2 — PostgreSQL or DR toolchain not available — skipping module coverage (backups)"; \
 	fi; \
-	echo "📊 Phase 3 — Generating combined coverage report (threshold deferred to Phase 4)..."; \
-	$(PYTHON) -m coverage html; \
-	$(PYTHON) -m coverage report --fail-under=0; \
-	$(PYTHON) -m coverage json; \
-	echo "🔍 Phase 4 — Checking coverage policy (90% equal-weight package mean, 80% per-file)..."; \
-	$(PYTHON) scripts/check_coverage_policy.py coverage.json; \
-	policy_exit=$$?; \
-	if [ $$policy_exit -ne 0 ]; then \
-		echo "⚠️  Phase 4 — Coverage policy check failed (exit $$policy_exit)"; \
-		[ $$overall_exit -eq 0 ] && overall_exit=$$policy_exit; \
+	if [ "$$phase1_missing" = false ] && [ "$$required_backups_missing" = false ]; then \
+		echo "📊 Phase 3 — Combining isolated coverage data and generating report (threshold deferred to Phase 4)..."; \
+		set +e; \
+		$(PYTHON) -m coverage combine --data-file="$$combined_file" "$$coverage_dir"; \
+		combine_exit=$$?; \
+		set -e; \
+		if [ $$combine_exit -ne 0 ]; then \
+			echo "⚠️  Phase 3 — Coverage combine failed (exit $$combine_exit)"; \
+			record_failure "$$combine_exit"; \
+		elif [ ! -f "$$combined_file" ]; then \
+			echo "❌ Phase 3 — Coverage combine did not create the expected data file: $$combined_file"; \
+			record_failure 1; \
+		else \
+			set +e; \
+			$(PYTHON) -m coverage html --data-file="$$combined_file"; \
+			html_exit=$$?; \
+			$(PYTHON) -m coverage report --data-file="$$combined_file" --fail-under=0; \
+			report_exit=$$?; \
+			$(PYTHON) -m coverage json --data-file="$$combined_file"; \
+			json_exit=$$?; \
+			set -e; \
+			if [ $$html_exit -ne 0 ]; then \
+				echo "⚠️  Phase 3 — Coverage HTML report failed (exit $$html_exit)"; \
+				record_failure "$$html_exit"; \
+			fi; \
+			if [ $$report_exit -ne 0 ]; then \
+				echo "⚠️  Phase 3 — Coverage report failed (exit $$report_exit)"; \
+				record_failure "$$report_exit"; \
+			fi; \
+			if [ $$json_exit -ne 0 ] || [ ! -f coverage.json ]; then \
+				if [ $$json_exit -ne 0 ]; then \
+					echo "⚠️  Phase 3 — Coverage JSON report failed (exit $$json_exit)"; \
+				else \
+					echo "❌ Phase 3 — Coverage JSON report did not create coverage.json"; \
+				fi; \
+				if [ $$json_exit -ne 0 ]; then record_failure "$$json_exit"; else record_failure 1; fi; \
+			else \
+				echo "🔍 Phase 4 — Checking coverage policy (90% equal-weight package mean, 80% per-file)..."; \
+				set +e; \
+				$(PYTHON) scripts/check_coverage_policy.py coverage.json; \
+				policy_exit=$$?; \
+				set -e; \
+				if [ $$policy_exit -ne 0 ]; then \
+					echo "⚠️  Phase 4 — Coverage policy check failed (exit $$policy_exit)"; \
+					record_failure "$$policy_exit"; \
+				fi; \
+			fi; \
+		fi; \
+	else \
+		echo "⚠️  Phase 3 — Skipping coverage combine because required coverage inputs are missing"; \
 	fi; \
-	echo "📊 Coverage report: htmlcov/index.html"; \
+	if [ -f coverage.json ]; then echo "📊 Coverage report: htmlcov/index.html"; fi; \
 	exit $$overall_exit
 
 # Run the coverage policy helper test suite independently.

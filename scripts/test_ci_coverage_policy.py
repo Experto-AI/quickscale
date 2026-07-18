@@ -19,7 +19,10 @@ from __future__ import annotations
 import json
 import math
 import os
+import subprocess
 import tempfile
+import textwrap
+from pathlib import Path
 
 from scripts.check_coverage_policy import check_policy
 
@@ -617,6 +620,158 @@ class TestMakefileCoveragePipeline:
 
     MAKEFILE_PATH = os.path.join(os.path.dirname(__file__), "..", "Makefile")
 
+    def _write_fake_tools(self, tmp_path: Path) -> tuple[Path, Path, Path]:
+        """Create deterministic Python and PostgreSQL fakes for recipe tests."""
+        fake_python = tmp_path / "fake_python.py"
+        event_log = tmp_path / "events.jsonl"
+        fake_python.write_text(
+            textwrap.dedent(
+                """
+                #!/usr/bin/env python3
+                import json
+                import os
+                from pathlib import Path
+                import signal
+                import sys
+
+                args = sys.argv[1:]
+                log_path = Path(os.environ["FAKE_LOG"])
+
+                def event(kind, **fields):
+                    with log_path.open("a", encoding="utf-8") as stream:
+                        json.dump({"kind": kind, **fields}, stream)
+                        stream.write("\\n")
+
+                event(
+                    "invoke",
+                    args=args,
+                    coverage_file=os.environ.get("COVERAGE_FILE"),
+                    cwd=os.getcwd(),
+                )
+
+                if args[:1] == ["-c"]:
+                    raise SystemExit(int(os.environ.get("FAKE_PG_EXIT", "1")))
+
+                if args[:2] == ["-m", "pytest"]:
+                    coverage_file = os.environ["COVERAGE_FILE"]
+                    phase = "phase2" if "phase2" in coverage_file else "phase1"
+                    event(
+                        "pytest",
+                        phase=phase,
+                        args=args,
+                        coverage_file=coverage_file,
+                    )
+                    if os.environ.get("FAKE_SIGNAL") == phase:
+                        os.kill(os.getppid(), signal.SIGTERM)
+                        raise SystemExit(0)
+                    if not (
+                        phase == "phase2"
+                        and os.environ.get("FAKE_NO_PHASE2_FILE") == "1"
+                    ):
+                        Path(coverage_file).write_text(phase, encoding="utf-8")
+                    raise SystemExit(
+                        int(os.environ.get(f"FAKE_{phase.upper()}_EXIT", "0"))
+                    )
+
+                if args[:2] == ["-m", "coverage"]:
+                    command = args[2]
+                    event("coverage", command=command, args=args)
+                    if command == "combine":
+                        data_file = next(
+                            arg.split("=", 1)[1]
+                            for arg in args
+                            if arg.startswith("--data-file=")
+                        )
+                        event(
+                            "combine_inputs",
+                            data_file=data_file,
+                            input_dir=args[-1],
+                        )
+                        Path(data_file).write_text("combined", encoding="utf-8")
+                    elif command == "json":
+                        Path("coverage.json").write_text("{}", encoding="utf-8")
+                    raise SystemExit(
+                        int(
+                            os.environ.get(
+                                f"FAKE_COVERAGE_{command.upper()}_EXIT", "0"
+                            )
+                        )
+                    )
+
+                if args and args[0].endswith("check_coverage_policy.py"):
+                    event("policy", args=args)
+                    raise SystemExit(int(os.environ.get("FAKE_POLICY_EXIT", "0")))
+
+                raise SystemExit(f"unexpected fake Python invocation: {args!r}")
+                """
+            ).lstrip(),
+            encoding="utf-8",
+        )
+        fake_python.chmod(0o755)
+
+        fake_bin = tmp_path / "fake-bin"
+        fake_bin.mkdir()
+        for tool in ("pg_dump", "pg_restore"):
+            tool_path = fake_bin / tool
+            tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            tool_path.chmod(0o755)
+        return fake_python, event_log, fake_bin
+
+    def _run_pipeline(
+        self,
+        tmp_path: Path,
+        *,
+        pg_exit: int = 1,
+        extra_env: dict[str, str] | None = None,
+    ) -> tuple[subprocess.CompletedProcess[str], list[dict], Path]:
+        """Run the actual Make recipe against bounded fake tools."""
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        fake_python, event_log, fake_bin = self._write_fake_tools(tmp_path)
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        root_coverage = work_dir / ".coverage"
+        root_coverage.write_text("unrelated-root-data", encoding="utf-8")
+        temp_dir = tmp_path / "system-tmp"
+        temp_dir.mkdir()
+
+        env = os.environ.copy()
+        for key in ("REQUIRE_BACKUPS_COVERAGE", "PYTEST_XDIST_WORKERS"):
+            env.pop(key, None)
+        env.update(
+            {
+                "FAKE_LOG": str(event_log),
+                "FAKE_PG_EXIT": str(pg_exit),
+                "PATH": f"{fake_bin}{os.pathsep}{env['PATH']}",
+                "TMPDIR": str(temp_dir),
+            }
+        )
+        if extra_env:
+            env.update(extra_env)
+
+        result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "-f",
+                self.MAKEFILE_PATH,
+                f"PYTHON={fake_python}",
+                "test-cov",
+            ],
+            cwd=work_dir,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        events = [json.loads(line) for line in event_log.read_text(encoding="utf-8").splitlines()]
+        return result, events, work_dir
+
+    @staticmethod
+    def _pytest_events(events: list[dict]) -> list[dict]:
+        """Return only fake pytest invocations, excluding the DB probe."""
+        return [event for event in events if event["kind"] == "pytest"]
+
     def _read_makefile_section(self, anchor: str) -> str:
         """Return the Makefile from *anchor* to the next target."""
         with open(self.MAKEFILE_PATH, encoding="utf-8") as fh:
@@ -633,20 +788,46 @@ class TestMakefileCoveragePipeline:
         return remainder[:end]
 
     def test_phase1_uses_fail_under_zero(self) -> None:
-        """Phase 1 uses ``--cov-fail-under=0`` to defer threshold to helper."""
+        """Both isolated phases defer threshold enforcement to the helper."""
         section = self._read_makefile_section("test-cov")
-        assert "--cov-fail-under=0" in section, (
-            "Phase 1 must use --cov-fail-under=0 to defer statement-weighted "
-            "threshold enforcement to the Phase 4 policy helper"
+        assert section.count("--cov-fail-under=0") == 2
+
+    def test_phases_use_isolated_coverage_files(self) -> None:
+        """Each test phase writes to its own coverage data file."""
+        section = self._read_makefile_section("test-cov")
+        assert 'phase1_file="$$coverage_dir/combined.phase1"' in section
+        assert 'phase2_file="$$coverage_dir/combined.phase2"' in section
+        assert 'COVERAGE_FILE="$$phase1_file"' in section
+        assert 'COVERAGE_FILE="$$phase2_file"' in section
+        assert "--cov-append" not in section, (
+            "Coverage phases must not append to a shared data file"
         )
 
-    def test_phase2_uses_cov_append(self) -> None:
-        """Phase 2 uses ``--cov-append`` to augment the combined measurement."""
+    def test_phases_forward_xdist_args(self) -> None:
+        """Both coverage phases inherit the configured xdist arguments."""
         section = self._read_makefile_section("test-cov")
-        assert "--cov-append" in section, (
-            "Phase 2 must use --cov-append so the backups-module run "
-            "contributes to the same combined .coverage file"
-        )
+        assert section.count("$(PYTEST_XDIST_ARGS)") == 2
+
+    def test_combines_once_before_reports(self) -> None:
+        """One explicit combine feeds all coverage reports."""
+        section = self._read_makefile_section("test-cov")
+        combine_lines = [
+            line for line in section.splitlines() if "$(PYTHON) -m coverage combine" in line
+        ]
+        assert len(combine_lines) == 1
+        combine_index = section.index("coverage combine")
+        for report in ("coverage html", "coverage report", "coverage json"):
+            assert section.index(report) > combine_index
+        assert section.count('--data-file="$$combined_file"') == 4
+
+    def test_coverage_temp_dir_has_cleanup_and_signal_traps(self) -> None:
+        """Per-run coverage state is cleaned up on normal and signal exits."""
+        section = self._read_makefile_section("test-cov")
+        assert "coverage_dir=$$(mktemp -d " in section
+        assert "trap cleanup_coverage EXIT" in section
+        assert "trap 'exit 130' INT" in section
+        assert "trap 'exit 143' TERM" in section
+        assert "trap 'exit 129' HUP" in section
 
     def test_phase3_fail_under_zero(self) -> None:
         """Phase 3 coverage report uses ``--fail-under=0`` (deferred)."""
@@ -664,18 +845,173 @@ class TestMakefileCoveragePipeline:
         )
 
     def test_phase1_failure_propagates(self) -> None:
-        """Phase 1 exit code propagates to ``overall_exit``."""
+        """Phase 1 exit code is recorded as the first pipeline failure."""
         section = self._read_makefile_section("test-cov")
-        assert "overall_exit=$$phase1_exit" in section.replace(" ", "").replace("\t", ""), (
-            "Phase 1 failure must propagate to overall_exit"
+        assert 'record_failure "$$phase1_exit"' in section, (
+            "Phase 1 failure must be recorded in overall_exit"
         )
 
     def test_phase4_failure_propagates(self) -> None:
-        """Phase 4 exit code propagates when overall_exit is still 0."""
+        """Phase 4 exit code is recorded without replacing an earlier failure."""
         section = self._read_makefile_section("test-cov")
-        assert "overall_exit=$$policy_exit" in section.replace(" ", "").replace("\t", ""), (
-            "Phase 4 failure must set overall_exit when it is still 0"
+        assert 'record_failure "$$policy_exit"' in section, (
+            "Phase 4 failure must be recorded in overall_exit"
         )
+
+    def test_first_failure_is_retained_when_combine_fails(self, tmp_path: Path) -> None:
+        """A later combine failure must not replace the Phase 1 test failure."""
+        result, events, _ = self._run_pipeline(
+            tmp_path,
+            extra_env={
+                "FAKE_PHASE1_EXIT": "7",
+                "FAKE_COVERAGE_COMBINE_EXIT": "9",
+            },
+        )
+
+        output = result.stdout + result.stderr
+        assert result.returncode != 0
+        assert "Error 7" in output
+        assert "Error 9" not in output
+        assert any(event["kind"] == "combine_inputs" for event in events)
+
+    def test_first_failure_is_retained_when_policy_fails(self, tmp_path: Path) -> None:
+        """A later policy failure must not replace the Phase 1 test failure."""
+        result, events, _ = self._run_pipeline(
+            tmp_path,
+            extra_env={
+                "FAKE_PHASE1_EXIT": "7",
+                "FAKE_POLICY_EXIT": "5",
+            },
+        )
+
+        output = result.stdout + result.stderr
+        assert result.returncode != 0
+        assert "Error 7" in output
+        assert "Error 5" not in output
+        assert any(event["kind"] == "policy" for event in events)
+
+    def test_policy_failure_is_captured(self, tmp_path: Path) -> None:
+        """A policy failure is captured after reports and returned by the recipe."""
+        result, events, _ = self._run_pipeline(
+            tmp_path,
+            extra_env={"FAKE_POLICY_EXIT": "5"},
+        )
+
+        output = result.stdout + result.stderr
+        assert result.returncode != 0
+        assert "Error 5" in output
+        assert any(event["kind"] == "policy" for event in events)
+
+    def test_combine_uses_only_isolated_phase_inputs(self, tmp_path: Path) -> None:
+        """Both phase files feed one combined output, not the root data file."""
+        result, events, work_dir = self._run_pipeline(tmp_path, pg_exit=0)
+
+        assert result.returncode == 0
+        pytest_events = self._pytest_events(events)
+        phase_files = [event["coverage_file"] for event in pytest_events]
+        assert len(phase_files) == 2
+        assert len(set(phase_files)) == 2
+        assert {Path(path).name for path in phase_files} == {
+            "combined.phase1",
+            "combined.phase2",
+        }
+
+        combine_events = [event for event in events if event["kind"] == "combine_inputs"]
+        assert len(combine_events) == 1
+        combine = combine_events[0]
+        assert Path(combine["input_dir"]) == Path(phase_files[0]).parent
+        assert Path(combine["data_file"]).name == "combined"
+        assert Path(combine["data_file"]).parent == Path(phase_files[0]).parent
+        assert (work_dir / ".coverage").read_text(encoding="utf-8") == "unrelated-root-data"
+
+    def test_optional_backups_unavailable_remains_successful(self, tmp_path: Path) -> None:
+        """The standalone target still skips unavailable optional backups coverage."""
+        result, events, _ = self._run_pipeline(tmp_path, pg_exit=1)
+
+        assert result.returncode == 0
+        assert "skipping module coverage (backups)" in result.stdout
+        assert not any(event["kind"] == "pytest" and event["phase"] == "phase2" for event in events)
+
+    def test_required_backups_unavailable_fails_without_combine(self, tmp_path: Path) -> None:
+        """Required backups coverage fails closed and does not run partial reports."""
+        result, events, _ = self._run_pipeline(
+            tmp_path,
+            pg_exit=1,
+            extra_env={
+                "FAKE_PHASE1_EXIT": "7",
+                "REQUIRE_BACKUPS_COVERAGE": "1",
+            },
+        )
+
+        output = result.stdout + result.stderr
+        assert result.returncode != 0
+        assert "Error 7" in output
+        assert "Error 1" not in output
+        assert "REQUIRE_BACKUPS_COVERAGE is set" in output
+        assert not any(event["kind"] == "combine_inputs" for event in events)
+
+    def test_required_backups_missing_artifact_fails_before_combine(self, tmp_path: Path) -> None:
+        """A required phase without its data file cannot enter Phase 3."""
+        result, events, _ = self._run_pipeline(
+            tmp_path,
+            pg_exit=0,
+            extra_env={
+                "FAKE_NO_PHASE2_FILE": "1",
+                "REQUIRE_BACKUPS_COVERAGE": "1",
+            },
+        )
+
+        output = result.stdout + result.stderr
+        assert result.returncode != 0
+        assert "Expected coverage data file is missing" in output
+        assert not any(event["kind"] == "combine_inputs" for event in events)
+
+    def test_xdist_and_serial_arguments_reach_both_phases(self, tmp_path: Path) -> None:
+        """Configured xdist arguments reach both phases, with serial opt-out."""
+        parallel_result, parallel_events, _ = self._run_pipeline(
+            tmp_path / "parallel",
+            pg_exit=0,
+            extra_env={"PYTEST_XDIST_WORKERS": "2"},
+        )
+        serial_result, serial_events, _ = self._run_pipeline(
+            tmp_path / "serial",
+            pg_exit=0,
+            extra_env={"PYTEST_XDIST_WORKERS": "0"},
+        )
+
+        assert parallel_result.returncode == 0
+        assert serial_result.returncode == 0
+        for event in self._pytest_events(parallel_events):
+            worker_index = event["args"].index("-n")
+            assert event["args"][worker_index : worker_index + 4] == [
+                "-n",
+                "2",
+                "--dist",
+                "loadfile",
+            ]
+        for event in self._pytest_events(serial_events):
+            assert "-n" not in event["args"]
+
+    def test_normal_cleanup_removes_isolated_directory(self, tmp_path: Path) -> None:
+        """The EXIT trap removes the temporary coverage directory."""
+        result, events, _ = self._run_pipeline(tmp_path)
+
+        assert result.returncode == 0
+        phase1 = next(event for event in self._pytest_events(events) if event["phase"] == "phase1")
+        assert not Path(phase1["coverage_file"]).parent.exists()
+
+    def test_term_cleanup_removes_isolated_directory(self, tmp_path: Path) -> None:
+        """A trapped TERM exits and still removes the temporary directory."""
+        result, events, _ = self._run_pipeline(
+            tmp_path,
+            extra_env={"FAKE_SIGNAL": "phase1"},
+        )
+
+        output = result.stdout + result.stderr
+        phase1 = next(event for event in self._pytest_events(events) if event["phase"] == "phase1")
+        assert result.returncode != 0
+        assert "Error 143" in output
+        assert not Path(phase1["coverage_file"]).parent.exists()
 
 
 class TestCheckCILocallyStageNumbering:
