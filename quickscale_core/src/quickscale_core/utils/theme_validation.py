@@ -65,12 +65,7 @@ _RECOVERY_FILE = ".quickscale/apply-recovery.yml"
 _CONFIG_LABEL = "quickscale.yml (desired state)"
 _STATE_LABEL = ".quickscale/state.yml (applied state)"
 _RECOVERY_LABEL = ".quickscale/apply-recovery.yml (recovery ledger)"
-
-#: Paths whose presence triggers the preflight recovery-ledger check.
-_RECOVERY_PROBE_PATHS = (
-    ".quickscale",
-    "apply-recovery.yml",
-)
+_RECOVERY_CHECKPOINT_THEME = "__checkpoint__"
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +73,11 @@ _RECOVERY_PROBE_PATHS = (
 # ---------------------------------------------------------------------------
 
 
-def validate_theme_preflight(project_path: Path) -> None:
+def validate_theme_preflight(
+    project_path: Path,
+    *,
+    allow_recovery_checkpoint: bool = False,
+) -> None:
     """Validate the ``theme`` field in every present configuration source.
 
     Checks *all* of the following sources independently when they exist:
@@ -87,8 +86,15 @@ def validate_theme_preflight(project_path: Path) -> None:
     * ``<project_path>/.quickscale/state.yml`` — applied state
     * ``<project_path>/.quickscale/apply-recovery.yml`` — recovery ledger
 
+    The recovery ledger may temporarily use the ``__checkpoint__`` placeholder
+    only when ``allow_recovery_checkpoint`` is explicitly enabled. The default
+    remains fail-closed for every source, including the recovery ledger.
+
     Args:
         project_path: Root directory of the QuickScale project.
+        allow_recovery_checkpoint: Permit the recovery ledger's temporary
+            ``__checkpoint__`` placeholder. This does not permit the
+            placeholder in desired or applied state.
 
     Raises:
         ThemeValidationError: If any present source has a missing,
@@ -116,7 +122,12 @@ def validate_theme_preflight(project_path: Path) -> None:
     recovery_path = project_path / _RECOVERY_FILE
     if recovery_path.exists():
         try:
-            _validate_source_theme(recovery_path, _RECOVERY_LABEL, _extract_state_theme)
+            _validate_source_theme(
+                recovery_path,
+                _RECOVERY_LABEL,
+                _extract_state_theme,
+                allow_recovery_checkpoint=allow_recovery_checkpoint,
+            )
         except ThemeValidationError as exc:
             errors.append(str(exc))
 
@@ -144,6 +155,8 @@ def _validate_source_theme(
     file_path: Path,
     source_label: str,
     extract_theme: Any,
+    *,
+    allow_recovery_checkpoint: bool = False,
 ) -> None:
     """Parse *file_path* and validate its theme is the sole valid value.
 
@@ -152,6 +165,8 @@ def _validate_source_theme(
         source_label: Human-readable label for error messages.
         extract_theme: Callable ``(raw: dict) -> str | None`` that
             extracts the theme value from the parsed mapping.
+        allow_recovery_checkpoint: Permit ``__checkpoint__`` only for the
+            recovery-ledger source.
 
     Raises:
         ThemeValidationError: On any validation failure.
@@ -208,6 +223,13 @@ def _validate_source_theme(
         )
 
     if theme == SOLE_VALID_THEME:
+        return
+
+    if (
+        theme == _RECOVERY_CHECKPOINT_THEME
+        and allow_recovery_checkpoint
+        and source_label == _RECOVERY_LABEL
+    ):
         return
 
     # Invalid theme — map known retired values to actionable message.

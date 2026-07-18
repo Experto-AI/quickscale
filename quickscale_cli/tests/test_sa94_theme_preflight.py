@@ -408,6 +408,86 @@ class TestDevUpPreflight:
         assert SOLE_VALID_THEME in (result.output or "")
         mock_docker.assert_not_called()
 
+    def test_up_recovery_html_rejected_with_remediation(
+        self, react_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """up() must reject a stale recovery ledger with remediation text."""
+        from quickscale_cli.commands.development_commands import up
+
+        recovery = {
+            "version": "1",
+            "project": {
+                "slug": "myapp",
+                "package": "myapp",
+                "theme": "showcase_html",
+            },
+        }
+        recovery_path = react_project / ".quickscale" / "apply-recovery.yml"
+        recovery_path.parent.mkdir(parents=True, exist_ok=True)
+        recovery_path.write_text(
+            yaml.dump(recovery, default_flow_style=False, sort_keys=False)
+        )
+
+        mock_docker = Mock()
+        runner = CliRunner()
+        with monkeypatch.context() as mp:
+            mp.setattr(
+                "quickscale_cli.commands.development_commands.Path.cwd",
+                lambda: react_project,
+            )
+            mp.setattr(
+                "quickscale_cli.commands.development_commands._validate_project_and_docker",
+                mock_docker,
+            )
+            result = runner.invoke(up, [])
+
+        output = result.output or ""
+        assert result.exit_code != 0
+        assert "showcase_html" in output
+        assert "retired" in output
+        assert SOLE_VALID_THEME in output
+        assert "apply-recovery.yml" in output
+        mock_docker.assert_not_called()
+
+    def test_up_recovery_checkpoint_proceeds_past_preflight(
+        self, react_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """up() may proceed when only the recovery ledger has a checkpoint."""
+        from quickscale_cli.commands.development_commands import up
+
+        recovery = {
+            "version": "1",
+            "project": {
+                "slug": "myapp",
+                "package": "myapp",
+                "theme": "__checkpoint__",
+            },
+        }
+        recovery_path = react_project / ".quickscale" / "apply-recovery.yml"
+        recovery_path.parent.mkdir(parents=True, exist_ok=True)
+        recovery_path.write_text(
+            yaml.dump(recovery, default_flow_style=False, sort_keys=False)
+        )
+
+        post_preflight = RuntimeError("post-preflight sentinel")
+        mock_docker = Mock(side_effect=post_preflight)
+        runner = CliRunner()
+        with monkeypatch.context() as mp:
+            mp.setattr(
+                "quickscale_cli.commands.development_commands.Path.cwd",
+                lambda: react_project,
+            )
+            mp.setattr(
+                "quickscale_cli.commands.development_commands._validate_project_and_docker",
+                mock_docker,
+            )
+            result = runner.invoke(up, [])
+
+        assert result.exit_code != 0
+        assert result.exception is post_preflight
+        assert "Theme validation failed" not in (result.output or "")
+        mock_docker.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # CR-SA94-REV-A-002: Apply preflight with custom config path and output root
