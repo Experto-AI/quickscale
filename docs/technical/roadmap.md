@@ -69,30 +69,14 @@ git merge --no-ff wt-track{N}
 All per-module restricted-role gates (CRM/SA84, blog/SA83+SA95, forms/SA85, listings/SA86, orgs/SA77, notifications/SA79) and repo-global gates (GATE-lint, GATE-typecheck, GATE-check-suite, GATE-quality, SA91 parallel worker pool) are **complete**. Only **SA93** (e2e in the green-gate) remains on Track 3 — both former cross-track prerequisites (SA84 CRM, SA95 blog) are met. See [CHANGELOG.md](../../CHANGELOG.md).
 
 - [ ] **SA93 — Fold the e2e lane into the green-gate definition of done.** `Tier 1 · Track 3 · deps: none remaining (SA84 CRM + SA95 blog prerequisites met)`
-  **Blocked checkpoint (2026-07-17; maintainer-selected stop-and-merge; not complete). No design decision remains — continuation is merge-back, authorized push/dispatch of `v87`, and retention of the green run URL/ref/SHA.**
+  **Blocked on external evidence only (SA93-EVID-001). No design or maintainer decision remains — continuation is merge-back → authorized push/dispatch of `v87` → retention of the green run URL/ref/SHA.**
 
-  Fresh local gate and review evidence is recorded in [CHANGELOG.md §SA93 continuation](../../CHANGELOG.md#sa93-continuation). Prior implemented/landed evidence (deterministic fixes, component E2E green, review CR-SA93-REV-001/002/003/004 resolved) is also recorded there.
-
-  **Done:**
-  - **SA93-BLOCK-002:** exact `make ci-e2e` exits 0 locally with all 12 stages, Core 35, CLI 29, all 12 integration modules, 91.90% combined coverage, every file at least 80%, unchanged thresholds, and an empty quarantine.
-  - Independent review confirmed the database-isolation, CLI-lifecycle, generated-React, manifest-parity, and local/remote runner contracts. **CR-SA93-REV-005** and **CR-SA93-REV-006** are resolved: bounded production trigger paths invoke the maintained Core+CLI runner, and stale coverage-artifact promises were retired.
-  - The **CR-SA93-REV-007** checkpoint correction restores the stable advisory summaries below; the **SA93-DOC-001** correction adds the missing changelog anchor fragment.
+  Implementation, exact local gate, independent review, and all resolved prerequisites are recorded in [CHANGELOG.md §SA93 continuation](../../CHANGELOG.md#sa93-continuation) (local `make ci-e2e` green — 12 stages, 91.90% combined coverage, empty quarantine; reviews CR-SA93-REV-001..007 resolved; blog/CRM cross-track prerequisites met via SA95/SA84). Preserve the exact unquarantined `make ci-e2e` contract — quarantine and threshold weakening are not acceptable.
 
   **Pending/Blocking:**
-  - **SA93-EVID-001 (high/blocking):** external GitHub Actions evidence for `v87` is absent — origin has no `v87` ref, no GH auth is configured, and the API has no run. Cannot close SA93 without a successful remote run on the merged `v87` commit.
-  - **Final CI evidence:** after merge-back, push the intended `v87` ref through an authorized operator, dispatch `.github/workflows/e2e.yml`, and retain the successful run URL, conclusion, ref, and SHA before marking SA93 complete.
+  - **SA93-EVID-001 (high/blocking):** external GitHub Actions evidence for `v87` is absent — origin has no `v87` ref, no GH auth is configured, and the API has no run. After merge-back, an authorized operator must push the `v87` ref, dispatch `.github/workflows/e2e.yml`, and retain the successful run URL/conclusion/ref/SHA before SA93 is marked complete. This is required evidence, not permission to weaken acceptance.
 
-  **Advisory:**
-  - **SA93-ADV-001 (low/advisory):** pytest reports a future pytest-10 warning for the class-scoped fixture pattern in `TestReactThemePnpmIntegration.test_pnpm_install_succeeds`; normalize it before a pytest 10 upgrade.
-  - **SA93-ADV-002 (low/advisory):** local validation reports database access during application initialization and an orgs test-database teardown warning; investigate without weakening the gate.
-  - **SA93-ADV-003 (low/advisory):** the worker-pool harness runs between numbered stages 9 and 10 without a stage/substage label; improve auditability when next maintaining the script.
-  - **SA93-ADV-004 (low/advisory):** coverage-threshold overrides accept non-finite `NaN`/`Inf` values and can fail open; reject non-finite overrides in a separate hardening task.
-
-  **Decisions needed:** no design or maintainer decision remains. An authorized operator must decide when to push the merged local `v87` ref and dispatch the remote workflow; this operational action is required evidence, not permission to weaken acceptance.
-
-  **Resolved prerequisites:** SA93-BLOCK-001 (blog + CRM integration fixture-finalizer failures) is resolved — blog closed by **SA95** (2026-07-17, no reproducible defect on post-SA92 v87) and CRM closed by **SA84** (2026-07-17, 263 pass/21 skip/0 fail, review STATUS ok). Both former cross-track prerequisites for SA93 are met. Preserve the exact unquarantined `make ci-e2e` contract; quarantine and threshold weakening are not acceptable.
-
-  **Clean continuation:** merge this reviewed blocked checkpoint to local `v87`, then have an authorized operator push that ref and dispatch `e2e.yml`. Record the green run URL/ref/SHA, update CHANGELOG/roadmap, and only then mark SA93 complete.
+  **Advisory (open, non-gating — defer as separate hardening):** SA93-ADV-001 (pytest-10 class-scoped fixture warning in `TestReactThemePnpmIntegration.test_pnpm_install_succeeds`); SA93-ADV-002 (app-init DB access + orgs teardown warning); SA93-ADV-003 (unlabelled worker-pool substage between stages 9–10); SA93-ADV-004 (non-finite `NaN`/`Inf` coverage-threshold overrides fail open).
 
   *(Acceptance:* `make ci-e2e` exits 0 on a fresh clone; `e2e.yml` green on `v87`; independent review passes; exit-criteria prose lists the e2e lane.*)*
   *(why →* green-gate milestone; e2e was outside the definition of done*)*
@@ -206,7 +190,7 @@ TP1/TP2/TP2b/TP3a/TP3b/TP4                   (F9 runtime half) deps: SA97 ✓   
 
 **Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join (SA96-GATE). It cannot start until both module sweeps and SA93 are complete. SA93's cross-track blockers are resolved; component Core/CLI E2E, exact local `make ci-e2e`, and independent source review are green. The only remaining blocker is SA93-EVID-001 (no remote `v87` run).
 
-### Track readiness (2026-07-17)
+### Track readiness (2026-07-18)
 
 - **Track 1 — ASSIGNED the TP (test-parallelization) suite; first position on this green track.** All prior release tickets closed (SA92, SA84, SA86, SA96-T1) and both audit-remediation tickets — **SA97** (arch Finding 9 test-plumbing half) and **SA99** (arch Finding 7 devtools→ruff/mypy) — completed 2026-07-17. Now carries **TP1** (static-gate fan-out), **TP2**/**TP2b** (unit xdist + coverage-combine), **TP3a**/**TP3b** (E2E port-namespacing + concurrent lanes), and **TP4** (AI fast-loop docs). All Tier 1–2, none on the SA96 release critical path — pure SDLC cycle-time work; must not regress any gate's pass/fail set or coverage thresholds. Evidence for closed work in [CHANGELOG.md](../../CHANGELOG.md).
 - **Track 2 — CLEAN to continue; SA98 open.** Release tickets closed (SA94, SA88b, SA86, SA95, SA96-T2). Carries **SA98** (arch Finding 9 sanitizer half); its SA97 dependency is satisfied (landed on `v87`). SA98 records a self-contained sanitizer-home decision (the commons rule covers runtime org-context helpers and test plumbing, not a view-layer sanitizer) — within-track, not a maintainer blocker. Evidence in [CHANGELOG.md](../../CHANGELOG.md).
