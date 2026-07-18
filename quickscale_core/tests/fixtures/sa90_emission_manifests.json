@@ -270,7 +270,7 @@
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
-      "sha256": "5396d064f6be9f16b51637ce752d6ece2044ec7c130546a3f8544762a6fd6592"
+      "sha256": "342be9269719c6ee1181fbd95e9a40325638ed478ccabd23905bfbfeaf1d4aeb"
     },
     "frontend/src/pages/FormsPage.tsx": {
       "mode": "664",
@@ -656,7 +656,7 @@
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
-      "sha256": "b54e077f931f0a8d5b3abaf8a56b7ba1e86c9bcf49d6565d7758af49de026334"
+      "sha256": "a26e0cd0ca43d1c04a46124561f734ebcb76417513e02956a0e1588fc7974384"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "664",
@@ -688,7 +688,7 @@
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
-      "sha256": "9ed51b2cc64d9f08df7fe2ab73e54fd59473b23ddc4003eae07afa8752f4d1e0"
+      "sha256": "107a7e8e2c63e9aadd1b2b967851a782f9ad8854ef4a918b68c85150cf9bf784"
     },
     "frontend/src/pages/NotFound.tsx": {
       "mode": "664",
@@ -736,7 +736,7 @@
     },
     "frontend/src/test/App.test.tsx": {
       "mode": "664",
-      "sha256": "7bb78d363c29e280866711ca4256c06f51716f4973179dd9b8692d1c8af7eb55"
+      "sha256": "59e8e13999b133db23fafcf976eacd87f35e83b41712dea22977932a8d2ce3cd"
     },
     "frontend/src/test/PublicSocialPages.test.tsx": {
       "mode": "664",
@@ -1074,7 +1074,7 @@
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
-      "sha256": "2d24e47e94525d8eec2d4dea26b36fd77d2112e7850e43897cc1f846f174d221"
+      "sha256": "db6277839bff4eaa20ced7f5dced435cff6386ec2eb00292b21a4fb9559cb603"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "664",
@@ -1110,7 +1110,7 @@
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
-      "sha256": "bdc923755fce9c8dc2af962805c161e15701e46f29635d4f037b809c695fee7f"
+      "sha256": "d5dda2095f93421b1c145efe9560c256bfc818e3b2428e2cf141b3770f7b3e73"
     },
     "frontend/src/pages/FormsPage.tsx": {
       "mode": "664",
@@ -1170,11 +1170,11 @@
     },
     "frontend/src/test/App.test.tsx": {
       "mode": "664",
-      "sha256": "06cc8015c7303a3f6af4ac4ab9a68c73ee4df231bc564c2ccf2c21ac10c2fee2"
+      "sha256": "bdf4b49e474fc1712e5e7f2a5220476d6c423b09d8d16b0972eef489b7d9b80c"
     },
     "frontend/src/test/PublicSocialPages.test.tsx": {
       "mode": "664",
-      "sha256": "ed15b770fdfd598bce991721d21c1e5aa249126d23fcbe06cf5a67f50a29d10a"
+      "sha256": "a8fe0c9f8771fe975c62c3985f05999f694f2e5ea6e36d8ab8a9b292c38f4e28"
     },
     "frontend/src/test/setup.ts": {
       "mode": "664",

@@ -128,8 +128,9 @@ recovery ledger as exempt, or plumb per-error `theme` attributes through the agg
 check `exc.theme == "__checkpoint__"`. Also fix the two `.quickscape` typos in the adjacent
 comments. Verification: a test that `up` fails (with remediation text) on a recovery ledger
 carrying `showcase_html`, and proceeds on one carrying `__checkpoint__`. Age: introduced
-2026-07-17 (`022a88fb`, SA93 checkpoint) — a candidate to fold into SA93's pending independent
-review rather than a separate PR.
+2026-07-17 (`022a88fb`, SA93 checkpoint) — initially filed as a candidate to fold into SA93's
+pending review; SA93 independent review is now complete; TA58 is tracked as a separate SA100
+follow-up on Track 3 and does not block the SA93/SA96 release path.
 
 **TA59 — `theme-validation-dead-probe-constant` (S4).**
 `quickscale_core/src/quickscale_core/utils/theme_validation.py:70-73` — `_RECOVERY_PROBE_PATHS`
@@ -299,8 +300,10 @@ retirement coherent template↔schema↔CLI↔docs; emission mapping centralized
   throughput only).
 - **React `QuickScaleModules.auth` is always typed/defaulted `false`:** recorded maintainer
   decision inside SA93 (runtime availability still gates visibility) — not a defect.
-- **SA93 remains a blocked checkpoint:** exact `make ci-e2e` root-gate closure pending one Ruff
-  format + broad rerun + independent review (roadmap Track 3). TA58 should ride that review.
+- **SA93 remains a blocked checkpoint (SA93-EVID-001):** external GitHub Actions evidence on the
+merged `v87` ref is the sole remaining blocker; local `make ci-e2e` gate, independent review, and
+component E2E are complete. TA58/TA59 are tracked as SA100 on Track 3 — an independent follow-up
+that does not block the SA93/SA96 release path.
 - **Two same-named `ImproperlyConfigured` classes coexist** (SA69 decision recorded): carried.
 - **`test_update_auto_commits_each_module_e2e` mocks `_sync_module_dependencies`** — carried.
 - **SA47 sole-member self-removal orphans the org (deliberate):** carried.
