@@ -1542,6 +1542,31 @@ than duplicated across module conftests.
 
 ---
 
+### Rendered-Link Sanitization Ownership (SA98) {#rendered-link-sanitization-ownership-sa98}
+
+**Decision:** The orgs module owns the narrow shared rendered-link sanitization
+seam used by the blog and listings modules. The public API is
+`quickscale_modules_orgs.sanitization.sanitize_href` and
+`quickscale_modules_orgs.sanitization.sanitize_rendered_html`; the consumer
+views import the rendered-HTML helper directly and do not define or re-export
+local aliases. Direct primitive tests live with the orgs owner, while blog and
+listings retain their detail-view regression coverage.
+
+This is a narrow existing-dependency/distribution exception: blog and listings
+already depend on and distribute alongside orgs, so placing this security
+primitive there avoids a second implementation without adding a new runtime
+dependency or package. It is not a generic commons decision, and orgs must not
+become a general-purpose utility bucket. New shared helpers still require a
+separate ownership decision based on an existing dependency and a concrete
+module boundary.
+
+The sanitizer contract remains deliberately limited to scheme checks for
+double-quoted rendered `href` attributes and the established allowed-link
+semantics; this decision does not authorize unrelated HTML or URL utility
+surface.
+
+---
+
 ## Prohibitions (Critical - DO NOT)
 
 **Database:**

@@ -66,6 +66,7 @@ Use this pattern only when you are intentionally maintaining shared code across 
 |---|---|---|
 | Core | `quickscale_core` | `quickscale_core` |
 | CLI | `quickscale_cli` | n/a |
+| Orgs Module | `quickscale_modules_orgs` | `quickscale_modules_orgs` |
 | Auth Module | `quickscale_modules.auth` | `quickscale_modules_auth` |
 | Listings Module | `quickscale_modules.listings` | `quickscale_modules_listings` |
 | Notifications Module | `quickscale_modules.notifications` | `quickscale_modules_notifications` |
@@ -78,3 +79,8 @@ Rules:
 - Dotted import paths map to underscore-qualified Django app labels where needed.
 - Generated projects should favor standard Django import patterns.
 - Do not introduce alternate naming systems when the existing package and app-label pattern is sufficient.
+- The narrow shared rendered-link seam is imported as
+  `quickscale_modules_orgs.sanitization` by
+  `quickscale_modules_blog.views` and `quickscale_modules_listings.views`.
+  Its public symbols are `sanitize_href` and `sanitize_rendered_html`; the
+  consumer views do not define or re-export sanitizer aliases.
