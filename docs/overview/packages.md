@@ -16,6 +16,7 @@ Use it to understand how QuickScale names the repository packages and first-part
 | `quickscale` | meta-package context | packaging notes only; root docs remain authoritative |
 | `quickscale_cli` | CLI package | owns the `quickscale` command workflow |
 | `quickscale_core` | generator and shared scaffolding support | owns templates and generation logic |
+| `quickscale_devtools` | maintainer/dev tooling package | repo-internal tooling; not part of generated projects |
 | `quickscale_modules/*` | first-party module workspace | one directory per first-party module |
 
 ## Current Naming Conventions
