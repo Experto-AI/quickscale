@@ -137,20 +137,29 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 
 ### Dependency & parallelization overview
 
+Completed history (SA92/SA84/SA86/SA93/SA94/SA95/SA96-T1/T2/SA97/SA98/SA99/SA100/SA91/TP1,
+Finding 1, all four GATEs) lives in [CHANGELOG.md](../../CHANGELOG.md); only open work is shown below.
+
 ```
 Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track 3 (core/CLI plumbing)
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
-SA92/SA84/SA86 ✓ (dev tickets)      SA94/SA88b/SA86/SA95 ✓ (dev tickets)    Finding 1 ✓ (SA89a+SA89b)
-SA96-T1 ── module sweep ✓            SA96-T2 ── module sweep ✓               GATE-lint/typecheck/check/quality ✓
-SA97 ✓ + SA99 ✓ (audit remed.)      SA98 ✓ (sanitizer consolidation)         SA91 ✓ (parallel loop, non-gating)
-TP1 ✓ / TP2/TP2b/TP4               TP3a → TP3b (E2E concurrency)            SA93 ✓ ── e2e in green-gate
- (test-parallelization; off crit.)   (rebalanced from Track 1; off crit.)    SA100 ✓ (TA58/TA59 theme preflight)
-                       ┌─────────────────────┴───────────────────────────────────────┐
-                       ▼   (SA98 ✓ / SA100 ✓; both off the release critical path — independent; SA97 ✓ landed)
-        SA96-GATE ── green-gate join (make check/quality/ci/ci-e2e)  deps: SA96-T1 + SA96-T2 + SA93 ✓
+  all prior tickets ✓ (CHANGELOG)    all prior tickets ✓ (CHANGELOG)         all prior tickets ✓ (CHANGELOG)
+  TP2 ─→ TP2b   (unit xdist +        TP3a ─→ TP3b  (E2E port-namespacing     idle — release-ready; owns
+  TP4 (AI fast-loop docs)             + concurrent Core/CLI E2E lanes)         the SA96-GATE join
+  test-parallelization; off crit.)    rebalanced from Track 1; off crit.)      when tracks 1/2 quiesce
+                       └─────────────────────┬───────────────────────────────────────┘
+                                             ▼   (all release inputs ✓: SA96-T1, SA96-T2, SA93;
+                                                  TP suite is off the critical path and gate-neutral)
+        SA96-GATE ── green-gate join (make check/quality/ci/ci-e2e)  deps: SA96-T1 ✓ + SA96-T2 ✓ + SA93 ✓
                        ▼
-        SA96-PUBLISH ── build → publish-test → publish-prod          deps: SA96-GATE
+        SA96-PUBLISH ── build → publish-test → publish-prod          deps: SA96-GATE  (human-only)
 ```
+
+**Open work only:** Track 1 `TP2 → TP2b` (+ `TP4`), Track 2 `TP3a → TP3b`, and the release join
+`SA96-GATE → SA96-PUBLISH`. The two TP chains run in parallel with no source-file overlap
+(`Makefile`/`pyproject.toml` vs `scripts/test_e2e.sh`); both are off the release critical path and
+must not regress any gate's pass/fail set or coverage thresholds. `TP4` is docs-only and lands after
+`TP1` (done) and `TP3b` (Track 2) merge to `v87`.
 
 **Critical path.** Both pre-publish module sweeps are complete: **SA96-T1** (Track 1) and **SA96-T2** (Track 2). **SA93** is complete and its dependency is met; **SA96-GATE** is the next release-path step, followed by **SA96-PUBLISH**. **SA98** and **SA100** are complete independent audit-remediation tickets; neither blocks SA96-GATE. SA97 and SA99 are also complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
