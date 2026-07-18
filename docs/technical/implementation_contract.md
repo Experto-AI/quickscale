@@ -44,9 +44,9 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 - `quickscale status` reports drift and compatibility diagnostics on demand, including state consolidation status, legacy files on disk, per-module tracking completeness, managed-file drift, and version drift.
 - Apply acquires an advisory lock around `state.yml` read/modify/write so concurrent `apply` operations fail closed instead of racing.
 - Apply is expected to be declarative, incremental, and idempotent for the current shipped contract.
-- **AF5 recovery semantics:** Each apply step carries an `is_satisfied()`/`apply()` contract. After each non-destructive step completes, a checkpoint is written to the recovery ledger (`.quickscale/apply-recovery.yml`) via `ApplyExecutor.checkpoint_step()`. On rerun, `ApplyExecutor.find_first_unsatisfied_step()` reads the `RecoveryLedger.resume_checkpoint` field and returns the first incomplete step — recovery resumes from that step instead of rerunning all prior steps. The executor also handles AF6-era ledgers that lack the `resume_checkpoint` field (treated as `None`, which triggers a full rerun).
-- **Late destructive confirmation gate (AF5 Phase 4):** Steps 11–16 (mutable config, Docker startup, database migrations, Railway deploy, state finalization, next-steps display) are grouped into a separately-confirmable phase after step 10 completes. The operator is prompted with an explicit list of pending destructive/remote operations and must confirm before the phase executes. A test-only bypass flag (`_AF5_DESTRUCTIVE_CONFIRM_BYPASS`) exists for automated test scenarios. This design keeps the non-destructive steps 1–10 (embed, wiring, env-sync, dependency setup) always safe to re-run.
-- **Fault-injection harness (AF5 Phase 3):** A deterministic test harness kills apply execution after step N, verifies the recovery ledger captures the correct checkpoint, then reruns and asserts convergence to a fully satisfied state across all 16 steps.
+- **Recovery semantics:** Each apply step carries an `is_satisfied()`/`apply()` contract. After each non-destructive step completes, a checkpoint is written to the recovery ledger (`.quickscale/apply-recovery.yml`) via `ApplyExecutor.checkpoint_step()`. On rerun, `ApplyExecutor.find_first_unsatisfied_step()` reads the `RecoveryLedger.resume_checkpoint` field and returns the first incomplete step — recovery resumes from that step instead of rerunning all prior steps. The executor also handles legacy ledgers that lack the `resume_checkpoint` field (treated as `None`, which triggers a full rerun).
+- **Late destructive confirmation gate:** Steps 11–16 (mutable config, Docker startup, database migrations, Railway deploy, state finalization, next-steps display) are grouped into a separately-confirmable phase after step 10 completes. The operator is prompted with an explicit list of pending destructive/remote operations and must confirm before the phase executes. A test-only bypass flag (`_AF5_DESTRUCTIVE_CONFIRM_BYPASS`) exists for automated test scenarios. This design keeps the non-destructive steps 1–10 (embed, wiring, env-sync, dependency setup) always safe to re-run.
+- **Fault-injection harness:** A deterministic test harness kills apply execution after step N, verifies the recovery ledger captures the correct checkpoint, then reruns and asserts convergence to a fully satisfied state across all 16 steps.
 
 <a id="module-configuration-strategy"></a>
 ## Module Configuration Strategy
@@ -59,10 +59,10 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 <a id="module-manifest-architecture"></a>
 ## Module Manifest Contract
 
-- `module.yml` is the **required** source for module identity, installed-version tracking, and configuration contract. The CLI adapter files (`*_manifest.py`) that previously duplicated per-module config normalization/validation/derivation have been deleted; all callers now resolve module configuration through the shared resolver in `quickscale_core.manifest.resolver`.
+- `module.yml` is the **required** source for module identity, installed-version tracking, and configuration contract. The CLI adapter files (`*_manifest.py`) do not carry per-module config normalization/validation/derivation; all callers resolve module configuration through the shared resolver in `quickscale_core.manifest.resolver`.
 - Mutable options are applied through the documented plan/apply flow; immutable options remain embed-time contract and must not be rewritten silently.
 - Module discovery is now manifest-backed: the authoritative shipped-module inventory comes from scanning `quickscale_modules/*/module.yml` via `module_discovery.py`. Known placeholder directories (e.g. `teams`) that lack a `module.yml` are excluded from discovery and fail closed. The static `MODULE_CATALOG` is supplemented but callers should prefer `get_discovered_module_entries()` for the authoritative list.
-- Manifest adapters use a hybrid discovery contract (AF7): module-owned adapters in ``quickscale_modules/{name}/adapter.py`` are primary for monorepo contexts, while core compatibility fallback adapters remain for bundled/installed fallback. See [Manifest Adapter Architecture](#manifest-adapter-architecture-af7).
+- Manifest adapters use a hybrid discovery contract: module-owned adapters in ``quickscale_modules/{name}/adapter.py`` are primary for monorepo contexts, while core compatibility fallback adapters remain for bundled/installed fallback. See [Manifest Adapter Architecture](#manifest-adapter-architecture).
 - Generated projects remain standalone even when modules are embedded.
 - When manifest behavior changes, keep the shipped contract here aligned with the detailed module implementation docs.
 
@@ -119,7 +119,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 | **MODULES & DISTRIBUTION** |
 | `quickscale_modules/` (split branch distribution) | IN | Modules distribute via git subtree split branches. Embed via `quickscale plan --add <name>` plus `quickscale apply`. |
 | Billing module (`quickscale_modules.billing`) | IN | Desired-state config lives in `quickscale.yml`; Stripe secrets remain env-only; billing ships module-owned pricing/dashboard routes and uses `debit_user` plus `WebhookEvent` as the stable credit-consumption and webhook gates. |
-| Themes (React sole theme) | IN | `showcase_react` is the sole shipped starter theme. The former `showcase_html` theme (server-rendered HTML + CSS secondary option) has been removed. |
+| Themes (React sole theme) | IN | `showcase_react` is the sole shipped starter theme; no server-rendered HTML theme is offered. |
 | `quickscale_themes/` packaged themes | NOT CURRENT | Theme package distribution is out of contract unless a later release documents it explicitly. |
 | YAML declarative configuration (`quickscale.yml`) | IN | Shipped as part of the plan/apply system. |
 | State tracking (`.quickscale/state.yml`) | IN (consolidated Phase 2 / M2) | Sole authoritative applied-state store with consolidated sub-sections for module-tracking metadata and managed-file drift records. Advisory lock serializes concurrent `apply`. `quickscale status` reports drift and compatibility diagnostics. |
@@ -209,7 +209,7 @@ class OrderProcessor:
         self.payment_service = payment_service or services.DefaultPaymentService()
 ```
 
-### Manifest Adapter Architecture (AF7)
+### Manifest Adapter Architecture
 
 Manifest adapters follow a **hybrid discovery contract**:
 
@@ -234,18 +234,14 @@ Manifest adapters follow a **hybrid discovery contract**:
    calls ``refresh_managed_adapters()`` after changing and restoring the modules
    base path, ensuring the correct adapter set is active for each context.
 
-Currently managed adapters: social, billing, CRM. Remaining modules
+Managed adapters: social, billing, CRM. The remaining modules
 (analytics, blog, listings, forms, backups, notifications, auth, orgs,
-storage) are still registered at import time in ``entry_point.py`` and may be
-migrated in future phases.
+storage) are registered at import time in ``entry_point.py``.
 
-> **AF7 status — partial.** The module-owned primary
-> adapters and infrastructure seam have landed (managed-origin tracking,
-> provenance tests, refresh coordination). However, the bundled/installed core
-> fallback adapters for social, billing, and CRM are currently too thin and no
-> longer preserve parity with the module-owned implementations. Bundled-context
-> regression coverage is also missing. Until the fallbacks are restored to
-> parity and regression tests are added, AF7 remains open.
+> **Known limitation.** The bundled/installed core fallback adapters for social,
+> billing, and CRM are too thin and do not preserve parity with the module-owned
+> implementations, and bundled-context regression coverage is missing. Treat the
+> fallback path as not-at-parity.
 
 ### Configuration Boundaries
 
@@ -306,9 +302,9 @@ See [module-extension.md](./module-extension.md) for the full extension contract
 - Do not invent custom table-naming schemes to simulate a plugin system.
 
 <a id="runtime-pins-constraints"></a>
-## Runtime Pins and Constraints (F7.3 Current)
+## Runtime Pins and Constraints
 
-This section documents the current inventory of Python, Django, PostgreSQL, and Node.js runtime constraints, split by ownership. The F7.2 ownership-split phase established `quickscale_core/src/quickscale_core/generator/runtime_pins.py` as the authoritative source of truth for generated-project runtime pins, with the generator injecting these pins into template context at generation time. F7.3 added drift-detection validation (`quickscale_core.generator.constraint_validation`) that verifies generator and module constraint parity against the runtime pins SSOT on every test run.
+This section documents the inventory of Python, Django, PostgreSQL, and Node.js runtime constraints, split by ownership. `quickscale_core/src/quickscale_core/generator/runtime_pins.py` is the authoritative source of truth for generated-project runtime pins; the generator injects these pins into template context at generation time. Drift-detection validation (`quickscale_core.generator.constraint_validation`) verifies generator and module constraint parity against the runtime pins SSOT on every test run.
 
 ### Generator Runtime (repo-owned `pyproject.toml` files)
 
@@ -359,7 +355,7 @@ Generated-project runtime pins are owned by `quickscale_core/src/quickscale_core
 | PostgreSQL major version | `POSTGRES_VERSION` | `postgres_version` | `Dockerfile.j2`, `github/workflows/ci.yml.j2` |
 | PostgreSQL Docker image tag | `POSTGRES_DOCKER_TAG` | `postgres_docker_tag` | `docker-compose.yml.j2` |
 
-**Frontend (Node.js / pnpm) pins — still template literals (unchanged by F7.2):**
+**Frontend (Node.js / pnpm) pins — template literals:**
 
 | Constraint | Template file | Value |
 |------------|--------------|-------|
@@ -376,17 +372,17 @@ Generated-project runtime pins are owned by `quickscale_core/src/quickscale_core
 
 **Generated-project database:** PostgreSQL only (`django.db.backends.postgresql`), configured via `DATABASE_URL` environment variable. No SQLite fallback or compatibility mode.
 
-### Post-F7.3 Pending Notes
+### Runtime Pin Notes
 
-The following items are resolved by F7.3:
+Drift-detection and validation properties in force:
 
-- **Drift detection (constraint parity):** `quickscale_core.generator.constraint_validation` now provides functions to detect unintended drift between `runtime_pins.py` and generator/embedded-module `pyproject.toml` files. Tests in `TestRuntimePinDriftDetection` (`test_templates.py`) enforce parity on every test run. See the test class for the current contract encoding.
-- **Ruff target-version variableization:** The generated project `pyproject.toml.j2` now derives `[tool.ruff] target-version` from the `python_version` template variable instead of hardcoding `py313`. This ensures the ruff setting stays aligned when `PYTHON_VERSION` changes.
+- **Drift detection (constraint parity):** `quickscale_core.generator.constraint_validation` provides functions to detect unintended drift between `runtime_pins.py` and generator/embedded-module `pyproject.toml` files. Tests in `TestRuntimePinDriftDetection` (`test_templates.py`) enforce parity on every test run. See the test class for the current contract encoding.
+- **Ruff target-version variableization:** The generated project `pyproject.toml.j2` derives `[tool.ruff] target-version` from the `python_version` template variable rather than hardcoding a value, so the ruff setting stays aligned when `PYTHON_VERSION` changes.
 
-The following remain true post-F7.3 concerns:
+Standing constraint-duplication concerns:
 
 1. **Generator ↔ generated-project Python constraint duplication:** The generator repo-level `pyproject.toml` files and `runtime_pins.PYTHON_CONSTRAINT` remain independent copies (`>=3.13,<3.15`). A coordinated version bump still requires manual synchronization across these two systems, but drift detection now alerts on any unnoticed mismatch.
 
 2. **Embedded-module pin intentional drift:** All 12 packaged modules carry Django `>=6.0.5,<6.1.0` while `runtime_pins.DJANGO_CONSTRAINT` uses `>=6.0.3,<6.1.0`. This is the documented, intentional lower-bound drift. The drift detection tests (`test_module_django_lower_bound_drift`) enforce the exact expected module constraint and will fail if a version bump changes either side without an intentional update to both.
 
-3. **Frontend constraints still template literals:** Node.js v24, pnpm 11.0.9, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates remain as literal values, intentionally unchanged by F7.2 or F7.3. A future phase could absorb them into `runtime_pins.py`.
+3. **Frontend constraints are template literals:** Node.js v24, pnpm 11.0.9, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates are literal values, not sourced from `runtime_pins.py`.

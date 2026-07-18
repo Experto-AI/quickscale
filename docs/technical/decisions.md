@@ -175,12 +175,10 @@ QuickScale currently ships one starter theme only:
     manual adoption for any equivalent public pages, while the backend-managed social
     transport endpoints and settings wiring remain theme-agnostic
 
-The former `showcase_html` theme (server-rendered HTML + CSS secondary starter) has been removed
-The plan/apply CLI
-no longer offers `showcase_html` as a selection; `showcase_react` is the sole supported and
-configured theme. Existing generated projects that used `showcase_html` keep their user-owned
-files — no automatic rewrite is performed. Any desired/state/recovery reference to `showcase_html`
-fails closed before operational side effects.
+`showcase_react` is the sole supported and configured theme; the plan/apply CLI offers no
+other theme selection. Any desired/state/recovery reference to `showcase_html` (or any other
+non-React theme) fails closed before operational side effects. Existing generated projects keep
+their user-owned files — apply performs no automatic rewrite.
 
 Planned vertical themes such as CRM remain roadmap work. They are not part of the
 current shipped generator surface until a release note and this file explicitly add
@@ -282,18 +280,15 @@ quickscale_core/generator/templates/
 Fresh generations copy `showcase_react/src/**` into the generated project's
 `frontend/src/` directory and copy `showcase_react/templates/**` into Django
   `templates/`. Only fresh `showcase_react` generations auto-scaffold the Django-owned
-  public `/social` and `/social/embeds` pages. With the removal of `showcase_html`,
-  `showcase_react` is the sole theme; the `showcase_html` theme and its
-  server-rendered stubs no longer ship. QuickScale does not currently ship any
-  vertical theme template trees.
+  public `/social` and `/social/embeds` pages. `showcase_react` is the sole theme;
+  QuickScale ships no server-rendered theme stubs and no vertical theme template trees.
 
 
 **Key Characteristics:**
 - ❌ NOT runtime dependencies (just generated code)
 - ❌ NO updates after generation (user owns completely)
 - ✅ One-time scaffolding, user owns completely
-- ✅ `showcase_react` is the sole shipped starter theme; `showcase_html` has been
-  removed
+- ✅ `showcase_react` is the sole shipped starter theme
 - ✅ Fresh `showcase_react` generations include dormant analytics starter support and
   Django-owned public social pages
 - ✅ Generated starter output surfaces billing as a module flag only (`modules.billing`);
@@ -419,7 +414,7 @@ Legacy `config.yml` and `file_hashes.yml` are compatibility inputs only: they ar
 - ❌ NEVER re-execute already-applied modules
 - ✅ Skip modules that are already embedded
 - ✅ Only embed modules that appear in desired state but not in applied state
-- ✅ Remove modules that were applied but no longer appear in desired state (future)
+- ✅ Remove modules that were applied but no longer appear in desired state
 
 **State Integrity**:
 - ✅ Write state file atomically (no partial writes)
@@ -641,15 +636,14 @@ workflow coverage are aligned to it.
 | `OptionDerivation` | Per-option bundle of normalisation, validation, alias, and derivation rules |
 | `ModuleDerivationSchema` | Top-level container keyed by module name with per-option derivations and shared rules |
 
-**Why this exists:** This foundation replaces the imperative `normalize_*` / `validate_*` functions and CLI contract files that historically duplicated per-module knowledge across hand-written contract files. Migrated modules use declarative derivation exclusively; an imperative-freeze guardrail prevents unmigrated modules from growing further imperative logic. See [roadmap.md Track 2](roadmap.md#track-2--module-contracts--settings) for per-module migration status.
+**Why this exists:** Declarative derivation is the single source of per-module normalisation and validation knowledge, replacing imperative `normalize_*` / `validate_*` functions and hand-written CLI contract files. An imperative-freeze guardrail prevents modules from growing new imperative contract logic.
 
 **Constraints:**
 - ✅ Derivation types are frozen dataclasses (immutable after construction)
 - ✅ All field types are YAML-safe (scalars, lists, dicts)
 - ✅ `ModuleDerivationSchema` is a companion to `ModuleManifest`, not a replacement
 - ✅ YAML loading from `module.yml` is supported
-- ✅ Runtime derivation execution is active for analytics and listings; other modules remain imperative pending migration
-- ❌ No contract-file deletion yet for unmigrated modules (deferred to per-module migration phases)
+- ✅ Runtime derivation execution is active for analytics and listings
 
 ---
 
@@ -754,7 +748,7 @@ disable_error_code = var-annotated
 - [ ] Add module-specific "Next steps" instructions in embed output
 
 **5. Template Integration (showcase_react theme):**
-- [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure; the former `showcase_html` theme templates (`navigation.html.j2`, `index.html.j2`) have been removed
+- [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure
 
 **6. Testing:**
 - [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
@@ -867,7 +861,7 @@ The authoritative current CLI command surface now lives in [implementation_contr
 - Categories and tags for organization
 - Featured images with automatic thumbnail generation
 - RSS feed for content syndication
-- Responsive templates for the sole showcase_react theme (the former showcase_html theme has been removed)
+- Responsive templates for the sole showcase_react theme
 
 **Features Deferred**:
 - Comments (use third-party like Disqus/Commento)
@@ -877,7 +871,7 @@ The authoritative current CLI command surface now lives in [implementation_contr
 
 **Distribution**: Split branch pattern (`splits/simple-blog`), added via `quickscale plan` and `quickscale apply`
 
-**Theme Support**: showcase_react (showcase_html has been removed)
+**Theme Support**: showcase_react
 
 ---
 
@@ -1230,7 +1224,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - ❌ **Supabase as the database provider** — valid for teams that want managed infrastructure, but introduces vendor lock-in and changes the cost/operational model; our self-hosted Railway approach uses the same GUC-carried tenant-context pattern without changing the current contract
 
 **Supabase architecture parity note:**
-QuickScale's shared-schema + FORCE RLS model is structurally equivalent to Supabase's multi-tenant architecture. Both use a PostgreSQL GUC parameter as the per-transaction tenant context carrier and `FORCE ROW LEVEL SECURITY` for tenant data isolation. The key difference is injection mechanism: Supabase's PostgREST sets the GUC from JWT claims before every query; QuickScale's AF9 execute-wrapper derives the GUC from the ContextVar at transaction start. Supabase also ships a dashboard "Impersonate User" button — QuickScale now ships VIEW-AS for the same restricted-role debugging need. In QuickScale's shipped surface, runtime admin/debug access stays on the restricted role; BYPASSRLS is reserved for the migration exception and any future explicitly documented non-runtime privileged path.
+QuickScale's shared-schema + FORCE RLS model is structurally equivalent to Supabase's multi-tenant architecture. Both use a PostgreSQL GUC parameter as the per-transaction tenant context carrier and `FORCE ROW LEVEL SECURITY` for tenant data isolation. The key difference is injection mechanism: Supabase's PostgREST sets the GUC from JWT claims before every query; QuickScale's execute-wrapper derives the GUC from the ContextVar at transaction start. Supabase also ships a dashboard "Impersonate User" button — QuickScale now ships VIEW-AS for the same restricted-role debugging need. In QuickScale's shipped surface, runtime admin/debug access stays on the restricted role; BYPASSRLS is reserved for the migration exception and any future explicitly documented non-runtime privileged path.
 
 **Operator debug mode — shipped VIEW-AS contract:**
 Django superusers may activate a debug session that scopes the entire request to a selected organization so they can see the app exactly as that org's members see it. The shipped surface uses the session key `quickscale_modules_orgs.debug_as_org_id` (superuser-only); `TenantMiddleware._resolve_debug_org()` overrides Solo/SaaS resolution when the key is present; the admin surface activates or exits the session; a debug banner renders while active; and every activation is audit-logged. No BYPASSRLS — the debug session runs under the same restricted runtime role as all other tenant paths, so RLS remains fully enforced.
@@ -1324,17 +1318,15 @@ and asserts every emitted file is classified.
    (``Dockerfile``, ``start.sh``), they are not copy targets during migration.
    Fresh-first preserves the recipient's templates; in-place does not touch
    them.  Theme-specific template overrides (social) are
-   user-owned once generated.  ``templates/components/navigation.html`` was
-   removed as stale (the former ``showcase_html`` theme was retired;
-   ``showcase_react`` does not emit a ``templates/components/navigation.html``
-   template).
+   user-owned once generated.  ``templates/components/navigation.html`` is not a
+   copy target — ``showcase_react`` does not emit a
+   ``templates/components/navigation.html`` template.
 
    **Category U4 — Static assets:**
    ``frontend/public/favicon.svg``.
    Rationale: User-owned static file.  Generated once; not a migration target.
-   ``static/css/style.css`` and ``static/images/favicon.svg`` were removed as
-   stale (they were only emitted by the former ``showcase_html`` theme,
-   now retired).
+   ``static/css/style.css`` and ``static/images/favicon.svg`` are not copy
+   targets — ``showcase_react`` does not emit them.
 
    **Category U5 — Test scaffolding:**
    ``tests/__init__.py``, ``tests/conftest.py``, ``tests/test_example.py``.
@@ -1541,7 +1533,7 @@ plumbing layer.
 
 **Enforcement:** Any module conftest that defines a fixture whose
 documentation or identifier references resetting `app.current_org_id`,
-`SET ROLE`, AF9 priming memo, or the Django cache should instead import
+`SET ROLE`, execute-wrapper priming memo, or the Django cache should instead import
 the shared `reset_test_state` fixture from `tests_shared.reset_state`.
 New cross-module test utilities must be placed in `tests_shared/` rather
 than duplicated across module conftests.

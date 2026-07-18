@@ -154,17 +154,9 @@ Prior development tickets closed — SA88b (forms diagnosis), SA86 (listings), S
   - No SA98-specific blockers or findings. The unrelated repository-wide coverage/dead-code/complexity baseline remains outside this ticket; broad `make check`/`make quality` failures were not fixed here, and no E2E claim is made.
   *(why →* arch-audit Finding 9 — one-sided fixes to a duplicated sanitizer are XSS-class drift on public pages*)*
 
-### Track 3 — Core/CLI plumbing — SA93 externally blocked; SA100 complete
+### Track 3 — Core/CLI plumbing — SA93 externally blocked
 
-arch-audit **Finding 1** is closed (SA89a+SA89b, DR persistence port). All four GATEs and **SA91** (parallel worker pool) are complete. The single open release-path item is **SA93** (e2e in green-gate): implementation, component E2E, exact local gate, and independent source-review evidence are present; the sole remaining blocker is SA93-EVID-001 (no remote `v87` ref or successful GH Actions run). **SA100** (tech-audit TA58/TA59) is a separate completed Track 3 audit remediation and does not block the release path. **No cross-track prerequisite or maintainer decision remains.**
-
-- [x] **SA100 — Fix the `up` recovery-ledger theme exemption + remove the dead probe constant.** `Tier 1 · Track 3 · deps: none (SA93 review complete; separate follow-up)`
-  Implementation and closeout review are complete. Adaptive-change-review pass 1 returned **STATUS ok** with no findings and caller parity passed; 53 targeted tests passed, Ruff check/format and `git diff --check` passed, numeric coverage was not generated, and blockers are none.
-  Two S4 tech-audit findings, both in the theme-preflight surface the SA93 checkpoint touched — [tech-audit](../others/tech-audit.md) TA58/TA59. SA93's independent review is complete, and this audit remediation was implemented and independently reviewed as a separate follow-up rather than reopening the capped SA93 delta.
-  - **TA58** (`development_commands.py:281-303`, `up`): the exemption now keys on `theme == "__checkpoint__"` (via a `validate_theme_preflight` variant flag or a per-error `theme` attribute on the aggregate error), not on the source label; stale ledgers carrying retired `showcase_html` or missing `project.theme` retain fail-closed remediation, and the two adjacent `.quickscape` comment typos were fixed.
-  - **TA59** (`quickscale_core/utils/theme_validation.py:70-73`): the dead `_RECOVERY_PROBE_PATHS` constant was deleted; the preflight probes `_RECOVERY_FILE` directly.
-  - Verification: `up` fails with remediation text for a recovery ledger carrying `showcase_html` and proceeds for one carrying `__checkpoint__`.
-  *(why →* tech-audit TA58 (declared-invariant / quick win) + TA59 (dead code); TA58 softened a barrier SA94 had just erected*)*
+arch-audit **Finding 1** is closed (SA89a+SA89b, DR persistence port). All four GATEs and **SA91** (parallel worker pool) are complete. The single open release-path item is **SA93** (e2e in green-gate): implementation, component E2E, exact local gate, and independent source-review evidence are present; the sole remaining blocker is SA93-EVID-001 (no remote `v87` ref or successful GH Actions run). **SA100** (tech-audit TA58/TA59 theme-preflight remediation) is complete — see [CHANGELOG.md](../../CHANGELOG.md). **No cross-track prerequisite or maintainer decision remains.**
 
 Deferred with the (unscheduled) teams module, per both audits — **not ticketed:** arch-audit Finding 2 (`deletion-invariants-per-boundary`) and Finding 4 (`org-model-universe-hand-enumerated`).
 
@@ -177,9 +169,7 @@ SA92/SA84/SA86 ✓ (dev tickets)      SA94/SA88b/SA86/SA95 ✓ (dev tickets)    
 SA96-T1 ── module sweep ✓            SA96-T2 ── module sweep ✓               GATE-lint/typecheck/check/quality ✓
 SA97 ✓ + SA99 ✓ (audit remed.)      SA98 ✓ (sanitizer consolidation)         SA91 ✓ (parallel loop, non-gating)
 TP1/TP2/TP2b/TP3a/TP3b/TP4                   (F9 runtime half) deps: SA97 ✓   SA93 ── e2e in green-gate (open)
- (test-parallelization; off critical path)
-                                             │                               SA100 ✓ ── TA58/TA59 theme preflight
-                                             │                                         (complete; separate follow-up)
+ (test-parallelization; off critical path)                                   SA100 ✓ (TA58/TA59 theme preflight)
                        ┌─────────────────────┴───────────────────────────────────────┐
                        ▼   (SA98 ✓ / SA100 ✓; both off the release critical path — independent; SA97 ✓ landed)
         SA96-GATE ── green-gate join (make check/quality/ci/ci-e2e)  deps: SA96-T1 + SA96-T2 + SA93
