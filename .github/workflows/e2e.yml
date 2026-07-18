@@ -147,7 +147,7 @@ jobs:
         cd /tmp
         printf '\n1\n\ny\ny\nn\ny\n' | poetry -P $GITHUB_WORKSPACE run quickscale plan test_docker_project
         cd /tmp/test_docker_project
-        printf 'y\n' | poetry -P $GITHUB_WORKSPACE run quickscale apply quickscale.yml --no-docker
+        printf 'y\ny\n' | poetry -P $GITHUB_WORKSPACE run quickscale apply quickscale.yml --no-docker
 
     - name: Verify Dockerfile exists
       run: |
