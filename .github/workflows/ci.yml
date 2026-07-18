@@ -339,6 +339,10 @@ jobs:
       run: |
         make test-integration-worker-pool
 
+    - name: Run local CI parallelism regression tests (no PostgreSQL needed)
+      run: |
+        make test-ci-local-parallel
+
     - name: Run type checking (mypy)
       run: |
         make typecheck -- --core --cli --modules

@@ -18,6 +18,7 @@
 #   make test-cov             - Run tests with coverage (aggregates DR-engine coverage from backups module when PostgreSQL is available)
 #   make test-e2e             - Run E2E tests (needs Docker + Playwright)
 #   make test-agent           - Run agentic flow adapter tests
+#   make test-ci-local-parallel - Run TP1 local-CI parallelism regression tests
 #   make lint                 - Run linting
 #   make lint-fix             - Fix linting issues
 #   make lint-frontend        - Lint React theme templates
@@ -44,7 +45,7 @@
 #   make clean                - Remove build artifacts
 
 .PHONY: setup bootstrap install \
-        test test-unit test-integration test-cov test-cov-policy test-integration-worker-pool test-e2e test-agent \
+        test test-unit test-integration test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-agent \
         lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
         quality check ci ci-e2e \
         docs \
@@ -110,6 +111,7 @@ help:
 	@echo "  make test-e2e             - Run E2E tests (needs Docker + Playwright)"
 	@echo "  make test-agent           - Run agentic flow adapter tests"
 	@echo "  make test-integration-worker-pool - Run worker pool harness tests (fast, no PostgreSQL needed)"
+	@echo "  make test-ci-local-parallel - Run TP1 local-CI parallelism regression tests"
 	@echo ""
 	@echo "Quality Checks:"
 	@echo "  make lint                 - Check linting (no changes)"
@@ -450,6 +452,12 @@ test-cov-policy:
 test-integration-worker-pool:
 	@$(PYTHON) -m pytest scripts/test_integration_worker_pool.py -q --tb=short
 
+# Run TP1 local-CI fan-out, signal-lifecycle, and serial/post-static tests.
+# The test fixture replaces make/poetry, so this target is safe as a prerequisite
+# of ci and cannot recurse through the real ci target.
+test-ci-local-parallel:
+	@$(PYTHON) -m pytest scripts/test_ci_local_parallel.py -q --tb=short
+
 # --- Lint / Format ---
 
 # Run linting (check only, no changes)
@@ -712,7 +720,7 @@ quality:
 	@scripts/check_quality.sh
 
 # Run primary local development checks (lint + typecheck + unit tests; integration when PostgreSQL available)
-ci:
+ci: test-ci-local-parallel
 	@scripts/check_ci_locally.sh
 
 # Run full CI including E2E tests (slow — needs Docker + Playwright)
