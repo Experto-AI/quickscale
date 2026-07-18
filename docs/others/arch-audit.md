@@ -22,8 +22,9 @@ Generated apps: Django 6 + PostgreSQL 18, single-service Railway; generator outp
 unchanged: CLI is single-process local; generated apps are single-service WSGI; **tenant isolation
 is the highest-blast property.** Growth direction (roadmap 2026-07-17): the repo is in **release
 end-game** — every per-module restricted-role gate is green with an empty quarantine; SA93 (e2e in
-the green-gate) is the sole open ticket before the SA96-GATE publishability join and the staged
-PyPI publish. No post-release domain is named anywhere in the planning surface.
+the green-gate) is the sole open release-path input before the SA96-GATE publishability join and the
+staged PyPI publish. Off the critical path, the TP test-parallelization suite and SA100 audit
+remediation are assigned work; SA99's quickscale_devtools Ruff/MyPy sub-item is complete.
 
 **Commit-delta classification (§2f).** Base `803daef7` (2026-07-13 pass HEAD) → `09f9cbcc`,
 ~127 commits. *Closeouts* (all mapped to tickets and audited below): SA85 (`1e178d31`), the SA88
@@ -48,23 +49,25 @@ beta-migration taxonomy block, the quality-baseline diff. Sampled: SA94's CLI di
 callsite census), SA91's `_qs_jobs.sh` harness, `check_coverage_policy.py`. Skipped: bulk test
 rewrites inside SA84/SA96 beyond mechanism identification.
 
-**Result: two prior findings closed and verified in code (Findings 1 and 8 — both fix-regression
-audits pass), two still-open deferred findings unchanged (2 and 4, anchors re-verified at prior
-line numbers), Finding 7 still-open and strengthened (SA94 paid its predicted hand-sync tax), and
-one new finding.** The new finding (**Finding 9 `module-commons-unowned`**) is the promotion of
-the commons watchlist item, whose trigger fired twice this delta: SA84 and SA85 landed
-near-identical hand-rolled test-state-reset fixtures in crm and forms (a third, divergent
-ContextVar-only variant already sits in blog), while the sanctioned shared home
-(`tests_shared/isolation.py`) has exactly one consumer and the SA26 sanitizer copy-pair enters its
-sixth pass unconsolidated. Fix-regression audits: **SA89a/b clean** (all three cycle carriers
+**Result: three findings are closed and verified in code (Findings 1, 8, and 9; Findings 1 and 8's
+fix-regression audits pass), two still-open deferred findings unchanged (2 and 4, anchors
+re-verified at prior line numbers), and Finding 7 remains open and strengthened (SA94 paid its
+predicted hand-sync tax).**
+Finding 9 (`module-commons-unowned`) is closed by SA97+SA98: the test-plumbing half is shared in
+`tests_shared/`, and the runtime sanitizer half is shared in the orgs-owned seam consumed by blog
+and listings. The historical autopsy evidence below is retained; the live finding is removed from
+the current findings list.
+The SA97+SA98 closeout is additive to the historical delta evidence: the shared reset plumbing and
+orgs-owned sanitizer seam now have their intended consumers, and the accepted review found no
+SA98-specific blockers or findings. Fix-regression audits: **SA89a/b clean** (all three cycle carriers
 removed — the core→backups import, the DR `_LAZY_*` tables, the `mypy.ini` backups ignore; the
 reverse import ban is live; the one surviving core→module edge is the pre-existing, deliberate,
 fail-hard-bounded dynamic `import_module("quickscale_modules_storage.helpers")` at
 `orchestration.py:248`, invisible to the static ban — watchlist). **SA92 clean** (squashed `0001`s
 route RLS install through orgs-owned `apply_force_rls`/`revert_force_rls` — a real shared seam;
 the guardrail is a documented bounded tripwire backed by the pg_policies/catalog/data parity
-baseline, decision-recorded). **SA84/SA85 mixed** (drained through the sanctioned `org_scope`
-primitives — correct — but the glue plumbing was copied per-module: Finding 9's evidence).
+baseline, decision-recorded). **SA84/SA85 clean for the shared test-plumbing closeout** and
+**SA98 clean for the sanitizer closeout**.
 **SA94 audited** (a real shared `theme_validation` seam in core, consumed by 7 CLI callsites, plus
 one inline re-implementation with duplicated message strings in `apply_command.py:3831–3854` and a
 hand-enumerated per-command parity test — transitional surface, watchlist).
@@ -91,97 +94,20 @@ hand-enumerated per-command parity test — transitional surface, watchlist).
 | 16 | No cross-org `organization_id` DML in module migrations | SA92 bounded regex tripwire (`test_sa92_migration_squash_guardrail.py`) + pg_policies/catalog/data parity vs v87 | gated | **NEW row** (replaces the retired Finding 8 row) — deliberately shallow by recorded decision; the tripwire's module list is a hand tuple (10 modules) |
 | 17 | Theme validity (react-only) | core `theme_validation.py` seam (fail-closed, `SOLE_VALID_THEME`) + per-command preflight | structural seam, **convention callers** | **NEW row** (SA94) — 7 CLI callsites each remember the preflight; parity pinned by hand-enumerated per-command tests; one inline message-copy in `apply_command.py:3838` |
 | 18 | Code-quality regression (complexity/size/dead-code) | `make quality` vs `quality_baseline.json` grandfather lists | gated | **NEW row** — 151 allowed functions / 41 allowed files; no shrink-only contract; baseline reset wholesale under a chore label (watchlist) |
-| 19 | Shared-code commons (runtime + test plumbing) | none — ad-hoc per-module copies | **convention** | **NEW row (Finding 9)** — sanctioned homes exist (orgs; `tests_shared/`) but nothing routes shared concerns there |
+| 19 | Shared-code commons (runtime + test plumbing) | orgs-owned sanitizer seam + `tests_shared/reset_state.py` | **convention + tested** | **closed by SA97+SA98** — shared reset plumbing and sanitizer have one implementation; sanitizer uniqueness/caller proof passed |
 
 ### Summary table
 
+**Live findings: 3** — Findings 7, 2, and 4. Finding 9 is closed by SA97+SA98 and retained only in
+the reconciliation history below.
+
 | # | ID | Horizon | Confidence | Size | One-line problem |
 |---|----|---------|-----------|------|------------------|
-| 9 | `module-commons-unowned` | now | High (evidence) / Medium (urgency) | M | Shared cross-module concerns land as divergent per-module copies (sanitizer ×2, test-state reset ×3 in 2 shapes) while the sanctioned commons (`tests_shared/`, orgs) sit unused and unwritten-down; no gate keeps any copy-pair honest |
-| 7 | `generated-file-ownership-unmodeled` | 6–18 months | High | M | Production emission routing is closed (SA66/SA90), but the beta-migration tool re-encodes file ownership in hand-synced tuples (tax paid again by SA94) and devtools sits outside the lint/typecheck universe while import-load-bearing for the release gate |
+| 7 | `generated-file-ownership-unmodeled` | 6–18 months | High | M | Production emission routing is closed (SA66/SA90), and SA99 brought quickscale_devtools under Ruff/MyPy; the beta-migration tool still re-encodes file ownership in hand-synced tuples (tax paid again by SA94) |
 | 2 | `deletion-invariants-per-boundary-reimplementation` | deferred (teams) | High | S | Last-owner check is canonical with a `pre_delete` backstop; no domain-owned deletion service covers other boundaries' invariants (e.g. billing) |
 | 4 | `org-model-universe-hand-enumerated` | deferred (teams) | High | M | Tenant-model membership is derivation-gated; purge *order* is hand-written and ungated on a uniformly `NOT DEFERRABLE` foundation |
 
 ---
-
-### Finding 9: Shared module code has no owned commons — concerns land as divergent per-module copies while the sanctioned homes sit unused
-
-- **ID:** `module-commons-unowned`
-- **Rank rationale (blast radius × likelihood):** blast is moderate (silent drift between copies of
-  an XSS-sensitive sanitizer; divergent tenant-test-state plumbing that decides whether isolation
-  tests are trustworthy) but likelihood is the highest of any open finding — the pattern fired
-  twice inside this one delta (SA84, SA85) and has recurred in every hardening batch since SA26.
-- **Horizon & trigger:** `now` — already reproducing; each new module suite, each new shared
-  runtime concern, and each one-sided fix to an existing copy is a trigger.
-- **Confidence:** High on the evidence (all copies read and compared this pass); Medium on urgency
-  (all current copies are behaviorally consistent today; the cost is drift-risk plus repeated
-  re-derivation, not a live defect).
-- **Context dependence:** wrong-for-now on the module-count dimension — at 12+ module suites and a
-  recurring hardening cadence, per-copy discipline is already the observed failure mode (the
-  SA83–SA86 saga was four separate diagnoses of per-module state-leak plumbing).
-- **Problem:** there is no written rule for where shared cross-module code lives, and the two
-  sanctioned homes that exist are bypassed in practice — so every shared concern is re-resolved ad
-  hoc as hand-rolled per-module copies with no gate keeping them consistent.
-- **Evidence (all established this pass):**
-  - Runtime copy-pair (sixth pass): `_sanitize_href`/`_sanitize_rendered_html` byte-similar in
-    `blog/views.py:69–115` and `listings/views.py:42–88` (SA26). No parity test or gate references
-    them (searched blog/listings tests, scripts/, workflows — zero matches).
-  - Test-plumbing copies (new, SA84/SA85): crm `tests/conftest.py:43–83` and forms
-    `tests/conftest.py:63–90` carry near-identical hand-rolled autouse `_reset_test_state`
-    fixtures (ContextVar + `RESET app.current_org_id`/`app.operator_access` + `RESET ROLE` +
-    cache), with matching docstrings. blog `tests/conftest.py:187–198` carries a third, divergent
-    ContextVar-only variant (`_reset_current_org_context`, SA83). Three modules, two shapes, zero
-    shared implementation.
-  - The sanctioned test commons exists and is bypassed: `tests_shared/isolation.py` ("so that
-    every tenant module can express the same contract consistently") has exactly **one** consumer
-    (`crm/tests/test_isolation.py`); neither SA84 nor SA85 routed their plumbing through it.
-  - The commons rule is unwritten: `grep "commons\|tests_shared"` over `decisions.md` returns
-    nothing; the 2026-07-09 pass established "orgs is the de facto module commons" but it was
-    never recorded, and the concern has since reproduced outside orgs.
-- **Counter-evidence:** searched for a parity gate over any copy-pair (none exists — unlike the
-  gated module.yml and SA68 pairs, these copies have no tripwire); searched decisions.md for a
-  deliberate "test plumbing stays module-local" record (none); strongest disconfirming facts: (a)
-  the *primitives* are properly shared — SA84/SA85 consume orgs' sanctioned
-  `org_scope`/`set_current_org_id`/`reset_current_org_id` API, so what is copied is glue, not
-  policy; (b) `tests_shared/isolation.py`'s own docstring says fixture creation "remains
-  module-specific," which partially sanctions per-module plumbing. Neither dissolves the finding:
-  the glue is where the SA83–SA86 failures actually lived, and the docstring sanctions
-  module-specific *fixtures*, not three divergent implementations of the same reset contract.
-- **Why it compounds:** every new module suite re-decides the reset-plumbing shape (three shapes in
-  three modules already); every fix to one copy must be remembered N−1 more times with no signal on
-  a miss — for the sanitizer that is an XSS-class drift on public pages, for the reset fixtures it
-  is false-green isolation tests, the exact class the restricted-role gate exists to prevent; and
-  every future shared concern (the next sanitizer, the next fixture idiom, the next helper) repeats
-  the whole cycle because no rule says where it goes. Already built on top: six passes of carried
-  sanitizer copies, the SA83/SA84/SA85 per-module diagnoses, and blog's divergent variant.
-- **Detection signal:** none today — the copies fail silently by drifting. Instrument cheaply: a
-  byte-parity check over the sanitizer pair would make drift loud; a grep-count of
-  `RESET app.operator_access` outside a shared fixture would catch the next plumbing copy.
-- **Steelman:** a solo maintainer copying 40 lines twice is cheaper than designing a shared seam;
-  per-module conftests keep suites independently runnable; and the copies are currently consistent.
-  This holds while copies stay small, few, and behaviorally identical — but the census already
-  shows divergence (blog's variant lacks the GUC/role resets that SA84/SA85 needed), so the
-  holding condition is broken.
-- **Correct shape:** one written rule (decisions.md) naming where shared runtime code and shared
-  test plumbing live; each existing shared concern has exactly one implementation at its sanctioned
-  home; any remaining deliberate copy-pair is gate-pinned like the module.yml pairs.
-- **Options:**
-  1. **Write the rule + consolidate the two live concerns (recommended).** Record the commons rule
-     in decisions.md (orgs for org-context runtime helpers; `tests_shared/` for cross-module test
-     plumbing). Promote the crm/forms `_reset_test_state` fixture into `tests_shared/` (a
-     conftest-importable fixture module) and point crm/forms/blog at it; move the sanitizer to one
-     shared home consumed by blog+listings. M, removes both live copy classes and the re-decision
-     cost.
-  2. **Gate the copies without consolidating.** Add byte-parity CI checks over the sanitizer pair
-     and the two conftest fixtures. S, but relocates the problem into more gated copy-pairs (the
-     Finding 1 lattice pattern in miniature) and does nothing for the next concern.
-  3. **Full shared test-infra package** (a pytest plugin distributed like a module). L —
-     over-engineered at current scale; only worth it if module suites ever run outside the
-     monorepo.
-- **Recommendation:** Option 1, sized to fit the current idle Track 1/2 capacity noted in the
-  roadmap — it is independent of SA93/SA96 and touches no release-gated surface. · **Size:** M ·
-  **First step:** write the decisions.md commons rule (it is the cheapest artifact and makes every
-  future landing decidable), then lift the crm/forms reset fixture into `tests_shared/`.
 
 ---
 
@@ -201,9 +127,8 @@ hand-enumerated per-command parity test — transitional surface, watchlist).
   third site / second operator / public update command.
 - **Problem:** the generator's production emission routing is now a single exported function with
   an independent parity fixture (closed by SA66/SA90), but the *maintainer upgrade tool* still
-  re-encodes per-file ownership as hand-written tuples outside that derivation chain, and the
-  package holding it sits outside the repo's lint/typecheck governance while being
-  import-load-bearing for the release gate.
+  re-encodes per-file ownership as hand-written tuples outside that derivation chain. The package
+  holding it is now inside the repo's Ruff/MyPy governance through SA99.
 - **Evidence (anchors re-resolved this pass; note the corrected src-layout path):**
   - Production chain (closed, protect): `get_generator_emission_mapping()`
     (`quickscale_core/src/quickscale_core/generator/generator.py:151`) consumed by
@@ -218,14 +143,13 @@ hand-enumerated per-command parity test — transitional surface, watchlist).
   - The compounding tax, paid this delta as predicted: SA94's theme retirement had to hand-edit the
     taxonomy (`9020ad97`, +53 lines in `beta_migration.py` plus a decisions.md taxonomy correction
     in `31863733`) — the O(themes × artifacts) cost this finding named.
-  - Devtools governance unchanged: `quickscale_devtools` is absent from `ruff.toml`, `mypy.ini`,
-    and Makefile lint/typecheck targets (re-verified by grep this pass) while the conformance test
-    importing it runs in the unit gate of ci.yml and publish.yml. Partial mitigation noted: the
-    GATE-quality baseline now covers devtools (8 grandfathered entries), so it is inside the
-    vulture/radon/pylint net even though ruff/mypy still skip it.
+  - Devtools governance: **SA99 completed the Ruff/MyPy sub-item** by bringing
+    `quickscale_devtools` into the repository's Ruff and MyPy coverage; the conformance test
+    importing it continues to run in the unit gate of ci.yml and publish.yml. The GATE-quality
+    baseline also covers devtools (8 grandfathered entries).
   - decisions.md rule 3 rationale enforcement still asserts non-emptiness only.
-- **Counter-evidence:** searched for a beta_migration↔emission-mapping cross-check (none); for a
-  devtools entry in any lint/typecheck config (none); strongest disconfirming facts: the production
+- **Counter-evidence:** searched for a beta_migration↔emission-mapping cross-check (none); strongest
+  disconfirming facts: the production
   chain now has three independent sources of truth (mapping, conformance gate, checked-in
   manifest), and SA94's hand-edits to the tuples were caught correct by the ownership-conformance
   test added in `9020ad97` (`test_beta_migration_ownership_conformance.py`) — the miss class is
@@ -234,7 +158,8 @@ hand-enumerated per-command parity test — transitional surface, watchlist).
 - **Why it compounds:** every change to the emitted-file universe (SA63, SA66, now SA94) pays a
   hand-edit in the devtools taxonomy plus its conformance re-baseline; cost grows with dynamic
   artifacts × consumer sites; and a drift between the shared mapping and the devtools copy would
-  pass ruff/mypy (which don't look) and fail only if the conformance fixture happens to cover it.
+  not be caught by Ruff/MyPy alone and would fail only if the conformance fixture happens to cover
+  it.
 - **Detection signal:** a conformance-gate failure naming an unclassified path (loud, good); the
   silent direction remains devtools-copy drift — instrument with a cross-check between the taxonomy
   tuples and `get_generator_emission_mapping()`.
@@ -250,14 +175,14 @@ hand-enumerated per-command parity test — transitional surface, watchlist).
   1. ~~Derivation gate over the existing lists~~ — **done** (SA66).
   2. **Generator-emitted ownership manifest (live, partially done).** The export + parity fixture
      halves are done (SA90). Remaining: derive `beta_migration.py`'s tuples from
-     `get_generator_emission_mapping()` (keeping only the ownership-judgment overlay hand-written),
-     and bring devtools into ruff/mypy. M.
+     `get_generator_emission_mapping()` (keeping only the ownership-judgment overlay hand-written);
+     SA99 completed the separate devtools Ruff/MyPy sub-item. M.
   3. **Fold the upgrade path into the product** (`quickscale apply` contract-vintage refresh). L;
      only when generated-project upgrades become a public feature.
-- **Recommendation:** Option 2's remainder, unscheduled — correctly gated on a third consumer or
-  public update command; the cheap sub-item (add devtools to ruff/mypy) is S and could ride any
-  idle-track slot. · **Size:** M remaining · **First step:** add `quickscale_devtools` to
-  `ruff.toml`/`mypy.ini` (removes the ungoverned-but-load-bearing edge for one config line each).
+- **Recommendation:** Option 2's tuple-derivation remainder, unscheduled — correctly gated on a
+  third consumer or public update command; SA99 completed the separate devtools Ruff/MyPy sub-item.
+  · **Size:** M remaining · **First step:** derive the beta-migration taxonomy from
+  `get_generator_emission_mapping()`, retaining only the ownership-judgment overlay by hand.
 
 ---
 
@@ -339,14 +264,10 @@ hand-enumerated per-command parity test — transitional surface, watchlist).
 
 ### Fix order and interactions
 
-1. **Finding 9 Option 1** (commons rule + consolidate sanitizer and reset-fixture) — highest value
-   now; fits the idle Track 1/2 capacity; independent of SA93/SA96 and touches no release-gated
-   surface. Do the decisions.md rule first.
-2. **Finding 7's cheap sub-item** (devtools into ruff/mypy) — S, independent, any idle slot. The
-   tuple-derivation remainder stays unscheduled pending its trigger.
-3. **Findings 2 and 4** — deferred with teams; independent.
+1. **Finding 7's tuple-derivation remainder** — M, independent, unscheduled pending its trigger.
+2. **Findings 2 and 4** — deferred with teams; independent.
 
-All four findings are independent — no fix forces rework of another. None conflicts with the SA93 →
+The three live findings are independent — no fix forces rework of another. None conflicts with the SA93 →
 SA96-GATE → SA96-PUBLISH critical path.
 
 ### Sound load-bearing decisions (protect these during remediation)
@@ -358,7 +279,7 @@ SA96-GATE → SA96-PUBLISH critical path.
   boot guard) — carried, re-verified via census row 1.
 - **orgs-owned `apply_force_rls`/`revert_force_rls` as the single RLS-install seam** (new this
   pass): every squashed `0001` consumes it (`crm/0001_initial.py:31–35` et al.) — the module
-  commons working as Finding 9 wants it to; Finding 9's fix should cite this as the house pattern.
+  commons house pattern that SA97+SA98 extend.
 - **The SA89 persistence-port shape** (Django-free protocols + fail-hard registry,
   `dr_engine/persistence.py:148–260`): the correct way to give core access to module state.
   Protect the fail-hard unregistered-access behavior and the idempotent re-registration rule.
@@ -409,10 +330,10 @@ SA96-GATE → SA96-PUBLISH critical path.
   fired** — 1,226 lines, verified unchanged. Carry.
 - **Grandfathered option defaults multi-sourced — ninth pass.** Trigger ("a default changes in one
   station only"): **not fired** — `module_config.py` untouched. Carry.
-- *Retired this pass:* **shared module-runtime commons rule** — promoted to **Finding 9** (trigger
-  fired: SA84/SA85 landed copies outside any sanctioned home). **`quickscale_devtools` governance**
-  — remains absorbed into Finding 7's evidence (partially mitigated: GATE-quality now covers
-  devtools; ruff/mypy still don't).
+- *Retired this pass:* **shared module-runtime commons rule** — closed by **SA97+SA98** (shared
+  reset plumbing and sanitizer homes are now in use). **`quickscale_devtools` governance**
+  — completed by SA99 and removed from Finding 7's remainder; only the beta-migration
+  tuple-derivation work remains.
 
 *(Carried unchanged at low priority, unprinted: hardcoded `EXEMPT_PATH_PREFIXES` in
 `orgs/middleware.py:45` — re-verified unchanged.)*
@@ -424,17 +345,17 @@ SA96-GATE → SA96-PUBLISH critical path.
 > final schema (`organization_id NOT NULL` from row zero) and calls orgs' `apply_force_rls` — the
 > Finding 8 helper no longer exists and must not be reinvented; teams data migrations traverse the
 > SA68 launcher env contract; teams' admin subclasses `TenantModelAdmin`; teams' test suite must
-> consume the (Finding 9) shared reset plumbing rather than minting a fourth conftest variant;
+> consume the `tests_shared/` reset plumbing rather than minting a fourth conftest variant;
 > teams' arrival re-fires Probe A's ~eight hand stations, including the SA92 discovery tuple
 > (fail-silent) and the three `QS_*_DB_USER` lists.
 
 ### Questions that would change the ranking
 
-- **What is the first post-release domain after SA96-PUBLISH?** The roadmap is fully drained
-  except SA93/publish, and Tracks 1–2 are idle. If teams (or any new module) is next, Findings 2
-  and 4 move from `deferred` to `6–18 months` and Finding 9's consolidation becomes a
-  prerequisite; if the next work is consumer sites, Finding 7's third-consumer trigger approaches.
-  (Affects Findings 2, 4, 7, 9.)
+- **What is the first new domain or consumer after the assigned work?** SA93 remains the sole
+  release-path input; the TP test-parallelization suite and SA100 audit remediation are
+  off-critical-path assigned work. If teams (or any new module) is next, Findings 2 and 4 move
+  from `deferred` to `6–18 months`; if the next work is consumer sites, Finding 7's
+  third-consumer trigger approaches. (Affects Findings 2, 4, 7.)
 - **Is the quality baseline intended to be shrink-only from the v87 reset?** If yes, one sentence
   in decisions.md plus a trend check turns census row 18 from "gated, uncontracted" into a real
   ratchet; if no, the 151-function grandfather list is permanent and will quietly grow. (Affects
@@ -447,7 +368,8 @@ SA96-GATE → SA96-PUBLISH critical path.
 Lenses scanned with no qualifying finding this pass: data/state integrity (SA92 squash verified
 invariant-preserving), trust boundaries (SA68/boot-guard re-verified; theme preflight is
 watchlist), consistency/failure models, observability, API contracts, concurrency (SA91 pool is
-bounded, derived, and tested), security architecture (sanitizer copies belong to Finding 9),
+bounded, derived, and tested), security architecture (the shared sanitizer seam is closed by
+SA98),
 performance, governance/gates (§5.XV produced census rows 16–18 and two watchlist items, no
 standalone finding), code-generator archetype (Finding 7 owns it; SA94/Probe C measured).
 
@@ -903,5 +825,10 @@ standalone finding), code-generator archetype (Finding 7 owns it; SA94/Probe C m
   blind spot); seven items carried not-fired. Prior red flags: none were open. Prior Questions:
   both 2026-07-13 Finding 8 questions were answered in the 2026-07-14/15 log entries (0
   runtime-query failures; helper superseded by squash) — retired; two new questions (post-release
-  domain; quality-baseline shrink-only intent). Red flags: none this pass (one doc-staleness note
-  on `decisions.md:1237`, not promoted).
+   domain; quality-baseline shrink-only intent). Red flags: none this pass (one doc-staleness note
+   on `decisions.md:1237`, not promoted).
+- 2026-07-18 (SA98 closeout) — **Finding 9 (`module-commons-unowned`): CLOSED.** SA97 closed
+  the shared test-plumbing half and SA98 closed the runtime sanitizer half: the orgs-owned
+  sanitizer seam is consumed by blog and listings, with sanitizer uniqueness/caller proof passed.
+  No SA98-specific blockers or findings were identified. The unrelated repository-wide
+  coverage/dead-code/complexity baseline remains outside this ticket.

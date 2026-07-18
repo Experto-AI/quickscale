@@ -56,7 +56,7 @@ git merge --no-ff wt-track{N}
 **Open workstreams before release:**
 1. **SA93** (e2e in the green-gate) on Track 3 — the sole open input to the green-gate join.
 2. **SA96-GATE → SA96-PUBLISH** (green-gate join → staged PyPI publish), deps on SA93.
-3. **Audit remediation** in Track 2/3 capacity — remaining: Finding 9 runtime half (SA98, Track 2) and tech-audit TA58/TA59 (SA100, Track 3, separate post-SA93-review follow-up). Both are independent of the release critical path. Arch-audit Finding 9 test half (SA97) and Finding 7 cheap sub-item (SA99) are complete — see [CHANGELOG.md](../../CHANGELOG.md). Arch Findings 2 and 4 stay deferred with the (unscheduled) teams module — **not ticketed**.
+3. **Audit remediation** in Track 2/3 capacity — remaining: tech-audit TA58/TA59 (SA100, Track 3, separate post-SA93-review follow-up). Arch-audit Finding 9 is complete through SA97+SA98, and Finding 7's cheap sub-item (SA99) is complete — see [CHANGELOG.md](../../CHANGELOG.md). Arch Findings 2 and 4 stay deferred with the (unscheduled) teams module — **not ticketed**.
 
 ### Green-gate milestone — all quality make commands pass
 
@@ -160,14 +160,14 @@ Track 1 was idle and has been assigned the **TP (test-parallelization)** suite b
   - Verify: every command in the doc runs as written on a clean tree.
   *(why →* parallelization audit Tier 4 — scoped partial runs already exist; the gap is discoverability for the incremental-dev loop*)*
 
-### Track 2 — Module contracts & settings — SA98 open (audit remediation)
+### Track 2 — Module contracts & settings — SA98 complete (audit remediation)
 
-Prior development tickets closed — SA88b (forms diagnosis), SA86 (listings), SA94 (react-only theme), SA95 (blog fixture-finalizer regression), GATE-lint/typecheck/check-suite, **SA96-T2** module sweep. Track 2 carries the arch-audit **Finding 9** runtime-copy half — its SA97 dependency is satisfied (landed on `v87`, see [CHANGELOG.md](../../CHANGELOG.md)).
+Prior development tickets closed — SA88b (forms diagnosis), SA86 (listings), SA94 (react-only theme), SA95 (blog fixture-finalizer regression), GATE-lint/typecheck/check-suite, **SA96-T2** module sweep, and **SA98**. Together, SA97+SA98 close arch-audit **Finding 9** (test-plumbing and runtime-copy halves); see [CHANGELOG.md](../../CHANGELOG.md).
 
-- [ ] **SA98 — Consolidate the `_sanitize_href`/`_sanitize_rendered_html` sanitizer copy-pair.** `Tier 2 · Track 2 · deps: SA97 ✓ (landed on v87)`
-  arch-audit [Finding 9](../others/arch-audit.md), Option 1 — runtime half (sixth pass unconsolidated). Byte-similar sanitizer in `blog/views.py:69-115` and `listings/views.py:42-88` with no parity test or gate.
-  - Merge `v87`. SA97's commons rule ([decisions.md §SA97](./decisions.md#test-commons-ownership-sa97)) covers org-context runtime helpers (orgs) and cross-module test plumbing (`tests_shared/`) — a view-layer sanitizer is neither, so record an explicit sanitizer-home decision (self-contained, within-track; not a maintainer blocker). Move the sanitizer there, have blog and listings consume it.
-  - Verify: both sanitizer regression suites pass against the shared implementation; no second copy remains.
+- [x] **SA98 — Consolidate the `_sanitize_href`/`_sanitize_rendered_html` sanitizer copy-pair.** `Tier 2 · Track 2 · deps: SA97 ✓ (landed on v87)`
+  arch-audit [Finding 9](../others/arch-audit.md), Option 1 — runtime half. The shared sanitizer is owned by orgs and consumed by blog and listings; no second runtime copy remains.
+  - Evidence: orgs **874 passed / 11 skipped**, blog **206 passed**, listings **132 passed**; scoped Ruff/MyPy, sanitizer uniqueness/caller proof, diff check, and manifest sync passed. Independent review returned **STATUS ok with no findings**.
+  - No SA98-specific blockers or findings. The unrelated repository-wide coverage/dead-code/complexity baseline remains outside this ticket; broad `make check`/`make quality` failures were not fixed here, and no E2E claim is made.
   *(why →* arch-audit Finding 9 — one-sided fixes to a duplicated sanitizer are XSS-class drift on public pages*)*
 
 ### Track 3 — Core/CLI plumbing — SA93/SA100 open
@@ -190,29 +190,29 @@ Track 1 (tenant-context surface)   Track 2 (module contracts & settings)   Track
 ────────────────────────────────   ─────────────────────────────────────   ───────────────────────────
 SA92/SA84/SA86 ✓ (dev tickets)      SA94/SA88b/SA86/SA95 ✓ (dev tickets)    Finding 1 ✓ (SA89a+SA89b)
 SA96-T1 ── module sweep ✓            SA96-T2 ── module sweep ✓               GATE-lint/typecheck/check/quality ✓
-SA97 ✓ + SA99 ✓ (audit remed.)      SA98 ── sanitizer consolidation         SA91 ✓ (parallel loop, non-gating)
+SA97 ✓ + SA99 ✓ (audit remed.)      SA98 ✓ (sanitizer consolidation)         SA91 ✓ (parallel loop, non-gating)
 TP1/TP2/TP2b/TP3a/TP3b/TP4                   (F9 runtime half) deps: SA97 ✓   SA93 ── e2e in green-gate (open)
  (test-parallelization; off critical path)
                                              │                               SA100 ── TA58/TA59 theme preflight
                                              │                                       (separate follow-up)
                        ┌─────────────────────┴───────────────────────────────────────┐
-                       ▼   (SA98/SA100 off the release critical path — independent; SA97 ✓ landed)
+                       ▼   (SA98 ✓ / SA100 off the release critical path — independent; SA97 ✓ landed)
         SA96-GATE ── green-gate join (make check/quality/ci/ci-e2e)  deps: SA96-T1 + SA96-T2 + SA93
                        ▼
         SA96-PUBLISH ── build → publish-test → publish-prod          deps: SA96-GATE
 ```
 
-**Critical path.** Both pre-publish module sweeps are complete: **SA96-T1** (Track 1) and **SA96-T2** (Track 2). **SA93** is the sole open input to **SA96-GATE**; **SA96-PUBLISH** follows. The remaining SA93 path is merge-back → authorized push/dispatch → green `e2e.yml` evidence on `v87` (SA93-EVID-001) → close SA93. **SA98** and **SA100** are independent audit-remediation tickets and do not block SA96-GATE; SA97 and SA99 are complete (see [CHANGELOG.md](../../CHANGELOG.md)).
+**Critical path.** Both pre-publish module sweeps are complete: **SA96-T1** (Track 1) and **SA96-T2** (Track 2). **SA93** is the sole open input to **SA96-GATE**; **SA96-PUBLISH** follows. The remaining SA93 path is merge-back → authorized push/dispatch → green `e2e.yml` evidence on `v87` (SA93-EVID-001) → close SA93. **SA98** is complete and **SA100** remains an independent audit-remediation ticket; neither blocks SA96-GATE. SA97 and SA99 are also complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 **Green-gate milestone (cross-track join).** "All quality make commands pass" is the integration join (SA96-GATE). It cannot start until both module sweeps and SA93 are complete. SA93's cross-track blockers are resolved; component Core/CLI E2E, exact local `make ci-e2e`, and independent source review are green. The only remaining blocker is SA93-EVID-001 (no remote `v87` run).
 
 ### Track readiness (2026-07-17)
 
 - **Track 1 — ASSIGNED the TP (test-parallelization) suite; first position on this green track.** All prior release tickets closed (SA92, SA84, SA86, SA96-T1) and both audit-remediation tickets — **SA97** (arch Finding 9 test-plumbing half) and **SA99** (arch Finding 7 devtools→ruff/mypy) — completed 2026-07-17. Now carries **TP1** (static-gate fan-out), **TP2**/**TP2b** (unit xdist + coverage-combine), **TP3a**/**TP3b** (E2E port-namespacing + concurrent lanes), and **TP4** (AI fast-loop docs). All Tier 1–2, none on the SA96 release critical path — pure SDLC cycle-time work; must not regress any gate's pass/fail set or coverage thresholds. Evidence for closed work in [CHANGELOG.md](../../CHANGELOG.md).
-- **Track 2 — CLEAN to continue; SA98 open.** Release tickets closed (SA94, SA88b, SA86, SA95, SA96-T2). Carries **SA98** (arch Finding 9 sanitizer half); its SA97 dependency is satisfied (landed on `v87`). SA98 records a self-contained sanitizer-home decision (the commons rule covers runtime org-context helpers and test plumbing, not a view-layer sanitizer) — within-track, not a maintainer blocker. Evidence in [CHANGELOG.md](../../CHANGELOG.md).
+- **Track 2 — CLEAN; SA98 complete.** Release tickets and audit remediation are closed (SA94, SA88b, SA86, SA95, SA96-T2, and SA98). SA97+SA98 close arch-audit Finding 9, including the shared sanitizer home and test-plumbing commons. Evidence in [CHANGELOG.md](../../CHANGELOG.md).
 - **Track 3 — NOT BLOCKED ON A DECISION; SA93 external evidence + SA100 open.** Finding 1, all four GATEs, and SA91 are complete. SA93 implementation, exact local gate, workflow parity, and independent source review are green; continuation is merge-back → authorized push/dispatch → green `e2e.yml` evidence on `v87` → close SA93. **SA100** is a separate audit-remediation follow-up. SA91 retains CR-SA91-REV-006 (low/advisory); SA89B-CR-004 and SA93-ADV-001..004 are non-gating low advisories.
 
-**Net — all three tracks have assigned work (Track 1 carries the off-critical-path TP test-parallelization suite); no maintainer decisions pending.** Both pre-publish module sweeps are complete. SA93 remains the sole release-path input; SA98 and SA100 are independent audit remediation, while SA97 and SA99 are complete. Exact local `make ci-e2e` and independent SA93 source review are green. Merge this checkpoint, have an authorized operator push/dispatch `v87`, retain the green run evidence, then close SA93. After SA93 closes, SA96-GATE can run the four-command publishability join and SA96-PUBLISH can proceed. The squash-migrations decision and bounded guardrail strategy are recorded in [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); reasoning trail in [CHANGELOG.md](../../CHANGELOG.md).
+**Net — all three tracks have assigned work (Track 1 carries the off-critical-path TP test-parallelization suite); no maintainer decisions pending.** Both pre-publish module sweeps are complete. SA93 remains the sole release-path input; SA98 is complete and SA100 remains independent audit remediation, while SA97 and SA99 are also complete. Exact local `make ci-e2e` and independent SA93 source review are green. Merge this checkpoint, have an authorized operator push/dispatch `v87`, retain the green run evidence, then close SA93. After SA93 closes, SA96-GATE can run the four-command publishability join and SA96-PUBLISH can proceed. The squash-migrations decision and bounded guardrail strategy are recorded in [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92); reasoning trail in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 

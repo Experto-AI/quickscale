@@ -7,7 +7,6 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from PIL import Image
 from quickscale_modules_blog.models import Category, Post, Tag
-from quickscale_modules_blog.views import _sanitize_href
 from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
 
 
@@ -355,8 +354,8 @@ class TestPostDetailView:
         renders as ``java    script:alert(1)`` in the href.  Browsers do
         NOT strip interior spaces from URLs, so this is not an executable
         ``javascript:`` scheme — the tab-obfuscation attack is blocked by
-        the markdown parser itself.  The ``_sanitize_href`` control-char
-        normalisation handles the general case when a tab reaches the
+        the markdown parser itself.  The shared sanitizer's control-char
+         normalisation handles the general case when a tab reaches the
         sanitizer via a non-markdown path.
         """
         with blog_org_scope(system_org):
@@ -516,31 +515,6 @@ class TestPostDetailView:
         assert response.status_code == 200
         html = response.content.decode()
         assert 'href="mailto:user@example.com"' in html
-
-
-class TestSanitizeHrefUnit:
-    """Direct unit tests for the ``_sanitize_href`` security primitive.
-
-    Locks the C0 control-char normalization (CR-SA26-001) so the fix cannot
-    be silently reverted.  These reach ``_sanitize_href`` directly — not
-    through ``markdownify``, which pre-converts tabs to spaces in rendered
-    hrefs and would therefore not fail if the normalization were removed.
-    """
-
-    def test_neutralizes_tab_obfuscated_javascript(self):
-        assert _sanitize_href("java\tscript:alert(1)") == ""
-
-    def test_neutralizes_newline_obfuscated_javascript(self):
-        assert _sanitize_href("java\nscript:alert(1)") == ""
-
-    def test_neutralizes_carriage_return_obfuscated_javascript(self):
-        assert _sanitize_href("java\rscript:alert(1)") == ""
-
-    def test_neutralizes_leading_whitespace_javascript(self):
-        assert _sanitize_href("\t  javascript:alert(1)") == ""
-
-    def test_preserves_https_through_normalization(self):
-        assert _sanitize_href("https://example.com/page") == "https://example.com/page"
 
 
 @pytest.mark.django_db
