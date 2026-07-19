@@ -8,7 +8,7 @@ merge_strategy: append
 # Shared
 
 [include](docs/technical/ai_context.md)
-[include](docs/technical/project_intake.yml)
+[include](adaptive.intake.yml)
 
 # Adaptive
 [include](#shared)

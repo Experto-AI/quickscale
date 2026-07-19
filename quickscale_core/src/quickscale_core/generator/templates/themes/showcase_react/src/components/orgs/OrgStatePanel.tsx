@@ -1,0 +1,38 @@
+import { Link } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+
+interface OrgStatePanelProps {
+  actionHref: string
+  actionLabel: string
+  description: string
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+}
+
+export function OrgStatePanel({
+  actionHref,
+  actionLabel,
+  description,
+  icon: Icon,
+  title,
+}: OrgStatePanelProps) {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <Card className="w-full max-w-2xl">
+        <CardHeader>
+          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+            <Icon className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild>
+            <Link to={actionHref}>{actionLabel}</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

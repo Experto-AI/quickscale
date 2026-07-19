@@ -9,6 +9,7 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
       - id: check-json
+        exclude: ^quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/tsconfig\.json$
       - id: check-toml
       - id: check-merge-conflict
       - id: detect-private-key
