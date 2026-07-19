@@ -1,7 +1,7 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Latest re-run:** 2026-07-17 (V3 delta pass) · **Branch:** `v87` (HEAD `09f9cbcc`, prior
-> `41689be7`) · **Result: two S4 findings (one quick-win), zero S1–S3 — near-clean pass.**
+> **Latest re-run:** 2026-07-19 (V3 delta pass) · **Branch:** `v87` (HEAD `82a73d1f`, prior
+> `09f9cbcc`) · **Result: one S3 and one S4 finding (the S4 a quick win), zero S1–S2.**
 > History of prior passes is preserved in the Reconciliation log below and in this file's git
 > history; per this document's convention, closed findings live only in the log.
 >
@@ -9,85 +9,92 @@
 > tech-audit-prompt (V3). Structural findings live in [arch-audit.md](arch-audit.md); fail-hard
 > policy SSOT is [decisions.md §fail-hard-principle](../technical/decisions.md#fail-hard-principle).
 >
-> **This pass (2026-07-17, delta `41689be7..HEAD`, 144 commits, ~227 files, +24.8k/−12.3k):**
-> the delta carries the v87 closeout batch — **SA89a/b** (DR persistence port), **SA90-msq/SA92**
-> (final-schema migration squash across all nine modules), **SA91** (parallel integration worker
-> pool), **SA93** (e2e green-gate, still a blocked checkpoint), **SA94** (showcase_html theme
-> retirement), **SA81** (monorepo dependency cleanup), **SA84/SA86/SA95/SA96** (restricted-role and
-> module test sweeps), plus the SA88 gate-saga retirement. The full first-party production diff was
-> read; checkpoint/side-channel commits (`022a88fb`, `76c5cc55`, `4ba4ad32`, `6961d651`, `ddfa6daa`,
-> `a561e8fd`) received elevated scrutiny per §2f.2 — and, for the fourth consecutive pass, the
-> checkpoint lane is where this pass's defect lives (TA58, from SA93 checkpoint `022a88fb`).
-> Test-integrity diff (§3.7) run across every changed test file: no weakened or flipped tests.
-> Closure claims verified in code per §2f.3 (SA84, SA86, SA88-retirement, SA92 — all confirmed).
-> Chain pass (§3.9) ran: no chains. **A PostgreSQL 18 server is running on this machine for the
-> first time across audit passes**, closing the standing "no empirical DB checks possible" caveat;
-> one REPL empirical check was run this pass (TA58 confirmation).
+> **This pass (2026-07-19, delta `09f9cbcc..HEAD`, 65 commits, ~49 files, +5.4k/−1.7k):** the
+> delta carries the v87 tail — **SA97** (shared test-state reset fixture), **SA98** (orgs-owned
+> sanitizer seam), **SA100** (recovery-theme exemption narrowed; closed TA58/TA59), **SA99**
+> (devtools under repo lint/mypy), the **SA93 closeout** (hosted e2e evidence + remote-gate
+> alignment), and the **TP1/TP2/TP3a** test-parallelization suite (parallel local static gates,
+> xdist unit runs, e2e lane namespacing), plus ~50 docs/merge commits. The full first-party
+> production diff was read. The same delta was audited structurally by the arch-audit's
+> 2026-07-19 pass (same invoker session), whose **red flag — the rendered-frontend proof wired
+> into no gate — is accepted here as TA60 after independent verification and narrowing** (the
+> e2e docker-build layer partially mitigates it; see the finding). The invoker's frontend-theme
+> portability question is owned by arch-audit **Finding 10** (`frontend-source-generation-
+> specialized`); this document's ticket-shaped contribution to it is TA60. Test-integrity diff
+> (§3.7) run across every changed test file: no weakened or flipped tests; the one widened
+> assertion (`test_middleware.py:542`) was **empirically verified fail-closed-equivalent**
+> (PG18: `RESET` leaves a custom GUC readable as `''`, and the Option C policies are
+> NULLIF-guarded, so `''` ≡ no-org). Closure claims verified in code per §2f.3 (TA58, TA59 —
+> both confirmed; SA97/SA98 fix-regression audits clean). Chain pass (§3.9) ran: one
+> cross-document chain noted on TA60 (with arch-audit Finding 10). **For the fifth consecutive
+> pass, the checkpoint lane carried the pass's anomaly** — `022a88fb` (prior delta) edited 4
+> theme templates without rebaselining the SA90 parity fixture, leaving that gate red for ~2
+> days until side-channel commit `1e7cbc2c` synced it; invisible remotely because `ci.yml` does
+> not run on `v87` pushes (see Notes). The current fixture was empirically re-verified green.
 
 ## Orientation summary
 
 QuickScale is a **Python 3.13 Django project generator** (Poetry monorepo: `quickscale_core`
 manifest/apply/generator/DR engine, `quickscale_cli` Click CLI, 13 shipped `quickscale_modules/*`
 Django apps, `quickscale_devtools` beta-migration tooling, Jinja2 generator templates; version
-0.87.0, unreleased). Two deployment realities: **(a)** the *generated project* — an internet-facing
-Django app targeting Railway (edge proxy → gunicorn, non-root container, fail-closed runtime DB
-role, HTTPS/HSTS/secure cookies, active `CACHES`, SA36 trusted-proxy client-IP, SA68 one-shot
-privileged-command env contract); **(b)** the *CLI/generator* — a local developer tool (monorepo
-Poetry or `pip install quickscale`; only `quickscale_core`/`quickscale_cli`/`quickscale` are
-published to PyPI — modules ship via the generator, not as standalone wheels). Major deltas this
-pass: **SA92** squashed every module's migration history to a single final-schema `0001_initial`
-(`organization_id NOT NULL` from row zero; ratified fresh-only posture, decisions.md
-§Migration-Squash Decision; pg_policies/catalog/data hash parity against the v87 baseline is the
-authoritative proof, plus a bounded literal tripwire); **SA89a/b** moved all backups ORM lifecycle
-edges behind a fail-hard persistence provider registry (`dr_engine/persistence.py` protocols +
-`quickscale_modules_backups/persistence.py` providers registered in `AppConfig.ready()`); **SA94**
-retired the `showcase_html` theme with a fail-closed read-only preflight
-(`utils/theme_validation.py`) wired into 8 CLI callsites and the beta-migration tool; **SA91**
-parallelized the module integration gate behind `QS_INTEGRATION_JOBS` with validated bounds,
-per-worker coverage files, and signal-tree cleanup; **SA93** replaced the raw coverage threshold
-with a fail-closed dual-threshold policy checker (`scripts/check_coverage_policy.py`, 90%
-equal-weight core/CLI package mean + 80% per-file, own 37-test suite). Declared-invariant oracle
-used this pass: the fail-hard principle (decisions.md SSOT), the RLS runtime-role contract
-(NOSUPERUSER/NOBYPASSRLS, SA58 boot guard), the SA68 one-shot launcher env contract, Option C
-child-table RLS with the NULLIF-guarded GUC policy, SA14.4/SA14.5 (no auto-primed BYPASSRLS;
-`operator_access` is SELECT-only), the SA94 theme-preflight invariant ("if any present file
-carries an invalid theme, the preflight fails regardless of what other valid sources say" —
-violated by TA58), and the SA92 squash guardrail (parity gate + tripwire). Tooling baseline:
-ruff + strict mypy in CI (the backups module-override weakening flagged last pass is **removed**
-— replaced by a narrow per-file `var-annotated` suppression and a legitimate third-party
-`storages.*` ignore), csrf_exempt/delete-rule/module-core/manifest-sync/SA60-composite-FK/SA66
-gates, new worker-pool and coverage-policy test suites in CI; **still no
-dependency-audit / bandit / semgrep step**.
+0.87.0, unreleased). Two deployment realities: **(a)** the *generated project* — an
+internet-facing Django 6 + PostgreSQL 18 + Vite/React app targeting Railway (edge proxy →
+gunicorn, non-root container, fail-closed runtime DB role, HTTPS/HSTS/secure cookies, active
+`CACHES`, SA36 trusted-proxy client-IP, SA68 one-shot privileged-command env contract);
+**(b)** the *CLI/generator* — a local developer tool (only `quickscale_core`/`quickscale_cli`/
+`quickscale` publish to PyPI — the theme templates ship inside the `quickscale_core` wheel).
+Major deltas this pass: **SA100** replaced TA58's string-matching recovery-ledger exemption with
+an explicit `allow_recovery_checkpoint` opt-in keyed on the exact `__checkpoint__` sentinel and
+only for the recovery-ledger source (`theme_validation.py`), with `up` now fail-closed for every
+other invalid theme; **SA98** single-homed the href/rendered-HTML sanitizer in
+`orgs/sanitization.py` (blog + listings consume it; byte-identical logic); **SA97** consolidated
+six divergent per-module conftest reset copies into `tests_shared/reset_state.py` (canonical
+superset: ContextVar + GUCs + `RESET ROLE` + AF9 memo + cache, setup and teardown); **TP1**
+parallelized the nine local static CI gates behind a worker fan-out in `check_ci_locally.sh`
+(per-worker exit-code retention, reentrancy-guarded signal handling, `QS_CI_PARALLEL=0` serial
+escape hatch, own 6-test suite `test_ci_local_parallel.py` wired into `make ci` and `ci.yml`);
+**TP2** put core/CLI unit runs on pytest-xdist (`PYTEST_XDIST_WORKERS`, `--dist loadfile`,
+serial escape at `0`); the `test-cov` target was rewritten onto isolated per-phase
+`COVERAGE_FILE`s in a mktemp dir with an explicit combine step — **missing coverage data now
+fails hard** where it was previously silent; **TP3a** namespaced e2e Docker scopes per lane
+(compose-project labels + container prefixes; cleanup is label-filtered instead of the old
+global port-based `docker rm`); **SA93** moved the hosted e2e workflow onto the maintained
+`test_e2e.sh` runner and widened its PR path filters to the whole generator tree. Declared-
+invariant oracle used this pass: the fail-hard principle (decisions.md SSOT), the RLS
+runtime-role contract (SA58 boot guard), the SA68 launcher env contract, Option C child-table
+RLS with the NULLIF-guarded GUC policy, the SA94/SA100 theme-preflight invariant, the SA92
+squash guardrail, and the SA90 emission-parity invariant (this pass's transient violation — see
+Notes). Tooling baseline: ruff + strict mypy in CI, csrf_exempt/delete-rule/module-core/
+manifest-sync/SA60-composite-FK/SA66 gates, worker-pool + coverage-policy + TP1 test suites in
+CI; **still no dependency-audit / bandit / semgrep step; `lint-frontend`/`frontend-proof` exist
+but are wired into no gate (TA60)**.
 
 **Coverage (this pass):** read in full — the entire first-party production diff
-`41689be7..HEAD`: `dr_engine/persistence.py` (new), `quickscale_modules_backups/persistence.py`
-(new), `_dr_remote_storage.py` (new), `orchestration.py` (full port diff), `adapter.py`,
-`_sidecar.py`, `_paths.py`, `recovery.py`, `runtime/__init__.py` + `runtime/dr.py` (eager-import
-switch), backups `apps.py`/`admin.py`/`models.py`/`services.py`/`dr_adapter_call.py`,
-`utils/theme_validation.py` (new, complete), `generator/generator.py` emission-mapping diff,
-`config_schema.py`, `urls.py.j2`/`views.py.j2`/React theme template diffs, all 8 CLI command
-diffs (apply/plan/remove/module/module_config/dr/development/module_wiring_manager),
-`beta_migration.py` diff, `orgs/current_org.py` (SA83 `_clear_priming_memo`), `blog/views.py`
-(token-auth org-context save/restore), `forms/views.py` (SA85 Phase 4 retained-role helpers) +
-`notifications.py` + both management commands, `listings/models.py`, the orgs/forms/crm squashed
-`0001_initial` structure (RLS RunPython, seed RunPython, system-org handling verified),
-`scripts/_qs_jobs.sh` (complete), `test_integration.sh` diff, `check_coverage_policy.py`
-(complete), `check_module_core_imports.py` diff, `check_ci_locally.sh` diff, `Makefile`,
-`mypy.ini`, `ci.yml`/`e2e.yml`/`publish.yml` diffs, module `pyproject.toml`/`poetry.toml`
-changes (SA81). Sampled — the ~100 changed test files via targeted §3.7 scans (all added
-`skipif` markers enumerated — every one is a PostgreSQL-only catalog/RLS assertion in the
-squash-rewritten migration tests, still exercised under the PG integration gate; all added
-autouse fixtures enumerated — context resets, persistence-registry resets, and an S3Storage mock
-at the unit seam; SA84/SA86/SA96 test commits read as diffs and found strengthening),
-`quality_baseline.json` (advisory-tool re-baseline, see Notes), CHANGELOG/roadmap/decisions
-deltas for blessing checks. Skipped — module interiors unchanged since the 2026-07-10 deep pass
-(verdicts carried), `htmlcov/`, `graphify-out/`, `poetry.lock` (7-line metadata change only; no
-scanner available). **Empirical checks:** (1) REPL run of `validate_theme_preflight` against a
-scratch project with a retired `showcase_html` theme in `.quickscale/apply-recovery.yml` —
-confirmed the error is single-line and matches the `up` command's "recovery ledger" exemption,
-so `quickscale up` proceeds silently (TA58, confidence High). (2) `pg_isready` — a PostgreSQL
-server **is** running on localhost:5432 this pass (first time). Audit tools run: none available
-(`bandit`/`pip-audit`/`semgrep` absent, installs prohibited).
+`09f9cbcc..HEAD`: `Makefile` (complete diff incl. the `test-cov` rewrite and devtools section
+plumbing), `scripts/check_ci_locally.sh` (current file, complete), `scripts/test_e2e.sh` diff,
+`.github/workflows/ci.yml`/`e2e.yml` diffs + `publish.yml` job graph,
+`development_commands.py` diff (SA100 `up` carve-out removal), `theme_validation.py` diff
+(complete), `orgs/sanitization.py` (new, complete), blog/listings `views.py` diffs (complete),
+`tests_shared/reset_state.py` (new, complete), `pyproject.toml`/`ruff.toml`/`poetry.lock`
+diffs, the `sa90_emission_manifests.json` rebaseline traced commit-by-commit to its template
+edits. Sampled — the changed test files via targeted §3.7 scans (all six conftest migrations
+enumerated — every one replaces a private reset copy with the SA97 superset; the deleted
+blog/listings sanitizer tests confirmed moved-and-strengthened into
+`orgs/tests/test_sanitization.py`, including new case-obfuscation, `data:`, `vbscript:` pins
+and an honest pin of the single-quoted-attribute limitation, unreachable at the live sink
+because `escape()`+markdownify emit only double-quoted attributes), `test_sa94_theme_preflight`
+and `test_theme_validation` additions (all strengthenings pinning SA100),
+`test_ci_local_parallel.py`/`test_ci_coverage_policy.py` (no skips/xfails). Skipped — module
+interiors unchanged since 2026-07-10 (verdicts carried), the five SA96 coverage checkpoint test
+modules (`b7922aaa`, test-only, no source changes), `htmlcov/`, `graphify-out/`. **Empirical
+checks:** (1) PG18 session check — `SET app.current_org_id='42'; RESET …` →
+`current_setting(…, true)` returns `''` not NULL, and `NULLIF(…, '')` is NULL — confirms the
+`test_middleware.py` assertion widening is fail-closed-equivalent (result: refuted the
+weakened-test hypothesis). (2) SA90 parity suite run read-only against current templates —
+19 passed (the fixture rebaseline in `1e7cbc2c` is a correct sync, not drift). (3) ruff
+check/format + strict mypy run read-only over `quickscale_devtools/src` — all pass, so TA61 is
+gate drift, not concealment. Audit tools run: none available (`bandit`/`pip-audit`/`semgrep`
+absent, installs prohibited).
 
 ---
 
@@ -95,19 +102,89 @@ server **is** running on localhost:5432 this pass (first time). Audit tools run:
 
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |----|----------|----------|-------|--------|------------|--------|
+| TA60 | S3 | operability / generator archetype | Frontend build/lint proof sits on no blocking gate path | Small | High | open |
+| TA61 | S4 | operability / gate drift | Devtools lint+mypy absent from every CI invocation despite SA99's coverage claim | Trivial (quick win) | High | open |
 
-Counts: **S1: 0 · S2: 0 · S3: 0 · S4: 0.**
-Chain pass (§3.9): ran — no chains. The two S4 findings from the latest delta pass were
-closed by SA100; no security or data-path composition with any watch item or crown jewel.
+Counts: **S1: 0 · S2: 0 · S3: 1 · S4: 1.**
+Chain pass (§3.9): ran — one cross-document chain (TA60 × arch-audit Finding 10, noted inside
+TA60); no security or data-path composition with any watch item or crown jewel.
 
 ---
 
 ## Findings detail
 
-No open findings. TA58 and TA59 (both S4, opened in the 2026-07-17 delta pass) were closed by
-SA100 on 2026-07-18 — see the Reconciliation log below and the SA100 entry in
-[CHANGELOG.md](../../CHANGELOG.md). Per this document's convention, closed findings live only in
-the log; their prior full text is preserved in version control.
+### TA60 (S3) — `frontend-build-proof-ungated`
+
+- **Severity:** S3 — generator deployment reality; late detection plus a realistic
+  broken-publish path, but a partial layer-up safeguard exists (preconditions counted below).
+  Violates no declared oracle invariant; it is the gate the SA93 green-gate work has not yet
+  covered. Accepted from the arch-audit 2026-07-19 red-flag hand-off after independent
+  verification; severity here is narrower than the red flag's phrasing.
+- **Category:** §VI operability / §4.X code-generator ("no gate exercises the generated
+  artifact's frontend build").
+- **Confidence:** High — every gate surface read directly this pass.
+- **Location:** `Makefile:691,695` (`lint-frontend`, `frontend-proof` targets),
+  `Makefile:793,803` (`check`/`ci` umbrellas — neither includes them),
+  `.github/workflows/ci.yml` (zero node/pnpm references), `.github/workflows/publish.yml`
+  (job graph `verify → test → build → publish-pypi`; no docker build, no frontend, no
+  dependency on the e2e workflow), `.github/workflows/e2e.yml:150-192` (the only place the
+  frontend is ever built).
+- **Defect:** the only executable proof that the shipped theme renders to compilable,
+  buildable frontend code (`make lint-frontend`: render → ESLint+tsc; `make frontend-proof`:
+  render → pnpm install/build) is wired into no gate. The e2e lane's `docker-build-test` job
+  does build a generated project (Dockerfile `frontend-builder` stage runs `pnpm install` +
+  `pnpm run build` = `tsc -b && vite build` — `Dockerfile.j2:6-15`, `package.json.j2:12`), but
+  it triggers only on PRs to main (path-filtered), `v*` tags, and manual dispatch — and
+  `publish.yml` runs concurrently on the same tag with **no dependency on it**. ESLint runs
+  nowhere at all.
+- **Failure scenario:** a theme edit introducing a TypeScript error lands on `v87`. `make ci`
+  is green (no node stage), `ci.yml` never runs (push triggers are main/develop only), and
+  weeks of work stack on top. At release: if the route to main is a PR, the e2e docker build
+  catches it there (late, release-blocking surprise); if main is pushed directly or the tag is
+  cut, `publish.yml`'s verify/test/build jobs are all green and the broken templates publish
+  to PyPI inside the `quickscale_core` wheel while the e2e workflow fails separately after the
+  fact — every `quickscale apply` from that release emits a frontend that cannot build.
+- **Evidence:** `grep -rn "lint-frontend\|frontend-proof\|pnpm\|node" .github/workflows/*.yml
+  Makefile` → hits only in the Makefile target definitions and help text; `check:` at
+  `Makefile:793` lists lint/typecheck/test/five gates, no frontend target; `publish.yml` has
+  zero docker/frontend references and its `publish-pypi` needs only `build`.
+- **Refutation:** attempted per §1a — the layer-up hunt *found* a safeguard (the e2e
+  docker-build job compiles the frontend, and this delta widened its PR path filters to
+  `quickscale_core/src/quickscale_core/generator/**`, which covers the theme tree). It narrows
+  the finding from "ships through a fully green release gate" to "not on any *blocking* path":
+  two preconditions (no PR-to-main run before the tag, or ignoring a concurrently failing
+  non-blocking workflow) separate the defect from the PyPI consequence — hence S3, not S2.
+  The ESLint half survives unconditionally: no environment executes it.
+- **Fix (Small):** (1) add a `lint-frontend` job to `ci.yml` (node+pnpm setup, `make
+  lint-frontend`) and add the target to the `check` umbrella / `check_ci_locally.sh` fan-out
+  guarded by a node-availability check; (2) make the publish workflow depend on the frontend
+  proof — either a `frontend-proof` step in publish's `test` job or converting e2e's
+  docker-build job into a `workflow_call` dependency. **Chain (cross-document):** arch-audit
+  Finding 10 stage 1 (templates become real `.ts`/`.tsx` files) would let the repo's existing
+  ESLint/tsc gate them directly — fixing TA60 cheaply is still worth doing first; the two are
+  compatible, not alternatives.
+- **Verification:** introduce a deliberate TS error in `Dashboard.tsx.j2` on a branch — the
+  new gate must go red in `make ci` and `ci.yml`; revert.
+- **Deliberate?** none found — the targets were built (SA94 era) with clear intent to gate;
+  no decision record excludes them from CI. The SA93 roadmap treats the e2e lane as the
+  green-gate, which plausibly explains the gap going unnoticed.
+- **Age:** long-standing — the targets have existed ungated since their introduction; the
+  publish/e2e non-dependency predates this delta.
+
+### TA61 (S4) — `devtools-gates-absent-from-ci`
+
+- **Location:** `.github/workflows/ci.yml:336,348` and `scripts/check_ci_locally.sh:188,253`
+  (serial) `,375,390` (parallel) — all five invocations pass `-- --core --cli --modules`,
+  omitting `--devtools`.
+- **Defect:** SA99 (`e862415a`, CHANGELOG: "quickscale_devtools brought under repo ruff/mypy
+  coverage") added devtools to the Makefile *default* sections only; every CI path — GitHub
+  and local `make ci` — pins explicit section flags that exclude it, so devtools lint/mypy run
+  in no gate anywhere (only bare `make lint`/`make typecheck`/`make check`, which no CI
+  invokes). Verified empirically that devtools passes both today — this is drift that will
+  silently admit the first future regression, contradicting the recorded coverage claim.
+- **Fix (Trivial, quick win):** add `--devtools` to the five invocation sites (or drop the
+  explicit flags where the default sections are the intent). Verification: temporary ruff
+  violation in `quickscale_devtools/src` must fail `make ci` and `ci.yml`.
 
 ---
 
@@ -116,185 +193,130 @@ the log; their prior full text is preserved in version control.
 Module interiors unchanged since the 2026-07-10 deep pass; verdicts carried except where this
 delta touched them:
 
-- **quickscale_core** — production clean. SA89a/b persistence port verified a faithful,
-  fail-hard refactor (see Clean sweeps); SA94 generator/theme removal verified fail-closed;
-  SA92 squash machinery (tripwire + parity evidence) verified present; `config_schema.py`
-  `VALID_THEMES` narrowed with actionable retired-theme messaging. TA59 (dead constant) opened
-  in `utils/theme_validation.py`.
-- **quickscale_cli** — TA58 opened (`development_commands.py`, SA93 checkpoint). All other SA94
-  preflight callsites (apply/plan/remove/module/dr/module_wiring_manager) are fail-closed;
-  `apply`'s preflight validates the supplied config *and* the actual output root, and its broad
-  raw-YAML catch defers to the fail-hard schema loader immediately after (documented, benign).
-  The new `-e RUNTIME_DATABASE_URL=` on dev `docker exec` calls is a documented dev-only
-  convenience (see Notes).
-- **quickscale_devtools** — clean; beta migration gained donor+recipient theme preflight with
-  explicit check records and blockers (fail-closed).
-- **backups** — clean; persistence providers are faithful ports (trust chain for admin-uploaded
-  restore artifacts preserved verbatim; `ensure_default_policy`'s settings-precedence overwrite
-  is byte-identical pre-existing behavior, not a port regression); models diff is mypy casts
-  only.
-- **orgs** — clean; `_clear_priming_memo` (SA83) verified: every GUC mutation
-  (`_set_db_current_org_id`, `reset_db_current_org_id`, `_restore_current_org_id`) clears the
-  per-transaction priming memo in a `finally`, so the next wrapped statement re-primes. Squashed
-  `0001_initial` carries no module-table policy by design (tenant modules are authoritative for
-  their own policies); the deleted `0002_system_org` seed is safe — `get_system_org()` is
-  create-on-demand, idempotent, and race-guarded.
-- **forms** — clean; SA85 Phase 4 admin views verified: superuser cross-tenant reads run under
-  `operator_access` inside `transaction.atomic()` with fully-materialized responses (CSV export
-  builds the body inside the scope — no lazy-evaluation escape); regular staff are org-scoped or
-  fail-closed (`objects.none()`); PATCH saves inside `org_scope(instance.organization)`. Both
-  management commands follow the read-via-`operator_access` / write-via-`org_scope` pattern.
-  Squashed `0001_initial` seeds presets + System org at migrate time (matches README).
-- **blog** — clean; token-auth org-context side effect of `_resolve_api_org` is documented and
-  both callers save/restore the ContextVar in `finally` with vendor+`in_atomic_block`-guarded
-  GUC restore.
-- **listings** — clean (index additions matching the squashed migration; SA86 test fixes are
-  strengthenings).
-- **auth, billing, crm, notifications, social, storage, analytics** — carried clean at their
-  live surfaces; this delta touched only squashed migrations (verified), test strengthenings
-  (SA84/SA96), and SA81 metadata.
-- **scripts/CI** — clean; `_qs_jobs.sh` worker pool verified (input validation incl. leading-zero
-  and 64-bit overflow rejection, eligible-count capping, per-worker `COVERAGE_FILE` isolation,
-  INT/TERM/HUP descendant-tree cleanup); `check_coverage_policy.py` verified fail-closed (exit 2
-  on malformed data, missing packages, traversal paths); `check_ci_locally.sh` replaced its unit
-  stage with `make test-cov REQUIRE_BACKUPS_COVERAGE=1` (tests still run, coverage now gated
-  fail-closed when backups deps are absent).
+- **quickscale_core** — production clean. SA100 verified: `_RECOVERY_CHECKPOINT_THEME` accepted
+  only under the explicit opt-in *and* only for the recovery-ledger source; desired/applied
+  state never exempt; TA59's dead constant deleted. SA90 manifest rebaseline traced to its
+  template edits and empirically re-verified green.
+- **quickscale_cli** — clean. `up` is now fail-closed for every invalid theme (the TA58
+  carve-out is gone); the e2e workflow-path additions are test plumbing.
+- **quickscale_devtools** — clean at its surface (untouched this delta); TA61 concerns its
+  *gating*, not its code — both gates pass today (empirical).
+- **orgs** — clean; new `sanitization.py` is a faithful byte-equivalent home for the SA26/SA98
+  sanitizer with a strengthened test suite; conftest moved onto the SA97 superset;
+  `test_middleware.py` widening empirically verified fail-closed-equivalent.
+- **blog, listings** — clean; both views consume the orgs sanitizer seam; local copies and
+  local tests deleted, tests moved-and-strengthened in orgs.
+- **crm, forms, social** — conftest-only changes (SA97 adoption); clean.
+- **auth, billing, notifications, storage, analytics, backups** — untouched this delta;
+  carried clean at their live surfaces.
+- **scripts/CI** — TA60/TA61 opened here. TP1 fan-out verified sound (per-worker exit-code
+  retention via indexed join, reentrancy-guarded signal handler with descendant-tree kill,
+  deterministic log replay, failure attribution per gate, serial escape hatch preserved);
+  `test-cov` rewrite verified a strengthening (isolated per-phase data files, fail-hard on
+  missing coverage data, policy checker still sole authority); `test_e2e.sh` lane namespacing
+  verified scoped (label-filtered cleanup cannot touch another lane's containers; port
+  validation on `QS_E2E_APP_PORT`).
 
-## Clean sweeps worth recording (2026-07-17 pass)
+## Clean sweeps worth recording (2026-07-19 pass)
 
-- **SA89a/b persistence port is a faithful, fail-hard refactor:** every model-constant→literal
-  substitution verified against `models.py` (all of `"ready"/"failed"/"deleted"/"pending"/
-  "restored"/"validated"/"restoring"/"local"/"private_remote"` match); the provider registry
-  fails hard when unregistered and on conflicting re-registration (identity-idempotent);
-  registration in `AppConfig.ready()` does no DB I/O; the admin-upload trust chain
-  (checksum+size → status/format/scope → snapshot link → full-backup contract → provenance
-  pointer-back) ports verbatim; S3 imports isolated in `_dr_remote_storage.py` with streaming
-  upload preserved (no full-file materialization).
-- **SA92 squash carries its own proof:** decisions.md records the ratified fresh-only posture
-  with pg_policies/catalog/data hash parity against the v87 baseline (21 FORCE-RLS tables /
-  42 policies identical) and a bounded literal tripwire; the SA88 `operator_access_migration`
-  helper and conformance gate are confirmed retired in code (zero references remain).
-- **SA94 preflight is fail-closed at every callsite except TA58's `up` carve-out:** apply, plan,
-  remove, module add/config, dr, module_wiring_manager, and beta-migration all abort with
-  remediation on any invalid source; the schema's `VALID_THEMES` is narrowed with a
-  retired-theme-specific message; the two `except ImportError → None` social-view fallbacks died
-  with the HTML theme (net fail-hard gain).
-- **SA83 `_clear_priming_memo` closes the stale-memo class at the mutation sites themselves** —
-  all three GUC-mutation helpers clear the memo in `finally`, not just `org_scope` exit.
-- **SA91 worker pool:** failure propagation verified through both the bound-enforcement wait and
-  the final join; worker output/coverage merged in deterministic discovery order; harness has its
-  own PostgreSQL-free test suite wired into ci/publish/local-CI.
-- **SA93 coverage policy is a gate redefinition, not a weakening:** the old statement-weighted
-  90% became an equal-weight core/CLI package mean *plus* a new 80% per-file floor, with pytest's
-  own threshold explicitly deferred so the fail-closed checker is the single authority; 37 helper
-  tests pin its arithmetic and error paths.
-- **Test-integrity (§3.7): no weakened or flipped tests** in ~100 changed test files. SA96
-  tightened module test-settings defaults from `postgres` to `quickscale_test_role` (restricted
-  role is now the default even without env wiring); SA84's conftest fix *adds* GUC-restoration
-  proof; CRM serializer expectations moved strictly tighter (solo routes now reject foreign-org
-  stages).
-- **mypy watch item resolved:** the backups `ignore_missing_imports` module override is gone;
-  replaced by a narrow per-file `var-annotated` suppression (documented rationale in
-  `models.py`) and a legitimate `storages.*` third-party ignore.
+- **SA100 closes TA58 correctly at the validator seam:** the exemption moved from caller-side
+  string matching to an explicit `allow_recovery_checkpoint` parameter, sentinel-exact
+  (`__checkpoint__`), source-exact (recovery label only), default-off — with tests pinning that
+  the opt-in never exempts `quickscale.yml` or `state.yml`, that retired themes fail `up` with
+  remediation, and that the checkpoint pass-through still reaches Docker dispatch.
+- **SA98 sanitizer consolidation is byte-equivalent** (regex, allowlist, normalization order all
+  identical to both deleted copies) and its relocated test suite is strictly stronger; the
+  single-quoted-href limitation is now honestly pinned and remains unreachable at the live sink.
+- **SA97's shared fixture is the superset of all six private copies** — no module lost reset
+  coverage; blog/orgs/listings/social were upgraded from ContextVar-or-cache-only resets to the
+  full GUC/ROLE/AF9-memo/cache contract.
+- **The `test-cov` rewrite converts silent coverage-data loss into hard failure** — a missing
+  phase data file, a failed combine, or a missing `coverage.json` now fails the target where the
+  old append-based flow would have reported partial coverage as truth.
+- **TP1's parallel fan-out preserves serial semantics** — every gate's exit code is retained and
+  attributed even under multiple failures; DB-dependent stages never run after a static failure;
+  `QS_CI_PARALLEL=0` reproduces the exact pre-TP1 behavior for debugging.
+- **e2e cleanup is now lane-scoped** — the old global `docker ps | grep ':(8000|5432)->'` kill
+  pattern (which could reap unrelated containers on a dev machine) is gone, replaced by
+  compose-project-label and prefix filters.
+- **Test-integrity (§3.7): no weakened or flipped tests** across every changed test file; the
+  one widened assertion was empirically proven equivalent under the NULLIF-guarded policy.
 
 ## Structural smells (candidates for `arch-audit.md`)
 
-- **Checkpoint/quality-fix commits as the recurring defect lane — fourth consecutive pass:**
-  TA58 landed in the SA93 checkpoint `022a88fb` ahead of its own scheduled independent review,
-  softening a barrier that SA94's reviewed commits had just erected. The CHANGELOG/decisions
-  coverage gate under Tooling gaps remains the ticket-shaped mitigation.
-- **Backups model constants duplicated as bare string literals across the persistence seam
-  (new, SA89b):** `orchestration.py`/`_paths.py` now express `BackupArtifact`/`BackupSnapshot`
-  status and target values as ~40 unlinked literals that must stay in sync with `models.py` by
-  hand. Correct today (verified literal-by-literal); nothing gates tomorrow. The ticket-shaped
-  fix is core-owned enum/constant definitions the models import (or a conformance test) — see
-  Tooling gaps.
-- **Verbatim security-code copies accumulating:** carried — SA26 `_sanitize_href` pair
-  (blog/listings); generated `get_client_ip` duplicated across `base.py.j2`/`production.py.j2`.
+- **Checkpoint/side-channel commits as the recurring anomaly lane — fifth consecutive pass:**
+  `022a88fb` (SA93 checkpoint, prior delta) edited 4 theme templates without rebaselining the
+  SA90 parity fixture; the gate stayed red for ~2 days until `1e7cbc2c` ("ci(sa93): align
+  remote e2e gate") synced 8 hashes — correct in content (empirically verified) but landed
+  under a CI-alignment message with no independent review of the rebaseline. The
+  CHANGELOG/decisions coverage gate under Tooling gaps remains the ticket-shaped mitigation.
+- **Frontend-source specialization** — owned by arch-audit Finding 10 (this pass); TA60 is its
+  ticket-shaped gate companion. Not duplicated here.
+- **Verbatim security-code copies:** the blog/listings sanitizer pair is **resolved** (SA98);
+  the generated `get_client_ip` duplication remains (`base.py.j2:61` / `production.py.j2:123`)
+  — carried.
 
 ## Tooling gaps
 
-- **CHANGELOG/decisions coverage gate for production commits** — carried (fourth pass of
-  evidence: TA47/TA49/TA50/TA51 → TA53 → TA55/TA56 → TA58).
-- **DR status-literal conformance check** *(new, ties to the SA89b smell)* — a small test
-  asserting every string literal used for artifact/snapshot status and storage-target values in
-  `dr_engine/` is a member of the model-declared choice sets; prevents silent drift across the
-  Django-free seam.
-- **`pip-audit`/`safety` CI step** — carried; still no CVE signal source.
+- **Frontend gate in CI** — ties to TA60 (this is the finding's fix, recorded here because it
+  is the class-preventing check: `lint-frontend` in `ci.yml` + a publish dependency on the
+  built-artifact proof).
+- **CHANGELOG/decisions coverage gate for production commits** — carried (fifth pass of
+  evidence: TA47/TA49/TA50/TA51 → TA53 → TA55/TA56 → TA58 → the SA90 red-window rebaseline).
+- **DR status-literal conformance check** — carried (SA89b literal drift).
+- **`pip-audit`/`safety` CI step** — carried; still no CVE signal source (this delta added
+  pytest-xdist/execnet to the lockfile with no scanner in the loop).
 - **`bandit`/`semgrep` CI step** — carried.
-- **Generated-project boot smoke test** — carried; SA93's e2e green-gate work (12-stage
-  `make ci-e2e` incl. Docker/apply/E2E) is converging on exactly this — closing SA93 closes the
-  gap.
-- **csrf_exempt gate matcher coverage** — carried (no live slipping usage today).
+- **csrf_exempt gate matcher coverage** — carried.
 
-Categories swept with no qualifying finding this pass (chain pass ran — none): injection/XSS
-(templates re-read under output-language rules after the SA94 deletions; React theme escapes at
-sinks; no new sink surface), auth/authz (SA85 Phase 4 admin views verified role-correct and
-fail-closed), multi-tenant RLS (all new/changed callsites follow the ratified operator-read /
-org-scoped-write pattern; GUC hygiene improved via SA83), concurrency (worker pool verified;
-`_atomic_claim_restore` untouched), resource leaks/timeouts (worker temp dirs trap-cleaned;
-streaming S3 upload preserved), N+1/perf (listings gained indexes; no new hot-path regressions),
-secrets (no credential material committed; role provisioning unchanged), data handling (squash
-verified — fresh-only posture ratified, seeds preserved in `0001_initial`, hash-parity proof),
-dependency CVEs (lockfile metadata-only change; low confidence without a scanner), CLI archetype
-(preflights fail-closed after the SA100 TA58 correction; no new destructive paths), generator archetype (theme
-retirement coherent template↔schema↔CLI↔docs; emission mapping centralized and gated by SA66).
+Categories swept with no qualifying finding this pass (chain pass ran — one chain, on TA60):
+injection/XSS (SA98 seam verified byte-equivalent; no new sink surface), auth/authz (no
+authz-bearing code in delta), multi-tenant RLS (SA97 fixture *improves* GUC hygiene;
+`RESET`-to-`''` semantics empirically confirmed fail-closed under NULLIF policies), concurrency
+(TP1 fan-out and xdist adoption verified; no shared-state hazards — per-worker temp files,
+per-lane Docker scopes), resource leaks/timeouts (worker temp dirs trap-cleaned; mktemp
+coverage dir removed on EXIT), N+1/perf (no hot-path production code in delta), secrets (no
+credential material committed; workflows unchanged on that axis), data handling (no
+schema/migration changes), dependency CVEs (xdist/execnet additions; low confidence without a
+scanner), CLI archetype (no new destructive paths; `up` strictly more fail-closed), generator
+archetype (emission parity empirically green; TA60 owns the build-proof gap).
 
 ---
 
 ## Notes (not violations, watch items)
 
-- **SA68 persistent-misconfiguration cell:** carried — an operator who *persistently* sets
-  `QUICKSCALE_PRIVILEGED_COMMAND=migrate` **and** `RUNTIME_DATABASE_URL=""` would serve traffic
-  under the superuser `DATABASE_URL` with RLS silently inert; two simultaneous
-  misconfigurations against documentation. Watch, don't fix.
-- **Dev `docker exec` unsets `RUNTIME_DATABASE_URL` (new, SA93 `022a88fb`):** the CLI's dev
-  commands now pass `-e RUNTIME_DATABASE_URL=` so in-container `manage.py` invocations run under
-  the superuser `DATABASE_URL`. Deliberate and documented (dev/admin workflows need DDL); the
-  serving process is unaffected. Watch that this stays scoped to `development_commands.py`.
-- **`quality_baseline.json` allowlist roughly tripled (new, `76c5cc55`):** the complexity/dead-code
-  regression baseline consumed by `scripts/check_quality.sh` was re-baselined for v87.
-  `check_quality.sh` is a local advisory tool (Makefile only, not a CI gate), so this is a
-  ratchet reset, not a guard weakening — but the ratchet is now looser by ~550 entries.
-- **Module `pyproject.toml`s no longer declare their real orgs dependency (SA81):** modules
-  import `quickscale_modules_orgs` but dropped `quickscale-module-orgs` from their deps. Safe
-  under the ratified posture — modules are not published standalone (`publish.yml` builds only
-  core/cli/quickscale) and per-module `poetry.toml` documents "standalone lock/install is
-  unsupported" — but the metadata is now silently wrong if that posture ever changes. This
-  retires the prior "auth's orgs cap `<0.87.0`" watch item.
-- **`forms_anonymize_submissions` runs its whole multi-org sweep in one transaction:** a single
-  `transaction.atomic()` wraps every org's read+update. For large deployments this is a long
-  transaction holding locks across tenants; batching per-org would be the operational
-  improvement. Periodic command, not a hot path — watch item.
-- **Worker pool head-of-line blocking (SA91):** `_qs_enforce_worker_bound` waits on the *oldest*
-  worker, not the first to finish — already tracked as CR-SA91-REV-006 (low/advisory,
-  throughput only).
-- **React `QuickScaleModules.auth` is always typed/defaulted `false`:** recorded maintainer
-  decision inside SA93 (runtime availability still gates visibility) — not a defect.
-- **SA93 remains a blocked checkpoint (SA93-EVID-001):** external GitHub Actions evidence on the
-  merged `v87` ref is the sole remaining blocker; local `make ci-e2e` gate, independent review, and
-  component E2E are complete. TA58/TA59 were closed by SA100 on Track 3 — an independent follow-up
-  that did not block the SA93/SA96 release path.
-- **Two same-named `ImproperlyConfigured` classes coexist** (SA69 decision recorded): carried.
-- **`test_update_auto_commits_each_module_e2e` mocks `_sync_module_dependencies`** — carried.
+- **`ci.yml` does not run on integration-branch pushes** (triggers: push to main/develop, PRs
+  to main): the entire v87 cycle is guarded by local `make ci` discipline only. Deliberate
+  workflow shape for a solo maintainer, and local CI covers the same gates — but the SA90
+  red window (see Structural smells) is the paid evidence of what it costs when a checkpoint
+  commit skips the local gate. Watch; the ticket-shaped alternative (a lightweight push
+  workflow on `v*` integration branches) is cheap if the pattern recurs.
+- **SA68 persistent-misconfiguration cell:** carried — watch, don't fix.
+- **Dev `docker exec` unsets `RUNTIME_DATABASE_URL`:** carried; still scoped to
+  `development_commands.py`.
+- **`quality_baseline.json` ratchet looser by ~550 entries (v87 re-baseline):** carried — now
+  governed by the ratified Option A decision (remediate, per-entry shrink-only exemptions;
+  SA101 open). Watch that the decision text reaches decisions.md with the first exemption.
+- **Module `pyproject.toml`s no longer declare their real orgs dependency (SA81):** carried.
+- **`forms_anonymize_submissions` single multi-org transaction:** carried.
+- **Worker pool head-of-line blocking (SA91/CR-SA91-REV-006):** carried.
+- **React `QuickScaleModules.auth` always typed/defaulted `false`:** carried (recorded
+  maintainer decision).
+- **Two same-named `ImproperlyConfigured` classes coexist** (SA69 decision): carried.
+- **`test_update_auto_commits_each_module_e2e` mocks `_sync_module_dependencies`:** carried.
 - **SA47 sole-member self-removal orphans the org (deliberate):** carried.
-- **Stripe call inside the SA47 atomic block:** carried; client timeout is the cheap mitigation.
-- **`reset_stale_restore` `None`-`restore_started_at` edge:** carried — unreachable from the only
-  caller.
+- **Stripe call inside the SA47 atomic block:** carried.
+- **`reset_stale_restore` `None`-`restore_started_at` edge:** carried — unreachable.
 - **`normalize_notifications_module_options` empty→full-defaults materialization:** carried.
-- **Storage legacy-credential conversion is deliberate:** carried (SA29).
-- `orgs/public_context.py:66,132`: `except Exception → None` on system-org lookup is
-  **fail-closed** — carried.
-- DR engine fallback modes are by-design recovery behavior, exempt per §fail-hard-principle —
-  carried.
-- Analytics runtime missing-API-key → silent disable is the deliberate SA17.7 shape — carried.
-- `subprocess.Popen` in the dispatchers is never `wait()`ed — carried; at most one transient
-  zombie per dispatch.
+- **Storage legacy-credential conversion is deliberate (SA29):** carried.
+- `orgs/public_context.py:66,132` `except Exception → None` is fail-closed — carried.
+- DR engine fallback modes are by-design recovery behavior — carried.
+- Analytics missing-API-key silent disable is the deliberate SA17.7 shape — carried.
+- `subprocess.Popen` in the dispatchers never `wait()`ed — carried.
 - Malformed staff-authored validation rules surface as field-level 400s (SA40) — carried.
-- **SA83–SA86 "bucket 3" runtime-read triage: closed.** SA88's CRM triage bucketed 0
-  runtime-query failures, the restricted-role cluster is fully drained, and the SA82 integration
-  gate is green — the standing verification step is retired without promoting a finding.
-- **mypy backups override watch item: resolved** (see Clean sweeps).
+- **SA97 fixture's setup-phase `except RuntimeError: pass`** on the GUC reset is deliberate
+  (tests without the `db` marker) and documented; test plumbing, not production — noted, not
+  promoted.
 
 ---
 
@@ -447,3 +469,28 @@ retirement coherent template↔schema↔CLI↔docs; emission mapping centralized
   Validation evidence: 53 targeted tests in 0.25s, Ruff check/format, and `git diff --check` all
   passed. Numeric coverage was not generated. No blockers remain. Findings-table counts updated
   (S4: 2→0, total: 2→0).
+- 2026-07-19 (V3-prompt delta re-run, HEAD `82a73d1f`, prior `09f9cbcc`) — **TA60 (S3), TA61 (S4)
+  opened; zero S1-S2.** Full first-party production diff `09f9cbcc..HEAD` read (SA97/SA98/SA99/
+  SA100/SA93-closeout/TP1/TP2/TP3a + SA96 test checkpoint). **TA58/TA59 closure verified in code
+  per §2f.3** (the 2026-07-18 log entry above was testimony from the SA100 review, not an audit
+  pass): TA58 — `up` now calls `validate_theme_preflight(…, allow_recovery_checkpoint=True)` and
+  the validator exempts only the exact `__checkpoint__` sentinel, only for the recovery-ledger
+  source, only under the explicit opt-in (`theme_validation.py:228-234`), with regression tests
+  pinning the retired-theme rejection at `up`; TA59 — `_RECOVERY_PROBE_PATHS` deleted. Both
+  closures complete; no regression. Fix-regression pass (§3.6): SA98 byte-equivalent
+  consolidation; SA97 superset fixture (no module lost reset coverage); SA100 exemption cannot
+  be reached from config/state sources. Test-integrity diff (§3.7): no weakened/flipped tests;
+  the `test_middleware.py:542` widening (`is None` → `is None or == ""`) empirically verified
+  fail-closed-equivalent (PG18 `RESET` → `''`; NULLIF-guarded policies treat `''` as NULL).
+  **TA60 opened** — `frontend-build-proof-ungated` (S3, accepted from the arch-audit 2026-07-19
+  red flag after independent verification; narrowed by the discovered e2e docker-build layer,
+  which compiles the frontend but sits on no publish-blocking path). **TA61 opened** —
+  `devtools-gates-absent-from-ci` (S4, from `e862415a`; empirically verified devtools passes
+  both gates today, so drift not concealment). Side-channel scrutiny (§2f.2): `1e7cbc2c`
+  rebaselined 8 SA90 manifest hashes under a ci-alignment message — traced to `022a88fb`'s
+  (prior delta) template edits that had left the parity gate red ~2 days; current fixture
+  empirically re-verified green (19 tests); recorded as the fifth consecutive checkpoint-lane
+  anomaly (Structural smells), not a finding (already fixed, fix verified). Chain pass (§3.9):
+  one chain — TA60 × arch-audit Finding 10 (noted on TA60). Invoker-directed frontend-theme
+  portability question answered by arch-audit Finding 10 (same-day pass); TA60 is this
+  document's contribution.
