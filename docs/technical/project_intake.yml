@@ -1,0 +1,34 @@
+# Project intake
+#
+# Consumed by the Adaptive orchestrator's PROJECT INTAKE BOOTSTRAP GATE
+# (see ~/.claude/agents/Adaptive.md). This artifact is the confirmed project
+# profile: when it is present and referenced (PROJECT INTAKE REF), Adaptive
+# loads it instead of re-inferring from repo signals and asking the user to
+# confirm on every non-trivial task.
+#
+# Keep in sync with the authoritative sources listed under ssot_authority.
+# If any field here conflicts with those docs, the docs win.
+
+readiness: ready            # ready | partial | blocked
+
+stack_profile: Poetry / Python 3.13–3.15 (Django)
+
+quality_gate_authority:
+  owner: Make targets
+  policy_doc: docs/technical/validation_policy.md
+  gates:
+    - make lint
+    - make typecheck
+    - make test
+
+review_rule_authority:
+  owner: Adaptive independent review
+  rules_doc: docs/contrib/review.md
+
+ssot_authority:
+  - docs/technical/decisions.md            # repo-wide policy, tie-breakers, ownership map
+  - docs/technical/implementation_contract.md
+  - docs/technical/validation_policy.md
+  - docs/technical/generated_project_structure.md
+  - docs/technical/repository_layout.md
+  - docs/technical/scaffolding.md

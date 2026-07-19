@@ -34,7 +34,9 @@ on:
       - 'quickscale_core/tests/fixtures/sa90_emission_manifests.json'
       - 'Makefile'
       - 'scripts/check_ci_locally.sh'
+      - 'scripts/_qs_jobs.sh'
       - 'scripts/test_e2e.sh'
+      - 'scripts/test_e2e_parallel.py'
       - '.github/workflows/ci.yml'
       - '.github/workflows/e2e.yml'
 

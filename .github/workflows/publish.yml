@@ -97,7 +97,7 @@ jobs:
 
       - name: Run linting (ruff)
         run: |
-          make lint -- --core --cli --modules
+          make lint -- --core --cli --modules --devtools
 
       - name: Run worker pool harness tests (no PostgreSQL needed)
         run: |
@@ -105,7 +105,7 @@ jobs:
 
       - name: Run type checking (mypy)
         run: |
-          make typecheck -- --core --cli --modules
+          make typecheck -- --core --cli --modules --devtools
 
       - name: Create test databases in PostgreSQL
         run: |
