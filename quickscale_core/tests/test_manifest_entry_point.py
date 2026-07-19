@@ -196,10 +196,15 @@ class TestSessionManagedAdaptersFixtureGuard:
             _discover_no_billing,
         )
 
-        _refresh_session_managed_adapters()
-        assert "billing" not in MANIFEST_ADAPTER_REGISTRY, (
-            "billing should not be registered when absent from shipped set"
-        )
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        try:
+            _refresh_session_managed_adapters()
+            assert "billing" not in MANIFEST_ADAPTER_REGISTRY, (
+                "billing should not be registered when absent from shipped set"
+            )
+        finally:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
 
     def test_broken_managed_adapter_import_is_not_swallowed(
         self, monkeypatch: pytest.MonkeyPatch

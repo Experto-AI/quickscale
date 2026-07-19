@@ -527,10 +527,10 @@ test-cov:
 test-cov-policy:
 	@$(PYTHON) -m pytest scripts/test_ci_coverage_policy.py -q --tb=short
 
-# Run the QS_INTEGRATION_JOBS validation and worker-pool harness tests.
-# These are fast, self-contained, and do not require PostgreSQL.
+# Run the worker-pool and concurrent E2E lane harness tests.
+# These are fast, self-contained, and do not require PostgreSQL or Docker.
 test-integration-worker-pool:
-	@$(PYTHON) -m pytest scripts/test_integration_worker_pool.py -q --tb=short
+	@$(PYTHON) -m pytest scripts/test_integration_worker_pool.py scripts/test_e2e_parallel.py -q --tb=short
 
 # Run TP1 local-CI fan-out, signal-lifecycle, and serial/post-static tests.
 # The test fixture replaces make/poetry, so this target is safe as a prerequisite
