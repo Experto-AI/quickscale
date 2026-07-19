@@ -378,13 +378,11 @@ SA90 parity proof.
 
 ### Red flags (out of scope — fix now)
 
-- **The rendered-frontend proof is wired into no gate.** `make lint-frontend` (render →
-  ESLint+tsc) and `make frontend-proof` (render → pnpm install/build) exist
-  (`Makefile:691/695`) but appear in neither `make check`, `make ci`, `ci.yml`, `publish.yml`,
-  nor the e2e lane (zero node/pnpm references in any workflow) — a theme edit that breaks
-  TypeScript or the Vite build ships through a fully green release gate; the SA90 fixture pins
-  bytes, not buildability. Ticket shape: add `lint-frontend` to the `check` umbrella (or a CI
-  job) before SA96-GATE re-runs.
+- **~~The rendered-frontend proof is wired into no gate.~~ RESOLVED (SA103, 2026-07-19).** The
+  red flag this pass raised — `make lint-frontend`/`make frontend-proof` gated nowhere — was
+  ticketed as **SA103** and closed: a blocking `lint-frontend` job now runs in `ci.yml`, the
+  local `make ci`/`check_ci_locally.sh` fan-out includes it (absent-Node/pnpm guard only), and
+  `publish.yml` runs `frontend-proof` before build/publish. Census row 20 reflects the closure.
 
 Lenses scanned with no qualifying finding this pass: data/state integrity, trust boundaries,
 consistency/failure models, observability, API contracts (the `window.__QUICKSCALE__` contract is
@@ -897,3 +895,13 @@ flag).
   downstream build/publish. Census row 20 updated to `gated`. The structural finding (Finding 10,
   census row 21) remains open for the frontend-theme de-specialization chain (SA104 → SA105/SA106)
   on Track 2. Full evidence in CHANGELOG.md (SA103 entry) and roadmap.md (completed).
+- 2026-07-19 (SA104 closeout) — **Finding 10 stage 1 (byte-static frontend source move): complete
+  (Finding 10 remains open for stages 2a/2b).** SA104 moved 57 byte-static `showcase_react` theme
+  files onto the generator's verbatim-copy path (`_theme_non_jinja_emitted_paths`) — `.j2` suffix
+  and `{% raw %}` wrappers dropped, emitted bytes unchanged (SA90 parity fixture stayed green;
+  two-project `frontend/src` diff zero). 13 genuine active-Jinja files remain. This is the safe,
+  mechanical first stage of Option 1; the semantic de-specialization (module-availability surface
+  SA105, project identity SA106) is still open on Track 2, so Finding 10 stays open. Advisory
+  SA104-ADV-001 (generated projects' `.pre-commit-config.yaml.j2:10` strict `check-json` over
+  emitted JSONC `frontend/tsconfig.json`) deferred. Full evidence in CHANGELOG.md (SA104 entry)
+  and roadmap.md (Track 2).

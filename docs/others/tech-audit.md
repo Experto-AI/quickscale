@@ -1,9 +1,9 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
 > **Latest re-run:** 2026-07-19 (V3 delta pass) · **Branch:** `v87` (HEAD `82a73d1f`, prior
-> `09f9cbcc`) · **Result: one S3 finding open, zero S1–S2–S4.** (TA61 was closed by SA102
-> on 2026-07-19 — see the Reconciliation log; per this document's convention closed findings
-> live only in the log.)
+> `09f9cbcc`) · **Result: zero open findings (S1–S4).** (TA60 was closed by SA103 and TA61 by
+> SA102 on 2026-07-19 — see the Reconciliation log; per this document's convention closed
+> findings live only in the log.)
 > History of prior passes is preserved in the Reconciliation log below and in this file's git
 > history; per this document's convention, closed findings live only in the log.
 >
@@ -68,8 +68,8 @@ RLS with the NULLIF-guarded GUC policy, the SA94/SA100 theme-preflight invariant
 squash guardrail, and the SA90 emission-parity invariant (this pass's transient violation — see
 Notes). Tooling baseline: ruff + strict mypy in CI, csrf_exempt/delete-rule/module-core/
 manifest-sync/SA60-composite-FK/SA66 gates, worker-pool + coverage-policy + TP1 test suites in
-CI; **still no dependency-audit / bandit / semgrep step; `lint-frontend`/`frontend-proof` exist
-but are wired into no gate (TA60)**.
+CI; **still no dependency-audit / bandit / semgrep step**; `lint-frontend`/`frontend-proof` are
+now gated in `check`/`ci`/`publish` (TA60 closed by SA103).
 
 **Coverage (this pass):** read in full — the entire first-party production diff
 `09f9cbcc..HEAD`: `Makefile` (complete diff incl. the `test-cov` rewrite and devtools section
@@ -102,75 +102,11 @@ absent, installs prohibited).
 
 ## Findings summary
 
-| ID | Severity | Category | Title | Effort | Confidence | Status |
-|----|----------|----------|-------|--------|------------|--------|
-| TA60 | S3 | operability / generator archetype | Frontend build/lint proof sits on no blocking gate path | Small | High | closed |
-
-Counts: **S1: 0 · S2: 0 · S3: 0 · S4: 0.** (TA60 closed by SA103; TA61 resolved by SA102 — see Reconciliation log.)
-Chain pass (§3.9): ran — one cross-document chain (TA60 × arch-audit Finding 10, noted inside
-TA60); no security or data-path composition with any watch item or crown jewel.
-
----
-
-## Findings detail
-
-### TA60 (S3) — `frontend-build-proof-ungated`
-
-- **Severity:** S3 — generator deployment reality; late detection plus a realistic
-  broken-publish path, but a partial layer-up safeguard exists (preconditions counted below).
-  Violates no declared oracle invariant; it is the gate the SA93 green-gate work has not yet
-  covered. Accepted from the arch-audit 2026-07-19 red-flag hand-off after independent
-  verification; severity here is narrower than the red flag's phrasing.
-- **Category:** §VI operability / §4.X code-generator ("no gate exercises the generated
-  artifact's frontend build").
-- **Confidence:** High — every gate surface read directly this pass.
-- **Location:** `Makefile:691,695` (`lint-frontend`, `frontend-proof` targets),
-  `Makefile:793,803` (`check`/`ci` umbrellas — neither includes them),
-  `.github/workflows/ci.yml` (zero node/pnpm references), `.github/workflows/publish.yml`
-  (job graph `verify → test → build → publish-pypi`; no docker build, no frontend, no
-  dependency on the e2e workflow), `.github/workflows/e2e.yml:150-192` (the only place the
-  frontend is ever built).
-- **Defect:** the only executable proof that the shipped theme renders to compilable,
-  buildable frontend code (`make lint-frontend`: render → ESLint+tsc; `make frontend-proof`:
-  render → pnpm install/build) is wired into no gate. The e2e lane's `docker-build-test` job
-  does build a generated project (Dockerfile `frontend-builder` stage runs `pnpm install` +
-  `pnpm run build` = `tsc -b && vite build` — `Dockerfile.j2:6-15`, `package.json.j2:12`), but
-  it triggers only on PRs to main (path-filtered), `v*` tags, and manual dispatch — and
-  `publish.yml` runs concurrently on the same tag with **no dependency on it**. ESLint runs
-  nowhere at all.
-- **Failure scenario:** a theme edit introducing a TypeScript error lands on `v87`. `make ci`
-  is green (no node stage), `ci.yml` never runs (push triggers are main/develop only), and
-  weeks of work stack on top. At release: if the route to main is a PR, the e2e docker build
-  catches it there (late, release-blocking surprise); if main is pushed directly or the tag is
-  cut, `publish.yml`'s verify/test/build jobs are all green and the broken templates publish
-  to PyPI inside the `quickscale_core` wheel while the e2e workflow fails separately after the
-  fact — every `quickscale apply` from that release emits a frontend that cannot build.
-- **Evidence:** `grep -rn "lint-frontend\|frontend-proof\|pnpm\|node" .github/workflows/*.yml
-  Makefile` → hits only in the Makefile target definitions and help text; `check:` at
-  `Makefile:793` lists lint/typecheck/test/five gates, no frontend target; `publish.yml` has
-  zero docker/frontend references and its `publish-pypi` needs only `build`.
-- **Refutation:** attempted per §1a — the layer-up hunt *found* a safeguard (the e2e
-  docker-build job compiles the frontend, and this delta widened its PR path filters to
-  `quickscale_core/src/quickscale_core/generator/**`, which covers the theme tree). It narrows
-  the finding from "ships through a fully green release gate" to "not on any *blocking* path":
-  two preconditions (no PR-to-main run before the tag, or ignoring a concurrently failing
-  non-blocking workflow) separate the defect from the PyPI consequence — hence S3, not S2.
-  The ESLint half survives unconditionally: no environment executes it.
-- **Fix (Small):** (1) add a `lint-frontend` job to `ci.yml` (node+pnpm setup, `make
-  lint-frontend`) and add the target to the `check` umbrella / `check_ci_locally.sh` fan-out
-  guarded by a node-availability check; (2) make the publish workflow depend on the frontend
-  proof — either a `frontend-proof` step in publish's `test` job or converting e2e's
-  docker-build job into a `workflow_call` dependency. **Chain (cross-document):** arch-audit
-  Finding 10 stage 1 (templates become real `.ts`/`.tsx` files) would let the repo's existing
-  ESLint/tsc gate them directly — fixing TA60 cheaply is still worth doing first; the two are
-  compatible, not alternatives.
-- **Verification:** introduce a deliberate TS error in `Dashboard.tsx.j2` on a branch — the
-  new gate must go red in `make ci` and `ci.yml`; revert.
-- **Deliberate?** none found — the targets were built (SA94 era) with clear intent to gate;
-  no decision record excludes them from CI. The SA93 roadmap treats the e2e lane as the
-  green-gate, which plausibly explains the gap going unnoticed.
-- **Age:** long-standing — the targets have existed ungated since their introduction; the
-  publish/e2e non-dependency predates this delta.
+**Zero open findings (S1: 0 · S2: 0 · S3: 0 · S4: 0).** TA60 was closed by SA103 and TA61 by
+SA102 (2026-07-19) — see the Reconciliation log; per this document's convention, closed findings
+live only in the log.
+Chain pass (§3.9): ran — one cross-document chain (TA60 × arch-audit Finding 10) before TA60's
+closure; no security or data-path composition with any watch item or crown jewel.
 
 ---
 
@@ -195,7 +131,7 @@ delta touched them:
 - **crm, forms, social** — conftest-only changes (SA97 adoption); clean.
 - **auth, billing, notifications, storage, analytics, backups** — untouched this delta;
   carried clean at their live surfaces.
-- **scripts/CI** — TA60 open here (TA61 closed by SA102). TP1 fan-out verified sound (per-worker exit-code
+- **scripts/CI** — clean (TA60 closed by SA103, TA61 by SA102). TP1 fan-out verified sound (per-worker exit-code
   retention via indexed join, reentrancy-guarded signal handler with descendant-tree kill,
   deterministic log replay, failure attribution per gate, serial escape hatch preserved);
   `test-cov` rewrite verified a strengthening (isolated per-phase data files, fail-hard on
@@ -244,9 +180,8 @@ delta touched them:
 
 ## Tooling gaps
 
-- **Frontend gate in CI** — ties to TA60 (this is the finding's fix, recorded here because it
-  is the class-preventing check: `lint-frontend` in `ci.yml` + a publish dependency on the
-  built-artifact proof).
+- **Frontend gate in CI** — **closed** (SA103 wired `lint-frontend` into `ci.yml` + `check`/
+  `check_ci_locally.sh` and a `frontend-proof` publish dependency; TA60 resolved).
 - **CHANGELOG/decisions coverage gate for production commits** — carried (fifth pass of
   evidence: TA47/TA49/TA50/TA51 → TA53 → TA55/TA56 → TA58 → the SA90 red-window rebaseline).
 - **DR status-literal conformance check** — carried (SA89b literal drift).
