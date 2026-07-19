@@ -861,6 +861,53 @@ class TestSa90MappingDrivenGeneration:
             "Non-Jinja file must be byte-identical after generation"
         )
 
+    def test_non_jinja_theme_root_index_html_routed_correctly(
+        self, tmp_path: Path
+    ) -> None:
+        """frontend/index.html must be on the verbatim-copy path (SA104-CR-001 regression).
+
+        The theme-root ``index.html`` only contains literal ``{{ project_name }}``
+        text — no actual Jinja template logic. After removing the ``.j2`` suffix
+        (and its ``{% raw %}`` wrapper), the file must be sourced from a non-.j2
+        path so the generator routes it through the verbatim ``shutil.copy2`` path
+        rather than Jinja rendering.
+
+        This test provides the narrow durable regression guard that was missing
+        when the file was accidentally left as a Jinja template.
+        """
+        template_dir = self._get_template_dir()
+        mapping = get_generator_emission_mapping(template_dir, theme="showcase_react")
+
+        # The mapping entry's source must not be a .j2 template
+        src = mapping.get("frontend/index.html")
+        assert src is not None, "frontend/index.html must be in the emission mapping"
+        assert not src.endswith(".j2"), (
+            f"frontend/index.html source {src!r} must not be a Jinja template"
+        )
+
+        # Verify the source file is read from the theme root
+        source_path = template_dir / src
+        assert source_path.exists(), (
+            f"frontend/index.html source not found: {source_path}"
+        )
+        assert source_path.suffix == ".html", (
+            f"Source file must be .html, got {source_path.suffix}"
+        )
+
+        # Confirm byte-identical output through a full generation
+        gen = ProjectGenerator(template_dir=template_dir, theme="showcase_react")
+        output = tmp_path / "test_cr001"
+        gen.generate("validname", output)
+
+        emitted = output / "frontend" / "index.html"
+        assert emitted.exists(), "Emitted frontend/index.html not found"
+
+        original = source_path.read_bytes()
+        assert emitted.read_bytes() == original, (
+            "frontend/index.html must be byte-identical after generation "
+            "(verbatim copy, not Jinja render)"
+        )
+
     # ------------------------------------------------------------------
     # Union mapping for SA66 (no duplicates, covers all themes)
     # ------------------------------------------------------------------

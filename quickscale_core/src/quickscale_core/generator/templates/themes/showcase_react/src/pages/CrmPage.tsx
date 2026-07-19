@@ -1,0 +1,147 @@
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { useApiData } from '@/hooks/useApi'
+import { useOrgNavigation } from '@/hooks/useOrgNavigation'
+import { Briefcase, Building2, UserCircle, Tag, ExternalLink, ArrowUpRight } from 'lucide-react'
+
+interface ApiListResponse {
+  count?: number
+  results?: unknown[]
+}
+
+function useCrmStats(crmApiBase: string) {
+  const contacts = useApiData<ApiListResponse>(`${crmApiBase}contacts/`, [
+    'crm',
+    crmApiBase,
+    'contacts',
+  ])
+  const companies = useApiData<ApiListResponse>(`${crmApiBase}companies/`, [
+    'crm',
+    crmApiBase,
+    'companies',
+  ])
+  const deals = useApiData<ApiListResponse>(`${crmApiBase}deals/`, ['crm', crmApiBase, 'deals'])
+  const tags = useApiData<ApiListResponse>(`${crmApiBase}tags/`, ['crm', crmApiBase, 'tags'])
+
+  return {
+    contacts: contacts.data?.count ?? contacts.data?.results?.length ?? 0,
+    companies: companies.data?.count ?? companies.data?.results?.length ?? 0,
+    deals: deals.data?.count ?? deals.data?.results?.length ?? 0,
+    tags: tags.data?.count ?? tags.data?.results?.length ?? 0,
+    isLoading: contacts.isLoading || companies.isLoading || deals.isLoading || tags.isLoading,
+  }
+}
+
+const buildCrmSections = (crmApiBase: string) =>
+  [
+    {
+      key: 'contacts',
+      name: 'Contacts',
+      icon: UserCircle,
+      description: 'Manage customer contacts and communication',
+      apiPath: `${crmApiBase}contacts/`,
+    },
+    {
+      key: 'companies',
+      name: 'Companies',
+      icon: Building2,
+      description: 'Track companies and organizations',
+      apiPath: `${crmApiBase}companies/`,
+    },
+    {
+      key: 'deals',
+      name: 'Deals',
+      icon: Briefcase,
+      description: 'Manage deals and sales pipeline',
+      apiPath: `${crmApiBase}deals/`,
+    },
+    {
+      key: 'tags',
+      name: 'Tags',
+      icon: Tag,
+      description: 'Organize records with tags',
+      apiPath: `${crmApiBase}tags/`,
+    },
+  ] as const
+
+export function CrmPage() {
+  const { appPaths, documentPaths } = useOrgNavigation()
+  const stats = useCrmStats(documentPaths.crmApiBase)
+  const crmSections = buildCrmSections(documentPaths.crmApiBase)
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">CRM Workspace</h1>
+          <p className="text-muted-foreground">
+            API-backed CRM workspace at {appPaths.crm} for contacts, companies, deals, and pipeline.
+            The Django dashboard at {documentPaths.crmDashboard} remains staff-only.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <a href={documentPaths.crmApiBase} target="_blank" rel="noopener noreferrer">
+              API Browser <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+          <Button asChild>
+            <a href={documentPaths.crmDashboard} target="_blank" rel="noopener noreferrer">
+              <ArrowUpRight className="mr-2 h-4 w-4" /> Staff CRM Dashboard
+            </a>
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {crmSections.map((section) => (
+          <Card key={section.key}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{section.name}</CardTitle>
+              <section.icon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.isLoading ? '—' : stats[section.key as keyof typeof stats]}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{section.description}</p>
+              <Button variant="outline" size="sm" className="mt-3" asChild>
+                <a href={section.apiPath} target="_blank" rel="noopener noreferrer">
+                  View API <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>Manage CRM data through the Django Admin or REST API</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          <Button variant="outline" asChild>
+            <a href="/admin/quickscale_modules_crm/" target="_blank" rel="noopener noreferrer">
+              Django Admin <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a
+              href={`${documentPaths.crmApiBase}contacts/`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Contacts API <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href={`${documentPaths.crmApiBase}deals/`} target="_blank" rel="noopener noreferrer">
+              Deals API <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
