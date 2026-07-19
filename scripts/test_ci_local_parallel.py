@@ -42,6 +42,8 @@ EXPECTED_CI_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
 )
 
+FRONTEND_WORKFLOWS = (".github/workflows/ci.yml", ".github/workflows/publish.yml")
+
 
 def _make_lint_typecheck_commands(path: Path) -> list[str]:
     command_pattern = re.compile(r"\bmake (?:lint|typecheck) --[ \t]+[^\r\n#]+")
@@ -76,7 +78,9 @@ sys.exit(1 if target in failures else 0)
 """
 
 
-def _fake_environment(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+def _fake_environment(
+    tmp_path: Path, *, missing_tools: tuple[str, ...] = ()
+) -> tuple[Path, dict[str, str]]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     make = bin_dir / "make"
@@ -88,9 +92,30 @@ def _fake_environment(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     pg_isready = bin_dir / "pg_isready"
     pg_isready.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
     pg_isready.chmod(0o755)
+    for executable in ("node", "pnpm"):
+        if executable in missing_tools:
+            continue
+        tool = bin_dir / executable
+        tool.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        tool.chmod(0o755)
 
     environment = os.environ.copy()
-    environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
+    runtime_bin = tmp_path / "runtime-bin"
+    runtime_bin.mkdir()
+    available_names = {entry.name for entry in bin_dir.iterdir()}
+    for path_entry in environment["PATH"].split(os.pathsep):
+        if not path_entry:
+            continue
+        source_dir = Path(path_entry)
+        if not source_dir.is_dir():
+            continue
+        for source in source_dir.iterdir():
+            if source.name in available_names or source.name in missing_tools:
+                continue
+            if source.is_file() and os.access(source, os.X_OK):
+                (runtime_bin / source.name).symlink_to(source)
+                available_names.add(source.name)
+    environment["PATH"] = os.pathsep.join((str(bin_dir), str(runtime_bin)))
     environment["FAKE_CI_EVENT_LOG"] = str(tmp_path / "events.log")
     return bin_dir, environment
 
@@ -100,8 +125,9 @@ def _run_ci(
     *,
     parallel: str | None = None,
     failures: str = "",
+    missing_tools: tuple[str, ...] = (),
 ) -> subprocess.CompletedProcess[str]:
-    _, environment = _fake_environment(tmp_path)
+    _, environment = _fake_environment(tmp_path, missing_tools=missing_tools)
     environment["FAKE_CI_FAILURES"] = failures
     environment["FAKE_CI_DELAY"] = "0.2"
     if parallel is not None:
@@ -180,23 +206,46 @@ def test_ci_lint_typecheck_sites_require_devtools() -> None:
     assert all(command.endswith(" --devtools") for command in all_commands)
 
 
+def test_frontend_workflows_match_maintained_toolchain_pattern() -> None:
+    """Frontend jobs use the maintained Node/pnpm majors and store cache shape."""
+    repository_root = SCRIPT.parents[1]
+
+    for relative_path in FRONTEND_WORKFLOWS:
+        content = (repository_root / relative_path).read_text(encoding="utf-8")
+        node_setup = content.index("uses: actions/setup-node@v6")
+        pnpm_setup = content.index("uses: pnpm/action-setup@v5")
+
+        assert node_setup < pnpm_setup
+        assert 'node-version: "24"' in content
+        assert "version: 11.0.9" in content
+        assert 'echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV' in content
+        assert "uses: actions/cache@v5" in content
+        assert "path: ${{ env.STORE_PATH }}" in content
+        assert (
+            "hashFiles('quickscale_core/src/quickscale_core/generator/"
+            "templates/themes/showcase_react/package.json.j2')" in content
+        )
+        assert "runner.os }}-pnpm-store-" in content
+
+
 def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
     """All static gates run, replay in order, and report multiple failures."""
     result = _run_ci(
         tmp_path,
-        failures="lint,typecheck,check-manifest-sync",
+        failures="lint,typecheck,check-manifest-sync,lint-frontend",
     )
     assert result.returncode != 0
     assert "database-dependent stages will not run" in result.stdout
     assert "Linting (exit 1)" in result.stdout
     assert "Type Checks (exit 1)" in result.stdout
     assert "Manifest Sync Gate (exit 1)" in result.stdout
+    assert "Frontend Lint (exit 1)" in result.stdout
     assert "[10/" not in result.stdout
 
     # Every declared static worker started before the replay, and at least two
     # overlapped.  This also proves the worker-pool stage-9 harness was kept.
     events = _events(tmp_path)
-    assert sum(event.startswith("START ") for event in events) == 9
+    assert sum(event.startswith("START ") for event in events) == 10
     assert _max_active(events) > 1
 
     replay_markers = [
@@ -209,6 +258,7 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
         "[8/11] Running type checks",
         "[9/11] Running coverage policy",
         "[9/11] Running worker pool",
+        "[9/11] Running rendered frontend",
     ]
     positions = [result.stdout.index(marker) for marker in replay_markers]
     assert positions == sorted(positions)
@@ -228,6 +278,37 @@ def test_serial_opt_out_has_no_overlap_and_stops_before_db_stages(tmp_path: Path
     assert "[6/11]" not in result.stdout
     assert "[10/" not in result.stdout
     assert _max_active(_events(tmp_path)) == 1
+
+
+def test_frontend_lint_skips_when_node_is_absent(tmp_path: Path) -> None:
+    """Missing Node skips only the optional rendered frontend lint stage."""
+    result = _run_ci(tmp_path, missing_tools=("node",))
+
+    assert result.returncode != 0  # PostgreSQL is intentionally unavailable here.
+    assert "Skipping rendered frontend lint (Node.js is not available)." in result.stdout
+    assert "Frontend Lint Failed" not in result.stdout
+    assert "[10/11] Running coverage checks" in result.stdout
+
+
+def test_frontend_lint_skips_when_pnpm_is_absent(tmp_path: Path) -> None:
+    """Missing pnpm skips only the optional rendered frontend lint stage."""
+    result = _run_ci(tmp_path, missing_tools=("pnpm",))
+
+    assert result.returncode != 0  # PostgreSQL is intentionally unavailable here.
+    assert "Skipping rendered frontend lint (pnpm is not available)." in result.stdout
+    assert "Frontend Lint Failed" not in result.stdout
+    assert "[10/11] Running coverage checks" in result.stdout
+
+
+def test_serial_frontend_lint_failure_blocks_before_database_stages(tmp_path: Path) -> None:
+    """An actual frontend lint failure is not treated as a missing-tool skip."""
+    result = _run_ci(tmp_path, parallel="0", failures="lint-frontend")
+
+    assert result.returncode != 0
+    assert "[9/11] Running rendered frontend lint" in result.stdout
+    assert "Frontend Lint Failed" in result.stdout
+    assert "Skipping rendered frontend lint" not in result.stdout
+    assert "[10/11] Running coverage checks" not in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -257,12 +338,13 @@ def test_signals_terminate_static_workers(
     try:
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
-            if (tmp_path / "events.log").exists() and sum(
-                line.startswith("START ") for line in _events(tmp_path)
-            ) == 9:
-                break
+            if (tmp_path / "events.log").exists():
+                events = _events(tmp_path)
+                if sum(line.startswith("START ") for line in events) >= 10:
+                    break
             time.sleep(0.05)
-        assert sum(line.startswith("START ") for line in _events(tmp_path)) == 9
+        events = _events(tmp_path)
+        assert sum(line.startswith("START ") for line in events) == 10
         process.send_signal(signum)
         stdout, stderr = process.communicate(timeout=10)
     finally:

@@ -791,6 +791,12 @@ check-csrf-exempt:
 
 # Run all checks (lint + typecheck + test + core-compat + import-linter + manifest-sync + gates)
 check: lint typecheck test check-core-compat check-module-core-imports check-manifest-sync check-org-context-primitives check-csrf-exempt
+	@if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then \
+		echo "📦 Linting rendered frontend..."; \
+		$(MAKE) lint-frontend; \
+	else \
+		echo "ℹ️ Skipping rendered frontend lint (node and pnpm are required)."; \
+	fi
 	@echo ""
 	@echo "🎉 All checks passed!"
 
