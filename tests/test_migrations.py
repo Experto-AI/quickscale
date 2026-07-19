@@ -13,6 +13,7 @@ All bootstrap assertions use fully independent literal expectations
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from typing import Any
 
 import pytest
@@ -26,6 +27,16 @@ pytestmark = [
 
 APP_LABEL = "quickscale_modules_forms"
 MIG_0001 = "0001_initial"
+
+
+def _system_org_scope() -> AbstractContextManager[None]:
+    """Enter the system tenant for restricted-role bootstrap assertions."""
+    from quickscale_modules_orgs.current_org import org_scope
+    from quickscale_modules_orgs.models import Organization
+
+    system_org = Organization.objects.get(is_system=True, slug="__system__")
+    return org_scope(system_org)
+
 
 # ---------------------------------------------------------------------------
 # Bootstrap proof: fully independent literal expectations
@@ -85,17 +96,26 @@ class TestFormsBootstrapFromMigration:
         )
         seed_forms = mod.seed_forms
 
-        seed_forms(apps, None)
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import Organization
+
+        system_org, _ = Organization.objects.get_or_create(
+            slug="__system__",
+            defaults={"name": "System", "is_system": True, "is_personal": False},
+        )
+        with org_scope(system_org):
+            seed_forms(apps, None)
 
     def test_four_presets_created(self) -> None:
         """Exactly 4 preset forms exist after migration + seed."""
         from django.db import connection
 
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT slug FROM quickscale_modules_forms_form ORDER BY slug"
-            )
-            slugs = [row[0] for row in cursor.fetchall()]
+        with _system_org_scope():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT slug FROM quickscale_modules_forms_form ORDER BY slug"
+                )
+                slugs = [row[0] for row in cursor.fetchall()]
         assert len(slugs) == 4, f"Expected 4 presets, got {len(slugs)}: {slugs}"
         for entry in _EXPECTED_PRESETS:
             assert entry["slug"] in slugs, f"Missing preset slug '{entry['slug']}'"
@@ -104,101 +124,107 @@ class TestFormsBootstrapFromMigration:
         """Exactly 16 fields exist across all preset forms."""
         from django.db import connection
 
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*) FROM quickscale_modules_forms_formfield")
-            total = cursor.fetchone()[0]
+        with _system_org_scope():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM quickscale_modules_forms_formfield"
+                )
+                total = cursor.fetchone()[0]
         assert total == 16, f"Expected 16 fields total, got {total}"
 
     def test_each_preset_has_correct_fields(self) -> None:
         """Each preset form has the expected number and names of fields."""
         from django.db import connection
 
-        for preset in _EXPECTED_PRESETS:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT name FROM quickscale_modules_forms_formfield "
-                    "WHERE form_id = (SELECT id FROM quickscale_modules_forms_form "
-                    'WHERE slug = %s) ORDER BY "order"',
-                    [preset["slug"]],
+        with _system_org_scope():
+            for preset in _EXPECTED_PRESETS:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT name FROM quickscale_modules_forms_formfield "
+                        "WHERE form_id = (SELECT id FROM quickscale_modules_forms_form "
+                        'WHERE slug = %s) ORDER BY "order"',
+                        [preset["slug"]],
+                    )
+                    names = [row[0] for row in cursor.fetchall()]
+                assert len(names) == preset["num_fields"], (
+                    f"Preset '{preset['slug']}' expected {preset['num_fields']} fields, "
+                    f"got {len(names)}: {names}"
                 )
-                names = [row[0] for row in cursor.fetchall()]
-            assert len(names) == preset["num_fields"], (
-                f"Preset '{preset['slug']}' expected {preset['num_fields']} fields, "
-                f"got {len(names)}: {names}"
-            )
-            for fname in preset["field_names"]:
-                assert fname in names, (
-                    f"Preset '{preset['slug']}' missing field '{fname}': {names}"
-                )
+                for fname in preset["field_names"]:
+                    assert fname in names, (
+                        f"Preset '{preset['slug']}' missing field '{fname}': {names}"
+                    )
 
     def test_all_presets_owned_by_system_org(self) -> None:
         """Every preset form and every field is owned by the System org."""
         from django.db import connection
 
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT id FROM quickscale_modules_orgs_organization "
-                "WHERE is_system = true AND slug = '__system__'"
-            )
-            system_pk = cursor.fetchone()[0]
+        with _system_org_scope():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id FROM quickscale_modules_orgs_organization "
+                    "WHERE is_system = true AND slug = '__system__'"
+                )
+                system_pk = cursor.fetchone()[0]
 
-            cursor.execute(
-                "SELECT DISTINCT organization_id FROM quickscale_modules_forms_form"
-            )
-            form_orgs = {row[0] for row in cursor.fetchall()}
-            assert form_orgs == {system_pk}, (
-                f"Form orgs {form_orgs} should all be system org {system_pk}"
-            )
+                cursor.execute(
+                    "SELECT DISTINCT organization_id FROM quickscale_modules_forms_form"
+                )
+                form_orgs = {row[0] for row in cursor.fetchall()}
+                assert form_orgs == {system_pk}, (
+                    f"Form orgs {form_orgs} should all be system org {system_pk}"
+                )
 
-            cursor.execute(
-                "SELECT DISTINCT organization_id FROM "
-                "quickscale_modules_forms_formfield"
-            )
-            field_orgs = {row[0] for row in cursor.fetchall()}
-            assert field_orgs == {system_pk}, (
-                f"FormField orgs {field_orgs} should all be system org {system_pk}"
-            )
+                cursor.execute(
+                    "SELECT DISTINCT organization_id FROM "
+                    "quickscale_modules_forms_formfield"
+                )
+                field_orgs = {row[0] for row in cursor.fetchall()}
+                assert field_orgs == {system_pk}, (
+                    f"FormField orgs {field_orgs} should all be system org {system_pk}"
+                )
 
     def test_presets_have_business_properties(self) -> None:
         """Verify specific business properties on preset forms/fields."""
         from django.db import connection
 
-        with connection.cursor() as cursor:
-            # Contact preset: textarea for project_context
-            cursor.execute(
-                "SELECT field_type FROM quickscale_modules_forms_formfield ff "
-                "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
-                "WHERE f.slug = 'contact' AND ff.name = 'project_context'"
-            )
-            assert cursor.fetchone()[0] == "textarea"
+        with _system_org_scope():
+            with connection.cursor() as cursor:
+                # Contact preset: textarea for project_context
+                cursor.execute(
+                    "SELECT field_type FROM quickscale_modules_forms_formfield ff "
+                    "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
+                    "WHERE f.slug = 'contact' AND ff.name = 'project_context'"
+                )
+                assert cursor.fetchone()[0] == "textarea"
 
-            # Feedback preset: select rating with 5 options
-            cursor.execute(
-                "SELECT field_type FROM quickscale_modules_forms_formfield ff "
-                "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
-                "WHERE f.slug = 'feedback' AND ff.name = 'rating'"
-            )
-            row = cursor.fetchone()
-            assert row is not None
-            assert row[0] == "select"
+                # Feedback preset: select rating with 5 options
+                cursor.execute(
+                    "SELECT field_type FROM quickscale_modules_forms_formfield ff "
+                    "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
+                    "WHERE f.slug = 'feedback' AND ff.name = 'rating'"
+                )
+                row = cursor.fetchone()
+                assert row is not None
+                assert row[0] == "select"
 
-            # Support preset: priority select with 3 options
-            cursor.execute(
-                "SELECT field_type FROM quickscale_modules_forms_formfield ff "
-                "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
-                "WHERE f.slug = 'support' AND ff.name = 'priority'"
-            )
-            row = cursor.fetchone()
-            assert row is not None
-            assert row[0] == "select"
+                # Support preset: priority select with 3 options
+                cursor.execute(
+                    "SELECT field_type FROM quickscale_modules_forms_formfield ff "
+                    "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
+                    "WHERE f.slug = 'support' AND ff.name = 'priority'"
+                )
+                row = cursor.fetchone()
+                assert row is not None
+                assert row[0] == "select"
 
-            # Newsletter preset: 2 fields only
-            cursor.execute(
-                "SELECT COUNT(*) FROM quickscale_modules_forms_formfield ff "
-                "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
-                "WHERE f.slug = 'newsletter'"
-            )
-            assert cursor.fetchone()[0] == 2
+                # Newsletter preset: 2 fields only
+                cursor.execute(
+                    "SELECT COUNT(*) FROM quickscale_modules_forms_formfield ff "
+                    "JOIN quickscale_modules_forms_form f ON f.id = ff.form_id "
+                    "WHERE f.slug = 'newsletter'"
+                )
+                assert cursor.fetchone()[0] == 2
 
 
 class TestFormsBootstrapIdempotent:
@@ -217,16 +243,25 @@ class TestFormsBootstrapIdempotent:
         mod = importlib.import_module(
             "quickscale_modules_forms.migrations.0001_initial"
         )
-        mod.seed_forms(apps, None)  # First seed (migration's RunPython)
-        mod.seed_forms(apps, None)  # Second seed (idempotent re-apply)
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import Organization
+
+        system_org, _ = Organization.objects.get_or_create(
+            slug="__system__",
+            defaults={"name": "System", "is_system": True, "is_personal": False},
+        )
+        with org_scope(system_org):
+            mod.seed_forms(apps, None)  # First seed (migration's RunPython)
+            mod.seed_forms(apps, None)  # Second seed (idempotent re-apply)
 
     def test_second_seed_does_not_duplicate_presets(self) -> None:
         """Seeding twice produces exactly 4 preset forms (no duplicates)."""
         from django.db import connection
 
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*) FROM quickscale_modules_forms_form")
-            count = cursor.fetchone()[0]
+        with _system_org_scope():
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) FROM quickscale_modules_forms_form")
+                count = cursor.fetchone()[0]
         assert count == 4, f"Expected 4 preset forms after second seed, got {count}"
 
 
