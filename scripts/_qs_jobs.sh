@@ -170,14 +170,25 @@ _qs_replay_worker_logs() {
 # _qs_join_workers  — wait for remaining workers and return failure status
 #
 # Usage: _qs_join_workers
-# Uses global: WORKER_PIDS
+# Uses globals: WORKER_PIDS, WORKER_WAIT_PID
 # Returns 0 if all workers exited successfully, 1 if any failed.
 _qs_join_workers() {
     local exit_code=0
-    local i
-    for i in "${!WORKER_PIDS[@]}"; do
-        wait "${WORKER_PIDS[$i]}" 2>/dev/null || exit_code=1
+    local worker_pid
+
+    # Remove each PID from the pending set before waiting for it.  The PID
+    # being waited on is tracked separately so a signal handler can still
+    # terminate an active join without retaining a reaped PID that could be
+    # recycled for an unrelated process.
+    WORKER_WAIT_PID=""
+    while [ "${#WORKER_PIDS[@]}" -gt 0 ]; do
+        worker_pid="${WORKER_PIDS[0]}"
+        WORKER_PIDS=("${WORKER_PIDS[@]:1}")
+        WORKER_WAIT_PID="$worker_pid"
+        wait "$worker_pid" 2>/dev/null || exit_code=1
+        WORKER_WAIT_PID=""
     done
+
     return "$exit_code"
 }
 
@@ -218,17 +229,58 @@ _kill_descendants() {
 # Kills all tracked worker subprocess trees, waits for reaping, runs temp
 # cleanup, then exits with the signal-derived code.
 # ---------------------------------------------------------------------------
+_qs_worker_pid_is_active() {
+    local pid="$1"
+    local active_pid
+
+    while read -r active_pid; do
+        if [ "$active_pid" = "$pid" ]; then
+            return 0
+        fi
+    done < <(jobs -pr)
+    return 1
+}
+
+_qs_worker_pid_is_owned() {
+    local pid="$1"
+    local owned_pid
+
+    while read -r owned_pid; do
+        if [ "$owned_pid" = "$pid" ]; then
+            return 0
+        fi
+    done < <(jobs -p)
+    return 1
+}
+
 _handle_worker_signal() {
     local signal_name="$1"
     local exit_code="$2"
+    local pid
+    local wait_pid="${WORKER_WAIT_PID:-}"
 
     echo ""
     echo "⚠ Received SIG${signal_name}, terminating worker subprocesses..." >&2
     for pid in "${WORKER_PIDS[@]:-}"; do
-        _kill_descendants "$pid" "$signal_name"
+        if [ -n "$pid" ] && _qs_worker_pid_is_active "$pid"; then
+            _kill_descendants "$pid" "$signal_name"
+        fi
     done
-    # Reap all terminated workers
-    wait 2>/dev/null || true
+    if [ -n "$wait_pid" ] && _qs_worker_pid_is_active "$wait_pid"; then
+        _kill_descendants "$wait_pid" "$signal_name"
+    fi
+    # Reap only jobs still owned by this shell.  A PID that has already been
+    # reaped must not be waited on or signalled after a possible PID recycle.
+    for pid in "${WORKER_PIDS[@]:-}"; do
+        if [ -n "$pid" ] && _qs_worker_pid_is_owned "$pid"; then
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
+    if [ -n "$wait_pid" ] && _qs_worker_pid_is_owned "$wait_pid"; then
+        wait "$wait_pid" 2>/dev/null || true
+    fi
+    WORKER_WAIT_PID=""
+    WORKER_PIDS=()
     cleanup_temp_files
     exit "$exit_code"
 }
