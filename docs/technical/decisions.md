@@ -1215,6 +1215,16 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 
 4. **Preserved schema surfaces — keep matching the baseline:** forms' four presets / 16 fields (auto-created via initial data migration), the five parent UNIQUE constraints and six composite FKs, and listings' pinned index names.
 
+5. **Quality maxima are shrink-only (v87):** the checked-in quality baseline
+   remains the comparison authority; remediation may only reduce a measured
+   maximum or leave it unchanged.  Documentation does not affect the quality
+   gate, and no migration or other historical artifact may be allowlisted to
+   avoid the gate.  The CRM and Forms initial migrations were remediated below
+   the generic large-file threshold through migration-local compaction while
+   preserving their exact historical operation, schema, data, and reverse
+   contracts.  Future compacting changes must use the same parity proof rather
+   than a baseline, threshold, or gate exemption.
+
 **Related docs:** [roadmap.md](./roadmap.md) | [CHANGELOG.md](../../CHANGELOG.md)
 
 **Rejected alternatives (do not re-introduce):**

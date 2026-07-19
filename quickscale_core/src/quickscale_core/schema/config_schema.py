@@ -1,8 +1,4 @@
-"""QuickScale Configuration Schema
-
-Dataclasses and validation for quickscale.yml configuration files.
-Implements Terraform-style declarative project configuration.
-"""
+"""Dataclasses and validation for quickscale.yml configuration files."""
 
 import keyword
 import re
@@ -31,11 +27,13 @@ from quickscale_core.contracts import (
     validate_billing_env_var_reference,
 )
 from quickscale_core.utils.file_utils import validate_project_name
+from quickscale_core.utils.theme_validation import (
+    _CONFIG_LABEL,
+    _validate_theme_value,
+)
 
 
 class ConfigValidationError(Exception):
-    """Configuration validation error with line number context"""
-
     def __init__(
         self, message: str, line: int | None = None, suggestion: str | None = None
     ):
@@ -45,7 +43,6 @@ class ConfigValidationError(Exception):
         super().__init__(self._format_message())
 
     def _format_message(self) -> str:
-        """Format error message with line number and suggestion"""
         parts = []
         if self.line:
             parts.append(f"Line {self.line}: {self.message}")
@@ -58,8 +55,6 @@ class ConfigValidationError(Exception):
 
 @dataclass
 class ModuleConfig:
-    """Configuration for a single module"""
-
     name: str
     options: dict[str, Any] = field(default_factory=dict)
 
@@ -69,8 +64,6 @@ class ModuleConfig:
 
 @dataclass
 class ProjectConfig:
-    """Project-level configuration"""
-
     slug: str
     package: str
     theme: str = "showcase_react"
@@ -78,8 +71,6 @@ class ProjectConfig:
 
 @dataclass
 class DockerConfig:
-    """Docker-related configuration"""
-
     start: bool = True
     build: bool = True
     create_superuser: bool = False
@@ -87,15 +78,13 @@ class DockerConfig:
 
 @dataclass
 class QuickScaleConfig:
-    """Complete QuickScale configuration from quickscale.yml"""
-
     version: str
     project: ProjectConfig
     modules: dict[str, ModuleConfig] = field(default_factory=dict)
     docker: DockerConfig = field(default_factory=DockerConfig)
 
 
-# Valid keys at each level
+# Valid keys at each level.
 VALID_TOP_LEVEL_KEYS = {"version", "project", "modules", "docker"}
 VALID_PROJECT_KEYS = {"slug", "package", "theme"}
 VALID_DOCKER_KEYS = {"start", "build", "create_superuser"}
@@ -105,7 +94,6 @@ READY_MODULES = set(get_discovered_module_names())
 
 
 def _find_line_number(yaml_content: str, key: str) -> int | None:
-    """Find the line number where a key appears in YAML content"""
     for i, line in enumerate(yaml_content.splitlines(), start=1):
         if line.strip().startswith(f"{key}:") or f" {key}:" in line:
             return i
@@ -113,7 +101,6 @@ def _find_line_number(yaml_content: str, key: str) -> int | None:
 
 
 def _suggest_similar_key(invalid_key: str, valid_keys: set[str]) -> str | None:
-    """Suggest a similar key from valid keys"""
     for valid_key in valid_keys:
         # Simple similarity check: same first letter and close length
         if (
@@ -127,7 +114,6 @@ def _suggest_similar_key(invalid_key: str, valid_keys: set[str]) -> str | None:
 def _validate_unknown_keys(
     data: dict, valid_keys: set[str], yaml_content: str, section_name: str = ""
 ) -> None:
-    """Validate that all keys in data are in valid_keys."""
     section_prefix = f" in {section_name} section" if section_name else ""
     for key in data.keys():
         if key not in valid_keys:
@@ -359,8 +345,7 @@ def _validate_package_name(package_name: str, yaml_content: str) -> None:
         )
 
 
-def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str, str]:
-    """Validate project section and return (slug, package, theme)."""
+def _project_mapping(data: dict, yaml_content: str) -> dict:
     if "project" not in data:
         raise ConfigValidationError(
             "Missing required key 'project'",
@@ -370,11 +355,17 @@ def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str, 
             ),
         )
 
-    project_data = data.get("project", {})
+    project_data = data["project"]
     if not isinstance(project_data, dict):
         line = _find_line_number(yaml_content, "project")
         raise ConfigValidationError("'project' must be a mapping", line=line)
 
+    return project_data
+
+
+def _validate_project_identity(
+    project_data: dict, yaml_content: str
+) -> tuple[str, str]:
     _validate_unknown_keys(project_data, VALID_PROJECT_KEYS, yaml_content, "project")
 
     if "slug" not in project_data:
@@ -418,10 +409,16 @@ def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str, 
         )
     _validate_package_name(package_name, yaml_content)
 
+    return project_slug, package_name
+
+
+def _validate_project_theme(project_data: dict, yaml_content: str) -> str:
     theme = project_data.get("theme", "showcase_react")
-    if theme not in VALID_THEMES:
+    try:
+        _validate_theme_value(str(theme), _CONFIG_LABEL)
+    except ValueError as exc:
         line = _find_line_number(yaml_content, "theme")
-        if theme == "showcase_html":
+        if str(theme) == "showcase_html":
             suggestion = (
                 "'showcase_html' has been retired. Use 'showcase_react' instead."
             )
@@ -433,7 +430,16 @@ def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str, 
             f"Unknown theme '{theme}'",
             line=line,
             suggestion=suggestion,
-        )
+        ) from exc
+
+    return str(theme)
+
+
+def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str, str]:
+    """Validate project section and return (slug, package, theme)."""
+    project_data = _project_mapping(data, yaml_content)
+    project_slug, package_name = _validate_project_identity(project_data, yaml_content)
+    theme = _validate_project_theme(project_data, yaml_content)
 
     return project_slug, package_name, theme
 
@@ -529,18 +535,7 @@ def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, Module
 
 
 def validate_config(yaml_content: str) -> QuickScaleConfig:
-    """Validate YAML content and return a QuickScaleConfig
-
-    Args:
-        yaml_content: Raw YAML string
-
-    Returns:
-        QuickScaleConfig: Validated configuration object
-
-    Raises:
-        ConfigValidationError: If validation fails with helpful error message
-
-    """
+    """Validate YAML content and return a QuickScaleConfig."""
     try:
         data = yaml.safe_load(yaml_content)
     except yaml.YAMLError as e:
@@ -549,11 +544,9 @@ def validate_config(yaml_content: str) -> QuickScaleConfig:
     if not isinstance(data, dict):
         raise ConfigValidationError("Configuration must be a YAML mapping (dictionary)")
 
-    # Validate top-level structure
     _validate_unknown_keys(data, VALID_TOP_LEVEL_KEYS, yaml_content)
     _validate_version(data, yaml_content)
 
-    # Validate each section
     project_slug, project_package, theme = _validate_project_section(data, yaml_content)
     docker_config = _validate_docker_section(data, yaml_content)
     modules = _validate_modules_section(data, yaml_content)
@@ -571,23 +564,12 @@ def validate_config(yaml_content: str) -> QuickScaleConfig:
 
 
 def parse_config(yaml_content: str) -> QuickScaleConfig:
-    """Parse and validate YAML configuration content
-
-    Alias for validate_config for semantic clarity.
-    """
+    """Parse and validate YAML configuration content."""
     return validate_config(yaml_content)
 
 
 def generate_yaml(config: QuickScaleConfig) -> str:
-    """Generate YAML string from a QuickScaleConfig object
-
-    Args:
-        config: QuickScaleConfig object
-
-    Returns:
-        YAML string representation
-
-    """
+    """Generate YAML string from a QuickScaleConfig object."""
     data: dict[str, Any] = {
         "version": config.version,
         "project": {
