@@ -1,7 +1,9 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
 > **Latest re-run:** 2026-07-19 (V3 delta pass) · **Branch:** `v87` (HEAD `82a73d1f`, prior
-> `09f9cbcc`) · **Result: one S3 and one S4 finding (the S4 a quick win), zero S1–S2.**
+> `09f9cbcc`) · **Result: one S3 finding open, zero S1–S2–S4.** (TA61 was closed by SA102
+> on 2026-07-19 — see the Reconciliation log; per this document's convention closed findings
+> live only in the log.)
 > History of prior passes is preserved in the Reconciliation log below and in this file's git
 > history; per this document's convention, closed findings live only in the log.
 >
@@ -103,9 +105,8 @@ absent, installs prohibited).
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |----|----------|----------|-------|--------|------------|--------|
 | TA60 | S3 | operability / generator archetype | Frontend build/lint proof sits on no blocking gate path | Small | High | open |
-| TA61 | S4 | operability / gate drift | Devtools lint+mypy absent from every CI invocation despite SA99's coverage claim | Trivial (quick win) | High | open |
 
-Counts: **S1: 0 · S2: 0 · S3: 1 · S4: 1.**
+Counts: **S1: 0 · S2: 0 · S3: 1 · S4: 0.** (TA61 resolved by SA102 — see Reconciliation log.)
 Chain pass (§3.9): ran — one cross-document chain (TA60 × arch-audit Finding 10, noted inside
 TA60); no security or data-path composition with any watch item or crown jewel.
 
@@ -171,21 +172,6 @@ TA60); no security or data-path composition with any watch item or crown jewel.
 - **Age:** long-standing — the targets have existed ungated since their introduction; the
   publish/e2e non-dependency predates this delta.
 
-### TA61 (S4) — `devtools-gates-absent-from-ci`
-
-- **Location:** `.github/workflows/ci.yml:336,348` and `scripts/check_ci_locally.sh:188,253`
-  (serial) `,375,390` (parallel) — all five invocations pass `-- --core --cli --modules`,
-  omitting `--devtools`.
-- **Defect:** SA99 (`e862415a`, CHANGELOG: "quickscale_devtools brought under repo ruff/mypy
-  coverage") added devtools to the Makefile *default* sections only; every CI path — GitHub
-  and local `make ci` — pins explicit section flags that exclude it, so devtools lint/mypy run
-  in no gate anywhere (only bare `make lint`/`make typecheck`/`make check`, which no CI
-  invokes). Verified empirically that devtools passes both today — this is drift that will
-  silently admit the first future regression, contradicting the recorded coverage claim.
-- **Fix (Trivial, quick win):** add `--devtools` to the five invocation sites (or drop the
-  explicit flags where the default sections are the intent). Verification: temporary ruff
-  violation in `quickscale_devtools/src` must fail `make ci` and `ci.yml`.
-
 ---
 
 ## Per-module verdicts
@@ -199,8 +185,8 @@ delta touched them:
   template edits and empirically re-verified green.
 - **quickscale_cli** — clean. `up` is now fail-closed for every invalid theme (the TA58
   carve-out is gone); the e2e workflow-path additions are test plumbing.
-- **quickscale_devtools** — clean at its surface (untouched this delta); TA61 concerns its
-  *gating*, not its code — both gates pass today (empirical).
+- **quickscale_devtools** — clean at its surface (untouched this delta); its former gating gap
+  (TA61) was closed by SA102, which wired `--devtools` into every CI lint/typecheck invocation.
 - **orgs** — clean; new `sanitization.py` is a faithful byte-equivalent home for the SA26/SA98
   sanitizer with a strengthened test suite; conftest moved onto the SA97 superset;
   `test_middleware.py` widening empirically verified fail-closed-equivalent.
@@ -209,7 +195,7 @@ delta touched them:
 - **crm, forms, social** — conftest-only changes (SA97 adoption); clean.
 - **auth, billing, notifications, storage, analytics, backups** — untouched this delta;
   carried clean at their live surfaces.
-- **scripts/CI** — TA60/TA61 opened here. TP1 fan-out verified sound (per-worker exit-code
+- **scripts/CI** — TA60 open here (TA61 closed by SA102). TP1 fan-out verified sound (per-worker exit-code
   retention via indexed join, reentrancy-guarded signal handler with descendant-tree kill,
   deterministic log replay, failure attribution per gate, serial escape hatch preserved);
   `test-cov` rewrite verified a strengthening (isolated per-phase data files, fail-hard on
@@ -494,3 +480,10 @@ archetype (emission parity empirically green; TA60 owns the build-proof gap).
   one chain — TA60 × arch-audit Finding 10 (noted on TA60). Invoker-directed frontend-theme
   portability question answered by arch-audit Finding 10 (same-day pass); TA60 is this
   document's contribution.
+- 2026-07-19 (roadmap cleanup) — **TA61: resolved** (SA102, `fdc88901` — explicit `--devtools`
+  added to all ten scoped lint/typecheck invocations across `.github/workflows/ci.yml`,
+  `.github/workflows/publish.yml`, and `scripts/check_ci_locally.sh`; the original five-site
+  inventory was corrected to ten. A temporary Ruff violation in `quickscale_devtools/src` was
+  verified to fail the lint and local-CI paths, then removed). Findings-table counts updated
+  (S4: 1→0, total: 2→1). Full detail in CHANGELOG.md (SA102 entry). **TA60 remains open** —
+  SA103 (frontend-proof gate) is its ticketed fix, rebalanced onto roadmap Track 1.
