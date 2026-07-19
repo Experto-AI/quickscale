@@ -104,9 +104,9 @@ absent, installs prohibited).
 
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |----|----------|----------|-------|--------|------------|--------|
-| TA60 | S3 | operability / generator archetype | Frontend build/lint proof sits on no blocking gate path | Small | High | open |
+| TA60 | S3 | operability / generator archetype | Frontend build/lint proof sits on no blocking gate path | Small | High | closed |
 
-Counts: **S1: 0 · S2: 0 · S3: 1 · S4: 0.** (TA61 resolved by SA102 — see Reconciliation log.)
+Counts: **S1: 0 · S2: 0 · S3: 0 · S4: 0.** (TA60 closed by SA103; TA61 resolved by SA102 — see Reconciliation log.)
 Chain pass (§3.9): ran — one cross-document chain (TA60 × arch-audit Finding 10, noted inside
 TA60); no security or data-path composition with any watch item or crown jewel.
 
@@ -487,3 +487,14 @@ archetype (emission parity empirically green; TA60 owns the build-proof gap).
   verified to fail the lint and local-CI paths, then removed). Findings-table counts updated
   (S4: 1→0, total: 2→1). Full detail in CHANGELOG.md (SA102 entry). **TA60 remains open** —
   SA103 (frontend-proof gate) is its ticketed fix, rebalanced onto roadmap Track 1.
+- 2026-07-19 (SA103 closeout) — **TA60: resolved** (SA103, `13b13ac5` — blocking `lint-frontend`
+  job wired into `ci.yml` with Node/pnpm/cache setup, local `make ci` / `check_ci_locally.sh`
+  frontend-lint fan-out with absent-Node/pnpm-only guard, and `make frontend-proof` step in
+  `publish.yml` before downstream build/publish. Deliberate injected TypeScript error exited
+  `make ci` 2 with TS2322/TS6133; template restored byte-identically; `make frontend-proof`
+  passed. QG1 15 focused + bounded `make ci` (4,536 core/CLI, 323 backups, 92.88% mean, all
+  files ≥80%); QG2 19 focused + six delta + Ruff/MyPy/YAML/workflow-order checks green.
+  Independent change-review pass 2 **STATUS ok**; SA103-REV-001/002 and SA103-ADV-001 resolved.
+  Hosted GitHub Actions not remotely observed (non-blocking residual caveat). Findings-table
+  counts updated (S3: 1→0, total: 1→0). Full detail in CHANGELOG.md (SA103 entry) and
+  roadmap.md (completed).

@@ -73,7 +73,7 @@ coverage test modules beyond mechanism identification.
 | 17 | Theme validity (react-only) | core `theme_validation.py` seam + per-command preflight | structural seam, convention callers | **strengthened** (SA100): recovery-ledger exemption narrowed to `__checkpoint__`, fail-closed retained; 7 CLI callsites + the `apply_command.py:3836–3853` inline copy unchanged |
 | 18 | Code-quality regression (complexity/size/dead-code) | `make quality` vs `quality_baseline.json` | gated | **contract clarified**: BLK-002 surfaced 19 regressions; maintainer ratified Option A (remediate against the existing baseline; per-entry shrink-only exemptions in decisions.md) — answers the prior pass's shrink-only question; SA101 open |
 | 19 | Shared-code commons (runtime + test plumbing) | orgs-owned sanitizer seam + `tests_shared/reset_state.py` | structural homes, tested | **closure verified in code this pass** (SA97+SA98 fix-regression audits clean) |
-| 20 | Rendered-frontend build/type validity | `make lint-frontend` (render → ESLint+tsc) + `make frontend-proof` (render → pnpm install/build) | **manual — wired into no gate** | **NEW row** — neither target appears in `make check`, `ci.yml`, `publish.yml`, or the e2e lane (zero node/pnpm references in any workflow); red-flagged |
+| 20 | Rendered-frontend build/type validity | `make lint-frontend` (render → ESLint+tsc) + `make frontend-proof` (render → pnpm install/build) | **gated — SA103 wired into check/ci/publish** | **closed** — blocking `lint-frontend` job in `ci.yml`, absent-tool guard in local `make ci`/`check_ci_locally.sh`, and `frontend-proof` step blocking `publish.yml` build/publish; red flag retired |
 | 21 | Frontend module-availability contract (TS interface ↔ Django flag ladder ↔ generator file gating) | none — hand-synced lists in ≥5 stations | convention | **NEW row** (Finding 10) — `useModules.ts.j2` tuples, `index.html.j2` 11-module ladder, `REACT_THEME_OPTIONAL_FILES`, `IN_PLACE_MODULE_REACT_SURFACES`, playbook step 6; SA90 pins per-file bytes, not cross-list consistency |
 
 ### Summary table
@@ -890,3 +890,10 @@ flag).
   decision-record-location watch). Prior red flags: none were open. New red flag: `make
   lint-frontend`/`frontend-proof` wired into no gate — a theme TypeScript/build break ships
   through a green release gate.
+- 2026-07-19 (SA103 closeout) — **red-flag row 20 (rendered-frontend proof ungated): closed.**
+  SA103 (`13b13ac5`) wired `lint-frontend` into `ci.yml` as a blocking job with Node/pnpm/cache
+  setup, added the target to the local `make ci` / `check_ci_locally.sh` fan-out behind an
+  absent-Node/pnpm-only guard, and placed `frontend-proof` in `publish.yml`'s test job before
+  downstream build/publish. Census row 20 updated to `gated`. The structural finding (Finding 10,
+  census row 21) remains open for the frontend-theme de-specialization chain (SA104 → SA105/SA106)
+  on Track 2. Full evidence in CHANGELOG.md (SA103 entry) and roadmap.md (completed).
