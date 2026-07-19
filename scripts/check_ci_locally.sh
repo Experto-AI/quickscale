@@ -160,6 +160,7 @@ for arg in "$@"; do
             echo "  7. CSRF-exempt gate (check_csrf_exempt_gate)"
             echo "  8. Type check (mypy)"
             echo "  9. Coverage policy helper tests"
+            echo "     Rendered frontend lint (when Node.js and pnpm are available)"
             echo " 10. Combined coverage checks (core + CLI + backups module with dual-threshold policy)"
             echo " 11. Integration tests (requires PostgreSQL)"
             echo " 12. E2E tests (optional, with --e2e flag)"
@@ -178,6 +179,18 @@ TOTAL_STAGES=11
 if [ "$RUN_E2E" = true ]; then
     TOTAL_STAGES=12
 fi
+
+run_frontend_lint() {
+    if ! command -v node >/dev/null 2>&1; then
+        echo "ℹ️ Skipping rendered frontend lint (Node.js is not available)."
+        return 0
+    fi
+    if ! command -v pnpm >/dev/null 2>&1; then
+        echo "ℹ️ Skipping rendered frontend lint (pnpm is not available)."
+        return 0
+    fi
+    make lint-frontend
+}
 
 run_static_gates_serial() {
     # This is intentionally the pre-TP1 order and failure behaviour. It is
@@ -275,6 +288,18 @@ run_static_gates_serial() {
         exit 1
     fi
     echo "✓ Worker pool harness tests passed"
+
+    echo ""
+    echo "[9/${TOTAL_STAGES}] Running rendered frontend lint..."
+    run_frontend_lint || FAILED=true
+    if [ "$FAILED" = true ]; then
+        echo ""
+        echo "╔════════════════════════════════════════╗"
+        echo "║   ✗ Frontend Lint Failed               ║"
+        echo "╚════════════════════════════════════════╝"
+        exit 1
+    fi
+    echo "✓ Rendered frontend lint passed"
 }
 
 launch_static_gate() {
@@ -352,6 +377,11 @@ report_static_failure_banner() {
             echo "║   ✗ Worker Pool Harness Tests Failed   ║"
             echo "╚════════════════════════════════════════╝"
             ;;
+        frontend-lint)
+            echo "╔════════════════════════════════════════╗"
+            echo "║   ✗ Frontend Lint Failed               ║"
+            echo "╚════════════════════════════════════════╝"
+            ;;
     esac
 }
 
@@ -369,7 +399,7 @@ run_static_gates_parallel() {
     save_worker_traps
 
     # Every independent static gate is launched before any wait. The two
-    # existing stage-9 harnesses are separate workers but retain the same
+    # existing stage-9 harnesses and frontend lint are separate workers but retain the same
     # stage number and declaration order in replay/failure attribution.
     launch_static_gate lint 2 "Running linters (ruff)..." "✓ Linting passed" "Linting" \
         make lint -- --core --cli --modules --devtools
@@ -394,6 +424,8 @@ run_static_gates_parallel() {
     launch_static_gate worker-pool 9 "Running worker pool harness tests..." \
         "✓ Worker pool harness tests passed" "Worker Pool Harness Tests" \
         make test-integration-worker-pool
+    launch_static_gate frontend-lint 9 "Running rendered frontend lint..." \
+        "✓ Rendered frontend lint passed" "Frontend Lint" run_frontend_lint
 
     # Join in declaration order so every worker exit code is retained even
     # when several gates fail. Output is replayed only after all joins.

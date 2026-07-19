@@ -7,6 +7,56 @@ on:
     branches: [ main ]
 
 jobs:
+  lint-frontend:
+    name: Lint Rendered Frontend (SA103)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: "24"
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v5
+      with:
+        version: 11.0.9
+
+    - name: Get pnpm store directory
+      shell: bash
+      run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - name: Setup pnpm cache
+      uses: actions/cache@v5
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/package.json.j2') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install dependencies
+      run: |
+        poetry install --with dev
+
+    - name: Run rendered frontend lint
+      run: |
+        make lint-frontend
+
   backups-validation:
     name: Fail Fast Backups PG18 Contract
     runs-on: ubuntu-24.04
