@@ -185,7 +185,7 @@ run_static_gates_serial() {
     local FAILED=false
 
     echo "[2/${TOTAL_STAGES}] Running linters (ruff)..."
-    make lint -- --core --cli --modules
+    make lint -- --core --cli --modules --devtools
     echo "✓ Linting passed"
 
     echo ""
@@ -250,7 +250,7 @@ run_static_gates_serial() {
 
     echo ""
     echo "[8/${TOTAL_STAGES}] Running type checks (mypy)..."
-    make typecheck -- --core --cli --modules
+    make typecheck -- --core --cli --modules --devtools
     echo "✓ Type checks passed"
 
     echo ""
@@ -372,7 +372,7 @@ run_static_gates_parallel() {
     # existing stage-9 harnesses are separate workers but retain the same
     # stage number and declaration order in replay/failure attribution.
     launch_static_gate lint 2 "Running linters (ruff)..." "✓ Linting passed" "Linting" \
-        make lint -- --core --cli --modules
+        make lint -- --core --cli --modules --devtools
     launch_static_gate core-compat 3 "Running module-vs-core compatibility check..." \
         "✓ Module-to-core compatibility passed" "Module-Core Compatibility" \
         make check-core-compat
@@ -387,7 +387,7 @@ run_static_gates_parallel() {
     launch_static_gate csrf-exempt 7 "Running CSRF-exempt gate..." \
         "✓ All csrf_exempt callsites are protected" "CSRF-Exempt Gate" make check-csrf-exempt
     launch_static_gate typecheck 8 "Running type checks (mypy)..." "✓ Type checks passed" \
-        "Type Checks" make typecheck -- --core --cli --modules
+        "Type Checks" make typecheck -- --core --cli --modules --devtools
     launch_static_gate coverage-policy 9 "Running coverage policy helper tests..." \
         "✓ Coverage policy helper tests passed" "Coverage Policy Helper Tests" \
         make test-cov-policy

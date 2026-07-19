@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import signal
 import subprocess
 import time
@@ -11,6 +12,44 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).with_name("check_ci_locally.sh")
+
+
+EXPECTED_CI_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        ".github/workflows/ci.yml",
+        (
+            "make lint -- --core --cli --modules --devtools",
+            "make typecheck -- --core --cli --modules --devtools",
+            "make lint -- --cli --devtools",
+            "make typecheck -- --cli --devtools",
+        ),
+    ),
+    (
+        ".github/workflows/publish.yml",
+        (
+            "make lint -- --core --cli --modules --devtools",
+            "make typecheck -- --core --cli --modules --devtools",
+        ),
+    ),
+    (
+        "scripts/check_ci_locally.sh",
+        (
+            "make lint -- --core --cli --modules --devtools",
+            "make typecheck -- --core --cli --modules --devtools",
+            "make lint -- --core --cli --modules --devtools",
+            "make typecheck -- --core --cli --modules --devtools",
+        ),
+    ),
+)
+
+
+def _make_lint_typecheck_commands(path: Path) -> list[str]:
+    command_pattern = re.compile(r"\bmake (?:lint|typecheck) --[ \t]+[^\r\n#]+")
+    return [
+        " ".join(match.group(0).split())
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if (match := command_pattern.search(line))
+    ]
 
 
 FAKE_MAKE = r"""#!/usr/bin/env python3
@@ -127,6 +166,20 @@ def _assert_pids_dead(events: list[str], *, target: str | None = None) -> None:
             assert probe.wait() != 0, f"{target or 'worker'} {pid} was left running"
 
 
+def test_ci_lint_typecheck_sites_require_devtools() -> None:
+    """Every authoritative CI/local-CI command explicitly covers devtools."""
+    repository_root = SCRIPT.parents[1]
+    all_commands: list[str] = []
+
+    for relative_path, expected_commands in EXPECTED_CI_COMMANDS:
+        actual_commands = _make_lint_typecheck_commands(repository_root / relative_path)
+        assert actual_commands == list(expected_commands), relative_path
+        all_commands.extend(actual_commands)
+
+    assert len(all_commands) == 10
+    assert all(command.endswith(" --devtools") for command in all_commands)
+
+
 def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
     """All static gates run, replay in order, and report multiple failures."""
     result = _run_ci(
@@ -161,9 +214,9 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
     assert positions == sorted(positions)
 
     # The existing section flags remain arguments to their Make targets.
-    calls = "\n".join(event for event in events if event.startswith("CALL "))
-    assert "CALL lint lint -- --core --cli --modules" in calls
-    assert "CALL typecheck typecheck -- --core --cli --modules" in calls
+    calls = [event for event in events if event.startswith("CALL ")]
+    assert "CALL lint lint -- --core --cli --modules --devtools" in calls
+    assert "CALL typecheck typecheck -- --core --cli --modules --devtools" in calls
 
 
 def test_serial_opt_out_has_no_overlap_and_stops_before_db_stages(tmp_path: Path) -> None:
