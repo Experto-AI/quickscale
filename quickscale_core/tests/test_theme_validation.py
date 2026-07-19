@@ -138,6 +138,64 @@ def test_config_theme_explicit_null_yaml_empty_value_raises(tmp_path: Path) -> N
     assert SOLE_VALID_THEME in str(excinfo.value)
 
 
+def test_custom_config_path_is_selected_without_changing_state_root(
+    tmp_path: Path,
+) -> None:
+    custom_path = tmp_path / "config" / "desired.yml"
+    _write_yml(custom_path, _react_config())
+    _write_yml(tmp_path / "quickscale.yml", _html_config())
+    _write_yml(
+        tmp_path / ".quickscale" / "state.yml",
+        _state_data(theme="showcase_html"),
+    )
+
+    with pytest.raises(ThemeValidationError, match="showcase_html"):
+        validate_theme_preflight(tmp_path, config_path=custom_path)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        "not: valid: yaml: [",
+        "version: '1'\n",
+        "version: '1'\nproject: not-a-mapping\n",
+        "version: '1'\nproject:\n  theme:\n",
+    ],
+)
+def test_defer_config_errors_allows_apply_to_continue(
+    tmp_path: Path, data: str
+) -> None:
+    config_path = tmp_path / "custom.yml"
+    config_path.write_text(data)
+    validate_theme_preflight(
+        tmp_path,
+        config_path=config_path,
+        defer_config_errors=True,
+    )
+
+
+def test_defer_config_errors_does_not_defer_unsupported_theme(tmp_path: Path) -> None:
+    config_path = tmp_path / "custom.yml"
+    _write_yml(config_path, _html_config())
+
+    with pytest.raises(ThemeValidationError, match="showcase_html"):
+        validate_theme_preflight(
+            tmp_path,
+            config_path=config_path,
+            defer_config_errors=True,
+        )
+
+
+def test_defer_config_errors_never_defers_state_errors(tmp_path: Path) -> None:
+    _write_yml(
+        tmp_path / ".quickscale" / "state.yml",
+        {"version": "1", "project": {"theme": "showcase_html"}},
+    )
+
+    with pytest.raises(ThemeValidationError, match="showcase_html"):
+        validate_theme_preflight(tmp_path, defer_config_errors=True)
+
+
 # ---------------------------------------------------------------------------
 # State only
 # ---------------------------------------------------------------------------

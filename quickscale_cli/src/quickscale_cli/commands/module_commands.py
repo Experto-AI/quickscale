@@ -49,11 +49,6 @@ from quickscale_core.utils.git_utils import (
     run_git_subtree_pull,
     run_git_subtree_push,
 )
-from quickscale_core.utils.theme_validation import (
-    ThemeValidationError,
-    validate_theme_preflight,
-)
-
 from .module_config import (
     APPLY_MODULE_EXECUTION_MODE,
     MODULE_CONFIGURATOR_REGISTRY,
@@ -61,6 +56,12 @@ from .module_config import (
     ModuleExecutionMode,
     assess_auth_migration_state,
     format_auth_migration_remediation,
+)
+from .module_output import (
+    _print_installation_error,
+    _report_local_pre_pull_guard_block,
+    _resolve_embed_source_ref,
+    _validate_embed_theme,
 )
 
 # Available modules discovered via manifest scanning.
@@ -360,6 +361,16 @@ def _cleanup_failed_apply_embed(project_path: Path, module: str) -> None:
         )
 
 
+def _record_embed_provenance(
+    success: bool,
+    provenance: ModuleEmbedProvenance | None,
+    provenance_sink: list[ModuleEmbedProvenance] | None,
+) -> None:
+    """Append successful apply provenance to the caller-owned sink."""
+    if success and provenance is not None and provenance_sink is not None:
+        provenance_sink.append(provenance)
+
+
 def _perform_module_embed(
     project_path: Path,
     module: str,
@@ -556,21 +567,7 @@ def embed_module(
         # This rejects retired-theme / malformed-source projects before
         # any probe or mutation occurs.  The shared
         # regenerate_managed_wiring guard also runs preflight internally.
-        try:
-            validate_theme_preflight(project_path)
-        except ThemeValidationError as exc:
-            click.secho(
-                "\n❌ Theme validation failed for module embed:\n"
-                + "\n".join(f"  • {line}" for line in str(exc).splitlines()),
-                fg="red",
-                err=True,
-                bold=True,
-            )
-            click.echo(
-                "\n💡 Update project.theme to 'showcase_react' in all present "
-                "configuration files before embedding modules.",
-                err=True,
-            )
+        if not _validate_embed_theme(project_path):
             return False
 
         # Validation steps
@@ -604,22 +601,15 @@ def embed_module(
         # add and the in-memory handoff to later phases.  Standalone
         # (non-apply) embeds skip resolution and continue to use the
         # tracking branch name directly.
-        source_ref: str | None = None
-        if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-            try:
-                source_ref = resolve_remote_ref(remote, branch)
-            except GitError as ref_error:
-                click.secho(
-                    f"❌ Failed to resolve source ref for {module}: {ref_error}",
-                    fg="red",
-                    err=True,
-                    bold=True,
-                )
-                click.echo(
-                    "💡 Check network connectivity and remote branch availability.",
-                    err=True,
-                )
-                return False
+        ref_resolved, source_ref = _resolve_embed_source_ref(
+            remote,
+            branch,
+            module,
+            execution_mode,
+            resolve_remote_ref,
+        )
+        if not ref_resolved:
+            return False
 
         # Interactive module configuration
         config: dict[str, Any] = {}
@@ -640,8 +630,7 @@ def embed_module(
             execution_mode=execution_mode,
         )
 
-        if success and provenance is not None and provenance_sink is not None:
-            provenance_sink.append(provenance)
+        _record_embed_provenance(success, provenance, provenance_sink)
 
         return success
 
@@ -741,32 +730,6 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
             err=True,
         )
         return False
-
-
-def _print_installation_error(
-    project_path: Path,
-    module: str,
-    result: subprocess.CompletedProcess[str],
-    *,
-    command_name: str = "poetry install",
-) -> None:
-    """Print detailed installation error message."""
-    click.secho(
-        f"\n❌ Failed to run {command_name} for {module} module",
-        fg="red",
-        err=True,
-        bold=True,
-    )
-    click.echo("\n📋 Error output (stderr):", err=True)
-    click.echo(result.stderr, err=True)
-    click.echo("\n📋 Standard output (stdout):", err=True)
-    click.echo(result.stdout, err=True)
-
-    click.echo("\n💡 To fix this manually:", err=True)
-    click.echo(f"   1. cd {project_path}", err=True)
-    click.echo("   2. poetry lock", err=True)
-    click.echo("   3. poetry install", err=True)
-    click.echo("   4. poetry run python manage.py migrate", err=True)
 
 
 def _sync_module_dependencies(
@@ -1035,21 +998,6 @@ def _load_update_recovery_state(project_path: Path) -> Any | None:
     if ledger is None:
         return None
     return ledger.applied_state
-
-
-def _report_local_pre_pull_guard_block(
-    module_name: str,
-    lines: list[str],
-) -> None:
-    """Report a bounded local pre-pull guard block for module update."""
-    click.secho(
-        f"⚠️  Pre-pull local guard blocked update for {module_name}",
-        fg="yellow",
-        err=True,
-        bold=True,
-    )
-    for line in lines:
-        click.echo(line, err=True)
 
 
 def _check_local_pre_pull_guard(

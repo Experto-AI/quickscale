@@ -18,9 +18,19 @@ from quickscale_core.contracts.resolvers import (
     validate_notifications_module_options,
 )
 from quickscale_cli.commands.module_config import MODULE_CONFIGURATOR_REGISTRY
+from quickscale_cli.commands.plan_selection import (
+    AVAILABLE_THEMES,  # noqa: F401 - preserve the historical import seam
+    _format_module_choice,  # noqa: F401 - preserve the historical import seam
+    _get_module_choices,
+    _get_theme_by_index,  # noqa: F401 - preserve the historical import seam
+    _get_theme_by_name,  # noqa: F401 - preserve the historical import seam
+    _parse_module_choice,  # noqa: F401 - preserve the historical import seam
+    _parse_module_selection,  # noqa: F401 - preserve the historical import seam
+    _select_modules,
+    _select_theme,
+)
 from quickscale_core.contracts.module_catalog import (
     ModuleCatalogEntry,
-    get_discovered_module_entries,
     get_module_readiness_reason,
 )
 from quickscale_core.manifest.implications import resolve_module_implications
@@ -39,171 +49,6 @@ from quickscale_core.utils.theme_validation import (
     ThemeValidationError,
     validate_theme_preflight,
 )
-
-# Available themes for selection
-AVAILABLE_THEMES = [
-    ("showcase_react", "React + TypeScript + shadcn/ui (default, production-ready)"),
-]
-
-
-def _get_module_choices(
-    *, include_experimental: bool = False
-) -> list[ModuleCatalogEntry]:
-    """Return shipped module choices discovered via manifest scanning.
-
-    The authoritative source is manifest-backed discovery
-    (:func:`get_discovered_module_entries`).  The *include_experimental*
-    parameter is accepted for backward compatibility but has no effect
-    — a discovered module is a shipped module.
-    """
-    return get_discovered_module_entries()
-
-
-def _format_module_choice(entry: ModuleCatalogEntry) -> str:
-    """Format a catalog entry for interactive display."""
-    if not entry.ready:
-        if entry.name == "billing":
-            return (
-                f"{entry.name} - {entry.description} "
-                "(internal packaged Phase 1 foundation, not public-ready)"
-            )
-        return f"{entry.name} - {entry.description} (placeholder, not public-ready)"
-    if entry.experimental:
-        return f"{entry.name} - {entry.description} (experimental)"
-    return f"{entry.name} - {entry.description}"
-
-
-def _get_theme_by_index(idx: int) -> str | None:
-    """Get theme ID by index (0-based)"""
-    if 0 <= idx < len(AVAILABLE_THEMES):
-        return AVAILABLE_THEMES[idx][0]
-    return None
-
-
-def _get_theme_by_name(name: str) -> str | None:
-    """Get theme ID by name (case-insensitive)"""
-    for theme_id, _ in AVAILABLE_THEMES:
-        if name.lower() == theme_id.lower():
-            return theme_id
-    return None
-
-
-def _select_theme() -> str:
-    """Interactive theme selection"""
-    click.echo("\n🎨 Select a theme for your project:")
-    for i, (tid, description) in enumerate(AVAILABLE_THEMES, start=1):
-        click.echo(f"  {i}. {tid} - {description}")
-
-    while True:
-        choice = click.prompt(
-            "\nEnter theme number or name",
-            default="1",
-            show_default=True,
-        )
-
-        # Try numeric choice first
-        theme_id: str | None
-        if choice.isdigit():
-            theme_id = _get_theme_by_index(int(choice) - 1)
-        else:
-            theme_id = _get_theme_by_name(choice)
-
-        if theme_id is not None:
-            return theme_id
-
-        if theme_id is None:
-            click.secho("Invalid choice. Please try again.", fg="red")
-
-
-def _parse_module_choice(
-    part: str, available_modules: list[ModuleCatalogEntry]
-) -> str | None:
-    """Parse a single module choice (number or name).
-
-    Returns:
-        Module ID if valid, None otherwise
-
-    Raises:
-        ValueError: If choice is invalid
-    """
-    if part.isdigit():
-        idx = int(part) - 1
-        if 0 <= idx < len(available_modules):
-            selected = available_modules[idx]
-            if not selected.ready:
-                raise ValueError(
-                    get_module_readiness_reason(selected.name)
-                    or f"Unknown module: {selected.name}"
-                )
-            return selected.name
-        raise ValueError(f"Invalid number: {part}")
-
-    # Handle module name
-    for entry in available_modules:
-        if part.lower() == entry.name.lower():
-            if not entry.ready:
-                raise ValueError(
-                    get_module_readiness_reason(entry.name)
-                    or f"Unknown module: {entry.name}"
-                )
-            return entry.name
-
-    raise ValueError(f"Unknown module: {part}")
-
-
-def _parse_module_selection(
-    choice: str,
-    available_modules: list[ModuleCatalogEntry],
-) -> list[str]:
-    """Parse comma-separated module selection.
-
-    Returns:
-        List of unique module IDs
-
-    Raises:
-        ValueError: If any choice is invalid
-    """
-    if not choice.strip():
-        return []
-
-    selected: list[str] = []
-    parts = [p.strip() for p in choice.split(",")]
-
-    for part in parts:
-        module_id = _parse_module_choice(part, available_modules)
-        if module_id and module_id not in selected:
-            selected.append(module_id)
-
-    return selected
-
-
-def _select_modules(*, include_experimental: bool = False) -> list[str]:
-    """Interactive module selection"""
-    available_modules = _get_module_choices(include_experimental=include_experimental)
-    click.echo("\n📦 Select modules to embed (optional):")
-    for i, entry in enumerate(available_modules, start=1):
-        click.echo(f"  {i}. {_format_module_choice(entry)}")
-
-    if include_experimental and any(not entry.ready for entry in available_modules):
-        click.echo(
-            "\n  Non-public modules are shown for visibility only and cannot be selected"
-        )
-
-    click.echo(
-        "\n  Enter numbers separated by commas (e.g., 1,3), or press Enter to skip"
-    )
-
-    while True:
-        choice = click.prompt(
-            "Select modules",
-            default="",
-            show_default=False,
-        )
-
-        try:
-            return _parse_module_selection(choice, available_modules)
-        except ValueError as e:
-            click.secho(f"Invalid selection: {e}. Please try again.", fg="red")
 
 
 def _configure_docker() -> tuple[bool, bool, bool]:
@@ -635,6 +480,110 @@ def _select_modules_to_add(
             click.secho(f"Invalid selection: {e}. Please try again.", fg="red")
 
 
+def _prepare_added_module_data(
+    project_path: Path,
+    all_existing: list[str],
+    new_modules: list[str],
+    existing_config: QuickScaleConfig | None,
+    *,
+    configure_modules: bool,
+) -> tuple[list[str], dict[str, dict[str, Any]], list[str]]:
+    """Prepare module options and implied modules for add mode."""
+    existing_options = _get_existing_module_options(project_path, existing_config)
+    all_modules = _merge_module_names(all_existing, new_modules)
+
+    if configure_modules:
+        existing_options.update(
+            _configure_selected_modules(
+                new_modules,
+                existing_options,
+                new_modules=set(new_modules),
+            )
+        )
+    else:
+        for module_name in new_modules:
+            existing_options.setdefault(module_name, {})
+
+    all_modules, existing_options, implied_modules = (
+        _materialize_implied_module_configs(
+            all_modules,
+            existing_options,
+        )
+    )
+    if implied_modules:
+        new_modules = _merge_module_names(new_modules, implied_modules)
+        # Run implied modules through registry-backed configurators so that
+        # billing/CRM planner flows invoke configurators for implied
+        # notifications/orgs in the same planning pass.
+        if configure_modules:
+            existing_options.update(
+                _configure_selected_modules(
+                    implied_modules,
+                    existing_options,
+                    new_modules=set(implied_modules),
+                )
+            )
+
+    return all_modules, existing_options, new_modules
+
+
+def _build_add_config(
+    existing_config: QuickScaleConfig | None,
+    state: QuickScaleState | None,
+    all_modules: list[str],
+    module_options: dict[str, dict[str, Any]],
+) -> QuickScaleConfig:
+    """Build the desired configuration for add mode."""
+    if existing_config is not None:
+        docker_config = existing_config.docker
+        project_config = existing_config.project
+    else:
+        assert state is not None
+        docker_config = DockerConfig(start=False, build=False, create_superuser=False)
+        project_config = ProjectConfig(
+            slug=state.project.slug,
+            package=state.project.package,
+            theme=state.project.theme,
+        )
+
+    return QuickScaleConfig(
+        version="1",
+        project=project_config,
+        modules=_build_module_configs(all_modules, module_options),
+        docker=docker_config,
+    )
+
+
+def _preview_and_save_added_config(
+    project_path: Path,
+    yaml_content: str,
+    new_modules: list[str],
+) -> None:
+    """Preview and save the updated configuration for add mode."""
+    click.echo("\n" + "=" * 50)
+    click.echo("📋 Updated Configuration:")
+    click.echo("=" * 50)
+    click.echo(yaml_content)
+    click.echo("=" * 50)
+
+    click.echo("\n🆕 New modules to add:")
+    for module in new_modules:
+        click.secho(f"   + {module}", fg="green")
+
+    if not click.confirm("\n💾 Save updated configuration?", default=True):
+        click.echo("❌ Cancelled")
+        raise click.Abort()
+
+    config_path = project_path / "quickscale.yml"
+    with open(config_path, "w") as f:
+        f.write(yaml_content)
+
+    click.secho(f"\n✅ Configuration updated: {config_path}", fg="green", bold=True)
+
+    click.echo("\n📋 Next steps:")
+    click.echo("  quickscale apply     # Apply configuration to add modules")
+
+
 def _handle_add_modules(
     project_path: Path,
     existing_config: QuickScaleConfig | None,
@@ -671,12 +620,7 @@ def _handle_add_modules(
     click.echo("\n🔧 Adding modules to existing project")
     click.echo(f"   Project: {project_path}")
 
-    # Get already applied modules
-    applied_modules = _get_applied_modules(project_path)
-
-    # Also include modules in config but not yet applied
-    config_modules = list(existing_config.modules.keys()) if existing_config else []
-    all_existing = list(set(applied_modules + config_modules))
+    all_existing = _collect_existing_modules(project_path, existing_config)
 
     # Select new modules to add
     new_modules = _select_modules_to_add(
@@ -698,92 +642,23 @@ def _handle_add_modules(
         )
         raise click.Abort()
 
-    existing_options = _get_existing_module_options(project_path, existing_config)
-    all_modules = _merge_module_names(all_existing, new_modules)
-
-    if configure_modules:
-        existing_options.update(
-            _configure_selected_modules(
-                new_modules,
-                existing_options,
-                new_modules=set(new_modules),
-            )
-        )
-    else:
-        for module_name in new_modules:
-            existing_options.setdefault(module_name, {})
-
-    all_modules, existing_options, implied_modules = (
-        _materialize_implied_module_configs(
-            all_modules,
-            existing_options,
-        )
+    all_modules, existing_options, new_modules = _prepare_added_module_data(
+        project_path,
+        all_existing,
+        new_modules,
+        existing_config,
+        configure_modules=configure_modules,
     )
-    if implied_modules:
-        new_modules = _merge_module_names(new_modules, implied_modules)
-        # Run implied modules through registry-backed configurators so that
-        # billing/CRM planner flows invoke configurators for implied
-        # notifications/orgs in the same planning pass.
-        if configure_modules:
-            existing_options.update(
-                _configure_selected_modules(
-                    implied_modules,
-                    existing_options,
-                    new_modules=set(implied_modules),
-                )
-            )
-
-    if existing_config is not None:
-        docker_config = existing_config.docker
-        project_config = existing_config.project
-    else:
-        assert state is not None
-        docker_config = DockerConfig(start=False, build=False, create_superuser=False)
-        project_config = ProjectConfig(
-            slug=state.project.slug,
-            package=state.project.package,
-            theme=state.project.theme,
-        )
-
-    config = QuickScaleConfig(
-        version="1",
-        project=project_config,
-        modules=_build_module_configs(all_modules, existing_options),
-        docker=docker_config,
+    config = _build_add_config(
+        existing_config,
+        state,
+        all_modules,
+        existing_options,
     )
 
     _validate_existing_project_notifications_or_abort(config)
-
-    # Generate YAML
     yaml_content = generate_yaml(config)
-
-    # Preview configuration
-    click.echo("\n" + "=" * 50)
-    click.echo("📋 Updated Configuration:")
-    click.echo("=" * 50)
-    click.echo(yaml_content)
-    click.echo("=" * 50)
-
-    # Highlight new modules
-    click.echo("\n🆕 New modules to add:")
-    for module in new_modules:
-        click.secho(f"   + {module}", fg="green")
-
-    # Confirm save
-    if not click.confirm("\n💾 Save updated configuration?", default=True):
-        click.echo("❌ Cancelled")
-        raise click.Abort()
-
-    # Save configuration
-    config_path = project_path / "quickscale.yml"
-    with open(config_path, "w") as f:
-        f.write(yaml_content)
-
-    click.secho(f"\n✅ Configuration updated: {config_path}", fg="green", bold=True)
-
-    # Next steps
-    click.echo("\n📋 Next steps:")
-    click.echo("  quickscale apply     # Apply configuration to add modules")
+    _preview_and_save_added_config(project_path, yaml_content, new_modules)
 
 
 def _get_project_info_for_reconfig(
@@ -1142,6 +1017,112 @@ def _save_config_with_validation(yaml_content: str, output_path: Path) -> None:
         f.write(yaml_content)
 
 
+def _build_new_project_config(
+    validated_slug: str,
+    resolved_package: str,
+    theme: str,
+    selected_modules: list[str],
+    docker_start: bool,
+    docker_build: bool,
+    docker_create_superuser: bool,
+    *,
+    configure_modules: bool,
+) -> QuickScaleConfig:
+    """Assemble a new-project configuration after interactive selection."""
+    module_options: dict[str, dict[str, Any]] = {
+        module_name: {} for module_name in selected_modules
+    }
+    if configure_modules:
+        module_options.update(
+            _configure_selected_modules(
+                selected_modules,
+                module_options,
+                new_modules=set(selected_modules),
+            )
+        )
+
+    selected_modules, module_options, implied_modules = (
+        _materialize_implied_module_configs(
+            selected_modules,
+            module_options,
+        )
+    )
+    # Run implied modules through registry-backed configurators so that
+    # new-project flows invoke configurators for implied notifications/orgs
+    # in the same planning pass.
+    if configure_modules and implied_modules:
+        module_options.update(
+            _configure_selected_modules(
+                implied_modules,
+                module_options,
+                new_modules=set(implied_modules),
+            )
+        )
+
+    return QuickScaleConfig(
+        version="1",
+        project=ProjectConfig(
+            slug=validated_slug,
+            package=resolved_package,
+            theme=theme,
+        ),
+        modules=_build_module_configs(selected_modules, module_options),
+        docker=DockerConfig(
+            start=docker_start,
+            build=docker_build,
+            create_superuser=docker_create_superuser,
+        ),
+    )
+
+
+def _preview_and_save_new_config(
+    output_path: Path,
+    validated_slug: str,
+    yaml_content: str,
+) -> None:
+    """Preview, preflight, and save a new-project configuration."""
+    click.echo("\n" + "=" * 50)
+    click.echo("📋 Configuration Preview:")
+    click.echo("=" * 50)
+    click.echo(yaml_content)
+    click.echo("=" * 50)
+
+    if not click.confirm("\n💾 Save configuration?", default=True):
+        click.echo("❌ Cancelled")
+        raise click.Abort()
+
+    # Run read-only theme preflight before saving (checks state/recovery
+    # files only — the config file is about to be written/overwritten so
+    # any existing config content is irrelevant).
+    project_root = output_path.parent
+    state_path = project_root / ".quickscale" / "state.yml"
+    recovery_path = project_root / ".quickscale" / "apply-recovery.yml"
+    if state_path.exists() or recovery_path.exists():
+        try:
+            validate_theme_preflight(project_root)
+        except ThemeValidationError as exc:
+            click.secho(
+                "\n❌ Theme validation failed before saving configuration:",
+                fg="red",
+                err=True,
+                bold=True,
+            )
+            for line in str(exc).splitlines():
+                click.echo(f"  • {line}", err=True)
+            raise click.Abort()
+
+    _save_config_with_validation(yaml_content, output_path)
+
+    click.secho(f"\n✅ Configuration saved to {output_path}", fg="green", bold=True)
+
+    click.echo("\n📋 Next steps:")
+    if output_path.parent.name == validated_slug:
+        click.echo(f"  cd {validated_slug}")
+        click.echo("  quickscale apply")
+    else:
+        click.echo(f"  quickscale apply {output_path}")
+
+
 @click.command()
 @click.argument("slug", required=False, metavar="PROJECT_SLUG")
 @click.option(
@@ -1235,98 +1216,16 @@ def plan(
     selected_modules = _select_modules(include_experimental=include_experimental)
     docker_start, docker_build, docker_create_superuser = _configure_docker()
 
-    module_options: dict[str, dict[str, Any]] = {
-        module_name: {} for module_name in selected_modules
-    }
-    if configure_modules:
-        module_options.update(
-            _configure_selected_modules(
-                selected_modules,
-                module_options,
-                new_modules=set(selected_modules),
-            )
-        )
-
-    selected_modules, module_options, implied_modules = (
-        _materialize_implied_module_configs(
-            selected_modules,
-            module_options,
-        )
-    )
-    # Run implied modules through registry-backed configurators so that
-    # new-project flows invoke configurators for implied notifications/orgs
-    # in the same planning pass.
-    if configure_modules and implied_modules:
-        module_options.update(
-            _configure_selected_modules(
-                implied_modules,
-                module_options,
-                new_modules=set(implied_modules),
-            )
-        )
-
-    # Build configuration
-    modules = _build_module_configs(selected_modules, module_options)
-
-    config = QuickScaleConfig(
-        version="1",
-        project=ProjectConfig(
-            slug=validated_slug,
-            package=resolved_package,
-            theme=theme,
-        ),
-        modules=modules,
-        docker=DockerConfig(
-            start=docker_start,
-            build=docker_build,
-            create_superuser=docker_create_superuser,
-        ),
+    config = _build_new_project_config(
+        validated_slug,
+        resolved_package,
+        theme,
+        selected_modules,
+        docker_start,
+        docker_build,
+        docker_create_superuser,
+        configure_modules=configure_modules,
     )
 
-    # Generate YAML
     yaml_content = generate_yaml(config)
-
-    # Preview configuration
-    click.echo("\n" + "=" * 50)
-    click.echo("📋 Configuration Preview:")
-    click.echo("=" * 50)
-    click.echo(yaml_content)
-    click.echo("=" * 50)
-
-    # Confirm save
-    if not click.confirm("\n💾 Save configuration?", default=True):
-        click.echo("❌ Cancelled")
-        raise click.Abort()
-
-    # Run read-only theme preflight before saving (checks state/recovery
-    # files only — the config file is about to be written/overwritten so
-    # any existing config content is irrelevant).
-    project_root = output_path.parent
-    state_path = project_root / ".quickscale" / "state.yml"
-    recovery_path = project_root / ".quickscale" / "apply-recovery.yml"
-    if state_path.exists() or recovery_path.exists():
-        try:
-            validate_theme_preflight(project_root)
-        except ThemeValidationError as exc:
-            click.secho(
-                "\n❌ Theme validation failed before saving configuration:",
-                fg="red",
-                err=True,
-                bold=True,
-            )
-            for line in str(exc).splitlines():
-                click.echo(f"  • {line}", err=True)
-            raise click.Abort()
-
-    # Save with validation
-    _save_config_with_validation(yaml_content, output_path)
-
-    click.secho(f"\n✅ Configuration saved to {output_path}", fg="green", bold=True)
-
-    # Next steps
-    click.echo("\n📋 Next steps:")
-    if output_path.parent.name == validated_slug:
-        click.echo(f"  cd {validated_slug}")
-        click.echo("  quickscale apply")
-    else:
-        click.echo(f"  quickscale apply {output_path}")
+    _preview_and_save_new_config(output_path, validated_slug, yaml_content)

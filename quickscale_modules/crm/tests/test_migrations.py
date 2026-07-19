@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from django.db import IntegrityError, connection, transaction
+from django.db import IntegrityError, ProgrammingError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 
 pytestmark = [
@@ -22,6 +22,14 @@ pytestmark = [
 
 APP_LABEL = "quickscale_modules_crm"
 MIG_0001 = "0001_initial"
+
+
+def _current_role_bypasses_rls() -> bool:
+    """Return whether the active PostgreSQL role can bypass row security."""
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT rolbypassrls FROM pg_roles WHERE rolname = CURRENT_USER")
+        row = cursor.fetchone()
+    return bool(row and row[0])
 
 
 # ---------------------------------------------------------------------------
@@ -747,39 +755,57 @@ class TestCrmParentOrgMutationRejection:
 
     def test_contact_org_id_mutation_rejected_when_contactnote_exists(self) -> None:
         """Updating Contact.organization_id fails when a ContactNote
-        references the old (contact_id, organization_id) pair."""
+        references the old (contact_id, organization_id) pair.
+
+        A restricted role is expected to fail at the FORCE-RLS boundary before
+        PostgreSQL evaluates the composite FK.  A role with BYPASSRLS reaches
+        the FK and must receive the original integrity error.
+        """
         from django.contrib.auth import get_user_model
 
         from quickscale_modules_crm.models import Company, Contact, ContactNote
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
         User = get_user_model()
 
         org_a = Organization.objects.create(name="Org A", slug="crm-mut-a")
         org_b = Organization.objects.create(name="Org B", slug="crm-mut-b")
-        company = Company.objects.create(name="Acme Corp", organization=org_a)
         user = User.objects.create_user(username="testuser", password="testpass")
 
-        contact = Contact.all_objects.create(
-            organization=org_a,
-            first_name="Mutation",
-            last_name="Target",
-            email="mut@test.com",
-            company=company,
-        )
-        ContactNote.all_objects.create(
-            contact=contact,
-            organization=org_a,
-            text="Child row locking the parent org.",
-            created_by=user,
-        )
+        with org_scope(org_a):
+            company = Company.objects.create(name="Acme Corp", organization=org_a)
+            contact = Contact.all_objects.create(
+                organization=org_a,
+                first_name="Mutation",
+                last_name="Target",
+                email="mut@test.com",
+                company=company,
+            )
+            ContactNote.all_objects.create(
+                contact=contact,
+                organization=org_a,
+                text="Child row locking the parent org.",
+                created_by=user,
+            )
 
-        with pytest.raises(IntegrityError), transaction.atomic():
-            Contact.all_objects.filter(pk=contact.pk).update(organization=org_b)
+            if _current_role_bypasses_rls():
+                with pytest.raises(IntegrityError), transaction.atomic():
+                    Contact.all_objects.filter(pk=contact.pk).update(organization=org_b)
+            else:
+                with (
+                    pytest.raises(ProgrammingError, match="row-level security policy"),
+                    transaction.atomic(),
+                ):
+                    Contact.all_objects.filter(pk=contact.pk).update(organization=org_b)
 
     def test_deal_org_id_mutation_rejected_when_dealnote_exists(self) -> None:
         """Updating Deal.organization_id fails when a DealNote
-        references the old (deal_id, organization_id) pair."""
+        references the old (deal_id, organization_id) pair.
+
+        Restricted-role execution must fail closed at FORCE RLS; a bypass role
+        must still reach and prove the composite-FK rejection.
+        """
         from django.contrib.auth import get_user_model
 
         from quickscale_modules_crm.models import (
@@ -789,57 +815,82 @@ class TestCrmParentOrgMutationRejection:
             DealNote,
             Stage,
         )
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
         User = get_user_model()
 
         org_a = Organization.objects.create(name="Org A", slug="crm-mut-c")
         org_b = Organization.objects.create(name="Org B", slug="crm-mut-d")
-        company = Company.objects.create(name="Acme Corp", organization=org_a)
         user = User.objects.create_user(username="testuser2", password="testpass")
-        stage = Stage.objects.create(name="Test Stage", order=1, organization=org_a)
 
-        contact = Contact.all_objects.create(
-            organization=org_a,
-            first_name="DealMut",
-            last_name="Target",
-            email="dealmut@test.com",
-            company=company,
-        )
-        deal = Deal.all_objects.create(
-            organization=org_a,
-            title="Mutation target deal",
-            contact=contact,
-            stage=stage,
-        )
-        DealNote.all_objects.create(
-            deal=deal,
-            organization=org_a,
-            text="Child row locking the deal org.",
-            created_by=user,
-        )
+        with org_scope(org_a):
+            company = Company.objects.create(name="Acme Corp", organization=org_a)
+            stage = Stage.objects.create(name="Test Stage", order=1, organization=org_a)
+            contact = Contact.all_objects.create(
+                organization=org_a,
+                first_name="DealMut",
+                last_name="Target",
+                email="dealmut@test.com",
+                company=company,
+            )
+            deal = Deal.all_objects.create(
+                organization=org_a,
+                title="Mutation target deal",
+                contact=contact,
+                stage=stage,
+            )
+            DealNote.all_objects.create(
+                deal=deal,
+                organization=org_a,
+                text="Child row locking the deal org.",
+                created_by=user,
+            )
 
-        with pytest.raises(IntegrityError), transaction.atomic():
-            Deal.all_objects.filter(pk=deal.pk).update(organization=org_b)
+            if _current_role_bypasses_rls():
+                with pytest.raises(IntegrityError), transaction.atomic():
+                    Deal.all_objects.filter(pk=deal.pk).update(organization=org_b)
+            else:
+                with (
+                    pytest.raises(ProgrammingError, match="row-level security policy"),
+                    transaction.atomic(),
+                ):
+                    Deal.all_objects.filter(pk=deal.pk).update(organization=org_b)
 
     def test_contact_org_id_mutation_without_children_succeeds(self) -> None:
-        """Updating Contact.organization_id succeeds when NO child
-        ContactNote rows reference the old pair — positive control."""
+        """Prove the positive control without bypassing restricted-role RLS.
+
+        A bypass role can complete the cross-org mutation when no child exists;
+        a restricted role must reject the write at FORCE RLS even without a
+        child row.
+        """
         from quickscale_modules_crm.models import Company, Contact
+        from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import Organization
 
         org_a = Organization.objects.create(name="Org A", slug="crm-mut-e")
         org_b = Organization.objects.create(name="Org B", slug="crm-mut-f")
-        company = Company.objects.create(name="Acme Corp", organization=org_a)
 
-        contact = Contact.all_objects.create(
-            organization=org_a,
-            first_name="NoChild",
-            last_name="Contact",
-            email="nochild@test.com",
-            company=company,
-        )
+        with org_scope(org_a):
+            company = Company.objects.create(name="Acme Corp", organization=org_a)
+            contact = Contact.all_objects.create(
+                organization=org_a,
+                first_name="NoChild",
+                last_name="Contact",
+                email="nochild@test.com",
+                company=company,
+            )
 
-        Contact.all_objects.filter(pk=contact.pk).update(organization=org_b)
-        contact.refresh_from_db()
-        assert contact.organization_id == org_b.pk
+            if _current_role_bypasses_rls():
+                Contact.all_objects.filter(pk=contact.pk).update(organization=org_b)
+            else:
+                with (
+                    pytest.raises(ProgrammingError, match="row-level security policy"),
+                    transaction.atomic(),
+                ):
+                    Contact.all_objects.filter(pk=contact.pk).update(organization=org_b)
+
+        if _current_role_bypasses_rls():
+            with org_scope(org_b):
+                contact.refresh_from_db()
+            assert contact.organization_id == org_b.pk

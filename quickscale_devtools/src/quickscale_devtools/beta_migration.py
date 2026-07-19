@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tomllib
 from collections.abc import Sequence
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from shlex import quote
@@ -26,6 +26,12 @@ from quickscale_core.utils.theme_validation import (
     SOLE_VALID_THEME,
     ThemeValidationError,
     validate_theme_preflight,
+)
+
+from .report_rendering import (
+    render_report_json,
+    render_report_summary,
+    write_report_file,
 )
 
 BetaMigrationMode = Literal["fresh-first", "in-place"]
@@ -488,22 +494,6 @@ def _utc_now_iso() -> str:
 def _shell_cwd(path: Path) -> str:
     """Return a shell-safe cwd prefix for readable command output."""
     return f"cd {quote(str(path))} && "
-
-
-def _json_ready(value: Any) -> Any:
-    """Convert nested dataclasses and paths into JSON-ready primitives."""
-    if isinstance(value, Path):
-        return str(value)
-    if is_dataclass(value):
-        return {
-            field.name: _json_ready(getattr(value, field.name))
-            for field in fields(value)
-        }
-    if isinstance(value, dict):
-        return {str(key): _json_ready(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_ready(item) for item in value]
-    return value
 
 
 def _make_report(inputs: BetaMigrationInput, *, phase: str) -> BetaMigrationReport:
@@ -1005,12 +995,10 @@ def _validate_fresh_first_snapshot_paths(
 
 
 def _blocked_due_to_missing_snapshots(report: BetaMigrationReport) -> bool:
-    """Return whether snapshot-dependent planning must stop."""
     return report.donor is None or report.recipient is None
 
 
 def _protected_recipient_paths(snapshot: ProjectSnapshot) -> list[Path]:
-    """Return the protected recipient-managed files for fresh-first."""
     paths = [
         snapshot.path / relative_path
         for relative_path in FRESH_FIRST_PROTECTED_ROOT_FILES
@@ -1023,7 +1011,6 @@ def _protected_recipient_paths(snapshot: ProjectSnapshot) -> list[Path]:
 
 
 def _fresh_first_identity_targets(snapshot: ProjectSnapshot) -> list[Path]:
-    """Return the recipient files updated during identity reconciliation."""
     paths = [snapshot.config_path]
     paths.extend(
         snapshot.path / relative_path
@@ -1037,7 +1024,6 @@ def _fresh_first_identity_targets(snapshot: ProjectSnapshot) -> list[Path]:
 
 
 def _render_verification_commands(recipient_root: Path) -> list[str]:
-    """Render the verification stack as readable shell commands."""
     commands: list[str] = []
     for spec in VERIFICATION_COMMAND_SPECS:
         working_dir = (
@@ -1371,28 +1357,205 @@ def _build_pending_manual_actions(
     return actions
 
 
+def _select_report_phase(
+    inputs: BetaMigrationInput, execution_intent: Literal["plan", "run"]
+) -> str:
+    if inputs.mode == "in-place":
+        if (
+            execution_intent == "run"
+            and inputs.continue_after_checkpoint
+            and not inputs.dry_run
+        ):
+            return "in-place-execution-pending"
+        return "in-place-checkpoint"
+    if inputs.dry_run:
+        return "dry-run"
+    if execution_intent == "run":
+        return "fresh-first-execution-pending"
+    return "planning-only"
+
+
+def _load_report_snapshots(
+    report: BetaMigrationReport,
+    inputs: BetaMigrationInput,
+    *,
+    donor_ok: bool,
+    recipient_ok: bool,
+    theme_ok: bool,
+) -> None:
+    if not (donor_ok and recipient_ok and not report.blockers and theme_ok):
+        return
+    for role, project_path in (
+        ("donor", inputs.donor),
+        ("recipient", inputs.recipient),
+    ):
+        try:
+            snapshot = _load_project_snapshot(project_path)
+        except Exception as exc:
+            _record_snapshot_load(report, role=role, snapshot=None, error=exc)
+        else:
+            setattr(report, role, snapshot)
+            _record_snapshot_load(report, role=role, snapshot=snapshot)
+
+
+def _validate_report_snapshot_paths(
+    report: BetaMigrationReport, inputs: BetaMigrationInput
+) -> None:
+    if (
+        inputs.mode != "fresh-first"
+        or report.blockers
+        or report.donor is None
+        or report.recipient is None
+    ):
+        return
+    if _validate_fresh_first_snapshot_paths(report, report.donor, report.recipient):
+        _append_completed_step(
+            report,
+            step="validate-fresh-first-runtime-files",
+            detail="Validated snapshot-dependent donor and recipient files required for fresh-first mutation and verification.",
+        )
+
+
+def _populate_report_diffs(report: BetaMigrationReport) -> None:
+    if report.donor is None or report.recipient is None:
+        raise ValueError(
+            "Project snapshots are required before building planned actions."
+        )
+
+    report.identity_reconciliation_required = (
+        report.donor.identity.slug != report.recipient.identity.slug
+        or report.donor.identity.package != report.recipient.identity.package
+    )
+    report.module_diff = _compute_diff(report.donor.modules, report.recipient.modules)
+    report.path_dependency_diff = _compute_diff(
+        report.donor.path_dependencies, report.recipient.path_dependencies
+    )
+    _append_completed_step(
+        report,
+        step="load-project-identities-and-diffs",
+        detail=(
+            "Loaded donor/recipient identities and computed module diff: "
+            f"donor_only={report.module_diff.donor_only}, "
+            f"recipient_only={report.module_diff.recipient_only}."
+        ),
+    )
+
+
+def _validate_in_place_report_boundary(
+    report: BetaMigrationReport, recipient_path: Path
+) -> None:
+    is_clean, detail = _check_clean_git_worktree(recipient_path)
+    _append_check(
+        report,
+        name="recipient-clean-git-worktree",
+        status="passed" if is_clean else "failed",
+        detail=detail,
+    )
+    if is_clean:
+        _append_completed_step(
+            report,
+            step="enforce-clean-git-state",
+            detail="Verified that the in-place recipient git worktree is clean.",
+        )
+    else:
+        _append_blocker(report, detail)
+
+
+def _build_report_planned_actions(report: BetaMigrationReport) -> None:
+    if report.donor is None or report.recipient is None:
+        raise ValueError(
+            "Project snapshots are required before building planned actions."
+        )
+    if report.mode == "fresh-first":
+        if report.path_dependency_diff is None:
+            raise ValueError(
+                "Path dependency diff is required for fresh-first actions."
+            )
+        report.planned_actions = _fresh_first_actions(
+            report.donor,
+            report.recipient,
+            identity_reconciliation_required=report.identity_reconciliation_required,
+            path_dependency_diff=report.path_dependency_diff,
+        )
+    else:
+        if report.module_diff is None:
+            raise ValueError("Module diff is required for in-place actions.")
+        report.planned_actions = _in_place_actions(
+            report.donor,
+            report.recipient,
+            module_diff=report.module_diff,
+        )
+    _append_completed_step(
+        report,
+        step="build-planned-actions",
+        detail=f"Built {len(report.planned_actions)} planned actions for the {report.mode} workflow.",
+    )
+
+
+def _prepare_report_plan(
+    report: BetaMigrationReport, inputs: BetaMigrationInput
+) -> None:
+    if report.blockers or _blocked_due_to_missing_snapshots(report):
+        return
+    _populate_report_diffs(report)
+    if inputs.mode == "in-place":
+        _validate_in_place_report_boundary(report, inputs.recipient)
+    if not report.blockers:
+        _build_report_planned_actions(report)
+
+
+def _append_in_place_boundary_steps(
+    report: BetaMigrationReport, boundary_reason: str
+) -> None:
+    for step in (
+        "perform-in-place-merge-sequence",
+        "run-quickscale-apply",
+        "copy-post-apply-react-surfaces",
+        "execute-verification-subprocesses",
+    ):
+        _append_skipped_step(report, step=step, detail=boundary_reason)
+
+
+def _append_report_boundary_steps(
+    report: BetaMigrationReport,
+    inputs: BetaMigrationInput,
+    execution_intent: Literal["plan", "run"],
+) -> bool:
+    boundary_reason = DRY_RUN_REASON if inputs.dry_run else PHASE_BOUNDARY_REASON
+    if inputs.mode == "fresh-first":
+        if execution_intent == "plan" or inputs.dry_run:
+            _append_skipped_step(
+                report,
+                step="perform-fresh-first-file-copy-sequence",
+                detail=boundary_reason,
+            )
+            _append_skipped_step(
+                report,
+                step="execute-verification-subprocesses",
+                detail=boundary_reason,
+            )
+        return False
+    if (
+        execution_intent == "run"
+        and inputs.continue_after_checkpoint
+        and not inputs.dry_run
+    ):
+        report.status = "checkpoint" if not report.blockers else "blocked"
+        report.pending_manual_actions = _build_pending_manual_actions(report)
+        return True
+    _append_in_place_boundary_steps(report, boundary_reason)
+    return False
+
+
 def _prepare_beta_migration_report(
     inputs: BetaMigrationInput,
     *,
     execution_intent: Literal["plan", "run"],
 ) -> BetaMigrationReport:
     """Build the shared report skeleton for planning and execution paths."""
-    if inputs.mode == "in-place":
-        phase = (
-            "in-place-execution-pending"
-            if execution_intent == "run"
-            and inputs.continue_after_checkpoint
-            and not inputs.dry_run
-            else "in-place-checkpoint"
-        )
-    elif inputs.dry_run:
-        phase = "dry-run"
-    elif execution_intent == "run":
-        phase = "fresh-first-execution-pending"
-    else:
-        phase = "planning-only"
-
-    report = _make_report(inputs, phase=phase)
+    report = _make_report(
+        inputs, phase=_select_report_phase(inputs, execution_intent=execution_intent)
+    )
     _append_completed_step(
         report,
         step="parse-cli-arguments",
@@ -1432,168 +1595,24 @@ def _prepare_beta_migration_report(
             detail="Validated input paths and required static files for the selected workflow.",
         )
 
-    # CR-SA94-REV-B-001: validate_theme_preflight for donor and recipient
-    # before any snapshot loading, subprocess probes, or mutation steps.
+    # Validate themes before snapshot loading, subprocess probes, or mutation steps.
     theme_ok = True
     if donor_ok and recipient_ok and not report.blockers:
         theme_ok = _validate_theme_preflight_checks(
             report, donor_path=inputs.donor, recipient_path=inputs.recipient
         )
 
-    if donor_ok and recipient_ok and not report.blockers and theme_ok:
-        try:
-            donor_snapshot = _load_project_snapshot(inputs.donor)
-        except (
-            Exception
-        ) as exc:  # pragma: no cover - exercised through blocker assertions
-            donor_snapshot = None
-            _record_snapshot_load(report, role="donor", snapshot=None, error=exc)
-        else:
-            report.donor = donor_snapshot
-            _record_snapshot_load(report, role="donor", snapshot=donor_snapshot)
-
-        try:
-            recipient_snapshot = _load_project_snapshot(inputs.recipient)
-        except (
-            Exception
-        ) as exc:  # pragma: no cover - exercised through blocker assertions
-            recipient_snapshot = None
-            _record_snapshot_load(report, role="recipient", snapshot=None, error=exc)
-        else:
-            report.recipient = recipient_snapshot
-            _record_snapshot_load(report, role="recipient", snapshot=recipient_snapshot)
-
-    if (
-        inputs.mode == "fresh-first"
-        and not report.blockers
-        and report.donor is not None
-        and report.recipient is not None
-    ):
-        if _validate_fresh_first_snapshot_paths(report, report.donor, report.recipient):
-            _append_completed_step(
-                report,
-                step="validate-fresh-first-runtime-files",
-                detail="Validated snapshot-dependent donor and recipient files required for fresh-first mutation and verification.",
-            )
-
-    if not report.blockers and not _blocked_due_to_missing_snapshots(report):
-        donor_snapshot = report.donor
-        recipient_snapshot = report.recipient
-        if donor_snapshot is None or recipient_snapshot is None:
-            raise ValueError(
-                "Project snapshots are required before building planned actions."
-            )
-
-        report.identity_reconciliation_required = (
-            donor_snapshot.identity.slug != recipient_snapshot.identity.slug
-            or donor_snapshot.identity.package != recipient_snapshot.identity.package
-        )
-        report.module_diff = _compute_diff(
-            donor_snapshot.modules, recipient_snapshot.modules
-        )
-        report.path_dependency_diff = _compute_diff(
-            donor_snapshot.path_dependencies,
-            recipient_snapshot.path_dependencies,
-        )
-        _append_completed_step(
-            report,
-            step="load-project-identities-and-diffs",
-            detail=(
-                f"Loaded donor/recipient identities and computed module diff: "
-                f"donor_only={report.module_diff.donor_only}, "
-                f"recipient_only={report.module_diff.recipient_only}."
-            ),
-        )
-
-        if inputs.mode == "in-place":
-            is_clean, detail = _check_clean_git_worktree(inputs.recipient)
-            _append_check(
-                report,
-                name="recipient-clean-git-worktree",
-                status="passed" if is_clean else "failed",
-                detail=detail,
-            )
-            if is_clean:
-                _append_completed_step(
-                    report,
-                    step="enforce-clean-git-state",
-                    detail="Verified that the in-place recipient git worktree is clean.",
-                )
-            else:
-                _append_blocker(report, detail)
-
-        if inputs.mode == "fresh-first":
-            report.planned_actions = _fresh_first_actions(
-                donor_snapshot,
-                recipient_snapshot,
-                identity_reconciliation_required=report.identity_reconciliation_required,
-                path_dependency_diff=report.path_dependency_diff,
-            )
-        else:
-            report.planned_actions = _in_place_actions(
-                donor_snapshot,
-                recipient_snapshot,
-                module_diff=report.module_diff,
-            )
-
-        _append_completed_step(
-            report,
-            step="build-planned-actions",
-            detail=(
-                f"Built {len(report.planned_actions)} planned actions for the {inputs.mode} workflow."
-            ),
-        )
-
-    if inputs.mode == "fresh-first":
-        if execution_intent == "plan" or inputs.dry_run:
-            boundary_reason = (
-                DRY_RUN_REASON if inputs.dry_run else PHASE_BOUNDARY_REASON
-            )
-            _append_skipped_step(
-                report,
-                step="perform-fresh-first-file-copy-sequence",
-                detail=boundary_reason,
-            )
-            _append_skipped_step(
-                report,
-                step="execute-verification-subprocesses",
-                detail=boundary_reason,
-            )
-            _append_skipped_step(
-                report,
-                step="replace-production-repository-and-deploy",
-                detail=MANUAL_HANDOFF_REASON,
-            )
-    else:
-        boundary_reason = DRY_RUN_REASON if inputs.dry_run else PHASE_BOUNDARY_REASON
-        if (
-            execution_intent == "run"
-            and inputs.continue_after_checkpoint
-            and not inputs.dry_run
-        ):
-            report.status = "checkpoint" if not report.blockers else "blocked"
-            report.pending_manual_actions = _build_pending_manual_actions(report)
-            return report
-        _append_skipped_step(
-            report,
-            step="perform-in-place-merge-sequence",
-            detail=boundary_reason,
-        )
-        _append_skipped_step(
-            report,
-            step="run-quickscale-apply",
-            detail=boundary_reason,
-        )
-        _append_skipped_step(
-            report,
-            step="copy-post-apply-react-surfaces",
-            detail=boundary_reason,
-        )
-        _append_skipped_step(
-            report,
-            step="execute-verification-subprocesses",
-            detail=boundary_reason,
-        )
+    _load_report_snapshots(
+        report,
+        inputs,
+        donor_ok=donor_ok,
+        recipient_ok=recipient_ok,
+        theme_ok=theme_ok,
+    )
+    _validate_report_snapshot_paths(report, inputs)
+    _prepare_report_plan(report, inputs)
+    if _append_report_boundary_steps(report, inputs, execution_intent=execution_intent):
+        return report
 
     report.status = (
         "blocked"
@@ -1605,7 +1624,6 @@ def _prepare_beta_migration_report(
 
 
 def plan_beta_migration(inputs: BetaMigrationInput) -> BetaMigrationReport:
-    """Build a planning-only beta migration report for the requested mode."""
     return _prepare_beta_migration_report(inputs, execution_intent="plan")
 
 
@@ -1626,7 +1644,6 @@ def _replace_text_in_file(
 
 
 def _remove_path(path: Path) -> None:
-    """Remove an existing file or directory path."""
     if not path.exists():
         return
     if path.is_dir():
@@ -1636,7 +1653,6 @@ def _remove_path(path: Path) -> None:
 
 
 def _copy_path(source: Path, destination: Path) -> None:
-    """Copy a file or directory to its destination, replacing any existing path."""
     _remove_path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     if source.is_dir():
@@ -1867,7 +1883,6 @@ def _collect_missing_path_dependency_values(
 
 
 def _load_json_file(path: Path) -> Any:
-    """Load a JSON file from disk."""
     return json.loads(path.read_text())
 
 
@@ -2596,92 +2611,6 @@ def run_beta_migration(inputs: BetaMigrationInput) -> BetaMigrationReport:
     report = _execute_fresh_first(report)
     report.pending_manual_actions = _build_pending_manual_actions(report)
     return report
-
-
-def render_report_summary(report: BetaMigrationReport) -> str:
-    """Render a readable summary for stdout."""
-    module_diff_summary = "unavailable"
-    if report.module_diff is not None:
-        module_diff_summary = (
-            f"donor-only={report.module_diff.donor_only or ['(none)']}, "
-            f"recipient-only={report.module_diff.recipient_only or ['(none)']}"
-        )
-
-    path_dependency_summary = "unavailable"
-    if report.path_dependency_diff is not None:
-        path_dependency_summary = (
-            f"donor-only={report.path_dependency_diff.donor_only or ['(none)']}, "
-            f"recipient-only={report.path_dependency_diff.recipient_only or ['(none)']}"
-        )
-
-    verification_passed = sum(
-        1 for result in report.verification_results if result.status == "passed"
-    )
-    verification_failed = sum(
-        1 for result in report.verification_results if result.status == "failed"
-    )
-
-    lines = [
-        "Beta migration summary",
-        f"Mode: {report.mode}",
-        f"Status: {report.status}",
-        f"Phase: {report.phase}",
-        f"Dry run: {'yes' if report.dry_run else 'no'}",
-        f"Donor: {report.donor_path}",
-        f"Recipient: {report.recipient_path}",
-        f"Identity reconciliation: {'required' if report.identity_reconciliation_required else 'not required'}",
-        f"Module diff: {module_diff_summary}",
-        f"Path dependency diff: {path_dependency_summary}",
-        f"Planned actions: {len(report.planned_actions)}",
-        f"Changed files: {len(report.changed_files)}",
-        f"Verification results: {verification_passed} passed, {verification_failed} failed",
-        f"Pending manual actions: {len(report.pending_manual_actions)}",
-        f"Blockers: {len(report.blockers)}",
-    ]
-
-    if report.written_report_path:
-        lines.append(f"Report file: {report.written_report_path}")
-
-    if report.blockers:
-        lines.extend(f"Blocker: {blocker}" for blocker in report.blockers)
-
-    for result in report.verification_results:
-        if result.status == "failed":
-            lines.append(
-                f"Verification failure: {result.command} (cwd={result.cwd}, return_code={result.return_code})"
-            )
-
-    if report.pending_manual_actions:
-        for action in report.pending_manual_actions:
-            lines.append(f"Pending: {action.action} — {action.detail}")
-
-    if report.changed_files:
-        lines.append(
-            f"Mutation summary: Updated {len(report.changed_files)} recipient paths during this run."
-        )
-    else:
-        lines.append(
-            "Mutation summary: No donor or recipient project files were modified."
-        )
-    return "\n".join(lines)
-
-
-def render_report_json(report: BetaMigrationReport) -> str:
-    """Render a JSON report for stdout or file output."""
-    return json.dumps(_json_ready(report), indent=2)
-
-
-def write_report_file(report: BetaMigrationReport, report_path: Path) -> Path:
-    """Write a JSON report to disk and return the resolved path."""
-    resolved_path = (
-        report_path.resolve()
-        if report_path.is_absolute()
-        else (Path.cwd() / report_path).resolve()
-    )
-    report.written_report_path = str(resolved_path)
-    resolved_path.parent.mkdir(parents=True, exist_ok=True)
-    resolved_path.write_text(render_report_json(report) + "\n")
-    return resolved_path
 
 
 def run_beta_migration_cli(

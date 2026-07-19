@@ -89,6 +89,160 @@ def _load_module_options(project_path: Path) -> dict[str, dict[str, Any]]:
     return options
 
 
+def _resolve_package_name(
+    project_path: Path, project_package: str | None
+) -> tuple[str | None, str | None]:
+    if project_package is not None:
+        return project_package, None
+
+    try:
+        identity = resolve_project_identity(project_path, strict=True)
+    except ProjectIdentityResolutionError as error:
+        return None, str(error)
+    except Exception as error:
+        return None, f"Unable to resolve project identity: {error}"
+    return identity.package, None
+
+
+def _select_module_names(
+    project_path: Path, module_names: list[str] | None
+) -> list[str]:
+    if module_names is None:
+        return _discover_embedded_modules(project_path)
+    return sorted(dict.fromkeys(module_names))
+
+
+def _load_and_merge_module_options(
+    project_path: Path,
+    option_overrides: Mapping[str, Mapping[str, Any]] | None,
+) -> tuple[dict[str, dict[str, Any]] | None, str | None]:
+    try:
+        module_options = _load_module_options(project_path)
+    except ManagedWiringContextError as error:
+        return None, str(error)
+
+    if option_overrides:
+        module_options.update(
+            {
+                module_name: dict(options)
+                for module_name, options in option_overrides.items()
+            }
+        )
+    return module_options, None
+
+
+def _get_prior_modules_base_path() -> Path | None:
+    try:
+        return get_modules_base_path()
+    except ImproperlyConfigured:
+        return None
+
+
+def _has_embedded_manifests(project_path: Path) -> bool:
+    modules_dir = project_path / "modules"
+    return modules_dir.is_dir() and any(
+        (modules_dir / entry.name / "module.yml").exists()
+        for entry in modules_dir.iterdir()
+    )
+
+
+def _refresh_adapters() -> str | None:
+    try:
+        refresh_managed_adapters()
+    except ImproperlyConfigured as error:
+        return f"Managed adapter wiring failed: {error}"
+    return None
+
+
+def _prepare_modules_base_path(
+    project_path: Path, prior_base_path: Path | None
+) -> str | None:
+    if _has_embedded_manifests(project_path):
+        set_modules_base_path(project_path / "modules")
+        return _refresh_adapters()
+    if prior_base_path is not None:
+        return _refresh_adapters()
+    return (
+        "Modules base path not configured and no embedded module manifests found. "
+        "Run inside the maintainer monorepo, call set_modules_base_path(), or "
+        "embed at least one module with a module.yml file."
+    )
+
+
+def _build_one_wiring_spec(
+    module_name: str,
+    options: Mapping[str, Any],
+    package_name: str,
+) -> tuple[ModuleWiringSpec | None, str | None]:
+    try:
+        return (
+            build_manifest_wiring_spec(
+                module_name,
+                dict(options),
+                project_package=package_name,
+            ),
+            None,
+        )
+    except (ManifestAdapterNotFound, ManifestError) as error:
+        if isinstance(error, ManifestAdapterNotFound):
+            return None, None
+        if "Manifest file not found" in str(error):
+            return None, None
+        return None, str(error)
+    except ValueError as error:
+        return None, f"Unable to build managed wiring specs: {error}"
+    except ImproperlyConfigured as error:
+        return None, f"Managed adapter wiring failed: {error}"
+
+
+def _build_wiring_specs(
+    selected_modules: list[str],
+    module_options: Mapping[str, Mapping[str, Any]],
+    package_name: str,
+) -> tuple[dict[str, ModuleWiringSpec] | None, str | None]:
+    specs: dict[str, ModuleWiringSpec] = {}
+    for module_name in selected_modules:
+        spec, error = _build_one_wiring_spec(
+            module_name,
+            module_options.get(module_name, {}),
+            package_name,
+        )
+        if error is not None:
+            return None, error
+        if spec is not None:
+            specs[module_name] = spec
+    return specs, None
+
+
+def _write_wiring_files(
+    project_path: Path,
+    package_name: str,
+    specs: Mapping[str, ModuleWiringSpec],
+) -> tuple[bool, str]:
+    package_dir = project_path / package_name
+    if not package_dir.exists():
+        return False, f"Python package directory not found: {package_dir}"
+
+    try:
+        write_managed_wiring(package_dir, specs)
+    except Exception as error:
+        return False, f"Failed to write managed wiring files: {error}"
+    return True, "Managed wiring files regenerated"
+
+
+def _restore_modules_context(prior_base_path: Path | None) -> None:
+    set_modules_base_path(prior_base_path)
+    if prior_base_path is None:
+        return
+    try:
+        refresh_managed_adapters()
+    except ImproperlyConfigured:
+        # Best-effort restoration of the adapter registry. If the prior base
+        # path no longer has importable managed adapters, there is no
+        # meaningful recovery from the finally block.
+        pass
+
+
 def regenerate_managed_wiring(
     project_path: Path,
     *,
@@ -107,150 +261,32 @@ def regenerate_managed_wiring(
     except ThemeValidationError as exc:
         return False, str(exc)
 
-    package_name = project_package
-    if package_name is None:
-        try:
-            identity = resolve_project_identity(project_path, strict=True)
-            package_name = identity.package
-        except ProjectIdentityResolutionError as error:
-            return False, str(error)
-        except Exception as error:
-            return False, f"Unable to resolve project identity: {error}"
+    package_name, error = _resolve_package_name(project_path, project_package)
+    if error is not None:
+        return False, error
+    assert package_name is not None
 
-    if module_names is None:
-        selected_modules = _discover_embedded_modules(project_path)
-    else:
-        selected_modules = sorted(dict.fromkeys(module_names))
+    selected_modules = _select_module_names(project_path, module_names)
+    module_options, error = _load_and_merge_module_options(
+        project_path, option_overrides
+    )
+    if error is not None:
+        return False, error
+    assert module_options is not None
 
+    prior_base_path: Path | None = None
     try:
-        module_options = _load_module_options(project_path)
-    except ManagedWiringContextError as error:
-        return False, str(error)
+        prior_base_path = _get_prior_modules_base_path()
+        error = _prepare_modules_base_path(project_path, prior_base_path)
+        if error is not None:
+            return False, error
 
-    if option_overrides:
-        module_options.update(
-            {
-                module_name: dict(options)
-                for module_name, options in option_overrides.items()
-            }
+        specs, error = _build_wiring_specs(
+            selected_modules, module_options, package_name
         )
-
-    # Point manifest loading at the embedded modules directory when this
-    # context has a project with at least one real embedded manifest
-    # (``modules/<name>/module.yml``).  Empty ``modules/`` directories
-    # (e.g. in test fixtures) leave the default path active so that
-    # shipped-module manifests from the bundled/installed fallback remain
-    # available.
-    # Save/restore the global base path so the override does not leak
-    # across callers running in the same process.
-    _prior_base_path: Path | None = None
-    _has_real_manifests = False
-    try:
-        try:
-            _prior_base_path = get_modules_base_path()
-        except ImproperlyConfigured:
-            # Absence of a prior base path is acceptable when embedded
-            # modules are available — we override it below.  Set to
-            # ``None`` so the finally block restores correctly.
-            _prior_base_path = None
-
-        modules_dir = project_path / "modules"
-        _has_real_manifests = modules_dir.is_dir() and any(
-            (modules_dir / entry.name / "module.yml").exists()
-            for entry in modules_dir.iterdir()
-        )
-
-        if _has_real_manifests:
-            set_modules_base_path(modules_dir)
-            try:
-                refresh_managed_adapters()
-            except ImproperlyConfigured as error:
-                return (
-                    False,
-                    f"Managed adapter wiring failed: {error}",
-                )
-        elif _prior_base_path is not None:
-            # Prior base path is active (e.g. maintainer monorepo) — refresh
-            # managed adapters so the registry is current before building
-            # managed-module specs (CR-SA44-REV-001).
-            try:
-                refresh_managed_adapters()
-            except ImproperlyConfigured as error:
-                return (
-                    False,
-                    f"Managed adapter wiring failed: {error}",
-                )
-        else:
-            return (
-                False,
-                "Modules base path not configured and no embedded module "
-                "manifests found. Run inside the maintainer monorepo, call "
-                "set_modules_base_path(), or embed at least one module with "
-                "a module.yml file.",
-            )
-
-        selected_options = {
-            module_name: module_options.get(module_name, {})
-            for module_name in selected_modules
-        }
-
-        specs: dict[str, ModuleWiringSpec] = {}
-        for module_name, options in selected_options.items():
-            try:
-                specs[module_name] = build_manifest_wiring_spec(
-                    module_name,
-                    dict(options),
-                    project_package=package_name,
-                )
-            except ManifestAdapterNotFound:
-                # Skip discovered/forwarded modules that have no manifest adapter
-                # registered yet.  This preserves the legacy skip-unknown behaviour
-                # for non-registered module names (e.g. a modules/ directory that
-                # contains a module without a manifest adapter).
-                continue
-            except ManifestError as exc:
-                # When the embedded project's modules directory is set as the
-                # base path (via set_modules_base_path below), a module name
-                # may appear in selected_modules but not exist in the embedded
-                # directory.  Silently skip it only for "Manifest file not
-                # found" errors, matching the skip-unknown contract for
-                # non-embedded modules.
-                # Other ManifestError instances (e.g. invalid analytics
-                # configuration from SA18.2) fail as (False, message),
-                # consistent with the ValueError/ImproperlyConfigured
-                # handlers in this loop.
-                if "Manifest file not found" in str(exc):
-                    continue
-                return False, str(exc)
-            except ValueError as error:
-                return False, f"Unable to build managed wiring specs: {error}"
-            except ImproperlyConfigured as error:
-                return (
-                    False,
-                    f"Managed adapter wiring failed: {error}",
-                )
-
-        package_dir = project_path / package_name
-        if not package_dir.exists():
-            return (
-                False,
-                f"Python package directory not found: {package_dir}",
-            )
-
-        try:
-            write_managed_wiring(package_dir, specs)
-        except Exception as error:
-            return False, f"Failed to write managed wiring files: {error}"
-
-        return True, "Managed wiring files regenerated"
+        if error is not None:
+            return False, error
+        assert specs is not None
+        return _write_wiring_files(project_path, package_name, specs)
     finally:
-        set_modules_base_path(_prior_base_path)
-        if _prior_base_path is not None:
-            try:
-                refresh_managed_adapters()
-            except ImproperlyConfigured:
-                # Best-effort restoration of the adapter registry.
-                # If the prior base path no longer has importable
-                # managed adapters there is no meaningful recovery
-                # from the finally block.
-                pass
+        _restore_modules_context(prior_base_path)

@@ -76,13 +76,15 @@ _RECOVERY_CHECKPOINT_THEME = "__checkpoint__"
 def validate_theme_preflight(
     project_path: Path,
     *,
+    config_path: Path | None = None,
+    defer_config_errors: bool = False,
     allow_recovery_checkpoint: bool = False,
 ) -> None:
     """Validate the ``theme`` field in every present configuration source.
 
     Checks *all* of the following sources independently when they exist:
 
-    * ``<project_path>/quickscale.yml`` — desired state
+    * ``<config_path>`` or ``<project_path>/quickscale.yml`` — desired state
     * ``<project_path>/.quickscale/state.yml`` — applied state
     * ``<project_path>/.quickscale/apply-recovery.yml`` — recovery ledger
 
@@ -92,6 +94,10 @@ def validate_theme_preflight(
 
     Args:
         project_path: Root directory of the QuickScale project.
+        config_path: Desired-state YAML path. State and recovery paths remain
+            rooted at ``project_path``.
+        defer_config_errors: Defer desired-state read, structure, absent-theme,
+            and explicit-null errors. Unsupported non-null themes still fail.
         allow_recovery_checkpoint: Permit the recovery ledger's temporary
             ``__checkpoint__`` placeholder. This does not permit the
             placeholder in desired or applied state.
@@ -102,47 +108,39 @@ def validate_theme_preflight(
     """
     errors: list[str] = []
 
-    # 1. Desired-state (quickscale.yml).
-    config_path = project_path / _CONFIG_FILE
-    if config_path.exists():
-        try:
-            _validate_source_theme(config_path, _CONFIG_LABEL, _extract_config_theme)
-        except ThemeValidationError as exc:
-            errors.append(str(exc))
+    desired_path = config_path or project_path / _CONFIG_FILE
+    if desired_path.exists():
+        error = _source_error(
+            desired_path,
+            _CONFIG_LABEL,
+            _extract_config_theme,
+            defer_errors=defer_config_errors,
+        )
+        if error:
+            errors.append(error)
 
-    # 2. Applied state (.quickscale/state.yml).
+    # Applied state and recovery remain rooted at the project path.
     state_path = project_path / _STATE_FILE
     if state_path.exists():
-        try:
-            _validate_source_theme(state_path, _STATE_LABEL, _extract_state_theme)
-        except ThemeValidationError as exc:
-            errors.append(str(exc))
+        error = _source_error(state_path, _STATE_LABEL, _extract_state_theme)
+        if error:
+            errors.append(error)
 
-    # 3. Recovery ledger (.quickscale/apply-recovery.yml).
     recovery_path = project_path / _RECOVERY_FILE
     if recovery_path.exists():
-        try:
-            _validate_source_theme(
-                recovery_path,
-                _RECOVERY_LABEL,
-                _extract_state_theme,
-                allow_recovery_checkpoint=allow_recovery_checkpoint,
-            )
-        except ThemeValidationError as exc:
-            errors.append(str(exc))
+        error = _source_error(
+            recovery_path,
+            _RECOVERY_LABEL,
+            _extract_state_theme,
+            allow_recovery_checkpoint=allow_recovery_checkpoint,
+        )
+        if error:
+            errors.append(error)
 
     if errors:
         raise ThemeValidationError(
             "\n".join(errors),
-            source_label=", ".join(
-                label
-                for label, _path in [
-                    (_CONFIG_LABEL, config_path),
-                    (_STATE_LABEL, state_path),
-                    (_RECOVERY_LABEL, recovery_path),
-                ]
-                if _path.exists()
-            ),
+            source_label=_source_labels(desired_path, state_path, recovery_path),
         )
 
 
@@ -151,80 +149,110 @@ def validate_theme_preflight(
 # ---------------------------------------------------------------------------
 
 
+def _source_error(
+    file_path: Path,
+    source_label: str,
+    extract_theme: Any,
+    *,
+    defer_errors: bool = False,
+    allow_recovery_checkpoint: bool = False,
+) -> str | None:
+    try:
+        _validate_source_theme(
+            file_path,
+            source_label,
+            extract_theme,
+            defer_errors=defer_errors,
+            allow_recovery_checkpoint=allow_recovery_checkpoint,
+        )
+    except ThemeValidationError as exc:
+        return str(exc)
+    return None
+
+
+def _source_labels(*paths: Path) -> str:
+    labels = (_CONFIG_LABEL, _STATE_LABEL, _RECOVERY_LABEL)
+    return ", ".join(label for label, path in zip(labels, paths) if path.exists())
+
+
 def _validate_source_theme(
     file_path: Path,
     source_label: str,
     extract_theme: Any,
     *,
+    defer_errors: bool = False,
     allow_recovery_checkpoint: bool = False,
 ) -> None:
-    """Parse *file_path* and validate its theme is the sole valid value.
-
-    Args:
-        file_path: Absolute path to the source YAML file.
-        source_label: Human-readable label for error messages.
-        extract_theme: Callable ``(raw: dict) -> str | None`` that
-            extracts the theme value from the parsed mapping.
-        allow_recovery_checkpoint: Permit ``__checkpoint__`` only for the
-            recovery-ledger source.
-
-    Raises:
-        ThemeValidationError: On any validation failure.
-    """
+    """Parse *file_path* and validate its theme."""
     try:
-        raw: Any = yaml.safe_load(file_path.read_text())
-    except yaml.YAMLError as exc:
-        raise ThemeValidationError(
-            f"{source_label} contains invalid YAML and cannot be used: {exc}",
-            source_label=source_label,
-        )
-    except OSError as exc:
-        raise ThemeValidationError(
-            f"{source_label} could not be read: {exc}",
-            source_label=source_label,
-        )
-
-    if not isinstance(raw, dict):
-        raise ThemeValidationError(
-            f"{source_label} must be a YAML mapping (dictionary)",
-            source_label=source_label,
-        )
-
-    # SA94 Barrier A: fail closed when the ``project`` section is missing
-    # or is not a mapping.  A missing or non-mapping ``project`` means
-    # the file is structurally invalid and must not silently default
-    # to React.
-    project = raw.get("project")
-    if not isinstance(project, dict):
-        raise ThemeValidationError(
-            f"{source_label} is missing the required 'project' section",
-            source_label=source_label,
-        )
-
-    try:
+        raw = _load_yaml_source(file_path, source_label)
+        _project_mapping(raw, source_label)
         theme = extract_theme(raw)
     except ThemeValidationError:
+        if defer_errors:
+            return
         raise
     except Exception as exc:
+        if defer_errors:
+            return
         raise ThemeValidationError(
             f"{source_label} could not be parsed: {exc}",
             source_label=source_label,
         ) from exc
 
     if theme is None:
-        # Theme is optional in desired config (defaults to showcase_react
-        # at the schema level).  For state and recovery the theme must be
-        # present when the file exists.
-        if source_label == _CONFIG_LABEL:
+        if defer_errors or source_label == _CONFIG_LABEL:
             return  # Absent -> default is React, which is valid.
         raise ThemeValidationError(
             f"{source_label} is missing the required 'project.theme' field",
             source_label=source_label,
         )
 
+    _validate_theme_value(
+        theme,
+        source_label,
+        allow_recovery_checkpoint=allow_recovery_checkpoint,
+    )
+
+
+def _load_yaml_source(file_path: Path, source_label: str) -> Any:
+    try:
+        return yaml.safe_load(file_path.read_text())
+    except yaml.YAMLError as exc:
+        raise ThemeValidationError(
+            f"{source_label} contains invalid YAML and cannot be used: {exc}",
+            source_label=source_label,
+        ) from exc
+    except OSError as exc:
+        raise ThemeValidationError(
+            f"{source_label} could not be read: {exc}",
+            source_label=source_label,
+        ) from exc
+
+
+def _project_mapping(raw: Any, source_label: str) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ThemeValidationError(
+            f"{source_label} must be a YAML mapping (dictionary)",
+            source_label=source_label,
+        )
+    project = raw.get("project")
+    if not isinstance(project, dict):
+        raise ThemeValidationError(
+            f"{source_label} is missing the required 'project' section",
+            source_label=source_label,
+        )
+    return project
+
+
+def _validate_theme_value(
+    theme: str,
+    source_label: str,
+    *,
+    allow_recovery_checkpoint: bool = False,
+) -> None:
     if theme == SOLE_VALID_THEME:
         return
-
     if (
         theme == _RECOVERY_CHECKPOINT_THEME
         and allow_recovery_checkpoint
@@ -232,7 +260,6 @@ def _validate_source_theme(
     ):
         return
 
-    # Invalid theme — map known retired values to actionable message.
     if theme == "showcase_html":
         hint = (
             f"Theme 'showcase_html' has been retired. "
@@ -267,10 +294,7 @@ def _extract_config_theme(raw: dict) -> str | None:
             to ``null`` (which is invalid — the key should be omitted
             or set to ``showcase_react``).
     """
-    project = raw.get("project")
-    # Narrow type for static analysis — the caller guarantees this is a
-    # dict (checked by _validate_source_theme before calling this helper).
-    assert isinstance(project, dict)
+    project = _project_mapping(raw, _CONFIG_LABEL)
     # Must distinguish "key absent" (valid schema default) from
     # "key present with value null" (invalid — the user explicitly
     # wrote ``project.theme: null`` or ``project.theme:`` in YAML).
@@ -298,8 +322,8 @@ def _extract_state_theme(raw: dict) -> str | None:
     with an explicit ``theme`` field.  Returns ``None`` when absent
     (which will be treated as a validation error by the caller).
     """
-    project = raw.get("project")
-    theme = project.get("theme")  # type: ignore[union-attr]
+    project = _project_mapping(raw, _STATE_LABEL)
+    theme = project.get("theme")
     if theme is None:
         return None
     return str(theme)
