@@ -1,3 +1,4 @@
+// DORMANT: Social embeds surface. Inert unless modules.social is true and publicPage.surface === 'embeds' at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant.
 import { ExternalLink, PlaySquare } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

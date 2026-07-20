@@ -1,3 +1,4 @@
+// DORMANT: Social link-tree surface. Inert unless modules.social is true and publicPage.surface === 'link_tree' at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant.
 import { ExternalLink, Link2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

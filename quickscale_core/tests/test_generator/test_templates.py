@@ -4099,30 +4099,14 @@ class TestEditorconfigContent:
 
 
 class TestSelectedModulesTemplateSafety:
-    """After SA105, main.tsx, App.test.tsx, and PublicSocialPages.test.tsx are
-    static files (no longer Jinja templates). Verify their static content."""
+    """After SA105, App.test.tsx and PublicSocialPages.test.tsx are
+    static files (no longer Jinja templates). Verify their static content.
+    main.tsx source-shape assertions moved to test_themes.py (SA105)."""
 
     def _get_template_dir(self) -> Path:
         import quickscale_core
 
         return Path(quickscale_core.__file__).parent / "generator" / "templates"
-
-    def test_main_tsx_always_has_social_imports(self) -> None:
-        """After SA105, main.tsx uses React.lazy for social pages."""
-        template_dir = self._get_template_dir()
-        main_path = template_dir / "themes" / "showcase_react" / "src" / "main.tsx"
-        assert main_path.exists(), "Static main.tsx not found"
-        content = main_path.read_text()
-        assert "SocialEmbedsPublicPage" in content
-        assert "SocialLinkTreePublicPage" in content
-        assert "lazy(() => import(" in content
-        assert ".then((m) => ({ default: m." in content
-        assert "renderQuickScaleRoot" in content
-        assert (
-            "const Page = surface === 'link_tree' ? SocialLinkTreePublicPage : SocialEmbedsPublicPage"
-            in content
-        )
-        assert "<Suspense fallback={<div>Loading…</div>}>" in content
 
     def test_app_test_tsx_always_has_all_module_flags(self) -> None:
         """After SA105, App.test.tsx always includes all module flags."""

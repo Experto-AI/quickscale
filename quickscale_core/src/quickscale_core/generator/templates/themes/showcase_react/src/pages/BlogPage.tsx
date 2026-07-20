@@ -1,3 +1,4 @@
+// DORMANT: Blog module surface. Inert unless modules.blog is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant.
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

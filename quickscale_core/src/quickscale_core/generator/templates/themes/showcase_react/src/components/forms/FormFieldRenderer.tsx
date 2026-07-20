@@ -1,3 +1,4 @@
+// DORMANT: Forms module component. Inert unless modules.forms is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant.
 import { Control } from 'react-hook-form'
 import {
   FormControl,

@@ -2085,15 +2085,15 @@
     },
     "frontend/src/components/forms/FormFieldRenderer.tsx": {
       "mode": "664",
-      "sha256": "4d538b8e5ece4b92786a84ad2a8271b7bd7287e08259bbe476649909c323b931"
+      "sha256": "d0ecc4b71bf32f8b9e7afb2363e872b12e22d75929914b6a531c4fbb5d70dd8b"
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "8db724e7e4afdb76e92b3110d0b89b1a3e91edaf0c174fb81f521e30c02051e2"
+      "sha256": "d33a50e5a15e09d26f6ba1bee0ae45d777c6494a85a6eae01117717b846edfd9"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
-      "sha256": "293429132906d5b61f747d09762a38240e7399187cf6e3d9c443a8d1ee8f2047"
+      "sha256": "ae4c9bbdd499b076917699963fdf4bc7c37e47d36b05b6fdc482461acd47785e"
     },
     "frontend/src/components/layout/Header.tsx": {
       "mode": "664",
@@ -2173,7 +2173,7 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
-      "sha256": "47f7756fda58c594e4a267d3f0541653b15d3df183ee042b88738081822559c8"
+      "sha256": "e1b3c20ca9c738e1adc3b8d5ca833c8d9bbb630693f904561dff67620bb67bcc"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
@@ -2205,15 +2205,15 @@
     },
     "frontend/src/main.tsx": {
       "mode": "664",
-      "sha256": "52c07af90a10f8c73c65c34c59bdd212c2560ce8ba64ea1102ada49867e05ff6"
+      "sha256": "d06deba192308ac9bc5cfa2879f1888db2072c8b8a0c486c031f6ca3a0fd1f65"
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "664",
-      "sha256": "d9cce538c347fd64210bdba0c34b71d8c26bbcb3a426f9fe0c76da103285e6d1"
+      "sha256": "db923e5a3c6aa05f2157986810ab49deed42f8fd52c4b9a744b9e2531711c88d"
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "664",
-      "sha256": "199455d3b01699704ec24d0887ac6078bf11f56a478db0c5e8d4d0921534d525"
+      "sha256": "3b090fe957f544409d687c6d772d3c898f6614372e1ee34f41ba97cd1f0d49f1"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
@@ -2221,11 +2221,11 @@
     },
     "frontend/src/pages/FormsPage.tsx": {
       "mode": "664",
-      "sha256": "5d93628e4aa277d356016d7ebddb2c87e877168ec62eb8e619c58a59d7d0f2a2"
+      "sha256": "f24d7dddf1a84d947f177189488d3da5dac9ae2f3c71d7778a0688bba8e56aff"
     },
     "frontend/src/pages/ListingsPage.tsx": {
       "mode": "664",
-      "sha256": "cf7ef5e83e475f3cc68083a02b56e135dc07cec0d5823a58561163b3a66a3333"
+      "sha256": "995cc65b6c9150f7c86aaab02740bac2790f7441940d550b0363bd7bebdaee07"
     },
     "frontend/src/pages/NotFound.tsx": {
       "mode": "664",
@@ -2241,11 +2241,11 @@
     },
     "frontend/src/pages/SocialEmbedsPublicPage.tsx": {
       "mode": "664",
-      "sha256": "67d36b34f613af358b63c13aee86d92178a71a8fbf2ee22312bf47209cdd2585"
+      "sha256": "e40201bb0a1a7660c631e17bed6ef5bb4501599c2fd55e9682678f7054ea6cf9"
     },
     "frontend/src/pages/SocialLinkTreePublicPage.tsx": {
       "mode": "664",
-      "sha256": "2407754cee580e0efeaca478c61cbc5dc921fd8b70e40dc08d0b04c2e582a090"
+      "sha256": "6d8dc77ee6b34d3fde1a58678aa3e384db0f72566be61871b502a3b618c9cb0b"
     },
     "frontend/src/pages/orgs/OrgCreatePage.tsx": {
       "mode": "664",
@@ -2422,6 +2422,14 @@
     "tests/test_example.py": {
       "mode": "664",
       "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
+    },
+    "frontend/src/renderQuickScaleRoot.tsx": {
+      "mode": "664",
+      "sha256": "af913ac47ec7e4c496d4fa92c246691f8649bda09bc1a94561d79a38ed926757"
+    },
+    "frontend/src/test/RootDispatch.test.tsx": {
+      "mode": "664",
+      "sha256": "1336548eae717bb5e4d1858b6a21db73251b86d5beb26560ce678e5fe4a26fac"
     }
   },
   "react_empty": {
@@ -4475,15 +4483,15 @@
     },
     "frontend/src/components/forms/FormFieldRenderer.tsx": {
       "mode": "664",
-      "sha256": "4d538b8e5ece4b92786a84ad2a8271b7bd7287e08259bbe476649909c323b931"
+      "sha256": "d0ecc4b71bf32f8b9e7afb2363e872b12e22d75929914b6a531c4fbb5d70dd8b"
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "8db724e7e4afdb76e92b3110d0b89b1a3e91edaf0c174fb81f521e30c02051e2"
+      "sha256": "d33a50e5a15e09d26f6ba1bee0ae45d777c6494a85a6eae01117717b846edfd9"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
-      "sha256": "293429132906d5b61f747d09762a38240e7399187cf6e3d9c443a8d1ee8f2047"
+      "sha256": "ae4c9bbdd499b076917699963fdf4bc7c37e47d36b05b6fdc482461acd47785e"
     },
     "frontend/src/components/layout/Header.tsx": {
       "mode": "664",
@@ -4563,7 +4571,7 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
-      "sha256": "47f7756fda58c594e4a267d3f0541653b15d3df183ee042b88738081822559c8"
+      "sha256": "e1b3c20ca9c738e1adc3b8d5ca833c8d9bbb630693f904561dff67620bb67bcc"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
@@ -4595,15 +4603,15 @@
     },
     "frontend/src/main.tsx": {
       "mode": "664",
-      "sha256": "52c07af90a10f8c73c65c34c59bdd212c2560ce8ba64ea1102ada49867e05ff6"
+      "sha256": "d06deba192308ac9bc5cfa2879f1888db2072c8b8a0c486c031f6ca3a0fd1f65"
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "664",
-      "sha256": "d9cce538c347fd64210bdba0c34b71d8c26bbcb3a426f9fe0c76da103285e6d1"
+      "sha256": "db923e5a3c6aa05f2157986810ab49deed42f8fd52c4b9a744b9e2531711c88d"
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "664",
-      "sha256": "199455d3b01699704ec24d0887ac6078bf11f56a478db0c5e8d4d0921534d525"
+      "sha256": "3b090fe957f544409d687c6d772d3c898f6614372e1ee34f41ba97cd1f0d49f1"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
@@ -4611,11 +4619,11 @@
     },
     "frontend/src/pages/FormsPage.tsx": {
       "mode": "664",
-      "sha256": "5d93628e4aa277d356016d7ebddb2c87e877168ec62eb8e619c58a59d7d0f2a2"
+      "sha256": "f24d7dddf1a84d947f177189488d3da5dac9ae2f3c71d7778a0688bba8e56aff"
     },
     "frontend/src/pages/ListingsPage.tsx": {
       "mode": "664",
-      "sha256": "cf7ef5e83e475f3cc68083a02b56e135dc07cec0d5823a58561163b3a66a3333"
+      "sha256": "995cc65b6c9150f7c86aaab02740bac2790f7441940d550b0363bd7bebdaee07"
     },
     "frontend/src/pages/NotFound.tsx": {
       "mode": "664",
@@ -4631,11 +4639,11 @@
     },
     "frontend/src/pages/SocialEmbedsPublicPage.tsx": {
       "mode": "664",
-      "sha256": "67d36b34f613af358b63c13aee86d92178a71a8fbf2ee22312bf47209cdd2585"
+      "sha256": "e40201bb0a1a7660c631e17bed6ef5bb4501599c2fd55e9682678f7054ea6cf9"
     },
     "frontend/src/pages/SocialLinkTreePublicPage.tsx": {
       "mode": "664",
-      "sha256": "2407754cee580e0efeaca478c61cbc5dc921fd8b70e40dc08d0b04c2e582a090"
+      "sha256": "6d8dc77ee6b34d3fde1a58678aa3e384db0f72566be61871b502a3b618c9cb0b"
     },
     "frontend/src/pages/orgs/OrgCreatePage.tsx": {
       "mode": "664",
@@ -4812,6 +4820,14 @@
     "tests/test_example.py": {
       "mode": "664",
       "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
+    },
+    "frontend/src/renderQuickScaleRoot.tsx": {
+      "mode": "664",
+      "sha256": "af913ac47ec7e4c496d4fa92c246691f8649bda09bc1a94561d79a38ed926757"
+    },
+    "frontend/src/test/RootDispatch.test.tsx": {
+      "mode": "664",
+      "sha256": "1336548eae717bb5e4d1858b6a21db73251b86d5beb26560ce678e5fe4a26fac"
     }
   },
   "react_selected": {
@@ -6865,15 +6881,15 @@
     },
     "frontend/src/components/forms/FormFieldRenderer.tsx": {
       "mode": "664",
-      "sha256": "4d538b8e5ece4b92786a84ad2a8271b7bd7287e08259bbe476649909c323b931"
+      "sha256": "d0ecc4b71bf32f8b9e7afb2363e872b12e22d75929914b6a531c4fbb5d70dd8b"
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "8db724e7e4afdb76e92b3110d0b89b1a3e91edaf0c174fb81f521e30c02051e2"
+      "sha256": "d33a50e5a15e09d26f6ba1bee0ae45d777c6494a85a6eae01117717b846edfd9"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
-      "sha256": "293429132906d5b61f747d09762a38240e7399187cf6e3d9c443a8d1ee8f2047"
+      "sha256": "ae4c9bbdd499b076917699963fdf4bc7c37e47d36b05b6fdc482461acd47785e"
     },
     "frontend/src/components/layout/Header.tsx": {
       "mode": "664",
@@ -6953,7 +6969,7 @@
     },
     "frontend/src/hooks/useFormSchema.ts": {
       "mode": "664",
-      "sha256": "47f7756fda58c594e4a267d3f0541653b15d3df183ee042b88738081822559c8"
+      "sha256": "e1b3c20ca9c738e1adc3b8d5ca833c8d9bbb630693f904561dff67620bb67bcc"
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
@@ -6985,15 +7001,15 @@
     },
     "frontend/src/main.tsx": {
       "mode": "664",
-      "sha256": "52c07af90a10f8c73c65c34c59bdd212c2560ce8ba64ea1102ada49867e05ff6"
+      "sha256": "d06deba192308ac9bc5cfa2879f1888db2072c8b8a0c486c031f6ca3a0fd1f65"
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "664",
-      "sha256": "d9cce538c347fd64210bdba0c34b71d8c26bbcb3a426f9fe0c76da103285e6d1"
+      "sha256": "db923e5a3c6aa05f2157986810ab49deed42f8fd52c4b9a744b9e2531711c88d"
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "664",
-      "sha256": "199455d3b01699704ec24d0887ac6078bf11f56a478db0c5e8d4d0921534d525"
+      "sha256": "3b090fe957f544409d687c6d772d3c898f6614372e1ee34f41ba97cd1f0d49f1"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
@@ -7001,11 +7017,11 @@
     },
     "frontend/src/pages/FormsPage.tsx": {
       "mode": "664",
-      "sha256": "5d93628e4aa277d356016d7ebddb2c87e877168ec62eb8e619c58a59d7d0f2a2"
+      "sha256": "f24d7dddf1a84d947f177189488d3da5dac9ae2f3c71d7778a0688bba8e56aff"
     },
     "frontend/src/pages/ListingsPage.tsx": {
       "mode": "664",
-      "sha256": "cf7ef5e83e475f3cc68083a02b56e135dc07cec0d5823a58561163b3a66a3333"
+      "sha256": "995cc65b6c9150f7c86aaab02740bac2790f7441940d550b0363bd7bebdaee07"
     },
     "frontend/src/pages/NotFound.tsx": {
       "mode": "664",
@@ -7021,11 +7037,11 @@
     },
     "frontend/src/pages/SocialEmbedsPublicPage.tsx": {
       "mode": "664",
-      "sha256": "67d36b34f613af358b63c13aee86d92178a71a8fbf2ee22312bf47209cdd2585"
+      "sha256": "e40201bb0a1a7660c631e17bed6ef5bb4501599c2fd55e9682678f7054ea6cf9"
     },
     "frontend/src/pages/SocialLinkTreePublicPage.tsx": {
       "mode": "664",
-      "sha256": "2407754cee580e0efeaca478c61cbc5dc921fd8b70e40dc08d0b04c2e582a090"
+      "sha256": "6d8dc77ee6b34d3fde1a58678aa3e384db0f72566be61871b502a3b618c9cb0b"
     },
     "frontend/src/pages/orgs/OrgCreatePage.tsx": {
       "mode": "664",
@@ -7202,6 +7218,14 @@
     "tests/test_example.py": {
       "mode": "664",
       "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
+    },
+    "frontend/src/renderQuickScaleRoot.tsx": {
+      "mode": "664",
+      "sha256": "af913ac47ec7e4c496d4fa92c246691f8649bda09bc1a94561d79a38ed926757"
+    },
+    "frontend/src/test/RootDispatch.test.tsx": {
+      "mode": "664",
+      "sha256": "1336548eae717bb5e4d1858b6a21db73251b86d5beb26560ce678e5fe4a26fac"
     }
   }
 }

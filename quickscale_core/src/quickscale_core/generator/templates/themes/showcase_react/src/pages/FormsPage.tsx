@@ -1,3 +1,4 @@
+// DORMANT: Forms module surface. Inert unless modules.forms is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant.
 import { useParams, Navigate } from 'react-router-dom'
 import { FormRenderer } from '@/components/forms/FormRenderer'
 import { useOrgNavigation } from '@/hooks/useOrgNavigation'

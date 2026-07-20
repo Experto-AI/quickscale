@@ -1,14 +1,9 @@
-import { lazy, StrictMode, Suspense } from 'react'
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter } from 'react-router-dom'
 import './index.css'
-import App from './App'
 import { initializeAnalytics } from '@/lib/analytics'
-import type { PublicSocialSurface } from '@/hooks/useModules'
-
-const SocialEmbedsPublicPage = lazy(() => import('@/pages/SocialEmbedsPublicPage').then((m) => ({ default: m.SocialEmbedsPublicPage })))
-const SocialLinkTreePublicPage = lazy(() => import('@/pages/SocialLinkTreePublicPage').then((m) => ({ default: m.SocialLinkTreePublicPage })))
+import { renderQuickScaleRoot } from './renderQuickScaleRoot'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,26 +13,6 @@ const queryClient = new QueryClient({
     },
   },
 })
-
-function renderQuickScaleRoot(surface?: PublicSocialSurface) {
-  const config = window.__QUICKSCALE__
-  const socialEnabled = config?.modules?.social ?? false
-
-  if (surface && socialEnabled) {
-    const Page = surface === 'link_tree' ? SocialLinkTreePublicPage : SocialEmbedsPublicPage
-    return (
-      <Suspense fallback={<div>Loading…</div>}>
-        <Page />
-      </Suspense>
-    )
-  }
-
-  return (
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  )
-}
 
 const rootElement = document.getElementById('root')
 
