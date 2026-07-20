@@ -4,33 +4,11 @@ import {
   Building2,
   Home,
   Settings,
-{% endraw -%}
-{%- if selected_modules is none or 'blog' in selected_modules %}
-{%- raw %}
   BookOpen,
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'listings' in selected_modules %}
-{%- raw %}
   Store,
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'crm' in selected_modules %}
-{%- raw %}
   Briefcase,
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'forms' in selected_modules %}
-{%- raw %}
   ClipboardList,
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'social' in selected_modules %}
-{%- raw %}
   Share2,
-{%- endraw %}
-{%- endif %}
-{%- raw -%}
   UserCircle,
   Users,
 } from 'lucide-react'
@@ -50,68 +28,37 @@ interface NavItem {
 }
 
 export function Sidebar() {
-{%- endraw %}
-{% if selected_modules is none or 'social' in selected_modules %}
-{%- raw %}
   const { modules, modulePaths } = useProjectConfig()
-{%- endraw %}
-{% else %}
-{%- raw %}
-  const { modules } = useProjectConfig()
-{%- endraw %}
-{% endif %}
-{%- raw %}
   const { appPaths, hasOrgContext, isSaas } = useOrgNavigation()
 
   const navigation: NavItem[] = [
     { name: 'Organizations', href: appPaths.orgList, icon: Building2, show: isSaas, end: true },
     { name: 'Dashboard', href: appPaths.dashboard, icon: Home, show: true, end: true },
-{%- endraw %}
-{%- if selected_modules is none or 'blog' in selected_modules %}
-{%- raw %}
     {
       name: 'Blog',
       href: appPaths.blog,
       icon: BookOpen,
       show: modules.blog && (!isSaas || hasOrgContext),
     },
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'listings' in selected_modules %}
-{%- raw %}
     {
       name: 'Listings',
       href: appPaths.listings,
       icon: Store,
       show: modules.listings && (!isSaas || hasOrgContext),
     },
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'crm' in selected_modules %}
-{%- raw %}
     {
       name: 'CRM',
       href: appPaths.crm,
       icon: Briefcase,
       show: modules.crm,
     },
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'forms' in selected_modules %}
-{%- raw %}
     {
       name: 'Forms',
       href: appPaths.forms,
       icon: ClipboardList,
       show: modules.forms && (!isSaas || hasOrgContext),
     },
-{%- endraw %}
-{%- endif %}
-{%- raw %}
     { name: 'Members', href: appPaths.members, icon: Users, show: isSaas && hasOrgContext },
-{%- endraw %}
-{%- if selected_modules is none or 'social' in selected_modules %}
-{%- raw %}
     {
       name: 'Social',
       href: modulePaths.social,
@@ -119,9 +66,6 @@ export function Sidebar() {
       show: modules.social,
       reloadDocument: true,
     },
-{%- endraw %}
-{%- endif %}
-{%- raw %}
   ]
 
   const bottomNavigation: NavItem[] = [

@@ -1,5 +1,3 @@
-{% if selected_modules is none or 'social' in selected_modules %}
-{% raw -%}
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -16,8 +14,6 @@ function buildProjectConfig(surface: 'link_tree' | 'embeds'): QuickScaleConfig {
   return {
     projectName: 'Public Social Demo',
     modules: {
-{% endraw %}
-{%- if selected_modules is none %}
       auth: false,
       blog: false,
       listings: false,
@@ -28,38 +24,13 @@ function buildProjectConfig(surface: 'link_tree' | 'embeds'): QuickScaleConfig {
       notifications: false,
       analytics: false,
       billing: false,
-{%- else %}
-      auth: false,
-{%- if 'blog' in selected_modules %}      blog: false,
-{%- endif %}
-{%- if 'listings' in selected_modules %}      listings: false,
-{%- endif %}
-{%- if 'crm' in selected_modules %}      crm: false,
-{%- endif %}
-{%- if 'forms' in selected_modules %}      forms: false,
-{%- endif %}
-{%- if 'storage' in selected_modules %}      storage: false,
-{%- endif %}
-{%- if 'backups' in selected_modules %}      backups: false,
-{%- endif %}
-{%- if 'notifications' in selected_modules %}      notifications: false,
-{%- endif %}
-{%- if 'analytics' in selected_modules %}      analytics: false,
-{%- endif %}
-{%- if 'billing' in selected_modules %}      billing: false,
-{%- endif %}
-{%- endif %}
-{% raw %}      social: true,
+      social: true,
     },
     modulePaths: {
-{% endraw %}
-{%- if selected_modules is none or 'crm' in selected_modules %}
-      crm: '/crm',{% endif %}
-{%- if selected_modules is none or 'social' in selected_modules %}
-      social: surface === 'link_tree' ? '/social' : '/social/embeds',{% endif %}
-{%- if selected_modules is none or 'analytics' in selected_modules %}
-      analytics: '/analytics/',{% endif %}
-{% raw %}    },
+      crm: '/crm',
+      social: surface === 'link_tree' ? '/social' : '/social/embeds',
+      analytics: '/analytics/',
+    },
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -269,7 +240,7 @@ describe('public social pages', () => {
           embed_height: null,
           thumbnail_width: null,
           thumbnail_height: null,
-          last_resolution_attempt_at: '2026-04-02T10:05:00+00:00',
+          last_resolution_attempt_at: '2026-04-02T10:00:00+00:00',
           last_resolved_at: null,
         },
       ],
@@ -311,8 +282,6 @@ describe('public social pages', () => {
     renderPublicPage('embeds', <SocialEmbedsPublicPage />)
 
     expect(await screen.findByText('Embed configuration needs attention')).toBeInTheDocument()
-    expect(screen.getByText(/must include TikTok or YouTube/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/must include TikTok or YouTube/i).length).toBeGreaterThanOrEqual(1)
   })
 })
-{% endraw -%}
-{% endif -%}

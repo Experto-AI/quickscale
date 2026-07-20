@@ -4,10 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from quickscale_core.contracts.module_catalog import get_discovered_module_entries
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.generator.generator import (
-    REACT_THEME_OPTIONAL_FILES,
     REACT_THEME_SHARED_DJANGO_TEMPLATES,
 )
 
@@ -269,122 +267,85 @@ class TestReactThemeBuildCompatibility:
         assert "index.html /app/templates/index.html" not in dockerfile
 
 
-class TestReactOptionalFilesModuleCatalogAlignment:
-    """Lightweight alignment between the React gating map and the module catalog.
+class TestSelectedModulesReactTheme:
+    """Verify that SA105 removed selected_modules-driven frontend source omission.
 
-    ``REACT_THEME_OPTIONAL_FILES`` maps every optional React file to the
-    module that gates it. If a gating module key is not present in the
-    shared module catalog, ``selected_modules`` membership gating would
-    silently never trigger because the key can never appear in user
-    configs. This test guards that contract from drifting.
+    After SA105, all module source files are emitted as dormant files regardless
+    of the selected_modules parameter. Runtime gating via window.__QUICKSCALE__.
     """
 
-    def test_all_react_optional_file_gating_modules_are_in_catalog(self) -> None:
-        """Every module referenced by ``REACT_THEME_OPTIONAL_FILES`` must exist in the discovered catalog."""
-        catalog_names = {entry.name for entry in get_discovered_module_entries()}
-        gating_modules = set(REACT_THEME_OPTIONAL_FILES.values())
+    OPTIONAL_REL_PATHS: tuple[str, ...] = (
+        "src/pages/BlogPage.tsx",
+        "src/pages/CrmPage.tsx",
+        "src/pages/FormsPage.tsx",
+        "src/pages/ListingsPage.tsx",
+        "src/pages/SocialLinkTreePublicPage.tsx",
+        "src/pages/SocialEmbedsPublicPage.tsx",
+        "src/components/forms/FormRenderer.tsx",
+        "src/components/forms/FormFieldRenderer.tsx",
+        "src/components/forms/FormSuccess.tsx",
+        "src/hooks/useFormSchema.ts",
+    )
 
-        missing = gating_modules - catalog_names
-        assert not missing, (
-            "REACT_THEME_OPTIONAL_FILES references gating modules that are "
-            f"missing from the discovered catalog: {sorted(missing)}"
-        )
-
-    def test_all_react_optional_file_gating_modules_are_ready(self) -> None:
-        """Gating modules should be public-ready so apply accepts them by default."""
-        ready_names = {entry.name for entry in get_discovered_module_entries()}
-        gating_modules = set(REACT_THEME_OPTIONAL_FILES.values())
-
-        not_ready = gating_modules - ready_names
-        assert not not_ready, (
-            "REACT_THEME_OPTIONAL_FILES references gating modules that are "
-            f"not public-ready: {sorted(not_ready)}"
-        )
-
-    def test_react_optional_files_values_match_module_catalog(self) -> None:
-        """Spot-check that known gating values line up with catalog entries."""
-        expected_subset = {"blog", "crm", "forms", "listings", "social"}
-        actual = set(REACT_THEME_OPTIONAL_FILES.values())
-        assert expected_subset.issubset(actual), (
-            f"Expected {sorted(expected_subset)} to gate React optional files; "
-            f"actual gating modules: {sorted(actual)}"
-        )
-
-
-class TestSelectedModulesReactTheme:
-    """Verify React theme honours ``selected_modules`` for per-module output."""
-
-    def test_default_selected_modules_emits_all_per_module_surfaces(
+    def test_default_selected_modules_emits_all_dormant_surfaces(
         self, tmp_path: Path
     ) -> None:
-        """When ``selected_modules`` is not provided every optional surface is rendered."""
+        """When ``selected_modules`` is not provided every module surface is rendered."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_default_modules"
         generator.generate("react_default_modules", output_path)
 
-        for rel_path in REACT_THEME_OPTIONAL_FILES:
+        for rel_path in self.OPTIONAL_REL_PATHS:
             absolute = output_path / "frontend" / rel_path
             assert absolute.exists(), (
-                f"Expected default React theme to render {rel_path} when "
-                "selected_modules is not provided."
+                f"Expected default React theme to render {rel_path}."
             )
 
-    def test_empty_selected_modules_drops_every_optional_react_file(
+    def test_empty_selected_modules_emits_all_dormant_files(
         self, tmp_path: Path
     ) -> None:
-        """An empty ``selected_modules`` list should drop every optional React file."""
+        """After SA105, an empty ``selected_modules`` list still emits all module files as dormant."""
         generator = ProjectGenerator(theme="showcase_react", selected_modules=[])
         output_path = tmp_path / "react_empty_modules"
         generator.generate("react_empty_modules", output_path)
 
-        for rel_path in REACT_THEME_OPTIONAL_FILES:
+        # All optional files are emitted as dormant files regardless of selection
+        for rel_path in self.OPTIONAL_REL_PATHS:
             absolute = output_path / "frontend" / rel_path
-            assert not absolute.exists(), (
-                f"Optional React file {rel_path} should not be generated when "
-                "selected_modules is empty."
+            assert absolute.exists(), (
+                f"Dormant file {rel_path} should be generated even when "
+                "selected_modules is empty after SA105."
             )
 
-        # Verify auth is always typed in QuickScaleModules interface even
-        # when selected_modules is empty (SA93 Phase 3A).
+        # All modules appear in the QuickScaleModules interface
         use_modules = (
             output_path / "frontend" / "src" / "hooks" / "useModules.ts"
         ).read_text()
         modules_interface = use_modules.split("interface QuickScaleModules {", 1)[
             1
         ].split("\n}", 1)[0]
-        assert "auth: boolean" in modules_interface, (
-            "auth must always be present in QuickScaleModules interface."
-        )
-        for unselected in ("blog", "crm", "listings", "social", "analytics"):
-            assert f"{unselected}: boolean" not in modules_interface, (
-                f"Non-auth module '{unselected}' must not appear in QuickScaleModules "
-                "when selected_modules is empty."
+        for module_key in ("auth", "blog", "crm", "listings", "social", "analytics"):
+            assert f"{module_key}: boolean" in modules_interface, (
+                f"Module '{module_key}' must appear in QuickScaleModules after SA105."
             )
 
-        # Verify defaultConfig.modules always has auth: false
-        default_config = use_modules.split(
-            "const defaultConfig: QuickScaleConfig = {", 1
-        )[1].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
-        assert "auth: false" in default_config, (
-            "defaultConfig.modules must always have auth: false."
-        )
-        # Non-auth modules must not appear in defaultConfig when empty
-        for unselected in ("blog", "listings", "crm"):
-            assert f"{unselected}: false" not in default_config, (
-                f"Non-auth module '{unselected}' must not appear in defaultConfig "
-                "when selected_modules is empty."
-            )
+        # defaultConfig includes all modules
+        default = use_modules.split("const defaultConfig: QuickScaleConfig = {", 1)[
+            1
+        ].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
+        assert "auth: false" in default
+        assert "blog: false" in default
+        assert "listings: false" in default
 
-        # Verify QuickScaleModulePaths is empty (no module with paths selected)
+        # QuickScaleModulePaths includes all known paths
         module_paths_interface = use_modules.split(
             "interface QuickScaleModulePaths {", 1
         )[1].split("\n}", 1)[0]
-        assert module_paths_interface.strip() == "", (
-            "QuickScaleModulePaths must be empty when no modules with paths are selected."
-        )
+        assert "crm: string" in module_paths_interface
+        assert "social: string" in module_paths_interface
+        assert "analytics: string" in module_paths_interface
 
-        # Core pages that are not module-gated must still be present so the
-        # generated app remains usable with no modules selected.
+        # Core pages are always generated
         for rel_path in (
             "frontend/src/pages/Dashboard.tsx",
             "frontend/src/pages/SettingsPage.tsx",
@@ -395,34 +356,26 @@ class TestSelectedModulesReactTheme:
                 f"Core page {rel_path} must still be generated."
             )
 
-    def test_partial_selected_modules_keeps_only_requested_surfaces(
+    def test_partial_selected_modules_also_emits_dormant_files(
         self, tmp_path: Path
     ) -> None:
-        """Only the requested modules should keep their per-module React surface."""
+        """After SA105, partial selection still emits all dormant module files."""
         generator = ProjectGenerator(
             theme="showcase_react", selected_modules=["blog", "crm"]
         )
         output_path = tmp_path / "react_blog_crm"
         generator.generate("react_blog_crm", output_path)
 
-        # Selected modules keep their page files
-        assert (output_path / "frontend" / "src" / "pages" / "BlogPage.tsx").exists()
-        assert (output_path / "frontend" / "src" / "pages" / "CrmPage.tsx").exists()
-
-        # Unselected modules drop their gated files
-        for rel_path, gating_module in REACT_THEME_OPTIONAL_FILES.items():
-            if gating_module in {"blog", "crm"}:
-                continue
+        # All module pages exist as dormant files
+        for rel_path in self.OPTIONAL_REL_PATHS:
             absolute = output_path / "frontend" / rel_path
-            assert not absolute.exists(), (
-                f"Optional file {rel_path} (gated by '{gating_module}') should "
-                "not be generated when the module is unselected."
+            assert absolute.exists(), (
+                f"Optional file {rel_path} should be generated as dormant "
+                "regardless of selected_modules after SA105."
             )
 
-    def test_use_modules_interface_reflects_selected_modules(
-        self, tmp_path: Path
-    ) -> None:
-        """TypeScript interface entries in ``useModules`` should match the selection."""
+    def test_use_modules_interface_always_all_modules(self, tmp_path: Path) -> None:
+        """After SA105, QuickScaleModules always includes every module."""
         generator = ProjectGenerator(
             theme="showcase_react", selected_modules=["blog", "crm", "billing"]
         )
@@ -440,43 +393,39 @@ class TestSelectedModulesReactTheme:
             1
         ].split("\n}", 1)[0]
 
-        for module_key in ("auth", "blog", "crm", "billing"):
-            assert f"{module_key}: boolean" in modules_block, (
-                f"Expected module '{module_key}' in QuickScaleModules (auth is always typed)."
-            )
+        # All modules always present in the interface
         for module_key in (
+            "auth",
+            "blog",
+            "crm",
             "listings",
             "forms",
             "storage",
             "backups",
             "notifications",
             "analytics",
+            "billing",
             "social",
         ):
-            assert f"{module_key}: boolean" not in modules_block, (
-                f"Unselected module '{module_key}' should be absent from "
-                "QuickScaleModules."
+            assert f"{module_key}: boolean" in modules_block, (
+                f"Module '{module_key}' must always appear in QuickScaleModules after SA105."
             )
 
+        # All known module paths are always present
         assert "crm: string" in module_paths_block
+        assert "social: string" in module_paths_block
+        assert "analytics: string" in module_paths_block
         # D1 Option B: billing path removed from module paths until session-sync contract exists
         assert "billing: string" not in module_paths_block
-        assert "social: string" not in module_paths_block
 
-    def test_always_typed_auth_in_default_config_and_interface(
+    def test_always_all_modules_in_default_config_and_interface(
         self, tmp_path: Path
     ) -> None:
-        """Auth is always typed in QuickScaleModules and defaultConfig has auth:false.
-
-        SA93 Phase 3A: QuickScaleModules.auth: boolean is unconditional,
-        defaultConfig.modules.auth=false is unconditional, and the runtime
-        merge (defaultConfig + runtimeConfig) ensures auth is always present
-        even when the window.__QUICKSCALE__ payload omits it.
-        """
+        """After SA105, all modules are unconditionally typed and defaulted."""
         # --- Empty selection ---
         empty_gen = ProjectGenerator(theme="showcase_react", selected_modules=[])
-        empty_out = tmp_path / "react_auth_always_empty"
-        empty_gen.generate("react_auth_always_empty", empty_out)
+        empty_out = tmp_path / "react_all_modules_empty"
+        empty_gen.generate("react_all_modules_empty", empty_out)
 
         empty_modules = (
             empty_out / "frontend" / "src" / "hooks" / "useModules.ts"
@@ -485,54 +434,24 @@ class TestSelectedModulesReactTheme:
         modules_iface = empty_modules.split("interface QuickScaleModules {", 1)[
             1
         ].split("\n}", 1)[0]
-        assert "auth: boolean" in modules_iface, (
-            "auth must be typed in QuickScaleModules even when selected_modules=[]."
-        )
-        for unselected in ("blog", "crm", "listings", "analytics"):
-            assert f"{unselected}: boolean" not in modules_iface, (
-                f"Non-auth module '{unselected}' must be absent when selected_modules=[]."
+        for module_key in ("auth", "blog", "crm", "listings", "analytics"):
+            assert f"{module_key}: boolean" in modules_iface, (
+                f"Module '{module_key}' must be typed in QuickScaleModules "
+                "even when selected_modules=[] after SA105."
             )
 
         default = empty_modules.split("const defaultConfig: QuickScaleConfig = {", 1)[
             1
         ].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
-        assert "auth: false" in default, (
-            "defaultConfig.modules must have auth:false when selected_modules=[]."
-        )
-        for unselected in ("blog: false", "crm: false", "listings: false"):
-            assert unselected not in default, (
-                f"Non-auth default '{unselected}' must be absent when selected_modules=[]."
-            )
+        assert "auth: false" in default
+        assert "blog: false" in default
+        assert "crm: false" in default
+        assert "listings: false" in default
 
-        # --- Partial selection (auth + blog) ---
-        partial_gen = ProjectGenerator(
-            theme="showcase_react", selected_modules=["auth", "blog"]
-        )
-        partial_out = tmp_path / "react_auth_always_partial"
-        partial_gen.generate("react_auth_always_partial", partial_out)
-
-        partial_modules = (
-            partial_out / "frontend" / "src" / "hooks" / "useModules.ts"
-        ).read_text()
-
-        partial_iface = partial_modules.split("interface QuickScaleModules {", 1)[
-            1
-        ].split("\n}", 1)[0]
-        assert "auth: boolean" in partial_iface
-        assert "blog: boolean" in partial_iface
-        assert "crm: boolean" not in partial_iface
-
-        partial_default = partial_modules.split(
-            "const defaultConfig: QuickScaleConfig = {", 1
-        )[1].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
-        assert "auth: false" in partial_default
-        assert "blog: false" in partial_default
-        assert "crm: false" not in partial_default
-
-    def test_app_tsx_routes_only_emit_selected_module_paths(
+    def test_app_tsx_always_includes_all_imports_and_routes(
         self, tmp_path: Path
     ) -> None:
-        """Routes, imports, and legacy redirects in App.tsx should be module-aware."""
+        """After SA105, App.tsx uses React.lazy for module pages and gates routes on runtime flags."""
         generator = ProjectGenerator(
             theme="showcase_react", selected_modules=["blog", "crm"]
         )
@@ -541,22 +460,31 @@ class TestSelectedModulesReactTheme:
 
         app_tsx = (output_path / "frontend" / "src" / "App.tsx").read_text()
 
-        for kept in ("BlogPage", "CrmPage", 'path="/blog"', 'path="/crm"'):
-            assert kept in app_tsx, (
-                f"Expected App.tsx to reference {kept} for selected modules."
+        # Module pages use React.lazy (dynamic import, not static import)
+        for page in ("BlogPage", "CrmPage", "ListingsPage", "FormsPage"):
+            assert f"const {page} = lazy(() => import(" in app_tsx, (
+                f"App.tsx should use React.lazy for {page} after SA105."
             )
-        for dropped in (
-            "ListingsPage",
-            "FormsPage",
-            'path="/listings"',
-            'path="/forms"',
-        ):
-            assert dropped not in app_tsx, (
-                f"App.tsx should not reference {dropped} when modules are not selected."
-            )
+        # Core pages are still statically imported
+        assert "import { Dashboard }" in app_tsx
+        assert "import { NotFound }" in app_tsx
+        assert "import { SettingsPage }" in app_tsx
+        assert "import { ProfilePage }" in app_tsx
 
-    def test_sidebar_nav_reflects_selected_modules(self, tmp_path: Path) -> None:
-        """Sidebar nav items should follow the same module selection rules."""
+        # Routes are conditionally gated with runtime flags
+        assert '{modules.blog && <Route path="/blog"' in app_tsx
+        assert '{modules.crm && <Route path="/crm"' in app_tsx
+        assert '{modules.listings && <Route path="/listings"' in app_tsx
+        assert '{modules.forms && <Route path="/forms"' in app_tsx
+
+        # Suspense wrapper is used
+        assert "<Suspense fallback={<div>Loading…</div>}>" in app_tsx
+
+        # useModules hook is imported
+        assert "useModules" in app_tsx
+
+    def test_sidebar_always_includes_all_nav_items(self, tmp_path: Path) -> None:
+        """After SA105, all nav items are always present (runtime gating via modules.* flags)."""
         generator = ProjectGenerator(theme="showcase_react", selected_modules=["blog"])
         output_path = tmp_path / "react_sidebar"
         generator.generate("react_sidebar", output_path)
@@ -565,85 +493,39 @@ class TestSelectedModulesReactTheme:
             output_path / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
         ).read_text()
 
+        # All nav items always present in the template
         assert "name: 'Blog'" in sidebar
-        for dropped in (
-            "name: 'Listings'",
-            "name: 'CRM'",
-            "name: 'Forms'",
-            "name: 'Billing'",
-            "name: 'Social'",
-        ):
-            assert dropped not in sidebar, (
-                f"Sidebar should not include {dropped} when its module is unselected."
-            )
+        assert "name: 'Listings'" in sidebar
+        assert "name: 'CRM'" in sidebar
+        assert "name: 'Forms'" in sidebar
+        assert "name: 'Social'" in sidebar
+        # Billing nav entry excluded (D1 Option B)
+        assert "name: 'Billing'" not in sidebar
 
-    def test_no_social_selected_modules_avoids_unused_param_and_omits_social_imports(
-        self, tmp_path: Path
-    ) -> None:
-        """No-social variant avoids noUnusedParameters and omits social page imports (D1-REV-005).
-
-        When ``selected_modules`` does not include ``social``:
-        - ``renderQuickScaleRoot()`` uses ``_surface`` prefixed param so
-          TypeScript's ``noUnusedParameters`` does not fire.
-        - Social page components (``SocialEmbedsPublicPage``,
-          ``SocialLinkTreePublicPage``) must NOT be imported — they would
-          be dead imports flagged by ``noUnusedLocals``.
-        - ``PublicSocialSurface`` type import stays unconditional because it
-          is referenced by both function signatures.
-        """
-        # --- No-social variant (selected_modules=[]) ---
+    def test_social_imports_and_render_always_present(self, tmp_path: Path) -> None:
+        """After SA105, social imports and renderQuickScaleRoot(surface) are unconditional."""
+        # --- Empty selection still has social imports ---
         empty_gen = ProjectGenerator(theme="showcase_react", selected_modules=[])
         empty_out = tmp_path / "react_no_social_main"
         empty_gen.generate("react_no_social_main", empty_out)
 
         empty_main = (empty_out / "frontend" / "src" / "main.tsx").read_text()
 
-        # Must NOT import social page components (dead imports)
-        assert "SocialEmbedsPublicPage" not in empty_main, (
-            "No-social variant must not import SocialEmbedsPublicPage"
+        # Social page components are always imported
+        assert "SocialEmbedsPublicPage" in empty_main, (
+            "Empty-selection variant must import SocialEmbedsPublicPage after SA105."
         )
-        assert "SocialLinkTreePublicPage" not in empty_main, (
-            "No-social variant must not import SocialLinkTreePublicPage"
+        assert "SocialLinkTreePublicPage" in empty_main, (
+            "Empty-selection variant must import SocialLinkTreePublicPage after SA105."
         )
 
-        # Must use _surface prefixed param to suppress noUnusedParameters
+        # renderQuickScaleRoot always uses surface (not _surface)
         assert (
-            "function renderQuickScaleRoot(_surface?: PublicSocialSurface)"
-            in empty_main
-        ), (
-            "No-social variant must define renderQuickScaleRoot with "
-            "_surface?: PublicSocialSurface"
-        )
+            "function renderQuickScaleRoot(surface?: PublicSocialSurface)" in empty_main
+        ), "renderQuickScaleRoot must take surface parameter after SA105."
 
-        # --- All-modules variant (default) must STILL have the social surface ---
-        all_gen = ProjectGenerator(theme="showcase_react")
-        all_out = tmp_path / "react_all_modules_main"
-        all_gen.generate("react_all_modules_main", all_out)
-
-        all_main = (all_out / "frontend" / "src" / "main.tsx").read_text()
-
-        # Must import the social type (unconditional)
-        assert "PublicSocialSurface" in all_main, (
-            "All-modules variant must import PublicSocialSurface"
-        )
-
-        # Social page imports should be present
-        assert "SocialEmbedsPublicPage" in all_main, (
-            "All-modules variant must import SocialEmbedsPublicPage"
-        )
-
-        # renderQuickScaleRoot must have surface parameter in all-modules variant
-        assert (
-            "function renderQuickScaleRoot(surface?: PublicSocialSurface)" in all_main
-        ), (
-            "All-modules variant must define renderQuickScaleRoot "
-            "with surface?: PublicSocialSurface"
-        )
-
-    def test_window_module_config_matches_selected_modules(
-        self, tmp_path: Path
-    ) -> None:
-        """The Django-rendered React index.html should only include selected modules."""
+    def test_window_config_always_includes_all_modules(self, tmp_path: Path) -> None:
+        """After SA105, the Django-rendered index.html always emits all module flags."""
         generator = ProjectGenerator(
             theme="showcase_react", selected_modules=["blog", "crm"]
         )
@@ -655,13 +537,11 @@ class TestSelectedModulesReactTheme:
             "};", 1
         )[0]
 
-        # Modules block only includes the selected keys
-        for kept in ("blog:", "crm:"):
-            assert kept in window_config, (
-                f"window.__QUICKSCALE__.modules should reference {kept}."
-            )
-        for dropped in (
+        # All modules are always listed
+        for module in (
             "auth:",
+            "blog:",
+            "crm:",
             "listings:",
             "forms:",
             "storage:",
@@ -671,12 +551,15 @@ class TestSelectedModulesReactTheme:
             "billing:",
             "social:",
         ):
-            assert dropped not in window_config, (
-                f"window.__QUICKSCALE__.modules should not reference {dropped}."
+            assert module in window_config, (
+                f"window.__QUICKSCALE__.modules should reference {module} after SA105."
             )
 
-        # modulePaths block keeps CRM only
-        assert "crm:" in window_config.split("modulePaths:", 1)[1]
+        # modulePaths block always has all paths
+        module_paths_section = window_config.split("modulePaths:", 1)[1]
+        assert "crm:" in module_paths_section
+        assert "social:" in module_paths_section
+        assert "analytics:" in module_paths_section
 
 
 class TestSharedAdminTemplates:

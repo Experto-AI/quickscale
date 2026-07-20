@@ -12,7 +12,6 @@ from quickscale_core.generator import (
     ProjectGenerator,
     get_generator_emission_mapping,
 )
-from quickscale_core.generator.generator import REACT_THEME_OPTIONAL_FILES
 
 
 class TestProjectGeneratorInit:
@@ -690,53 +689,29 @@ class TestSa90MappingDrivenGeneration:
         )
 
     # ------------------------------------------------------------------
-    # selected_modules filtering in the mapping
+    # Post-SA105: selected_modules no longer filters frontend/src files;
+    # all optional source files are always present as dormant entries.
+    # selected_modules parameter is retained for non-frontend surfaces.
     # ------------------------------------------------------------------
 
-    def test_selected_modules_none_includes_optional(self) -> None:
-        """selected_modules=None must include every optional React file."""
-        mapping = get_generator_emission_mapping(
-            self._get_template_dir(),
-            theme="showcase_react",
-            selected_modules=None,
-        )
-        for opt_rel in REACT_THEME_OPTIONAL_FILES:
-            emitted_opt = f"frontend/{opt_rel}"
-            assert emitted_opt in mapping, (
-                f"Optional file {emitted_opt} should be present when "
-                f"selected_modules=None"
-            )
-
-    def test_selected_modules_empty_excludes_all_optional(self) -> None:
-        """selected_modules=[] must exclude every optional React file."""
+    def test_selected_modules_does_not_filter_frontend_source(self) -> None:
+        """After SA105, selected_modules no longer removes frontend/src files."""
         mapping = get_generator_emission_mapping(
             self._get_template_dir(),
             theme="showcase_react",
             selected_modules=[],
         )
-        for opt_rel in REACT_THEME_OPTIONAL_FILES:
-            emitted_opt = f"frontend/{opt_rel}"
-            assert emitted_opt not in mapping, (
-                f"Optional file {emitted_opt} should be absent when selected_modules=[]"
-            )
-
-    def test_selected_modules_partial_includes_only_selected(self) -> None:
-        """Partial selection must include only gated files for selected modules."""
-        mapping = get_generator_emission_mapping(
-            self._get_template_dir(),
-            theme="showcase_react",
-            selected_modules=["blog", "forms"],
-        )
-        # blog and forms optional files should be present
+        # All optional files are always present (dormant)
         assert "frontend/src/pages/BlogPage.tsx" in mapping
+        assert "frontend/src/pages/CrmPage.tsx" in mapping
+        assert "frontend/src/pages/FormsPage.tsx" in mapping
+        assert "frontend/src/pages/ListingsPage.tsx" in mapping
+        assert "frontend/src/pages/SocialLinkTreePublicPage.tsx" in mapping
+        assert "frontend/src/pages/SocialEmbedsPublicPage.tsx" in mapping
         assert "frontend/src/components/forms/FormRenderer.tsx" in mapping
+        assert "frontend/src/components/forms/FormFieldRenderer.tsx" in mapping
+        assert "frontend/src/components/forms/FormSuccess.tsx" in mapping
         assert "frontend/src/hooks/useFormSchema.ts" in mapping
-        # crm and listings should be absent (not selected)
-        assert "frontend/src/pages/CrmPage.tsx" not in mapping
-        assert "frontend/src/pages/ListingsPage.tsx" not in mapping
-        # social should also be absent
-        assert "frontend/src/pages/SocialLinkTreePublicPage.tsx" not in mapping
-        assert "frontend/src/pages/SocialEmbedsPublicPage.tsx" not in mapping
 
     # ------------------------------------------------------------------
     # Generated-tree completeness: every mapped file exists on disk
@@ -971,6 +946,8 @@ class TestSa90ExactManifestParity:
     # exact manifest comparison.
     _DYNAMIC_PATHS = frozenset({"poetry.lock"})
 
+    _EXCLUDED_PREFIXES = (".venv/",)
+
     # ------------------------------------------------------------------
     # Fixture validation
     # ------------------------------------------------------------------
@@ -1025,12 +1002,20 @@ class TestSa90ExactManifestParity:
             rel = str(fpath.relative_to(output))
             if rel in self._DYNAMIC_PATHS:
                 continue
+            if rel.startswith(self._EXCLUDED_PREFIXES):
+                continue
             content = fpath.read_bytes()
             actual[rel] = {
                 "mode": oct(os.stat(fpath).st_mode)[-3:],
                 "sha256": hashlib.sha256(content).hexdigest(),
             }
 
+        # Also exclude .venv/ entries from expected set
+        expected = {
+            k: v
+            for k, v in expected.items()
+            if not k.startswith(self._EXCLUDED_PREFIXES)
+        }
         missing = set(expected.keys()) - set(actual.keys())
         extra = set(actual.keys()) - set(expected.keys())
         mismatch: list[str] = []
@@ -1076,7 +1061,7 @@ class TestSa90ExactManifestParity:
 
     def test_zero_delta_regeneration_stable(self) -> None:
         """Generating the same variant twice must produce identical trees
-        (no non-determinism beyond poetry.lock)."""
+        (no non-determinism beyond poetry.lock and .venv)."""
         import tempfile
 
         cfg = self._VARIANTS["react_default"]
@@ -1090,6 +1075,8 @@ class TestSa90ExactManifestParity:
                     continue
                 rel = str(fpath.relative_to(out_dir))
                 if rel in self._DYNAMIC_PATHS:
+                    continue
+                if rel.startswith(self._EXCLUDED_PREFIXES):
                     continue
                 result[rel] = hashlib.sha256(fpath.read_bytes()).hexdigest()
             return result
