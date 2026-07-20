@@ -177,8 +177,12 @@ make frontend-proof
 # Apply formatting changes
 make format
 
-# Combined quality gate
+# Fast pre-push gate: lint + typecheck + unit tests + repo gates
+# (add QUIET=1 for quiet-on-success output in agent/LLM workflows)
 make check
+
+# Full local-CI parity, adding integration tests (and E2E via ci-e2e)
+make ci
 ```
 
 **Note**: Linting rules are centralized in `ruff.toml` and `mypy.ini` at the repository root. All packages share these configurations automatically.
