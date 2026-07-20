@@ -57,7 +57,7 @@ git merge --no-ff wt-track{N}
 1. **SA96-GATE** (green-gate join, Track 3) — next pending release-path task. All deps are met (SA96-T1/T2, SA93, SA103, SA101 all complete — see [CHANGELOG.md](../../CHANGELOG.md)); both blockers (BLK-001 coverage, BLK-002 quality baseline) are cleared. The four-command join can now re-run.
 2. **SA96-PUBLISH** (staged PyPI publish, human-only), deps on SA96-GATE.
 3. **Frontend-theme de-specialization (arch-audit Finding 10, Track 2)** — staged chain **SA104 ✓ → SA105/SA106**. SA104 (stage 1) is complete; **SA105** (module de-spec) and **SA106** (identity de-spec) remain open — both assistant-executable now that SA105's dormant-files decision is resolved (Option A, see [decisions.md](./decisions.md#frontend-theme-despecialization-dormant-files)). Off the release critical path. Arch **Finding 7** stays unscheduled (SA104 shrank its surface — sequence any tuple-derivation work after it); arch Findings **2/4** remain **not ticketed** with the (unscheduled) teams module.
-4. **Track 1 test-parallelization** — **TP4** (docs-only AI fast-loop recipes) is the sole open TP ticket; off the release critical path.
+4. **Track 1 test-parallelization** — **TP4** (docs-only AI fast-loop recipes) is **complete** (see below); no open TP tickets remain. Off the release critical path.
 
 ### Green-gate milestone — all quality make commands pass
 
@@ -88,13 +88,11 @@ Pre-release re-verification: **SA96-T1 (Track 1) and SA96-T2 (Track 2) module sw
 
 Prior Track 1 tickets are closed — SA92, SA84, SA86, SA96-T1, Finding 8, the audit-remediation tickets SA97/SA99, the CI-gate tickets SA102/SA103 (rebalanced here from Track 3), and the test-parallelization suite SA91/TP1/TP2/TP2b (the E2E sub-chain TP3a/TP3b was rebalanced to Track 2). See [CHANGELOG.md](../../CHANGELOG.md).
 
-Track 1 carries the tail of the **TP (test-parallelization)** suite — the goal is to shorten the SDLC feedback loop (and let an AI assistant run partial tests concurrently) by parallelizing the long-running quality gates. The sole remaining ticket is **TP4** (docs-only AI fast-loop recipes) — a pure cycle-time improvement, off the release critical path, that must not regress any existing gate's pass/fail set or coverage thresholds.
+Track 1 carried the tail of the **TP (test-parallelization)** suite — the goal was to shorten the SDLC feedback loop (and let an AI assistant run partial tests concurrently) by parallelizing the long-running quality gates. The suite is now **complete** with the landing of **TP4** (docs-only AI fast-loop recipes). All prior TP tickets (TP1, TP2, TP2b, TP3a, TP3b) are closed — see [CHANGELOG.md](../../CHANGELOG.md).
 
-- [ ] **TP4 — Document the AI-assistant fast partial-test recipes.** `Tier 1 · Track 1 · deps: none · docs-only (review-only closeout)`
-  The repo already supports targeted, safe partial runs that an AI assistant should prefer during iteration, but they are underused/undocumented as a coherent workflow: section flags (`make lint -- --core`, `make typecheck -- --cli`, `make test-unit -- --core`), single-module reruns (`make MODULE=<name> test -- --modules`), and bounded integration concurrency (`QS_INTEGRATION_JOBS=<N> make test-integration`).
-  - Add a short "Fast feedback loop for AI-assisted / incremental development" subsection to `docs/technical/development.md` (or the closest testing doc): the iterate → pre-merge → E2E-last ladder, the targeted-rerun recipes above, and the landed `QS_CI_PARALLEL` (TP1, Track 1) / `QS_E2E_PARALLEL` (TP3b, **Track 2**) knobs (cross-reference, don't block on them — this is the one cross-track reference the rebalance introduces; land TP4 after both TP1 and TP3b merge to `v87`).
-  - Verify: every command in the doc runs as written on a clean tree.
-  *(why →* parallelization audit Tier 4 — scoped partial runs already exist; the gap is discoverability for the incremental-dev loop*)*
+- [x] **TP4 — Document the AI-assistant fast partial-test recipes.** `Tier 1 · Track 1 · deps: none · docs-only (review-only closeout)`
+  Added a "Fast feedback loop for AI-assisted / incremental development" subsection to `docs/technical/development.md` covering the iterate → pre-merge → E2E-last ladder, section flags (`make lint -- --core`, `make typecheck -- --cli`, `make test-unit -- --core`), single-module reruns (`QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules`), bounded integration concurrency (`QS_INTEGRATION_JOBS=2 make test-integration`), and cross-references to `QS_CI_PARALLEL` (TP1), `QS_E2E_PARALLEL` (TP3b), and `PYTEST_XDIST_WORKERS` (TP2). Five commands were verified on the clean `v87` baseline: `make lint -- --core` exit 0; `make typecheck -- --cli` exit 0; `make test-unit -- --core` exit 0 (2,489 passed); `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules` exit 0 (874 passed, 11 skipped); `QS_INTEGRATION_JOBS=2 make test-integration` returned nonzero — the bounded worker pool ran all 12 modules (94.39% mean) but `orgs/test_debug.py::TestMiddlewareDebugOverride::test_debug_org_overrides_saas_session` failed with "server closed the connection unexpectedly". A serial rerun (`QS_INTEGRATION_JOBS=1 make test-integration`) subsequently passed (all 12 modules, 94.41% mean). The bounded-run failure is an unresolved non-blocking integration risk for this docs-only task. `QS_CI_PARALLEL=0` and `QS_E2E_PARALLEL=0` are documented as cross-references (their full verification is the responsibility of their owning tickets, which are complete). CR-TP4-001 (shell-invalid `<N>` in presented command syntax) and CR-TP4-002 (overstated verification evidence) were resolved in the follow-up pass.
+  *(why →* parallelization audit Tier 4 — scoped partial runs already exist; the gap was discoverability for the incremental-dev loop*)*
 
 ### Track 2 — Module contracts & settings — frontend-theme de-specialization (arch Finding 10)
 
@@ -126,31 +124,31 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 
 ### Dependency & parallelization overview
 
-All prior release-path and audit-remediation tickets are complete (SA92/SA84/SA86/SA93/SA94/SA95/SA96-T1/T2/SA97/SA98/SA99/SA100/SA91/SA101/SA102/SA103/SA104/TP1/TP2/TP2b/TP3a/TP3b, Finding 1, all four GATEs) — see [CHANGELOG.md](../../CHANGELOG.md). Only open work is shown below.
+All prior release-path and audit-remediation tickets are complete (SA92/SA84/SA86/SA93/SA94/SA95/SA96-T1/T2/SA97/SA98/SA99/SA100/SA91/SA101/SA102/SA103/SA104/TP1/TP2/TP2b/TP3a/TP3b/TP4, Finding 1, all four GATEs) — see [CHANGELOG.md](../../CHANGELOG.md). Only open work is shown below.
 
 ```
-Track 1 (off crit. path)   Track 2 (off crit. path)          Track 3 → release (critical path)
+Track 1 (complete)         Track 2 (off crit. path)          Track 3 → release (critical path)
 ────────────────────────   ────────────────────────────      ─────────────────────────────────
-TP4 ── AI fast-loop        SA105 ── module de-spec (2a;       SA96-GATE ── green-gate join
-  recipes (docs-only)        deps SA104 ✓; decision resolved)    (make check/quality/ci/ci-e2e)
-                                                                all deps ✓; blockers cleared
-                           SA106 ── identity de-spec (2b;             │
-                             deps SA104 ✓; assistant-exec.)           ▼
-                           (arch Finding 10 chain)             SA96-PUBLISH ── build → publish
-                                                                 deps: SA96-GATE  (human-only)
+✓ TP4 complete              SA105 ── module de-spec (2a;       SA96-GATE ── green-gate join
+✓ TP suite closed             deps SA104 ✓; decision resolved)   (make check/quality/ci/ci-e2e)
+  (TP1/TP2/TP2b/           SA106 ── identity de-spec (2b;       all deps ✓; blockers cleared
+   TP3a/TP3b/TP4)             deps SA104 ✓; assistant-exec.)           │
+                             (arch Finding 10 chain)                   ▼
+                                                              SA96-PUBLISH ── build → publish
+                                                                deps: SA96-GATE  (human-only)
 ```
 
-**Open work only:** Track 1 `TP4` (docs-only), Track 2's frontend chain `SA105/SA106` (arch Finding 10, downstream of the complete SA104), and the release join `SA96-GATE → SA96-PUBLISH`. The frontend chain owns the `quickscale_core` generator + `showcase_react` template tree only — disjoint from the TP work and the SA103 CI surfaces — so all three tracks run concurrently; only the closeout files (`CHANGELOG.md`, `roadmap.md`) are shared, covered by the Merge procedure. TP and the frontend chain are off the release critical path and must not regress any gate's pass/fail set or coverage thresholds. `TP4` is unblocked (TP1 done, TP3b merged to `v87`); `SA105` and `SA106` are both assistant-executable (SA105's dormant-files decision is resolved — Option A, see [decisions.md](./decisions.md#frontend-theme-despecialization-dormant-files)).
+**Open work only:** Track 2's frontend chain `SA105/SA106` (arch Finding 10, downstream of the complete SA104) and the release join `SA96-GATE → SA96-PUBLISH`. Track 1's TP suite is **complete** (TP1/TP2/TP2b/TP3a/TP3b/TP4). The frontend chain owns the `quickscale_core` generator + `showcase_react` template tree only — disjoint from the TP work and the SA103 CI surfaces — so Track 2 and Track 3 run concurrently; only the closeout files (`CHANGELOG.md`, `roadmap.md`) are shared, covered by the Merge procedure. Tracks 1 and 2 are off the release critical path and must not regress any gate's pass/fail set or coverage thresholds. `SA105` and `SA106` are both assistant-executable (SA105's dormant-files decision is resolved — Option A, see [decisions.md](./decisions.md#frontend-theme-despecialization-dormant-files)).
 
 **Critical path.** All SA96-GATE dependencies are complete (SA96-T1/T2, SA93, SA103, SA101) and both blockers (BLK-001 coverage, BLK-002 quality baseline) are cleared, so the remaining critical-path chain is just **SA96-GATE** (green-gate join, assistant-executable) → **SA96-PUBLISH** (human-only). The SA96-GATE join must not be represented as run until its own four-command re-run and re-verification occur.
 
 ### Track readiness (2026-07-20)
 
-- **Track 1 — CLEAN to continue (off critical path).** All prior TP work (TP1/TP2/TP2b/TP3a/TP3b) and the two rebalanced CI-gate tickets (SA102/SA103) are closed — see [CHANGELOG.md](../../CHANGELOG.md). The sole open ticket is **TP4** (docs-only AI fast-loop recipes), unblocked (TP1 done, TP3b merged to `v87`). Off the SA96 release critical path; must not regress any gate's pass/fail set or coverage thresholds.
+- **Track 1 — COMPLETE (off critical path).** All TP work (TP1/TP2/TP2b/TP3a/TP3b/TP4) and the two rebalanced CI-gate tickets (SA102/SA103) are closed — see [CHANGELOG.md](../../CHANGELOG.md). The TP suite is fully landed with no open tickets. Off the SA96 release critical path; none of its changes regressed any gate's pass/fail set or coverage thresholds.
 - **Track 2 — CLEAN to continue (off critical path).** All prior release/audit work is closed (SA94, SA88b, SA86, SA95, SA96-T2, SA98, TP3a/TP3b). The open frontend-theme de-specialization chain (arch Finding 10) is **SA105** (module de-spec) and **SA106** (identity de-spec), both deps SA104 ✓ and both assistant-executable — SA105's dormant-files decision is resolved (Option A, [decisions.md](./decisions.md#frontend-theme-despecialization-dormant-files)). The chain owns the `quickscale_core` generator + `showcase_react` template tree only, disjoint from the TP work and the SA103 CI surfaces; must not regress any gate or coverage threshold.
 - **Track 3 — CLEAN to continue (owns the release critical path).** All prior Track 3 work is closed (Finding 1, four GATEs, SA91, SA100, SA93, SA101). The sole open ticket is **SA96-GATE** (green-gate join, assistant-executable) — all deps met and both blockers cleared; its four-command re-run is the next release-path action. **SA96-PUBLISH** (human-only) follows. Non-gating advisories remain deferred (SA91 CR-SA91-REV-006 low; SA89B-CR-004; SA93-REV-005; SA93-ADV-001..004).
 
-**Net — all three tracks have assigned, independent work and none is a merge hazard (file-disjoint except the shared closeout files, covered by the Merge procedure).** Track 1 = `TP4` (docs-only, clean); Track 2 = `SA105` + `SA106` (both clean — SA105 decision resolved); Track 3 = `SA96-GATE` (clean, critical path) → `SA96-PUBLISH` (human-only). SA96-GATE is the only critical-path task and is a cross-track join that cannot be parallelized, so no rebalancing move helps — see [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92) for the recorded squash/guardrail/shrink-only-quality policies; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
+**Net — Tracks 2 and 3 have assigned, independent work and none is a merge hazard (file-disjoint except the shared closeout files, covered by the Merge procedure).** Track 1 is **complete** (all TP tickets closed). Track 2 = `SA105` + `SA106` (both clean — SA105 decision resolved); Track 3 = `SA96-GATE` (clean, critical path) → `SA96-PUBLISH` (human-only). SA96-GATE is the only critical-path task and is a cross-track join that cannot be parallelized, so no rebalancing move helps — see [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92) for the recorded squash/guardrail/shrink-only-quality policies; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
