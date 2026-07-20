@@ -62,10 +62,18 @@
       storage: false,
       backups: false,
       notifications: false,
+      analytics: false,
+      billing: false,
       social: {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}true{% else %}false{% endif %},
     },
     modulePaths: {
+      crm: "/crm/",
       social: "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}/social{% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}/social/embeds{% else %}/social{% endif %}",
+      analytics: "/analytics/",
+    },
+    owner: {
+      mode: "solo",
+      currentOrgSlug: null,
     },
     publicPage: {
       module: 'social',

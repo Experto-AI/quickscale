@@ -369,14 +369,6 @@ class TestSelectedModulesReactTheme:
                 f"Module '{module_key}' must appear in QuickScaleModules after SA105."
             )
 
-        # defaultConfig includes all modules
-        default = use_modules.split("const defaultConfig: QuickScaleConfig = {", 1)[
-            1
-        ].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
-        assert "auth: false" in default
-        assert "blog: false" in default
-        assert "listings: false" in default
-
         # QuickScaleModulePaths includes all known paths
         module_paths_interface = use_modules.split(
             "interface QuickScaleModulePaths {", 1
@@ -480,13 +472,7 @@ class TestSelectedModulesReactTheme:
                 "even when selected_modules=[] after SA105."
             )
 
-        default = empty_modules.split("const defaultConfig: QuickScaleConfig = {", 1)[
-            1
-        ].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
-        assert "auth: false" in default
-        assert "blog: false" in default
-        assert "crm: false" in default
-        assert "listings: false" in default
+        # After SA107, defaultConfig is removed — validation is fail-hard at runtime.
 
     def test_app_tsx_always_includes_all_imports_and_routes(
         self, tmp_path: Path
@@ -558,10 +544,10 @@ class TestSelectedModulesReactTheme:
         ), "main.tsx must import renderQuickScaleRoot from extracted seam after SA105."
 
         # renderQuickScaleRoot is used in the render tree with surface
+        # After SA107, surface is read from the validated config, not directly from the seam.
         assert (
-            "renderQuickScaleRoot(window.__QUICKSCALE__?.publicPage?.surface)"
-            in empty_main
-        ), "renderQuickScaleRoot must be called with surface in the render tree."
+            "renderQuickScaleRoot(quickScaleConfig.publicPage?.surface)" in empty_main
+        ), "renderQuickScaleRoot must be called with surface from validated config."
 
     def test_window_config_always_includes_all_modules(self, tmp_path: Path) -> None:
         """After SA105, the Django-rendered index.html always emits all module flags."""
@@ -673,11 +659,12 @@ class TestSelectedModulesReactTheme:
         ), (
             "Generated main.tsx must import renderQuickScaleRoot from the extracted seam."
         )
-        # Uses it with surface
+        # Uses it with surface (from validated config after SA107)
         assert (
-            "renderQuickScaleRoot(window.__QUICKSCALE__?.publicPage?.surface)"
-            in content
-        ), "Generated main.tsx must call renderQuickScaleRoot with surface."
+            "renderQuickScaleRoot(quickScaleConfig.publicPage?.surface)" in content
+        ), (
+            "Generated main.tsx must call renderQuickScaleRoot with surface from validated config."
+        )
         # No inline lazy social variable declarations remain in main.tsx
         assert "const SocialEmbedsPublicPage" not in content, (
             "Generated main.tsx must not define lazy social imports inline."
