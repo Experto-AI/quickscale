@@ -89,8 +89,6 @@ VALID_TOP_LEVEL_KEYS = {"version", "project", "modules", "docker"}
 VALID_PROJECT_KEYS = {"slug", "package", "theme"}
 VALID_DOCKER_KEYS = {"start", "build", "create_superuser"}
 VALID_THEMES = {"showcase_react"}
-AVAILABLE_MODULES = set(get_discovered_module_names())
-READY_MODULES = set(get_discovered_module_names())
 
 
 def _find_line_number(yaml_content: str, key: str) -> int | None:
@@ -484,23 +482,41 @@ def _validate_docker_section(data: dict, yaml_content: str) -> DockerConfig:
 
 
 def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, ModuleConfig]:
-    """Validate modules section and return dict of ModuleConfig."""
+    """Validate modules section and return dict of ModuleConfig.
+
+    Module discovery is performed lazily — only when the ``modules`` mapping
+    is non-empty — so that import-time filesystem discovery is eliminated.
+
+    Discovery uses :func:`get_discovered_module_names` which resolves source
+    inventory first and falls back to authoritative bundled inventory.  If
+    neither is available, :exc:`ImproperlyConfigured` propagates as a fail-hard
+    validation error.
+    """
     modules_data = data.get("modules", {})
     if not isinstance(modules_data, dict):
         line = _find_line_number(yaml_content, "modules")
         raise ConfigValidationError("'modules' must be a mapping", line=line)
 
+    # Discover modules lazily only when there are entries to validate.
+    if modules_data:
+        _discovered = get_discovered_module_names()
+        _available_modules: set[str] = set(_discovered)
+        _ready_modules: set[str] = set(_discovered)
+    else:
+        _available_modules = set()
+        _ready_modules = set()
+
     modules: dict[str, ModuleConfig] = {}
     for module_name, module_options in modules_data.items():
-        if module_name not in AVAILABLE_MODULES:
+        if module_name not in _available_modules:
             line = _find_line_number(yaml_content, module_name)
-            suggestion = _suggest_similar_key(module_name, AVAILABLE_MODULES)
+            suggestion = _suggest_similar_key(module_name, _available_modules)
             suggestion_text = f"did you mean '{suggestion}'?" if suggestion else None
             raise ConfigValidationError(
                 f"Unknown module '{module_name}'",
                 line=line,
                 suggestion=suggestion_text
-                or f"Available modules: {', '.join(sorted(AVAILABLE_MODULES))}",
+                or f"Available modules: {', '.join(sorted(_available_modules))}",
             )
 
         if module_options is None:
@@ -525,7 +541,7 @@ def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, Module
                 line=line,
                 suggestion=(
                     "Remove it from quickscale.yml and choose a shipped module: "
-                    + ", ".join(sorted(READY_MODULES))
+                    + ", ".join(sorted(_ready_modules))
                 ),
             )
 

@@ -18,6 +18,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from quickscale_core.contracts.module_discovery import (
+    ImproperlyConfigured,
+    discover_bundled_module_names,
     discover_shipped_module_names,
     get_placeholder_rejection_reason,
     is_placeholder_module,
@@ -131,18 +133,38 @@ def get_module_entry(module_name: str) -> ModuleCatalogEntry | None:
 
 
 def get_discovered_module_names() -> list[str]:
-    """Return the authoritative list of shipped module names discovered by
-    scanning ``quickscale_modules/*/module.yml``.
+    """Return the authoritative list of shipped module names.
 
-    This is the primary source of truth for which modules are available.
+    Resolution follows a fixed precedence:
+
+    1.  **Source inventory** — ``quickscale_modules/*/module.yml`` scanned
+        via :func:`discover_shipped_module_names`.  This is the primary
+        source when running inside the maintainer monorepo or when a
+        runtime override is active.
+
+    2.  **Bundled inventory** — manifests shipped with the installed
+        ``quickscale_core`` package, discovered via
+        :func:`discover_bundled_module_names`.  This is the fallback for
+        installed-wheel contexts where no source workspace is available.
+
+    3.  **Fail-hard** — raises :exc:`ImproperlyConfigured` if neither
+        source nor bundled inventory can be resolved.
+
     Placeholder directories (e.g. ``teams``) without ``module.yml`` are
-    excluded.  Returns an empty list when the module workspace cannot be
-    read.
+    excluded in both paths.
 
     Returns:
         Sorted list of shipped module names.
+
+    Raises:
+        ImproperlyConfigured: If no module inventory is available.
     """
-    return discover_shipped_module_names()
+    try:
+        return discover_shipped_module_names()
+    except ImproperlyConfigured:
+        pass
+
+    return discover_bundled_module_names()
 
 
 def get_discovered_module_entries() -> list[ModuleCatalogEntry]:
@@ -158,7 +180,7 @@ def get_discovered_module_entries() -> list[ModuleCatalogEntry]:
     Returns:
         List of :class:`ModuleCatalogEntry` for discovered modules.
     """
-    discovered_names = discover_shipped_module_names()
+    discovered_names = get_discovered_module_names()
 
     entries: list[ModuleCatalogEntry] = []
     seen: set[str] = set()

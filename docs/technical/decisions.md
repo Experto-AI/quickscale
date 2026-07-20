@@ -1597,6 +1597,71 @@ the per-file migration merge and a second hand-synced list.
 
 ---
 
+<a id="af7-installed-wheel-module-discovery"></a>
+### Bundled Module Inventory and Source-Required Paths (AF7)
+
+**Architectural Decision (SA109):** Distinguish authoritative bundled manifest inventory
+from real module source. The installed-wheel context uses synchronized bundled manifests
+for inventory and discovery; source-required paths remain fail-hard.
+
+**Background:** The ``quickscale_core`` package ships a synchronized manifest snapshot at
+``quickscale_core/data/manifests/*/module.yml`` for every shipped module. Before SA109,
+module discovery (``get_discovered_module_names``) only consulted the maintainer monorepo
+``quickscale_modules/`` workspace and raised ``ImproperlyConfigured`` for any other context
+— meaning the installed wheel crashed on import. AF7 was previously docstring-only
+(recorded in ``module_discovery.py:127`` and ``entry_point.py:17-23``) but was absent from
+the policy hub.
+
+**Resolution precedence** (``get_discovered_module_names``):
+1. **Source inventory** — ``quickscale_modules/*/module.yml`` via ``discover_shipped_module_names()``
+2. **Bundled inventory** — ``quickscale_core/data/manifests/*/module.yml`` via ``discover_bundled_module_names()``
+3. **Fail-hard** — ``ImproperlyConfigured`` if neither source nor bundled inventory is available
+
+**Observable provenance:** The :class:`ModuleResolutionSource` enum in
+``module_discovery.py`` exposes which source is currently active (``OVERRIDE``,
+``MONOREPO``, ``BUNDLED``). Callers can query ``get_resolution_source()`` to adapt
+behaviour or diagnostics to the current context.
+
+**G1–G4 Guardrails:**
+
+| Guard | Mechanism | Scope | Fail behaviour |
+|-------|-----------|-------|----------------|
+| **G1 — Source inventory** | ``discover_shipped_module_names()`` scans ``*/module.yml`` at the configured base path | Monorepo dev / runtime override | Returns empty list (no manifests found) |
+| **G2 — Bundled inventory** | ``discover_bundled_module_names()`` reads ``importlib.resources:quickscale_core/data/manifests/`` | Installed wheel / editable install | ``ImproperlyConfigured`` if manifests dir absent or empty |
+| **G3 — Source-required path** | ``get_modules_base_path()`` resolves the monorepo path or override | Any operation needing real module source trees | ``ImproperlyConfigured`` — no fallback to bundled (bundled manifests are not source trees) |
+| **G4 — Managed adapter import** | ``refresh_managed_adapters()`` imports ``quickscale_modules_{name}.adapter`` | Wiring-spec assembly for managed modules (billing, CRM, social) | ``ImproperlyConfigured`` if adapter package not importable |
+
+**Source-required operations (G3):** ``get_modules_base_path()``,
+``discover_shipped_module_paths()``, ``load_module_manifest()``, and
+``refresh_managed_adapters()`` all require a resolvable modules base path. They fail hard
+(``ImproperlyConfigured``) in the ``BUNDLED`` provenance state. Only
+``discover_bundled_module_names()``, ``get_discovered_module_names()``, and
+``get_resolution_source()`` work from bundled data alone. This preserves the AF7 fail-hard
+intent where it is genuinely load-bearing — generation needs real module source — while
+allowing the shipped module universe to be read from the bundled snapshot.
+
+**Eager discovery sites — remediated.** Two call sites previously triggered filesystem
+discovery at import time:
+
+1.  ``config_schema.py`` — had ``AVAILABLE_MODULES = set(get_discovered_module_names())``
+    at module level. Now lazy: discovery runs only when ``_validate_modules_section()``
+    encounters a non-empty ``modules`` mapping.
+2.  ``module_commands.py`` — used a static ``click.Choice`` that evaluated module names at
+    module load time. Now uses ``_LazyModuleChoice`` which defers resolution to first CLI
+    argument parsing.
+
+**Cross-reference:** This decision is a specific expression of the
+`Fail-Hard Principle <#fail-hard-principle>`_: source-required operations fail immediately
+with a descriptive ``ImproperlyConfigured`` rather than silently falling back to
+incomplete data. The bundled inventory path is not a fail-hard exception — it is a
+distinct data source that carries synchronized manifest metadata, not module source trees.
+The ``ImproperlyConfigured`` identity rules in
+`§ImproperlyConfigured Exception Identity <#improperlyconfigured-exception-identity>`_
+apply: contracts-layer catchers import the contracts-layer exception; Django-runtime
+catchers import Django's.
+
+---
+
 ## Prohibitions (Critical - DO NOT)
 
 **Database:**

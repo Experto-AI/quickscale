@@ -285,6 +285,115 @@ class TestValidateConfigValid:
 
 
 # ---------------------------------------------------------------------------
+# SA109 Phase 2 — lazy import-time/empty-config discovery guards
+# ---------------------------------------------------------------------------
+
+
+class TestLazyModuleDiscovery:
+    """Discovery must not happen at import time or for empty modules mappings."""
+
+    def test_import_does_not_trigger_discovery(self) -> None:
+        """Importing config_schema must not call get_discovered_module_names."""
+        import importlib
+        import sys
+
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts import module_catalog as _mc
+
+        # Clear module cache for the target modules.
+        for mod_name in list(sys.modules):
+            if "config_schema" in mod_name:
+                del sys.modules[mod_name]
+
+        original = _md.discover_shipped_module_names
+        call_count = 0
+
+        def _tracking(*args: object, **kwargs: object) -> list[str]:
+            nonlocal call_count
+            call_count += 1
+            return original(*args, **kwargs)
+
+        _md.discover_shipped_module_names = _tracking
+        _mc.discover_shipped_module_names = _tracking  # via module_catalog import
+
+        try:
+            importlib.import_module("quickscale_core.schema.config_schema")
+            assert call_count == 0, (
+                f"discover_shipped_module_names called {call_count} time(s)"
+                " during config_schema import"
+            )
+        finally:
+            _md.discover_shipped_module_names = original
+            _mc.discover_shipped_module_names = original
+
+    def test_empty_modules_no_discovery(self) -> None:
+        """validate_config with empty modules must not call discovery."""
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts import module_catalog as _mc
+
+        original = _md.discover_shipped_module_names
+        call_count = 0
+
+        def _tracking(*args: object, **kwargs: object) -> list[str]:
+            nonlocal call_count
+            call_count += 1
+            return original(*args, **kwargs)
+
+        _md.discover_shipped_module_names = _tracking
+        _mc.discover_shipped_module_names = _tracking
+
+        try:
+            validate_config(_MINIMAL_VALID_YAML)
+            assert call_count == 0, "discovery triggered for empty modules mapping"
+        finally:
+            _md.discover_shipped_module_names = original
+            _mc.discover_shipped_module_names = original
+
+    def test_non_empty_modules_triggers_discovery(self) -> None:
+        """validate_config with non-empty modules must trigger discovery."""
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts import module_catalog as _mc
+
+        original = _md.discover_shipped_module_names
+        call_count = 0
+
+        def _tracking(*args: object, **kwargs: object) -> list[str]:
+            nonlocal call_count
+            call_count += 1
+            return original(*args, **kwargs)
+
+        _md.discover_shipped_module_names = _tracking
+        _mc.discover_shipped_module_names = _tracking
+
+        yaml_text = _valid_yaml_with_modules("  analytics:\n    enabled: true\n")
+        try:
+            validate_config(yaml_text)
+            assert call_count >= 1, (
+                "discovery was not triggered for non-empty modules mapping"
+            )
+        finally:
+            _md.discover_shipped_module_names = original
+            _mc.discover_shipped_module_names = original
+
+    def test_unknown_module_validation_error(self) -> None:
+        """An unknown module name must produce ConfigValidationError."""
+        with pytest.raises(ConfigValidationError, match="Unknown module"):
+            validate_config(
+                _valid_yaml_with_modules("  nonexistent_xyz:\n    enabled: true\n")
+            )
+
+    def test_unknown_module_suggestion(self) -> None:
+        """The error for an unknown module must include a suggestion."""
+        with pytest.raises(
+            ConfigValidationError,
+            match=r"(did you mean|Available modules)",
+        ):
+            validate_config(
+                _valid_yaml_with_modules("  nonexistent_xyz:\n    enabled: true\n")
+            )
+
+
+# ---------------------------------------------------------------------------
 # Schema lazy exports
 # ---------------------------------------------------------------------------
 

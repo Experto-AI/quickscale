@@ -11,7 +11,6 @@ from typing import Any
 import click
 
 from quickscale_core.contracts.module_catalog import (
-    get_discovered_module_names,
     get_module_readiness_reason,
 )
 from quickscale_core.schema.config_schema import validate_config
@@ -64,10 +63,49 @@ from .module_output import (
     _validate_embed_theme,
 )
 
-# Available modules discovered via manifest scanning.
-# The authoritative source is manifest-backed discovery; all discovered
-# modules are shipped modules.
-AVAILABLE_MODULES = get_discovered_module_names()
+# ---------------------------------------------------------------------------
+# Lazy module choice for Click (SA109 Phase 2)
+# ---------------------------------------------------------------------------
+# Module names are discovered lazily at first validation instead of at import
+# time, so that ``quickscale --help`` and related import-only paths do not
+# trigger filesystem discovery.
+
+
+class _LazyModuleChoice(click.Choice):
+    """A :class:`click.Choice` subclass that resolves module names lazily.
+
+    Defers the call to :func:`get_discovered_module_names` until the first
+    time the choices are actually accessed (during CLI argument parsing).
+    All ``click.Choice`` behaviours — case-insensitive canonicalisation,
+    help metavar rendering, and invalid-choice diagnostics — are preserved.
+    """
+
+    def __init__(self) -> None:
+        # Intentionally skip ``super().__init__()`` — we expose ``choices``
+        # via a property that resolves lazily and provide a setter so that
+        # Click's internal ``self.choices = ...`` in its own ``__init__`` is
+        # not required.
+        self.case_sensitive = False
+        self._resolved_choices: list[str] | None = None
+
+    @property  # type: ignore[override]
+    def choices(self) -> list[str]:
+        if self._resolved_choices is None:
+            from quickscale_core.contracts.module_catalog import (
+                get_discovered_module_names,
+            )
+
+            self._resolved_choices = get_discovered_module_names()
+        return self._resolved_choices
+
+    @choices.setter
+    def choices(self, value: object) -> None:
+        if value is None:
+            self._resolved_choices = None
+        elif isinstance(value, list):
+            self._resolved_choices = [str(v) for v in value]
+        else:
+            self._resolved_choices = [str(value)]
 
 
 @dataclass(frozen=True)
@@ -1447,7 +1485,7 @@ def update(no_preview: bool) -> None:
 @click.option(
     "--module",
     required=True,
-    type=click.Choice(AVAILABLE_MODULES, case_sensitive=False),
+    type=_LazyModuleChoice(),
     help="Module name to push changes for",
 )
 @click.option(

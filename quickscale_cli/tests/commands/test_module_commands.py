@@ -1800,6 +1800,86 @@ class TestUpdateVersionDriftWarning:
         mock_warn.assert_called_once()
 
 
+# ---------------------------------------------------------------------------
+# SA109 Phase 2 — LazyModuleChoice Click type
+# ---------------------------------------------------------------------------
+
+
+class TestLazyModuleChoice:
+    """_LazyModuleChoice must resolve module names lazily and preserve
+    all click.Choice behaviours."""
+
+    def test_lazy_no_discovery_at_construction(self) -> None:
+        """Construction must not trigger module discovery."""
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts import module_catalog as _mc
+        from quickscale_cli.commands.module_commands import _LazyModuleChoice
+
+        original_src = _md.discover_shipped_module_names
+        call_count = 0
+
+        def _tracking(*args: object, **kwargs: object) -> list[str]:
+            nonlocal call_count
+            call_count += 1
+            return original_src(*args, **kwargs)
+
+        _md.discover_shipped_module_names = _tracking
+        _mc.discover_shipped_module_names = _tracking
+
+        try:
+            _LazyModuleChoice()
+            assert call_count == 0, (
+                "discovery triggered during _LazyModuleChoice construction"
+            )
+        finally:
+            _md.discover_shipped_module_names = original_src
+            _mc.discover_shipped_module_names = original_src
+
+    def test_case_insensitive_match(self) -> None:
+        """_LazyModuleChoice must match module names case-insensitively."""
+        from quickscale_cli.commands.module_commands import _LazyModuleChoice
+
+        choice = _LazyModuleChoice()
+        all_choices = choice.choices
+        assert len(all_choices) > 0
+
+        first = all_choices[0]
+        result = choice.convert(first.upper(), None, None)
+        assert result == first, (
+            f"Case-insensitive match failed: '{first.upper()}' -> '{result}'"
+        )
+
+    def test_invalid_choice_raises(self) -> None:
+        """An invalid module name must produce a click.BadParameter."""
+        from quickscale_cli.commands.module_commands import _LazyModuleChoice
+
+        choice = _LazyModuleChoice()
+        with pytest.raises(click.BadParameter, match="not one of"):
+            choice.convert("nonexistent_module_xyz", None, None)
+
+    def test_help_output_lists_choices(self) -> None:
+        """CLI help for push --module must list available module names."""
+        from click.testing import CliRunner
+        from quickscale_cli.commands.module_commands import push
+
+        runner = CliRunner()
+        result = runner.invoke(push, ["--help"])
+        assert result.exit_code == 0
+        assert "analytics" in result.output
+        assert "auth" in result.output
+        assert "billing" in result.output
+
+    def test_invalid_module_via_cli_runner(self) -> None:
+        """CLI push with invalid module name must show an error."""
+        from click.testing import CliRunner
+        from quickscale_cli.commands.module_commands import push
+
+        runner = CliRunner()
+        result = runner.invoke(push, ["--module", "nonexistent_xyz"])
+        assert result.exit_code != 0
+        assert "not one of" in result.output
+
+
 class TestPushCommand:
     """Tests for push click command."""
 
