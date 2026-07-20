@@ -56,12 +56,12 @@ git merge --no-ff wt-track{N}
 **Open workstreams before release:**
 1. **SA96-GATE** (green-gate join, Track 3) — **complete**. All deps met (SA96-T1/T2, SA93, SA103, SA101) and both blockers cleared. The four-command join passed — see [CHANGELOG.md](../../CHANGELOG.md). The next release-path step is **SA96-PUBLISH** (human-only).
 2. **SA96-PUBLISH** (staged PyPI publish, human-only), deps on SA96-GATE.
-3. **Frontend-theme de-specialization (arch-audit Finding 10, Track 2)** — staged chain **SA104 ✓ → SA105/SA106**. SA104 (stage 1) is complete; **SA105** (module de-spec, blocked on a maintainer dormant-files decision) and **SA106** (identity de-spec, assistant-executable) remain open. Off the release critical path. Arch **Finding 7** stays unscheduled (SA104 shrank its surface — sequence any tuple-derivation work after it); arch Findings **2/4** remain **not ticketed** with the (unscheduled) teams module.
-4. **Track 1 test-parallelization** — **TP4** (docs-only AI fast-loop recipes) is the sole open TP ticket; off the release critical path.
+3. **Frontend-theme de-specialization (arch-audit Finding 10, Track 2)** — staged chain **SA104 ✓ → SA105/SA106**. SA104 (stage 1) is complete; **SA105** (module de-spec) and **SA106** (identity de-spec) remain open — both assistant-executable now that SA105's dormant-files decision is resolved (Option A, see [decisions.md](./decisions.md#frontend-theme-despecialization-dormant-files)). Off the release critical path. Arch **Finding 7** stays unscheduled (SA104 shrank its surface — sequence any tuple-derivation work after it); arch Findings **2/4** remain **not ticketed** with the (unscheduled) teams module.
+4. **Track 1 test-parallelization** — **TP4** (docs-only AI fast-loop recipes) is **complete** (see below); no open TP tickets remain. Off the release critical path.
 
 ### Green-gate milestone — all quality make commands pass
 
-**Exit criteria (single definition of done).** On a fresh clone + fresh `migrate` (post-SA92 squash), `make check`, `make quality`, `make ci`, and `make ci-e2e` all exit 0, with `QUARANTINE_TICKETS` **empty** in `scripts/test_integration.sh` (no masked failures). `make check` is the umbrella gate — `lint` + `typecheck` + `test` (unit + integration) + `check-core-compat` + `check-module-core-imports` + `check-manifest-sync` + `check-org-context-primitives` + `check-csrf-exempt` (see the `check` target in `Makefile`). `make check` keeps its `-m "not e2e"` scoping; e2e runs in its own lane (`make test-e2e` / `make ci-e2e`, `.github/workflows/e2e.yml`) and is now part of "done" via SA93.
+**Exit criteria (single definition of done).** On a clean rerun at the prior synced code baseline (post-SA92 squash), `make check`, `make quality`, `make ci`, and `make ci-e2e` all exit 0, with `QUARANTINE_TICKETS` **empty** in `scripts/test_integration.sh` (no masked failures). `make check` is the umbrella gate — `lint` + `typecheck` + `test` (unit + integration) + `check-core-compat` + `check-module-core-imports` + `check-manifest-sync` + `check-org-context-primitives` + `check-csrf-exempt` (see the `check` target in `Makefile`). `make check` keeps its `-m "not e2e"` scoping; e2e runs in its own lane (`make test-e2e` / `make ci-e2e`, `.github/workflows/e2e.yml`) and is now part of "done" via SA93.
 
 **Only the integration suite shards by module — and now runs in parallel** (SA91). `scripts/test_integration.sh` parallelizes module test runs through a configurable worker pool (QS_INTEGRATION_JOBS), with per-worker coverage-file isolation, deterministic replay order, and joined exit codes. Each worker runs one pytest stage per module with per-file 80% / mean 90% coverage floors. `lint`, `typecheck`, and the `check-*` gates are repo-global — they do not parallelize per module. A single module runs in isolation via `make MODULE=<name> test -- --modules`.
 
@@ -73,14 +73,14 @@ All per-module restricted-role gates (CRM/SA84, blog/SA83+SA95, forms/SA85, list
 
 Pre-release re-verification: **SA96-T1 (Track 1) and SA96-T2 (Track 2) module sweeps are complete** — all 12 modules re-verified green in isolation on post-SA92 v87, no regression, empty quarantine. **SA93 and SA96-GATE are complete; the next release-path step is SA96-PUBLISH (human-only).** See [CHANGELOG.md](../../CHANGELOG.md).
 
-- [x] **SA96-GATE — Green-gate join (cross-track).** `Tier 1 · v87 integration · deps: SA96-T1 ✓ + SA96-T2 ✓ + SA93 ✓ + SA103 ✓ + SA101 ✓` · *assistant-executable; re-ran clean*
-  All four commands exit 0 on fresh clone + fresh `migrate` (post-SA92 squash) with `QUARANTINE_TICKETS` **empty**:
+- [x] **SA96-GATE — Green-gate join (cross-track).** `Tier 1 · v87 integration · deps: SA96-T1 ✓ + SA96-T2 ✓ + SA93 ✓ + SA103 ✓ + SA101 ✓` · *assistant-executable; clean rerun*
+  All four commands exit 0 on a clean rerun at the prior synced code baseline (post-SA92 squash) with `QUARANTINE_TICKETS` **empty**:
   - `make check` — exit 0
   - `make quality` — exit 0, zero baseline regressions
   - `make ci` — exit 0, coverage mean 92.89%, all 90 files ≥80%
   - `make ci-e2e` — exit 0, 64 E2E passed
-  - Integration mean 94.41%, empty quarantine.
-  **Resolved operational finding:** initial aborted attempts left an orphan `test_test_quickscale_orgs` Django mirror DB (double-prefixed). No repository defect or threshold change was needed — after terminating and removing only the disposable double-prefixed mirror state with no stale workers remaining, the clean rerun passed. No open product blocker.
+  - Integration: 2,262 passed, mean 94.41%, empty quarantine.
+  **Resolved operational finding:** initial aborted attempts left an orphan `test_test_quickscale_orgs` Django mirror DB (double-prefixed). No repository defect or threshold change was needed — no stale test workers remained, and only the disposable double-prefixed mirror database was dropped before the clean rerun passed. No open product blocker.
   The coding assistant ran this join; it stops here and hands off to a human for **SA96-PUBLISH**.
 
 - [ ] **SA96-PUBLISH — Staged release ladder.** `Tier 1 · v87 · deps: SA96-GATE` · **HUMAN-ONLY — do not delegate to an assistant**
@@ -93,13 +93,11 @@ Pre-release re-verification: **SA96-T1 (Track 1) and SA96-T2 (Track 2) module sw
 
 Prior Track 1 tickets are closed — SA92, SA84, SA86, SA96-T1, Finding 8, the audit-remediation tickets SA97/SA99, the CI-gate tickets SA102/SA103 (rebalanced here from Track 3), and the test-parallelization suite SA91/TP1/TP2/TP2b (the E2E sub-chain TP3a/TP3b was rebalanced to Track 2). See [CHANGELOG.md](../../CHANGELOG.md).
 
-Track 1 carries the tail of the **TP (test-parallelization)** suite — the goal is to shorten the SDLC feedback loop (and let an AI assistant run partial tests concurrently) by parallelizing the long-running quality gates. The sole remaining ticket is **TP4** (docs-only AI fast-loop recipes) — a pure cycle-time improvement, off the release critical path, that must not regress any existing gate's pass/fail set or coverage thresholds.
+Track 1 carried the tail of the **TP (test-parallelization)** suite — the goal was to shorten the SDLC feedback loop (and let an AI assistant run partial tests concurrently) by parallelizing the long-running quality gates. The suite is now **complete** with the landing of **TP4** (docs-only AI fast-loop recipes). All prior TP tickets (TP1, TP2, TP2b, TP3a, TP3b) are closed — see [CHANGELOG.md](../../CHANGELOG.md).
 
-- [ ] **TP4 — Document the AI-assistant fast partial-test recipes.** `Tier 1 · Track 1 · deps: none · docs-only (review-only closeout)`
-  The repo already supports targeted, safe partial runs that an AI assistant should prefer during iteration, but they are underused/undocumented as a coherent workflow: section flags (`make lint -- --core`, `make typecheck -- --cli`, `make test-unit -- --core`), single-module reruns (`make MODULE=<name> test -- --modules`), and bounded integration concurrency (`QS_INTEGRATION_JOBS=<N> make test-integration`).
-  - Add a short "Fast feedback loop for AI-assisted / incremental development" subsection to `docs/technical/development.md` (or the closest testing doc): the iterate → pre-merge → E2E-last ladder, the targeted-rerun recipes above, and the landed `QS_CI_PARALLEL` (TP1, Track 1) / `QS_E2E_PARALLEL` (TP3b, **Track 2**) knobs (cross-reference, don't block on them — this is the one cross-track reference the rebalance introduces; land TP4 after both TP1 and TP3b merge to `v87`).
-  - Verify: every command in the doc runs as written on a clean tree.
-  *(why →* parallelization audit Tier 4 — scoped partial runs already exist; the gap is discoverability for the incremental-dev loop*)*
+- [x] **TP4 — Document the AI-assistant fast partial-test recipes.** `Tier 1 · Track 1 · deps: none · docs-only (review-only closeout)`
+  Added a "Fast feedback loop for AI-assisted / incremental development" subsection to `docs/technical/development.md` covering the iterate → pre-merge → E2E-last ladder, section flags (`make lint -- --core`, `make typecheck -- --cli`, `make test-unit -- --core`), single-module reruns (`QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules`), bounded integration concurrency (`QS_INTEGRATION_JOBS=2 make test-integration`), and cross-references to `QS_CI_PARALLEL` (TP1), `QS_E2E_PARALLEL` (TP3b), and `PYTEST_XDIST_WORKERS` (TP2). Five commands were verified on the clean `v87` baseline: `make lint -- --core` exit 0; `make typecheck -- --cli` exit 0; `make test-unit -- --core` exit 0 (2,489 passed); `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules` exit 0 (874 passed, 11 skipped); `QS_INTEGRATION_JOBS=2 make test-integration` returned nonzero — the bounded worker pool ran all 12 modules (94.39% mean) but `orgs/test_debug.py::TestMiddlewareDebugOverride::test_debug_org_overrides_saas_session` failed with "server closed the connection unexpectedly". A serial rerun (`QS_INTEGRATION_JOBS=1 make test-integration`) subsequently passed (all 12 modules, 94.41% mean). The bounded-run failure is an unresolved non-blocking integration risk for this docs-only task. `QS_CI_PARALLEL=0` and `QS_E2E_PARALLEL=0` are documented as cross-references (their full verification is the responsibility of their owning tickets, which are complete). CR-TP4-001 (shell-invalid `<N>` in presented command syntax) and CR-TP4-002 (overstated verification evidence) were resolved in the follow-up pass.
+  *(why →* parallelization audit Tier 4 — scoped partial runs already exist; the gap was discoverability for the incremental-dev loop*)*
 
 ### Track 2 — Module contracts & settings — frontend-theme de-specialization (arch Finding 10)
 
@@ -111,9 +109,9 @@ The 2026-07-19 arch pass promoted **Finding 10** (`frontend-source-generation-sp
 
 > **SA104 (stage 1, byte-static source move) is complete** — 57 files converted onto the verbatim-copy path, SA90-fixture-verified, review STATUS ok. It unblocked SA105/SA106. See [CHANGELOG.md](../../CHANGELOG.md). The residual **advisory SA104-ADV-001** (generated projects' `.pre-commit-config.yaml.j2:10` still runs strict `check-json` against emitted JSONC `frontend/tsconfig.json`) is a non-blocking deferred follow-up — fixing it changes generated output and fixture hashes.
 
-- [ ] **SA105 — Stage 2a: de-specialize the module-availability surface via runtime config.** `Tier 2 · Track 2 · deps: SA104 ✓ + maintainer decision (dormant files) · assistant-executable after decision`
+- [ ] **SA105 — Stage 2a: de-specialize the module-availability surface via runtime config.** `Tier 2 · Track 2 · deps: SA104 ✓ · assistant-executable (maintainer decision resolved)`
   Remove the generation-time narrowing of the module universe: make the `QuickScaleModules` TS interface all-modules-optional (flags default `false` when a module is absent — the Django `INSTALLED_APPS` ladder already emits runtime truth into `window.__QUICKSCALE__`), and convert `main.tsx`'s social-conditional imports into unconditional imports with **flag-gated routes**. Removes the src-side module stations (`useModules.ts.j2` tuples, `main.tsx` conditionals) so a new frontend-visible module no longer edits them.
-  - **Blocking maintainer decision:** this makes unselected modules' pages exist as inert, flag-gated files in generated trees. If accepted → proceed. If rejected → fall back to Finding 10 **Option 3** (ownership-manifest overlay, extends Finding 7) and re-scope this ticket. *Record the decision in [decisions.md](./decisions.md) before implementing.*
+  - **Maintainer decision — RESOLVED (2026-07-20): Option A — accept dormant module files.** Unselected modules' pages are emitted as inert, flag-gated files in generated trees (tree-shaken from the built bundle). Recorded in [decisions.md §Frontend Theme Source De-Specialization](./decisions.md#frontend-theme-despecialization-dormant-files). Option 3 (ownership-manifest overlay) was rejected. SA105 is now unblocked.
   - Verify: generate projects with different module sets — the module-availability files are byte-identical across them; dormant module pages tree-shake/lazy-load and do not render when the flag is false; ESLint/tsc (via SA103) green.
   *(why →* arch-audit Finding 10 stage 2, module half — collapse the ≥5 hand-synced module stations onto the existing runtime seam*)*
 
@@ -131,30 +129,31 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 
 ### Dependency & parallelization overview
 
-All prior release-path and audit-remediation tickets are complete (SA92/SA84/SA86/SA93/SA94/SA95/SA96-T1/T2/SA97/SA98/SA99/SA100/SA91/SA101/SA102/SA103/SA104/TP1/TP2/TP2b/TP3a/TP3b, Finding 1, all four GATEs) — see [CHANGELOG.md](../../CHANGELOG.md). Only open work is shown below.
+All prior release-path and audit-remediation tickets are complete (SA92/SA84/SA86/SA93/SA94/SA95/SA96-T1/T2/SA97/SA98/SA99/SA100/SA91/SA101/SA102/SA103/SA104/TP1/TP2/TP2b/TP3a/TP3b/TP4, Finding 1, all four GATEs) — see [CHANGELOG.md](../../CHANGELOG.md). Only open work is shown below.
 
 ```
-Track 1 (off crit. path)   Track 2 (off crit. path)          Track 3 → release (critical path)
-────────────────────────   ────────────────────────────      ─────────────────────────────────────
-TP4 ── AI fast-loop        SA105 ── module de-spec (2a;       SA96-GATE ✓ ── green-gate join
-  recipes (docs-only)        deps SA104 ✓ + dormant-files       (all four exit 0; empty quarantine)
-                             maintainer decision)                          │
-                           SA106 ── identity de-spec (2b;                   ▼
-                             deps SA104 ✓; assistant-exec.)       SA96-PUBLISH ── build → publish
-                           (arch Finding 10 chain)              deps: SA96-GATE ✓ (human-only)
+Track 1 (complete)         Track 2 (off crit. path)          Track 3 → release (critical path)
+────────────────────────   ────────────────────────────      ─────────────────────────────────
+✓ TP4 complete              SA105 ── module de-spec (2a;       SA96-GATE ✓ ── green-gate join
+✓ TP suite closed             deps SA104 ✓; decision resolved)   (make check/quality/ci/ci-e2e)
+  (TP1/TP2/TP2b/           SA106 ── identity de-spec (2b;       all four exit 0; empty quarantine)
+   TP3a/TP3b/TP4)             deps SA104 ✓; assistant-exec.)           │
+                             (arch Finding 10 chain)                   ▼
+                                                              SA96-PUBLISH ── build → publish
+                                                                deps: SA96-GATE ✓ (human-only)
 ```
 
-**Open work only:** Track 1 `TP4` (docs-only), Track 2's frontend chain `SA105/SA106` (arch Finding 10, downstream of the complete SA104), and the release **SA96-PUBLISH** (human-only, deps: SA96-GATE ✓). The frontend chain owns the `quickscale_core` generator + `showcase_react` template tree only — disjoint from the TP work and the SA103 CI surfaces — so all three tracks run concurrently; only the closeout files (`CHANGELOG.md`, `roadmap.md`) are shared, covered by the Merge procedure. TP and the frontend chain are off the release critical path and must not regress any gate's pass/fail set or coverage thresholds. `TP4` is unblocked (TP1 done, TP3b merged to `v87`) and `SA106` is assistant-executable; `SA105` is blocked only on a maintainer dormant-files decision.
+**Open work only:** Track 2's frontend chain `SA105/SA106` (arch Finding 10, downstream of the complete SA104), and the release **SA96-PUBLISH** (human-only, deps: SA96-GATE ✓). Track 1's TP suite is **complete** (TP1/TP2/TP2b/TP3a/TP3b/TP4). The frontend chain owns the `quickscale_core` generator + `showcase_react` template tree only — disjoint from the TP work and the SA103 CI surfaces — so Track 2 runs concurrently with release; only the closeout files (`CHANGELOG.md`, `roadmap.md`) are shared, covered by the Merge procedure. TP and the frontend chain are off the release critical path and must not regress any gate's pass/fail set or coverage thresholds. SA105's dormant-files decision is resolved (Option A, see [decisions.md](./decisions.md#frontend-theme-despecialization-dormant-files)).
 
 **Critical path.** SA96-GATE is complete — all four commands exit 0 with empty quarantine (see [CHANGELOG.md](../../CHANGELOG.md)). The sole remaining critical-path item is **SA96-PUBLISH** (human-only).
 
 ### Track readiness (2026-07-20)
 
-- **Track 1 — CLEAN to continue (off critical path).** All prior TP work (TP1/TP2/TP2b/TP3a/TP3b) and the two rebalanced CI-gate tickets (SA102/SA103) are closed — see [CHANGELOG.md](../../CHANGELOG.md). The sole open ticket is **TP4** (docs-only AI fast-loop recipes), unblocked (TP1 done, TP3b merged to `v87`). Off the SA96 release critical path; must not regress any gate's pass/fail set or coverage thresholds.
-- **Track 2 — CLEAN to continue for SA106; SA105 blocked on a maintainer decision (off critical path).** All prior release/audit work is closed (SA94, SA88b, SA86, SA95, SA96-T2, SA98, TP3a/TP3b). The open frontend-theme de-specialization chain (arch Finding 10) is **SA106** (identity de-spec — deps SA104 ✓, assistant-executable — clean to continue) and **SA105** (module de-spec — deps SA104 ✓ **plus a pending maintainer dormant-files decision**, record in decisions.md before implementing). The chain owns the `quickscale_core` generator + `showcase_react` template tree only, disjoint from the TP work and the SA103 CI surfaces; must not regress any gate or coverage threshold.
+- **Track 1 — COMPLETE (off critical path).** All TP work (TP1/TP2/TP2b/TP3a/TP3b/TP4) and the two rebalanced CI-gate tickets (SA102/SA103) are closed — see [CHANGELOG.md](../../CHANGELOG.md). The TP suite is fully landed with no open tickets. Off the SA96 release critical path; none of its changes regressed any gate's pass/fail set or coverage thresholds.
+- **Track 2 — CLEAN to continue (off critical path).** All prior release/audit work is closed (SA94, SA88b, SA86, SA95, SA96-T2, SA98, TP3a/TP3b). The open frontend-theme de-specialization chain (arch Finding 10) is **SA105** (module de-spec) and **SA106** (identity de-spec), both deps SA104 ✓ and both assistant-executable — SA105's dormant-files decision is resolved (Option A, [decisions.md](./decisions.md#frontend-theme-despecialization-dormant-files)). The chain owns the `quickscale_core` generator + `showcase_react` template tree only, disjoint from the TP work and the SA103 CI surfaces; must not regress any gate or coverage threshold.
 - **Track 3 — ALL WORK COMPLETE (release critical-path handoff to human).** All Track 3 work is closed (Finding 1, four GATEs, SA91, SA100, SA93, SA101, and **SA96-GATE**). No open tickets remain on Track 3. The next release-path step is **SA96-PUBLISH** (human-only). Non-gating advisories remain deferred (SA91 CR-SA91-REV-006 low; SA89B-CR-004; SA93-REV-005; SA93-ADV-001..004).
 
-**Net — all three tracks have assigned, independent work and none is a merge hazard (file-disjoint except the shared closeout files, covered by the Merge procedure).** Track 1 = `TP4` (docs-only, clean); Track 2 = `SA106` (clean) + `SA105` (blocked on one maintainer decision); Track 3 = `SA96-GATE` ✓ (complete) → `SA96-PUBLISH` (human-only, single remaining critical-path item). Detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
+**Net — Tracks 2 and 3 have assigned, independent work and none is a merge hazard (file-disjoint except the shared closeout files, covered by the Merge procedure).** Track 1 is **complete** (all TP tickets closed). Track 2 = `SA105` + `SA106` (both clean — SA105 decision resolved); Track 3 = `SA96-GATE` ✓ (complete) → `SA96-PUBLISH` (human-only, single remaining critical-path item). SA96-GATE is a cross-track join that cannot be parallelized, so no rebalancing move helps — see [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision-sa92) for the recorded squash/guardrail/shrink-only-quality policies; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
