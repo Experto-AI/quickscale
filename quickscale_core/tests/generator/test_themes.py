@@ -287,6 +287,46 @@ class TestSelectedModulesReactTheme:
         "src/hooks/useFormSchema.ts",
     )
 
+    # Authoritative path-to-module mapping for dormant files.
+    PATH_TO_MODULE: dict[str, str] = {
+        "src/pages/BlogPage.tsx": "blog",
+        "src/pages/CrmPage.tsx": "crm",
+        "src/pages/FormsPage.tsx": "forms",
+        "src/pages/ListingsPage.tsx": "listings",
+        "src/pages/SocialLinkTreePublicPage.tsx": "social",
+        "src/pages/SocialEmbedsPublicPage.tsx": "social",
+        "src/components/forms/FormRenderer.tsx": "forms",
+        "src/components/forms/FormFieldRenderer.tsx": "forms",
+        "src/components/forms/FormSuccess.tsx": "forms",
+        "src/hooks/useFormSchema.ts": "forms",
+    }
+
+    # Expected first-line banner for each dormant file.
+    # Each banner is module-specific, static (no Jinja interpolation), and
+    # explains the file is inert unless the corresponding module flag is true
+    # at runtime — React.lazy-loaded, tree-shaken when unused, safe to leave.
+    _BANNER_PREFIX_BLOG = "// DORMANT: Blog module surface. Inert unless modules.blog is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant."
+    _BANNER_PREFIX_CRM = "// DORMANT: CRM module surface. Inert unless modules.crm is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant."
+    _BANNER_PREFIX_FORMS = "// DORMANT: Forms module surface. Inert unless modules.forms is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant."
+    _BANNER_PREFIX_LISTINGS = "// DORMANT: Listings module surface. Inert unless modules.listings is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant."
+    _BANNER_PREFIX_SOCIAL_LINK_TREE = "// DORMANT: Social link-tree surface. Inert unless modules.social is true and publicPage.surface === 'link_tree' at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant."
+    _BANNER_PREFIX_SOCIAL_EMBEDS = "// DORMANT: Social embeds surface. Inert unless modules.social is true and publicPage.surface === 'embeds' at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant."
+    _BANNER_PREFIX_FORMS_COMPONENT = "// DORMANT: Forms module component. Inert unless modules.forms is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant."
+    _BANNER_PREFIX_FORMS_HOOK = "// DORMANT: Forms module hook. Inert unless modules.forms is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant."
+
+    BANNER_PREFIXES: dict[str, str] = {
+        "src/pages/BlogPage.tsx": _BANNER_PREFIX_BLOG,
+        "src/pages/CrmPage.tsx": _BANNER_PREFIX_CRM,
+        "src/pages/FormsPage.tsx": _BANNER_PREFIX_FORMS,
+        "src/pages/ListingsPage.tsx": _BANNER_PREFIX_LISTINGS,
+        "src/pages/SocialLinkTreePublicPage.tsx": _BANNER_PREFIX_SOCIAL_LINK_TREE,
+        "src/pages/SocialEmbedsPublicPage.tsx": _BANNER_PREFIX_SOCIAL_EMBEDS,
+        "src/components/forms/FormRenderer.tsx": _BANNER_PREFIX_FORMS_COMPONENT,
+        "src/components/forms/FormFieldRenderer.tsx": _BANNER_PREFIX_FORMS_COMPONENT,
+        "src/components/forms/FormSuccess.tsx": _BANNER_PREFIX_FORMS_COMPONENT,
+        "src/hooks/useFormSchema.ts": _BANNER_PREFIX_FORMS_HOOK,
+    }
+
     def test_default_selected_modules_emits_all_dormant_surfaces(
         self, tmp_path: Path
     ) -> None:
@@ -503,26 +543,25 @@ class TestSelectedModulesReactTheme:
         assert "name: 'Billing'" not in sidebar
 
     def test_social_imports_and_render_always_present(self, tmp_path: Path) -> None:
-        """After SA105, social imports and renderQuickScaleRoot(surface) are unconditional."""
-        # --- Empty selection still has social imports ---
+        """After SA105, renderQuickScaleRoot is imported from the extracted seam."""
+        # --- Empty selection still has social dispatch ---
         empty_gen = ProjectGenerator(theme="showcase_react", selected_modules=[])
         empty_out = tmp_path / "react_no_social_main"
         empty_gen.generate("react_no_social_main", empty_out)
 
         empty_main = (empty_out / "frontend" / "src" / "main.tsx").read_text()
 
-        # Social page components are always imported
-        assert "SocialEmbedsPublicPage" in empty_main, (
-            "Empty-selection variant must import SocialEmbedsPublicPage after SA105."
-        )
-        assert "SocialLinkTreePublicPage" in empty_main, (
-            "Empty-selection variant must import SocialLinkTreePublicPage after SA105."
-        )
-
-        # renderQuickScaleRoot always uses surface (not _surface)
+        # main.tsx imports renderQuickScaleRoot from the extracted seam
         assert (
-            "function renderQuickScaleRoot(surface?: PublicSocialSurface)" in empty_main
-        ), "renderQuickScaleRoot must take surface parameter after SA105."
+            "import { renderQuickScaleRoot } from './renderQuickScaleRoot'"
+            in empty_main
+        ), "main.tsx must import renderQuickScaleRoot from extracted seam after SA105."
+
+        # renderQuickScaleRoot is used in the render tree with surface
+        assert (
+            "renderQuickScaleRoot(window.__QUICKSCALE__?.publicPage?.surface)"
+            in empty_main
+        ), "renderQuickScaleRoot must be called with surface in the render tree."
 
     def test_window_config_always_includes_all_modules(self, tmp_path: Path) -> None:
         """After SA105, the Django-rendered index.html always emits all module flags."""
@@ -560,6 +599,125 @@ class TestSelectedModulesReactTheme:
         assert "crm:" in module_paths_section
         assert "social:" in module_paths_section
         assert "analytics:" in module_paths_section
+
+    # ── Dormant-file banner verification ───────────────────────────────
+
+    def test_generated_dormant_file_banners(self, tmp_path: Path) -> None:
+        """Every generated dormant file starts with its module-specific banner."""
+        generator = ProjectGenerator(
+            theme="showcase_react", selected_modules=["blog", "crm"]
+        )
+        output_path = tmp_path / "react_banners"
+        generator.generate("react_banners", output_path)
+
+        for rel_path, expected_banner in self.BANNER_PREFIXES.items():
+            absolute = output_path / "frontend" / rel_path
+            assert absolute.exists(), f"Expected dormant file {rel_path} to exist."
+            first_line = absolute.read_text().splitlines()[0]
+            assert first_line == expected_banner, (
+                f"File {rel_path} expected first-line banner:\n"
+                f"  {expected_banner!r}\n"
+                f"  got {first_line!r}"
+            )
+
+    def test_dormant_file_byte_identity_across_selections(self, tmp_path: Path) -> None:
+        """Dormant files are byte-identical regardless of selected_modules."""
+        selections = [
+            (None, "default"),
+            ([], "empty"),
+            (["blog", "crm"], "partial"),
+        ]
+        variants: dict[str, dict[str, bytes]] = {}
+
+        for selected_modules, label in selections:
+            gen = ProjectGenerator(
+                theme="showcase_react", selected_modules=selected_modules
+            )
+            out = tmp_path / f"react_byte_id_{label}"
+            gen.generate(f"react_byte_id_{label}", out)
+            files: dict[str, bytes] = {}
+            for rel_path in self.OPTIONAL_REL_PATHS:
+                files[rel_path] = (out / "frontend" / rel_path).read_bytes()
+            variants[label] = files
+
+        # All variants must produce identical byte content for every dormant file
+        baseline = variants["default"]
+        for label, files in variants.items():
+            for rel_path in self.OPTIONAL_REL_PATHS:
+                assert files[rel_path] == baseline[rel_path], (
+                    f"Dormant file {rel_path} differs between selected_modules="
+                    f"{label!r} and selected_modules=None (baseline)."
+                )
+
+    # ── Static main.tsx source-shape assertions ───────────────────────
+    # Moved from test_templates.py TestSelectedModulesTemplateSafety (SA105).
+
+    _MAIN_REACT_LAZY_PAGES = {
+        "SocialEmbedsPublicPage",
+        "SocialLinkTreePublicPage",
+    }
+
+    def test_generated_main_tsx_imports_render_quick_scale_root(
+        self, tmp_path: Path
+    ) -> None:
+        """After SA105, generated main.tsx imports renderQuickScaleRoot from the extracted seam."""
+        generator = ProjectGenerator(theme="showcase_react", selected_modules=[])
+        output_path = tmp_path / "react_main_src"
+        generator.generate("react_main_src", output_path)
+
+        content = (output_path / "frontend" / "src" / "main.tsx").read_text()
+
+        # Imports from the extracted seam
+        assert (
+            "import { renderQuickScaleRoot } from './renderQuickScaleRoot'" in content
+        ), (
+            "Generated main.tsx must import renderQuickScaleRoot from the extracted seam."
+        )
+        # Uses it with surface
+        assert (
+            "renderQuickScaleRoot(window.__QUICKSCALE__?.publicPage?.surface)"
+            in content
+        ), "Generated main.tsx must call renderQuickScaleRoot with surface."
+        # No inline lazy social variable declarations remain in main.tsx
+        assert "const SocialEmbedsPublicPage" not in content, (
+            "Generated main.tsx must not define lazy social imports inline."
+        )
+        assert "const SocialLinkTreePublicPage" not in content, (
+            "Generated main.tsx must not define lazy social imports inline."
+        )
+
+    def test_generated_render_quick_scale_root_tsx_social_lazy_imports(
+        self, tmp_path: Path
+    ) -> None:
+        """Generated renderQuickScaleRoot.tsx has lazy imports and dispatch logic."""
+        generator = ProjectGenerator(theme="showcase_react", selected_modules=[])
+        output_path = tmp_path / "react_root_dispatch"
+        generator.generate("react_root_dispatch", output_path)
+
+        content = (
+            output_path / "frontend" / "src" / "renderQuickScaleRoot.tsx"
+        ).read_text()
+
+        # React.lazy used for social pages
+        for page in self._MAIN_REACT_LAZY_PAGES:
+            assert f"const {page} = lazy(() => import(" in content, (
+                f"renderQuickScaleRoot.tsx must use React.lazy for {page} after SA105."
+            )
+            assert ".then((m) => ({ default: m." in content, (
+                "renderQuickScaleRoot.tsx must use the then/default pattern for lazy imports."
+            )
+
+        # Surface dispatch logic
+        assert (
+            "function renderQuickScaleRoot(surface?: PublicSocialSurface)" in content
+        ), "renderQuickScaleRoot must take the surface parameter."
+        assert (
+            "const Page = surface === 'link_tree' ? SocialLinkTreePublicPage : SocialEmbedsPublicPage"
+            in content
+        ), "renderQuickScaleRoot must dispatch based on surface value."
+        assert "<Suspense fallback={<div>Loading…</div>}>" in content, (
+            "renderQuickScaleRoot must wrap lazy pages in Suspense."
+        )
 
 
 class TestSharedAdminTemplates:

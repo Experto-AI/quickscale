@@ -1,3 +1,4 @@
+// DORMANT: Forms module hook. Inert unless modules.forms is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant.
 import { useQuery } from '@tanstack/react-query'
 
 export interface FormFieldOption {

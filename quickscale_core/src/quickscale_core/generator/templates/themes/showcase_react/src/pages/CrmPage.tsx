@@ -1,3 +1,4 @@
+// DORMANT: CRM module surface. Inert unless modules.crm is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant.
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useApiData } from '@/hooks/useApi'
