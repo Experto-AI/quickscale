@@ -1575,6 +1575,24 @@ double-quoted rendered `href` attributes and the established allowed-link
 semantics; this decision does not authorize unrelated HTML or URL utility
 surface.
 
+### Frontend Theme Source De-Specialization {#frontend-theme-despecialization-dormant-files}
+
+**Rule:** `frontend/src` must be project-agnostic and byte-identical across all projects on
+the same theme version. Project- and module-specific facts flow only through the existing
+`window.__QUICKSCALE__` runtime seam — never baked into frontend source at generation time.
+No second injection mechanism.
+
+**Module availability:** the generator emits **every** module's frontend files unconditionally;
+absence of a module is expressed only as a runtime flag (`false`), gating routes/rendering.
+Dormant module files in generated trees are accepted (tree-shaken from the built bundle). Do
+not narrow the emitted file set or the `QuickScaleModules` TS interface per project.
+
+**Project identity** (name, etc.) is read from runtime config, not JSX/source literals. Jinja
+specialization is confined to Django-side templates and at most `package.json`.
+
+Rejected: per-project source specialization plus an ownership-manifest overlay — it preserves
+the per-file migration merge and a second hand-synced list.
+
 ---
 
 ## Prohibitions (Critical - DO NOT)
