@@ -121,6 +121,10 @@ jobs:
         run: |
           make frontend-proof
 
+      - name: Run installed-artifact smoke gate (SA110)
+        run: |
+          make smoke-install
+
       - name: Run linting (ruff)
         run: |
           make lint -- --core --cli --modules --devtools
