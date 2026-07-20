@@ -7,7 +7,10 @@
 # Usage:
 #   make bootstrap            - Full bootstrap (Python check + poetry install)
 #   make setup                - Install Poetry dependencies only
-#   make check                - Run all checks (lint, typecheck, test)
+#   make fix                  - Auto-format + auto-fix lint (write mode)
+#   make check                - Fast pre-commit gate (lint + typecheck + unit + gates)
+#   make check QUIET=1        - Same as `check`, quiet on success (LLM/agent mode)
+#   make ci                   - Full local-CI parity (adds integration)
 #   make test                 - Run all tests
 #   make test-unit            - Run unit tests only
 #   make lint -- --modules    - Run lint only for quickscale_modules/*
@@ -48,14 +51,13 @@
 .PHONY: setup bootstrap smoke-install install \
         test test-unit test-integration test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-agent \
         lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
-        quality check ci ci-e2e \
+        quality fix check ci ci-e2e \
         docs \
         build clean \
 		beta-migrate-fresh beta-migrate-in-place \
         publish-build publish-test publish-prod publish-full publish-module \
         legacy-mount legacy-unmount legacy-status \
         version-check version-update bump-version \
-        check-llm lint-llm typecheck-llm test-llm test-cov-llm \
         check-core-compat check-module-core-imports check-manifest-sync \
         check-org-context-primitives \
         check-csrf-exempt \
@@ -106,40 +108,40 @@ help:
 	@echo "                             Default stays checkpoint-only; add CONTINUE=1 to run copy/apply/verification"
 	@echo "                             Optional: REPORT=/abs/path/report.json"
 	@echo ""
-	@echo "Testing:"
-	@echo "  make test                 - Run all tests (unit + integration)"
+	@echo "Inner loop (fast, while coding):"
+	@echo "  make fix                  - Auto-format + auto-fix lint (write mode)"
+	@echo "  make lint                 - Check linting, no changes"
+	@echo "  make typecheck            - Run mypy type checking"
+	@echo "  make format               - Format code with ruff"
 	@echo "  make test-unit            - Run DB-free unit tests only (core + CLI)"
-	@echo "  PYTEST_XDIST_WORKERS=0 make test-unit - Run unit tests serially for parity/debugging"
-	@echo "  PYTEST_XDIST_WORKERS=N make test-unit - Pin the xdist worker count (default: auto)"
-	@echo "  make test -- --modules    - Run tests only for quickscale_modules/*"
-	@echo "  make test-unit -- --core  - Run unit tests only for quickscale_core"
-	@echo "  make test-integration     - Run integration tests for quickscale_modules/* (requires PostgreSQL)"
-	@echo "  make test-cov             - Run tests with coverage report (aggregates DR-engine coverage from backups module when PostgreSQL is available)"
-	@echo "  make test-e2e             - Run E2E tests (needs Docker + Playwright)"
-	@echo "  make test-agent           - Run agentic flow adapter tests"
-	@echo "  make test-integration-worker-pool - Run worker pool harness tests (fast, no PostgreSQL needed)"
-	@echo "  make test-ci-local-parallel - Run TP1 local-CI parallelism regression tests"
 	@echo ""
-	@echo "Quality Checks:"
-	@echo "  make lint                 - Check linting (no changes)"
-	@echo "  make lint-fix             - Fix linting issues"
+	@echo "Before you push (gates):"
+	@echo "  make check                - Fast gate: lint + typecheck + unit tests + repo gates"
+	@echo "  make check QUIET=1        - Same as check, quiet on success (LLM/agent mode)"
+	@echo "  make ci                   - Full local-CI parity (adds integration when PostgreSQL available)"
+	@echo "  make ci-e2e               - Full local CI including E2E (slow — Docker + Playwright)"
+	@echo ""
+	@echo "Deep / occasional:"
+	@echo "  make test                 - Run all tests (unit + integration)"
+	@echo "  make test-integration     - Integration tests for quickscale_modules/* (requires PostgreSQL)"
+	@echo "  make test-cov             - Tests with coverage report (aggregates backups DR-engine coverage when PostgreSQL is available)"
+	@echo "  make test-e2e             - E2E tests (needs Docker + Playwright)"
+	@echo "  make test-agent           - Agentic flow adapter tests"
+	@echo "  make quality              - Full quality analysis (dead code, complexity, duplication)"
 	@echo "  make lint-frontend        - Lint React theme templates (ESLint + TypeScript)"
 	@echo "  make frontend-proof       - Render showcase_react and run pnpm install/type-check/build"
 	@echo "  make smoke-install        - Build wheels, install into throwaway venv, run CLI smoke tests"
 	@echo "  make lint-agent           - Lint .agent adapter shell scripts"
-	@echo "  make typecheck            - Run mypy type checking"
-	@echo "  make format               - Format code with ruff"
-	@echo "  make quality              - Full quality analysis (dead code, complexity, duplication)"
-	@echo "  make check                - Run all checks (lint, typecheck, test)"
-	@echo "  make ci                   - Run primary local CI checks (lint + typecheck + unit tests; integration when PostgreSQL available)"
-	@echo "  make ci-e2e               - Run CI checks including E2E tests"
+	@echo "  make test-integration-worker-pool - Worker pool harness tests (fast, no PostgreSQL)"
+	@echo "  make test-ci-local-parallel - TP1 local-CI parallelism regression tests"
 	@echo ""
-	@echo "Section Flags:"
-	@echo "  Pass flags after \`--\`: --quickscale/-q, --core/-c, --cli/-l, --devtools/-d, --modules/-m"
-	@echo "  Examples: make lint -- -m | make typecheck -- --core | make check -- --cli --modules"
-	@echo "  Variable alternative: SECTION=modules or SECTIONS=\"core modules\""
-	@echo "  Optional: MODULE=blog limits the modules scope to one module"
-	@echo "  Example: make MODULE=blog test -- --modules"
+	@echo "Modifiers (apply to most check/test targets — not commands on their own):"
+	@echo "  Section flags (after \`--\`): --quickscale/-q, --core/-c, --cli/-l, --devtools/-d, --modules/-m"
+	@echo "    e.g. make lint -- --core | make typecheck -- --cli --modules"
+	@echo "    Variable form: SECTION=modules or SECTIONS=\"core modules\""
+	@echo "  MODULE=blog               - Limit the modules scope to one module (e.g. make MODULE=blog test -- --modules)"
+	@echo "  QUIET=1                   - Quiet-on-success output for \`make check\` / \`make test-cov\` (LLM/agent mode)"
+	@echo "  PYTEST_XDIST_WORKERS=0|N  - Serial run (0) or pinned worker count (default: auto)"
 	@echo ""
 	@echo "Docs:"
 	@echo "  make docs                 - Compile contributing docs from docs/contrib/"
@@ -160,30 +162,13 @@ help:
 	@echo "  make legacy-unmount       - Remove legacy symlink"
 	@echo "  make legacy-status        - Show legacy symlink status"
 	@echo ""
-	@echo "Repository Gates:"
-	@echo "  make check-core-compat    - Verify each module's quickscale_core imports"
-	@echo "                               resolve against the current core API"
-	@echo "  make check-module-core-imports - Verify module code imports only from"
-	@echo "                               quickscale_core.runtime (with per-module"
-	@echo "                               legacy exceptions for billing/crm adapters)"
-	@echo "  make check-manifest-sync  - Verify all module-owned module.yml files"
-	@echo "                               match their core snapshots"
-	@echo "  make manifest-sync        - Copy source manifests to snapshot paths"
-	@echo "  make check-org-context-primitives - Hard-fail gate for direct external use"
-	@echo "                               of the three privatized org-context primitives"
-	@echo "                               (_tenant_context, _set_current_org_for_context,"
-	@echo "                               _set_db_current_org_id). Exits 1 on any"
-	@echo "                               violation. Existing migrations are complete."
-	@echo "                               None-path hardening remains deferred"
-	@echo "                               (see roadmap.md)."
-	@echo "  make check-csrf-exempt      - Hard-fail gate pairing every csrf_exempt"
-	@echo "                               callsite with _enforce_csrf or cryptographic"
-	@echo "                               signature verification. Exits 1 on any"
-	@echo "                               unprotected csrf_exempt usage."
-	@echo ""
-	@echo "LLM Optimized Checks (Quiet on success):"
-	@echo "  make check-llm            - Run all checks quietly"
-	@echo "  make test-cov-llm         - Run coverage quietly"
+	@echo "Repository gates (auto-run by \`make check\` — run solo only to debug drift):"
+	@echo "  make check-core-compat            - Module quickscale_core imports resolve against current core API"
+	@echo "  make check-module-core-imports    - Module code imports only from quickscale_core.runtime"
+	@echo "  make check-manifest-sync          - Module-owned module.yml files match their core snapshots"
+	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
+	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
+	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
 	@echo ""
 	@echo "Version Management:"
 	@echo "  make version-check        - Verify VERSION matches all pyproject.toml files"
@@ -373,6 +358,14 @@ test-agent:
 #   make test-cov REQUIRE_BACKUPS_COVERAGE=1 — CI mode (backups required)
 test-cov:
 	@set -e; \
+	if [ -n "$(QUIET)" ]; then \
+		$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short \
+			--cov=quickscale_core/src --cov=quickscale_cli/src \
+			--cov-report=term-missing --cov-report=json --cov-fail-under=90 \
+			> pytest_cov_log.txt 2>&1 || { cat pytest_cov_log.txt; rm -f pytest_cov_log.txt; exit 1; }; \
+		rm -f pytest_cov_log.txt; \
+		exit 0; \
+	fi; \
 	overall_exit=0; \
 	coverage_dir=$$(mktemp -d "$${TMPDIR:-/tmp}/quickscale-test-cov.XXXXXX"); \
 	phase1_file="$$coverage_dir/combined.phase1"; \
@@ -797,16 +790,39 @@ check-csrf-exempt:
 
 # --- Combined Checks ---
 
-# Run all checks (lint + typecheck + test + core-compat + import-linter + manifest-sync + gates)
-check: lint typecheck test check-core-compat check-module-core-imports check-manifest-sync check-org-context-primitives check-csrf-exempt
-	@if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then \
-		echo "📦 Linting rendered frontend..."; \
-		$(MAKE) lint-frontend; \
+# Auto-format and auto-fix lint across the active sections (write mode).
+fix: format lint-fix
+	@echo "✨ Formatted and lint-fixed!"
+
+# Fast pre-commit gate: lint + typecheck + UNIT tests + repository gates.
+# (Integration/E2E live in `make ci` / `make ci-e2e`.)
+#
+#   make check           - full output, respects section flags (-- --core, MODULE=…)
+#   make check QUIET=1    - quiet on success for LLM/agent use (flat SRC/TEST dirs,
+#                           ruff/mypy --quiet, pytest output shown only on failure)
+check:
+	@set -e; \
+	if [ -n "$(QUIET)" ]; then \
+		$(PYTHON) -m ruff check $(SRC_DIRS) --quiet; \
+		$(PYTHON) -m ruff format --check $(SRC_DIRS) --quiet; \
+		$(PYTHON) -m mypy $(SRC_DIRS) --show-error-codes > mypy_log.txt 2>&1 || { cat mypy_log.txt; rm -f mypy_log.txt; exit 1; }; \
+		rm -f mypy_log.txt; \
+		$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short $(PYTEST_XDIST_ARGS) > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm -f pytest_log.txt; exit 1; }; \
+		rm -f pytest_log.txt; \
 	else \
-		echo "ℹ️ Skipping rendered frontend lint (node and pnpm are required)."; \
+		$(MAKE) lint typecheck test-unit SECTIONS="$(ACTIVE_SECTIONS)" MODULE="$(MODULE)"; \
+	fi; \
+	$(MAKE) check-core-compat check-module-core-imports check-manifest-sync check-org-context-primitives check-csrf-exempt
+	@if [ -z "$(QUIET)" ]; then \
+		if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then \
+			echo "📦 Linting rendered frontend..."; \
+			$(MAKE) lint-frontend; \
+		else \
+			echo "ℹ️ Skipping rendered frontend lint (node and pnpm are required)."; \
+		fi; \
+		echo ""; \
+		echo "🎉 All checks passed!"; \
 	fi
-	@echo ""
-	@echo "🎉 All checks passed!"
 
 # Full code quality analysis: dead code (vulture), complexity (radon), duplication (pylint)
 # Reports saved to .quickscale/quality_report.{json,md}
@@ -919,29 +935,3 @@ bump-version:
 	@echo "  UPDATED: VERSION"
 	@scripts/version_tool.sh update
 	@echo "✅ Version bumped to $(VERSION_ARG)"
-
-
-# --- LLM Optimized Targets ---
-
-lint-llm:
-	@$(PYTHON) -m ruff check $(SRC_DIRS) --quiet
-	@$(PYTHON) -m ruff format --check $(SRC_DIRS) --quiet
-
-typecheck-llm:
-	@$(PYTHON) -m mypy $(SRC_DIRS) --show-error-codes > mypy_log.txt 2>&1 || { cat mypy_log.txt; rm mypy_log.txt; exit 1; }
-	@rm -f mypy_log.txt
-
-test-llm:
-	@$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm pytest_log.txt; exit 1; }
-	@rm -f pytest_log.txt
-
-test-cov-llm:
-	@$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short \
-		--cov=quickscale_core/src \
-		--cov=quickscale_cli/src \
-		--cov-report=term-missing \
-		--cov-report=json \
-		--cov-fail-under=90 > pytest_cov_log.txt 2>&1 || { cat pytest_cov_log.txt; rm pytest_cov_log.txt; exit 1; }
-	@rm -f pytest_cov_log.txt
-
-check-llm: lint-llm typecheck-llm test-llm
