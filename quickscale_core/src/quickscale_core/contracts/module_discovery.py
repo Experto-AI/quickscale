@@ -18,8 +18,11 @@ without altering the core discovery contract.
 
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import Final
+
+import importlib.resources as _resources
 
 
 class ImproperlyConfigured(Exception):
@@ -50,6 +53,34 @@ _PLACEHOLDER_REASON_TEMPLATE: Final[str] = (
     "quickscale.yml, quickscale apply, and quickscale status workflows until "
     "it ships."
 )
+
+# ---------------------------------------------------------------------------
+# Resolution provenance
+# ---------------------------------------------------------------------------
+
+
+class ModuleResolutionSource(Enum):
+    """Identifies which module resolution source is currently active.
+
+    Resolution follows a fixed precedence:
+
+    * ``OVERRIDE`` — a runtime override has been set via
+      :func:`set_modules_base_path` (always wins when set).
+    * ``MONOREPO`` — the maintainer monorepo ``quickscale_modules/``
+      directory exists.  This is the default for development and CI.
+    * ``BUNDLED`` — no override or monorepo path is available, but the
+      installed ``quickscale_core`` package contains bundled manifests.
+      Source-required operations (``get_modules_base_path``,
+      ``discover_shipped_module_paths``) **fail** in this state —
+      callers must use :func:`discover_bundled_module_names` instead.
+
+    Call :func:`get_resolution_source` to query the active source.
+    """
+
+    OVERRIDE = "override"
+    MONOREPO = "monorepo"
+    BUNDLED = "bundled"
+
 
 # ---------------------------------------------------------------------------
 # Configurable modules base path
@@ -222,12 +253,161 @@ def get_placeholder_rejection_reason(name: str) -> str | None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Resolution source observability
+# ---------------------------------------------------------------------------
+
+
+def get_resolution_source() -> ModuleResolutionSource:
+    """Return the current active module resolution source.
+
+    Follows the fixed precedence defined in :class:`ModuleResolutionSource`:
+
+    1.  Runtime override (via :func:`set_modules_base_path`) — returns
+        ``OVERRIDE``.
+    2.  Maintainer monorepo ``quickscale_modules/`` — returns ``MONOREPO``.
+    3.  Bundled manifests within the installed ``quickscale_core`` package
+        — returns ``BUNDLED`` (only when the bundled directory exists and
+        contains at least one valid ``module.yml``).
+    4.  No source available — raises :exc:`ImproperlyConfigured`.
+
+    Returns:
+        The active :class:`ModuleResolutionSource`.
+
+    Raises:
+        ImproperlyConfigured: If no module resolution source can be
+            determined.
+    """
+    if _modules_base_path is not None:
+        return ModuleResolutionSource.OVERRIDE
+
+    monorepo_path = Path(__file__).resolve().parents[4] / "quickscale_modules"
+    if monorepo_path.is_dir():
+        return ModuleResolutionSource.MONOREPO
+
+    # Check whether bundled manifests are available and usable.
+    try:
+        ref = _resources.files("quickscale_core") / "data" / "manifests"
+    except Exception as exc:
+        raise ImproperlyConfigured(
+            "No module resolution source available. "
+            "Set a runtime override via set_modules_base_path(), run from the "
+            "maintainer monorepo, or install quickscale_core with bundled module "
+            "data."
+        ) from exc
+
+    if not ref.is_dir():
+        raise ImproperlyConfigured(
+            "No module resolution source available. "
+            "Set a runtime override via set_modules_base_path(), run from the "
+            "maintainer monorepo, or install quickscale_core with bundled module "
+            "data."
+        )
+
+    # Verify bundled manifests are non-empty (at least one valid module.yml).
+    try:
+        has_valid = any(
+            entry.is_dir() and (entry / "module.yml").is_file()
+            for entry in ref.iterdir()
+        )
+    except Exception as exc:
+        raise ImproperlyConfigured(
+            f"Failed to read bundled manifests directory '{ref}': {exc}"
+        ) from exc
+
+    if not has_valid:
+        raise ImproperlyConfigured(
+            f"No valid module.yml files found in bundled manifests "
+            f"directory '{ref}'. The quickscale_core installation may "
+            "be corrupted."
+        )
+
+    return ModuleResolutionSource.BUNDLED
+
+
+# ---------------------------------------------------------------------------
+# Bundled manifest access
+# ---------------------------------------------------------------------------
+
+
+def get_bundled_manifests_path() -> Path:
+    """Return the path to the bundled module manifests directory.
+
+    Uses ``importlib.resources`` to locate ``data/manifests`` within the
+    installed ``quickscale_core`` package.  The returned path is valid for
+    both installed wheels and filesystem development (editable) installs.
+
+    Raises:
+        ImproperlyConfigured: If the bundled manifests directory is absent
+            or cannot be read.
+    """
+    try:
+        ref = _resources.files("quickscale_core") / "data" / "manifests"
+    except Exception as exc:
+        raise ImproperlyConfigured(
+            "Bundled manifests directory not found in installed package. "
+            "Ensure quickscale_core is properly installed."
+        ) from exc
+
+    if not ref.is_dir():
+        raise ImproperlyConfigured(
+            f"Bundled manifests directory '{ref}' not found. "
+            "The quickscale_core installation may be corrupted."
+        )
+
+    return Path(str(ref))
+
+
+def discover_bundled_module_names() -> list[str]:
+    """Return alphabetically sorted names of modules from the bundled
+    manifests within the installed ``quickscale_core`` package.
+
+    Uses ``importlib.resources`` to read the bundled manifest directory.
+    This is the primary inventory source for installed-wheel contexts where
+    no monorepo ``quickscale_modules/`` directory is available.
+
+    Raises:
+        ImproperlyConfigured: If the bundled manifests directory is absent,
+            empty, unreadable, or contains no valid ``module.yml`` files.
+
+    Returns:
+        Sorted list of module names discovered from bundled manifests.
+    """
+    manifests_path = get_bundled_manifests_path()
+
+    discovered: list[str] = []
+    try:
+        for entry in sorted(manifests_path.iterdir()):
+            if not entry.is_dir():
+                continue
+            manifest_file = entry / "module.yml"
+            if manifest_file.is_file():
+                discovered.append(entry.name)
+    except Exception as exc:
+        raise ImproperlyConfigured(
+            f"Failed to read bundled manifests directory '{manifests_path}': {exc}"
+        ) from exc
+
+    if not discovered:
+        raise ImproperlyConfigured(
+            "No valid module.yml files found in bundled manifests directory "
+            f"'{manifests_path}'. The quickscale_core installation may be "
+            "corrupted."
+        )
+
+    return discovered
+
+
 __all__ = [
+    "ModuleResolutionSource",
     "PLACEHOLDER_MODULE_NAMES",
+    "discover_bundled_module_names",
     "discover_shipped_module_names",
     "discover_shipped_module_paths",
+    "get_bundled_manifests_path",
     "get_modules_base_path",
     "get_placeholder_rejection_reason",
+    "get_resolution_source",
     "is_placeholder_module",
     "set_modules_base_path",
 ]

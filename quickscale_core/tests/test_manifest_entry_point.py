@@ -901,6 +901,42 @@ class TestRefreshManagedAdaptersFailure:
     """Managed-adapter import/factory failure at an active base path raises
     ImproperlyConfigured (AF7 fail-hard decision)."""
 
+    def test_source_only_discovery_rejects_bundled_fallback(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``refresh_managed_adapters`` uses ``discover_shipped_module_names``
+        directly (source-only), NOT ``get_discovered_module_names`` (which
+        falls back to bundled).  When the monorepo is not available, it must
+        raise ``ImproperlyConfigured`` regardless of bundled availability.
+        """
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts.module_discovery import (
+            ImproperlyConfigured,
+        )
+
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+        try:
+            monorepo_path = Path(__file__).resolve().parents[2] / "quickscale_modules"
+            real_is_dir = Path.is_dir
+
+            def _no_monorepo(self: Path) -> bool:
+                if self.resolve() == monorepo_path.resolve():
+                    return False
+                return real_is_dir(self)
+
+            monkeypatch.setattr(Path, "is_dir", _no_monorepo)
+
+            # bundled manifests ARE available, but refresh_managed_adapters
+            # uses source-only discover_shipped_module_names which raises.
+            with pytest.raises(
+                ImproperlyConfigured,
+                match="Modules base path not found",
+            ):
+                refresh_managed_adapters()
+        finally:
+            _md._modules_base_path = original_override
+
     def test_raises_improperly_configured_when_adapter_not_importable(
         self, tmp_path: Path
     ) -> None:

@@ -1,5 +1,7 @@
 """Tests for the shared module catalog owned by quickscale_core."""
 
+from pathlib import Path
+
 import pytest
 
 from quickscale_core.contracts.module_catalog import (
@@ -213,3 +215,139 @@ class TestDiscoveredCatalogIsCanonicalInventory:
         entries = get_discovered_module_entries()
         names = [e.name for e in entries]
         assert names == sorted(names)
+
+
+# ---------------------------------------------------------------------------
+# SA109 Phase 2 — authoritative source-or-bundled discovery, fail-hard
+# ---------------------------------------------------------------------------
+
+
+class TestGetDiscoveredModuleNamesSourceOrBundled:
+    """``get_discovered_module_names`` resolves source inventory first and
+    falls back to authoritative bundled inventory.  Neither available → fail-hard.
+    """
+
+    def test_source_used_when_available(self) -> None:
+        """When the monorepo is available, discovery returns source inventory."""
+        names = get_discovered_module_names()
+        assert "analytics" in names
+        assert "teams" not in names
+        assert names == sorted(names)
+
+    def test_bundled_fallback_when_source_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When the monorepo is not available, falls back to bundled manifests."""
+        from quickscale_core.contracts import module_discovery as _md
+
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+        try:
+            monorepo_path = Path(__file__).resolve().parents[2] / "quickscale_modules"
+            real_is_dir = Path.is_dir
+
+            def _no_monorepo(self: Path) -> bool:
+                if self.resolve() == monorepo_path.resolve():
+                    return False
+                return real_is_dir(self)
+
+            monkeypatch.setattr(Path, "is_dir", _no_monorepo)
+
+            names = get_discovered_module_names()
+            assert "analytics" in names
+            assert "teams" not in names
+            assert names == sorted(names)
+        finally:
+            _md._modules_base_path = original_override
+
+    def test_fails_hard_when_no_inventory(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Raises ImproperlyConfigured when neither source nor bundled exists."""
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts.module_discovery import ImproperlyConfigured
+
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+        try:
+            # Make ALL is_dir calls return False — monorepo AND bundled vanish.
+            monkeypatch.setattr(Path, "is_dir", lambda _self: False)
+
+            with pytest.raises(
+                ImproperlyConfigured,
+                match="No valid module.yml files found|Bundled manifests directory.*not found",
+            ):
+                get_discovered_module_names()
+        finally:
+            _md._modules_base_path = original_override
+
+
+class TestGetDiscoveredModuleEntriesBundledAware:
+    """``get_discovered_module_entries`` must use the same bundled-aware
+    discovery path as ``get_discovered_module_names`` (SA109-CR-001).
+    """
+
+    def test_entries_use_source_when_available(self) -> None:
+        """Entries return all shipped modules when source is available."""
+        entries = get_discovered_module_entries()
+        names = [e.name for e in entries]
+        assert "auth" in names
+        assert "analytics" in names
+        assert "teams" not in names
+        assert names == sorted(names)
+
+    def test_entries_fallback_to_bundled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Entries fall back to bundled manifests when source is unavailable."""
+        from quickscale_core.contracts import module_discovery as _md
+
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+        try:
+            monorepo_path = Path(__file__).resolve().parents[2] / "quickscale_modules"
+            real_is_dir = Path.is_dir
+
+            def _no_monorepo(self: Path) -> bool:
+                if self.resolve() == monorepo_path.resolve():
+                    return False
+                return real_is_dir(self)
+
+            monkeypatch.setattr(Path, "is_dir", _no_monorepo)
+
+            entries = get_discovered_module_entries()
+            names = [e.name for e in entries]
+            assert "analytics" in names
+            assert "teams" not in names
+            assert names == sorted(names)
+        finally:
+            _md._modules_base_path = original_override
+
+    def test_entries_names_match_discovered_names(self) -> None:
+        """Entry names must be identical to the canonical discovered names."""
+        entries = get_discovered_module_entries()
+        entry_names = sorted([e.name for e in entries])
+        discovered_names = sorted(get_discovered_module_names())
+        assert entry_names == discovered_names, (
+            "get_discovered_module_entries returned different names than "
+            f"get_discovered_module_names: "
+            f"entries={entry_names}, names={discovered_names}"
+        )
+
+    def test_entries_fails_hard_when_no_inventory(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Raises ImproperlyConfigured when neither source nor bundled exists."""
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts.module_discovery import ImproperlyConfigured
+
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+        try:
+            monkeypatch.setattr(Path, "is_dir", lambda _self: False)
+
+            with pytest.raises(
+                ImproperlyConfigured,
+                match="No valid module.yml files found|Bundled manifests directory.*not found",
+            ):
+                get_discovered_module_entries()
+        finally:
+            _md._modules_base_path = original_override
