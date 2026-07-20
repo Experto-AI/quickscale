@@ -1,47 +1,19 @@
-{%- set all_module_cards = [
-  ('auth', 'Authentication', 'UserCircle',
-   'User registration, login, profiles, and password management',
-   '/profile', None, None),
-  ('blog', 'Blog', 'BookOpen',
-   'Full-featured blog with Markdown support, categories, tags, and RSS feed',
-   '/blog', None, None),
-  ('listings', 'Listings', 'Store',
-   'Generic listings with filtering for marketplace verticals',
-   '/listings', None, None),
-   ('crm', 'CRM', 'Briefcase',
-    'Contact management, companies, deals, and pipeline tracking',
-    '_modulePaths.crm', 'actionLabel', "'Open workspace'"),
-  ('forms', 'Forms', 'ClipboardList',
-   'Dynamic form builder with spam protection and submission management',
-   '/forms/contact', None, None),
-   ('social', 'Social', 'Share2',
-    'Managed social link-tree and embed feeds exposed through fixed public routes.',
-    '_modulePaths.social', 'reloadDocument', 'true'),
-  ('storage', 'Storage', 'HardDrive',
-   'Shared media storage infrastructure for local and S3-compatible backends',
-   '/settings', None, None),
-  ('backups', 'Backups', 'Archive',
-   'Operational backup snapshots with retention, validation, and artifact downloads.',
-   '/admin/quickscale_modules_backups/backuppolicy/', 'reloadDocument', 'true'),
-  ('notifications', 'Notifications', 'Bell',
-    'Transactional email settings, message history, and delivery event visibility.',
-    '/admin/quickscale_modules_notifications/', 'reloadDocument', 'true'),
-   ('analytics', 'Analytics', 'BarChart2',
-    'PostHog-backed event tracking with server-side capture, session identity, and frontend page-view instrumentation.',
-    '_modulePaths.analytics', 'reloadDocument', 'true'),
-] -%}
-{% raw -%}
 import { motion } from 'motion/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Link } from 'react-router-dom'
 import {
-{% endraw -%}
-{%- for key, name, icon, desc, href, extra_key, extra_val in all_module_cards %}
-  {{ icon }},
-{%- endfor %}
-{%- raw %}
+  UserCircle,
+  BookOpen,
+  Store,
+  Briefcase,
+  ClipboardList,
+  Share2,
+  HardDrive,
+  Archive,
+  Bell,
+  BarChart2,
   ExternalLink,
   Code,
   Rocket,
@@ -63,27 +35,81 @@ type ModuleCard = {
 const buildModuleInfo = (
   _modulePaths: Record<string, string>,
 ): ModuleCard[] => [
-{% endraw -%}
-{%- for key, name, icon, desc, href, extra_key, extra_val in all_module_cards %}
   {
-    key: '{{ key }}',
-    name: '{{ name }}',
-    icon: {{ icon }},
-    description: '{{ desc }}',
-    href: {{ "'" ~ href ~ "'" if href in ('/profile', '/blog', '/listings', '/forms/contact', '/settings', '/admin/quickscale_modules_backups/backuppolicy/', '/admin/quickscale_modules_notifications/') else href }},
-{%- if extra_key == 'reloadDocument' %}
-    reloadDocument: {{ extra_val }},
-{%- endif %}
-{%- if extra_key == 'actionLabel' %}
-    actionLabel: {{ extra_val }},
-{%- endif %}
-{%- if extra_key == 'reload_and_action' %}
-    reloadDocument: {{ extra_val.split('|')[0] }},
-    actionLabel: {{ extra_val.split('|')[1] }},
-{%- endif %}
+    key: 'auth',
+    name: 'Authentication',
+    icon: UserCircle,
+    description: 'User registration, login, profiles, and password management',
+    href: '/profile',
   },
-{%- endfor %}
-{%- raw %}
+  {
+    key: 'blog',
+    name: 'Blog',
+    icon: BookOpen,
+    description: 'Full-featured blog with Markdown support, categories, tags, and RSS feed',
+    href: '/blog',
+  },
+  {
+    key: 'listings',
+    name: 'Listings',
+    icon: Store,
+    description: 'Generic listings with filtering for marketplace verticals',
+    href: '/listings',
+  },
+  {
+    key: 'crm',
+    name: 'CRM',
+    icon: Briefcase,
+    description: 'Contact management, companies, deals, and pipeline tracking',
+    href: _modulePaths.crm,
+    actionLabel: 'Open workspace',
+  },
+  {
+    key: 'forms',
+    name: 'Forms',
+    icon: ClipboardList,
+    description: 'Dynamic form builder with spam protection and submission management',
+    href: '/forms/contact',
+  },
+  {
+    key: 'social',
+    name: 'Social',
+    icon: Share2,
+    description: 'Managed social link-tree and embed feeds exposed through fixed public routes.',
+    href: _modulePaths.social,
+    reloadDocument: true,
+  },
+  {
+    key: 'storage',
+    name: 'Storage',
+    icon: HardDrive,
+    description: 'Shared media storage infrastructure for local and S3-compatible backends',
+    href: '/settings',
+  },
+  {
+    key: 'backups',
+    name: 'Backups',
+    icon: Archive,
+    description: 'Operational backup snapshots with retention, validation, and artifact downloads.',
+    href: '/admin/quickscale_modules_backups/backuppolicy/',
+    reloadDocument: true,
+  },
+  {
+    key: 'notifications',
+    name: 'Notifications',
+    icon: Bell,
+    description: 'Transactional email settings, message history, and delivery event visibility.',
+    href: '/admin/quickscale_modules_notifications/',
+    reloadDocument: true,
+  },
+  {
+    key: 'analytics',
+    name: 'Analytics',
+    icon: BarChart2,
+    description: 'PostHog-backed event tracking with server-side capture, session identity, and frontend page-view instrumentation.',
+    href: _modulePaths.analytics,
+    reloadDocument: true,
+  },
 ]
 
 const gettingStarted = [
@@ -95,7 +121,7 @@ const gettingStarted = [
 
 export function Dashboard() {
   const modules = useModules()
-  const { modulePaths: _modulePaths } = useProjectConfig()
+  const { projectName, modulePaths: _modulePaths } = useProjectConfig()
   const installedModules = buildModuleInfo(_modulePaths as unknown as Record<string, string>).filter((m) => modules[m.key])
   // Use raw module installation state so billing-only generations don't falsely
   // render "No Modules Installed" (billing has module flag but no starter card).
@@ -104,7 +130,7 @@ export function Dashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome to {% endraw %}{{ project_name }}{% raw %}</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Welcome to {projectName}</h1>
         <p className="mt-1 text-muted-foreground">
           Your Django project has been successfully generated with QuickScale!
         </p>
@@ -214,4 +240,3 @@ export function Dashboard() {
     </div>
   )
 }
-{% endraw -%}

@@ -1360,11 +1360,13 @@ and asserts every emitted file is classified.
    ``index.html`` are user-owned after one-time generation.
 
    **Category U7 — Frontend user-owned source files:**
-    ``frontend/src/main.tsx``, ``frontend/src/index.css``,
+    ``frontend/src/main.tsx``, ``frontend/src/renderQuickScaleRoot.tsx``,
+    ``frontend/src/index.css``,
     ``frontend/src/vite-env.d.ts``, ``frontend/src/posthog-js.d.ts``,
     ``frontend/src/lib/utils.ts``, ``frontend/src/lib/analytics.ts``,
     ``frontend/src/stores/themeStore.ts``, ``frontend/src/test/setup.ts``,
     ``frontend/src/test/App.test.tsx``,
+    ``frontend/src/test/RootDispatch.test.tsx``,
     ``frontend/src/test/PublicSocialPages.test.tsx``,
     ``frontend/e2e/home.spec.ts``.
     Rationale: User-editable application source, styles, type declarations,

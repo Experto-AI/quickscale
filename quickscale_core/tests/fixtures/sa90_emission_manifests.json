@@ -23,7 +23,8 @@
       }
     },
     "baseline_evidence": {
-      "sa105": "Regenerated 2026-07-20 — all frontend/src module files are now unconditionally emitted as dormant files (SA105). All three variants carry identical frontend/src trees. Recorded deltas: App.tsx,j2→static, main.tsx.j2→static, App.test.tsx.j2→static, PublicSocialPages.test.tsx.j2→static, useModules.ts.j2 all-modules-unconditional, Sidebar.tsx.j2 all-nav-unconditional, Dashboard.tsx.j2 all-cards-unconditional, templates/index.html.j2 all-module-flags-unconditional."
+      "sa105": "Regenerated 2026-07-20 — all frontend/src module files are now unconditionally emitted as dormant files (SA105). All three variants carry identical frontend/src trees. Recorded deltas: App.tsx,j2→static, main.tsx.j2→static, App.test.tsx.j2→static, PublicSocialPages.test.tsx.j2→static, useModules.ts.j2 all-modules-unconditional, Sidebar.tsx.j2 all-nav-unconditional, Dashboard.tsx.j2 all-cards-unconditional, templates/index.html.j2 all-module-flags-unconditional.",
+    "sa106": "Regenerated 2026-07-20 — three identity-bearing frontend source templates converted from .j2 to static verbatim-copy files (SA106). projectName reads from window.__QUICKSCALE__.projectName at runtime via useProjectConfig. defaultConfig.projectName set to empty string. Deltas: useModules.ts.j2→static, Dashboard.tsx.j2→static, Sidebar.tsx.j2→static. 3 fixture hashes updated: useModules.ts, Dashboard.tsx, Sidebar.tsx."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -2105,7 +2106,7 @@
     },
     "frontend/src/components/layout/Sidebar.tsx": {
       "mode": "664",
-      "sha256": "725c36f9cb56088901173bf2c2fc0a50c20fbe361be7f3d2c8d8f4cabc09d397"
+      "sha256": "2b9ebfeba1c53c6fb2ad22872a7dff2b956de41c8950b5b1b953ddee8aef50de"
     },
     "frontend/src/components/orgs/OrgStatePanel.tsx": {
       "mode": "664",
@@ -2177,7 +2178,7 @@
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
-      "sha256": "9058e02dfe9f3a3e1872d8483b7563f4d2854c191c064631de74e9ab09c947a4"
+      "sha256": "1bf0dad5161d8fe1bff28f1baa8b87e5765ea6e8ddacc3f612bea6e446cece64"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "664",
@@ -2217,7 +2218,7 @@
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
-      "sha256": "342be9269719c6ee1181fbd95e9a40325638ed478ccabd23905bfbfeaf1d4aeb"
+      "sha256": "778495891fca2ee274d563042eb49ccda20d8b641fb49c7e69d88bab08becba2"
     },
     "frontend/src/pages/FormsPage.tsx": {
       "mode": "664",
@@ -4503,7 +4504,7 @@
     },
     "frontend/src/components/layout/Sidebar.tsx": {
       "mode": "664",
-      "sha256": "725c36f9cb56088901173bf2c2fc0a50c20fbe361be7f3d2c8d8f4cabc09d397"
+      "sha256": "2b9ebfeba1c53c6fb2ad22872a7dff2b956de41c8950b5b1b953ddee8aef50de"
     },
     "frontend/src/components/orgs/OrgStatePanel.tsx": {
       "mode": "664",
@@ -4575,7 +4576,7 @@
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
-      "sha256": "9058e02dfe9f3a3e1872d8483b7563f4d2854c191c064631de74e9ab09c947a4"
+      "sha256": "1bf0dad5161d8fe1bff28f1baa8b87e5765ea6e8ddacc3f612bea6e446cece64"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "664",
@@ -4615,7 +4616,7 @@
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
-      "sha256": "342be9269719c6ee1181fbd95e9a40325638ed478ccabd23905bfbfeaf1d4aeb"
+      "sha256": "778495891fca2ee274d563042eb49ccda20d8b641fb49c7e69d88bab08becba2"
     },
     "frontend/src/pages/FormsPage.tsx": {
       "mode": "664",
@@ -6901,7 +6902,7 @@
     },
     "frontend/src/components/layout/Sidebar.tsx": {
       "mode": "664",
-      "sha256": "725c36f9cb56088901173bf2c2fc0a50c20fbe361be7f3d2c8d8f4cabc09d397"
+      "sha256": "2b9ebfeba1c53c6fb2ad22872a7dff2b956de41c8950b5b1b953ddee8aef50de"
     },
     "frontend/src/components/orgs/OrgStatePanel.tsx": {
       "mode": "664",
@@ -6973,7 +6974,7 @@
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
-      "sha256": "9058e02dfe9f3a3e1872d8483b7563f4d2854c191c064631de74e9ab09c947a4"
+      "sha256": "1bf0dad5161d8fe1bff28f1baa8b87e5765ea6e8ddacc3f612bea6e446cece64"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "664",
@@ -7013,7 +7014,7 @@
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "664",
-      "sha256": "342be9269719c6ee1181fbd95e9a40325638ed478ccabd23905bfbfeaf1d4aeb"
+      "sha256": "778495891fca2ee274d563042eb49ccda20d8b641fb49c7e69d88bab08becba2"
     },
     "frontend/src/pages/FormsPage.tsx": {
       "mode": "664",

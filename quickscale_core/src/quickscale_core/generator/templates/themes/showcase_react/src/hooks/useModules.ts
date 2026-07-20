@@ -1,4 +1,3 @@
-{% raw -%}
 interface QuickScaleModules {
   auth: boolean
   blog: boolean
@@ -56,7 +55,7 @@ declare global {
 }
 
 const defaultConfig: QuickScaleConfig = {
-  projectName: '{% endraw %}{{ project_name }}{% raw %}',
+  projectName: '',
   modules: {
     auth: false,
     blog: false,
@@ -150,4 +149,3 @@ export function buildOrgPath(orgSlug: string, path = ''): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   return `/orgs/${orgSlug}${path ? normalizedPath : ''}`
 }
-{% endraw -%}
