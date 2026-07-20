@@ -48,36 +48,12 @@ export interface QuickScaleConfig {
   publicPage?: QuickScalePublicPageConfig
 }
 
+import { validateQuickScaleConfig } from '@/lib/validateQuickScaleSeam'
+
 declare global {
   interface Window {
     __QUICKSCALE__?: QuickScaleConfig
   }
-}
-
-const defaultConfig: QuickScaleConfig = {
-  projectName: '',
-  modules: {
-    auth: false,
-    blog: false,
-    listings: false,
-    crm: false,
-    forms: false,
-    storage: false,
-    backups: false,
-    notifications: false,
-    analytics: false,
-    billing: false,
-    social: false,
-  },
-  modulePaths: {
-    crm: '/crm',
-    social: '/social',
-    analytics: '/analytics/',
-  },
-  owner: {
-    mode: 'solo',
-    currentOrgSlug: null,
-  },
 }
 
 function inferCurrentOrgSlug(config: QuickScaleConfig): string | null {
@@ -97,34 +73,13 @@ function inferCurrentOrgSlug(config: QuickScaleConfig): string | null {
 }
 
 function resolveProjectConfig(): QuickScaleConfig {
-  const runtimeConfig = window.__QUICKSCALE__
-
-  if (!runtimeConfig) {
-    return defaultConfig
-  }
-
-  const mergedConfig: QuickScaleConfig = {
-    ...defaultConfig,
-    ...runtimeConfig,
-    modules: {
-      ...defaultConfig.modules,
-      ...runtimeConfig.modules,
-    },
-    modulePaths: {
-      ...defaultConfig.modulePaths,
-      ...runtimeConfig.modulePaths,
-    },
-    owner: {
-      ...defaultConfig.owner,
-      ...runtimeConfig.owner,
-    },
-  }
+  const config = validateQuickScaleConfig()
 
   return {
-    ...mergedConfig,
+    ...config,
     owner: {
-      ...mergedConfig.owner,
-      currentOrgSlug: inferCurrentOrgSlug(mergedConfig),
+      ...config.owner,
+      currentOrgSlug: inferCurrentOrgSlug(config),
     },
   }
 }

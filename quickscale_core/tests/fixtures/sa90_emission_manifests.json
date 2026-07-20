@@ -24,7 +24,12 @@
     },
     "baseline_evidence": {
       "sa105": "Regenerated 2026-07-20 — all frontend/src module files are now unconditionally emitted as dormant files (SA105). All three variants carry identical frontend/src trees. Recorded deltas: App.tsx,j2→static, main.tsx.j2→static, App.test.tsx.j2→static, PublicSocialPages.test.tsx.j2→static, useModules.ts.j2 all-modules-unconditional, Sidebar.tsx.j2 all-nav-unconditional, Dashboard.tsx.j2 all-cards-unconditional, templates/index.html.j2 all-module-flags-unconditional.",
-    "sa106": "Regenerated 2026-07-20 — three identity-bearing frontend source templates converted from .j2 to static verbatim-copy files (SA106). projectName reads from window.__QUICKSCALE__.projectName at runtime via useProjectConfig. defaultConfig.projectName set to empty string. Deltas: useModules.ts.j2→static, Dashboard.tsx.j2→static, Sidebar.tsx.j2→static. 3 fixture hashes updated: useModules.ts, Dashboard.tsx, Sidebar.tsx."
+      "sa106": "Regenerated 2026-07-20 — three identity-bearing frontend source templates converted from .j2 to static verbatim-copy files (SA106). projectName reads from window.__QUICKSCALE__.projectName at runtime via useProjectConfig. defaultConfig.projectName set to empty string. Deltas: useModules.ts.j2→static, Dashboard.tsx.j2→static, Sidebar.tsx.j2→static. 3 fixture hashes updated: useModules.ts, Dashboard.tsx, Sidebar.tsx.",
+      "sa107": "Regenerated 2026-07-20 — added validateQuickScaleSeam.ts and validateQuickScaleSeam.test.ts; updated useModules.ts, main.tsx, renderQuickScaleRoot.tsx hashes for fail-hard seam validation (SA107). defaultConfig removed from useModules.ts.",
+      "sa107-fix-pass": "Regenerated 2026-07-20 — owner/modulePaths validation added to validateQuickScaleSeam.ts; templates/social/{embeds,link_tree}.html.j2 inject owner and full modulePaths; RootDispatch.test.tsx and validateQuickScaleSeam.test.ts expanded for production-shaped public-social boot coverage and wrong-type/enum validation. 5 fixture hashes updated: validateQuickScaleSeam.ts, RootDispatch.test.tsx, validateQuickScaleSeam.test.ts, templates/social/embeds.html, templates/social/link_tree.html (all 3 variants).",
+      "sa107-cr-002-pass": "Regenerated 2026-07-20 — all 11 required module keys now enforced in validateQuickScaleSeam.ts (SA107-CR-002); renderQuickScaleRoot.tsx `?? false` fallback removed; parameterized and partial-module rejection tests added to validateQuickScaleSeam.test.ts; RootDispatch.test.tsx callsites updated for strict modules shape. 4 fixture hashes updated: validateQuickScaleSeam.ts, renderQuickScaleRoot.tsx, validateQuickScaleSeam.test.ts, RootDispatch.test.tsx (all 3 variants).",
+      "sa107-cr-002-final-fix": "Regenerated 2026-07-20 — inherited/non-enumerable required-flag regression fix (SA107-CR-002): key in seam.modules replaced with Object.prototype.hasOwnProperty.call; typeof boolean check collapsed into same required-key loop. 4 inherited/non-enumerable regression tests added to validateQuickScaleSeam.test.ts. 2 fixture hashes updated: validateQuickScaleSeam.ts, validateQuickScaleSeam.test.ts (all 3 variants).",
+      "sa107-cr-002-inherited-boolean": "Regenerated 2026-07-20 — added inherited-boolean regression test for SA107-CR-002: validates that an inherited boolean auth:true/auth:false with own booleans for other 10 keys is rejected. 1 fixture hash updated: validateQuickScaleSeam.test.ts (all 3 variants)."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -139,6 +144,118 @@
     ".venv/lib/python3.13/site-packages/_virtualenv.py": {
       "mode": "664",
       "sha256": "460589e83387d4dfe5fd84d41c5f6979599f5cd080983d73c832549161c80435"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/INSTALLER": {
+      "mode": "664",
+      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/METADATA": {
+      "mode": "664",
+      "sha256": "17832de47b5dc23e46253ba16462520036f28d9a27d5c30157784952ca4e69b2"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/RECORD": {
+      "mode": "664",
+      "sha256": "af0cda2a43f2dbfde8adac7b1b20e2700852c3fe98d21a238cc15f77a9afa03e"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/WHEEL": {
+      "mode": "664",
+      "sha256": "1b68144734c4b66791f27add5d425f3620775585718a03d0f9b110ba3a4d88db"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/entry_points.txt": {
+      "mode": "664",
+      "sha256": "5617fcb34218817dfb9ad778bc62fbdc13dcc5d2a7a9e0853f3079f9ddf4c7ca"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/AUTHORS.txt": {
+      "mode": "664",
+      "sha256": "5b73479bffada0916044cb29c47ab20360215e3c838ff2e7562ecdfcb11645bd"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/certifi/LICENSE": {
+      "mode": "664",
+      "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distro/LICENSE": {
+      "mode": "664",
+      "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md": {
+      "mode": "664",
+      "sha256": "b7a336abf3b04e180ec065cdd16e705d079e1cc7a14f910aa6e9187f36b9cd87"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/msgpack/COPYING": {
+      "mode": "664",
+      "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE": {
+      "mode": "664",
+      "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE": {
+      "mode": "664",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD": {
+      "mode": "664",
+      "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE": {
+      "mode": "664",
+      "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE": {
+      "mode": "664",
+      "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pygments/LICENSE": {
+      "mode": "664",
+      "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE": {
+      "mode": "664",
+      "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/requests/LICENSE": {
+      "mode": "664",
+      "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE": {
+      "mode": "664",
+      "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/rich/LICENSE": {
+      "mode": "664",
+      "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli/LICENSE": {
+      "mode": "664",
+      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE": {
+      "mode": "664",
+      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/truststore/LICENSE": {
+      "mode": "664",
+      "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.virtualenv": {
+      "mode": "664",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     ".venv/lib/python3.13/site-packages/pip/__init__.py": {
       "mode": "664",
@@ -1895,118 +2012,6 @@
     ".venv/lib/python3.13/site-packages/pip/py.typed": {
       "mode": "664",
       "sha256": "10156fbcf4539ff788a73e5ee50ced48276b317ed0c1ded53fddd14a82256762"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/INSTALLER": {
-      "mode": "664",
-      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/METADATA": {
-      "mode": "664",
-      "sha256": "17832de47b5dc23e46253ba16462520036f28d9a27d5c30157784952ca4e69b2"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/RECORD": {
-      "mode": "664",
-      "sha256": "af0cda2a43f2dbfde8adac7b1b20e2700852c3fe98d21a238cc15f77a9afa03e"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/WHEEL": {
-      "mode": "664",
-      "sha256": "1b68144734c4b66791f27add5d425f3620775585718a03d0f9b110ba3a4d88db"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/entry_points.txt": {
-      "mode": "664",
-      "sha256": "5617fcb34218817dfb9ad778bc62fbdc13dcc5d2a7a9e0853f3079f9ddf4c7ca"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/AUTHORS.txt": {
-      "mode": "664",
-      "sha256": "5b73479bffada0916044cb29c47ab20360215e3c838ff2e7562ecdfcb11645bd"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/certifi/LICENSE": {
-      "mode": "664",
-      "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distro/LICENSE": {
-      "mode": "664",
-      "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md": {
-      "mode": "664",
-      "sha256": "b7a336abf3b04e180ec065cdd16e705d079e1cc7a14f910aa6e9187f36b9cd87"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/msgpack/COPYING": {
-      "mode": "664",
-      "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE": {
-      "mode": "664",
-      "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE": {
-      "mode": "664",
-      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD": {
-      "mode": "664",
-      "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE": {
-      "mode": "664",
-      "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE": {
-      "mode": "664",
-      "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pygments/LICENSE": {
-      "mode": "664",
-      "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE": {
-      "mode": "664",
-      "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/requests/LICENSE": {
-      "mode": "664",
-      "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE": {
-      "mode": "664",
-      "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/rich/LICENSE": {
-      "mode": "664",
-      "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli/LICENSE": {
-      "mode": "664",
-      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE": {
-      "mode": "664",
-      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/truststore/LICENSE": {
-      "mode": "664",
-      "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.virtualenv": {
-      "mode": "664",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     ".venv/pyvenv.cfg": {
       "mode": "664",
@@ -2178,7 +2183,7 @@
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
-      "sha256": "1bf0dad5161d8fe1bff28f1baa8b87e5765ea6e8ddacc3f612bea6e446cece64"
+      "sha256": "7608d7b30ecb8dde36c4a18100acc1715c971fbf03931a208d9052d245694c8d"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "664",
@@ -2204,9 +2209,13 @@
       "mode": "664",
       "sha256": "e46429536f43f5910f5b2b0c50bb2769b510a4558bb4b5d20a3b0a9091dbf7c3"
     },
+    "frontend/src/lib/validateQuickScaleSeam.ts": {
+      "mode": "664",
+      "sha256": "049bc5e11d41f86f94f7bec05f6fa39f8ea7dca41346fc411131cf34888826c5"
+    },
     "frontend/src/main.tsx": {
       "mode": "664",
-      "sha256": "d06deba192308ac9bc5cfa2879f1888db2072c8b8a0c486c031f6ca3a0fd1f65"
+      "sha256": "d80d31f5e375e728fce7728d1ff668d2d7a568fdd60b84f85e78ebddf8004fdb"
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "664",
@@ -2276,6 +2285,10 @@
       "mode": "664",
       "sha256": "6cd1a256be9f15d8ee20a7e9e3c3fe6328d2bd86caa1e8f479f32b3052e42837"
     },
+    "frontend/src/renderQuickScaleRoot.tsx": {
+      "mode": "664",
+      "sha256": "874f03abb14b02762ec5172df5bcbba4319952a0e0171135548beffe8f2f35a5"
+    },
     "frontend/src/stores/themeStore.ts": {
       "mode": "664",
       "sha256": "cc3fab3de66286036ff9054a99267b0882fb843723e07d9de9b25533e551ebd9"
@@ -2288,9 +2301,17 @@
       "mode": "664",
       "sha256": "d0079e7c2046b7a0b463fa4db66b37f1e6e72d10fbbbc783de6fc9d6b0983e5a"
     },
+    "frontend/src/test/RootDispatch.test.tsx": {
+      "mode": "664",
+      "sha256": "375e4bbd02448bf255fd432be2ba25c4af080a23bdb7c914c6c2239249f52cf2"
+    },
     "frontend/src/test/setup.ts": {
       "mode": "664",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
+    },
+    "frontend/src/test/validateQuickScaleSeam.test.ts": {
+      "mode": "664",
+      "sha256": "52fa9e233d3eeac1aea204bc2376f471d7a5095b2bba2f1ff9a085ea8298b045"
     },
     "frontend/src/vite-env.d.ts": {
       "mode": "664",
@@ -2358,11 +2379,11 @@
     },
     "templates/social/embeds.html": {
       "mode": "664",
-      "sha256": "a91636c68eec9c77bcb2def936bb6c4d02c5e6a2920c9de4fe51c2ae36331cb6"
+      "sha256": "3ab2dfbb6039286ab713d0fb2b276e6700675b9a7e9b44e1563fc4ee75f04044"
     },
     "templates/social/link_tree.html": {
       "mode": "664",
-      "sha256": "512b5f8b479b3be5c9a431d2d37de7324b15b981086ac8a989daccd191c015a4"
+      "sha256": "74f62f91aada8b4c77cf238428263ec33be27635108307e3fe5e217084faee45"
     },
     "testproject/__init__.py": {
       "mode": "664",
@@ -2423,14 +2444,6 @@
     "tests/test_example.py": {
       "mode": "664",
       "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
-    },
-    "frontend/src/renderQuickScaleRoot.tsx": {
-      "mode": "664",
-      "sha256": "af913ac47ec7e4c496d4fa92c246691f8649bda09bc1a94561d79a38ed926757"
-    },
-    "frontend/src/test/RootDispatch.test.tsx": {
-      "mode": "664",
-      "sha256": "1336548eae717bb5e4d1858b6a21db73251b86d5beb26560ce678e5fe4a26fac"
     }
   },
   "react_empty": {
@@ -2537,6 +2550,118 @@
     ".venv/lib/python3.13/site-packages/_virtualenv.py": {
       "mode": "664",
       "sha256": "460589e83387d4dfe5fd84d41c5f6979599f5cd080983d73c832549161c80435"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/INSTALLER": {
+      "mode": "664",
+      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/METADATA": {
+      "mode": "664",
+      "sha256": "17832de47b5dc23e46253ba16462520036f28d9a27d5c30157784952ca4e69b2"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/RECORD": {
+      "mode": "664",
+      "sha256": "af0cda2a43f2dbfde8adac7b1b20e2700852c3fe98d21a238cc15f77a9afa03e"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/WHEEL": {
+      "mode": "664",
+      "sha256": "1b68144734c4b66791f27add5d425f3620775585718a03d0f9b110ba3a4d88db"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/entry_points.txt": {
+      "mode": "664",
+      "sha256": "5617fcb34218817dfb9ad778bc62fbdc13dcc5d2a7a9e0853f3079f9ddf4c7ca"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/AUTHORS.txt": {
+      "mode": "664",
+      "sha256": "5b73479bffada0916044cb29c47ab20360215e3c838ff2e7562ecdfcb11645bd"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/certifi/LICENSE": {
+      "mode": "664",
+      "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distro/LICENSE": {
+      "mode": "664",
+      "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md": {
+      "mode": "664",
+      "sha256": "b7a336abf3b04e180ec065cdd16e705d079e1cc7a14f910aa6e9187f36b9cd87"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/msgpack/COPYING": {
+      "mode": "664",
+      "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE": {
+      "mode": "664",
+      "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE": {
+      "mode": "664",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD": {
+      "mode": "664",
+      "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE": {
+      "mode": "664",
+      "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE": {
+      "mode": "664",
+      "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pygments/LICENSE": {
+      "mode": "664",
+      "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE": {
+      "mode": "664",
+      "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/requests/LICENSE": {
+      "mode": "664",
+      "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE": {
+      "mode": "664",
+      "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/rich/LICENSE": {
+      "mode": "664",
+      "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli/LICENSE": {
+      "mode": "664",
+      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE": {
+      "mode": "664",
+      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/truststore/LICENSE": {
+      "mode": "664",
+      "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.virtualenv": {
+      "mode": "664",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     ".venv/lib/python3.13/site-packages/pip/__init__.py": {
       "mode": "664",
@@ -4293,118 +4418,6 @@
     ".venv/lib/python3.13/site-packages/pip/py.typed": {
       "mode": "664",
       "sha256": "10156fbcf4539ff788a73e5ee50ced48276b317ed0c1ded53fddd14a82256762"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/INSTALLER": {
-      "mode": "664",
-      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/METADATA": {
-      "mode": "664",
-      "sha256": "17832de47b5dc23e46253ba16462520036f28d9a27d5c30157784952ca4e69b2"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/RECORD": {
-      "mode": "664",
-      "sha256": "af0cda2a43f2dbfde8adac7b1b20e2700852c3fe98d21a238cc15f77a9afa03e"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/WHEEL": {
-      "mode": "664",
-      "sha256": "1b68144734c4b66791f27add5d425f3620775585718a03d0f9b110ba3a4d88db"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/entry_points.txt": {
-      "mode": "664",
-      "sha256": "5617fcb34218817dfb9ad778bc62fbdc13dcc5d2a7a9e0853f3079f9ddf4c7ca"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/AUTHORS.txt": {
-      "mode": "664",
-      "sha256": "5b73479bffada0916044cb29c47ab20360215e3c838ff2e7562ecdfcb11645bd"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/certifi/LICENSE": {
-      "mode": "664",
-      "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distro/LICENSE": {
-      "mode": "664",
-      "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md": {
-      "mode": "664",
-      "sha256": "b7a336abf3b04e180ec065cdd16e705d079e1cc7a14f910aa6e9187f36b9cd87"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/msgpack/COPYING": {
-      "mode": "664",
-      "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE": {
-      "mode": "664",
-      "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE": {
-      "mode": "664",
-      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD": {
-      "mode": "664",
-      "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE": {
-      "mode": "664",
-      "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE": {
-      "mode": "664",
-      "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pygments/LICENSE": {
-      "mode": "664",
-      "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE": {
-      "mode": "664",
-      "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/requests/LICENSE": {
-      "mode": "664",
-      "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE": {
-      "mode": "664",
-      "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/rich/LICENSE": {
-      "mode": "664",
-      "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli/LICENSE": {
-      "mode": "664",
-      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE": {
-      "mode": "664",
-      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/truststore/LICENSE": {
-      "mode": "664",
-      "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.virtualenv": {
-      "mode": "664",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     ".venv/pyvenv.cfg": {
       "mode": "664",
@@ -4576,7 +4589,7 @@
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
-      "sha256": "1bf0dad5161d8fe1bff28f1baa8b87e5765ea6e8ddacc3f612bea6e446cece64"
+      "sha256": "7608d7b30ecb8dde36c4a18100acc1715c971fbf03931a208d9052d245694c8d"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "664",
@@ -4602,9 +4615,13 @@
       "mode": "664",
       "sha256": "e46429536f43f5910f5b2b0c50bb2769b510a4558bb4b5d20a3b0a9091dbf7c3"
     },
+    "frontend/src/lib/validateQuickScaleSeam.ts": {
+      "mode": "664",
+      "sha256": "049bc5e11d41f86f94f7bec05f6fa39f8ea7dca41346fc411131cf34888826c5"
+    },
     "frontend/src/main.tsx": {
       "mode": "664",
-      "sha256": "d06deba192308ac9bc5cfa2879f1888db2072c8b8a0c486c031f6ca3a0fd1f65"
+      "sha256": "d80d31f5e375e728fce7728d1ff668d2d7a568fdd60b84f85e78ebddf8004fdb"
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "664",
@@ -4674,6 +4691,10 @@
       "mode": "664",
       "sha256": "6cd1a256be9f15d8ee20a7e9e3c3fe6328d2bd86caa1e8f479f32b3052e42837"
     },
+    "frontend/src/renderQuickScaleRoot.tsx": {
+      "mode": "664",
+      "sha256": "874f03abb14b02762ec5172df5bcbba4319952a0e0171135548beffe8f2f35a5"
+    },
     "frontend/src/stores/themeStore.ts": {
       "mode": "664",
       "sha256": "cc3fab3de66286036ff9054a99267b0882fb843723e07d9de9b25533e551ebd9"
@@ -4686,9 +4707,17 @@
       "mode": "664",
       "sha256": "d0079e7c2046b7a0b463fa4db66b37f1e6e72d10fbbbc783de6fc9d6b0983e5a"
     },
+    "frontend/src/test/RootDispatch.test.tsx": {
+      "mode": "664",
+      "sha256": "375e4bbd02448bf255fd432be2ba25c4af080a23bdb7c914c6c2239249f52cf2"
+    },
     "frontend/src/test/setup.ts": {
       "mode": "664",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
+    },
+    "frontend/src/test/validateQuickScaleSeam.test.ts": {
+      "mode": "664",
+      "sha256": "52fa9e233d3eeac1aea204bc2376f471d7a5095b2bba2f1ff9a085ea8298b045"
     },
     "frontend/src/vite-env.d.ts": {
       "mode": "664",
@@ -4756,11 +4785,11 @@
     },
     "templates/social/embeds.html": {
       "mode": "664",
-      "sha256": "a91636c68eec9c77bcb2def936bb6c4d02c5e6a2920c9de4fe51c2ae36331cb6"
+      "sha256": "3ab2dfbb6039286ab713d0fb2b276e6700675b9a7e9b44e1563fc4ee75f04044"
     },
     "templates/social/link_tree.html": {
       "mode": "664",
-      "sha256": "512b5f8b479b3be5c9a431d2d37de7324b15b981086ac8a989daccd191c015a4"
+      "sha256": "74f62f91aada8b4c77cf238428263ec33be27635108307e3fe5e217084faee45"
     },
     "testproject/__init__.py": {
       "mode": "664",
@@ -4821,14 +4850,6 @@
     "tests/test_example.py": {
       "mode": "664",
       "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
-    },
-    "frontend/src/renderQuickScaleRoot.tsx": {
-      "mode": "664",
-      "sha256": "af913ac47ec7e4c496d4fa92c246691f8649bda09bc1a94561d79a38ed926757"
-    },
-    "frontend/src/test/RootDispatch.test.tsx": {
-      "mode": "664",
-      "sha256": "1336548eae717bb5e4d1858b6a21db73251b86d5beb26560ce678e5fe4a26fac"
     }
   },
   "react_selected": {
@@ -4935,6 +4956,118 @@
     ".venv/lib/python3.13/site-packages/_virtualenv.py": {
       "mode": "664",
       "sha256": "460589e83387d4dfe5fd84d41c5f6979599f5cd080983d73c832549161c80435"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/INSTALLER": {
+      "mode": "664",
+      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/METADATA": {
+      "mode": "664",
+      "sha256": "17832de47b5dc23e46253ba16462520036f28d9a27d5c30157784952ca4e69b2"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/RECORD": {
+      "mode": "664",
+      "sha256": "af0cda2a43f2dbfde8adac7b1b20e2700852c3fe98d21a238cc15f77a9afa03e"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/WHEEL": {
+      "mode": "664",
+      "sha256": "1b68144734c4b66791f27add5d425f3620775585718a03d0f9b110ba3a4d88db"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/entry_points.txt": {
+      "mode": "664",
+      "sha256": "5617fcb34218817dfb9ad778bc62fbdc13dcc5d2a7a9e0853f3079f9ddf4c7ca"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/AUTHORS.txt": {
+      "mode": "664",
+      "sha256": "5b73479bffada0916044cb29c47ab20360215e3c838ff2e7562ecdfcb11645bd"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/certifi/LICENSE": {
+      "mode": "664",
+      "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distro/LICENSE": {
+      "mode": "664",
+      "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md": {
+      "mode": "664",
+      "sha256": "b7a336abf3b04e180ec065cdd16e705d079e1cc7a14f910aa6e9187f36b9cd87"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/msgpack/COPYING": {
+      "mode": "664",
+      "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE": {
+      "mode": "664",
+      "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE": {
+      "mode": "664",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD": {
+      "mode": "664",
+      "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE": {
+      "mode": "664",
+      "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE": {
+      "mode": "664",
+      "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pygments/LICENSE": {
+      "mode": "664",
+      "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE": {
+      "mode": "664",
+      "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/requests/LICENSE": {
+      "mode": "664",
+      "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE": {
+      "mode": "664",
+      "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/rich/LICENSE": {
+      "mode": "664",
+      "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli/LICENSE": {
+      "mode": "664",
+      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE": {
+      "mode": "664",
+      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/truststore/LICENSE": {
+      "mode": "664",
+      "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt": {
+      "mode": "664",
+      "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
+    },
+    ".venv/lib/python3.13/site-packages/pip-26.1.2.virtualenv": {
+      "mode": "664",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     ".venv/lib/python3.13/site-packages/pip/__init__.py": {
       "mode": "664",
@@ -6692,118 +6825,6 @@
       "mode": "664",
       "sha256": "10156fbcf4539ff788a73e5ee50ced48276b317ed0c1ded53fddd14a82256762"
     },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/INSTALLER": {
-      "mode": "664",
-      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/METADATA": {
-      "mode": "664",
-      "sha256": "17832de47b5dc23e46253ba16462520036f28d9a27d5c30157784952ca4e69b2"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/RECORD": {
-      "mode": "664",
-      "sha256": "af0cda2a43f2dbfde8adac7b1b20e2700852c3fe98d21a238cc15f77a9afa03e"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/WHEEL": {
-      "mode": "664",
-      "sha256": "1b68144734c4b66791f27add5d425f3620775585718a03d0f9b110ba3a4d88db"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/entry_points.txt": {
-      "mode": "664",
-      "sha256": "5617fcb34218817dfb9ad778bc62fbdc13dcc5d2a7a9e0853f3079f9ddf4c7ca"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/AUTHORS.txt": {
-      "mode": "664",
-      "sha256": "5b73479bffada0916044cb29c47ab20360215e3c838ff2e7562ecdfcb11645bd"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/certifi/LICENSE": {
-      "mode": "664",
-      "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distro/LICENSE": {
-      "mode": "664",
-      "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md": {
-      "mode": "664",
-      "sha256": "b7a336abf3b04e180ec065cdd16e705d079e1cc7a14f910aa6e9187f36b9cd87"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/msgpack/COPYING": {
-      "mode": "664",
-      "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE": {
-      "mode": "664",
-      "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE": {
-      "mode": "664",
-      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD": {
-      "mode": "664",
-      "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE": {
-      "mode": "664",
-      "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE": {
-      "mode": "664",
-      "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pygments/LICENSE": {
-      "mode": "664",
-      "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE": {
-      "mode": "664",
-      "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/requests/LICENSE": {
-      "mode": "664",
-      "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE": {
-      "mode": "664",
-      "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/rich/LICENSE": {
-      "mode": "664",
-      "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli/LICENSE": {
-      "mode": "664",
-      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE": {
-      "mode": "664",
-      "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/truststore/LICENSE": {
-      "mode": "664",
-      "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt": {
-      "mode": "664",
-      "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
-    },
-    ".venv/lib/python3.13/site-packages/pip-26.1.2.virtualenv": {
-      "mode": "664",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
     ".venv/pyvenv.cfg": {
       "mode": "664",
       "sha256": "0b7c4158e44c435030b6edc448cf3ea560b31f429c7206aa483a81ad2b9b31b6"
@@ -6974,7 +6995,7 @@
     },
     "frontend/src/hooks/useModules.ts": {
       "mode": "664",
-      "sha256": "1bf0dad5161d8fe1bff28f1baa8b87e5765ea6e8ddacc3f612bea6e446cece64"
+      "sha256": "7608d7b30ecb8dde36c4a18100acc1715c971fbf03931a208d9052d245694c8d"
     },
     "frontend/src/hooks/useOrgNavigation.ts": {
       "mode": "664",
@@ -7000,9 +7021,13 @@
       "mode": "664",
       "sha256": "e46429536f43f5910f5b2b0c50bb2769b510a4558bb4b5d20a3b0a9091dbf7c3"
     },
+    "frontend/src/lib/validateQuickScaleSeam.ts": {
+      "mode": "664",
+      "sha256": "049bc5e11d41f86f94f7bec05f6fa39f8ea7dca41346fc411131cf34888826c5"
+    },
     "frontend/src/main.tsx": {
       "mode": "664",
-      "sha256": "d06deba192308ac9bc5cfa2879f1888db2072c8b8a0c486c031f6ca3a0fd1f65"
+      "sha256": "d80d31f5e375e728fce7728d1ff668d2d7a568fdd60b84f85e78ebddf8004fdb"
     },
     "frontend/src/pages/BlogPage.tsx": {
       "mode": "664",
@@ -7072,6 +7097,10 @@
       "mode": "664",
       "sha256": "6cd1a256be9f15d8ee20a7e9e3c3fe6328d2bd86caa1e8f479f32b3052e42837"
     },
+    "frontend/src/renderQuickScaleRoot.tsx": {
+      "mode": "664",
+      "sha256": "874f03abb14b02762ec5172df5bcbba4319952a0e0171135548beffe8f2f35a5"
+    },
     "frontend/src/stores/themeStore.ts": {
       "mode": "664",
       "sha256": "cc3fab3de66286036ff9054a99267b0882fb843723e07d9de9b25533e551ebd9"
@@ -7084,9 +7113,17 @@
       "mode": "664",
       "sha256": "d0079e7c2046b7a0b463fa4db66b37f1e6e72d10fbbbc783de6fc9d6b0983e5a"
     },
+    "frontend/src/test/RootDispatch.test.tsx": {
+      "mode": "664",
+      "sha256": "375e4bbd02448bf255fd432be2ba25c4af080a23bdb7c914c6c2239249f52cf2"
+    },
     "frontend/src/test/setup.ts": {
       "mode": "664",
       "sha256": "27b9e0f69d156c680ff63560e58a12c01a4abec1bdb4756534c93e13c1f278ea"
+    },
+    "frontend/src/test/validateQuickScaleSeam.test.ts": {
+      "mode": "664",
+      "sha256": "52fa9e233d3eeac1aea204bc2376f471d7a5095b2bba2f1ff9a085ea8298b045"
     },
     "frontend/src/vite-env.d.ts": {
       "mode": "664",
@@ -7154,11 +7191,11 @@
     },
     "templates/social/embeds.html": {
       "mode": "664",
-      "sha256": "a91636c68eec9c77bcb2def936bb6c4d02c5e6a2920c9de4fe51c2ae36331cb6"
+      "sha256": "3ab2dfbb6039286ab713d0fb2b276e6700675b9a7e9b44e1563fc4ee75f04044"
     },
     "templates/social/link_tree.html": {
       "mode": "664",
-      "sha256": "512b5f8b479b3be5c9a431d2d37de7324b15b981086ac8a989daccd191c015a4"
+      "sha256": "74f62f91aada8b4c77cf238428263ec33be27635108307e3fe5e217084faee45"
     },
     "testproject/__init__.py": {
       "mode": "664",
@@ -7219,14 +7256,6 @@
     "tests/test_example.py": {
       "mode": "664",
       "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
-    },
-    "frontend/src/renderQuickScaleRoot.tsx": {
-      "mode": "664",
-      "sha256": "af913ac47ec7e4c496d4fa92c246691f8649bda09bc1a94561d79a38ed926757"
-    },
-    "frontend/src/test/RootDispatch.test.tsx": {
-      "mode": "664",
-      "sha256": "1336548eae717bb5e4d1858b6a21db73251b86d5beb26560ce678e5fe4a26fac"
     }
   }
 }
