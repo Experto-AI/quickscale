@@ -1,26 +1,6 @@
-{%- set optional_module_entries = [
-  ('auth', "  auth: boolean\n"),
-  ('blog', "  blog: boolean\n"),
-  ('listings', "  listings: boolean\n"),
-  ('crm', "  crm: boolean\n"),
-  ('forms', "  forms: boolean\n"),
-  ('storage', "  storage: boolean\n"),
-  ('backups', "  backups: boolean\n"),
-  ('notifications', "  notifications: boolean\n"),
-  ('analytics', "  analytics: boolean\n"),
-  ('billing', "  billing: boolean\n"),
-  ('social', "  social: boolean\n"),
-] -%}
-{%- set optional_module_path_entries = [
-  ('crm', "  crm: string\n"),
-  ('social', "  social: string\n"),
-  ('analytics', "  analytics: string\n"),
-] -%}
 {% raw -%}
 interface QuickScaleModules {
-{% endraw -%}
-{%- if selected_modules is none %}
-{% raw %}  auth: boolean
+  auth: boolean
   blog: boolean
   listings: boolean
   crm: boolean
@@ -31,23 +11,12 @@ interface QuickScaleModules {
   analytics: boolean
   billing: boolean
   social: boolean
-{% endraw %}{%- else %}
-{% raw %}  auth: boolean
-{% endraw %}{%- for key, line in optional_module_entries %}{% if key != 'auth' and key in selected_modules %}{{ line }}{% endif %}{% endfor %}
-{%- endif %}
-{%- raw %}
 }
 
 interface QuickScaleModulePaths {
-{% endraw -%}
-{%- if selected_modules is none %}
-{% raw %}  crm: string
+  crm: string
   social: string
   analytics: string
-{% endraw %}{%- else %}
-{%- for key, line in optional_module_path_entries %}{% if key in selected_modules %}{{ line }}{% endif %}{% endfor %}
-{%- endif %}
-{%- raw %}
 }
 
 export type QuickScaleOwnerMode = 'solo' | 'saas'
@@ -89,9 +58,7 @@ declare global {
 const defaultConfig: QuickScaleConfig = {
   projectName: '{% endraw %}{{ project_name }}{% raw %}',
   modules: {
-{% endraw -%}
-{%- if selected_modules is none %}
-{% raw %}    auth: false,
+    auth: false,
     blog: false,
     listings: false,
     crm: false,
@@ -102,28 +69,11 @@ const defaultConfig: QuickScaleConfig = {
     analytics: false,
     billing: false,
     social: false,
-{% endraw %}{%- else %}
-    auth: false,
-{%- for key, line in optional_module_entries %}{% if key != 'auth' and key in selected_modules %}    {{ key }}: false,
-{% endif %}{% endfor %}
-{%- endif %}
-{%- raw %}
   },
   modulePaths: {
-{% endraw -%}
-{%- if selected_modules is none %}
-{% raw %}    crm: '/crm',
+    crm: '/crm',
     social: '/social',
     analytics: '/analytics/',
-{% endraw %}{%- else %}
-{%- if 'crm' in selected_modules %}    crm: '/crm',
-{% endif -%}
-{%- if 'social' in selected_modules %}    social: '/social',
-{% endif -%}
-{%- if 'analytics' in selected_modules %}    analytics: '/analytics/',
-{% endif -%}
-{%- endif %}
-{%- raw %}
   },
   owner: {
     mode: 'solo',

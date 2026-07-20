@@ -1428,38 +1428,44 @@ class TestReactThemeModuleActivationMatrix:
             output_path / "frontend" / "src" / "pages" / "TeamsPage.tsx"
         ).exists()
 
-    def test_react_theme_drops_unselected_optional_page_files(self, tmp_path):
-        """Optional page files should be skipped when their module is unselected."""
+    def test_react_theme_emits_dormant_optional_page_files(self, tmp_path):
+        """After SA105, optional page files are always emitted as dormant files."""
         generator = ProjectGenerator(theme="showcase_react", selected_modules=["blog"])
-        output_path = tmp_path / "react_optional_drop"
-        generator.generate("react_optional_drop", output_path)
+        output_path = tmp_path / "react_optional_dormant"
+        generator.generate("react_optional_dormant", output_path)
 
         pages_dir = output_path / "frontend" / "src" / "pages"
 
-        # Only BlogPage is kept; the rest are gated by other modules.
+        # All module pages are always emitted (dormant files)
         assert (pages_dir / "BlogPage.tsx").exists()
-        for dropped in (
+        for dormant in (
             "CrmPage.tsx",
             "FormsPage.tsx",
             "ListingsPage.tsx",
             "SocialLinkTreePublicPage.tsx",
             "SocialEmbedsPublicPage.tsx",
         ):
-            assert not (pages_dir / dropped).exists(), (
-                f"{dropped} should not be generated when its module is unselected."
+            assert (pages_dir / dormant).exists(), (
+                f"{dormant} should be emitted as a dormant file after SA105."
             )
 
-        # Forms-related components and hooks should also be skipped.
-        forms_dir = output_path / "frontend" / "src" / "components" / "forms"
-        assert not forms_dir.exists() or not any(forms_dir.iterdir()), (
-            "Forms components directory should be empty when forms is unselected."
-        )
-        assert not (
+        # Forms-related components and hooks are also always emitted as dormant
+        assert (
+            output_path
+            / "frontend"
+            / "src"
+            / "components"
+            / "forms"
+            / "FormRenderer.tsx"
+        ).exists()
+        assert (
             output_path / "frontend" / "src" / "hooks" / "useFormSchema.ts"
         ).exists()
 
-    def test_react_theme_empty_selected_modules_keeps_core_pages(self, tmp_path):
-        """No selected modules should still produce a usable core React app."""
+    def test_react_theme_empty_selected_modules_keeps_core_and_dormant_pages(
+        self, tmp_path
+    ):
+        """After SA105, even with no modules selected, all pages are emitted (core + dormant)."""
         generator = ProjectGenerator(theme="showcase_react", selected_modules=[])
         output_path = tmp_path / "react_empty_modules"
         generator.generate("react_empty_modules", output_path)
@@ -1475,8 +1481,8 @@ class TestReactThemeModuleActivationMatrix:
                 f"Core page {core_page} should be present even without modules."
             )
 
-        # Optional module pages should all be skipped.
-        for optional in (
+        # Optional module pages are also emitted as dormant files after SA105.
+        for dormant in (
             "BlogPage.tsx",
             "CrmPage.tsx",
             "FormsPage.tsx",
@@ -1484,4 +1490,4 @@ class TestReactThemeModuleActivationMatrix:
             "SocialLinkTreePublicPage.tsx",
             "SocialEmbedsPublicPage.tsx",
         ):
-            assert not (pages_dir / optional).exists()
+            assert (pages_dir / dormant).exists()

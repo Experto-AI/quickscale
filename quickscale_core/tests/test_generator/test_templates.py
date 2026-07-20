@@ -4099,214 +4099,69 @@ class TestEditorconfigContent:
 
 
 class TestSelectedModulesTemplateSafety:
-    """Verify main.tsx, App.test.tsx, and PublicSocialPages.test.tsx templates
-    are compile-safe for all selected_modules variants (None, empty, partial)."""
+    """After SA105, main.tsx, App.test.tsx, and PublicSocialPages.test.tsx are
+    static files (no longer Jinja templates). Verify their static content."""
 
-    def test_main_tsx_full_selected_modules_renders_social_imports(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """selected_modules=None (full): social page imports present."""
-        template = jinja_env.get_template("themes/showcase_react/src/main.tsx.j2")
-        context = {
-            **test_context,
-            "theme": "showcase_react",
-            "selected_modules": None,
-        }
-        output = template.render(context)
-        assert "import { SocialEmbedsPublicPage }" in output
-        assert "import { SocialLinkTreePublicPage }" in output
-        assert "renderQuickScaleRoot" in output
-        assert "return <SocialLinkTreePublicPage />" in output
-        assert "return <SocialEmbedsPublicPage />" in output
+    def _get_template_dir(self) -> Path:
+        import quickscale_core
 
-    def test_main_tsx_social_selected_renders_social_imports(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """selected_modules=['social']: social page imports present."""
-        template = jinja_env.get_template("themes/showcase_react/src/main.tsx.j2")
-        context = {
-            **test_context,
-            "theme": "showcase_react",
-            "selected_modules": ["social"],
-        }
-        output = template.render(context)
-        assert "import { SocialEmbedsPublicPage }" in output
-        assert "import { SocialLinkTreePublicPage }" in output
-        assert "return <SocialLinkTreePublicPage />" in output
-        assert "return <SocialEmbedsPublicPage />" in output
+        return Path(quickscale_core.__file__).parent / "generator" / "templates"
 
-    def test_main_tsx_empty_or_no_social_omits_social_imports(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Without social in selected_modules, omit social imports and
-        use the simplified renderQuickScaleRoot."""
-        template = jinja_env.get_template("themes/showcase_react/src/main.tsx.j2")
-
-        # Empty list — no modules selected
-        context_empty: dict = {
-            **test_context,
-            "theme": "showcase_react",
-            "selected_modules": [],
-        }
-        output = template.render(context_empty)
-        assert "import { SocialEmbedsPublicPage }" not in output
-        assert "import { SocialLinkTreePublicPage }" not in output
-        assert "renderQuickScaleRoot" in output
-        assert "return <SocialLinkTreePublicPage />" not in output
-        assert "return <SocialEmbedsPublicPage />" not in output
-        assert "return (" in output
-        assert "<BrowserRouter>" in output
-
-        # Only blog selected (no social)
-        context_blog: dict = {
-            **test_context,
-            "theme": "showcase_react",
-            "selected_modules": ["blog"],
-        }
-        output_blog = template.render(context_blog)
-        assert "import { SocialEmbedsPublicPage }" not in output_blog
-        assert "import { SocialLinkTreePublicPage }" not in output_blog
-
-    def test_app_test_tsx_full_selected_modules(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """selected_modules=None: App.test.tsx includes all module flags."""
-        template = jinja_env.get_template(
-            "themes/showcase_react/src/test/App.test.tsx.j2"
+    def test_main_tsx_always_has_social_imports(self) -> None:
+        """After SA105, main.tsx uses React.lazy for social pages."""
+        template_dir = self._get_template_dir()
+        main_path = template_dir / "themes" / "showcase_react" / "src" / "main.tsx"
+        assert main_path.exists(), "Static main.tsx not found"
+        content = main_path.read_text()
+        assert "SocialEmbedsPublicPage" in content
+        assert "SocialLinkTreePublicPage" in content
+        assert "lazy(() => import(" in content
+        assert ".then((m) => ({ default: m." in content
+        assert "renderQuickScaleRoot" in content
+        assert (
+            "const Page = surface === 'link_tree' ? SocialLinkTreePublicPage : SocialEmbedsPublicPage"
+            in content
         )
-        context = {
-            **test_context,
-            "theme": "showcase_react",
-            "selected_modules": None,
-        }
-        output = template.render(context)
-        assert "auth: false" in output
-        assert "blog: false" in output
-        assert "social: false" in output
-        assert "crm: '/crm'" in output
-        assert "social: '/social'" in output
-        assert "analytics: '/analytics/'" in output
-        assert "renders dashboard heading" in output
-        assert "renders the org list shell in saas mode" in output
+        assert "<Suspense fallback={<div>Loading…</div>}>" in content
 
-    def test_app_test_tsx_partial_selected_modules(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """selected_modules=['blog','auth']: only selected module flags."""
-        template = jinja_env.get_template(
-            "themes/showcase_react/src/test/App.test.tsx.j2"
+    def test_app_test_tsx_always_has_all_module_flags(self) -> None:
+        """After SA105, App.test.tsx always includes all module flags."""
+        template_dir = self._get_template_dir()
+        app_test_path = (
+            template_dir / "themes" / "showcase_react" / "src" / "test" / "App.test.tsx"
         )
-        context: dict = {
-            **test_context,
-            "theme": "showcase_react",
-            "selected_modules": ["blog", "auth"],
-        }
-        output = template.render(context)
-        # Selected modules present
-        assert "auth: false" in output
-        assert "blog: false" in output
-        # Unselected modules absent
-        assert "crm: false" not in output
-        assert "social: false" not in output
-        assert "listings: false" not in output
-        # Unselected module paths absent
-        assert "crm: '/crm'" not in output
-        assert "social: '/social'" not in output
-        assert "analytics: '/analytics/'" not in output
-        # Tests still present
-        assert "renders dashboard heading" in output
+        assert app_test_path.exists(), "Static App.test.tsx not found"
+        content = app_test_path.read_text()
+        assert "auth: false" in content
+        assert "blog: false" in content
+        assert "social: false" in content
+        assert "crm: '/crm'" in content
+        assert "social: '/social'" in content
+        assert "analytics: '/analytics/'" in content
+        assert "renders dashboard heading" in content
+        assert "renders the org list shell in saas mode" in content
 
-    def test_app_test_tsx_empty_selected_modules(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """selected_modules=[]: auth flag always present, no other modules."""
-        template = jinja_env.get_template(
-            "themes/showcase_react/src/test/App.test.tsx.j2"
+    def test_public_social_pages_test_always_present(self) -> None:
+        """After SA105, PublicSocialPages.test.tsx is always present and has social content."""
+        template_dir = self._get_template_dir()
+        test_path = (
+            template_dir
+            / "themes"
+            / "showcase_react"
+            / "src"
+            / "test"
+            / "PublicSocialPages.test.tsx"
         )
-        context: dict = {
-            **test_context,
-            "theme": "showcase_react",
-            "selected_modules": [],
-        }
-        output = template.render(context)
-        # Auth is always typed (SA93 Phase 3A)
-        assert "auth: false" in output
-        # No other module flags
-        assert "blog: false" not in output
-        assert "social: false" not in output
-        # No module paths
-        assert "crm:" not in output
-        # Core structure
-        assert "projectName: 'QuickScale Test Project'" in output
-        assert "owner:" in output
-        # Tests still present
-        assert "renders dashboard heading" in output
-
-    def test_public_social_pages_test_renders_when_social_selected(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """PublicSocialPages renders when social is selected (None or list)."""
-        template = jinja_env.get_template(
-            "themes/showcase_react/src/test/PublicSocialPages.test.tsx.j2"
-        )
-
-        # None (all modules)
-        context_full: dict = {
-            **test_context,
-            "theme": "showcase_react",
-            "selected_modules": None,
-        }
-        output_full = template.render(context_full)
-        assert "import { SocialEmbedsPublicPage }" in output_full
-        assert "import { SocialLinkTreePublicPage }" in output_full
-        assert "describe('public social pages'" in output_full
-
-        # Only social selected
-        context_social: dict = {
-            **test_context,
-            "theme": "showcase_react",
-            "selected_modules": ["social"],
-        }
-        output_social = template.render(context_social)
-        assert "import { SocialEmbedsPublicPage }" in output_social
-        assert "import { SocialLinkTreePublicPage }" in output_social
-        assert "describe('public social pages'" in output_social
-        # buildProjectConfig should have auth (always typed) and social
-        assert "social: true" in output_social
-        assert "auth: false" in output_social
-        # modulePaths should only have social
-        assert "social: surface" in output_social
-        assert "crm:" not in output_social
-
-    def test_public_social_pages_test_empty_when_social_not_selected(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """PublicSocialPages renders empty when social is not selected."""
-        template = jinja_env.get_template(
-            "themes/showcase_react/src/test/PublicSocialPages.test.tsx.j2"
-        )
-
-        # Empty list
-        context_empty: dict = {
-            **test_context,
-            "theme": "showcase_react",
-            "selected_modules": [],
-        }
-        output = template.render(context_empty)
-        assert output.strip() == "", (
-            "PublicSocialPages should be empty when social is not selected"
-        )
-
-        # Only blog (no social)
-        context_blog: dict = {
-            **test_context,
-            "theme": "showcase_react",
-            "selected_modules": ["blog"],
-        }
-        output_blog = template.render(context_blog)
-        assert output_blog.strip() == "", (
-            "PublicSocialPages should be empty when social is not selected"
-        )
+        assert test_path.exists(), "Static PublicSocialPages.test.tsx not found"
+        content = test_path.read_text()
+        assert "import { SocialEmbedsPublicPage }" in content
+        assert "import { SocialLinkTreePublicPage }" in content
+        assert "describe('public social pages'" in content
+        assert "social: true" in content
+        assert "auth: false" in content
+        # All module paths are always present
+        assert "crm:" in content
+        assert "analytics:" in content
 
 
 class TestLauncherOneShotCommandContract:

@@ -14,85 +14,26 @@
       window.__QUICKSCALE__ = {
         projectName: "{%endraw%}{{ project_name }}{%raw%}",
         modules: {
-{% endraw -%}
-{%- if selected_modules is none or 'auth' in selected_modules %}
-{%- raw %}
           auth: {% if 'quickscale_modules_auth' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'blog' in selected_modules %}
-{%- raw %}
           blog: {% if 'quickscale_modules_blog' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'listings' in selected_modules %}
-{%- raw %}
           listings: {% if 'quickscale_modules_listings' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'crm' in selected_modules %}
-{%- raw %}
           crm: {% if 'quickscale_modules_crm' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'forms' in selected_modules %}
-{%- raw %}
           forms: {% if 'quickscale_modules_forms' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'storage' in selected_modules %}
-{%- raw %}
           storage: {% if 'quickscale_modules_storage' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'backups' in selected_modules %}
-{%- raw %}
           backups: {% if 'quickscale_modules_backups' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'notifications' in selected_modules %}
-{%- raw %}
           notifications: {% if 'quickscale_modules_notifications' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'analytics' in selected_modules %}
-{%- raw %}
           analytics: {% if 'quickscale_modules_analytics' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'billing' in selected_modules %}
-{%- raw %}
           billing: {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'social' in selected_modules %}
-{%- raw %}
           social: {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}true{% else %}false{% endif %}
-{%- endraw %}
-{%- endif %}
-{%- raw %}
         },
         owner: {
           mode: "{% if settings.QUICKSCALE_MODE == 'saas' %}saas{% else %}solo{% endif %}",
           currentOrgSlug: {% if request.org and request.org.slug %}"{{ request.org.slug|escapejs }}"{% else %}null{% endif %}
         },
         modulePaths: {
-{% endraw -%}
-{%- if selected_modules is none or 'crm' in selected_modules %}
-{%- raw %}
           crm: "/crm/",
-{%- endraw %}
-{%- endif %}
-{%- if selected_modules is none or 'social' in selected_modules %}
-{%- raw %}
-          social: "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}/social{% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}/social/embeds{% else %}/social{% endif %}"{% endraw %}{% if selected_modules is none or 'analytics' in selected_modules %},{% endif %}
-{%- endif %}
-{%- if selected_modules is none or 'analytics' in selected_modules %}
-{%- raw %}
+          social: "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}/social{% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}/social/embeds{% else %}/social{% endif %}",
           analytics: "/analytics/"
-{% endraw %}
-{%- endif %}
-{%- raw %}
         }
       };
     </script>{%endraw%}

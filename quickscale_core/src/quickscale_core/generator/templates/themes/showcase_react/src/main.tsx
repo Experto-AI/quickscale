@@ -1,20 +1,14 @@
-{% raw -%}
-import { StrictMode } from 'react'
+import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App'
 import { initializeAnalytics } from '@/lib/analytics'
-{% endraw -%}
-{% if selected_modules is none or 'social' in selected_modules %}
-{% raw -%}
-import { SocialEmbedsPublicPage } from '@/pages/SocialEmbedsPublicPage'
-import { SocialLinkTreePublicPage } from '@/pages/SocialLinkTreePublicPage'
-{% endraw -%}
-{% endif %}
-{% raw -%}
 import type { PublicSocialSurface } from '@/hooks/useModules'
+
+const SocialEmbedsPublicPage = lazy(() => import('@/pages/SocialEmbedsPublicPage').then((m) => ({ default: m.SocialEmbedsPublicPage })))
+const SocialLinkTreePublicPage = lazy(() => import('@/pages/SocialLinkTreePublicPage').then((m) => ({ default: m.SocialLinkTreePublicPage })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,16 +19,17 @@ const queryClient = new QueryClient({
   },
 })
 
-{% endraw -%}
-{% if selected_modules is none or 'social' in selected_modules %}
-{% raw -%}
 function renderQuickScaleRoot(surface?: PublicSocialSurface) {
-  if (surface === 'link_tree') {
-    return <SocialLinkTreePublicPage />
-  }
+  const config = window.__QUICKSCALE__
+  const socialEnabled = config?.modules?.social ?? false
 
-  if (surface === 'embeds') {
-    return <SocialEmbedsPublicPage />
+  if (surface && socialEnabled) {
+    const Page = surface === 'link_tree' ? SocialLinkTreePublicPage : SocialEmbedsPublicPage
+    return (
+      <Suspense fallback={<div>Loading…</div>}>
+        <Page />
+      </Suspense>
+    )
   }
 
   return (
@@ -43,20 +38,6 @@ function renderQuickScaleRoot(surface?: PublicSocialSurface) {
     </BrowserRouter>
   )
 }
-{% endraw -%}
-{% else %}
-{% raw -%}
-function renderQuickScaleRoot(_surface?: PublicSocialSurface) {
-  void _surface
-  return (
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  )
-}
-{% endraw -%}
-{% endif %}
-{% raw -%}
 
 const rootElement = document.getElementById('root')
 
@@ -73,4 +54,3 @@ createRoot(rootElement).render(
     </QueryClientProvider>
   </StrictMode>,
 )
-{% endraw -%}
