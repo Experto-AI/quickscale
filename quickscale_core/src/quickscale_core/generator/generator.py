@@ -24,6 +24,13 @@ from quickscale_core.utils.file_utils import (
 )
 
 
+# Hard ceiling for the `poetry lock` subprocess during generation. Without a
+# timeout a stalled dependency resolve (unreachable index, hung network) blocks
+# generation — and any test that drives it — indefinitely. Bounded so a hang
+# degrades to a warning instead of wedging.
+POETRY_LOCK_TIMEOUT_SECONDS = 300
+
+
 # React theme Django-side templates that should be rendered from the shared
 # ``templates/`` location when the theme-specific copy is absent.
 REACT_THEME_SHARED_DJANGO_TEMPLATES: tuple[str, ...] = (
@@ -611,6 +618,7 @@ class ProjectGenerator:
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=POETRY_LOCK_TIMEOUT_SECONDS,
             )
 
             if result.returncode != 0:
@@ -626,6 +634,19 @@ class ProjectGenerator:
                     "Run 'poetry install' in the project directory to generate it.",
                     file=sys.stderr,
                 )
+        except subprocess.TimeoutExpired:
+            # `poetry lock` hung (typically a stalled network dependency
+            # resolve). Degrade to a warning instead of blocking forever, so a
+            # slow/unreachable index can never wedge generation (or the test
+            # suite that drives it). User can regenerate the lock manually.
+            import sys
+
+            print(
+                "Warning: 'poetry lock' timed out after "
+                f"{POETRY_LOCK_TIMEOUT_SECONDS}s (network issue?). "
+                "Run 'poetry install' in the project directory to generate it.",
+                file=sys.stderr,
+            )
         except FileNotFoundError:
             # Poetry not installed - user will need to run poetry install
             import sys
