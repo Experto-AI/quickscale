@@ -26,6 +26,7 @@
 #   make lint-fix             - Fix linting issues
 #   make lint-frontend        - Lint React theme templates
 #   make frontend-proof       - Render showcase_react and run pnpm install/type-check/build
+#   make smoke-install        - Build wheels, install into throwaway venv, run non-mutating CLI smoke tests
 #   make lint-agent           - Lint .agent adapter system
 #   make typecheck            - Run type checking
 #   make format               - Format code with ruff
@@ -47,7 +48,7 @@
 #   make legacy-status        - Show legacy symlink status
 #   make clean                - Remove build artifacts
 
-.PHONY: setup bootstrap install \
+.PHONY: setup bootstrap smoke-install install \
         test test-unit test-integration test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-agent \
         lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
         quality fix check ci ci-e2e \
@@ -129,6 +130,7 @@ help:
 	@echo "  make quality              - Full quality analysis (dead code, complexity, duplication)"
 	@echo "  make lint-frontend        - Lint React theme templates (ESLint + TypeScript)"
 	@echo "  make frontend-proof       - Render showcase_react and run pnpm install/type-check/build"
+	@echo "  make smoke-install        - Build wheels, install into throwaway venv, run CLI smoke tests"
 	@echo "  make lint-agent           - Lint .agent adapter shell scripts"
 	@echo "  make test-integration-worker-pool - Worker pool harness tests (fast, no PostgreSQL)"
 	@echo "  make test-ci-local-parallel - TP1 local-CI parallelism regression tests"
@@ -687,6 +689,12 @@ lint-frontend:
 # Render showcase_react and prove the generated frontend toolchain without Docker
 frontend-proof:
 	@scripts/frontend_proof.sh
+
+# Build wheels, install into throwaway venv outside source tree, and run
+# non-mutating CLI smoke tests (SA110 installed-artifact smoke gate).
+# Must run from the repository root with Poetry and a compatible Python.
+smoke-install:
+	@scripts/smoke_install.sh
 
 # Lint .agent adapter shell scripts for syntax errors
 lint-agent:
