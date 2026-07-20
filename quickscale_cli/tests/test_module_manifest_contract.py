@@ -366,7 +366,7 @@ def test_all_catalog_modules_in_react_index_html_modules_block() -> None:
 
 def test_all_catalog_modules_in_react_typescript_interface() -> None:
     """Every UI-visible catalog module must appear in the QuickScaleModules
-    TypeScript interface in useModules.ts.j2.
+    TypeScript interface in useModules.ts (static, no .j2 after SA106).
 
     A missing field means TypeScript does not know the module flag exists, so
     reading modules.{name} in any React component is a compile-time type error.
@@ -374,9 +374,7 @@ def test_all_catalog_modules_in_react_typescript_interface() -> None:
     When adding a new module: add a '{name}: boolean' line to the
     QuickScaleModules interface, or add the name to _REACT_UI_EXCLUDED_MODULES.
     """
-    use_modules = _strip_jinja2_control_tags(
-        (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts.j2").read_text()
-    )
+    use_modules = (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts").read_text()
     # Extract only the QuickScaleModules interface body
     interface_block = use_modules.split("interface QuickScaleModules {")[1].split("}")[
         0
@@ -389,22 +387,20 @@ def test_all_catalog_modules_in_react_typescript_interface() -> None:
         and f"{entry.name}: boolean" not in interface_block
     ]
     assert not missing, (
-        f"Modules missing from QuickScaleModules interface in useModules.ts.j2: {missing!r}. "
+        f"Modules missing from QuickScaleModules interface in useModules.ts: {missing!r}. "
         "Add the field or add the name to _REACT_UI_EXCLUDED_MODULES."
     )
 
 
 def test_react_index_html_and_typescript_interface_module_sets_are_symmetric() -> None:
-    """The module keys in index.html.j2 and useModules.ts.j2 must be identical.
+    """The module keys in index.html.j2 and useModules.ts must be identical.
 
     Asymmetry means the React runtime config and the TypeScript type declarations
     disagree: either a runtime key has no matching type or a typed field is never
     set at runtime.
     """
     index_html = (REACT_TEMPLATES_DIR / "templates" / "index.html.j2").read_text()
-    use_modules = _strip_jinja2_control_tags(
-        (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts.j2").read_text()
-    )
+    use_modules = (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts").read_text()
 
     modules_block = index_html.split("modules: {")[1].split("owner: {")[0]
     html_modules = set(re.findall(r"\b(\w+):\s+\{%", modules_block))
@@ -415,9 +411,9 @@ def test_react_index_html_and_typescript_interface_module_sets_are_symmetric() -
     ts_modules = set(re.findall(r"^\s+(\w+):\s+boolean", interface_block, re.MULTILINE))
 
     assert html_modules == ts_modules, (
-        "index.html.j2 and useModules.ts.j2 module sets diverge.\n"
+        "index.html.j2 and useModules.ts module sets diverge.\n"
         f"  In index.html.j2 only: {sorted(html_modules - ts_modules)}\n"
-        f"  In useModules.ts.j2 only: {sorted(ts_modules - html_modules)}"
+        f"  In useModules.ts only: {sorted(ts_modules - html_modules)}"
     )
 
 
