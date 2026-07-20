@@ -186,6 +186,7 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     # in fresh-first; useModules.ts is in-place infrastructure); those
     # are in the managed tuples.  Everything else stays with the user.
     "frontend/src/main.tsx",
+    "frontend/src/renderQuickScaleRoot.tsx",
     "frontend/src/index.css",
     "frontend/src/vite-env.d.ts",
     "frontend/src/posthog-js.d.ts",
@@ -194,6 +195,7 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     "frontend/src/stores/themeStore.ts",
     "frontend/src/test/setup.ts",
     "frontend/src/test/App.test.tsx",
+    "frontend/src/test/RootDispatch.test.tsx",
     "frontend/src/test/PublicSocialPages.test.tsx",
     "frontend/e2e/home.spec.ts",
     # ---- Forms module components (module-conditional) ----

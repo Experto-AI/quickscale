@@ -1,4 +1,3 @@
-{%- raw -%}
 import { NavLink } from 'react-router-dom'
 import {
   Building2,
@@ -28,7 +27,7 @@ interface NavItem {
 }
 
 export function Sidebar() {
-  const { modules, modulePaths } = useProjectConfig()
+  const { modules, modulePaths, projectName } = useProjectConfig()
   const { appPaths, hasOrgContext, isSaas } = useOrgNavigation()
 
   const navigation: NavItem[] = [
@@ -81,7 +80,7 @@ export function Sidebar() {
   return (
     <aside className="hidden min-h-screen w-64 flex-col border-r bg-sidebar lg:flex">
       <div className="p-6 pb-4">
-        <h1 className="text-xl font-bold text-sidebar-foreground">{% endraw %}{{ project_name }}{% raw %}</h1>
+        <h1 className="text-xl font-bold text-sidebar-foreground">{projectName}</h1>
       </div>
       {isSaas && (
         <div className="px-4 pb-4">
@@ -138,5 +137,3 @@ export function Sidebar() {
     </aside>
   )
 }
-
-{%- endraw %}
