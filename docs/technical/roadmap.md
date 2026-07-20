@@ -57,7 +57,7 @@ git merge --no-ff wt-track{N}
 1. **SA96-GATE** (green-gate join, Track 3) — **complete**. All deps met (SA96-T1/T2, SA93, SA103, SA101) and both blockers cleared. The four-command join passed — see [CHANGELOG.md](../../CHANGELOG.md). The next release-path step is **SA96-PUBLISH** (human-only).
 2. **SA96-PUBLISH** (staged PyPI publish, human-only), deps on SA96-GATE.
 3. **Frontend-theme de-specialization (arch-audit Finding 10, Track 2)** — staged chain **SA104 ✓ → SA105/SA106 → SA107/SA108**. SA104 (stage 1) is complete; **SA105** (module de-spec) is checkpointed but remains blocked on direct social-dispatch regression coverage (`SA105-CR-002`) and the dormant-file explanatory-banner acceptance added on the synced `v87`; **SA106** (identity de-spec) remains open and assistant-executable. SA105's dormant-files decision is resolved (Option A, see [decisions.md](./decisions.md#frontend-theme-despecialization-dormant-files)); no additional maintainer decision is open. The chain closes with **SA107** (fail-hard validation on the now load-bearing `window.__QUICKSCALE__` seam) and **SA108** (in-chain rewrite of `beta-site-migration.md` to the copy-not-merge reality). Off the release critical path. Arch **Finding 7** stays unscheduled (SA104 shrank its surface — sequence any tuple-derivation work after it); arch Findings **2/4** remain **not ticketed** with the (unscheduled) teams module.
-4. **Track 1 test-parallelization** — **TP4** (docs-only AI fast-loop recipes) is **complete** (see below); no open TP tickets remain. Off the release critical path.
+4. **Track 1 test-parallelization** — **TP4** (docs-only AI fast-loop recipes) is **complete** (see [CHANGELOG.md](../../CHANGELOG.md)); no open TP tickets remain. Off the release critical path.
 
 ### Green-gate milestone — all quality make commands pass
 
@@ -73,15 +73,7 @@ All per-module restricted-role gates (CRM/SA84, blog/SA83+SA95, forms/SA85, list
 
 Pre-release re-verification: **SA96-T1 (Track 1) and SA96-T2 (Track 2) module sweeps are complete** — all 12 modules re-verified green in isolation on post-SA92 v87, no regression, empty quarantine. **SA93 and SA96-GATE are complete; the next release-path step is SA96-PUBLISH (human-only).** See [CHANGELOG.md](../../CHANGELOG.md).
 
-- [x] **SA96-GATE — Green-gate join (cross-track).** `Tier 1 · v87 integration · deps: SA96-T1 ✓ + SA96-T2 ✓ + SA93 ✓ + SA103 ✓ + SA101 ✓` · *assistant-executable; clean rerun*
-  All four commands exit 0 on a clean rerun at the prior synced code baseline (post-SA92 squash) with `QUARANTINE_TICKETS` **empty**:
-  - `make check` — exit 0
-  - `make quality` — exit 0, zero baseline regressions
-  - `make ci` — exit 0, coverage mean 92.89%, all 90 files ≥80%
-  - `make ci-e2e` — exit 0, 64 E2E passed
-  - Integration: 2,262 passed, mean 94.41%, empty quarantine.
-  **Resolved operational finding:** initial aborted attempts left an orphan `test_test_quickscale_orgs` Django mirror DB (double-prefixed). No repository defect or threshold change was needed — no stale test workers remained, and only the disposable double-prefixed mirror database was dropped before the clean rerun passed. No open product blocker.
-  The coding assistant ran this join; it stops here and hands off to a human for **SA96-PUBLISH**.
+**SA96-GATE (green-gate join) is complete** — all four commands (`make check`/`quality`/`ci`/`ci-e2e`) exited 0 on a clean rerun with empty quarantine; detail in [CHANGELOG.md](../../CHANGELOG.md). The coding assistant ran this join and hands off to a human for **SA96-PUBLISH**.
 
 - [ ] **SA96-PUBLISH — Staged release ladder.** `Tier 1 · v87 · deps: SA96-GATE` · **HUMAN-ONLY — do not delegate to an assistant**
   Only after SA96-GATE passes. Version bump if needed (`make bump-version`), then `make build` → `make publish-test` (TestPyPI + verify) → `make publish-prod` (or `make publish-full` for test→verify→prod in one shot). **PyPI publish is irreversible/outward-facing — a human maintainer must confirm version + green-gate status before `publish-prod`. This step is explicitly excluded from any SA93/SA96-GATE assistant handoff.**
@@ -93,11 +85,7 @@ Pre-release re-verification: **SA96-T1 (Track 1) and SA96-T2 (Track 2) module sw
 
 Prior Track 1 tickets are closed — SA92, SA84, SA86, SA96-T1, Finding 8, the audit-remediation tickets SA97/SA99, the CI-gate tickets SA102/SA103 (rebalanced here from Track 3), and the test-parallelization suite SA91/TP1/TP2/TP2b (the E2E sub-chain TP3a/TP3b was rebalanced to Track 2). See [CHANGELOG.md](../../CHANGELOG.md).
 
-Track 1 carried the tail of the **TP (test-parallelization)** suite — the goal was to shorten the SDLC feedback loop (and let an AI assistant run partial tests concurrently) by parallelizing the long-running quality gates. The suite is now **complete** with the landing of **TP4** (docs-only AI fast-loop recipes). All prior TP tickets (TP1, TP2, TP2b, TP3a, TP3b) are closed — see [CHANGELOG.md](../../CHANGELOG.md).
-
-- [x] **TP4 — Document the AI-assistant fast partial-test recipes.** `Tier 1 · Track 1 · deps: none · docs-only (review-only closeout)`
-  Added a "Fast feedback loop for AI-assisted / incremental development" subsection to `docs/technical/development.md` covering the iterate → pre-merge → E2E-last ladder, section flags (`make lint -- --core`, `make typecheck -- --cli`, `make test-unit -- --core`), single-module reruns (`QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules`), bounded integration concurrency (`QS_INTEGRATION_JOBS=2 make test-integration`), and cross-references to `QS_CI_PARALLEL` (TP1), `QS_E2E_PARALLEL` (TP3b), and `PYTEST_XDIST_WORKERS` (TP2). Five commands were verified on the clean `v87` baseline: `make lint -- --core` exit 0; `make typecheck -- --cli` exit 0; `make test-unit -- --core` exit 0 (2,489 passed); `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules` exit 0 (874 passed, 11 skipped); `QS_INTEGRATION_JOBS=2 make test-integration` returned nonzero — the bounded worker pool ran all 12 modules (94.39% mean) but `orgs/test_debug.py::TestMiddlewareDebugOverride::test_debug_org_overrides_saas_session` failed with "server closed the connection unexpectedly". A serial rerun (`QS_INTEGRATION_JOBS=1 make test-integration`) subsequently passed (all 12 modules, 94.41% mean). The bounded-run failure is an unresolved non-blocking integration risk for this docs-only task. `QS_CI_PARALLEL=0` and `QS_E2E_PARALLEL=0` are documented as cross-references (their full verification is the responsibility of their owning tickets, which are complete). CR-TP4-001 (shell-invalid `<N>` in presented command syntax) and CR-TP4-002 (overstated verification evidence) were resolved in the follow-up pass.
-  *(why →* parallelization audit Tier 4 — scoped partial runs already exist; the gap was discoverability for the incremental-dev loop*)*
+Track 1 carried the tail of the **TP (test-parallelization)** suite — the goal was to shorten the SDLC feedback loop (and let an AI assistant run partial tests concurrently) by parallelizing the long-running quality gates. The suite is now **complete** with the landing of **TP4** (docs-only AI fast-loop recipes). All TP tickets (TP1, TP2, TP2b, TP3a, TP3b, TP4) are closed — see [CHANGELOG.md](../../CHANGELOG.md). Track 1 has no remaining open tickets.
 
 ### Track 2 — Module contracts & settings — frontend-theme de-specialization (arch Finding 10)
 
