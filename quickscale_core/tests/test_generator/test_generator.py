@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -582,6 +583,38 @@ class TestProjectGeneratorErrorPaths:
 
         captured = capsys.readouterr()
         assert "Poetry not found" in captured.err or "poetry" in captured.err.lower()
+
+    def test_generate_poetry_lock_handles_timeout(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """A hung `poetry lock` times out and degrades to a warning; never blocks."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_path = tmp_path / "fakeproject"
+        project_path.mkdir()
+
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=["poetry", "lock"], timeout=300),
+        ):
+            generator._generate_poetry_lock(project_path)
+
+        captured = capsys.readouterr()
+        assert "timed out" in captured.err.lower()
+
+    def test_generate_poetry_lock_passes_timeout(self, tmp_path: Path) -> None:
+        """The `poetry lock` subprocess must be bounded by a timeout."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_path = tmp_path / "fakeproject"
+        project_path.mkdir()
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            generator._generate_poetry_lock(project_path)
+
+        assert mock_run.call_args.kwargs.get("timeout") is not None
 
     def test_generate_poetry_lock_handles_nonzero_return_code(
         self, tmp_path: Path, capsys: pytest.CaptureFixture
