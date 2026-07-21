@@ -51,14 +51,14 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active work.
 
-The green-gate join (SA96-GATE) is green with empty quarantine. Two items remain open:
+The green-gate join (SA96-GATE) is green with empty quarantine. All remaining open work is on **Track 3 (release path)**; Tracks 1 and 2 are complete.
 
-1. **SA111** (installed-context `plan`+implication coverage gap, Track 3) — a real installed-venv crash slipped past SA109/SA110: `quickscale plan` selecting any module raises `ImproperlyConfigured` because the implication resolver has no bundled-manifest fallback and the SA110 smoke gate excludes `plan`. This ticket adds the missing regression coverage (fix tracked separately). **This partially re-opens the "installed wheel runs clean" claim — the release path is not fully de-risked until it is closed.**
-2. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Green-gate deps met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓); awaits a human maintainer to execute the irreversible publish. Should not publish while SA111 is open.
+1. **RESOLVER-FIX** (installed-context implication resolver, Track 3) — **the actual code fix, and the only thing on the critical path that is not yet ticketed.** `resolve_module_implications` (`quickscale_core/src/quickscale_core/manifest/implications.py:52`) calls `get_modules_base_path()` with no bundled-manifest fallback, so in an installed venv both `plan` (`plan_command.py:102`) and `apply` (`apply_command.py:973`) crash with `ImproperlyConfigured: Modules base path not found`. The fix mirrors the picker's `try/except ImproperlyConfigured → get_bundled_manifests_path()` pattern and must cover **both** call sites. SA111/SA112 are red until it lands. **See "Track 3 decision" below — this fix needs a ticket/owner before the release path can close.**
+2. **SA111** (installed-context `plan`+implication coverage, Track 3) — regression coverage for the crash above: SA111a (authoritative `smoke-install` probe) + SA111b (optional fast monkeypatch unit test). **This partially re-opens the "installed wheel runs clean" claim — the release path is not fully de-risked until it is closed.**
+3. **SA112** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — heavy e2e lane covering `apply`'s own resolver call site and the Docker path from a real install. Deps: SA110 ✓ + SA111a + resolver fix.
+4. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Green-gate deps met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓); awaits a human maintainer to execute the irreversible publish. Should not publish while SA111/SA112 (and the resolver fix) are open.
 
-SA108 (frontend de-specialization migration-doc rewrite, Track 2) is **complete** — closes arch-audit Finding 10. See [CHANGELOG.md](../../CHANGELOG.md) for details. Off the release critical path.
-
-Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays unscheduled — SA108's parent chain shrank its surface; sequence any tuple-derivation work after it. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module.
+Arch **Finding 10** (`frontend-source-generation-specialized`) is **closed** by the SA104→SA108 chain (see arch-audit reconciliation log, 2026-07-21). Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays unscheduled — the Finding 10 chain shrank its surface; sequence any tuple-derivation work after it. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module.
 
 ### Green-gate milestone — all quality make commands pass
 
@@ -80,14 +80,7 @@ The join runs entirely **inside the monorepo** and does **not** exercise the pip
 
 ### Track 2 — Module contracts & settings — frontend-theme de-specialization (arch Finding 10)
 
-The frontend-theme de-specialization chain (arch-audit Finding 10, `frontend-source-generation-specialized`) de-specializes the `showcase_react` theme so `frontend/src` is project-agnostic and byte-identical across projects on the same theme version, with all project/module facts flowing through the existing `window.__QUICKSCALE__` runtime seam. Stages SA104 → SA105 → SA106 → SA107 are complete (see [CHANGELOG.md](../../CHANGELOG.md)); **SA108** closes the chain. Off the SA96 release critical path; must not regress any gate or coverage threshold.
-
-**File ownership:** SA108 owns `docs/planning/beta-site-migration.md` only — disjoint from the CI/Makefile surfaces and the release path, so it runs fully in parallel with Track 3. Only the shared closeout files (`CHANGELOG.md`, `roadmap.md`) overlap, covered by the Merge procedure.
-
-- [x] **SA108 — Rewrite `beta-site-migration.md` as part of this chain (not deferred).** `Tier 2 · Track 2 · deps: SA105 ✓ + SA106 ✓ + SA107 ✓ · docs-only`
-  Finding 10 collapses migration from a per-file merge into "copy user-owned dirs, rebuild" — but that win is only realized when the playbook stops describing the old merge process. `docs/planning/beta-site-migration.md` is the artifact most invalidated by SA105/SA106: its identity-fix step (Step 1 `useModules.ts`/`projectName`, `Sidebar`/`Dashboard` transplant), `main.tsx`-conditional patching, per-module page-copy logic (in-place Step 6), and the per-file classification table all describe the pre-de-specialization scaffold. Rewrite it so the frontend sections reflect the project-agnostic, byte-identical `frontend/src` reality: shrink the fresh-first/in-place frontend transplant steps to the user-owned-dirs copy, drop the now-obsolete identity/module-station patches, and note the dormant-file model (SA105 Option A) so maintainers understand why unselected-module pages appear in their tree.
-  - Verify: playbook frontend sections contain no `projectName`/`useModules.ts`/`main.tsx`-conditional patch steps that SA105/SA106 removed; the classification table distinguishes fresh current-theme recipients (all module surfaces as dormant files per SA105) from legacy pre-SA105 in-place recipients (no retroactive dormant guarantee; running `quickscale apply` does not guarantee or backfill blog/crm/listings; post-apply adoption copies only missing forms/social surfaces and does not backfill blog/crm/listings); cross-references to the runtime seam (and SA107 `validateQuickScaleConfig()` fail-hard behavior) are present with correct function names and responsibilities.
-  *(why →* the Finding 10 win is not banked until the migration doc matches the new copy-not-merge reality; otherwise the drift moves from generator source into the playbook*)*
+**COMPLETE — no open tickets.** The frontend-theme de-specialization chain (SA104 → SA105 → SA106 → SA107 → SA108) is fully closed, retiring arch-audit Finding 10 (`frontend-source-generation-specialized`). `frontend/src` is now project-agnostic and byte-identical across projects on the same theme version, with all project/module facts flowing through the `window.__QUICKSCALE__` runtime seam; `beta-site-migration.md` has been rewritten to the copy-not-merge reality. See [CHANGELOG.md](../../CHANGELOG.md) for details. Off the SA96 release critical path; no gate or coverage threshold regressed.
 
 ### Track 3 — Core/CLI plumbing — release path
 
@@ -191,7 +184,7 @@ smoke gate. It belongs in a heavy lane gated like `ci-e2e`.
 
 ### Track 3 (prior) — Core/CLI plumbing — release path
 
-**Implementation COMPLETE.** All Track 3 work is closed (arch-audit Finding 1 via SA89a+SA89b; all four GATEs; SA91 parallel worker pool; SA93 e2e in green-gate; SA100 theme preflight; SA101 quality remediation; SA96-GATE join; SA109 installed-wheel discovery fix; SA110 installed-artifact smoke gate). See [CHANGELOG.md](../../CHANGELOG.md). The only remaining Track 3 item is the human-only **SA96-PUBLISH** (above).
+**Prior Track 3 work COMPLETE.** The foundational Track 3 work is closed (arch-audit Finding 1 via SA89a+SA89b; all four GATEs; SA91 parallel worker pool; SA93 e2e in green-gate; SA100 theme preflight; SA101 quality remediation; SA96-GATE join; SA109 installed-wheel discovery fix; SA110 installed-artifact smoke gate). See [CHANGELOG.md](../../CHANGELOG.md). The **open** Track 3 items are the resolver fix + SA111/SA112 (installed-context coverage gap, above) and the human-only **SA96-PUBLISH**.
 
 The AF7 installed-wheel discovery decision is recorded in [`decisions.md`](../technical/decisions.md#af7-installed-wheel-module-discovery): discovery falls back to bundled manifest snapshots (`quickscale_core/data/manifests/*/module.yml`) when the source workspace is absent, while source-required operations (`get_modules_base_path`, `refresh_managed_adapters`) remain fail-hard.
 
@@ -202,27 +195,39 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 ```
-Track 1 (complete)     Track 2 (complete)                   Track 3 → release (critical path)
-────────────────────   ────────────────────────────      ─────────────────────────────────
-✓ all tickets closed    SA104 ✓ → SA105 ✓ → SA106 ✓        SA96-GATE ✓ ── green-gate join
-                          → SA107 ✓ → SA108 ✓               SA109 ✓ ── installed-wheel discovery
-                        (arch Finding 10 chain closed)       SA110 ✓ ── installed-artifact smoke
-                                                                      │
-                                                                      ▼
-                                                                SA96-PUBLISH ── build → publish
-                                                                  deps: SA96-GATE ✓ + SA109 ✓ + SA110 ✓
-                                                                  (human-only)
+Track 1 (complete)     Track 2 (complete)                Track 3 → release (critical path)
+────────────────────   ────────────────────────────     ─────────────────────────────────
+✓ all tickets closed    SA104 ✓ → SA105 ✓ → SA106 ✓       SA96-GATE ✓  SA109 ✓  SA110 ✓
+                          → SA107 ✓ → SA108 ✓                        │
+                        (arch Finding 10 chain closed)     RESOLVER-FIX (unticketed) ← critical
+                                                                     │  both call sites
+                                                            ┌────────┴────────┐
+                                                         SA111a           SA111b (optional)
+                                                       (smoke probe)     (fast unit test)
+                                                            │
+                                                          SA112 ── installed-wheel plan→apply→up e2e
+                                                            │
+                                                            ▼
+                                                       SA96-PUBLISH ── build → publish
+                                                         deps: SA96-GATE ✓ + SA109 ✓ + SA110 ✓
+                                                         (human-only; hold until SA111/SA112 close)
 ```
 
-**Parallelism.** Exactly one item remains: **SA96-PUBLISH** (Track 3, human-only). SA108 (Track 2, migration-doc rewrite) is complete — its corrections to `beta-site-migration.md` have been finalized alongside this roadmap update (including the legacy compatibility distinction: SA105 dormant-file model guarantees all module surfaces only for fresh current-theme recipients; legacy pre-SA105 recipients have no retroactive dormant guarantee — running `quickscale apply` does not guarantee or backfill blog/crm/listings; the shipped continuation adopts forms/social surfaces only, with no blog/crm/listings backfill). There is no assistant-executable task sharing files with the human-only publish step, so Track 3 has no merge hazard from Track 2 and can proceed independently.
+**Parallelism.** All remaining work is on Track 3 and forms one coherent release unit: the **resolver fix** (`implications.py`, both call sites) is the critical-path code change, SA111a/SA111b prove it (SA111b optional/independent but red until the fix lands, so no cross-track win), and SA112 depends on SA111a + the fix. These share the resolver module, `scripts/`, and the release closeout, so splitting them across the idle Tracks 1/2 would create merge hazards for no throughput gain — kept together on Track 3. The only remaining shared-closeout overlap is `CHANGELOG.md`/`roadmap.md`, covered by the Merge procedure. SA96-PUBLISH (human-only) shares no files with the assistant-executable tickets.
 
 ### Track readiness (2026-07-21)
 
 - **Track 1 — COMPLETE (off critical path).** No open tickets.
 - **Track 2 — COMPLETE.** Chain stages SA104/SA105/SA106/SA107/SA108 complete. Track 2 frontend de-specialization chain (arch Finding 10) is fully closed. Legacy compatibility finding documented: SA105 dormant-file guarantee applies only to fresh current-theme recipients; legacy pre-SA105 recipients have no retroactive dormant guarantee for any module surface — running `quickscale apply` does not guarantee or backfill blog/crm/listings; the shipped continuation adopts only missing forms/social surfaces (no blog/crm/listings backfill). No blocker.
-- **Track 3 — implementation COMPLETE; awaiting human publish.** All assistant work closed (SA96-GATE, SA109, SA110, QG proofs done). The remaining **SA96-PUBLISH** is human-only and requires a maintainer to execute the irreversible PyPI publish after confirming version + green-gate status. Not blocked on any engineering work — blocked only on the human decision to publish. Non-gating advisories remain deferred (SA91 CR-SA91-REV-006 low; SA89B-CR-004; SA93-REV-005; SA93-ADV-001..004; SA104-ADV-001; SA105-ADV-001; CR-SA106-002; SA110-ADV-001).
+- **Track 3 — BLOCKED on a scoping decision (see below), then engineering work remains.** The green-gate join, SA109, and SA110 are all closed, but SA109/SA110 left the installed-context implication resolver crash uncovered: `plan` and `apply` both crash in an installed venv. The **resolver fix** that closes it is on the critical path but **is not yet ticketed or assigned an owner** — that is the open decision. SA111 (coverage) and SA112 (installed-wheel lifecycle e2e) are red until the fix lands. SA96-PUBLISH (human-only) must hold until all three close. Non-gating advisories remain deferred (SA91 CR-SA91-REV-006 low; SA89B-CR-004; SA93-REV-005; SA93-ADV-001..004; SA104-ADV-001; SA105-ADV-001; CR-SA106-002; SA110-ADV-001).
 
-**Net.** Tracks 1 and 2 are complete; Track 3 has no open assistant work — its only remaining item is the human-only SA96-PUBLISH. See [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision) for the recorded squash/guardrail/shrink-only-quality policies; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
+**Track 3 decision — the resolver fix needs a ticket/owner.** Context: the roadmap already scopes the *coverage* (SA111/SA112) but describes the code fix only as "tracked separately," and no such ticket exists. The fix itself is small and well-understood (mirror the module picker's `try/except ImproperlyConfigured → get_bundled_manifests_path()` fallback in `resolve_module_implications`, covering both the `plan` and `apply` call sites). The choice is about *sequencing*, not design:
+- **Option A (recommended) — fix first, then coverage.** Land the resolver fix as its own small Track 3 ticket, then flip SA111a/SA111b/SA112 green as verification. Pro: matches the existing bundled-fallback precedent (SA109 AF7 decision in decisions.md); the coverage tickets become straightforward green-confirmations; unblocks the release path fastest. Con: none material — the fix is smaller than its tests.
+- **Option B — TDD: write SA111a red first, then fix.** Pro: proves the gate actually catches the regression before the fix masks it. Con: leaves the gate red in the tree longer; only marginally more rigorous given SA109 already established the fallback pattern.
+
+  Both keep all work on Track 3 as one coherent unit. This is a sequencing preference for you to pick; either way the resolver fix must become a real ticket. No other track is affected.
+
+**Net.** Tracks 1 and 2 are complete. Track 3 is **not** done: the installed-wheel resolver crash reopened engineering work that SA109/SA110 did not cover. The critical path is now **resolver-fix → SA111a → SA112 → SA96-PUBLISH (human)**. See [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision) for the recorded squash/guardrail/shrink-only-quality policies and §Bundled Module Inventory (AF7) for the fallback precedent the fix should follow; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
