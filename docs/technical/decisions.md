@@ -1635,10 +1635,13 @@ behaviour or diagnostics to the current context.
 ``discover_shipped_module_paths()``, ``load_module_manifest()``, and
 ``refresh_managed_adapters()`` all require a resolvable modules base path. They fail hard
 (``ImproperlyConfigured``) in the ``BUNDLED`` provenance state. Only
-``discover_bundled_module_names()``, ``get_discovered_module_names()``, and
-``get_resolution_source()`` work from bundled data alone. This preserves the AF7 fail-hard
-intent where it is genuinely load-bearing — generation needs real module source — while
-allowing the shipped module universe to be read from the bundled snapshot.
+``discover_bundled_module_names()``, ``get_discovered_module_names()``,
+``get_resolution_source()``, and ``resolve_module_implications()`` (with the bundled
+fallback) work from bundled data alone. ``resolve_module_implications()`` applies a
+fail-hard boundary in the bundled fallback path: missing selected or implied module
+manifests raise ``ImproperlyConfigured`` rather than being silently skipped. This preserves
+the AF7 fail-hard intent where it is genuinely load-bearing — generation needs real module
+source — while allowing the shipped module universe to be read from the bundled snapshot.
 
 **Eager discovery sites — remediated.** Two call sites previously triggered filesystem
 discovery at import time:

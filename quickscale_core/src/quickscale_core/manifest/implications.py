@@ -12,7 +12,11 @@ from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
-from quickscale_core.contracts.module_discovery import get_modules_base_path
+from quickscale_core.contracts.module_discovery import (
+    ImproperlyConfigured,
+    get_bundled_manifests_path,
+    get_modules_base_path,
+)
 from quickscale_core.manifest.loader import load_manifest_from_path
 
 
@@ -37,6 +41,9 @@ def resolve_module_implications(
             subdirectories.  Defaults to the maintainer's
             ``quickscale_modules/`` directory at the repository root,
             determined relative to this file's location in the package tree.
+            When the source workspace is unavailable (installed-wheel
+            context), falls back to the bundled manifest snapshots
+            shipped within the ``quickscale_core`` package.
 
     Returns:
         A dict mapping each newly implied module name to its default
@@ -44,12 +51,26 @@ def resolve_module_implications(
         Returns an empty dict when there are no new implications.
 
     Raises:
+        ImproperlyConfigured: If no module manifest source is available
+            (neither source-tree nor bundled manifests can be resolved).
         quickscale_core.manifest.loader.ManifestError: If a manifest is
             found but fails to load or validate.
         OSError: For I/O errors reading manifest files.
     """
     if modules_base_path is None:
-        modules_base_path = get_modules_base_path()
+        try:
+            modules_base_path = get_modules_base_path()
+            _bundled_fallback = False
+        except ImproperlyConfigured:
+            # SA113: fall back to bundled manifest snapshots when the
+            # source-tree modules workspace is unavailable (installed
+            # wheel context).  In this mode missing manifests are a
+            # hard failure — the bundled snapshot is expected to be
+            # complete.
+            modules_base_path = get_bundled_manifests_path()
+            _bundled_fallback = True
+    else:
+        _bundled_fallback = False
 
     selected: set[str] = set(names)
     implied: dict[str, dict[str, Any]] = {}
@@ -59,6 +80,12 @@ def resolve_module_implications(
         name = worklist.pop()
         manifest_path = modules_base_path / name / "module.yml"
         if not manifest_path.exists():
+            if _bundled_fallback:
+                raise ImproperlyConfigured(
+                    f"Required module manifest not found in bundled "
+                    f"snapshot: '{manifest_path}'.  The quickscale_core "
+                    f"installation may be corrupted or incomplete."
+                )
             continue
 
         manifest = load_manifest_from_path(manifest_path)

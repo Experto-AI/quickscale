@@ -6,9 +6,11 @@ billing → orgs → notifications).
 """
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from quickscale_core.contracts.module_discovery import ImproperlyConfigured
 from quickscale_core.manifest.implications import resolve_module_implications
 from quickscale_core.manifest.loader import ManifestError
 
@@ -368,3 +370,160 @@ class TestDefaultModulesBasePath:
         result = resolve_module_implications(["billing"])
         assert "orgs" in result
         assert "notifications" in result
+
+
+# ---------------------------------------------------------------------------
+# SA113: Bundled manifest fallback
+# ---------------------------------------------------------------------------
+
+
+class TestBundledManifestFallback:
+    """SA113: resolve_module_implications falls back to bundled manifest
+    snapshots when the source-tree modules workspace is unavailable."""
+
+    def test_fallback_resolves_billing_chain(self) -> None:
+        """billing → orgs → notifications resolves from bundled manifests
+        when get_modules_base_path raises ImproperlyConfigured."""
+        with patch(
+            "quickscale_core.manifest.implications.get_modules_base_path",
+            side_effect=ImproperlyConfigured("no source tree"),
+        ):
+            result = resolve_module_implications(["billing"])
+            assert "orgs" in result
+            assert "notifications" in result
+
+    def test_fallback_with_explicit_path_unaffected(self) -> None:
+        """Explicitly passing modules_base_path still works—the fallback
+        path is not invoked."""
+        result = resolve_module_implications([], modules_base_path=Path("/nonexistent"))
+        assert result == {}
+
+    def test_fallback_with_explicit_path_still_resolves(self, tmp_path: Path) -> None:
+        """Explicit modules_base_path is used directly even when the source
+        tree is unavailable — the bundled fallback is NOT invoked when an
+        explicit path is supplied."""
+        billing_dir = tmp_path / "billing"
+        billing_dir.mkdir()
+        (billing_dir / "module.yml").write_text(
+            "name: billing\n"
+            'version: "1.0.0"\n'
+            "config:\n"
+            "  mutable: {}\n"
+            "  immutable: {}\n"
+            "implies:\n"
+            "  - name: orgs\n"
+            "    default_config: {}\n"
+        )
+        orgs_dir = tmp_path / "orgs"
+        orgs_dir.mkdir()
+        (orgs_dir / "module.yml").write_text(
+            "name: orgs\n"
+            'version: "1.0.0"\n'
+            "config:\n"
+            "  mutable: {}\n"
+            "  immutable: {}\n"
+            "implies: []\n"
+        )
+
+        # Even with source tree unavailable, explicit path is honoured.
+        with patch(
+            "quickscale_core.manifest.implications.get_modules_base_path",
+            side_effect=ImproperlyConfigured("no source tree"),
+        ):
+            result = resolve_module_implications(
+                ["billing"],
+                modules_base_path=tmp_path,
+            )
+        assert "orgs" in result
+        assert result["orgs"] == {}
+
+    def test_fallback_selected_manifest_missing_raises(self, tmp_path: Path) -> None:
+        """Bundled fallback: a selected module with no manifest in the
+        bundled snapshot raises ImproperlyConfigured."""
+        bundle_dir = tmp_path / "manifests"
+        bundle_dir.mkdir(parents=True)
+        # bundle_dir exists but contains no module.yml files at all.
+        with (
+            patch(
+                "quickscale_core.manifest.implications.get_modules_base_path",
+                side_effect=ImproperlyConfigured("no source tree"),
+            ),
+            patch(
+                "quickscale_core.manifest.implications.get_bundled_manifests_path",
+                return_value=bundle_dir,
+            ),
+        ):
+            with pytest.raises(ImproperlyConfigured):
+                resolve_module_implications(["billing"])
+
+    def test_fallback_implied_manifest_missing_raises(self, tmp_path: Path) -> None:
+        """Bundled fallback: a transitive implication target missing from
+        the bundled snapshot raises ImproperlyConfigured."""
+        bundle_dir = tmp_path / "manifests"
+        bundle_dir.mkdir(parents=True)
+        billing_dir = bundle_dir / "billing"
+        billing_dir.mkdir()
+        (billing_dir / "module.yml").write_text(
+            "name: billing\n"
+            'version: "1.0.0"\n'
+            "config:\n"
+            "  mutable: {}\n"
+            "  immutable: {}\n"
+            "implies:\n"
+            "  - name: orgs\n"
+            "    default_config: {}\n"
+        )
+        # orgs directory exists but has no module.yml — missing chain link.
+        orgs_dir = bundle_dir / "orgs"
+        orgs_dir.mkdir()
+
+        with (
+            patch(
+                "quickscale_core.manifest.implications.get_modules_base_path",
+                side_effect=ImproperlyConfigured("no source tree"),
+            ),
+            patch(
+                "quickscale_core.manifest.implications.get_bundled_manifests_path",
+                return_value=bundle_dir,
+            ),
+        ):
+            with pytest.raises(ImproperlyConfigured):
+                resolve_module_implications(["billing"])
+
+    def test_fallback_malformed_manifest_raises(self, tmp_path: Path) -> None:
+        """Bundled fallback: a malformed module.yml in the bundled snapshot
+        raises ManifestError (remains a hard failure)."""
+        bundle_dir = tmp_path / "manifests"
+        bundle_dir.mkdir(parents=True)
+        billing_dir = bundle_dir / "billing"
+        billing_dir.mkdir()
+        (billing_dir / "module.yml").write_text("invalid: [yaml: broken\n")
+
+        with (
+            patch(
+                "quickscale_core.manifest.implications.get_modules_base_path",
+                side_effect=ImproperlyConfigured("no source tree"),
+            ),
+            patch(
+                "quickscale_core.manifest.implications.get_bundled_manifests_path",
+                return_value=bundle_dir,
+            ),
+        ):
+            with pytest.raises(ManifestError):
+                resolve_module_implications(["billing"])
+
+    def test_fallback_fail_hard_when_both_unavailable(self) -> None:
+        """When both source-tree and bundled manifests are unavailable,
+        ImproperlyConfigured is raised (fail-hard)."""
+        with (
+            patch(
+                "quickscale_core.manifest.implications.get_modules_base_path",
+                side_effect=ImproperlyConfigured("no source tree"),
+            ),
+            patch(
+                "quickscale_core.manifest.implications.get_bundled_manifests_path",
+                side_effect=ImproperlyConfigured("no bundled manifests"),
+            ),
+        ):
+            with pytest.raises(ImproperlyConfigured):
+                resolve_module_implications(["billing"])
