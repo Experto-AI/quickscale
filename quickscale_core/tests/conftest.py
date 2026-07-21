@@ -1,6 +1,8 @@
 """Pytest configuration for quickscale_core tests."""
 
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -8,6 +10,29 @@ import pytest
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
+
+
+def _isolate_poetry_cache_per_worker() -> None:
+    """Give each xdist worker its own Poetry cache to avoid global-lock contention.
+
+    The e2e/runtime tests shell out to ``poetry lock``/``poetry install`` in
+    generated projects (see ``test_generated_project_runtime.py`` and
+    ``test_e2e_full_workflow.py``). Under ``-n auto`` many workers hit Poetry's
+    shared global cache lock (``~/.cache/pypoetry``) at once and serialize or
+    deadlock, wedging the whole run and leaving orphaned ``poetry`` processes.
+    A per-worker cache dir removes the contention. Runs at conftest import time
+    so the env var is set before any test shells out. Honors an explicit
+    ``POETRY_CACHE_DIR`` override and is a no-op outside xdist.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if not worker or "POETRY_CACHE_DIR" in os.environ:
+        return
+    cache_dir = Path(tempfile.gettempdir()) / f"qs-poetry-cache-{worker}"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["POETRY_CACHE_DIR"] = str(cache_dir)
+
+
+_isolate_poetry_cache_per_worker()
 
 
 @pytest.fixture

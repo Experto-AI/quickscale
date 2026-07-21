@@ -81,6 +81,13 @@ PYTEST_XDIST_WORKERS ?= $(shell \
 	[ "$$n" -gt 16 ] && n=16; [ "$$n" -lt 1 ] && n=1; echo $$n)
 PYTEST_XDIST_ARGS := $(if $(filter 0 off serial none,$(PYTEST_XDIST_WORKERS)),,-n $(PYTEST_XDIST_WORKERS) --dist loadfile)
 
+# Per-test timeout (seconds) for the UNIT lane only. A unit test that runs
+# longer than this is a hang, not a slow test, so we kill it and fail with a
+# thread dump naming the culprit instead of silently wedging the whole run.
+# Set to 0/empty to disable. E2E/integration lanes are intentionally exempt.
+PYTEST_TIMEOUT ?= 120
+PYTEST_TIMEOUT_ARGS := $(if $(filter 0 off none,$(PYTEST_TIMEOUT)),,--timeout=$(PYTEST_TIMEOUT) --timeout-method=thread)
+
 # Section flags must be passed after `--` so GNU make does not treat them as its
 # own options, e.g. `make lint -- --modules` or `make typecheck -- --core`.
 SECTION_FLAG_ARGS := $(filter --quickscale -q --core -c --cli -l --devtools -d --module --modules -m,$(MAKECMDGOALS))
@@ -313,13 +320,13 @@ test-unit:
 	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Unit testing quickscale_core..."; \
 		$(PYTHON) -m pytest quickscale_core/tests -q --tb=short -m "not integration and not e2e" \
-			$(PYTEST_XDIST_ARGS) \
+			$(PYTEST_XDIST_ARGS) $(PYTEST_TIMEOUT_ARGS) \
 			--cov=quickscale_core --cov-report=xml:quickscale_core/coverage.xml; \
 	fi; \
 	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Unit testing quickscale_cli..."; \
 		$(PYTHON) -m pytest quickscale_cli/tests -q --tb=short -m "not integration and not e2e" \
-			$(PYTEST_XDIST_ARGS) \
+			$(PYTEST_XDIST_ARGS) $(PYTEST_TIMEOUT_ARGS) \
 			--cov=quickscale_cli --cov-report=term-missing --cov-report=html \
 			--cov-report=xml:quickscale_cli/coverage.xml --cov-fail-under=90; \
 	fi; \
