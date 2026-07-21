@@ -1,5 +1,6 @@
 """Pytest configuration for quickscale_cli tests."""
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -28,6 +29,23 @@ for _module_entry in sorted((_REPO_ROOT / "quickscale_modules").iterdir()):
         _src_str = str(_module_src.resolve())
         if _src_str not in sys.path:
             sys.path.insert(0, _src_str)
+
+
+@pytest.fixture(autouse=True)
+def _skip_generator_poetry_lock(request: pytest.FixtureRequest) -> None:
+    """Stop ``generate()`` from shelling out to real ``poetry lock`` in the unit lane.
+
+    Mirrors the fixture in ``quickscale_core/tests/conftest.py``: CLI tests also
+    drive real project generation, and the generator runs ``poetry lock`` during
+    ``generate()`` (see ``generator._generate_poetry_lock``). Left unset, those
+    tests spawn a network ``poetry lock`` (up to 300s) that hangs the unit run —
+    now surfaced as a ``--timeout`` kill/node-down. ``QS_SKIP_POETRY_LOCK`` makes
+    the generator skip it. Cleared for e2e tests, which need real generation.
+    """
+    if request.node.get_closest_marker("e2e"):
+        os.environ.pop("QS_SKIP_POETRY_LOCK", None)
+    else:
+        os.environ["QS_SKIP_POETRY_LOCK"] = "1"
 
 
 @pytest.fixture
