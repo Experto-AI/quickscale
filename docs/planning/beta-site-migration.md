@@ -39,7 +39,7 @@ After the initial catch-up, use **ongoing maintenance** for all future updates.
 ## Deterministic automation boundary
 
 - **Fresh-first** is the primary deterministic automation target. The shipped target mutates the throwaway recipient and runs local verification by default; final repo replacement, push, deploy, secret setup, and smoke approval remain explicit operator steps.
-- **In-place** is checkpoint-first by default. The shipped target resolves identities and diffs, enforces clean-git preflight, and emits the explicit pre-apply review checkpoint; an explicit continuation opt-in then runs deterministic infrastructure copy, config merge, `quickscale apply`, missing module-owned React surface adoption, and local verification. Recipient-owned `App.tsx` and `main.tsx`, smoke checks, env vars, PR merge, deploy, and rollback remain manual.
+- **In-place** is checkpoint-first by default. The shipped target resolves identities and diffs, enforces clean-git preflight, and emits the explicit pre-apply review checkpoint; an explicit continuation opt-in then runs deterministic infrastructure copy, config merge, `quickscale apply`, post-apply adoption of only missing forms/social module-owned surfaces, and local verification. For **fresh current-theme recipients** (generated post-SA105), all module React pages (blog, crm, listings, forms, social) are unconditionally present as SA105 dormant files from generation — no adoption or copy steps needed. For **legacy pre-SA105 recipients**, there is no retroactive dormant-file guarantee for any module surface; blog/crm/listings/forms/social may all be absent before the continuation runs. The shipped continuation does **not** guarantee or backfill blog/crm/listings — running `quickscale apply` in a legacy user-owned frontend does not reliably produce them. The post-apply adoption copies only missing forms/social module-owned surfaces and preserves existing destinations. If blog/crm/listings surfaces are missing after the continuation completes, the maintainer must stop, record the compatibility gap, and restore/reconcile them manually before continuing. Recipient-owned `App.tsx` (review manually when newly added modules need dashboard routing changes — `App.tsx` gates ordinary module routes; public-social dispatch is handled by `renderQuickScaleRoot()` after `validateQuickScaleConfig()` validates the seam fail-hard). For fresh current-theme recipients, `main.tsx` is byte-identical and needs no special patch; legacy pre-SA107 or customized recipients must compare/review `main.tsx` because parity of boot validation and public-surface handoff is not proven. Smoke checks, env vars, PR merge, deploy, and rollback remain manual.
 - **Both paths** must avoid copying `.git`, `media/`, `.env`, or `poetry.lock` between projects. Generate derived artifacts only in the active working tree when the workflow explicitly reaches that step.
 
 ---
@@ -116,9 +116,8 @@ with open('$RECIPIENT/quickscale.yml', 'w') as f:
         "$RECIPIENT/pyproject.toml"
     sed -i "s|${RECIPIENT_PKG}|${DONOR_PKG}|g" "$RECIPIENT/pyproject.toml"
 
-    # Fix useModules.ts projectName
-    sed -i "s|projectName: '${RECIPIENT_SLUG}'|projectName: '${DONOR_SLUG}'|g" \
-        "$RECIPIENT/frontend/src/hooks/useModules.ts"
+    # useModules.ts is project-agnostic — no identity fix needed (SA106)
+    # projectName is injected at runtime via window.__QUICKSCALE__.projectName
 
     # Update variables for remaining steps
     RECIPIENT_PKG="$DONOR_PKG"
@@ -130,7 +129,10 @@ fi
 
 ### Step 2 — Transplant App.tsx
 
-The existing project's `App.tsx` is the custom SPA router. Replace the scaffold's default version.
+The existing project's `App.tsx` is the custom SPA router — replace the scaffold's default version.
+The fresh recipient's `useModules.ts` is already project-agnostic per SA106 (no baked/default
+projectName or embedded project slug; runtime identity flows from
+`window.__QUICKSCALE__.projectName`), so only the custom router is transplanted here.
 
 ```bash
 cp "$DONOR/frontend/src/App.tsx" "$RECIPIENT/frontend/src/App.tsx"
@@ -365,7 +367,7 @@ git push origin migrate/fresh-scaffold
 
 Use this when you prefer to stay in the existing git repo without copying files to a temp location.
 
-Current tooling boundary: `make beta-migrate-in-place ...` emits the checkpoint report by default. Add `CONTINUE=1` or `--continue-after-checkpoint` to continue through the deterministic infrastructure copy, config merge, `quickscale apply`, missing module-owned React surface adoption, and local verification steps below. Recipient-owned `App.tsx` and `main.tsx`, smoke tests, env var setup, PR merge, deploy, and rollback remain manual even after continuation succeeds.
+Current tooling boundary: `make beta-migrate-in-place ...` emits the checkpoint report by default. Add `CONTINUE=1` or `--continue-after-checkpoint` to continue through the deterministic infrastructure copy, config merge, `quickscale apply`, post-apply adoption of only missing forms/social module-owned surfaces, and local verification steps below. For **fresh current-theme recipients** (generated post-SA105), all module React pages (blog, crm, listings, forms, social) are unconditionally present as SA105 dormant files from generation — no adoption or copy steps needed. For **legacy pre-SA105 recipients**, there is no retroactive dormant-file guarantee for any module surface; blog/crm/listings/forms/social may all be absent before the continuation runs. The shipped continuation does **not** guarantee or backfill blog/crm/listings — running `quickscale apply` in a legacy user-owned frontend does not reliably produce them. The post-apply adoption copies only missing forms/social module-owned surfaces and preserves existing destinations. If blog/crm/listings surfaces are missing after the continuation completes, the maintainer must stop, record the compatibility gap, and restore/reconcile them manually before continuing. Recipient-owned `App.tsx` (review manually when newly added modules need dashboard routing changes — `App.tsx` gates ordinary module routes; public-social dispatch is handled by `renderQuickScaleRoot()` after `validateQuickScaleConfig()` validates the seam fail-hard). For fresh current-theme recipients, `main.tsx` is byte-identical and needs no special patch; legacy pre-SA107 or customized recipients must compare/review `main.tsx` because parity of boot validation and public-surface handoff is not proven. Smoke tests, env var setup, PR merge, deploy, and rollback remain manual even after continuation succeeds.
 
 ### Inputs
 
@@ -428,17 +430,22 @@ sed -i "s|${DONOR_PKG}|${RECIPIENT_PKG}|g; s|${DONOR_SLUG}|${RECIPIENT_SLUG}|g" 
 
 for f in .pre-commit-config.yaml frontend/vite.config.ts \
           frontend/tsconfig.json frontend/tsconfig.app.json frontend/tsconfig.node.json \
-          frontend/eslint.config.js frontend/postcss.config.js frontend/prettier.config.js; do
+          frontend/eslint.config.js frontend/postcss.config.js frontend/prettier.config.js \
+          frontend/src/hooks/useModules.ts; do
     [ -f "$DONOR/$f" ] && cp "$DONOR/$f" "$RECIPIENT/$f"
 done
 
-cp "$DONOR/frontend/src/hooks/useModules.ts" "$RECIPIENT/frontend/src/hooks/useModules.ts"
-sed -i "s|projectName: '${DONOR_SLUG}'|projectName: '${RECIPIENT_SLUG}'|g" \
+# useModules.ts is copied above as an infrastructure target and receives the
+# same generic DONOR_PKG→RECIPIENT_PKG and DONOR_SLUG→RECIPIENT_SLUG text
+# substitutions as Dockerfile and docker-compose.yml.  The post-SA106 source
+# has no baked/default projectName and no embedded project slug — runtime
+# identity flows from window.__QUICKSCALE__.projectName.  Therefore the
+# generic substitutions are expected no-ops for current donor content but are
+# retained to mirror the shipped executor and support older pre-SA106 donor
+# content where identity may still be baked in.  No projectName-specific
+# patch or slug-repair step is applied.
+sed -i "s|${DONOR_PKG}|${RECIPIENT_PKG}|g; s|${DONOR_SLUG}|${RECIPIENT_SLUG}|g" \
     "$RECIPIENT/frontend/src/hooks/useModules.ts"
-
-# App.tsx and main.tsx remain recipient-owned in the shipped continuation path.
-# Review them manually after continuation when newly added modules need dashboard routing,
-# public-surface mounting, or navigation changes.
 ```
 
 ---
@@ -517,33 +524,35 @@ quickscale apply
 
 ---
 
-### Step 6 — Copy new React pages (only for newly added modules)
+### Step 6 — Module React surface adoption (SA105 dormant-file model; post-apply adoption)
 
-```bash
-# Social pages
-python3 -c "
-import yaml, os
-with open('$RECIPIENT/quickscale.yml') as f: r = yaml.safe_load(f)
-exit(0 if 'social' in r.get('modules',{}) and
-     not os.path.exists('$RECIPIENT/frontend/src/pages/SocialLinkTreePublicPage.tsx')
-     else 1)
-" && {
-    cp "$DONOR/frontend/src/pages/SocialLinkTreePublicPage.tsx" "$RECIPIENT/frontend/src/pages/"
-    cp "$DONOR/frontend/src/pages/SocialEmbedsPublicPage.tsx"   "$RECIPIENT/frontend/src/pages/"
-    cp -r "$DONOR/frontend/src/components/social/"              "$RECIPIENT/frontend/src/components/"
-    [ -f "$DONOR/frontend/src/hooks/usePublicSocialSurface.ts" ] && \
-        cp "$DONOR/frontend/src/hooks/usePublicSocialSurface.ts" "$RECIPIENT/frontend/src/hooks/"
-}
+For **fresh current-theme recipients** (generated post-SA105): all module React
+pages for blog, crm, listings, forms, and social are unconditionally present as
+SA105 dormant files from generation. They are present but inactive —
+runtime-gated by `window.__QUICKSCALE__.modules` flag checks. Do not copy module
+pages from the donor; the recipient already has them.
 
-# FormsPage
-python3 -c "
-import yaml, os
-with open('$RECIPIENT/quickscale.yml') as f: r = yaml.safe_load(f)
-exit(0 if 'forms' in r.get('modules',{}) and
-     not os.path.exists('$RECIPIENT/frontend/src/pages/FormsPage.tsx')
-     else 1)
-" && cp "$DONOR/frontend/src/pages/FormsPage.tsx" "$RECIPIENT/frontend/src/pages/"
-```
+For **legacy pre-SA105 recipients** (updated in-place): there is **no retroactive
+dormant-file guarantee** for any module surface. Blog, crm, listings, forms, and
+social pages may all be absent before the continuation runs. Running `quickscale
+apply` in a legacy user-owned frontend does **not** guarantee or backfill blog,
+crm, or listings surfaces. The shipped post-apply adoption copies only missing
+forms/social module-owned surfaces (FormsPage.tsx,
+SocialLinkTreePublicPage.tsx, SocialEmbedsPublicPage.tsx, social components,
+and usePublicSocialSurface.ts) and preserves existing destinations — it does
+**not** backfill blog, crm, or listings.
+
+**If blog, crm, or listings surfaces are missing after the continuation
+completes, the maintainer must stop, record the compatibility gap, and
+restore/reconcile the missing surfaces manually before continuing.**
+
+The `validateQuickScaleConfig()` gateway (SA107, in `validateQuickScaleSeam.ts`)
+enforces fail-hard validation: malformed or missing seam data throws an error
+rather than falling back to silent defaults. Dashboard module routes are gated
+by `App.tsx` via `window.__QUICKSCALE__.modules` flag checks; public-social
+surfaces are dispatched by `renderQuickScaleRoot()` after validation. No manual
+route wiring or page-copy steps are needed for the dormant files in fresh
+current-theme recipients.
 
 ---
 
@@ -571,8 +580,8 @@ What to do with each file in each approach.
 | `docker-compose.yml` | keep RECIPIENT's | copy from donor, fix pkg/slug refs |
 | `.pre-commit-config.yaml` | keep RECIPIENT's | copy from donor |
 | `frontend/vite.config.ts`, `tsconfig*.json` | keep RECIPIENT's | copy from donor |
-| `frontend/src/hooks/useModules.ts` | keep RECIPIENT's, fix `projectName` | copy from donor, fix `projectName` |
-| `frontend/src/main.tsx` | keep RECIPIENT's (already has public surface routing) | keep RECIPIENT's; review manually if newly added public-surface modules need mount/provider changes |
+| `frontend/src/hooks/useModules.ts` | keep RECIPIENT's — project-agnostic per SA106 (no baked identity; runtime from `window.__QUICKSCALE__`) | copy from donor (infrastructure target; generic DONOR_PKG/DONOR_SLUG substitutions applied; no projectName-specific patch) |
+| `frontend/src/main.tsx` | keep RECIPIENT's (byte-identical only among projects from the same theme version; legacy pre-SA107 or customized recipients must compare/review for boot-validation and public-surface-handoff parity — parity is not proven) | keep RECIPIENT's (byte-identical only among projects from the same theme version; legacy pre-SA107 or customized recipients must compare/review for boot-validation and public-surface-handoff parity — parity is not proven) |
 | `pyproject.toml` | keep RECIPIENT's; add any missing path deps from donor | merge: donor non-path dep versions + recipient path deps; preserve recipient pytest settings |
 | `frontend/package.json` | keep RECIPIENT's | merge: donor scripts + deps, keep recipient name |
 | `quickscale.yml` | keep RECIPIENT's (already has target modules) | edit: add new modules from donor |
@@ -580,12 +589,12 @@ What to do with each file in each approach.
 | `<pkg>/urls_modules.py` | auto-generated — keep RECIPIENT's | auto-generated |
 | `railway.json` | auto-generated — keep RECIPIENT's | auto-generated |
 | `modules/` | already embedded in RECIPIENT — keep | embedded by `quickscale apply` |
-| `frontend/src/App.tsx` | copy from donor (custom routing) | keep RECIPIENT's; review manually if newly added dashboard routing changes are needed |
+| `frontend/src/App.tsx` | copy from donor (custom routing); shipped gated routes (React.lazy via SA105) guaranteed only for **fresh current-theme recipients**; legacy/customized recipients must review/reconcile App.tsx | keep RECIPIENT's; shipped gated routes (React.lazy via SA105) guaranteed only for **fresh current-theme recipients**; legacy/customized recipients must review/reconcile App.tsx manually when routing changes are needed |
 | `frontend/src/pages/` (custom) | copy pages only in DONOR (Home, About, etc.) | keep RECIPIENT's |
-| `frontend/src/pages/` (scaffold) | keep RECIPIENT's (fresher) | keep RECIPIENT's |
+| `frontend/src/pages/` (scaffold) | keep RECIPIENT's (fresher; all module pages already present as dormant files per SA105) | keep RECIPIENT's |
 | `frontend/src/components/` (custom) | copy from donor (home/, layout/, shared/, seo/, properties/) | keep RECIPIENT's |
 | `frontend/src/components/ui/` | keep RECIPIENT's (fresh shadcn) | keep RECIPIENT's |
-| `frontend/src/components/` (new modules) | keep RECIPIENT's (social/, forms/) | copy from donor |
+| `frontend/src/components/` (new modules) | keep RECIPIENT's (social/, forms/ — present as SA105 dormant files in fresh scaffold) | keep RECIPIENT's (blog/crm/listings not backfilled; forms/social components adopted in post-apply step if missing) |
 | `frontend/src/assets/`, `data/`, `types/`, `stores/` | copy from donor | keep RECIPIENT's |
 | `<pkg>/urls.py`, `views.py`, `middleware.py`, `sitemaps.py`, `context_processors.py` | copy from donor | keep RECIPIENT's |
 | `<pkg>/settings/production.py` | copy from donor | keep RECIPIENT's |
@@ -624,27 +633,12 @@ git checkout -b feat/add-<module>
 quickscale apply               # embeds module, regenerates wiring
 quickscale manage migrate
 
-# 2. Copy new pages if the module ships a React page (use the earlier in-place Step 6 copy patterns when relevant)
-# 3. Add route in App.tsx if it's a dashboard page (not needed for public-surface pages)
+# 2. If initial catch-up used fresh current-theme generation, or if legacy in-place catch-up completed manual reconciliation of missing blog/crm/listings, all dormant surfaces are present (SA105) — no manual copy needed. If legacy in-place catch-up did not reconcile missing blog/crm/listings, do not assume they exist; stop and handle manually first.
+# 3. Add route in App.tsx if it's a dashboard page (not needed for public-surface pages; renderQuickScaleRoot() dispatches public-social surfaces after validateQuickScaleConfig() validates the seam)
 
 pytest && cd frontend && pnpm test && cd ..
 git add -A && git commit -m "feat: add <module> module"
 ```
-
-### 2c — Adopt a new React pattern only
-
-```bash
-# Compare pages and hooks between current reference and your project
-diff <(ls /tmp/test80/frontend/src/pages/)  <(ls ./frontend/src/pages/)
-diff <(ls /tmp/test80/frontend/src/hooks/)  <(ls ./frontend/src/hooks/)
-
-# Copy only files that are new (don't exist in recipient) and are relevant
-cp /tmp/test80/frontend/src/pages/<NewPage>.tsx    ./frontend/src/pages/
-
-cd frontend && pnpm install && pnpm build && pnpm test && cd ..
-```
-
----
 
 ## Module-specific environment variables
 
@@ -724,8 +718,8 @@ railway redeploy <deployment-id> --service experto-ai-web
 [ ] In-place only: checkpoint report reviewed and the continuation path or equivalent manual steps copied infrastructure files and fixed slug references
 [ ] In-place only: continuation path or equivalent manual steps merged pyproject.toml and frontend/package.json
 [ ] In-place only: continuation path or equivalent manual steps updated quickscale.yml, reviewed it, and completed `quickscale apply`
-[ ] In-place only: continuation path or equivalent manual steps copied missing module React pages/hooks without overwriting existing pages
-[ ] In-place only: recipient-owned `App.tsx` and `main.tsx` reviewed manually when newly added modules need routing or public-surface adoption
+[ ] In-place only: fresh current-theme recipients already have all module surfaces as dormant files (SA105); legacy pre-SA105 recipients have no retroactive dormant guarantee for any surface — running `quickscale apply` does not guarantee or backfill blog/crm/listings; only missing forms/social surfaces are adopted in post-apply step; missing blog/crm/listings require manual reconciliation before continuing
+[ ] In-place only: recipient-owned `App.tsx` reviewed manually when newly added modules need dashboard routing changes (App.tsx gates ordinary module routes; renderQuickScaleRoot() dispatches public-social surfaces); main.tsx requires comparison/review for legacy pre-SA107 or customized recipients (validateQuickScaleConfig() validates seam fail-hard — parity not proven)
 [ ] Verification stack completed: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test`
 [ ] Local smoke-test completed — existing pages intact and new module pages work
 [ ] Redis state verified on target site; rollout order adjusted per Redis-present/absent conditions (see §SA68 rollout closeout notes → Safe rollout ordering)
@@ -761,7 +755,7 @@ manual maintainer action, not a roadmap.md checklist item:
 [ ] quickscale update ran (for module code updates)
 [ ] quickscale apply ran (for new module additions)
 [ ] quickscale manage migrate ran
-[ ] New React pages copied if applicable
+[ ] Blog/crm/listings/forms/social dormant surfaces present if initial catch-up used fresh generation or legacy recipient was manually reconciled; if legacy in-place catch-up skipped manual reconciliation, confirm surfaces exist before proceeding
 [ ] pytest passes; pnpm test passes
 [ ] Env vars set in Railway for any new modules
 [ ] Merged to main; Railway deployment confirmed
@@ -822,7 +816,7 @@ Use this when the maintainer tool is only partially implemented or stops intenti
 2. Determine the mode from the provided `DONOR` and `RECIPIENT` values rather than inferring from directory names.
 3. Resume from the last completed deterministic step in the tool's report instead of rerunning earlier destructive steps.
 4. Fresh-first continuation order: identity fix → frontend copies → Django file copies → path dependencies → local verification → manual repo handoff.
-5. In-place continuation order after the emitted checkpoint report or explicit continuation opt-in: infrastructure copies → config merges → `quickscale.yml` review → `quickscale apply` → missing module pages/hooks → local verification → manual review of recipient-owned `App.tsx` and `main.tsx` when newly added modules need routing or public-surface adoption.
+5. In-place continuation order after the emitted checkpoint report or explicit continuation opt-in: infrastructure copies → config merges → `quickscale.yml` review → `quickscale apply` → post-apply adoption of missing forms/social module-owned surfaces only (does **not** guarantee or backfill blog/crm/listings; legacy pre-SA105 recipients have no retroactive dormant guarantee for any surface) → local verification → manual review of recipient-owned `App.tsx` when newly added modules need routing changes (App.tsx gates ordinary module routes; renderQuickScaleRoot() dispatches public-social surfaces after validateQuickScaleConfig() validates the seam fail-hard). Legacy pre-SA107 or customized recipients must compare/review main.tsx because parity of boot validation and public-surface handoff is not proven. If blog/crm/listings surfaces are missing after continuation, the maintainer must stop, record the gap, and restore/reconcile them manually before continuing.
 6. If a step would require guessing about module adoption, deploy timing, or secrets, stop, record the skipped work in `skipped_steps`, and leave the operator follow-up in `pending_manual_actions`.
 7. The minimum handoff payload for partial automation is `mode`, `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions`.
 

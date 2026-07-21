@@ -905,3 +905,28 @@ flag).
   SA104-ADV-001 (generated projects' `.pre-commit-config.yaml.j2:10` strict `check-json` over
   emitted JSONC `frontend/tsconfig.json`) deferred. Full evidence in CHANGELOG.md (SA104 entry)
   and roadmap.md (Track 2).
+- 2026-07-21 — **Finding 10 (`frontend-source-generation-specialized`): CLOSED/SUPERSEDED by
+  SA105/SA106/SA107/SA108 — the full frontend de-specialization chain is complete.** SA105
+  (dormant-file generation) made all module React pages unconditionally present as dormant,
+  flag-gated files for fresh current-theme recipients — no per-module page-copy steps needed
+  at migration time. SA106 (identity de-spec) made `useModules.ts`, `Dashboard.tsx`, and
+  `Sidebar.tsx` project-agnostic and byte-identical across projects on the same theme version,
+  with `projectName` read from `window.__QUICKSCALE__.projectName` at runtime — no
+  generation-time identity patching. SA107 (fail-hard seam validation) replaced silent
+  fallback/optional-chaining in `resolveProjectConfig()`, `renderQuickScaleRoot()`, and
+  `main.tsx` with the fail-hard `validateQuickScaleConfig()` gateway, enforcing strict boolean
+  module flags and a valid `projectName` at runtime. SA108 (migration-doc rewrite) corrected
+  `beta-site-migration.md` frontend guidance to reflect the project-agnostic `frontend/src`
+  contract, removing obsolete identity-fix and conditional-patch steps, distinguishing fresh
+  current-theme recipients (SA105 dormant guarantees apply) from legacy pre-SA105 recipients.
+  **Legacy compatibility caveat (Finding 10 remnant, not reticketed):** SA105 dormant-file
+  guarantees apply only to fresh current-theme recipients generated post-SA105; legacy pre-SA105
+  in-place recipients have no retroactive dormant guarantee for any module surface. The shipped
+  post-apply adoption step copies only missing forms/social surfaces — it does **not** backfill
+  blog/crm/listings. If blog/crm/listings surfaces are absent after continuation, the maintainer
+  must stop, record the compatibility gap, and restore/reconcile them manually. Finding 10's
+  remaining "correct shape" (Option 1 stage 2 completion for dormant files, Option 3 ownership
+  manifest) is not independently ticketed — the dormant-files decision was ratified and the
+  playbook reflects it. The Summary table's "Live findings" line above and the Fix order section
+  are superseded by this entry; the next full autopsy re-run will drop the finding block. Detail
+  in CHANGELOG.md (SA105/SA106/SA107/SA108 entries) and roadmap.md (Track 2).
