@@ -32,7 +32,24 @@ def _isolate_poetry_cache_per_worker() -> None:
     os.environ["POETRY_CACHE_DIR"] = str(cache_dir)
 
 
+def _skip_generator_poetry_lock_for_non_e2e() -> None:
+    """Stop ``generate()`` from shelling out to real ``poetry lock`` in the unit lane.
+
+    The generator runs ``poetry lock`` as part of project generation (see
+    ``generator._generate_poetry_lock``). Every generator unit test that drives
+    real ``generate()`` therefore spawns a network ``poetry lock`` (up to 300s);
+    run in parallel they deadlock on Poetry's global cache lock and wedge the
+    suite. Setting ``QS_SKIP_POETRY_LOCK`` makes the generator skip that step.
+    E2e runs (``-m e2e``) need real generation + install, so leave it unset
+    there; those tests already produce/lock dependencies explicitly.
+    """
+    if "e2e" in " ".join(sys.argv):
+        return
+    os.environ.setdefault("QS_SKIP_POETRY_LOCK", "1")
+
+
 _isolate_poetry_cache_per_worker()
+_skip_generator_poetry_lock_for_non_e2e()
 
 
 @pytest.fixture

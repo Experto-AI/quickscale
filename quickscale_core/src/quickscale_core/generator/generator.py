@@ -611,6 +611,13 @@ class ProjectGenerator:
             RuntimeError: If poetry lock command fails
 
         """
+        # Escape hatch for test suites: ``poetry lock`` is a network side-effect
+        # that, under parallel/repeated generation, serializes on Poetry's global
+        # cache lock and can wedge the run. Setting ``QS_SKIP_POETRY_LOCK=1`` skips
+        # it so unit tests that drive ``generate()`` stay fast and hermetic. Tests
+        # that need a real lock (e2e) leave it unset and produce one explicitly.
+        if os.environ.get("QS_SKIP_POETRY_LOCK") == "1":
+            return
         try:
             result = subprocess.run(
                 ["poetry", "lock"],
