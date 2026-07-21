@@ -51,12 +51,13 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active work.
 
-The green-gate join (SA96-GATE) is green with empty quarantine. All remaining open work is on **Track 3 (release path)**; Tracks 1 and 2 are complete.
+The green-gate join (SA96-GATE) is green with empty quarantine. The **Track 3 (release path)** chain below is the critical path; one independent verification ticket (**SA114**) runs in parallel on the otherwise-idle **Track 1**. Track 2 is complete.
 
 1. **SA113** (installed-context implication-resolver fallback, Track 3) — **the critical-path code fix.** `resolve_module_implications` (`quickscale_core/src/quickscale_core/manifest/implications.py:52`) calls `get_modules_base_path()` with no bundled-manifest fallback, so in an installed venv both `plan` (`plan_command.py:102`) and `apply` (`apply_command.py:973`) crash with `ImproperlyConfigured: Modules base path not found`. The fix mirrors the picker's SA109 `try/except ImproperlyConfigured → get_bundled_manifests_path()` pattern and must cover **both** call sites. SA111/SA112 are red until it lands.
 2. **SA111** (installed-context `plan`+implication coverage, Track 3) — regression coverage for the crash above: SA111a (authoritative `smoke-install` probe) + SA111b (optional fast monkeypatch unit test). **This partially re-opens the "installed wheel runs clean" claim — the release path is not fully de-risked until it is closed.**
 3. **SA112** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — heavy e2e lane covering `apply`'s own resolver call site and the Docker path from a real install. Deps: SA110 ✓ + SA111a + SA113.
 4. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Green-gate deps met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓); awaits a human maintainer to execute the irreversible publish. Should not publish while SA113/SA111/SA112 are open.
+5. **SA114** (v87 gate re-verification & fix sweep, Track 1, `deps: none`) — re-run `make check`/`quality`/`ci`/`ci-e2e` on current `v87` HEAD (the green-gate join was proven at the synced baseline, not HEAD) and fix any drift. Runs in parallel with the Track 3 chain; heavy `ci`/`ci-e2e` legs serialized against Track 3's PG/Docker usage, and any fix in SA113's resolver/`scripts` surface deferred to Track 3.
 
 Arch **Finding 10** (`frontend-source-generation-specialized`) is **closed** by the SA104→SA108 chain (see arch-audit reconciliation log, 2026-07-21). Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays unscheduled — the Finding 10 chain shrank its surface; sequence any tuple-derivation work after it. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module.
 
@@ -76,7 +77,18 @@ The join runs entirely **inside the monorepo** and does **not** exercise the pip
 
 ### Track 1 — Tenant-context surface
 
-**COMPLETE — no open tickets.** All Track 1 work (SA92/SA84/SA86/SA96-T1, Finding 8, SA97/SA99, SA102/SA103, and the full TP test-parallelization suite SA91/TP1/TP2/TP2b/TP3a/TP3b/TP4) is closed. See [CHANGELOG.md](../../CHANGELOG.md). Off the release critical path; none of its changes regressed any gate's pass/fail set or coverage thresholds.
+**Prior Track 1 work COMPLETE.** All prior Track 1 work (SA92/SA84/SA86/SA96-T1, Finding 8, SA97/SA99, SA102/SA103, and the full TP test-parallelization suite SA91/TP1/TP2/TP2b/TP3a/TP3b/TP4) is closed. See [CHANGELOG.md](../../CHANGELOG.md). One new verification ticket (SA114) is parked here to use the idle track in parallel with the Track 3 release chain.
+
+#### SA114 — v87 gate re-verification & fix sweep
+
+SA96-GATE proved the four-command join green **at the post-SA92 synced baseline**. Commits have landed since (SA108/roadmap docs, the `d5d25c08` generator `poetry lock` timeout fix, merges), so the gates have not been re-run against current `v87` HEAD. This ticket re-verifies them and fixes any drift, running in parallel with SA113/SA111/SA112 on Track 3.
+
+- [ ] **SA114 — Re-run the make gates on current `v87` HEAD and fix drift.** `Tier 2 · Track 1 · deps: none`
+  Run, in order, `make check` → `make quality` → `make ci` → `make ci-e2e` against current `v87` HEAD; fix any lint/typecheck/unit/complexity/coverage/integration/e2e drift so each exits 0 with `QUARANTINE_TICKETS` empty. Record the evidence (exit codes, coverage mean, pass/fail counts) in the completed-work block on merge.
+  - **Concurrency bound (infra):** `make check`/`make quality` are static/light and run fully parallel with Track 3. `make ci`/`make ci-e2e` need a live PostgreSQL server + Docker daemon + ports and **must be serialized** against any Track 3 test run (SA111a `smoke-install`, SA112 e2e) — the `QS_CI_PARALLEL`/`QS_E2E_PARALLEL`/per-lane-scope knobs namespace lanes *within* one invocation, not across worktrees hitting the same server. Coordinate the heavy legs so only one track exercises PG/Docker at a time.
+  - **Fix-scope bound (merge hazard):** if a failure lands in SA113's surface — `quickscale_core/src/quickscale_core/manifest/implications.py`, `scripts/smoke_install.sh`, or the installed-wheel e2e lane — **do not fix it here**; hand it to SA113/SA111/SA112 on Track 3. This ticket owns only gate drift *outside* the installed-context resolver work. Any fix it does make outside that surface is disjoint, so the only shared-closeout overlap with Track 3 is `CHANGELOG.md`/`roadmap.md`, covered by the Merge procedure.
+  - Verify: `make check`, `make quality`, `make ci`, `make ci-e2e` each exit 0 on current `v87` HEAD with empty quarantine; any fixes are behavior-preserving and touch no SA113-owned file.
+  *(why →* the green-gate join was proven at the synced baseline, not at current HEAD; drift since then is unverified, and re-proving it is independent of the installed-context release chain — a genuine use of the idle track*)*
 
 ### Track 2 — Module contracts & settings — frontend-theme de-specialization (arch Finding 10)
 
@@ -220,10 +232,12 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 ```
-Track 1 (complete)     Track 2 (complete)                Track 3 → release (critical path)
+Track 1 (idle → SA114)   Track 2 (complete)              Track 3 → release (critical path)
 ────────────────────   ────────────────────────────     ─────────────────────────────────
-✓ all tickets closed    SA104 ✓ → SA105 ✓ → SA106 ✓       SA96-GATE ✓  SA109 ✓  SA110 ✓
-                          → SA107 ✓ → SA108 ✓                        │
+SA114 (gate re-verify   SA104 ✓ → SA105 ✓ → SA106 ✓       SA96-GATE ✓  SA109 ✓  SA110 ✓
+  & fix; deps: none)      → SA107 ✓ → SA108 ✓                        │
+  ‖ parallel, heavy                                                  │
+  legs serialized                                                    │
                         (arch Finding 10 chain closed)     SA113 ← critical-path fix
                                                                      │  both call sites (plan+apply)
                                                             ┌────────┴────────┐
@@ -238,17 +252,19 @@ Track 1 (complete)     Track 2 (complete)                Track 3 → release (cr
                                                          (human-only; hold until SA111/SA112 close)
 ```
 
-**Parallelism.** All remaining work is on Track 3 and forms one coherent release unit: **SA113** (`implications.py`, both call sites) is the critical-path code change and the *head* of the chain — SA111a/SA111b/SA112 are all red until it lands, so there is no independent work to overlap it against. Landing SA113 on an idle Track 1/2 would **not** run it any sooner (nothing runs in parallel with the chain head) and would split one ordered review unit (fix + its coverage share the resolver module, `scripts/`, and the e2e lane) across worktrees, manufacturing a merge hazard for zero throughput gain. Kept together on Track 3, sequenced SA113 → SA111a → SA112. The only shared-closeout overlap is `CHANGELOG.md`/`roadmap.md`, covered by the Merge procedure. SA96-PUBLISH (human-only) shares no files with the assistant-executable tickets.
+**Parallelism.** The Track 3 release chain forms one coherent unit: **SA113** (`implications.py`, both call sites) is the critical-path code change and the *head* of the chain — SA111a/SA111b/SA112 are all red until it lands, so there is no independent work to overlap it against. Landing SA113 on an idle Track 1/2 would **not** run it any sooner (nothing runs in parallel with the chain head) and would split one ordered review unit (fix + its coverage share the resolver module, `scripts/`, and the e2e lane) across worktrees, manufacturing a merge hazard for zero throughput gain. Kept together on Track 3, sequenced SA113 → SA111a → SA112.
+
+The one genuinely independent parallel workstream is **SA114** on the idle Track 1: re-verifying the make gates against current `v87` HEAD is a different intent from adding installed-context coverage, and `deps: none`. It is safe to parallelize with two explicit bounds: (1) **infra** — its heavy `make ci`/`ci-e2e` legs share the same PostgreSQL/Docker as Track 3's `smoke-install`/e2e runs and must be serialized against them (per-lane knobs don't span worktrees); (2) **fix scope** — any failure inside SA113's surface (`implications.py`, `scripts/smoke_install.sh`, the installed-wheel e2e lane) is handed to Track 3, not fixed on Track 1. With those bounds the only shared-closeout overlap across all tracks is `CHANGELOG.md`/`roadmap.md`, covered by the Merge procedure. SA96-PUBLISH (human-only) shares no files with the assistant-executable tickets.
 
 ### Track readiness (2026-07-21)
 
-- **Track 1 — COMPLETE (off critical path).** No open tickets.
+- **Track 1 — one open ticket (SA114), off the critical path.** All prior Track 1 work is closed; SA114 (v87 gate re-verification & fix sweep, `deps: none`) is parked here to use the idle track in parallel with the Track 3 chain, with heavy `ci`/`ci-e2e` legs serialized against Track 3's PG/Docker usage and SA113-surface fixes deferred to Track 3. Clean to start.
 - **Track 2 — COMPLETE.** Chain stages SA104/SA105/SA106/SA107/SA108 complete. Track 2 frontend de-specialization chain (arch Finding 10) is fully closed. Legacy compatibility finding documented: SA105 dormant-file guarantee applies only to fresh current-theme recipients; legacy pre-SA105 recipients have no retroactive dormant guarantee for any module surface — running `quickscale apply` does not guarantee or backfill blog/crm/listings; the shipped continuation adopts only missing forms/social surfaces (no blog/crm/listings backfill). No blocker.
 - **Track 3 — open engineering work, unblocked and sequenced (Option A ratified).** The green-gate join, SA109, and SA110 are all closed, but SA109/SA110 left the installed-context implication resolver crash uncovered: `plan` and `apply` both crash in an installed venv. The fix is now ticketed as **SA113** (head of the chain), followed by SA111 (coverage) and SA112 (installed-wheel lifecycle e2e), all red until SA113 lands. SA96-PUBLISH (human-only) holds until all three close. Non-gating advisories remain deferred (SA91 CR-SA91-REV-006 low; SA89B-CR-004; SA93-REV-005; SA93-ADV-001..004; SA104-ADV-001; SA105-ADV-001; CR-SA106-002; SA110-ADV-001).
 
 **Track 3 decision — RESOLVED (2026-07-21): Option A, fix-first.** The resolver fix is ticketed as **SA113** on Track 3 and lands before its coverage; SA111a/SA111b/SA112 then flip green as verification. It stays on Track 3 (not an idle Track 1/2) because it is the *head* of the dependency chain — nothing runs in parallel with it, and splitting the fix from its coverage (same resolver module, `scripts/`, e2e lane) would only create a cross-track merge hazard. The fix follows the SA109/AF7 bundled-fallback precedent in decisions.md.
 
-**Net.** Tracks 1 and 2 are complete. Track 3 is **not** done: the installed-wheel resolver crash reopened engineering work that SA109/SA110 did not cover. The critical path is now **SA113 → SA111a → SA112 → SA96-PUBLISH (human)**, all on Track 3. See [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision) for the recorded squash/guardrail/shrink-only-quality policies and §Bundled Module Inventory (AF7) for the fallback precedent SA113 follows; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
+**Net.** Track 2 is complete; Track 1 has one independent off-path ticket (SA114, gate re-verification). Track 3 is **not** done: the installed-wheel resolver crash reopened engineering work that SA109/SA110 did not cover. The critical path is now **SA113 → SA111a → SA112 → SA96-PUBLISH (human)**, all on Track 3, with SA114 running in parallel on Track 1. See [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision) for the recorded squash/guardrail/shrink-only-quality policies and §Bundled Module Inventory (AF7) for the fallback precedent SA113 follows; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
