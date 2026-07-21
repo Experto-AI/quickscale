@@ -66,9 +66,19 @@
 # Default Python command (uses root Poetry environment)
 PYTHON ?= poetry run python
 RUFF_CACHE_DIR ?= .ruff_cache/make
-# Unit-test worker count. Use ``0`` for a true serial run; ``auto`` is the
-# default for local development, while CI can pin an explicit worker count.
-PYTEST_XDIST_WORKERS ?= auto
+# Unit-test worker count. Use ``0`` for a true serial run, ``auto`` for pytest's
+# own CPU-count default, or an explicit integer (e.g. CI pins a fixed count).
+#
+# The default is computed dynamically: min(logical CPUs, available RAM in GB),
+# capped at 16. Budgeting ~1 GB of headroom per worker means that when several
+# worktrees run their suites at once the shared RAM shrinks MemAvailable, so
+# each subsequent run picks fewer workers instead of oversubscribing into swap.
+# On an idle machine this simply resolves to 16.
+PYTEST_XDIST_WORKERS ?= $(shell \
+	cpus=$$(nproc 2>/dev/null || echo 4); \
+	memgb=$$(awk '/MemAvailable/{printf "%d", $$2/1024/1024}' /proc/meminfo 2>/dev/null || echo 8); \
+	n=$$cpus; [ "$$memgb" -lt "$$n" ] && n=$$memgb; \
+	[ "$$n" -gt 16 ] && n=16; [ "$$n" -lt 1 ] && n=1; echo $$n)
 PYTEST_XDIST_ARGS := $(if $(filter 0 off serial none,$(PYTEST_XDIST_WORKERS)),,-n $(PYTEST_XDIST_WORKERS) --dist loadfile)
 
 # Section flags must be passed after `--` so GNU make does not treat them as its
