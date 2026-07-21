@@ -51,10 +51,11 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active work.
 
-The release critical path is fully de-risked in code: the green-gate join (SA96-GATE) is green with empty quarantine, and both installed-wheel blockers (SA109 discovery fix, SA110 installed-artifact smoke gate) are complete, verified, and merged (see [CHANGELOG.md](../../CHANGELOG.md)). Two items remain open:
+The release critical path is fully de-risked in code: the green-gate join (SA96-GATE) is green with empty quarantine, and both installed-wheel blockers (SA109 discovery fix, SA110 installed-artifact smoke gate) are complete, verified, and merged (see [CHANGELOG.md](../../CHANGELOG.md)). Only one item remains open:
 
 1. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. All deps met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓); awaits a human maintainer to execute the irreversible publish. This is the only remaining release-path step.
-2. **SA108** (frontend de-specialization migration-doc rewrite, Track 2) — assistant-executable, docs-only. All deps met (SA105 ✓ + SA106 ✓ + SA107 ✓). Closes arch-audit Finding 10; off the release critical path.
+
+SA108 (frontend de-specialization migration-doc rewrite, Track 2) is **complete** — closes arch-audit Finding 10. See [CHANGELOG.md](../../CHANGELOG.md) for details. Off the release critical path.
 
 Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays unscheduled — SA108's parent chain shrank its surface; sequence any tuple-derivation work after it. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module.
 
@@ -82,9 +83,9 @@ The frontend-theme de-specialization chain (arch-audit Finding 10, `frontend-sou
 
 **File ownership:** SA108 owns `docs/planning/beta-site-migration.md` only — disjoint from the CI/Makefile surfaces and the release path, so it runs fully in parallel with Track 3. Only the shared closeout files (`CHANGELOG.md`, `roadmap.md`) overlap, covered by the Merge procedure.
 
-- [ ] **SA108 — Rewrite `beta-site-migration.md` as part of this chain (not deferred).** `Tier 2 · Track 2 · deps: SA105 ✓ + SA106 ✓ + SA107 ✓ · docs-only`
+- [x] **SA108 — Rewrite `beta-site-migration.md` as part of this chain (not deferred).** `Tier 2 · Track 2 · deps: SA105 ✓ + SA106 ✓ + SA107 ✓ · docs-only`
   Finding 10 collapses migration from a per-file merge into "copy user-owned dirs, rebuild" — but that win is only realized when the playbook stops describing the old merge process. `docs/planning/beta-site-migration.md` is the artifact most invalidated by SA105/SA106: its identity-fix step (Step 1 `useModules.ts`/`projectName`, `Sidebar`/`Dashboard` transplant), `main.tsx`-conditional patching, per-module page-copy logic (in-place Step 6), and the per-file classification table all describe the pre-de-specialization scaffold. Rewrite it so the frontend sections reflect the project-agnostic, byte-identical `frontend/src` reality: shrink the fresh-first/in-place frontend transplant steps to the user-owned-dirs copy, drop the now-obsolete identity/module-station patches, and note the dormant-file model (SA105 Option A) so maintainers understand why unselected-module pages appear in their tree.
-  - Verify: playbook frontend sections contain no `projectName`/`useModules.ts`/`main.tsx`-conditional patch steps that SA105/SA106 removed; the classification table reflects "user-owned copy, everything else regenerated"; cross-references to the runtime seam (and SA107 fail-hard behavior) are present.
+  - Verify: playbook frontend sections contain no `projectName`/`useModules.ts`/`main.tsx`-conditional patch steps that SA105/SA106 removed; the classification table distinguishes fresh current-theme recipients (all module surfaces as dormant files per SA105) from legacy pre-SA105 in-place recipients (no retroactive dormant guarantee; running `quickscale apply` does not guarantee or backfill blog/crm/listings; post-apply adoption copies only missing forms/social surfaces and does not backfill blog/crm/listings); cross-references to the runtime seam (and SA107 `validateQuickScaleConfig()` fail-hard behavior) are present with correct function names and responsibilities.
   *(why →* the Finding 10 win is not banked until the migration doc matches the new copy-not-merge reality; otherwise the drift moves from generator source into the playbook*)*
 
 ### Track 3 — Core/CLI plumbing — release path
@@ -100,27 +101,27 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 ```
-Track 1 (complete)     Track 2 (off crit. path)          Track 3 → release (critical path)
+Track 1 (complete)     Track 2 (complete)                   Track 3 → release (critical path)
 ────────────────────   ────────────────────────────      ─────────────────────────────────
 ✓ all tickets closed    SA104 ✓ → SA105 ✓ → SA106 ✓        SA96-GATE ✓ ── green-gate join
-                          → SA107 ✓ (chain complete)        SA109 ✓ ── installed-wheel discovery
-                                │                            SA110 ✓ ── installed-artifact smoke
-                        SA108 ── migration-doc rewrite              │
-                          (deps SA105 ✓+SA106 ✓+SA107 ✓)            ▼
-                        (arch Finding 10 chain)            SA96-PUBLISH ── build → publish
-                                                             deps: SA96-GATE ✓ + SA109 ✓ + SA110 ✓
-                                                             (human-only)
+                          → SA107 ✓ → SA108 ✓               SA109 ✓ ── installed-wheel discovery
+                        (arch Finding 10 chain closed)       SA110 ✓ ── installed-artifact smoke
+                                                                      │
+                                                                      ▼
+                                                                SA96-PUBLISH ── build → publish
+                                                                  deps: SA96-GATE ✓ + SA109 ✓ + SA110 ✓
+                                                                  (human-only)
 ```
 
-**Parallelism.** Exactly two items remain: **SA108** (Track 2, assistant-executable, docs-only, owns `docs/planning/beta-site-migration.md`) and **SA96-PUBLISH** (Track 3, human-only). They are file-disjoint apart from the shared closeout files (`CHANGELOG.md`, `roadmap.md`) covered by the Merge procedure, so SA108 can land at any time relative to the human publish with no merge hazard. There is no idle-track rebalancing opportunity (one assistant task, one human task) and no move that would delay a mergeable track.
+**Parallelism.** Exactly one item remains: **SA96-PUBLISH** (Track 3, human-only). SA108 (Track 2, migration-doc rewrite) is complete — its corrections to `beta-site-migration.md` have been finalized alongside this roadmap update (including the legacy compatibility distinction: SA105 dormant-file model guarantees all module surfaces only for fresh current-theme recipients; legacy pre-SA105 recipients have no retroactive dormant guarantee — running `quickscale apply` does not guarantee or backfill blog/crm/listings; the shipped continuation adopts forms/social surfaces only, with no blog/crm/listings backfill). There is no assistant-executable task sharing files with the human-only publish step, so Track 3 has no merge hazard from Track 2 and can proceed independently.
 
-### Track readiness (2026-07-20)
+### Track readiness (2026-07-21)
 
 - **Track 1 — COMPLETE (off critical path).** No open tickets.
-- **Track 2 — clean to continue.** Chain stages SA104/SA105/SA106/SA107 complete; **SA108** (migration-doc rewrite) is ready — all deps met, assistant-executable, docs-only, file-disjoint from the release path. No blocker.
+- **Track 2 — COMPLETE.** Chain stages SA104/SA105/SA106/SA107/SA108 complete. Track 2 frontend de-specialization chain (arch Finding 10) is fully closed. Legacy compatibility finding documented: SA105 dormant-file guarantee applies only to fresh current-theme recipients; legacy pre-SA105 recipients have no retroactive dormant guarantee for any module surface — running `quickscale apply` does not guarantee or backfill blog/crm/listings; the shipped continuation adopts only missing forms/social surfaces (no blog/crm/listings backfill). No blocker.
 - **Track 3 — implementation COMPLETE; awaiting human publish.** All assistant work closed (SA96-GATE, SA109, SA110, QG proofs done). The remaining **SA96-PUBLISH** is human-only and requires a maintainer to execute the irreversible PyPI publish after confirming version + green-gate status. Not blocked on any engineering work — blocked only on the human decision to publish. Non-gating advisories remain deferred (SA91 CR-SA91-REV-006 low; SA89B-CR-004; SA93-REV-005; SA93-ADV-001..004; SA104-ADV-001; SA105-ADV-001; CR-SA106-002; SA110-ADV-001).
 
-**Net.** Tracks 1 and 3 have no open assistant work; Track 3's only remaining item is the human-only SA96-PUBLISH. Track 2's **SA108** is the sole open assistant-executable item, file-disjoint from the release path. See [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision) for the recorded squash/guardrail/shrink-only-quality policies; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
+**Net.** Tracks 1 and 2 are complete; Track 3 has no open assistant work — its only remaining item is the human-only SA96-PUBLISH. See [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision) for the recorded squash/guardrail/shrink-only-quality policies; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
