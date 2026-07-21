@@ -350,6 +350,21 @@ test-unit:
 test-integration:
 	@scripts/test_integration.sh
 
+# Run ONLY the BYPASSRLS-privileged tests (the `-m bypass_rls` migration/DDL
+# proofs that the default NOBYPASSRLS integration run skips). Kept separate on
+# purpose: it requires a DB role WITH the BYPASSRLS attribute, whereas the main
+# suite must stay NOBYPASSRLS so RLS-enforcement/boundary tests remain honest.
+# The `-m bypass_rls` filter deselects the restricted-role boundary tests, so a
+# BYPASSRLS role never produces false isolation failures. Coverage gate is
+# skipped since this deliberately runs a small subset.
+#
+# Requires: QS_*_DB_USER pointed at a LOGIN CREATEDB BYPASSRLS role (see
+# scripts/test_isolation_conformance.sh for the role-creation pattern).
+# Intended for a nightly/manual CI job, not the fast pre-commit gate.
+test-bypassrls:
+	@QUICKSCALE_ALLOW_BYPASSRLS=1 QS_SKIP_COVERAGE_GATE=1 \
+		scripts/test_integration.sh -- -m bypass_rls
+
 # Run E2E tests (starts PostgreSQL container, installs Playwright browsers)
 test-e2e:
 	@scripts/test_e2e.sh
