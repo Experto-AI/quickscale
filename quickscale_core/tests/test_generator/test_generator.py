@@ -543,6 +543,17 @@ class TestProjectGeneratorThemeValidation:
 class TestProjectGeneratorErrorPaths:
     """Tests for generate() and poetry lock error handling."""
 
+    @pytest.fixture(autouse=True)
+    def _exercise_real_poetry_lock(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Opt back into the real ``_generate_poetry_lock`` code path.
+
+        The session ``_skip_generator_poetry_lock`` fixture sets
+        ``QS_SKIP_POETRY_LOCK`` for non-e2e tests so generation never shells out
+        to Poetry. These tests deliberately exercise that method (with a mocked
+        subprocess, so no real Poetry runs), so the skip must be cleared here.
+        """
+        monkeypatch.delenv("QS_SKIP_POETRY_LOCK", raising=False)
+
     def test_generate_raises_permission_error_when_ensure_directory_fails(
         self, tmp_path: Path
     ) -> None:
