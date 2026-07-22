@@ -3,11 +3,13 @@
 #
 # Builds all wheels from per-run staged copies (never touches source
 # pyproject.toml), installs them into a throwaway venv OUTSIDE the source
-# tree (so ``parents[4]/quickscale_modules`` cannot resolve), and runs 19
+# tree (so ``parents[4]/quickscale_modules`` cannot resolve), and runs 20
 # probes: 18 version/help commands assert exit 0 and no traceback; the 19th
 # runs ``quickscale status`` outside a project and asserts exit 1, the
-# expected diagnostic, and no traceback.  All probes execute from an external
-# workdir with a sanitized environment.
+# expected diagnostic, and no traceback; the 20th runs ``quickscale plan`` from
+# an external workdir with all 12 modules via scripted stdin, exercising the full
+# module-implication graph (SA111a).  All probes execute from an external workdir
+# with a sanitized environment.
 #
 # Stage isolation guarantees concurrent build/publish activity cannot share
 # backups, rewritten metadata, or dist directories.
@@ -37,7 +39,7 @@
 # Must run from the repository root.
 #
 # Excludes state-changing / outward-facing commands:
-#   up down shell manage logs ps deploy dr update push plan apply remove
+#   up down shell manage logs ps deploy dr update push apply remove
 #
 # Usage:
 #   ./scripts/smoke_install.sh
@@ -523,6 +525,38 @@ if ! run_smoke_probe "quickscale status (outside project, expect exit 1)" \
     "$SMOKE_QUICKSCALE" "status"; then
     FAILED=1
 fi
+
+# quickscale plan probe (SA111a): non-interactive with all 12 modules via
+# scripted stdin, exercising the full module-implication graph from an
+# installed context.  Must exit 0 with no traceback.
+PLAN_TEST_DIR="$(mktemp -d -p "$SMOKE_WORK_DIR" quickscale-plan-test-XXXXXX)"
+(
+    cd "$PLAN_TEST_DIR"
+    # Prevent source-tree leakage through environment variables (SA111a).
+    unset PYTHONPATH
+    unset PYTHONHOME
+    echo "    🔍 quickscale plan testproj (all 12 modules, expect exit 0)"
+    output="$(
+        printf '\n\n1,2,3,4,5,6,7,8,9,10,11,12\ny\ny\ny\ny\n' | \
+        "$SMOKE_QUICKSCALE" plan testproj 2>&1
+    )" && exit_code=0 || exit_code=$?
+
+    if echo "$output" | grep -q 'Traceback (most recent call last)'; then
+        echo "      ❌ TRACEBACK DETECTED"
+        echo "      Output:"
+        echo "$output" | sed 's/^/        /'
+        exit 1
+    fi
+
+    if [[ $exit_code -ne 0 ]]; then
+        echo "      ❌ Expected exit code 0 but got $exit_code"
+        echo "      Output:"
+        echo "$output" | sed 's/^/        /'
+        exit 1
+    fi
+
+    echo "      ✅ exit $exit_code, no traceback"
+) || FAILED=1
 
 echo ""
 
