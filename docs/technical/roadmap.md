@@ -53,11 +53,12 @@ git merge --no-ff wt-track{N}
 
 The green-gate join (SA96-GATE) is green with empty quarantine. The **Track 3 (release path)** chain below is the critical path; one independent verification ticket (**SA114**) runs in parallel on the otherwise-idle **Track 1**. Track 2 is complete.
 
-1. **[x] SA113** (installed-context implication-resolver fallback, Track 3) — **complete.** `resolve_module_implications` now falls back to bundled manifest snapshots when the source-tree modules path is unavailable, covering both `plan` and `apply` call sites. SA111/SA112 are now unblocked.
-2. **SA111** (installed-context `plan`+implication coverage, Track 3) — regression coverage for the now-fixed crash: SA111a (authoritative `smoke-install` probe) + SA111b (optional fast monkeypatch unit test). Deps: SA113 ✓.
-3. **SA112** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — heavy e2e lane covering `apply`'s own resolver call site and the Docker path from a real install. Deps: SA110 ✓ + SA111a + SA113 ✓.
-4. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Baseline prerequisites met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓ + SA113 ✓); awaits a human maintainer to execute the irreversible publish. Hold: must not publish while SA111/SA112 remain open.
-5. **SA114** (v87 gate re-verification & fix sweep, Track 1, `deps: none`) — re-run `make check`/`quality`/`ci`/`ci-e2e` on current `v87` HEAD (the green-gate join was proven at the synced baseline, not HEAD) and fix any drift. Runs in parallel with the Track 3 chain; heavy `ci`/`ci-e2e` legs serialized against Track 3's PG/Docker usage, and any fix in SA113's resolver/`scripts` surface deferred to Track 3.
+> **SA113 landed** (installed-context implication-resolver bundled-manifest fallback with fail-hard inventory validation, covering both the `plan` and `apply` call sites) and is recorded in [CHANGELOG.md](../../CHANGELOG.md); it unblocked SA111/SA112. Referenced below as `SA113 ✓`.
+
+1. **SA111** (installed-context `plan`+implication coverage, Track 3) — regression coverage for the now-fixed crash: SA111a (authoritative `smoke-install` probe) + SA111b (optional fast monkeypatch unit test). Deps: SA113 ✓.
+2. **SA112** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — heavy e2e lane covering `apply`'s own resolver call site and the Docker path from a real install. Deps: SA110 ✓ + SA111a + SA113 ✓.
+3. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Baseline prerequisites met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓ + SA113 ✓); awaits a human maintainer to execute the irreversible publish. Hold: must not publish while SA111/SA112 remain open.
+4. **SA114** (v87 gate re-verification & fix sweep, Track 1, `deps: none`) — re-run `make check`/`quality`/`ci`/`ci-e2e` on current `v87` HEAD (the green-gate join was proven at the synced baseline, not HEAD) and fix any drift. Runs in parallel with the Track 3 chain; heavy `ci`/`ci-e2e` legs serialized against Track 3's PG/Docker usage, and any fix in SA113's resolver/`scripts` surface deferred to Track 3.
 
 Arch **Finding 10** (`frontend-source-generation-specialized`) is **closed** by the SA104→SA108 chain (see arch-audit reconciliation log, 2026-07-21). Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays unscheduled — the Finding 10 chain shrank its surface; sequence any tuple-derivation work after it. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module.
 
@@ -96,31 +97,7 @@ SA96-GATE proved the four-command join green **at the post-SA92 synced baseline*
 
 ### Track 3 — Core/CLI plumbing — release path
 
-#### SA113 — Installed-context implication-resolver bundled-manifest fallback (the fix)
-
-**Pre-fix diagnosis.** SA113 was the critical-path code change that SA111/SA112 now verify. `resolve_module_implications`
-(`quickscale_core/src/quickscale_core/manifest/implications.py:52`) called
-`get_modules_base_path()` with no fallback, so in an installed venv (no source
-workspace) both `plan` (`plan_command.py:102`) and `apply` (`apply_command.py:973`)
-crashed with `ImproperlyConfigured: Modules base path not found`. The module picker
-already solved this in SA109 — the resolver now adopts the same pattern.
-
-- [x] **SA113 — Add bundled-manifest fallback to `resolve_module_implications`.** `Tier 1 · Track 3 · deps: SA109 ✓`
-  Mirror the picker's SA109 pattern (`module_catalog.get_discovered_module_names` →
-  `try/except ImproperlyConfigured → get_bundled_manifests_path()`) inside
-  `resolve_module_implications`, so implication resolution falls back to the bundled
-  manifest snapshots (`quickscale_core/data/manifests/*/module.yml`) when the source
-  workspace is absent. The fix must cover **both** call sites reached from
-  `_materialize_implied_module_configs` — `plan` (`plan_command.py:102`) and `apply`
-   (`apply_command.py:973`); neither had an installed-context path before the fix. Follow the
-  AF7 fail-hard contract ([decisions.md §Bundled Module Inventory (AF7)](./decisions.md#af7-installed-wheel-module-discovery)):
-  source-required operations stay fail-hard; only the resolvable-from-snapshot
-  implication lookup gains the fallback.
-  - Verify: `resolve_module_implications(["billing"])` resolves billing → orgs with
-    `get_modules_base_path` unavailable; SA111a `make smoke-install` goes green (was red);
-    SA111b unit test passes; no regression in the in-monorepo `plan`/`apply` paths.
-  - **Findings/blockers:** None.
-  *(why →* SA109 fixed discovery but left the implication resolver fallback-less; it was the sole remaining installed-wheel crash on the release path, and every coverage ticket (SA111/SA112) was red until it landed*)*
+> **SA113 (installed-context implication-resolver bundled-manifest fallback) is complete** — see [CHANGELOG.md](../../CHANGELOG.md). It added the fallback (mirroring the SA109 picker pattern) to `resolve_module_implications` for both the `plan` and `apply` call sites, with a fail-hard inventory boundary, resolving the sole remaining installed-wheel crash on the release path and unblocking SA111/SA112.
 
 #### SA111 — Installed-context `plan` + module-implication coverage gap
 
