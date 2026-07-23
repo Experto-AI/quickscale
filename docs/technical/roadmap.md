@@ -158,25 +158,7 @@ Most groundwork already exists and is xdist-aware: `pytest-xdist ^3.8.0` is alre
 
 ### Track 3 — Core/CLI plumbing — release path
 
-> The installed-context resolver crash (`ImproperlyConfigured: Modules base path not found`) is closed: **SA113 ✓** added the bundled-manifest fallback to `resolve_module_implications` for both the `plan` and `apply` call sites (with a fail-hard inventory boundary), and **SA111a ✓** proved the fixed `plan` path in `smoke-install` (all 12 modules from an installed wheel). Both are recorded in [CHANGELOG.md](../../CHANGELOG.md). `apply`'s own installed-context lifecycle coverage remains open as **SA112**; **SA111b** below is an optional, non-gating companion.
-
-#### SA111b — (optional) Fast in-monorepo resolver monkeypatch test
-
-- [x] **SA111b — (optional) Fast in-monorepo resolver monkeypatch test.** `Tier 1 · Track 3 · deps: SA109 ✓ · optional`
-  Optional quick-signal companion: a unit test in
-  `quickscale_core/tests/test_manifest_implications.py` that monkeypatches
-  `implications.get_modules_base_path` to raise `ImproperlyConfigured` and asserts
-  `resolve_module_implications(["billing"])` still resolves billing → orgs via
-  `get_bundled_manifests_path()`. Runs in `make check` for a fast regression tick,
-  but is **not** the authoritative guard (it simulates rather than reproduces the
-  installed context — that reproduction is SA111a's job, already complete). Skip if SA111a is deemed sufficient.
-   - Verify: now unblocked — the resolver's bundled-manifest fallback (SA113) has landed, so this quick-signal unit test is expected to verify the fix once implemented.
-   - **Completion (2026-07-23):** Added `TestSa111bFallbackRegression` class
-     with `test_fallback_resolves_billing_to_orgs` in
-     `quickscale_core/tests/test_manifest_implications.py`. Focused test passes
-     (1/1); existing SA113 bundled-fallback tests unchanged (7/7); targeted
-     implication suite 38 passed. See [CHANGELOG.md](../../CHANGELOG.md).
-  *(why →* cheap early signal on every commit, but explicitly secondary to the real installed-wheel probe*)*
+> The installed-context resolver crash (`ImproperlyConfigured: Modules base path not found`) is closed: **SA113 ✓** added the bundled-manifest fallback to `resolve_module_implications` for both the `plan` and `apply` call sites (with a fail-hard inventory boundary), and **SA111a ✓** proved the fixed `plan` path in `smoke-install` (all 12 modules from an installed wheel). Both are recorded in [CHANGELOG.md](../../CHANGELOG.md). `apply`'s own installed-context lifecycle coverage remains open as **SA112**. (The optional in-monorepo fallback regression test **SA111b ✓** is complete and recorded in [CHANGELOG.md](../../CHANGELOG.md).)
 
 #### SA112 — Installed-wheel full-lifecycle e2e (`plan → apply → up`)
 
@@ -246,9 +228,7 @@ SA116 (resolvers.py      SA115 (e2e xdist; deps: none,       │
   ≤1749; deps: none)      merge after SA112)                │
                           (arch Finding 10 chain closed)     SA113 ✓ ── bundled-manifest fallback
                                                                       │  both call sites (plan+apply)
-                                                             ┌────────┴────────┐
-                                                           SA111a ✓         SA111b (optional)
-                                                         (smoke probe)     (fast unit test)
+                                                             SA111a ✓ (smoke probe) · SA111b ✓ (unit test)
                                                              │
                                                            SA112 ── installed-wheel plan→apply→up e2e
                                                              │
