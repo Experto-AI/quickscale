@@ -988,7 +988,7 @@ publish-modules-outdated:
 clean:
 	rm -rf quickscale/dist/ quickscale_core/dist/ quickscale_cli/dist/
 	rm -rf .pytest_cache/ .mypy_cache/ .ruff_cache/
-	rm -rf htmlcov/ .coverage coverage.json
+	rm -rf htmlcov/ htmlcov_*/ .coverage coverage.json
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@echo "✅ Cleaned!"
 
