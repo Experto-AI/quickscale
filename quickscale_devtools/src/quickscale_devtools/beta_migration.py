@@ -471,6 +471,11 @@ MODE_REQUIRED_SPECS: dict[
                 "file",
                 "fresh scaffold managed modules hook",
             ),
+            RequiredPathSpec(
+                "frontend/src/lib/validateQuickScaleSeam.ts",
+                "file",
+                "fresh scaffold runtime seam validation — useModules.ts imports this at runtime",
+            ),
         ),
         "recipient": (),
     },

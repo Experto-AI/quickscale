@@ -1070,3 +1070,418 @@ class TestCheckCILocallyStageNumbering:
                 )
                 found_dynamic = True
         assert found_dynamic, "E2E stage header echo not found"
+
+
+class TestCheckQuietSectionDispatch:
+    """
+    Bounded behavioral assertions for ``make check QUIET=1`` section dispatch.
+
+    Each test runs ``make check QUIET=1`` with a fake Python that logs every
+    invocation and exits 0, plus a no-op ``MAKE=true`` override so gate targets
+    (check-core-compat, etc.) are silently skipped.  This captures which
+    source, test, and module directories are actually passed to ruff, mypy,
+    and pytest for a given SECTIONS value.
+    """
+
+    MAKEFILE_PATH = os.path.join(os.path.dirname(__file__), "..", "Makefile")
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _write_fake_python(self, tmp_path: Path) -> tuple[Path, Path]:
+        """Create a deterministic fake Python that logs invocations and exits 0."""
+        fake_python = tmp_path / "fake_python.py"
+        event_log = tmp_path / "events.jsonl"
+        fake_python.write_text(
+            textwrap.dedent("""\
+                #!/usr/bin/env python3
+                import json, os, sys
+                from pathlib import Path
+
+                log_path = Path(os.environ["FAKE_LOG"])
+                args = sys.argv[1:]
+                with log_path.open("a", encoding="utf-8") as stream:
+                    json.dump({"kind": "invoke", "args": args}, stream)
+                    stream.write("\\n")
+                raise SystemExit(0)
+            """).lstrip(),
+            encoding="utf-8",
+        )
+        fake_python.chmod(0o755)
+        return fake_python, event_log
+
+    def _run_quiet_check(
+        self,
+        tmp_path: Path,
+        *,
+        sections: str = "",
+        module: str = "",
+        extra_env: dict[str, str] | None = None,
+    ) -> tuple[subprocess.CompletedProcess[str], list[dict]]:
+        """Run ``make check QUIET=1`` with fake Python and no-op sub-make."""
+        fake_python, event_log = self._write_fake_python(tmp_path)
+
+        env = os.environ.copy()
+        for key in ("SECTIONS", "SECTION", "MODULE", "PYTEST_XDIST_WORKERS"):
+            env.pop(key, None)
+        env["FAKE_LOG"] = str(event_log)
+
+        cmd = [
+            "make",
+            "--no-print-directory",
+            "-f",
+            self.MAKEFILE_PATH,
+            f"PYTHON={fake_python}",
+            "MAKE=true",
+            "QUIET=1",
+        ]
+        if sections:
+            cmd.append(f"SECTIONS={sections}")
+        if module:
+            cmd.append(f"MODULE={module}")
+        cmd.append("check")
+
+        result = subprocess.run(
+            cmd,
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        events: list[dict] = []
+        if event_log.exists() and event_log.stat().st_size > 0:
+            with event_log.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        events.append(json.loads(line))
+        return result, events
+
+    @staticmethod
+    def _ruff_check_invocations(events: list[dict]) -> list[list[str]]:
+        """Return args for each ``ruff check`` invocation."""
+        return [e["args"] for e in events if "ruff" in e["args"] and "check" in e["args"]]
+
+    @staticmethod
+    def _ruff_format_invocations(events: list[dict]) -> list[list[str]]:
+        """Return args for each ``ruff format --check`` invocation."""
+        return [e["args"] for e in events if "ruff" in e["args"] and "format" in e["args"]]
+
+    @staticmethod
+    def _mypy_invocations(events: list[dict]) -> list[list[str]]:
+        """Return args for each ``mypy --show-error-codes`` invocation."""
+        return [e["args"] for e in events if "mypy" in e["args"]]
+
+    @staticmethod
+    def _pytest_invocations(events: list[dict]) -> list[list[str]]:
+        """Return args for each ``pytest`` invocation."""
+        return [e["args"] for e in events if "pytest" in e["args"]]
+
+    # ------------------------------------------------------------------
+    # Default (all sections)
+    # ------------------------------------------------------------------
+
+    def test_default_all_sections_uses_all_dirs(self, tmp_path: Path) -> None:
+        """Default QUIET=1 includes all source and test dirs."""
+        result, events = self._run_quiet_check(tmp_path)
+        assert result.returncode == 0, (
+            f"make check QUIET=1 (default) failed: {result.stdout}\n{result.stderr}"
+        )
+
+        ruff_check = self._ruff_check_invocations(events)
+        ruff_check_str = " ".join(" ".join(a) for a in ruff_check)
+        assert "quickscale/src" in ruff_check_str
+        assert "quickscale_core/src" in ruff_check_str
+        assert "quickscale_cli/src" in ruff_check_str
+        assert "quickscale_devtools/src" in ruff_check_str
+
+        pytest_calls = self._pytest_invocations(events)
+        pytest_str = " ".join(" ".join(a) for a in pytest_calls)
+        assert "quickscale_core/tests" in pytest_str
+        assert "quickscale_cli/tests" in pytest_str
+
+    def test_default_includes_modules_when_present(self, tmp_path: Path) -> None:
+        """Default QUIET=1 with a real module dir present runs module ruff/mypy."""
+        mod_dir = tmp_path / "quickscale_modules" / "testmod" / "src"
+        mod_dir.mkdir(parents=True)
+        (mod_dir / "__init__.py").write_text("", encoding="utf-8")
+
+        result, events = self._run_quiet_check(tmp_path)
+        assert result.returncode == 0
+
+        ruff_check = self._ruff_check_invocations(events)
+        ruff_str = " ".join(" ".join(a) for a in ruff_check)
+        # Make variable expansion uses relative paths (from cwd)
+        assert "quickscale_modules/testmod/src" in ruff_str
+
+        mypy_calls = self._mypy_invocations(events)
+        mypy_str = " ".join(" ".join(a) for a in mypy_calls)
+        assert "quickscale_modules/testmod/src" in mypy_str
+
+    # ------------------------------------------------------------------
+    # Modules-only
+    # ------------------------------------------------------------------
+
+    def test_modules_only_skips_pytest(self, tmp_path: Path) -> None:
+        """Modules-only QUIET=1 does not run pytest (no core/cli test dirs)."""
+        result, events = self._run_quiet_check(tmp_path, sections="modules")
+        assert result.returncode == 0, (
+            f"make check QUIET=1 SECTIONS=modules failed: {result.stdout}\n{result.stderr}"
+        )
+
+        # Should have no pytest invocations
+        pytest_calls = self._pytest_invocations(events)
+        assert len(pytest_calls) == 0, (
+            f"modules-only QUIET=1 must skip pytest; got invocations: {pytest_calls}"
+        )
+
+        # Should have ruff runs but only for module dirs, not core/cli
+        ruff_check = self._ruff_check_invocations(events)
+        ruff_str = " ".join(" ".join(a) for a in ruff_check)
+        assert "quickscale_core/src" not in ruff_str, (
+            "modules-only QUIET=1 must not include core src"
+        )
+
+    def test_modules_only_runs_module_mypy_with_mypypath(self, tmp_path: Path) -> None:
+        """Modules-only QUIET=1 runs per-module mypy with MYPYPATH."""
+        mod_a = tmp_path / "quickscale_modules" / "mod_a" / "src"
+        mod_a.mkdir(parents=True)
+        (mod_a / "__init__.py").write_text("", encoding="utf-8")
+        mod_b = tmp_path / "quickscale_modules" / "mod_b" / "src"
+        mod_b.mkdir(parents=True)
+        (mod_b / "__init__.py").write_text("", encoding="utf-8")
+
+        result, events = self._run_quiet_check(tmp_path, sections="modules")
+        assert result.returncode == 0
+
+        mypy_calls = self._mypy_invocations(events)
+        assert len(mypy_calls) >= 1
+
+        # Each module should have its own mypy invocation with --show-error-codes
+        for mod in ("mod_a", "mod_b"):
+            found = any(f"quickscale_modules/{mod}" in " ".join(a) for a in mypy_calls)
+            assert found, f"module {mod} should have a mypy invocation"
+
+    # ------------------------------------------------------------------
+    # Core-only
+    # ------------------------------------------------------------------
+
+    def test_core_only_includes_core_dirs(self, tmp_path: Path) -> None:
+        """Core-only QUIET=1 includes core src and core tests only."""
+        result, events = self._run_quiet_check(tmp_path, sections="core")
+        assert result.returncode == 0
+
+        ruff_check_str = " ".join(" ".join(a) for a in self._ruff_check_invocations(events))
+        assert "quickscale_core/src" in ruff_check_str
+        assert "quickscale/src" not in ruff_check_str
+        assert "quickscale_cli/src" not in ruff_check_str
+
+        pytest_str = " ".join(" ".join(a) for a in self._pytest_invocations(events))
+        assert "quickscale_core/tests" in pytest_str
+        assert "quickscale_cli/tests" not in pytest_str
+
+    # ------------------------------------------------------------------
+    # Core + CLI
+    # ------------------------------------------------------------------
+
+    def test_core_cli_includes_both_test_dirs(self, tmp_path: Path) -> None:
+        """Core+CLI QUIET=1 includes both core and CLI test dirs."""
+        result, events = self._run_quiet_check(tmp_path, sections="core cli")
+        assert result.returncode == 0
+
+        ruff_str = " ".join(" ".join(a) for a in self._ruff_check_invocations(events))
+        assert "quickscale_core/src" in ruff_str
+        assert "quickscale_cli/src" in ruff_str
+
+        pytest_str = " ".join(" ".join(a) for a in self._pytest_invocations(events))
+        assert "quickscale_core/tests" in pytest_str
+        assert "quickscale_cli/tests" in pytest_str
+
+    # ------------------------------------------------------------------
+    # Structural — Makefile source patterns
+    # ------------------------------------------------------------------
+
+    def test_quiet_path_has_section_filters(self) -> None:
+        """Makefile QUIET=1 path uses ACTIVE_SECTIONS filtering (not SRC_DIRS)."""
+        with open(self.MAKEFILE_PATH, encoding="utf-8") as fh:
+            content = fh.read()
+
+        check_start = content.find("\ncheck:")
+        assert check_start >= 0
+        section = content[check_start:]
+
+        # The QUIET path should NOT reference SRC_DIRS or TEST_DIRS
+        quiet_section_start = section.find("$(QUIET)")
+        assert quiet_section_start >= 0
+        quiet_section = section[quiet_section_start:]
+        # Find the else branch
+        else_start = quiet_section.find("\n\telse")
+        quiet_then = quiet_section[:else_start] if else_start >= 0 else quiet_section
+
+        # The quiet path must not use the hardcoded SRC_DIRS or TEST_DIRS vars
+        assert "$(SRC_DIRS)" not in quiet_then, "QUIET=1 path must not reference hardcoded SRC_DIRS"
+        assert "$(TEST_DIRS)" not in quiet_then, (
+            "QUIET=1 path must not reference hardcoded TEST_DIRS"
+        )
+
+    def test_quiet_path_filters_by_active_sections(self) -> None:
+        """Makefile QUIET=1 path filters source dirs by ACTIVE_SECTIONS."""
+        with open(self.MAKEFILE_PATH, encoding="utf-8") as fh:
+            content = fh.read()
+
+        check_start = content.find("\ncheck:")
+        assert check_start >= 0
+        section = content[check_start:]
+
+        # Verify the QUIET path uses $(filter ... $(ACTIVE_SECTIONS)) for source dirs
+        assert "$(filter quickscale,$(ACTIVE_SECTIONS))" in section
+        assert "$(filter core,$(ACTIVE_SECTIONS))" in section
+        assert "$(filter cli,$(ACTIVE_SECTIONS))" in section
+        assert "$(filter devtools,$(ACTIVE_SECTIONS))" in section
+
+    def test_quiet_path_skips_pytest_when_no_core_cli(self) -> None:
+        """Makefile QUIET=1 pytest section checks for core/cli before running."""
+        with open(self.MAKEFILE_PATH, encoding="utf-8") as fh:
+            content = fh.read()
+
+        check_start = content.find("\ncheck:")
+        assert check_start >= 0
+        section = content[check_start:]
+
+        # The QUIET path should build test dirs from core/cli ACTIVE_SECTIONS guards
+        quiet_q_test = section.find('q_test_dirs=""')
+        assert quiet_q_test >= 0, "QUIET path should build q_test_dirs"
+        # Verify pytest only runs when q_test_dirs is non-empty
+        assert '-n "$$q_test_dirs"' in section
+
+    def test_quiet_path_runs_modules_with_per_module_mypy(self) -> None:
+        """Makefile QUIET=1 path runs per-module mypy with MYPYPATH for modules."""
+        with open(self.MAKEFILE_PATH, encoding="utf-8") as fh:
+            content = fh.read()
+
+        check_start = content.find("\ncheck:")
+        assert check_start >= 0
+        section = content[check_start:]
+
+        # Module mypy should use MYPYPATH setup like the typecheck target
+        assert 'MYPYPATH="$$module_mypypath"' in section
+        assert "--show-error-codes" in section
+        # Per-module mypy with captured log output (not bare stderr passthrough)
+        assert "_mod_log.txt" in section
+
+    # ------------------------------------------------------------------
+    # REV-002: Ruff test-directory parity in QUIET mode
+    # ------------------------------------------------------------------
+
+    def test_quiet_ruff_includes_core_cli_test_dirs(self, tmp_path: Path) -> None:
+        """Default QUIET=1 Ruff includes core and CLI test dirs alongside src."""
+        result, events = self._run_quiet_check(tmp_path)
+        assert result.returncode == 0, (
+            f"make check QUIET=1 failed: {result.stdout}\n{result.stderr}"
+        )
+
+        ruff_check = self._ruff_check_invocations(events)
+        ruff_check_str = " ".join(" ".join(a) for a in ruff_check)
+        assert "quickscale_core/tests" in ruff_check_str, (
+            "QUIET=1 Ruff check must include quickscale_core/tests"
+        )
+        assert "quickscale_cli/tests" in ruff_check_str, (
+            "QUIET=1 Ruff check must include quickscale_cli/tests"
+        )
+
+        ruff_format = self._ruff_format_invocations(events)
+        ruff_format_str = " ".join(" ".join(a) for a in ruff_format)
+        assert "quickscale_core/tests" in ruff_format_str, (
+            "QUIET=1 Ruff format must include quickscale_core/tests"
+        )
+        assert "quickscale_cli/tests" in ruff_format_str, (
+            "QUIET=1 Ruff format must include quickscale_cli/tests"
+        )
+
+    def test_quiet_mypy_src_only(self, tmp_path: Path) -> None:
+        """Default QUIET=1 MyPy covers only source dirs, not test dirs."""
+        result, events = self._run_quiet_check(tmp_path)
+        assert result.returncode == 0, (
+            f"make check QUIET=1 failed: {result.stdout}\n{result.stderr}"
+        )
+
+        mypy_calls = self._mypy_invocations(events)
+        mypy_str = " ".join(" ".join(a) for a in mypy_calls)
+        assert "quickscale_core/src" in mypy_str
+        assert "quickscale_core/tests" not in mypy_str, (
+            "QUIET=1 MyPy must NOT include core test dirs"
+        )
+        assert "quickscale_cli/tests" not in mypy_str, "QUIET=1 MyPy must NOT include CLI test dirs"
+
+    def test_quiet_module_ruff_includes_test_dirs_when_present(self, tmp_path: Path) -> None:
+        """QUIET=1 Ruff for modules includes test dirs when they exist."""
+        mod_dir = tmp_path / "quickscale_modules" / "testmod"
+        (mod_dir / "src" / "__init__.py").parent.mkdir(parents=True)
+        (mod_dir / "src" / "__init__.py").write_text("", encoding="utf-8")
+        (mod_dir / "tests" / "__init__.py").parent.mkdir(parents=True)
+        (mod_dir / "tests" / "__init__.py").write_text("", encoding="utf-8")
+
+        result, events = self._run_quiet_check(tmp_path)
+        assert result.returncode == 0, (
+            f"make check QUIET=1 failed: {result.stdout}\n{result.stderr}"
+        )
+
+        ruff_check = self._ruff_check_invocations(events)
+        ruff_check_str = " ".join(" ".join(a) for a in ruff_check)
+        assert "quickscale_modules/testmod/tests" in ruff_check_str, (
+            "QUIET=1 module Ruff must include test dirs when present"
+        )
+
+        mypy_calls = self._mypy_invocations(events)
+        mypy_str = " ".join(" ".join(a) for a in mypy_calls)
+        assert "quickscale_modules/testmod/src" in mypy_str
+        assert "quickscale_modules/testmod/tests" not in mypy_str, (
+            "QUIET=1 module MyPy must NOT include test dirs"
+        )
+
+    def test_quiet_module_ruff_skips_test_dirs_when_absent(self, tmp_path: Path) -> None:
+        """QUIET=1 Ruff for modules does not add test dir args when absent."""
+        mod_dir = tmp_path / "quickscale_modules" / "testmod"
+        (mod_dir / "src" / "__init__.py").parent.mkdir(parents=True)
+        (mod_dir / "src" / "__init__.py").write_text("", encoding="utf-8")
+        # No tests/ dir — intentionally omitted
+
+        result, events = self._run_quiet_check(tmp_path)
+        assert result.returncode == 0, (
+            f"make check QUIET=1 failed: {result.stdout}\n{result.stderr}"
+        )
+
+        ruff_check = self._ruff_check_invocations(events)
+        for args in ruff_check:
+            args_str = " ".join(args)
+            if "quickscale_modules/testmod" in args_str:
+                assert "tests" not in args_str, (
+                    f"Module without tests/ dir must not include tests arg: {args_str}"
+                )
+                break
+        else:
+            raise AssertionError("Expected a Ruff invocation for quickscale_modules/testmod")
+
+    def test_quiet_pytest_core_cli_only(self, tmp_path: Path) -> None:
+        """QUIET=1 pytest covers only core and CLI test dirs, not module tests."""
+        mod_dir = tmp_path / "quickscale_modules" / "testmod"
+        (mod_dir / "src" / "__init__.py").parent.mkdir(parents=True)
+        (mod_dir / "src" / "__init__.py").write_text("", encoding="utf-8")
+        (mod_dir / "tests" / "__init__.py").parent.mkdir(parents=True)
+        (mod_dir / "tests" / "__init__.py").write_text("", encoding="utf-8")
+
+        result, events = self._run_quiet_check(tmp_path)
+        assert result.returncode == 0, (
+            f"make check QUIET=1 failed: {result.stdout}\n{result.stderr}"
+        )
+
+        pytest_calls = self._pytest_invocations(events)
+        pytest_str = " ".join(" ".join(a) for a in pytest_calls)
+        assert "quickscale_core/tests" in pytest_str
+        assert "quickscale_cli/tests" in pytest_str
+        assert "quickscale_modules/testmod/tests" not in pytest_str, (
+            "QUIET=1 pytest must NOT include module test dirs"
+        )
