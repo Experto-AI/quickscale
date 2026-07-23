@@ -15,8 +15,26 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 VENV_BIN="$REPO_ROOT/.venv/bin"
 # shellcheck source=./_python_requirement.sh
 source "$REPO_ROOT/scripts/_python_requirement.sh"
+# shellcheck source=./_qs_jobs.sh
+source "$REPO_ROOT/scripts/_qs_jobs.sh"
 REQUIRED_PYTHON_VERSION="$(quickscale_min_python_version "$REPO_ROOT")"
 POETRY_AVAILABLE=false
+
+# Lane mode: core and CLI unit suites are independent and DB-free, so they run
+# as concurrent background workers by default (mirrors QS_E2E_PARALLEL in
+# test_e2e.sh).  Set QS_UNIT_PARALLEL=0 to run the lanes serially.
+if [ "${QS_UNIT_PARALLEL:-1}" = "0" ]; then
+  UNIT_PARALLEL=false
+else
+  UNIT_PARALLEL=true
+fi
+
+# Per-worker scratch dir for lane logs, statuses, coverage data, and results.
+WORKER_TEMP_DIR="$(mktemp -d)"
+# Worker-pool bookkeeping consumed by the _qs_* helpers in _qs_jobs.sh.
+WORKER_PIDS=()
+WORKER_ORDER=()
+WORKER_WAIT_PID=""
 
 SHOW_FULL_OUTPUT=false
 # Repository policy is dual-threshold: protect floor quality per file while
@@ -28,9 +46,16 @@ COVERAGE_RESULTS_FILE="$(mktemp)"
 
 cleanup_temp_files() {
   rm -f "$COVERAGE_RESULTS_FILE"
+  if [ -n "${WORKER_TEMP_DIR:-}" ] && [ -d "$WORKER_TEMP_DIR" ]; then
+    rm -rf "$WORKER_TEMP_DIR"
+  fi
 }
 
 trap cleanup_temp_files EXIT
+# Terminate lane worker subtrees and clean up on interrupt (shared handler).
+trap '_handle_worker_signal INT 130' INT
+trap '_handle_worker_signal TERM 143' TERM
+trap '_handle_worker_signal HUP 129' HUP
 
 if command -v poetry >/dev/null 2>&1; then
   POETRY_AVAILABLE=true
@@ -116,6 +141,9 @@ show_help() {
   echo "  --full            Show full pytest output (per-file lines + coverage details)"
   echo "  --verbose, -v     Alias for --full"
   echo "  --help, -h        Show this help message"
+  echo ""
+  echo "Environment:"
+  echo "  QS_UNIT_PARALLEL=0  Run core and CLI lanes serially (default: concurrent)"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -253,7 +281,9 @@ run_pytest_stage() {
   )
 
   if [ "$include_html_report" = true ]; then
-    shared_args+=(--cov-report=html)
+    # Stage-specific HTML dir: concurrent lanes would otherwise both write the
+    # default htmlcov/ and clobber each other.
+    shared_args+=("--cov-report=html:htmlcov_${stage_name}")
   fi
 
   local -a quiet_args=(
@@ -309,6 +339,115 @@ run_pytest_stage() {
   return 0
 }
 
+# Map a lane id to its (stage_name, tests-path) pair.
+lane_stage_name() {
+  case "$1" in
+    core) printf 'quickscale_core' ;;
+    cli)  printf 'quickscale_cli' ;;
+  esac
+}
+lane_tests_path() {
+  case "$1" in
+    core) printf 'quickscale_core/tests/' ;;
+    cli)  printf 'quickscale_cli/tests/' ;;
+  esac
+}
+
+# launch_unit_lane <core|cli> [log_file]
+#
+# Runs one package's unit stage in a background subshell.  Each lane isolates
+# its coverage artifacts so concurrent lanes never race:
+#   - COVERAGE_FILE: per-lane .coverage data file (read by `coverage report`)
+#   - COVERAGE_RESULTS_FILE: per-lane results, merged after the join barrier
+# When log_file is given the lane's output is captured for post-join replay
+# (parallel mode); without it the output streams live (serial mode).
+launch_unit_lane() {
+  local lane="$1"
+  local log_file="${2:-}"
+  local status_file="$WORKER_TEMP_DIR/status_$lane"
+  local stage_name tests_path
+  stage_name="$(lane_stage_name "$lane")"
+  tests_path="$(lane_tests_path "$lane")"
+
+  _run_unit_lane_body() {
+    set +e
+    export COVERAGE_FILE="$WORKER_TEMP_DIR/coverage_$lane"
+    COVERAGE_RESULTS_FILE="$WORKER_TEMP_DIR/results_$lane"
+    : > "$COVERAGE_RESULTS_FILE"
+    echo "📦 Testing ${stage_name}..."
+    # Run from root directory to use root Poetry environment (monorepo setup).
+    # Skip E2E tests (run separately with ./scripts/test_e2e.sh).
+    # Use package name (not src/) to avoid double-counting with pyproject addopts.
+    run_pytest_stage \
+      "$stage_name" \
+      "$stage_name" \
+      true \
+      run_repo_tool pytest "$tests_path" -m "not integration and not e2e"
+    local lane_status=$?
+    printf '%s\n' "$lane_status" > "$status_file"
+    exit "$lane_status"
+  }
+
+  if [ -n "$log_file" ]; then
+    ( _run_unit_lane_body ) > "$log_file" 2>&1 &
+  else
+    ( _run_unit_lane_body ) &
+  fi
+  WORKER_PIDS+=("$!")
+}
+
+read_lane_status() {
+  local lane="$1"
+  local status_file="$WORKER_TEMP_DIR/status_$lane"
+  local status
+  if [ -f "$status_file" ]; then
+    read -r status < "$status_file"
+    printf '%s' "$status"
+  else
+    printf '1'
+  fi
+}
+
+# Serial: one lane at a time, streaming output (preserves pre-parallel behavior).
+run_unit_lanes_serial() {
+  local lane lane_status
+  local failed=false
+  for lane in core cli; do
+    WORKER_PIDS=()
+    launch_unit_lane "$lane"
+    _qs_join_workers || failed=true
+    lane_status="$(read_lane_status "$lane")"
+    [ "$lane_status" -ne 0 ] && failed=true
+    # Fold the lane's coverage result into the aggregate for the mean gate.
+    cat "$WORKER_TEMP_DIR/results_$lane" >> "$COVERAGE_RESULTS_FILE" 2>/dev/null || true
+    echo ""
+  done
+  WORKER_PIDS=()
+  [ "$failed" = false ]
+}
+
+# Parallel: launch both lanes, join, then replay logs and merge results in a
+# deterministic order so output and the coverage summary stay stable.
+run_unit_lanes_parallel() {
+  local lane lane_status
+  local failed=false
+  WORKER_PIDS=()
+  WORKER_ORDER=(core cli)
+  launch_unit_lane core "$WORKER_TEMP_DIR/log_core"
+  launch_unit_lane cli "$WORKER_TEMP_DIR/log_cli"
+
+  _qs_join_workers || failed=true
+
+  _qs_replay_worker_logs "$WORKER_TEMP_DIR"
+  _qs_merge_worker_results "$WORKER_TEMP_DIR" "$COVERAGE_RESULTS_FILE"
+  for lane in core cli; do
+    lane_status="$(read_lane_status "$lane")"
+    [ "$lane_status" -ne 0 ] && failed=true
+  done
+  WORKER_PIDS=()
+  [ "$failed" = false ]
+}
+
 echo "🧪 Running unit tests (core + CLI)..."
 if [ "$SHOW_FULL_OUTPUT" = true ]; then
   echo "Output mode: full"
@@ -316,6 +455,11 @@ else
   echo "Output mode: dots"
 fi
 echo "Coverage policy: ${COVERAGE_MEAN_THRESHOLD}% overall mean, ${FILE_COVERAGE_THRESHOLD}% per file"
+if [ "$UNIT_PARALLEL" = true ]; then
+  echo "Lane mode: parallel (core + CLI)"
+else
+  echo "Lane mode: serial (QS_UNIT_PARALLEL=0)"
+fi
 if [ "$POETRY_AVAILABLE" = false ] && [ -x "$VENV_BIN/python" ]; then
   echo "Execution environment: repo-local .venv (Poetry not found on PATH)"
 fi
@@ -328,29 +472,10 @@ fi
 # Track exit codes
 EXIT_CODE=0
 
-echo "📦 Testing quickscale_core..."
-# Run from root directory to use root Poetry environment (monorepo setup)
-# Skip E2E tests (run separately with ./scripts/test_e2e.sh)
-# Use package name (not src/) to avoid double-counting with pyproject.toml addopts
-if ! run_pytest_stage \
-  "quickscale_core" \
-  "quickscale_core" \
-  true \
-  run_repo_tool pytest quickscale_core/tests/ -m "not integration and not e2e"; then
-  EXIT_CODE=1
-fi
-
-echo ""
-echo "📦 Testing quickscale_cli..."
-# Run from root directory to use root Poetry environment (monorepo setup)
-# Skip E2E tests (run separately with ./scripts/test_e2e.sh)
-# Use package name (not src/) to avoid double-counting with pyproject.toml addopts
-if ! run_pytest_stage \
-  "quickscale_cli" \
-  "quickscale_cli" \
-  true \
-  run_repo_tool pytest quickscale_cli/tests/ -m "not integration and not e2e"; then
-  EXIT_CODE=1
+if [ "$UNIT_PARALLEL" = true ]; then
+  run_unit_lanes_parallel || EXIT_CODE=1
+else
+  run_unit_lanes_serial || EXIT_CODE=1
 fi
 
 echo ""
