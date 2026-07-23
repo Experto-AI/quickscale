@@ -527,3 +527,29 @@ class TestBundledManifestFallback:
         ):
             with pytest.raises(ImproperlyConfigured):
                 resolve_module_implications(["billing"])
+
+
+# ---------------------------------------------------------------------------
+# SA111b: Fast in-monorepo fallback regression test
+# ---------------------------------------------------------------------------
+
+
+class TestSa111bFallbackRegression:
+    """SA111b: fast in-monorepo bundled-manifest fallback regression test.
+
+    Monkeypatches ``get_modules_base_path`` to raise ``ImproperlyConfigured``
+    and confirms that ``resolve_module_implications`` falls through to the
+    bundled-manifest snapshots via ``get_bundled_manifests_path()``.  This is
+    a cheap early-signal companion for the authoritative installed-wheel probe
+    (SA111a).  Runs inside ``make check``.
+    """
+
+    def test_fallback_resolves_billing_to_orgs(self) -> None:
+        """Monkeypatch the source-tree path so the resolver falls back to
+        bundled manifests and still resolves billing → orgs."""
+        with patch(
+            "quickscale_core.manifest.implications.get_modules_base_path",
+            side_effect=ImproperlyConfigured("no source tree"),
+        ):
+            result = resolve_module_implications(["billing"])
+            assert "orgs" in result
