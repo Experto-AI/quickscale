@@ -8,6 +8,7 @@ the resolver/wiring logic without requiring module.yml files on disk.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -77,6 +78,7 @@ from quickscale_core.contracts.resolvers import (
     resolve_storage_module_options,
     validate_storage_module_options,
 )
+from quickscale_core.contracts.module_discovery import ImproperlyConfigured
 from quickscale_core.schema.config_schema import ConfigValidationError
 
 from quickscale_core.manifest.schema import ModuleManifest
@@ -755,6 +757,79 @@ class TestResolversNotifications:
         )
         # Should flag placeholder email with resend_domain set
         assert any("placeholder" in i.lower() or "noreply" in i.lower() for i in issues)
+
+    # ------------------------------------------------------------------
+    # Bundled-manifest fallback (SA111a fix)
+    # ------------------------------------------------------------------
+
+    @patch("quickscale_core.contracts.resolvers.get_bundled_manifests_path")
+    @patch("quickscale_core.contracts.resolvers.get_modules_base_path")
+    @patch(_MANIFEST_PATCH_PATH)
+    def test_default_notifications_fallback_on_improperly_configured(
+        self,
+        mock_load: MagicMock,
+        mock_get_base: MagicMock,
+        mock_get_bundled: MagicMock,
+    ) -> None:
+        """default_notifications_module_options falls back to bundled
+        manifest when get_modules_base_path raises ImproperlyConfigured
+        (installed-wheel context without source-tree modules workspace)."""
+        mock_get_base.side_effect = ImproperlyConfigured(
+            "Modules base path not found: expected ..."
+        )
+        mock_get_bundled.return_value = Path("/bundled/manifests")
+        mock_load.return_value = _make_mock_manifest(
+            "notifications",
+            {
+                "enabled": True,
+                "sender_name": "App",
+                "sender_email": "noreply@example.com",
+            },
+        )
+
+        result = default_notifications_module_options()
+        assert result["sender_name"] == "App"
+
+        # Verify the bundled path was used for manifest loading.
+        bundled_call_path = str(mock_load.call_args[0][0])
+        assert "/bundled/manifests" in bundled_call_path
+        assert "notifications" in bundled_call_path
+
+    @patch("quickscale_core.contracts.resolvers.get_bundled_manifests_path")
+    @patch("quickscale_core.contracts.resolvers.get_modules_base_path")
+    @patch(_MANIFEST_PATCH_PATH)
+    def test_resolve_notifications_fallback_on_improperly_configured(
+        self,
+        mock_load: MagicMock,
+        mock_get_base: MagicMock,
+        mock_get_bundled: MagicMock,
+    ) -> None:
+        """resolve_notifications_module_options also falls back to bundled
+        manifests when get_modules_base_path raises ImproperlyConfigured."""
+        mock_get_base.side_effect = ImproperlyConfigured(
+            "Modules base path not found: expected ..."
+        )
+        mock_get_bundled.return_value = Path("/bundled/manifests")
+        mock_load.return_value = _make_mock_manifest(
+            "notifications",
+            {
+                "enabled": True,
+                "sender_name": "App",
+                "sender_email": "noreply@example.com",
+                "resend_domain": "",
+                "default_tags": [],
+                "allowed_tags": [],
+                "reply_to_email": None,
+            },
+        )
+
+        result = resolve_notifications_module_options({"sender_name": "Updated"})
+        assert result["sender_name"] == "Updated"
+
+        # Verify the bundled path was used for manifest loading.
+        bundled_call_path = str(mock_load.call_args[0][0])
+        assert "/bundled/manifests" in bundled_call_path
+        assert "notifications" in bundled_call_path
 
 
 # ===================================================================

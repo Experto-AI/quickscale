@@ -219,6 +219,11 @@ extract_coverage_percent() {
 extract_low_coverage_lines() {
   local coverage_report="$1"
 
+  # Subset runs cover only part of each file — suppress the per-file gate too.
+  if [ "${QS_SKIP_COVERAGE_GATE:-}" = "1" ]; then
+    return 0
+  fi
+
   awk -v threshold="$FILE_COVERAGE_THRESHOLD" '
     /^Name[[:space:]]+Stmts[[:space:]]+Miss[[:space:]]+Cover/ {
       in_report = 1
@@ -262,6 +267,13 @@ build_module_pythonpath() {
 }
 
 check_overall_mean_coverage() {
+  # Subset runs (e.g. `make test-bypassrls`, which runs only `-m bypass_rls`
+  # tests) legitimately cover a fraction of each module, so the mean-coverage
+  # gate does not apply. Opt out explicitly via QS_SKIP_COVERAGE_GATE=1.
+  if [ "${QS_SKIP_COVERAGE_GATE:-}" = "1" ]; then
+    echo "📊 Coverage gate skipped (QS_SKIP_COVERAGE_GATE=1 — subset run)."
+    return 0
+  fi
   if [ ! -s "$COVERAGE_RESULTS_FILE" ]; then
     return 0
   fi
@@ -332,6 +344,13 @@ run_pytest_stage() {
     "${stage_cmd[@]}" "${shared_args[@]}" "${quiet_args[@]}" "${PYTEST_EXTRA_ARGS[@]}" 2>&1 | tee "$run_log"
     stage_exit=${PIPESTATUS[0]}
     set -e
+  fi
+
+  # Subset runs (QS_SKIP_COVERAGE_GATE=1, e.g. `make test-bypassrls -- -m bypass_rls`)
+  # legitimately match zero tests in modules that have none of the selected marker.
+  # pytest exits 5 ("no tests collected") there; treat that as success, not failure.
+  if [ "${QS_SKIP_COVERAGE_GATE:-}" = "1" ] && [ "$stage_exit" -eq 5 ]; then
+    stage_exit=0
   fi
 
   local coverage_pct

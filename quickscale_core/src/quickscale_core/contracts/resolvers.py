@@ -62,7 +62,11 @@ from quickscale_core.manifest.derivation import (
 from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.manifest.resolver import resolve_module_config
 
-from quickscale_core.contracts.module_discovery import get_modules_base_path
+from quickscale_core.contracts.module_discovery import (
+    ImproperlyConfigured,
+    get_bundled_manifests_path,
+    get_modules_base_path,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -790,9 +794,17 @@ _LEGACY_NOTIFICATIONS_SECRET_OPTIONS = {
 
 
 def _load_notifications_manifest() -> Any:
-    return load_manifest_from_path(
-        get_modules_base_path() / "notifications" / "module.yml"
-    )
+    try:
+        return load_manifest_from_path(
+            get_modules_base_path() / "notifications" / "module.yml"
+        )
+    except ImproperlyConfigured:
+        # SA113 pattern: fall back to bundled manifest snapshots when
+        # the source-tree modules workspace is unavailable (installed
+        # wheel context).
+        return load_manifest_from_path(
+            get_bundled_manifests_path() / "notifications" / "module.yml"
+        )
 
 
 def _normalize_tag(value: Any) -> str:
