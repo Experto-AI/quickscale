@@ -116,6 +116,7 @@ IN_PLACE_INFRASTRUCTURE_TARGETS = (
     "frontend/postcss.config.js",
     "frontend/prettier.config.js",
     "frontend/src/hooks/useModules.ts",
+    "frontend/src/lib/validateQuickScaleSeam.ts",
     "start.sh",
 )
 IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS = frozenset(
@@ -195,6 +196,7 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     "frontend/src/stores/themeStore.ts",
     "frontend/src/test/setup.ts",
     "frontend/src/test/App.test.tsx",
+    "frontend/src/test/validateQuickScaleSeam.test.ts",
     "frontend/src/test/RootDispatch.test.tsx",
     "frontend/src/test/PublicSocialPages.test.tsx",
     "frontend/e2e/home.spec.ts",
