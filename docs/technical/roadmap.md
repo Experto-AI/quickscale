@@ -55,11 +55,12 @@ The green-gate join (SA96-GATE) is green with empty quarantine. The **Track 3 (r
 
 > **SA113 landed** (installed-context implication-resolver bundled-manifest fallback with fail-hard inventory validation, covering both the `plan` and `apply` call sites) and is recorded in [CHANGELOG.md](../../CHANGELOG.md); it unblocked SA111/SA112. Referenced below as `SA113 ✓`.
 
-1. **SA111a ✓** (installed-context `plan`+implication coverage, Track 3) — authoritative `smoke-install` regression probe for the fixed crash; SA111b remains an optional, non-gating fast monkeypatch test. Deps: SA113 ✓.
-2. **SA112** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — heavy e2e lane covering `apply`'s own resolver call site and the Docker path from a real install. Blocked checkpoint recorded below; no implementation from the attempt landed. Deps: SA110 ✓ + SA111a ✓ + SA113 ✓.
-3. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Baseline prerequisites met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓ + SA111a ✓ + SA113 ✓); awaits a human maintainer to execute the irreversible publish. Hold: must not publish while SA112 remains open.
-4. **SA114** (v87 gate re-verification & fix sweep, Track 1, `deps: none`) — re-run `make check`/`quality`/`ci`/`ci-e2e` on current `v87` HEAD (the green-gate join was proven at the synced baseline, not HEAD) and fix any drift. Runs in parallel with the Track 3 chain; heavy `ci`/`ci-e2e` legs serialized against Track 3's PG/Docker usage, and any fix in SA113's resolver/`scripts` surface deferred to Track 3.
-5. **SA115** (E2E in-lane parallelization, Track 2, `deps: none` · **merge after SA112**) — add `pytest-xdist` in-lane fan-out to the e2e suite (`scripts/test_e2e.sh`) so the ~40–60 serial per-lane tests run across N workers, shortening the longest quality check (`make ci-e2e`). Shares the `scripts/test_e2e.sh` / `.github/workflows/e2e.yml` surface with SA112 and the PG/Docker infra with SA114 — bounds below.
+1. **SA112** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — heavy e2e lane covering `apply`'s own resolver call site and the Docker path from a real install. Blocked checkpoint recorded below; no implementation from the attempt landed. Deps: SA110 ✓ + SA111a ✓ + SA113 ✓.
+2. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Baseline prerequisites met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓ + SA111a ✓ + SA113 ✓); awaits a human maintainer to execute the irreversible publish. Hold: must not publish while SA112 remains open.
+3. **SA114** (v87 gate re-verification & fix sweep, Track 1, `deps: none`) — re-run `make check`/`quality`/`ci`/`ci-e2e` on current `v87` HEAD (the green-gate join was proven at the synced baseline, not HEAD) and fix any drift. Runs in parallel with the Track 3 chain; heavy `ci`/`ci-e2e` legs serialized against Track 3's PG/Docker usage, and any fix in SA113's resolver/`scripts` surface deferred to Track 3.
+4. **SA115** (E2E in-lane parallelization, Track 2, `deps: none` · **merge after SA112**) — add `pytest-xdist` in-lane fan-out to the e2e suite (`scripts/test_e2e.sh`) so the ~40–60 serial per-lane tests run across N workers, shortening the longest quality check (`make ci-e2e`). Shares the `scripts/test_e2e.sh` / `.github/workflows/e2e.yml` surface with SA112 and the PG/Docker infra with SA114 — bounds below.
+
+> **SA111a landed** (installed-context `plan` probe selecting all 12 modules in `smoke-install`, plus the `_load_notifications_manifest` bundled-manifest fallback it exposed) and is recorded in [CHANGELOG.md](../../CHANGELOG.md); referenced below as `SA111a ✓`. SA111b remains an optional, non-gating fast monkeypatch test.
 
 Arch **Finding 10** (`frontend-source-generation-specialized`) is **closed** by the SA104→SA108 chain (see arch-audit reconciliation log, 2026-07-21). Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays unscheduled — the Finding 10 chain shrank its surface; sequence any tuple-derivation work after it. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module.
 
@@ -120,70 +121,18 @@ Most groundwork already exists and is xdist-aware: `pytest-xdist ^3.8.0` is alre
 
 > **SA113 (installed-context implication-resolver bundled-manifest fallback) is complete** — see [CHANGELOG.md](../../CHANGELOG.md). It added the fallback (mirroring the SA109 picker pattern) to `resolve_module_implications` for both the `plan` and `apply` call sites, with a fail-hard inventory boundary, resolving the sole remaining installed-wheel crash on the release path and unblocking SA111/SA112.
 
-#### SA111 — Installed-context `plan` + module-implication coverage gap
+#### SA111 — Installed-context `plan` + module-implication coverage (SA111a ✓; SA111b optional)
 
-**Pre-SA113 diagnosis — root cause now resolved by SA113.**
-Repro (installed venv, outside monorepo): `quickscale plan <name>` selecting any
-module crashed with `quickscale_core.contracts.module_discovery.ImproperlyConfigured:
-Modules base path not found`. Root cause: two module-discovery paths, only one
-handles the installed-wheel case. The module **picker**
-(`module_catalog.get_discovered_module_names`, `quickscale_core/src/quickscale_core/contracts/module_catalog.py:135`)
-falls back to bundled manifests via `discover_bundled_module_names()`; the
-implication **resolver** (`resolve_module_implications`,
-`quickscale_core/src/quickscale_core/manifest/implications.py:52`) calls
-`get_modules_base_path()` with **no** fallback. It is reached from
-`_materialize_implied_module_configs` (`quickscale_cli/src/quickscale_cli/commands/plan_command.py:102`).
-
-**Second, independent call site — `apply` is almost certainly broken the same way.**
-`apply` calls the *same* fallback-less resolver at
-`quickscale_cli/src/quickscale_cli/commands/apply_command.py:973`
-(`resolve_module_implications(qs_config.modules.keys())`, via its own
-`_materialize_implied_module_configs`). So even with a hand-written
-`quickscale.yml` (no `plan` at all), `apply` will hit the identical
-`ImproperlyConfigured` crash in an installed venv unless the module-wiring
-override (`set_modules_base_path(project_path/modules)`) already ran — which for a
-fresh project it hasn't. This is untested only because `plan` fails first. **The
-resolver fix must cover both call sites**, and `apply` needs its own
-installed-context coverage (see SA112).
-
-**Why existing e2e/unit coverage misses it — the coverage axis, not the scenario.**
-The `plan`-with-modules scenario *is* already tested: `test_plan_command.py`
-drives `plan` selecting `1,3` (line 204) and `billing` (line 248, which implies
-`orgs`, exercising `resolve_module_implications` and `_materialize_implied_module_configs`),
-asserting exit 0. But **every one of those tests — and all of `make e2e`/`ci-e2e` —
-runs inside the monorepo checkout**, where `get_modules_base_path()` resolves
-`quickscale_modules/` on disk and the missing bundled-fallback branch is never
-taken. The crash only occurs in an **installed venv** with no source workspace.
-The only gate that runs an installed wheel outside the source tree is
-`make smoke-install` (SA110) — and it **deliberately excludes `plan`/`apply`**.
-So the gap is the installed-context axis of an already-tested scenario.
-
-**Scope here: coverage only** — the coverage tests assert post-fix behavior and were
-red until SA113 landed the resolver fix. SA113 and authoritative SA111a coverage are
-now closed; SA111b remains an optional, non-gating quick-signal test.
-
-**Coverage location decision.** The authoritative test lives in the
-**installed-wheel `smoke-install` gate (SA111a)**, not in-monorepo. Rationale: a
-real project is *only* ever created from an installed wheel outside the source
-tree — nobody runs `quickscale plan` inside the codebase — so the installed
-context is the genuine use case, not a simulation. An in-monorepo test could only
-*fake* the installed context by monkeypatching `get_modules_base_path`, and that
-simulation-vs-reality drift is exactly how this bug shipped past every green gate.
-Cost tradeoff accepted: `smoke-install` is slower (it builds 3 wheels + a
-throwaway venv before probing), but it is the only environment that actually
-reproduces the crash. SA111b (fast in-monorepo monkeypatch test) is **optional**
-quick-signal only — not required, since it cannot prove the real path.
-
-- [x] **SA111a — Installed-artifact `plan` probe with all modules (authoritative).** `Tier 2 · Track 3 · deps: SA110 ✓ · SA113 ✓`
-  Extend `scripts/smoke_install.sh` (SA110 gate — builds wheels, installs into a
-  throwaway venv outside the source tree, the exact crash condition) with a
-  non-interactive `plan` probe that **selects all 12 modules by default** (mirroring
-  the real repro `1,2,...,12` + create-superuser=y), feeding the interactive prompts
-  via scripted stdin, asserting exit 0 and no traceback. Selecting all modules
-  exercises the full implication graph in one shot. Update the header comment that
-  currently lists `plan` among excluded commands; keep `apply` excluded (needs Docker).
-  - Verify: `make smoke-install` (with the `plan` probe) exercises the full real project-creation path end to end and catches remaining crashes. A second crash site was discovered during implementation — `_load_notifications_manifest` in `resolvers.py:794` also lacks a bundled-manifest fallback, hit via `sanitize_module_options("notifications", {})` → `default_notifications_module_options`. This is separate from the `resolve_module_implications` path SA113 fixed. **Fix applied:** `_load_notifications_manifest` now catches `ImproperlyConfigured` from `get_modules_base_path()` and falls back to `get_bundled_manifests_path()`, following the SA113/AF7 pattern. Two dedicated regression tests assert the fallback resolves via the bundled path for both `default_notifications_module_options` and `resolve_notifications_module_options`. Independent review approved the change after a source-contaminated `PYTHONPATH` smoke run passed all 20 probes.
-  *(why →* SA110 is the only installed-context gate and it excluded `plan`, leaving the sole environment where the code actually breaks with zero gate coverage*)*
+**Root cause resolved (SA113 ✓) and authoritative coverage landed (SA111a ✓).** The installed-wheel
+`plan`/`apply` crash (`ImproperlyConfigured: Modules base path not found`, from the fallback-less
+`resolve_module_implications`) was fixed by SA113's bundled-manifest fallback across both call
+sites, and SA111a proved the fixed `plan` path in the `smoke-install` gate (all 12 modules, from an
+installed wheel outside the source tree). Both are closed and recorded in
+[CHANGELOG.md](../../CHANGELOG.md). The only reason coverage lived in `smoke-install` rather than
+in-monorepo: the crash only reproduces in an installed venv with no `quickscale_modules/` workspace —
+an in-monorepo test could merely *simulate* the installed context, the exact drift that shipped this
+bug past every green gate. **`apply`'s own installed-context coverage remains open as SA112.**
+Only SA111b (below) remains, and it is optional and non-gating.
 
 - [ ] **SA111b — (optional) Fast in-monorepo resolver monkeypatch test.** `Tier 1 · Track 3 · deps: SA109 ✓ · optional`
   Optional quick-signal companion: a unit test in

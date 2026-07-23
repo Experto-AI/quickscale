@@ -78,131 +78,29 @@ coverage test modules beyond mechanism identification.
 
 ### Summary table
 
-**Live findings: 4** — new Finding 10, plus carried Findings 7, 2, and 4.
+**Live findings: 3** — carried Findings 7, 2, and 4. *(Finding 10
+`frontend-source-generation-specialized` was **closed** by the SA104→SA108 chain — see the
+Reconciliation log, 2026-07-21.)*
 
 | # | ID | Horizon | Confidence | Size | One-line problem |
 |---|----|---------|-----------|------|------------------|
-| 10 | `frontend-source-generation-specialized` | now | High | M | Generated frontend source is project- and module-set-specialized at generation time (baked identity, narrowed interfaces, conditional imports) although the runtime config seam already carries the same facts — so frontends are unportable source trees and migration is a per-file ownership/merge procedure instead of a copy |
-| 7 | `generated-file-ownership-unmodeled` | 6–18 months | High | M | The beta-migration tool still re-encodes file ownership in hand-synced tuples outside the SA66/SA90 derivation chain (untouched this delta; Finding 10's fix would shrink its surface) |
+| 7 | `generated-file-ownership-unmodeled` | 6–18 months | High | M | The beta-migration tool still re-encodes file ownership in hand-synced tuples outside the SA66/SA90 derivation chain (Finding 10's closure shrank its surface) |
 | 2 | `deletion-invariants-per-boundary-reimplementation` | deferred (teams) | High | S | Last-owner check is canonical with a `pre_delete` backstop; no domain-owned deletion service covers other boundaries' invariants (e.g. billing) |
 | 4 | `org-model-universe-hand-enumerated` | deferred (teams) | High | M | Tenant-model membership is derivation-gated; purge *order* is hand-written and ungated on a uniformly `NOT DEFERRABLE` foundation |
 
 ---
 
-### Finding 10: Frontend theme source is specialized at generation time, so generated frontends are unportable and migration is a merge procedure, not a copy
+### Finding 10: Frontend theme source specialized at generation time — RESOLVED (SA104→SA108)
 
 - **ID:** `frontend-source-generation-specialized`
-- **Rank rationale (blast radius × likelihood):** blast is every generated project's frontend, both
-  beta sites, the 893-line migration playbook, the devtools taxonomy, and every future
-  frontend-visible module; likelihood is 1 — the maintainer has named frontend migration as the
-  active direction, and the compounding has already been paid twice (billing shipped without a
-  frontend surface; SA94's Probe C measured the O(themes × artifacts) cost).
-- **Horizon & trigger:** `now` — the invoker's stated goal (copy/paste migration of a running
-  frontend onto a fresh scaffold) is exactly the operation this structure makes expensive; the next
-  beta-site catch-up or the next frontend-visible module re-fires it.
-- **Confidence:** High — full template-tree census run this pass; generator copy path, playbook,
-  and devtools taxonomy read directly.
-- **Context dependence:** wrong-for-now on the **portability/migration-cadence** dimension — a
-  strictly one-shot starter could keep this shape; the shipped playbook, the beta-migrate tooling,
-  and the invoker testimony establish that generated frontends are migrated and re-migrated, so the
-  one-shot steelman does not hold here.
-- **Problem:** the theme bakes project identity and the module universe into user-editable frontend
-  *source* at generation time, duplicating facts the runtime config seam (`window.__QUICKSCALE__`)
-  already delivers per request — which makes every generated frontend a unique source tree, forces
-  `{% raw %}`-wrapped `.j2` templating onto files that are byte-static, and leaves no ownership seam
-  between user application code and QuickScale-owned wiring inside `frontend/src`.
-- **Evidence (all anchors newly established this pass):**
-  - **Census:** 74 theme files; 70 are `.j2`; after stripping `{% raw %}` blocks, only **10**
-    contain real Jinja (8 with variables, 2 with only `{% if %}`); **60 are byte-static** yet carry
-    `.j2` names and raw-wrappers (114 raw markers under `src/` alone). The generator's
-    verbatim-copy path exists (`_theme_non_jinja_emitted_paths`,
-    `quickscale_core/src/quickscale_core/generator/generator.py:110–146`) but serves only 3 files
-    (`src/lib/analytics.ts`, `src/lib/utils.ts`, `src/posthog-js.d.ts`).
-  - **Module universe encoded in ≥5 hand-synced stations:** `useModules.ts.j2:1–18` (two literal
-    tuples, 11 + 3 entries) → generation-time-narrowed TS interfaces; `templates/index.html.j2:18–63+`
-    (11-module double ladder: Jinja `selected_modules` × Django `INSTALLED_APPS`);
-    `main.tsx.j2:10,29` (social-conditional imports/render); `generator.py:31–42`
-    (`REACT_THEME_OPTIONAL_FILES`, 10 files); `beta_migration.py:257`
-    (`IN_PLACE_MODULE_REACT_SURFACES`); playbook step 6 hand-lists per-module pages
-    (`beta-site-migration.md:520–534`). `selected_modules` is live, not a dead branch:
-    fresh generation forwards `list(config.modules.keys())` (`apply_command.py:463`).
-  - **Project identity double-encoded:** runtime `window.__QUICKSCALE__.projectName`
-    (`templates/index.html.j2:14–15`) vs. generation-baked JSX (`Sidebar.tsx.j2:140`,
-    `Dashboard.tsx.j2:116` "Welcome to {{ project_name }}"), `package.json.j2` name,
-    `e2e/home.spec.ts.j2`.
-  - **The tax, already written down by the project itself:** the migration playbook's rules are the
-    symptom inventory — "use the same slug … to avoid package name substitutions"
-    (`beta-site-migration.md:76–78`), donor `App.tsx` transplant + per-dir page/component diffs
-    (`:131–206`), `sed` into the generated `useModules.ts` (`:121`, `:435–437`), hand-JSON-merge of
-    `package.json` (`:473–486`), and "Recipient-owned `App.tsx` and `main.tsx` … remain manual"
-    (`:42`, `:368`) — the module wiring and the user's code are fused in the same files, so neither
-    migration path can automate them. The scaffold-owned-config list is itself duplicated between
-    the playbook (`:429–431`) and `beta_migration.py:105–112`.
-  - **The newest module opted out:** decisions.md:187–192 — billing surfaces "a module flag only";
-    no starter billing React page, sidebar entry, or dashboard card shipped. The frontend
-    coordination tax is high enough that the newest module skipped the surface entirely.
-  - **Tooling exclusion:** because the sources are `.j2`, the repo's ESLint/tsc cannot parse them;
-    `scripts/lint_frontend.sh` exists precisely to render-then-lint — and is wired into no gate
-    (census row 20).
-- **Counter-evidence:** searched decisions.md for a recorded templating-strategy decision (none —
-  only theme inventory and the billing-flag-only note); searched for a sync gate linking the
-  module-list stations (none — the SA90 fixture pins per-file bytes, not cross-list consistency);
-  found two mitigations that weaken a "deliberate and gated" reading while strengthening
-  feasibility of the fix: the verbatim-copy path already exists in the generator, and the runtime
-  config seam already carries `projectName` + per-module flags — i.e. the correct architecture is
-  half-built and the generation-time specialization duplicates it.
-- **Why it compounds:** every new frontend-visible module adds an entry to each of the ≥5 module
-  stations (billing's omission is the paid evidence; a 14th module with a frontend surface re-fires
-  all of them — added to Probe A); every migration of a running frontend pays O(customized files)
-  manual classification and two unavoidable file merges (`App.tsx`, `main.tsx`); every theme edit
-  pays raw-wrapper bookkeeping plus an SA90 manifest rebaseline (paid again this delta,
-  `1e7cbc2c`); and every project generated meanwhile deepens the installed base that any later
-  contract change must migrate.
-- **Detection signal:** generate two projects with different slugs and module sets and diff
-  `frontend/src` — every differing file is a portability defect (today: `useModules.ts`,
-  `main.tsx`, `Sidebar.tsx`, `Dashboard.tsx`, `package.json`, plus wholesale-absent module files).
-  No production error signal exists — the cost lands as migration labor and skipped module
-  surfaces.
-- **Steelman:** generation-time exclusion keeps unselected modules' files out of user trees (a
-  cleaner starter), and the narrowed TS interface turns references to unselected modules into
-  compile errors. Both are real but small: runtime flags already gate visibility, dormant pages
-  are tree-shakable/lazy-loadable, and the compile-time narrowing protects against a mistake that
-  the flag check already handles at runtime. The steelman would hold only if generated frontends
-  were never migrated or upgraded — refuted by the playbook and the invoker's stated goal.
-- **Correct shape:** frontend source under `frontend/src` is project-agnostic and byte-identical
-  across projects on the same theme version; all project- and module-specific facts flow through
-  the single typed runtime config that already exists (`window.__QUICKSCALE__`); Jinja
-  specialization is confined to the Django-side templates and (at most) `package.json`; ownership
-  of every emitted frontend file is trivially derivable (theme-owned static vs. user-owned), so
-  migration is "copy user-owned dirs, rebuild" and upgrade is "replace theme-owned files".
-- **Options:**
-  1. **Static-source completion via the existing runtime config (recommended).** Stage 1 (S,
-     mechanical): move the 60 byte-static files onto the existing non-Jinja copy path — drop the
-     `.j2` suffixes and raw-wrappers; emitted bytes are unchanged, which the SA90 parity fixture
-     proves by staying green (only mapping paths rebase). Stage 2 (M, semantic): de-specialize the
-     remaining src files — all-modules-optional `QuickScaleModules` interface (flags false when the
-     module is absent; the Django ladder already emits runtime truth), unconditional imports with
-     flag-gated routes in `main.tsx`, `projectName` read from config in `Sidebar`/`Dashboard`.
-     Requires one maintainer decision: unselected modules' pages exist as dormant files in
-     generated trees. Removes the src-side module stations entirely; templates become real
-     `.ts`/`.tsx` files the repo's ESLint/tsc can gate directly (closing census row 20's structural
-     cause).
-  2. **QuickScale frontend runtime as an npm package.** Extract hooks, module pages, and ui
-     components into a versioned package; the generated tree keeps only the user-owned shell
-     (`App.tsx`, pages). Upgrades become a version bump; migration is copying the whole app. L —
-     the right end-state if generated-frontend upgrades become a public product feature; Option 1
-     is a strict prerequisite-friendly step toward it.
-  3. **Ownership-manifest overlay only.** Keep generation-time specialization but formalize
-     per-file ownership (user-owned / theme-owned / merged) in the generator's emission mapping,
-     consumed by migration tooling (extends Finding 7). M — gates the classification problem but
-     removes neither the merges nor the specialization; rejected as primary because it manages the
-     compounding instead of deleting it.
-- **Recommendation:** Option 1, staged — stage 1 is safe now (byte-identical, fixture-verified) and
-  independently valuable (real TS files, gateable, diffable); stage 2 rides the maintainer's
-  dormant-files decision and converts the playbook's frontend half into `cp -r` + rebuild.
-  · **Size:** M (S for stage 1 alone) · **First step:** move the 60 zero-Jinja files onto
-  `_theme_non_jinja_emitted_paths` and delete their raw-wrappers, verifying byte-parity via the
-  SA90 fixture.
+- **Status: closed** (SA104→SA108; recorded in the Reconciliation log, 2026-07-21; finding
+  block dropped from the live sections during the 2026-07-23 roadmap/doc-consistency cleanup).
+  The SA104→SA108 chain delivered the recommended Option 1, staged — stage-1 static-source move
+  through runtime-config de-specialization, fail-hard seam validation, and the migration-doc
+  rewrite. `frontend/src` is now project-agnostic and byte-identical across projects on the same
+  theme version; all project/module facts flow through the `window.__QUICKSCALE__` runtime seam.
+  Closeout detail lives in [CHANGELOG.md](../../CHANGELOG.md) (SA104/SA105/SA106/SA107/SA108);
+  full finding text preserved in version control.
 
 ---
 
@@ -930,3 +828,8 @@ flag).
   playbook reflects it. The Summary table's "Live findings" line above and the Fix order section
   are superseded by this entry; the next full autopsy re-run will drop the finding block. Detail
   in CHANGELOG.md (SA105/SA106/SA107/SA108 entries) and roadmap.md (Track 2).
+- 2026-07-23 (roadmap/doc-consistency cleanup) — the deferred bookkeeping from the 2026-07-21
+  entry above is now applied: the Summary table's "Live findings" line reads **3** (Findings 7/2/4)
+  and Finding 10's row is dropped; its detail section is reduced to a closed-status stub pointing
+  here. No new audit was run and no finding status changed — this only reconciles the live sections
+  with the already-recorded 2026-07-21 closure.
