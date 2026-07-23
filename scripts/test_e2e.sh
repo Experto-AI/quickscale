@@ -128,6 +128,50 @@ else
     E2E_PARALLEL=true
 fi
 
+# _meminfo_kb  — read a /proc/meminfo field (KB) by name; prints 0 if absent.
+_meminfo_kb() {
+    local field="$1"
+    awk -v f="$field:" '$1 == f { print $2; found = 1 } END { if (!found) print 0 }' \
+        /proc/meminfo 2>/dev/null
+}
+
+# Preflight memory guard.  Concurrent lanes launch two Docker + Playwright
+# stacks at once; on a memory-tight host that peak can drive the session into
+# swap thrash and get the run reaped by systemd-oomd (surfaces as a SIGTERM
+# mid-run, not a test failure).  When resting headroom is already low we fall
+# back to serial lanes, which roughly halves peak memory.  Thresholds are
+# overridable; QS_E2E_NO_MEMORY_GUARD=1 disables the guard entirely.
+#   QS_E2E_MIN_AVAIL_MB  minimum MemAvailable before fallback (default 4096)
+#   QS_E2E_MIN_SWAP_MB   minimum SwapFree (when swap exists) before fallback (default 3072)
+memory_preflight_guard() {
+    [ "${QS_E2E_NO_MEMORY_GUARD:-0}" = "1" ] && return 0
+    [ "$E2E_PARALLEL" = true ] || return 0
+    [ -r /proc/meminfo ] || return 0
+
+    local avail_mb swap_total_mb swap_free_mb min_avail_mb min_swap_mb reason=""
+    avail_mb=$(( $(_meminfo_kb MemAvailable) / 1024 ))
+    swap_total_mb=$(( $(_meminfo_kb SwapTotal) / 1024 ))
+    swap_free_mb=$(( $(_meminfo_kb SwapFree) / 1024 ))
+    min_avail_mb="${QS_E2E_MIN_AVAIL_MB:-4096}"
+    min_swap_mb="${QS_E2E_MIN_SWAP_MB:-3072}"
+
+    if [ "$avail_mb" -lt "$min_avail_mb" ]; then
+        reason="available RAM ${avail_mb}MB < ${min_avail_mb}MB"
+    elif [ "$swap_total_mb" -gt 0 ] && [ "$swap_free_mb" -lt "$min_swap_mb" ]; then
+        reason="free swap ${swap_free_mb}MB < ${min_swap_mb}MB"
+    fi
+
+    if [ -n "$reason" ]; then
+        E2E_PARALLEL=false
+        echo -e "${YELLOW}⚠ Low memory headroom ($reason).${NC}" >&2
+        echo -e "${YELLOW}  Falling back to serial lanes to avoid an out-of-memory kill (systemd-oomd).${NC}" >&2
+        echo    "  Override with QS_E2E_NO_MEMORY_GUARD=1 to force concurrent lanes anyway." >&2
+        echo "" >&2
+    fi
+}
+
+memory_preflight_guard
+
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║   QuickScale E2E Test Runner           ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
@@ -149,10 +193,47 @@ WORKER_TEMP_DIR="$(mktemp -d)"
 declare -a WORKER_PIDS=()
 declare -a WORKER_ORDER=()
 
+HEARTBEAT_PID=""
+
+# Stop the background progress ticker if one is running.  Safe to call when
+# no heartbeat was started (empty PID) or when it has already exited.
+stop_heartbeat() {
+    if [ -n "$HEARTBEAT_PID" ]; then
+        kill "$HEARTBEAT_PID" 2>/dev/null || true
+        wait "$HEARTBEAT_PID" 2>/dev/null || true
+        HEARTBEAT_PID=""
+    fi
+}
+
 cleanup_temp_files() {
+    stop_heartbeat
     if [ -n "${WORKER_TEMP_DIR:-}" ] && [ -d "$WORKER_TEMP_DIR" ]; then
         rm -rf "$WORKER_TEMP_DIR"
     fi
+}
+
+# _e2e_heartbeat  — emit a periodic "still running" line while lanes execute.
+#
+# The lane logs are buffered and only replayed after both lanes join, so the
+# [3/4] phase would otherwise print nothing for several minutes.  This ticker
+# reports elapsed time and per-lane state (a lane is "done" once it has written
+# its status_<lane> file) without touching the buffered lane output, keeping the
+# deterministic replay intact.  Interval is configurable via
+# QS_E2E_HEARTBEAT_INTERVAL (seconds; default 15).
+_e2e_heartbeat() {
+    local start elapsed mm ss core_state cli_state interval
+    start="$(date +%s)"
+    interval="${QS_E2E_HEARTBEAT_INTERVAL:-15}"
+    while true; do
+        sleep "$interval"
+        elapsed=$(( $(date +%s) - start ))
+        mm=$(( elapsed / 60 ))
+        ss=$(( elapsed % 60 ))
+        if [ -f "$WORKER_TEMP_DIR/status_core" ]; then core_state="done"; else core_state="running"; fi
+        if [ -f "$WORKER_TEMP_DIR/status_cli" ]; then cli_state="done"; else cli_state="running"; fi
+        printf '  \xe2\x8f\xb1  still running — %dm%02ds elapsed (Core: %s, CLI: %s)\n' \
+            "$mm" "$ss" "$core_state" "$cli_state"
+    done
 }
 
 trap cleanup_temp_files EXIT
@@ -398,15 +479,20 @@ echo -e "${GREEN}✓ Playwright browsers ready${NC}"
 echo ""
 
 echo -e "${BLUE}[3/4] Running Core and CLI E2E lanes...${NC}"
+echo "  (lane output is buffered and replayed below once both lanes finish)"
+_e2e_heartbeat &
+HEARTBEAT_PID=$!
 if [ "$E2E_PARALLEL" = true ]; then
     run_lanes_parallel || LANES_FAILED=true
 else
     run_lanes_serial || LANES_FAILED=true
 fi
+stop_heartbeat
 
 echo ""
 if [ "${LANES_FAILED:-false}" = true ]; then
     echo "E2E failure attribution:"
+    suspected_oom=false
     for lane in core cli; do
         lane_status="$(read_lane_status "$lane")"
         if [ "$lane_status" -ne 0 ]; then
@@ -416,9 +502,25 @@ if [ "${LANES_FAILED:-false}" = true ]; then
                 lane_label="CLI"
             fi
             echo "  ✗ $lane_label E2E tests (exit $lane_status)"
+            # 143 = 128+SIGTERM (oomd's default action), 137 = 128+SIGKILL
+            # (kernel OOM killer). Either strongly implies the OS reaped the
+            # lane under memory pressure rather than a genuine test failure.
+            if [ "$lane_status" -eq 143 ] || [ "$lane_status" -eq 137 ]; then
+                suspected_oom=true
+            fi
         fi
     done
     echo ""
+    if [ "$suspected_oom" = true ]; then
+        echo -e "${YELLOW}⚠ A lane exited on SIGTERM/SIGKILL (143/137) — this usually means the OS${NC}"
+        echo -e "${YELLOW}  killed the run under memory pressure, not a real test failure.${NC}"
+        if command -v systemctl >/dev/null 2>&1 && \
+           [ "$(systemctl is-active systemd-oomd 2>/dev/null)" = "active" ]; then
+            echo    "  systemd-oomd is active on this host and is the likely reaper."
+        fi
+        echo    "  Retry with QS_E2E_PARALLEL=0 (serial lanes) or free memory/swap first."
+        echo ""
+    fi
 fi
 echo -e "${BLUE}[4/4] Final E2E results${NC}"
 if [ "${LANES_FAILED:-false}" != true ]; then
