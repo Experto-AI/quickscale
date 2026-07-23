@@ -81,6 +81,10 @@ def _fake_environment(tmp_path: Path, *, failure: str = "") -> dict[str, str]:
     environment["FAKE_E2E_DOCKER_LOG"] = str(tmp_path / "docker.log")
     environment["FAKE_E2E_FAILURE"] = failure
     environment["FAKE_E2E_DELAY"] = "0.2"
+    # The low-memory preflight would flip concurrent lanes to serial on a
+    # memory-tight host, breaking the concurrency assertions below.  Disable it
+    # so lane scheduling is deterministic regardless of the runner's free RAM.
+    environment["QS_E2E_NO_MEMORY_GUARD"] = "1"
     return environment
 
 
@@ -156,6 +160,35 @@ def test_serial_opt_out_forwards_flags_and_preserves_cleanup_mode(tmp_path: Path
     assert any("CALL|cli|" in event and "-k smoke" in event for event in calls)
     assert all(" -q" not in event for event in calls)
     assert result.stdout.count("Skipping cleanup (--no-cleanup specified)") == 2
+
+
+def test_memory_guard_falls_back_to_serial_when_headroom_is_low(tmp_path: Path) -> None:
+    """Low resting RAM headroom downshifts concurrent lanes to serial."""
+    # Re-enable the guard (the fake env disables it) and set an unsatisfiable
+    # available-RAM floor so the preflight always trips on any host.
+    result = _run(
+        tmp_path,
+        QS_E2E_NO_MEMORY_GUARD="0",
+        QS_E2E_MIN_AVAIL_MB="999999999",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _max_active(_events(tmp_path)) == 1
+    assert "Lane mode: serial" in result.stdout
+    assert "Low memory headroom" in result.stderr
+
+
+def test_memory_guard_can_be_disabled(tmp_path: Path) -> None:
+    """The opt-out keeps lanes concurrent even below the RAM floor."""
+    result = _run(
+        tmp_path,
+        QS_E2E_NO_MEMORY_GUARD="1",
+        QS_E2E_MIN_AVAIL_MB="999999999",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _max_active(_events(tmp_path)) == 2
+    assert "Low memory headroom" not in result.stderr
 
 
 def test_cli_only_failure_is_attributed_and_nonzero(tmp_path: Path) -> None:

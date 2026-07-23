@@ -20,7 +20,11 @@
 #   --help            Show this help message
 #
 # Environment:
-#   QS_E2E_PARALLEL=0  Run Core and CLI lanes serially (default: concurrent)
+#   QS_E2E_PARALLEL=0          Run Core and CLI lanes serially (default: concurrent)
+#   QS_E2E_NO_MEMORY_GUARD=1   Skip the low-memory preflight (never auto-fall back to serial)
+#   QS_E2E_MIN_AVAIL_MB=N      Fall back to serial below N MB available RAM (default: 4096)
+#   QS_E2E_MIN_SWAP_MB=N       Fall back to serial below N MB free swap when swap exists (default: 3072)
+#   QS_E2E_HEARTBEAT_INTERVAL=N  Seconds between "still running" progress lines (default: 15)
 #
 
 set -euo pipefail
@@ -64,7 +68,11 @@ while [[ $# -gt 0 ]]; do
             echo "  --help, -h        Show this help message"
             echo ""
             echo "Environment:"
-            echo "  QS_E2E_PARALLEL=0  Run Core and CLI lanes serially"
+            echo "  QS_E2E_PARALLEL=0            Run Core and CLI lanes serially"
+            echo "  QS_E2E_NO_MEMORY_GUARD=1     Skip the low-memory preflight"
+            echo "  QS_E2E_MIN_AVAIL_MB=N        Serial fallback below N MB available RAM (default 4096)"
+            echo "  QS_E2E_MIN_SWAP_MB=N         Serial fallback below N MB free swap (default 3072)"
+            echo "  QS_E2E_HEARTBEAT_INTERVAL=N  Seconds between progress lines (default 15)"
             exit 0
             ;;
         *)
@@ -199,7 +207,9 @@ HEARTBEAT_PID=""
 # no heartbeat was started (empty PID) or when it has already exited.
 stop_heartbeat() {
     if [ -n "$HEARTBEAT_PID" ]; then
-        kill "$HEARTBEAT_PID" 2>/dev/null || true
+        # Terminate the ticker and its in-flight `sleep` child together; killing
+        # only the subshell would leave it blocked in `sleep`, deferring exit.
+        _kill_descendants "$HEARTBEAT_PID" TERM 2>/dev/null || true
         wait "$HEARTBEAT_PID" 2>/dev/null || true
         HEARTBEAT_PID=""
     fi
@@ -221,6 +231,10 @@ cleanup_temp_files() {
 # deterministic replay intact.  Interval is configurable via
 # QS_E2E_HEARTBEAT_INTERVAL (seconds; default 15).
 _e2e_heartbeat() {
+    # Drop the inherited worker/cleanup traps: this ticker owns nothing, so a
+    # kill from stop_heartbeat should end it immediately rather than run the
+    # lane-cleanup signal handler or delete the shared temp dir.
+    trap - INT TERM HUP EXIT
     local start elapsed mm ss core_state cli_state interval
     start="$(date +%s)"
     interval="${QS_E2E_HEARTBEAT_INTERVAL:-15}"
@@ -479,15 +493,19 @@ echo -e "${GREEN}✓ Playwright browsers ready${NC}"
 echo ""
 
 echo -e "${BLUE}[3/4] Running Core and CLI E2E lanes...${NC}"
-echo "  (lane output is buffered and replayed below once both lanes finish)"
-_e2e_heartbeat &
-HEARTBEAT_PID=$!
 if [ "$E2E_PARALLEL" = true ]; then
+    # Concurrent lanes buffer their output and replay it only after both join,
+    # so without a ticker this phase prints nothing for several minutes.
+    echo "  (lane output is buffered and replayed below once both lanes finish)"
+    _e2e_heartbeat &
+    HEARTBEAT_PID=$!
     run_lanes_parallel || LANES_FAILED=true
+    stop_heartbeat
 else
+    # Serial lanes stream their output live, so progress is already visible and
+    # no heartbeat is needed.
     run_lanes_serial || LANES_FAILED=true
 fi
-stop_heartbeat
 
 echo ""
 if [ "${LANES_FAILED:-false}" = true ]; then

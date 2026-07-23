@@ -285,6 +285,13 @@ make ci-e2e
   fan-out (TP1, Track 1).
 - `QS_E2E_PARALLEL=0` — run Core and CLI E2E lanes serially instead of concurrently
   (TP3b, Track 2).
+- `QS_E2E_NO_MEMORY_GUARD=1` — skip the low-memory preflight that otherwise falls
+  back to serial lanes when resting RAM/swap headroom is low (guards against
+  `systemd-oomd` reaping the run under memory pressure). Companion knobs
+  `QS_E2E_MIN_AVAIL_MB` (default `4096`) and `QS_E2E_MIN_SWAP_MB` (default `3072`)
+  tune the fallback thresholds.
+- `QS_E2E_HEARTBEAT_INTERVAL=N` — seconds between "still running" progress lines
+  during the concurrent-lane phase (default `15`).
 - `PYTEST_XDIST_WORKERS=auto` — pin xdist worker count for unit tests (default `auto`);
   set to `0` for a true serial run, or a positive integer to cap workers (TP2, Track 1).
 
