@@ -68,7 +68,7 @@ class TestReactThemeUserWorkflow:
             # Step 2: Change to project directory and apply
             os.chdir(project_name)
             # Apply needs confirmation with "Y"
-            result = runner.invoke(cli, ["apply", "--no-docker"], input="Y\n")
+            result = runner.invoke(cli, ["apply", "--no-docker"], input="Y\nY\n")
             assert result.exit_code == 0, f"apply failed: {result.output}"
 
             # Step 3: Verify project structure (we're already in project_name dir)
@@ -152,27 +152,75 @@ class TestReactThemeUserWorkflow:
         assert (src / "components").is_dir()
 
     def test_generated_react_branding_uses_project_name(self, tmp_path):
-        """Generated React UI branding should use the requested project name."""
+        """Generated React UI branding should use the requested project name.
+
+        Post-SA113: project branding is supplied by the generated Django
+        template (templates/index.html) which injects
+        window.__QUICKSCALE__ with the projectName at runtime.
+        useModules.ts consumes validated runtime config rather than
+        embedding the project name directly.
+        """
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "my_real_project_name"
         project_path = tmp_path / project_name
 
         generator.generate(project_name, project_path)
 
+        # useModules.ts consumes validated runtime config from
+        # window.__QUICKSCALE__ via validateQuickScaleConfig() —
+        # it no longer embeds the project name as a literal string.
         use_modules_content = (
             project_path / "frontend" / "src" / "hooks" / "useModules.ts"
         ).read_text()
+        assert "validateQuickScaleConfig" in use_modules_content
+        assert "projectName" in use_modules_content
+        # Confirm the QuickScaleConfig interface is defined
+        assert "QuickScaleConfig" in use_modules_content
+
+        # Dashboard.tsx and Sidebar.tsx read projectName from
+        # useProjectConfig() runtime config rather than embedding the name
         dashboard_content = (
             project_path / "frontend" / "src" / "pages" / "Dashboard.tsx"
         ).read_text()
         sidebar_content = (
             project_path / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
         ).read_text()
+        assert "useProjectConfig" in dashboard_content
+        assert "projectName" in dashboard_content
+        assert "useProjectConfig" in sidebar_content
+        assert "projectName" in sidebar_content
 
-        assert project_name in use_modules_content
-        assert project_name in dashboard_content
-        assert project_name in sidebar_content
+        # Prove the project name literal is NOT hardcoded in any frontend
+        # source file — it must flow through runtime config only, not as an
+        # embedded string inside the generated React bundle.
+        assert project_name not in use_modules_content, (
+            f"project name {project_name!r} leaked into useModules.ts"
+        )
+        assert project_name not in dashboard_content, (
+            f"project name {project_name!r} leaked into Dashboard.tsx"
+        )
+        assert project_name not in sidebar_content, (
+            f"project name {project_name!r} leaked into Sidebar.tsx"
+        )
 
+        # The project name IS materialized in the Django-side template
+        # (templates/index.html.j2 → templates/index.html) where the
+        # window.__QUICKSCALE__ runtime config is injected.
+        index_template = (project_path / "templates" / "index.html").read_text()
+        assert project_name in index_template
+        assert "window.__QUICKSCALE__" in index_template
+        # Prove the project name actually appears inside the
+        # window.__QUICKSCALE__ runtime config context (not just
+        # somewhere else in the template like a meta tag or comment).
+        qs_start = index_template.find("window.__QUICKSCALE__")
+        qs_context_window = index_template[qs_start : qs_start + 500]
+        assert project_name in qs_context_window, (
+            f"project_name {project_name!r} not found inside the "
+            "window.__QUICKSCALE__ runtime config context — name may "
+            "appear elsewhere in the template but not as projectName injection"
+        )
+
+        # Verify no stale placeholder text leaked into generated files
         assert "qs_fmt_test" not in use_modules_content
         assert "qs_fmt_test" not in dashboard_content
         assert "qs_fmt_test" not in sidebar_content
@@ -644,7 +692,7 @@ class TestReactThemeVerboseDockerOption:
             # Apply with verbose docker (and no docker to avoid actually running)
             # Provide "Y" to confirm apply
             result = runner.invoke(
-                cli, ["apply", "--no-docker", "--verbose-docker"], input="Y\n"
+                cli, ["apply", "--no-docker", "--verbose-docker"], input="Y\nY\n"
             )
             # Should not fail due to unknown option
             assert result.exit_code == 0

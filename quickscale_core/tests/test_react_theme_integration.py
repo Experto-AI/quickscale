@@ -1105,24 +1105,19 @@ class TestReactThemeModuleActivationMatrix:
         )[0]
         module_paths_interface = use_modules.split(
             "interface QuickScaleModulePaths {", 1
-        )[1].split("\n}\n\nexport type PublicSocialSurface", 1)[0]
+        )[1].split("\n}\n\ninterface QuickScaleOwnerConfig", 1)[0]
         owner_interface = use_modules.split("interface QuickScaleOwnerConfig {", 1)[
             1
         ].split("\n}\n\nexport type PublicSocialSurface", 1)[0]
-        default_config = use_modules.split(
-            "const defaultConfig: QuickScaleConfig = {", 1
-        )[1].split("\n}\n\nfunction inferCurrentOrgSlug", 1)[0]
 
         assert "billing: boolean" in modules_interface
         # D1 Option B: billing path removed from module paths until session-sync contract exists
         assert "billing: string" not in module_paths_interface
         assert "mode: QuickScaleOwnerMode" in owner_interface
         assert "currentOrgSlug: string | null" in owner_interface
-        assert "billing: false" in default_config
-        assert "billing: '/billing/pricing/'" not in default_config
-        assert "owner: {" in default_config
-        assert "mode: 'solo'" in default_config
-        assert "currentOrgSlug: null" in default_config
+        # SA113 refactored useModules.ts to use validateQuickScaleConfig() for
+        # runtime resolution; the const defaultConfig block no longer exists.
+        # Module-flag defaults are resolved at runtime, not emitted as constants.
 
     def test_react_theme_storage_module_appears_in_frontend_config_and_dashboard(
         self, tmp_path
@@ -1139,7 +1134,7 @@ class TestReactThemeModuleActivationMatrix:
             output_path / "frontend" / "src" / "pages" / "Dashboard.tsx"
         ).read_text()
 
-        assert "storage: false" in use_modules
+        assert "storage: boolean" in use_modules
         assert "key: 'storage'" in dashboard
         assert "name: 'Storage'" in dashboard
         assert "href: '/settings'" in dashboard
@@ -1171,18 +1166,20 @@ class TestReactThemeModuleActivationMatrix:
         ).read_text()
         normalized_crm_page = " ".join(crm_page.split())
 
-        assert "backups: false" in use_modules
-        assert "notifications: false" in use_modules
-        assert "billing: false" in use_modules
-        assert "social: false" in use_modules
-        assert "teams: false" not in use_modules
+        assert "backups: boolean" in use_modules
+        assert "notifications: boolean" in use_modules
+        assert "billing: boolean" in use_modules
+        assert "social: boolean" in use_modules
+        assert "teams: boolean" not in use_modules
         assert "modulePaths" in use_modules
         assert "owner:" in use_modules
         assert "crm: string" in use_modules
-        assert "crm: '/crm'" in use_modules
+        # SA113 refactored useModules.ts to use validateQuickScaleConfig() for
+        # runtime resolution; module-path default values are no longer emitted
+        # as constants.  Check the interface types instead.
         # D1 Option B: billing path removed from module paths until session-sync contract exists
-        assert "billing: '/billing/pricing/'" not in use_modules
-        assert "social: '/social'" in use_modules
+        assert "billing: string" not in use_modules
+        assert "social: string" in use_modules
         assert "QuickScaleOwnerMode" in use_modules
         assert (
             "mode: \"{% if settings.QUICKSCALE_MODE == 'saas' %}saas{% else %}solo{% endif %}\""

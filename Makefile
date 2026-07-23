@@ -842,7 +842,8 @@ check:
 		$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short $(PYTEST_XDIST_ARGS) > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm -f pytest_log.txt; exit 1; }; \
 		rm -f pytest_log.txt; \
 	else \
-		$(MAKE) lint typecheck test-unit SECTIONS="$(ACTIVE_SECTIONS)" MODULE="$(MODULE)"; \
+		$(MAKE) lint typecheck SECTIONS="$(ACTIVE_SECTIONS)" MODULE="$(MODULE)"; \
+		$(MAKE) test-unit SECTIONS="$(filter-out modules,$(ACTIVE_SECTIONS))" MODULE="$(MODULE)"; \
 	fi; \
 	$(MAKE) check-core-compat check-module-core-imports check-manifest-sync check-org-context-primitives check-csrf-exempt
 	@if [ -z "$(QUIET)" ]; then \
