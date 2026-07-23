@@ -300,10 +300,25 @@ class TestLazyModuleDiscovery:
         from quickscale_core.contracts import module_discovery as _md
         from quickscale_core.contracts import module_catalog as _mc
 
-        # Clear module cache for the target modules.
-        for mod_name in list(sys.modules):
-            if "config_schema" in mod_name:
-                del sys.modules[mod_name]
+        # Exact-target isolation: only remove the single target module
+        # from sys.modules so re-import forces a fresh load.  We must
+        # also restore the parent package's attribute after the test to
+        # prevent class-identity drift — a re-imported module has different
+        # class identities from the originals held by other tests, which
+        # silently breaks identity checks like ``pytest.raises(TypeError)``.
+        mod_name = "quickscale_core.schema.config_schema"
+        original_module = sys.modules.get(mod_name)
+
+        # Save parent-package attribute for exact restoration.
+        parent_name, _, attr_name = mod_name.rpartition(".")
+        parent_package = sys.modules.get(parent_name) if parent_name else None
+        original_parent_attr = (
+            getattr(parent_package, attr_name, None) if parent_package else None
+        )
+
+        # Remove only the specific module — no broad iteration.
+        if mod_name in sys.modules:
+            del sys.modules[mod_name]
 
         original = _md.discover_shipped_module_names
         call_count = 0
@@ -317,7 +332,7 @@ class TestLazyModuleDiscovery:
         _mc.discover_shipped_module_names = _tracking  # via module_catalog import
 
         try:
-            importlib.import_module("quickscale_core.schema.config_schema")
+            importlib.import_module(mod_name)
             assert call_count == 0, (
                 f"discover_shipped_module_names called {call_count} time(s)"
                 " during config_schema import"
@@ -325,6 +340,13 @@ class TestLazyModuleDiscovery:
         finally:
             _md.discover_shipped_module_names = original
             _mc.discover_shipped_module_names = original
+            # Exact restore: put back the original module object AND
+            # restore the parent package's attribute so class identities
+            # stay consistent for all other tests.
+            if original_module is not None:
+                sys.modules[mod_name] = original_module
+                if parent_package is not None and original_parent_attr is not None:
+                    setattr(parent_package, attr_name, original_parent_attr)
 
     def test_empty_modules_no_discovery(self) -> None:
         """validate_config with empty modules must not call discovery."""

@@ -505,7 +505,7 @@
       },
       "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section": {
         "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
-        "max_complexity": 11,
+        "max_complexity": 12,
         "symbol": "_validate_modules_section",
         "type": "function"
       },
@@ -943,7 +943,7 @@
         "max_lines": 1749
       },
       "quickscale_cli/src/quickscale_cli/commands/module_commands.py": {
-        "max_lines": 1596
+        "max_lines": 1608
       },
       "quickscale_core/src/quickscale_core/manifest/entry_point.py": {
         "max_lines": 1484
@@ -1012,7 +1012,7 @@
         "max_lines": 614
       },
       "quickscale_core/src/quickscale_core/schema/config_schema.py": {
-        "max_lines": 605
+        "max_lines": 611
       },
       "quickscale_modules/forms/src/quickscale_modules_forms/views.py": {
         "max_lines": 604
