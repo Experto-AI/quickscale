@@ -159,6 +159,12 @@ class TestReactThemeUserWorkflow:
         window.__QUICKSCALE__ with the projectName at runtime.
         useModules.ts consumes validated runtime config rather than
         embedding the project name directly.
+
+        SA114-REV-004: Strengthened assertions:
+          - Exact projectName binding in the Django template
+          - Recursive scan of ALL frontend/src/ files for forbidden
+            project-name literal leakage
+          - Additional QuickScale forbidden-branding scan
         """
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "my_real_project_name"
@@ -166,15 +172,15 @@ class TestReactThemeUserWorkflow:
 
         generator.generate(project_name, project_path)
 
-        # useModules.ts consumes validated runtime config from
-        # window.__QUICKSCALE__ via validateQuickScaleConfig() —
-        # it no longer embeds the project name as a literal string.
+        # ── Runtime config consumption proof ────────────────────────
+        # useModules.ts must consume validated runtime config via
+        # validateQuickScaleConfig() and reference the QuickScaleConfig
+        # interface — not embed the project name as a literal.
         use_modules_content = (
             project_path / "frontend" / "src" / "hooks" / "useModules.ts"
         ).read_text()
         assert "validateQuickScaleConfig" in use_modules_content
         assert "projectName" in use_modules_content
-        # Confirm the QuickScaleConfig interface is defined
         assert "QuickScaleConfig" in use_modules_content
 
         # Dashboard.tsx and Sidebar.tsx read projectName from
@@ -190,40 +196,67 @@ class TestReactThemeUserWorkflow:
         assert "useProjectConfig" in sidebar_content
         assert "projectName" in sidebar_content
 
-        # Prove the project name literal is NOT hardcoded in any frontend
-        # source file — it must flow through runtime config only, not as an
-        # embedded string inside the generated React bundle.
-        assert project_name not in use_modules_content, (
-            f"project name {project_name!r} leaked into useModules.ts"
-        )
-        assert project_name not in dashboard_content, (
-            f"project name {project_name!r} leaked into Dashboard.tsx"
-        )
-        assert project_name not in sidebar_content, (
-            f"project name {project_name!r} leaked into Sidebar.tsx"
-        )
-
-        # The project name IS materialized in the Django-side template
-        # (templates/index.html.j2 → templates/index.html) where the
-        # window.__QUICKSCALE__ runtime config is injected.
+        # ── Exact projectName binding proof in the Django template ──
+        # The template (templates/index.html.j2 → templates/index.html)
+        # injects projectName: "{{ project_name }}" into the
+        # window.__QUICKSCALE__ runtime config.  After generation, the
+        # rendered template must contain the exact binding pattern.
         index_template = (project_path / "templates" / "index.html").read_text()
         assert project_name in index_template
         assert "window.__QUICKSCALE__" in index_template
-        # Prove the project name actually appears inside the
-        # window.__QUICKSCALE__ runtime config context (not just
-        # somewhere else in the template like a meta tag or comment).
+        # Exact binding: projectName: "my_real_project_name"
+        exact_binding = f'projectName: "{project_name}"'
+        assert exact_binding in index_template, (
+            f"Expected exact projectName binding {exact_binding!r} not found "
+            "in generated templates/index.html — the project name may appear "
+            "elsewhere in the template but not as the window.__QUICKSCALE__ "
+            "projectName injection"
+        )
+        # Prove the binding is inside the window.__QUICKSCALE__ config object
         qs_start = index_template.find("window.__QUICKSCALE__")
         qs_context_window = index_template[qs_start : qs_start + 500]
-        assert project_name in qs_context_window, (
-            f"project_name {project_name!r} not found inside the "
+        assert exact_binding in qs_context_window, (
+            f"projectName binding {exact_binding!r} not found inside the "
             "window.__QUICKSCALE__ runtime config context — name may "
-            "appear elsewhere in the template but not as projectName injection"
+            "appear elsewhere in the template but not as the intended injection"
         )
 
-        # Verify no stale placeholder text leaked into generated files
-        assert "qs_fmt_test" not in use_modules_content
-        assert "qs_fmt_test" not in dashboard_content
-        assert "qs_fmt_test" not in sidebar_content
+        # ── Recursive scan: project_name literal forbidden in frontend source ──
+        # Every generated frontend/src/ file must NOT contain the project
+        # name as a literal string — it must flow through the runtime
+        # window.__QUICKSCALE__ seam only.
+        frontend_src = project_path / "frontend" / "src"
+        leaked_files: list[str] = []
+        for src_path in sorted(frontend_src.rglob("*")):
+            if not src_path.is_file():
+                continue
+            # Skip vite-env.d.ts (type declaration, no branding concern)
+            if src_path.name == "vite-env.d.ts":
+                continue
+            content = src_path.read_text()
+            if project_name in content:
+                leaked_files.append(str(src_path.relative_to(project_path)))
+        assert not leaked_files, (
+            f"Project name {project_name!r} leaked into the following frontend "
+            f"source files as a hardcoded literal ({len(leaked_files)} files): "
+            f"{', '.join(leaked_files)}"
+        )
+
+        # ── Forbidden QuickScale branding scan ──────────────────────
+        # Verify that stale QuickScale-internal placeholder text does not
+        # leak into generated frontend source files.
+        stale_placeholders = ["qs_fmt_test", "QsFmtTest"]
+        for src_path in sorted(frontend_src.rglob("*")):
+            if not src_path.is_file():
+                continue
+            if src_path.name == "vite-env.d.ts":
+                continue
+            content = src_path.read_text()
+            for placeholder in stale_placeholders:
+                assert placeholder not in content, (
+                    f"Stale placeholder {placeholder!r} found in "
+                    f"{src_path.relative_to(project_path)}"
+                )
 
     def test_package_json_valid_and_complete(self, tmp_path):
         """
