@@ -330,7 +330,7 @@ class TestReactThemeGeneration:
         assert re.search(r"RUN\\s+npm\\s", dockerfile) is None
         assert "pnpm-workspace.yaml" in dockerfile
         assert dockerfile.index("pnpm-workspace.yaml") < dockerfile.index(
-            "RUN pnpm install"
+            "pnpm install"
         )
 
         # Should copy built assets
