@@ -7,6 +7,7 @@ import copy
 import os
 import subprocess
 import sys
+import traceback
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -2822,6 +2823,14 @@ def _regenerate_managed_wiring_for_apply(
                 project_package=qs_config.project.package,
             )
         except Exception as exc:
+            # Reducing the exception to str(exc) discards the traceback, which
+            # is why installed-context failures like the SA112 managed-wiring
+            # NameError have stayed undiagnosable across cycles. Surface the
+            # full traceback to stderr when QUICKSCALE_DEBUG is set so the
+            # actual raising frame can be captured; default behavior (and the
+            # returned message) is unchanged.
+            if os.environ.get("QUICKSCALE_DEBUG"):
+                click.echo(traceback.format_exc(), err=True)
             return False, str(exc)
 
     step_ctx = _build_step_context(ctx, embedded_modules=embedded_modules)
