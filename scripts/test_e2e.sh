@@ -20,7 +20,8 @@
 #   --help            Show this help message
 #
 # Environment:
-#   QS_E2E_PARALLEL=0  Run Core and CLI lanes serially (default: concurrent)
+#   QS_E2E_PARALLEL=0              Run Core and CLI lanes serially (default: concurrent)
+#   QS_E2E_XDIST_WORKERS=N         pytest-xdist workers per lane (default: heuristic; 0/1=serial)
 #
 
 set -euo pipefail
@@ -64,7 +65,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --help, -h        Show this help message"
             echo ""
             echo "Environment:"
-            echo "  QS_E2E_PARALLEL=0  Run Core and CLI lanes serially"
+            echo "  QS_E2E_PARALLEL=0              Run Core and CLI lanes serially"
+            echo "  QS_E2E_XDIST_WORKERS=N         pytest-xdist workers per lane (default: heuristic; 0/1=serial)"
             exit 0
             ;;
         *)
@@ -128,6 +130,33 @@ else
     E2E_PARALLEL=true
 fi
 
+# Resolve QS_E2E_XDIST_WORKERS: non-negative integer, default via heuristic.
+# Values 0 or 1 skip pytest-xdist flags; values >=2 append -n N --dist loadscope.
+E2E_XDIST_WORKERS="${QS_E2E_XDIST_WORKERS:-}"
+if [ -z "$E2E_XDIST_WORKERS" ]; then
+    # Default: min(max(1,floor(nproc/2)), max(1,floor(MemAvailable_GiB/4)), 4)
+    _NPROC_VAL=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+    _NPROC_VAL=${_NPROC_VAL:-1}
+    _MEM_AVAIL_GB=$(awk '/MemAvailable/{printf "%d", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo 0)
+    _MEM_AVAIL_GB=${_MEM_AVAIL_GB:-0}
+    _HALF_NPROC=$(( _NPROC_VAL / 2 ))
+    [ "$_HALF_NPROC" -lt 1 ] && _HALF_NPROC=1
+    _QUART_MEM=1
+    if [ "$_MEM_AVAIL_GB" -ge 4 ]; then
+        _QUART_MEM=$(( _MEM_AVAIL_GB / 4 ))
+    fi
+    _CANDIDATE=$_HALF_NPROC
+    [ "$_QUART_MEM" -lt "$_CANDIDATE" ] && _CANDIDATE=$_QUART_MEM
+    [ "$_CANDIDATE" -gt 4 ] && _CANDIDATE=4
+    E2E_XDIST_WORKERS=$_CANDIDATE
+fi
+case "$E2E_XDIST_WORKERS" in
+    *[!0-9]*)
+        echo -e "${RED}Error: QS_E2E_XDIST_WORKERS must be a non-negative integer (got: $E2E_XDIST_WORKERS)${NC}" >&2
+        exit 1
+        ;;
+esac
+
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║   QuickScale E2E Test Runner           ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
@@ -140,6 +169,11 @@ if [ "$E2E_PARALLEL" = true ]; then
     echo "Lane mode: concurrent (Core + CLI)"
 else
     echo "Lane mode: serial (QS_E2E_PARALLEL=0)"
+fi
+if [ "${E2E_XDIST_WORKERS:-0}" -ge 2 ]; then
+    echo "Xdist: ${E2E_XDIST_WORKERS} per lane (total $(( E2E_XDIST_WORKERS * 2 )) across 2 lanes)"
+else
+    echo "Xdist: serial"
 fi
 echo ""
 
@@ -268,6 +302,9 @@ run_e2e_lane() {
     fi
     if [ "$lane" = "core" ] && [ -n "$HEADED" ]; then
         pytest_cmd+=("$HEADED")
+    fi
+    if [ "${E2E_XDIST_WORKERS:-0}" -ge 2 ]; then
+        pytest_cmd+=(-n "$E2E_XDIST_WORKERS" --dist loadscope)
     fi
     if [ "${#PYTEST_ARGS[@]}" -gt 0 ]; then
         pytest_cmd+=("${PYTEST_ARGS[@]}")

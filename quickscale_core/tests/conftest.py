@@ -35,6 +35,33 @@ def _isolate_poetry_cache_per_worker() -> None:
 _isolate_poetry_cache_per_worker()
 
 
+def _build_docker_compose_project_name() -> str:
+    """Build a Docker Compose project name from environment context.
+
+    Outside xdist, returns the base name from ``QS_E2E_COMPOSE_PROJECT_NAME``
+    or a Docker-valid fallback (``qscaletest``). Under xdist, appends the
+    worker ID with a ``-`` separator so workers each get an isolated Compose
+    project and avoid container name collisions.
+    """
+    base = os.environ.get("QS_E2E_COMPOSE_PROJECT_NAME", "qscaletest")
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker:
+        return f"{base}-{worker}"
+    return base
+
+
+@pytest.fixture(scope="session")
+def docker_compose_project_name() -> str:
+    """Provide a Docker Compose project name unique per xdist worker.
+
+    Overrides pytest-docker's default project name so each xdist worker
+    gets its own Compose namespace.  The base comes from the
+    ``QS_E2E_COMPOSE_PROJECT_NAME`` env var (fallback: ``qscaletest``);
+    under xdist the ``PYTEST_XDIST_WORKER`` (e.g. ``gw0``) is appended.
+    """
+    return _build_docker_compose_project_name()
+
+
 @pytest.fixture(autouse=True)
 def _skip_generator_poetry_lock(request: pytest.FixtureRequest) -> None:
     """Stop ``generate()`` from shelling out to real ``poetry lock`` in the unit lane.
