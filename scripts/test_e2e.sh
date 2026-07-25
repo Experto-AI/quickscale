@@ -23,7 +23,9 @@
 #   QS_E2E_PARALLEL=0          Run Core and CLI lanes serially (default: concurrent)
 #   QS_E2E_NO_MEMORY_GUARD=1   Skip the low-memory preflight (never auto-fall back to serial)
 #   QS_E2E_MIN_AVAIL_MB=N      Fall back to serial below N MB available RAM (default: 4096)
-#   QS_E2E_MIN_SWAP_MB=N       Fall back to serial below N MB free swap when swap exists (default: 3072)
+#   QS_E2E_COMFORT_AVAIL_MB=N  At/above N MB available RAM, ignore free swap entirely (default: 8192)
+#   QS_E2E_MIN_SWAP_MB=N       Fall back to serial below N MB free swap, checked only
+#                              when available RAM is under QS_E2E_COMFORT_AVAIL_MB (default: 3072)
 #   QS_E2E_HEARTBEAT_INTERVAL=N  Seconds between "still running" progress lines (default: 15)
 #
 
@@ -71,7 +73,9 @@ while [[ $# -gt 0 ]]; do
             echo "  QS_E2E_PARALLEL=0            Run Core and CLI lanes serially"
             echo "  QS_E2E_NO_MEMORY_GUARD=1     Skip the low-memory preflight"
             echo "  QS_E2E_MIN_AVAIL_MB=N        Serial fallback below N MB available RAM (default 4096)"
-            echo "  QS_E2E_MIN_SWAP_MB=N         Serial fallback below N MB free swap (default 3072)"
+            echo "  QS_E2E_COMFORT_AVAIL_MB=N    Ignore free swap at/above N MB available RAM (default 8192)"
+            echo "  QS_E2E_MIN_SWAP_MB=N         Serial fallback below N MB free swap, only when"
+            echo "                               available RAM is under the comfort threshold (default 3072)"
             echo "  QS_E2E_HEARTBEAT_INTERVAL=N  Seconds between progress lines (default 15)"
             exit 0
             ;;
@@ -143,30 +147,67 @@ _meminfo_kb() {
         /proc/meminfo 2>/dev/null
 }
 
+# _require_mb  — abort unless a threshold override is a whole number of MB.
+#
+# A non-numeric threshold would make every `[ x -lt $threshold ]` below fail
+# with "integer expression expected" and evaluate as false, silently disabling
+# the very guard the operator was trying to tune.  Fail loudly instead.
+#
+# Called directly rather than via $(...) so the `exit` aborts the script rather
+# than just a command-substitution subshell.
+_require_mb() {
+    local name="$1" value="$2"
+    if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}Error: $name must be a whole number of MB (got '$value')${NC}" >&2
+        exit 1
+    fi
+}
+
 # Preflight memory guard.  Concurrent lanes launch two Docker + Playwright
 # stacks at once; on a memory-tight host that peak can drive the session into
 # swap thrash and get the run reaped by systemd-oomd (surfaces as a SIGTERM
 # mid-run, not a test failure).  When resting headroom is already low we fall
 # back to serial lanes, which roughly halves peak memory.  Thresholds are
 # overridable; QS_E2E_NO_MEMORY_GUARD=1 disables the guard entirely.
-#   QS_E2E_MIN_AVAIL_MB  minimum MemAvailable before fallback (default 4096)
-#   QS_E2E_MIN_SWAP_MB   minimum SwapFree (when swap exists) before fallback (default 3072)
+#
+# Low SwapFree on its own is not a fallback reason.  A desktop with plenty of
+# RAM routinely accumulates gigabytes of swapped-out idle browser/editor pages
+# (vm.swappiness evicts cold anonymous memory even when RAM is abundant), and
+# those pages never come back on their own.  Swap only matters as a secondary
+# cushion when RAM headroom is already mediocre, so the swap check is gated on
+# MemAvailable sitting below the comfort threshold.
+#   QS_E2E_MIN_AVAIL_MB     hard floor on MemAvailable before fallback (default 4096)
+#   QS_E2E_COMFORT_AVAIL_MB MemAvailable at/above which swap is ignored (default 8192)
+#   QS_E2E_MIN_SWAP_MB      minimum SwapFree, checked only below comfort (default 3072)
 memory_preflight_guard() {
     [ "${QS_E2E_NO_MEMORY_GUARD:-0}" = "1" ] && return 0
     [ "$E2E_PARALLEL" = true ] || return 0
     [ -r /proc/meminfo ] || return 0
 
-    local avail_mb swap_total_mb swap_free_mb min_avail_mb min_swap_mb reason=""
+    local avail_mb swap_total_mb swap_free_mb reason=""
+    local min_avail_mb comfort_avail_mb min_swap_mb
     avail_mb=$(( $(_meminfo_kb MemAvailable) / 1024 ))
     swap_total_mb=$(( $(_meminfo_kb SwapTotal) / 1024 ))
     swap_free_mb=$(( $(_meminfo_kb SwapFree) / 1024 ))
     min_avail_mb="${QS_E2E_MIN_AVAIL_MB:-4096}"
+    comfort_avail_mb="${QS_E2E_COMFORT_AVAIL_MB:-8192}"
     min_swap_mb="${QS_E2E_MIN_SWAP_MB:-3072}"
+    _require_mb QS_E2E_MIN_AVAIL_MB "$min_avail_mb"
+    _require_mb QS_E2E_COMFORT_AVAIL_MB "$comfort_avail_mb"
+    _require_mb QS_E2E_MIN_SWAP_MB "$min_swap_mb"
+
+    # Comfort must never sit below the hard floor, or the swap check would
+    # apply to a window that cannot exist.
+    if [ "$comfort_avail_mb" -lt "$min_avail_mb" ]; then
+        comfort_avail_mb="$min_avail_mb"
+    fi
 
     if [ "$avail_mb" -lt "$min_avail_mb" ]; then
         reason="available RAM ${avail_mb}MB < ${min_avail_mb}MB"
-    elif [ "$swap_total_mb" -gt 0 ] && [ "$swap_free_mb" -lt "$min_swap_mb" ]; then
-        reason="free swap ${swap_free_mb}MB < ${min_swap_mb}MB"
+    elif [ "$avail_mb" -lt "$comfort_avail_mb" ] \
+        && [ "$swap_total_mb" -gt 0 ] \
+        && [ "$swap_free_mb" -lt "$min_swap_mb" ]; then
+        reason="available RAM ${avail_mb}MB < ${comfort_avail_mb}MB and free swap ${swap_free_mb}MB < ${min_swap_mb}MB"
     fi
 
     if [ -n "$reason" ]; then

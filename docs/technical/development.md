@@ -288,8 +288,12 @@ make ci-e2e
 - `QS_E2E_NO_MEMORY_GUARD=1` — skip the low-memory preflight that otherwise falls
   back to serial lanes when resting RAM/swap headroom is low (guards against
   `systemd-oomd` reaping the run under memory pressure). Companion knobs
-  `QS_E2E_MIN_AVAIL_MB` (default `4096`) and `QS_E2E_MIN_SWAP_MB` (default `3072`)
-  tune the fallback thresholds.
+  `QS_E2E_MIN_AVAIL_MB` (default `4096`), `QS_E2E_COMFORT_AVAIL_MB` (default `8192`)
+  and `QS_E2E_MIN_SWAP_MB` (default `3072`) tune the fallback thresholds.
+  `MemAvailable` below `QS_E2E_MIN_AVAIL_MB` always forces serial. Low `SwapFree`
+  only forces serial when `MemAvailable` is *also* under `QS_E2E_COMFORT_AVAIL_MB`
+  — on a RAM-rich desktop, gigabytes of swap held by idle browser/editor pages is
+  normal and is not evidence of memory pressure.
 - `QS_E2E_HEARTBEAT_INTERVAL=N` — seconds between "still running" progress lines
   during the concurrent-lane phase (default `15`).
 - `PYTEST_XDIST_WORKERS=auto` — pin xdist worker count for unit tests (default `auto`);
