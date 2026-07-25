@@ -51,12 +51,12 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active work.
 
-The green-gate join (SA96-GATE), the installed-wheel discovery/resolver chain (SA109 ✓, SA110 ✓, SA113 ✓, SA111a ✓, SA111b ✓), and the Track 2 frontend de-specialization chain (SA104 → SA108 ✓) are all closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md). Five items remain open.
+The green-gate join (SA96-GATE), the installed-wheel discovery/resolver chain (SA109 ✓, SA110 ✓, SA113 ✓, SA111a ✓, SA111b ✓), and the Track 2 frontend de-specialization chain (SA104 → SA108 ✓) are closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md). Five items remain open.
 
 1. **SA112** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — heavy e2e lane covering `apply`'s own resolver call site and the Docker path from a real install. **Critical path.** Pre-diagnostic: gated on one focused plan review of the maintainer-supplied continuation artifact (sections A–E below). Deps: SA110 ✓ + SA111a ✓ + SA113 ✓.
 2. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Baseline prerequisites met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓ + SA111a ✓ + SA113 ✓); awaits a human maintainer to execute the irreversible publish. Hold: must not publish while SA112 remains open.
-3. **SA114** (v87 gate re-verification & fix sweep, Track 1, `deps: none`) — **open, blocked on SA114-ORDER-001.** All source work and reviews are complete (see CHANGELOG); what remains is one literal ordered run of `make check && make quality && make ci && make ci-e2e` with all four exiting 0.
-4. **SA116** (policy-compliant `resolvers.py` line reduction, Track 1, `deps: none`) — **implementation and review complete; unchecked only because closure is gated on SA114-ORDER-001.**
+3. **SA114** (v87 gate re-verification & fix sweep, Track 1, `deps: none`) — ordered gates are green; task remains open on recorded-partial-delivery finding SA114-CR-001 after the review cap.
+4. **SA116** (policy-compliant `resolvers.py` line reduction, Track 1, `deps: none`) — implementation and source review complete; remains unchecked because it closes with SA114.
 5. **SA115** (E2E in-lane parallelization, Track 2, `deps: none` · **merge after SA112**) — `pytest-xdist` in-lane fan-out for the e2e suite. Implementation reached a parked checkpoint; merge-order-blocked on SA112.
 
 Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unscheduled** — gated on a third consumer or a public "update my generated project" command. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module. Both audits ([arch-audit.md](../others/arch-audit.md), [tech-audit.md](../others/tech-audit.md)) otherwise stand at zero open findings.
@@ -75,38 +75,26 @@ The join runs entirely **inside the monorepo** and does **not** exercise the pip
   *(Acceptance:* all 12 modules green in isolation; SA96-GATE four-command run exits 0 with empty quarantine; SA109 ✓ and SA110 ✓ closed (installed wheel runs non-mutating commands clean); SA113 ✓ closed (resolver fix landed); SA111a ✓ and SA112 closed (optional SA111b is non-gating); release published and verified on PyPI.*)*
   *(why →* pre-publish assurance; green-gate is the definition of "publishable"*)*
 
-### Track 1 — Tenant-context surface
+### Track 1 — Tenant-context surface — RECORDED PARTIAL / REVIEW BLOCKED
 
-**Prior Track 1 work COMPLETE.** All prior Track 1 work (SA92/SA84/SA86/SA96-T1, Finding 8, SA97/SA99, SA102/SA103, and the full TP test-parallelization suite SA91/TP1/TP2/TP2b/TP3a/TP3b/TP4) is closed. See [CHANGELOG.md](../../CHANGELOG.md). Two tickets are parked here to use the idle track in parallel with the Track 3 release chain: **SA114** (gate re-verification) and **SA116** (its `resolvers.py` reduction dependency). They form one review unit and close together.
+**Prior Track 1 source work is complete.** SA114's ordered validation chain is green and SA116's source work is complete, but both tasks remain open under the recorded-partial-delivery checkpoint below because the final documentation review reached its cap with SA114-CR-001 still blocking. See [CHANGELOG.md](../../CHANGELOG.md).
 
 #### SA114 — v87 gate re-verification & fix sweep
 
 SA96-GATE proved the four-command join green **at the post-SA92 synced baseline**. Commits have landed since (SA108/roadmap docs, the `d5d25c08` generator `poetry lock` timeout fix, merges), so the gates have not been re-run against current `v87` HEAD. This ticket re-verifies them and fixes any drift. It was introduced while SA113 was still active (alongside the installed-context resolver fix) and now runs alongside the remaining SA112 work on Track 3.
 
 - [ ] **SA114 — Re-run the make gates on current `v87` HEAD and fix drift.** `Tier 2 · Track 1 · deps: none`
-  Run, in order, `make check` → `make quality` → `make ci` → `make ci-e2e` against current `v87` HEAD; fix any lint/typecheck/unit/complexity/coverage/integration/e2e drift so each exits 0 with `QUARANTINE_TICKETS` empty. Record the evidence (exit codes, coverage mean, pass/fail counts) in the completed-work block on merge.
-  - **Concurrency bound (infra):** `make check`/`make quality` are static/light and run fully parallel with Track 3. `make ci`/`make ci-e2e` need a live PostgreSQL server + Docker daemon + ports and **must be serialized** against any Track 3 SA112 e2e run — the `QS_CI_PARALLEL`/`QS_E2E_PARALLEL`/per-lane-scope knobs namespace lanes *within* one invocation, not across worktrees hitting the same server. Coordinate the heavy legs so only one track exercises PG/Docker at a time.
-  - **Fix-scope bound (merge hazard):** if a failure lands in SA113's surface — `quickscale_core/src/quickscale_core/manifest/implications.py`, `scripts/smoke_install.sh`, or the installed-wheel e2e lane — **do not fix it here**; route it to Track 3 follow-up ownership (SA112 or subsequent work). SA113 completed its resolver fix and is no longer an active handoff destination. This ticket owns only gate drift *outside* the installed-context resolver work. Any fix it does make outside that surface is disjoint, so the only shared-closeout overlap with Track 3 is `CHANGELOG.md`/`roadmap.md`, covered by the Merge procedure.
-  - Verify: `make check`, `make quality`, `make ci`, `make ci-e2e` each exit 0 on current `v87` HEAD with empty quarantine; any fixes are behavior-preserving and touch no installed-context resolver file.
-  - **Open state (as of 2026-07-25).** All source work, focused validation, and independent reviews are complete and recorded in [CHANGELOG.md](../../CHANGELOG.md) — gate-drift fixes, the fail-closed runtime-seam donor preflight, the modules-only `make check` dispatch, the runtime-branding/leakage proof (`SA114-REV-001/002/004/005` all resolved), SA116's `resolvers.py` compaction (`SA114-QUALITY-001` resolved), and the QG1 `Dockerfile.j2` pnpm/poetry install hardening with its SA90 fixture parity update. Nothing in the source tree is known-defective.
-  - **Sole blocking finding — `SA114-ORDER-001`** (medium, blocking for completion, completeness): the exact ordered chain `make check && make quality && make ci && make ci-e2e` still has no run in which all four commands exit 0. Across every attempt the first three commands passed with matching evidence and empty quarantine; only `make ci-e2e` has failed, always at the CLI E2E lane's generated-project Docker build, and always for environmental reasons (npm-registry download slowness timing out `pnpm install`, or the run exceeding the agent runtime window). Core E2E has been green throughout. Partial, out-of-order, or identical-tree evidence does **not** satisfy this finding.
-  - **Mitigations already on `v87`** (all in CHANGELOG; a continuation worktree must be synced past them): generated `Dockerfile.j2` retry/timeout hardening for `pnpm install`; `scripts/test_e2e.sh` low-memory preflight guard with the corrected swap veto, `QS_E2E_HEARTBEAT_INTERVAL` heartbeat, provenance banner, and per-lane stuck-lane attribution. Before attributing a failure to anything else, confirm the run header prints `Lane mode: concurrent (Core + CLI)` and capture the provenance line and heartbeat output alongside the exit codes.
-  - **Required clean continuation:**
-    1. Start from clean `wt-track1`, merge latest `v87`, recheck Poetry/Python, Docker, PostgreSQL, and heavy-run serialization against Track 3.
-    2. Run the exact chain `make check && make quality && make ci && make ci-e2e` in one window with a runtime allowance sufficient for E2E.
-    3. If CLI E2E still times out on registry throughput, restore sustained `registry.npmjs.org` access or configure a maintainer-approved compatible mirror, then rerun.
-    4. Require all four commands to exit 0 with quarantine empty; do not substitute partial or identical-tree evidence.
-    5. Obtain independent full-scope change review `STATUS: ok`.
-    6. Only then mark SA114 and SA116 `[x]` and add the completion CHANGELOG entry.
-  - **Decisions needed:** none. The maintainer selected **continue iterating** rather than waiving ORDER-001, and authorized the interim checkpoint merges — authorization to merge open checkpoints, not a waiver. `SA114-DEC-001` (assigning the `resolvers.py` reduction to SA116) is discharged.
-  *(why →* the green-gate join was proven at the synced baseline, not at current HEAD; drift since then is unverified, and re-proving it is independent of the installed-context release chain — a genuine use of the idle track*)*
+  **Recorded partial delivery (2026-07-25; review cap reached; task remains open).**
+  - **Done:** The exact ordered chain `make check && make quality && make ci && make ci-e2e` exited 0 from a clean wt-track1 synced to latest `v87`: QUARANTINE_TICKETS empty, core+CLI equal-weight coverage 92.88%, integration module mean 94.41%, Core E2E 35 passed, CLI E2E 29 passed. SA114-ORDER-001 is satisfied and no source fix was required. Non-gating Django/pytest warnings were observed without assigned ticket IDs.
+  - **Pending / blocking:** `SA114-CR-001` (medium, blocking, consistency) remains open after the second/final review continuation. The final review found that the open-only dependency diagram still included completed Track 1 and that SA115 scheduling/infra prose still treated SA114's heavy legs as future work (`docs/technical/roadmap.md:110,214-219,235,239` before this checkpoint). A future continuation must reconcile every same-fact scheduling site and obtain full-scope `STATUS: ok`; this checkpoint is not a waiver.
+  - **Decisions needed:** none. Any post-cap fix/re-review continuation requires explicit user approval or a fresh scoped continuation.
 
 #### SA116 — Policy-compliant `resolvers.py` line reduction (unblocks SA114 four-gate reclose)
 
 Cross-track growth left `quickscale_core/src/quickscale_core/contracts/resolvers.py` at 1761 lines against its checked-in 1749-line maximum in `scripts/quality_baseline.json`, so `make quality` exits 2 (this is `SA114-QUALITY-001`). Under the shrink-only quality-maxima policy (decisions.md §5) the only compliant fix is a behavior-preserving reduction; raising the baseline is not authorized. Assigned here by `SA114-DEC-001` (2026-07-23).
 
-- [ ] **SA116 — Reduce `contracts/resolvers.py` to ≤1749 lines, behavior-preserving.** `Tier 1 · Track 1 · deps: none` — **implementation and review complete; unchecked only because closure is gated on SA114-ORDER-001.**
-  Compaction landed and is recorded in [CHANGELOG.md](../../CHANGELOG.md): 1761→1749 lines, comment/docstring-only, public API and resolver behavior preserved, `scripts/quality_baseline.json` unchanged at `max_lines` 1749, `make quality` exit 0, independent source review `STATUS: ok` with no findings. SA116 is checked off together with SA114 when the ordered chain passes — no further SA116 work exists.
+- [ ] **SA116 — Reduce `contracts/resolvers.py` to ≤1749 lines, behavior-preserving.** `Tier 1 · Track 1 · deps: none`
+  Compaction landed and is recorded in [CHANGELOG.md](../../CHANGELOG.md): 1761→1749 lines, comment/docstring-only, public API and resolver behavior preserved, `scripts/quality_baseline.json` unchanged at `max_lines` 1749, `make quality` exit 0, independent source review `STATUS: ok` with no findings. No further SA116 source work exists; it remains unchecked because it closes with SA114 after SA114-CR-001 is resolved and full-scope review returns `STATUS: ok`.
   *(why →* shrink-only policy-compliant reduction; dedicated idle-Track-1 ticket resolved `SA114-QUALITY-001` and kept Track 3 on the critical path*)*
 
 ### Track 2 — Module contracts & settings — frontend-theme de-specialization (arch Finding 10)
@@ -231,17 +219,17 @@ Deferred with the (unscheduled) teams module, per both audits — **not ticketed
 Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 ```
-Track 1 (blocked — env)   Track 2 (blocked — merge order)   Track 3 → release (CRITICAL PATH)
+Track 1 (review blocked)  Track 2 (blocked — merge order)   Track 3 → release (CRITICAL PATH)
 ───────────────────────   ───────────────────────────────   ─────────────────────────────────
-SA114 (gate re-verify     SA104 ✓ → … → SA108 ✓             SA96-GATE ✓ SA109 ✓ SA110 ✓
-  & fix; deps: none)        (arch Finding 10 closed)          SA113 ✓ SA111a ✓ SA111b ✓
-SA116 (resolvers.py ≤1749 SA115 (e2e xdist; deps: none)                │
-  deps: none) ── closes      │                                         ▼
-  with SA114                 └── merge after SA112 ◄──────── SA112 ── installed-wheel
-                                                              │        plan→apply→up e2e
-                                                              ▼
-                                                          SA96-PUBLISH ── build → publish
-                                                            (human-only; hold until SA112)
+SA114 / SA116 (partial)   SA104 ✓ → … → SA108 ✓             SA96-GATE ✓ SA109 ✓ SA110 ✓
+                            (arch Finding 10 closed)          SA113 ✓ SA111a ✓ SA111b ✓
+                            SA115 (e2e xdist; deps: none)                │
+                              │                                         ▼
+                              └── merge after SA112 ◄──────── SA112 ── installed-wheel
+                                                               │        plan→apply→up e2e
+                                                               ▼
+                                                           SA96-PUBLISH ── build → publish
+                                                             (human-only; hold until SA112)
 ```
 
 **Critical path:** `SA112 → SA96-PUBLISH`. That is the longest remaining dependency chain to release, and the only chain worth optimizing — SA112 is also the gate SA115 waits behind, so it is the single scheduling bottleneck in the repo.
@@ -250,8 +238,8 @@ SA116 (resolvers.py ≤1749 SA115 (e2e xdist; deps: none)                │
 
 - **SA112 cannot be split or moved.** Its remaining work is one coherent unit — plan review → traceback capture → root fix → lifecycle lane → validation — over `scripts/smoke_install.sh`, `scripts/test_e2e.sh`, and `.github/workflows/e2e.yml`. Splitting it across tracks would put the same three files on two branches, which is exactly the merge hazard the parallel-track model exists to avoid.
 - **SA115 must stay on Track 2.** It edits `scripts/test_e2e.sh` (shared with SA112, hence `merge after SA112`) and needs exclusive PG/Docker (shared with SA114's heavy legs). Moving it to Track 1 would collide with SA114 on infra; moving it to Track 3 would collide with SA112 on files. Track 2 sitting idle is the correct outcome, not waste.
-- **SA114 and SA116 are one review unit** on the same `contracts/resolvers.py` / gate-drift surface, closing on the same ordered-chain gate. Separating them would create two half-closeouts of one logical change.
-- **Neither Track 1 nor Track 2 feeds the critical path.** SA114/SA116 re-prove current `v87` HEAD; SA115 shortens a gate. Neither is a dependency of SA112 or SA96-PUBLISH, so moving work onto Track 3 could only slow it.
+- **SA114 and SA116 remain one review unit** on the same `contracts/resolvers.py` / gate-drift surface. The ordered chain is green, but both remain open on the recorded SA114-CR-001 documentation-consistency checkpoint.
+- **Neither Track 1 nor Track 2 feeds the critical path.** SA114/SA116 re-proved current `v87` HEAD but remain review-blocked on documentation consistency; SA115 shortens a gate. Neither is a dependency of SA112 or SA96-PUBLISH, so moving work onto Track 3 could only slow it.
 
 **Infra serialization (not a track constraint).** `make ci`/`make ci-e2e` on Track 1 and SA112's/SA115's e2e lanes all need the same live PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL`/per-lane-scope knobs namespace lanes *within* one invocation, not across worktrees — only one track may exercise PG/Docker at a time regardless of track assignment.
 
@@ -259,11 +247,11 @@ SA116 (resolvers.py ≤1749 SA115 (e2e xdist; deps: none)                │
 
 ### Track readiness (2026-07-25)
 
-- **Track 1 — BLOCKED (environmental, not on the critical path).** SA114 and SA116 remain unchecked on **SA114-ORDER-001** only. All source work, focused validation, and independent reviews are complete; every failure to date has been the CLI E2E lane's generated-project Docker build failing on npm-registry throughput or runtime window, never a source regression. Fixes for both failure modes have since landed on `v87` (Dockerfile retry/timeout hardening; E2E memory-guard, heartbeat, and provenance diagnostics). **Clean to continue** from a worktree synced past those fixes — the next attempt may simply pass.
+- **Track 1 — RECORDED PARTIAL / REVIEW BLOCKED (not on the critical path).** SA114's ordered chain exited 0 on 2026-07-25 (QUARANTINE_TICKETS empty, coverage 92.88%/94.41%, Core 35/CLI 29 E2E) and no source fix was required; SA116 source work is complete. Both remain unchecked because final review returned `STATUS: partial` with SA114-CR-001 still blocking after the review cap.
 - **Track 2 — BLOCKED (merge order, off the critical path).** SA115's implementation is done and focus-validated but parked **uncommitted** on `wt-track2`; it cannot merge until SA112 lands. Not clean-to-start; the next action is mechanically "wait for SA112, then follow the post-SA112 reconciliation and validation sequence." Also note `scripts/test_e2e.sh` has moved on `v87` since the parked edits (memory guard, heartbeat, provenance) — reconcile against those as well as SA112's lane wiring. Legacy compatibility finding stands: the SA105 dormant-file guarantee covers only fresh current-theme recipients; legacy pre-SA105 recipients get no retroactive dormant guarantee, and the shipped continuation adopts only missing forms/social surfaces (no blog/crm/listings backfill).
 - **Track 3 — BLOCKED (process gate, on the critical path).** SA112 is pre-diagnostic behind `SA112-PR-002` (high) and `SA112-CR-005` (medium). The maintainer-supplied artifact (sections A–E) addresses both at plan-detail level. **Clean to continue:** start a fresh Track 3 worktree synced to latest `v87`, transcribe the artifact into the plan, and submit it to **one** focused plan review; on `STATUS: ok`, proceed to traceback capture and implementation. SA96-PUBLISH (human-only) holds until SA112 closes. Non-gating advisories remain deferred (SA91 CR-SA91-REV-006; SA89B-CR-004; SA93-REV-005; SA93-ADV-001..004; SA104-ADV-001; SA105-ADV-001; CR-SA106-002; SA110-ADV-001).
 
-**Net.** One critical path — **SA112 → SA96-PUBLISH (human)** — with Track 3 clean to continue behind a single plan-review gate. Track 1 is clean to continue and blocked only by an environment that has since been hardened. Track 2 is correctly idle, waiting on SA112 by design. See [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision) for the squash/guardrail/shrink-only-quality policies and §Bundled Module Inventory (AF7) for the fallback precedent SA113 follows; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
+**Net.** One critical path — **SA112 → SA96-PUBLISH (human)** — with Track 3 clean to continue behind a single plan-review gate. Track 1 has green ordered-gate evidence but is recorded partial with SA114/SA116 unchecked on SA114-CR-001 after the review cap. Track 2 is correctly idle, waiting on SA112 by design. See [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision) for the squash/guardrail/shrink-only-quality policies and §Bundled Module Inventory (AF7) for the fallback precedent SA113 follows; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
