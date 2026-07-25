@@ -266,9 +266,6 @@ make typecheck
 
 # Bounded integration concurrency — limit to N concurrent module workers:
 QS_INTEGRATION_JOBS=2 make test-integration
-
-# The QS_INTEGRATION_JOBS variable caps concurrent module workers (SA91).
-# 0 or unset = unlimited; 1 = serial; any positive N = at most N workers.
 ```
 
 **E2E-last** — before merging to a release branch:
@@ -280,26 +277,10 @@ make ci
 make ci-e2e
 ```
 
-**Related parallelism knobs (already landed):**
-- `QS_CI_PARALLEL=0` — run `make ci` static stages serially instead of concurrent
-  fan-out (TP1, Track 1).
-- `QS_E2E_PARALLEL=0` — run Core and CLI E2E lanes serially instead of concurrently
-  (TP3b, Track 2).
-- `QS_E2E_NO_MEMORY_GUARD=1` — skip the low-memory preflight that otherwise falls
-  back to serial lanes when resting RAM/swap headroom is low (guards against
-  `systemd-oomd` reaping the run under memory pressure). Companion knobs
-  `QS_E2E_MIN_AVAIL_MB` (default `4096`), `QS_E2E_COMFORT_AVAIL_MB` (default `8192`)
-  and `QS_E2E_MIN_SWAP_MB` (default `3072`) tune the fallback thresholds.
-  `MemAvailable` below `QS_E2E_MIN_AVAIL_MB` always forces serial. Low `SwapFree`
-  only forces serial when `MemAvailable` is *also* under `QS_E2E_COMFORT_AVAIL_MB`
-  — on a RAM-rich desktop, gigabytes of swap held by idle browser/editor pages is
-  normal and is not evidence of memory pressure.
-- `QS_E2E_HEARTBEAT_INTERVAL=N` — seconds between "still running" progress lines
-  during the concurrent-lane phase (default `15`).
-- `PYTEST_XDIST_WORKERS=auto` — pin xdist worker count for unit tests (default `auto`);
-  set to `0` for a true serial run, or a positive integer to cap workers (TP2, Track 1).
-
-See [CHANGELOG.md](../../CHANGELOG.md) for each knob's implementation history.
+Concurrency, memory-guard, and progress-reporting environment variables for these
+runners — plus how to tell a stuck lane from an out-of-date checkout during a long
+E2E run — are documented in
+[validation_policy.md § Runner Tuning Knobs](./validation_policy.md#runner-tuning-knobs).
 
 ---
 
