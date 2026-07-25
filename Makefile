@@ -835,15 +835,84 @@ fix: format lint-fix
 check:
 	@set -e; \
 	if [ -n "$(QUIET)" ]; then \
-		$(PYTHON) -m ruff check $(SRC_DIRS) --quiet; \
-		$(PYTHON) -m ruff format --check $(SRC_DIRS) --quiet; \
-		$(PYTHON) -m mypy $(SRC_DIRS) --show-error-codes > mypy_log.txt 2>&1 || { cat mypy_log.txt; rm -f mypy_log.txt; exit 1; }; \
-		rm -f mypy_log.txt; \
-		$(PYTHON) -m pytest $(TEST_DIRS) -q --tb=short $(PYTEST_XDIST_ARGS) > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm -f pytest_log.txt; exit 1; }; \
-		rm -f pytest_log.txt; \
+		q_src_dirs=""; \
+		if [ -n "$(filter quickscale,$(ACTIVE_SECTIONS))" ]; then \
+			q_src_dirs="$$q_src_dirs quickscale/src"; \
+		fi; \
+		if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
+			q_src_dirs="$$q_src_dirs quickscale_core/src"; \
+		fi; \
+		if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
+			q_src_dirs="$$q_src_dirs quickscale_cli/src"; \
+		fi; \
+		if [ -n "$(filter devtools,$(ACTIVE_SECTIONS))" ]; then \
+			q_src_dirs="$$q_src_dirs quickscale_devtools/src"; \
+		fi; \
+		q_src_dirs="$$(echo $$q_src_dirs)"; \
+		q_ruff_dirs="$$q_src_dirs"; \
+		if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
+			q_ruff_dirs="$$q_ruff_dirs quickscale_core/tests"; \
+		fi; \
+		if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
+			q_ruff_dirs="$$q_ruff_dirs quickscale_cli/tests"; \
+		fi; \
+		q_ruff_dirs="$$(echo $$q_ruff_dirs)"; \
+		if [ -n "$$q_ruff_dirs" ]; then \
+			$(PYTHON) -m ruff check $$q_ruff_dirs --quiet; \
+			$(PYTHON) -m ruff format --check $$q_ruff_dirs --quiet; \
+		fi; \
+		if [ -n "$$q_src_dirs" ]; then \
+			$(PYTHON) -m mypy $$q_src_dirs --show-error-codes > mypy_log.txt 2>&1 || { cat mypy_log.txt; rm -f mypy_log.txt; exit 1; }; \
+			rm -f mypy_log.txt; \
+		fi; \
+		if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
+			if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
+				echo "Error: MODULE=$(MODULE) does not exist."; \
+				exit 1; \
+			fi; \
+			for mod in $(MODULE_DIRS); do \
+				if [ -d "$$mod/src" ]; then \
+					mod_ruff_args="$$mod/src"; \
+					if [ -d "$$mod/tests" ]; then \
+						mod_ruff_args="$$mod_ruff_args $$mod/tests"; \
+					fi; \
+					$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) $$mod_ruff_args --quiet; \
+					$(PYTHON) -m ruff format --check --cache-dir $(RUFF_CACHE_DIR) $$mod_ruff_args --quiet; \
+					module_mypypath="$$mod:."; \
+					if [ -d "$$mod/src" ]; then \
+						module_mypypath="$$module_mypypath:$$mod/src"; \
+					fi; \
+					for sibling in quickscale_modules/*; do \
+						if [ "$$sibling" != "$$mod" ] && [ -d "$$sibling/src" ]; then \
+							module_mypypath="$$module_mypypath:$$sibling/src"; \
+						fi; \
+					done; \
+					if [ -n "$$MYPYPATH" ]; then \
+						module_mypypath="$$module_mypypath:$$MYPYPATH"; \
+					fi; \
+					MYPYPATH="$$module_mypypath" $(PYTHON) -m mypy "$$mod/src" --show-error-codes > mypy_mod_log.txt 2>&1 || { cat mypy_mod_log.txt; rm -f mypy_mod_log.txt; exit 1; }; \
+					rm -f mypy_mod_log.txt; \
+				fi; \
+			done; \
+		fi; \
+		q_test_dirs=""; \
+		if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
+			q_test_dirs="$$q_test_dirs quickscale_core/tests"; \
+		fi; \
+		if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
+			q_test_dirs="$$q_test_dirs quickscale_cli/tests"; \
+		fi; \
+		q_test_dirs="$$(echo $$q_test_dirs)"; \
+		if [ -n "$$q_test_dirs" ]; then \
+			$(PYTHON) -m pytest $$q_test_dirs -q --tb=short $(PYTEST_XDIST_ARGS) > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm -f pytest_log.txt; exit 1; }; \
+			rm -f pytest_log.txt; \
+		fi; \
 	else \
 		$(MAKE) lint typecheck SECTIONS="$(ACTIVE_SECTIONS)" MODULE="$(MODULE)"; \
-		$(MAKE) test-unit SECTIONS="$(filter-out modules,$(ACTIVE_SECTIONS))" MODULE="$(MODULE)"; \
+		sections_for_test_unit="$(filter-out modules,$(ACTIVE_SECTIONS))"; \
+		if [ -n "$$sections_for_test_unit" ]; then \
+			$(MAKE) test-unit SECTIONS="$$sections_for_test_unit" MODULE="$(MODULE)"; \
+		fi; \
 	fi; \
 	$(MAKE) check-core-compat check-module-core-imports check-manifest-sync check-org-context-primitives check-csrf-exempt
 	@if [ -z "$(QUIET)" ]; then \
@@ -919,7 +988,7 @@ publish-modules-outdated:
 clean:
 	rm -rf quickscale/dist/ quickscale_core/dist/ quickscale_cli/dist/
 	rm -rf .pytest_cache/ .mypy_cache/ .ruff_cache/
-	rm -rf htmlcov/ .coverage coverage.json
+	rm -rf htmlcov/ htmlcov_*/ .coverage coverage.json
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@echo "✅ Cleaned!"
 

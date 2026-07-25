@@ -8,8 +8,33 @@ WORKDIR /app/frontend
 RUN corepack enable
 # Copy dependency files
 COPY frontend/package.json frontend/pnpm-lock.yaml* frontend/pnpm-workspace.yaml* ./
-# Install dependencies
-RUN pnpm install --config.strict-dep-builds=false --no-frozen-lockfile
+# Install dependencies with retry logic for network resilience.
+# Retry up to 3 times to handle transient registry.npmjs.org slowness/timeouts,
+# mirroring the Python dependency step below. pnpm's own fetch timeout/retries
+# are also raised so a single slow download does not fail the whole build.
+#
+# Each attempt is wrapped in `timeout` so a STALLED install (dead socket / hung
+# connection that never returns) is killed and retried, instead of hanging the
+# whole build forever — pnpm's per-request fetch-timeout does not cover a
+# connection that stalls mid-stream, so the retry loop alone is insufficient.
+# `--reporter=append-only` emits timestamped progress lines (buildkit logs have
+# no TTY, so the default spinner prints almost nothing) — this lets you tell a
+# stale build from a progressing one from the log alone.
+RUN echo "📦 Installing frontend dependencies..." && \
+    for attempt in 1 2 3; do \
+        echo "  Attempt $attempt of 3 (started $(date -u +%H:%M:%SZ))..." && \
+        timeout 600 pnpm install --config.strict-dep-builds=false --no-frozen-lockfile \
+            --reporter=append-only \
+            --config.fetch-retries=5 && break; \
+        rc=$?; \
+        if [ $rc -eq 124 ]; then echo "  ⏱️ Attempt $attempt stalled and was killed after 600s"; fi; \
+        if [ $attempt -lt 3 ]; then \
+            echo "  ⚠️ Attempt $attempt failed (rc=$rc), retrying in 5 seconds..." && sleep 5; \
+        else \
+            echo "  ❌ All attempts failed (rc=$rc)" && exit 1; \
+        fi; \
+    done && \
+    echo "✅ Frontend dependencies installed"
 # Copy source code and build
 COPY frontend .
 RUN pnpm run build
@@ -62,16 +87,18 @@ ARG INSTALL_DEV=false
 RUN echo "📦 Installing Python dependencies (INSTALL_DEV=$INSTALL_DEV)..." && \
     export POETRY_HTTP_TIMEOUT=120 && \
     for attempt in 1 2 3; do \
-        echo "  Attempt $attempt of 3..." && \
+        echo "  Attempt $attempt of 3 (started $(date -u +%H:%M:%SZ))..." && \
         if [ "$INSTALL_DEV" = "true" ]; then \
-            poetry install --no-root --no-interaction --no-ansi && break; \
+            timeout 600 poetry install --no-root --no-interaction --no-ansi && break; \
         else \
-            poetry install --only main --no-root --no-interaction --no-ansi && break; \
+            timeout 600 poetry install --only main --no-root --no-interaction --no-ansi && break; \
         fi; \
+        rc=$?; \
+        if [ $rc -eq 124 ]; then echo "  ⏱️ Attempt $attempt stalled and was killed after 600s"; fi; \
         if [ $attempt -lt 3 ]; then \
-            echo "  ⚠️ Attempt $attempt failed, retrying in 5 seconds..." && sleep 5; \
+            echo "  ⚠️ Attempt $attempt failed (rc=$rc), retrying in 5 seconds..." && sleep 5; \
         else \
-            echo "  ❌ All attempts failed" && exit 1; \
+            echo "  ❌ All attempts failed (rc=$rc)" && exit 1; \
         fi; \
     done && \
     echo "✅ Python dependencies installed"

@@ -68,14 +68,8 @@ from quickscale_core.contracts.module_discovery import (
     get_modules_base_path,
 )
 
-
 # ---------------------------------------------------------------------------
-# Analytics — manifest-driven bridge (SA5.1)
-#
-# All public functions in this section delegate to the manifest-driven
-# pipeline (module.yml derivation rules) instead of the legacy imperative
-# derivation schema.  The behaviour is identical — the flat-dict contract
-# expected by CLI callers is preserved.
+# Analytics
 # ---------------------------------------------------------------------------
 
 _ANALYTICS_ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -117,12 +111,7 @@ def normalize_analytics_module_options(
 def resolve_analytics_module_options(
     options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    """Resolve analytics module options via the manifest runtime path.
-
-    Delegates to ``build_schema_from_manifest`` using the derivation rules
-    declared in ``module.yml`` (instead of the legacy hardcoded schema).
-    Applies legacy-compatible post-resolution string normalisation.
-    """
+    """Resolve analytics module options via the manifest runtime path."""
     manifest = load_manifest_from_path(
         get_modules_base_path() / "analytics" / "module.yml"
     )
@@ -136,7 +125,6 @@ def resolve_analytics_module_options(
     result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
     resolved = dict(result.resolved)
 
-    # Apply analytics-specific post-resolution normalisation.
     if "posthog_host" in resolved:
         resolved["posthog_host"] = _normalize_posthog_host(resolved["posthog_host"])
     resolved["provider"] = str(resolved.get("provider", "")).strip().lower()

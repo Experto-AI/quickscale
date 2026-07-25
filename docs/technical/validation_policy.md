@@ -126,3 +126,57 @@ Key expectations:
 - cover generate -> install -> migrate -> serve -> browse flows
 - keep E2E separate from the fast default test path
 - validate database, Docker, and browser integration together before release closeout when appropriate
+
+<a id="runner-tuning-knobs"></a>
+### Runner Tuning Knobs
+
+Environment variables that control concurrency and progress reporting for the
+repository validation runners. Defaults are tuned for CI parity; override only
+when diagnosing a run or working under constrained resources. See
+[CHANGELOG.md](../../CHANGELOG.md) for each knob's implementation history.
+
+**Concurrency:**
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `QS_CI_PARALLEL` | `1` | `0` runs `make ci` static stages serially instead of concurrent fan-out. |
+| `QS_E2E_PARALLEL` | `1` | `0` runs the Core and CLI E2E lanes serially instead of concurrently. |
+| `QS_INTEGRATION_JOBS` | `0` | Caps concurrent module workers for `make test-integration`. `0` or unset = unlimited; `1` = serial; positive `N` = at most `N` workers. |
+| `PYTEST_XDIST_WORKERS` | `auto` | Pins xdist worker count for unit tests. `0` = true serial run; positive integer caps workers. |
+
+**E2E memory guard.** A preflight check falls back to serial lanes when resting
+memory headroom is low, guarding against `systemd-oomd` reaping the run.
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `QS_E2E_NO_MEMORY_GUARD` | unset | `1` skips the preflight entirely. |
+| `QS_E2E_MIN_AVAIL_MB` | `4096` | `MemAvailable` below this always forces serial. |
+| `QS_E2E_COMFORT_AVAIL_MB` | `8192` | Low `SwapFree` forces serial only when `MemAvailable` is also under this. |
+| `QS_E2E_MIN_SWAP_MB` | `3072` | `SwapFree` threshold, subject to the condition above. |
+
+The swap threshold is deliberately conditional: on a RAM-rich machine, gigabytes
+of swap held by idle browser or editor pages is normal and is not evidence of
+memory pressure.
+
+**Progress and provenance:**
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `QS_E2E_HEARTBEAT_INTERVAL` | `60` | Seconds between progress lines during the concurrent-lane phase. Each tick prints total elapsed time plus per-lane silence (`running` vs `running, quiet 7m`); durations over an hour use `2h05m` form. |
+| `QS_E2E_INTEGRATION_REF` | `v87` | Ref the provenance banner compares the checkout against. The banner prints the checkout path, the script's HEAD, and `OUT OF DATE — N commit(s) behind` when the checkout lags. |
+
+<a id="reading-a-long-e2e-run"></a>
+### Reading a Long E2E Run
+
+Two distinct conditions, each with its own signal:
+
+| Condition | Signal | Meaning | Remedy |
+| --- | --- | --- | --- |
+| Stuck lane | heartbeat `quiet Nm` | lane produced no log output for N minutes | inspect that lane's log; abort if genuinely hung |
+| Out-of-date checkout | provenance banner `OUT OF DATE` | bash is executing older script text than the integration ref | re-launch the run from an up-to-date checkout |
+
+Neither signal is a verdict on its own. A quiet stretch is normal during a Docker
+image build or `pnpm install`. An out-of-date banner is expected when `make ci-e2e`
+is launched from a pinned worktree while fixes land in a sibling tree — bash
+executes the script text the run started with, so a mid-run commit is never picked
+up. Check the banner before attributing a failure to the code under test.

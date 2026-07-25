@@ -191,6 +191,14 @@ def _write_project(
         (frontend_src / "hooks" / "useModules.ts").write_text(
             f"export const projectConfig = {{ projectName: '{slug}' }}; // {marker}-hook-marker\n"
         )
+        # validateQuickScaleSeam.ts is the runtime seam that useModules.ts imports.
+        # In-place donor preflight now requires it (SA114-REV-001), so create it
+        # alongside the useModules hook it depends on.
+        seam_dir = frontend_src / "lib"
+        seam_dir.mkdir(parents=True, exist_ok=True)
+        (seam_dir / "validateQuickScaleSeam.ts").write_text(
+            f"export function validateQuickScaleConfig(config: any) {{ return config; }} // {marker}-seam-marker\n"
+        )
 
     if include_docker_files:
         (root / "Dockerfile").write_text(

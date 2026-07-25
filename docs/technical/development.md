@@ -266,9 +266,6 @@ make typecheck
 
 # Bounded integration concurrency — limit to N concurrent module workers:
 QS_INTEGRATION_JOBS=2 make test-integration
-
-# The QS_INTEGRATION_JOBS variable caps concurrent module workers (SA91).
-# 0 or unset = unlimited; 1 = serial; any positive N = at most N workers.
 ```
 
 **E2E-last** — before merging to a release branch:
@@ -280,15 +277,10 @@ make ci
 make ci-e2e
 ```
 
-**Related parallelism knobs (already landed):**
-- `QS_CI_PARALLEL=0` — run `make ci` static stages serially instead of concurrent
-  fan-out (TP1, Track 1).
-- `QS_E2E_PARALLEL=0` — run Core and CLI E2E lanes serially instead of concurrently
-  (TP3b, Track 2).
-- `PYTEST_XDIST_WORKERS=auto` — pin xdist worker count for unit tests (default `auto`);
-  set to `0` for a true serial run, or a positive integer to cap workers (TP2, Track 1).
-
-See [CHANGELOG.md](../../CHANGELOG.md) for each knob's implementation history.
+Concurrency, memory-guard, and progress-reporting environment variables for these
+runners — plus how to tell a stuck lane from an out-of-date checkout during a long
+E2E run — are documented in
+[validation_policy.md § Runner Tuning Knobs](./validation_policy.md#runner-tuning-knobs).
 
 ---
 

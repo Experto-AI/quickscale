@@ -61,6 +61,7 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
+htmlcov_*/
 .tox/
 .nox/
 .coverage
@@ -196,6 +197,7 @@ cython_debug/
 
 # Coverage
 htmlcov/
+htmlcov_*/
 
 # CODE
 
