@@ -26,7 +26,7 @@
 #   QS_E2E_COMFORT_AVAIL_MB=N  At/above N MB available RAM, ignore free swap entirely (default: 8192)
 #   QS_E2E_MIN_SWAP_MB=N       Fall back to serial below N MB free swap, checked only
 #                              when available RAM is under QS_E2E_COMFORT_AVAIL_MB (default: 3072)
-#   QS_E2E_HEARTBEAT_INTERVAL=N  Seconds between "still running" progress lines (default: 15)
+#   QS_E2E_HEARTBEAT_INTERVAL=N  Seconds between "still running" progress lines (default: 60)
 #
 
 set -euo pipefail
@@ -76,7 +76,7 @@ while [[ $# -gt 0 ]]; do
             echo "  QS_E2E_COMFORT_AVAIL_MB=N    Ignore free swap at/above N MB available RAM (default 8192)"
             echo "  QS_E2E_MIN_SWAP_MB=N         Serial fallback below N MB free swap, only when"
             echo "                               available RAM is under the comfort threshold (default 3072)"
-            echo "  QS_E2E_HEARTBEAT_INTERVAL=N  Seconds between progress lines (default 15)"
+            echo "  QS_E2E_HEARTBEAT_INTERVAL=N  Seconds between progress lines (default 60)"
             exit 0
             ;;
         *)
@@ -136,8 +136,10 @@ fi
 
 if [ "${QS_E2E_PARALLEL:-1}" = "0" ]; then
     E2E_PARALLEL=false
+    SERIAL_CAUSE="QS_E2E_PARALLEL=0"
 else
     E2E_PARALLEL=true
+    SERIAL_CAUSE=""
 fi
 
 # _meminfo_kb  — read a /proc/meminfo field (KB) by name; prints 0 if absent.
@@ -212,6 +214,7 @@ memory_preflight_guard() {
 
     if [ -n "$reason" ]; then
         E2E_PARALLEL=false
+        SERIAL_CAUSE="low-memory guard: $reason"
         echo -e "${YELLOW}⚠ Low memory headroom ($reason).${NC}" >&2
         echo -e "${YELLOW}  Falling back to serial lanes to avoid an out-of-memory kill (systemd-oomd).${NC}" >&2
         echo    "  Override with QS_E2E_NO_MEMORY_GUARD=1 to force concurrent lanes anyway." >&2
@@ -221,9 +224,54 @@ memory_preflight_guard() {
 
 memory_preflight_guard
 
+# Provenance banner.  `make ci-e2e` can run for hours, and it is routinely
+# launched from a git worktree pinned to an older commit while fixes land on
+# the integration branch in a sibling tree.  A run that began before a fix
+# existed will never pick it up — bash executes the script text it was started
+# with.  Printing the checkout, HEAD, and how far behind the integration branch
+# it is makes such a run self-evidently out of date in its own log, instead
+# of something reconstructed later by comparing message wording to source.
+#
+# Deliberately worded "out of date", never "stale": in this project "stale"
+# means a wedged/stuck lane (see the heartbeat's quiet-time reporting), which
+# is an unrelated condition.  Conflating the two has already misdirected one
+# diagnosis.
+#   QS_E2E_INTEGRATION_REF  ref to measure out-of-dateness against (default v87)
+print_provenance() {
+    local head_sha dirty="" behind="" integration_ref
+    integration_ref="${QS_E2E_INTEGRATION_REF:-v87}"
+
+    if ! git -C "$PROJECT_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+        echo "Checkout: $PROJECT_ROOT (not a git checkout)"
+        return 0
+    fi
+
+    head_sha="$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    # Compare against HEAD, not the index: `git diff --quiet` alone ignores
+    # staged-but-uncommitted edits, which are exactly as absent from a running
+    # script as unstaged ones.
+    git -C "$PROJECT_ROOT" diff --quiet HEAD 2>/dev/null || dirty=" +local-changes"
+
+    echo "Checkout: $PROJECT_ROOT"
+    if git -C "$PROJECT_ROOT" rev-parse --verify --quiet "$integration_ref" >/dev/null 2>&1; then
+        behind="$(git -C "$PROJECT_ROOT" rev-list --count "HEAD..$integration_ref" 2>/dev/null || echo 0)"
+        if [ "${behind:-0}" -gt 0 ]; then
+            echo -e "Script rev: ${head_sha}${dirty} ${YELLOW}(OUT OF DATE — $behind commit(s) behind $integration_ref)${NC}"
+            echo -e "${YELLOW}  This run uses the script as of ${head_sha}; anything fixed on $integration_ref since then is NOT in effect.${NC}"
+            echo -e "${YELLOW}  Sync with: git -C $PROJECT_ROOT merge $integration_ref${NC}"
+        else
+            echo "Script rev: ${head_sha}${dirty} (up to date with $integration_ref)"
+        fi
+    else
+        echo "Script rev: ${head_sha}${dirty}"
+    fi
+}
+
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║   QuickScale E2E Test Runner           ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
+echo "Started: $(date '+%F %T %Z')"
+print_provenance
 if [ "$SHOW_FULL_OUTPUT" = true ]; then
     echo "Output mode: full"
 else
@@ -232,7 +280,7 @@ fi
 if [ "$E2E_PARALLEL" = true ]; then
     echo "Lane mode: concurrent (Core + CLI)"
 else
-    echo "Lane mode: serial (QS_E2E_PARALLEL=0)"
+    echo "Lane mode: serial (${SERIAL_CAUSE:-unknown cause})"
 fi
 echo ""
 
@@ -263,6 +311,20 @@ cleanup_temp_files() {
     fi
 }
 
+# _fmt_duration  — humanize a second count for a run measured in hours.
+#
+# Pure (no state), so calling it via $(...) is safe.  Past an hour "125m00s" is
+# hard to read at a glance, which matters because these ticks are the operator's
+# only progress signal on a multi-hour run.
+_fmt_duration() {
+    local secs="$1"
+    if [ "$secs" -ge 3600 ]; then
+        printf '%dh%02dm' $(( secs / 3600 )) $(( (secs % 3600) / 60 ))
+    else
+        printf '%dm%02ds' $(( secs / 60 )) $(( secs % 60 ))
+    fi
+}
+
 # _e2e_heartbeat  — emit a periodic "still running" line while lanes execute.
 #
 # The lane logs are buffered and only replayed after both lanes join, so the
@@ -270,24 +332,64 @@ cleanup_temp_files() {
 # reports elapsed time and per-lane state (a lane is "done" once it has written
 # its status_<lane> file) without touching the buffered lane output, keeping the
 # deterministic replay intact.  Interval is configurable via
-# QS_E2E_HEARTBEAT_INTERVAL (seconds; default 15).
+# QS_E2E_HEARTBEAT_INTERVAL (seconds; default 60).
+#
+# A bare "running" tick cannot distinguish a lane making progress from one that
+# has wedged — both look identical, which is useless for deciding whether to let
+# a long run continue or abort it.  Each tick therefore reports how long the
+# lane's buffered log has been silent: a lane whose log is still growing is
+# working, while a lane silent for many minutes is the one to investigate.  A
+# quiet stretch is not proof of a hang (a Docker image build or pnpm install is
+# legitimately silent for minutes), so this reports the observation and leaves
+# the judgement to the operator.
 _e2e_heartbeat() {
     # Drop the inherited worker/cleanup traps: this ticker owns nothing, so a
     # kill from stop_heartbeat should end it immediately rather than run the
     # lane-cleanup signal handler or delete the shared temp dir.
     trap - INT TERM HUP EXIT
-    local start elapsed mm ss core_state cli_state interval
+    local start now elapsed interval lane
+    local -A last_size=() last_change=()
     start="$(date +%s)"
-    interval="${QS_E2E_HEARTBEAT_INTERVAL:-15}"
+    interval="${QS_E2E_HEARTBEAT_INTERVAL:-60}"
+    for lane in core cli; do
+        last_size[$lane]=0
+        last_change[$lane]="$start"
+    done
+
+    # _lane_report  — set LANE_STATE for one lane, updating its progress memo.
+    # Assigns to a global rather than echoing, because the caller must invoke it
+    # directly: inside $(...) the last_size/last_change updates would be made in
+    # a subshell and lost, freezing every lane at "quiet" forever.
+    _lane_report() {
+        local lane="$1" now="$2" size quiet
+        if [ -f "$WORKER_TEMP_DIR/status_$lane" ]; then
+            LANE_STATE="done"
+            return
+        fi
+        size="$(stat -c %s "$WORKER_TEMP_DIR/log_$lane" 2>/dev/null || echo 0)"
+        if [ "$size" -ne "${last_size[$lane]}" ]; then
+            last_size[$lane]="$size"
+            last_change[$lane]="$now"
+            LANE_STATE="running"
+            return
+        fi
+        quiet=$(( now - last_change[$lane] ))
+        if [ "$quiet" -lt 60 ]; then
+            LANE_STATE="running"
+        else
+            LANE_STATE="running, quiet $(_fmt_duration "$quiet")"
+        fi
+    }
+
+    local core_state cli_state
     while true; do
         sleep "$interval"
-        elapsed=$(( $(date +%s) - start ))
-        mm=$(( elapsed / 60 ))
-        ss=$(( elapsed % 60 ))
-        if [ -f "$WORKER_TEMP_DIR/status_core" ]; then core_state="done"; else core_state="running"; fi
-        if [ -f "$WORKER_TEMP_DIR/status_cli" ]; then cli_state="done"; else cli_state="running"; fi
-        printf '  \xe2\x8f\xb1  still running — %dm%02ds elapsed (Core: %s, CLI: %s)\n' \
-            "$mm" "$ss" "$core_state" "$cli_state"
+        now="$(date +%s)"
+        elapsed=$(( now - start ))
+        _lane_report core "$now"; core_state="$LANE_STATE"
+        _lane_report cli  "$now"; cli_state="$LANE_STATE"
+        printf '  \xe2\x8f\xb1  still running — %s elapsed (Core: %s | CLI: %s)\n' \
+            "$(_fmt_duration "$elapsed")" "$core_state" "$cli_state"
     done
 }
 
