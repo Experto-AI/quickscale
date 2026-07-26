@@ -51,13 +51,103 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active work.
 
-The green-gate join (SA96-GATE), the installed-wheel discovery/resolver chain (SA109 ✓, SA110 ✓, SA113 ✓, SA111a ✓, SA111b ✓), the Track 2 frontend de-specialization chain (SA104 → SA108 ✓), and the Track 1 re-verification chain (SA114 ✓, SA116 ✓) are closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md). Three items remain open.
+The green-gate join (SA96-GATE), the installed-wheel discovery/resolver chain (SA109 ✓, SA110 ✓, SA113 ✓, SA111a ✓, SA111b ✓), the Track 2 frontend de-specialization chain (SA104 → SA108 ✓), and the Track 1 re-verification chain (SA114 ✓, SA116 ✓) are closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md). Eight items remain open — SA117 is a release blocker (2026-07-26 diagnostic spike), and SA120–SA122b are the 2026-07-26 audit-derived governance chain that re-activates the idle Track 1.
 
-1. **SA112a → SA112f** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — six serial, handoff-sized tasks covering provisioning, diagnosis, the traceback-selected fix, permanent lifecycle coverage, CI triggers, and closeout. **Critical path.** Next: SA112a. Deps: SA110 ✓ + SA111a ✓ + SA113 ✓.
+1. **SA112a → SA112f** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — six serial, handoff-sized tasks covering provisioning, diagnosis, the traceback-selected fix, permanent lifecycle coverage, CI triggers, and closeout. **Critical path.** Deps: SA110 ✓ + SA111a ✓ + SA113 ✓, **plus SA117 from SA112b onward** (see the evidence-validity dependency below). Next: **SA117**, then SA112a.
 2. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Baseline prerequisites met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓ + SA111a ✓ + SA113 ✓); awaits a human maintainer to execute the irreversible publish. Hold: must not publish while SA112 remains open.
 3. **SA115** (E2E in-lane parallelization, Track 2, `deps: none` · **merge after SA112**) — `pytest-xdist` in-lane fan-out for the e2e suite. Implementation committed and reconciled with current `v87`. Heavy validation is NOT authorized (SA115-DEC-001 step 3 remains unauthorized per 2026-07-26 maintainer decision; human-authorization-gated, not SA112-gated). Only the merge is order-gated.
+4. **SA120** (quiet-check frontend-lint parity, Track 1, `deps: none`) — tech-audit `TA62`. The documented `make check QUIET=1` pre-commit gate skips `lint-frontend`, so the quiet path is false-green on rendered React defects. Tier 1, independent of the release chain.
+5. **SA121** (quality-baseline monotonicity gate, Track 1, `deps: none`) — arch Finding 12. `quality_baseline.json` is both measurement and waiver, so raising it legalizes the regression the shrink-only policy forbids. Tier 2, independent.
+6. **SA122a → SA122b** (gate-topology registry, Track 1) — arch Finding 11. Release assurance is four hand-synchronized inventories; `TA62` and `SA115-CI-001` are its latest paid drift instances. SA122a builds the registry + parity checker (deps: none); SA122b migrates the consumers and **merges after SA112e**, which owns the last manual e2e path-list append.
+7. **SA117** (embedded-manifest / split-branch version skew, Track 3) — **RELEASE BLOCKER, and Track 3's next action.** `apply` embeds modules by git subtree from `splits/<module>-module` on the public remote, so embedded `module.yml` files are whatever was last published, not the working tree. The published splits predate the derivation sections v87's core requires, so `apply` fails for every module set. Approach decided (`SA117-DEC-001`): **stamp + assert in v87, pin in v88 (SA119)**; rules in [decisions.md §module-version-lockstep](./decisions.md#module-version-lockstep). Blocks SA96-PUBLISH **and SA112b–SA112f** (2026-07-26 sequencing decision: `SA117-DEC-002`).
 
-Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unscheduled** — gated on a third consumer or a public "update my generated project" command. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module. Both audits ([arch-audit.md](../others/arch-audit.md), [tech-audit.md](../others/tech-audit.md)) otherwise stand at zero open findings.
+### SA117 — Embedded-manifest / split-branch version skew
+
+- [ ] **SA117 — Tie embedded module manifests to the core release.** `Tier 2 · Track 3 · deps: none · blocks SA96-PUBLISH + SA112b`
+
+  **Sequencing (`SA117-DEC-002`, 2026-07-26): SA117 runs first on Track 3, before SA112a.** SA117 and SA112 were previously order-free — both blocked SA96-PUBLISH, neither named the other. They are not independent, and the binding constraint is *evidence validity*, not file overlap:
+
+  - **SA112b is a diagnostic child.** It runs the all-module installed `plan` + `apply` under `QUICKSCALE_DEBUG=1` and records the final raising frame, and **SA112c changes only the production site that frame justifies.** With the skew unfixed, that `apply` fails at billing's post-hook `KeyError` (`adapter.py:36`) — which is SA117's defect, already diagnosed and already assigned a decided fix. SA112b would capture it as if it were an installed-context discovery bug, and SA112c would then "fix" the wrong seam. The serial-handoff contract makes this expensive: the bad evidence propagates through four reviewed children.
+  - **SA112d's permanent lifecycle E2E asserts the same path.** It applies all 12 modules from an installed wheel and requires a served HTTP response; that test cannot pass while the published splits serve pre-derivation manifests, so writing it before SA117 lands means authoring a test known to be red for a reason outside its own scope.
+  - **SA112a is technically unblocked** (provisioner extraction touches no module-embed path), but Track 3 executes one child at a time, so there is no gain from interleaving — and starting SA112a first would leave the release blocker open longer for no schedule benefit.
+  - **Not a file-overlap bound.** SA117's stamp/assert scope (`module.yml` versions, `embed_module`, managed-wiring regeneration) does not intersect any SA112 child allowlist. Nothing here changes the children's own scoped-plan-review requirement.
+
+
+  **Decision (`SA117-DEC-001`, 2026-07-26): stamp + assert in v87; pin in v88 (SA119).** Rule text is in [decisions.md §module-version-lockstep](./decisions.md#module-version-lockstep) — that section is the SSOT; this ticket only tracks the work.
+  1. **Stamp** — every `module.yml` `version:` is set to the repository `VERSION` at release. Today's spread (auth 0.72.0 … orgs 0.86.0 against `VERSION` 0.87.0) advertises an independent-versioning model the project does not support and must be retired.
+  2. **Assert** — embedding and managed-wiring regeneration fail hard with an explicit version-mismatch error when an embedded `module.yml` version does not match the running core. This converts today's downstream `KeyError` into a diagnosable failure.
+  3. **Pin** — deferred to **SA119** (v88). Stamping gives observability, not prevention: the embed ref is a moving branch, so a matched version is not a guaranteed-matched artifact.
+
+  **Release ordering (mandatory):** tag HEAD to match `VERSION` → push refreshed `splits/*` → publish to PyPI. Publishing core before the splits carry matching manifests ships a `quickscale apply` that fails for every user.
+
+  **Evidence (2026-07-26 diagnostic spike, source and installed contexts both reproduce).** `embed_module` fetches each module from `splits/<module>-module` on `https://github.com/Experto-AI/quickscale.git` (`module_commands.py:624`). The embedded manifests are truncated relative to the working tree — billing 1475 B vs 3699 B, analytics 2077 B vs 5206 B, listings 549 B vs 2063 B — missing `wiring_projections` and `option_derivations` entirely. Without the `enabled` derivation, `QUICKSCALE_BILLING_ENABLED` is never projected into the wiring spec and billing's post-hook raises `KeyError` at `adapter.py:36`. Verified directly that the **source** manifest produces the setting correctly from an empty options dict, so no resolver, assembler, or caller defect is involved.
+
+  **Two independent gaps.**
+  1. **Moving target.** The embed ref is a branch, not a pinned ref, so a given core version embeds whatever the split branch happens to hold at that moment. Version stamping alone gives observability, not prevention.
+  2. **Meaningless version field.** Per-module `module.yml` `version:` values have drifted independently (auth 0.72.0 … orgs 0.86.0) against `VERSION` 0.87.0, so no consumer can use them for a compatibility check.
+
+  **Release-ordering hazard.** `publish_module.py` already gates mutating publish flows on release-authoritative state (VERSION matches a tag at HEAD), so splits pushed during a proper release do correspond to a tagged version. What is missing is any gate proving the splits currently serving `apply` match the core about to be published. Publishing core to PyPI while the splits still serve pre-derivation manifests ships a `quickscale apply` that fails for every user.
+
+  - Verify: all twelve `module.yml` versions equal `VERSION`; an `apply` selecting all 12 modules reaches managed-wiring regeneration with no `KeyError`; a deliberately skewed embedded manifest is rejected with an explicit version-mismatch error naming both versions, not a downstream crash.
+  *(why →* `apply` with any module has zero end-to-end coverage — `test_e2e_development_workflow.py:276` plans with modules skipped — so this skew class has never been exercised*)*
+
+### Track 1 — Release governance (2026-07-26 audit intake)
+
+Track 1 was idle at the last readiness pass. The 2026-07-26 audits ([arch-audit.md](../../arch-audit.md) Findings 11/12, [tech-audit.md](../../tech-audit.md) `TA62`) supply three eligible tickets that touch **no** Track 3 release-path file and are therefore homed here. All three are gate-governance work: they change how "green" is decided, not what the generator emits.
+
+Ordering note from the arch-audit fix-order section: Finding 12 (SA121) is independent and should land **before any further `quality_baseline.json` adjustment**. Finding 11 (SA122a/b) should be centralized **before or as part of** the SA112e/SA115-CI-001 path-list edits — SA122a can and should land first so those edits have a registry to write into, while SA122b's consumer migration waits for SA112e so the e2e path list is only rewritten once.
+
+#### SA120 — Quiet `check` omits the rendered frontend lint (`TA62`)
+
+- [ ] **SA120 — Make `make check QUIET=1` gate-equivalent to `make check`.** `Tier 1 · Track 1 · deps: none`
+
+  The Makefile advertises `make check QUIET=1 - Same as check, quiet on success` (`Makefile:12,137`) but wraps the only `lint-frontend` call in `if [ -z "$(QUIET)" ]` (`Makefile:833-834,918-927`). `make -n check QUIET=1` schedules no frontend command; `make -n check` does. Because `v87` pushes do not trigger hosted CI (`.github/workflows/ci.yml:3-7`), an ESLint/TypeScript error in the generated React source can stay green through the documented agent pre-commit gate until a PR to `main` or the publish workflow. No comment, test, or commit message blesses reduced quiet coverage — `QUIET` is documented as output suppression only.
+
+  1. Run the same Node/pnpm availability guard and `lint-frontend` target in both modes. Under `QUIET=1`, capture output and print it **only on failure**, preserving the nonzero exit status.
+  2. Close the test gap at `scripts/test_ci_coverage_policy.py:1075-1083,1114-1148,1187-1204`: the existing 65 policy tests use `MAKE=true`, so they never observe recursive target invocation. Extend `TestCheckQuietSectionDispatch` so the fake recursive make **records** its targets, membership is compared against normal `check`, and a forced `lint-frontend` failure must propagate in quiet mode.
+
+  - Verify: the new focused policy test passes; `make -n check` and `make -n check QUIET=1` both contain `lint-frontend`; a temporary TypeScript error injected into scratch rendered output fails **both** commands at the same gate.
+  *(why →* tech-audit `TA62` — the documented quiet pre-commit gate is false-green, and the active integration branch is outside the hosted CI push trigger*)*
+
+#### SA121 — Quality baseline can authorize its own growth (arch Finding 12)
+
+- [ ] **SA121 — Enforce the shrink-only baseline against the merge base.** `Tier 2 · Track 1 · deps: none · blocks any further baseline edit`
+
+  [decisions.md](./decisions.md) states maxima "may only reduce … or leave [them] unchanged", but `scripts/check_quality.sh:792-814,824-846` compares actual values against whatever `baseline_entry["max_complexity"]`/`["max_lines"]` currently says — it never reads a parent version. A census of every numeric change since baseline creation `76c5cc55` found **3 of 3 increases, 0 decreases**, all in SA114's gate-drift commit `66157380` (`_validate_modules_section` 11→12, `module_commands.py` 1596→1608, `config_schema.py` 605→611), with no waiver, expiry, or decision amendment. The measurement snapshot is also the waiver authority.
+
+  **Approach — arch-audit Option 1** (smallest seam change; Option 3, generating the snapshot as CI output only, is reserved for a future quality-tool redesign):
+  1. Add a baseline-diff gate that compares `scripts/quality_baseline.json` keys and ceilings against the **merge base** and rejects any positive delta or new exemption.
+  2. Allow an escape only through a structured waiver object — owner, reason, expiry, ceiling — that is distinct from the measurement snapshot and reviewable on its own.
+  3. Report entry key, old value, new value, and the required waiver/decision reference in the failure message.
+
+  - Verify: the three SA114 increases, replayed as a fixture, **fail** the new gate; a decrease and an unchanged entry pass; a waiver-accompanied increase passes and an expired waiver fails; `make quality` stays green at current HEAD.
+  *(why →* arch Finding 12 — a rule stated as monotonic but enforced by a mutable self-declared ceiling is internally contradictory, and the next release-pressure edit is the trigger*)*
+
+#### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
+
+Required release properties have no authoritative topology. The five repository conformance gates are declared in `Makefile:784-821` and aggregated at `829-927`, repeated serially at `scripts/check_ci_locally.sh:195-302` and again in the parallel worker declaration at `401-428`, re-declared as five hosted jobs at `.github/workflows/ci.yml:168-306` with a hand-written `test.needs` at `308-310`, while `.github/workflows/publish.yml:120-207` contains **zero** occurrences of them, and e2e eligibility is a 26-path manual allowlist at `.github/workflows/e2e.yml:13-41`. Adding one gate costs up to ten stations. The drift is recurring, not hypothetical: SA103 (missing frontend proof), SA114 `66157380` (normal/quiet + beta-migration drift), `b5b6f349` (donor preflight), `SA115-CI-001`, and now `TA62`.
+
+**Approach — arch-audit Option 1: centralize *membership and metadata*, not execution.** Environment-specific jobs and hosted parallelism are worth keeping; what must stop is each context independently deciding what "green" means. Split into two Tier 2 tickets because a single registry-plus-five-consumers change is Tier 3.
+
+- [ ] **SA122a — Declarative gate registry + parity checker.** `Tier 2 · Track 1 · deps: none`
+
+  Additive only — no consumer is migrated in this ticket, so it cannot destabilize the release path.
+  1. Define one machine-readable registry owning each gate's identity, required contexts (local-serial, local-parallel, hosted, publish, e2e-trigger), dependencies, and trigger inputs. Seed it with the five repository conformance gates plus the frontend and installed-artifact proofs.
+  2. Add a parity checker that computes, per context, the required-set difference between the registry and that context's actual inventory, and prints it as a diagnostic.
+  3. Land the checker **failing on the current publish omission** (the five conformance targets absent from `publish.yml`), then decide explicitly — in the registry, as metadata — whether publish is genuinely narrower or whether the gates must be added. Record that decision in [decisions.md](./decisions.md); an intentional narrowing is a declared context exclusion, not an unowned gap.
+
+  - Verify: the checker reproduces today's inventories for all five contexts with no false differences; it fails on the publish omission before that omission is dispositioned and passes after; adding a fake gate to the registry fails every context that has not adopted it.
+  *(why →* arch Finding 11 first step — a gate can be correct yet irrelevant to one release path, and no source currently derives membership across paths*)*
+
+- [ ] **SA122b — Migrate the consumers onto the registry.** `Tier 2 · Track 1 · deps: SA122a · merge after SA112e`
+
+  Make each context derive its inventory from the registry instead of restating it: Make `check` aggregation, the serial and parallel lists in `check_ci_locally.sh` (whose current tests pin worker count/order and therefore protect each copy rather than derive it), hosted `ci.yml` jobs and `needs`, publish membership per SA122a's recorded disposition, and the `e2e.yml` `pull_request.paths` allowlist. Make the SA122a parity checker **blocking** in CI once every context derives.
+
+  - **Merge-order bound.** SA112e appends the installed-wheel path tuple to `.github/workflows/e2e.yml`, and `SA115-CI-001` appends its own; both preserve exact ordered tuples with `yaml.BaseLoader` regression coverage. Migrating that list before those land would force rework of all three edits. **Land SA122b after SA112e** — the same coordination bound SA115 already carries. SA122a is unaffected and should land first so SA112e and SA115-CI-001 register their paths as they go.
+  - Verify: adding one new gate requires editing only the registry and its implementation, proven by a test that adds a gate and asserts all five contexts pick it up; the ordered e2e path tuples from SA112e and SA115-CI-001 are both preserved byte-exact; `make check`, `make ci`, and hosted CI stay green with unchanged effective inventories.
+  *(why →* arch Finding 11 — removes the 7–10 coordination stations per cross-cutting property while preserving environment-specific execution*)*
+
+Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unscheduled** — gated on a third consumer or a public "update my generated project" command. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module. Tech-audit tooling gaps other than `TA62` (dependency-vulnerability scanning, security static analysis, production-change testimony gate) are parked in the v88 backlog as **SA123**. With SA120/SA121/SA122a-b ticketed, both audits stand at zero unscheduled `now`-horizon findings.
 
 ### Green-gate milestone — all quality make commands pass
 
@@ -132,7 +222,7 @@ itself. This does **not** belong in `smoke-install`: `apply` runs `poetry lock` 
 needs the Docker daemon + image builds — all antithetical to the fast, service-free
 smoke gate. It belongs in a heavy lane gated like `ci-e2e`.
 
-- [ ] **SA112 — Installed-wheel lifecycle e2e lane.** `Tier 2 · Track 3 · deps: SA110 ✓ · SA111a ✓ · SA113 ✓`
+- [ ] **SA112 — Installed-wheel lifecycle e2e lane.** `Tier 2 · Track 3 · deps: SA110 ✓ · SA111a ✓ · SA113 ✓ · SA117 (from SA112b on)`
   Umbrella acceptance only: SA112a–SA112f must prove that an installed wheel can
   provision an external project, run `plan` with all 12 modules, run `apply`, invoke
   the installed `up` command explicitly, boot and serve through Docker/PostgreSQL,
@@ -152,10 +242,11 @@ smoke gate. It belongs in a heavy lane gated like `ci-e2e`.
   **Serial handoff contract.** Execute exactly one child at a time on Track 3. Each child must name its complete file allowlist, commands, expected exits/artifacts, rollback, and focused validation before implementation; compare the staged names against that allowlist after `git add -A`; obtain independent change review; merge the reviewed child back to `v87`; then start the next child from a fresh sync. A child may stop with evidence and no source delta. Never carry an unreviewed implementation across child boundaries. `SA112` closes only after SA112a–SA112f are all complete.
 
   - [ ] **SA112a — Extract the installed-wheel provisioner and preserve smoke parity.** `Tier 2 · Track 3 · deps: SA110 ✓ + SA111a ✓ + SA113 ✓`
-    Extract the reusable staging/build/venv helpers from `scripts/smoke_install.sh` into a sourceable `scripts/_installed_wheel_venv.sh`, add the thin `scripts/provision_installed_venv.sh` wrapper, and keep all 20 smoke probes unchanged. The scoped plan must specify helper-owned temporary directories and signal/exit cleanup, caller-owned output cleanup, exact core → CLI → umbrella build/install order, one-line stdout, stderr chatter, usage exits, caller-trap/status preservation tests, the three-file allowlist, and exact `bash -n`, focused-test, and `make smoke-install` evidence. **Current status:** next pending task; implementation requires scoped plan-review `STATUS: ok`. **Open decisions:** none.
+    Extract the reusable staging/build/venv helpers from `scripts/smoke_install.sh` into a sourceable `scripts/_installed_wheel_venv.sh`, add the thin `scripts/provision_installed_venv.sh` wrapper, and keep all 20 smoke probes unchanged. The scoped plan must specify helper-owned temporary directories and signal/exit cleanup, caller-owned output cleanup, exact core → CLI → umbrella build/install order, one-line stdout, stderr chatter, usage exits, caller-trap/status preservation tests, the three-file allowlist, and exact `bash -n`, focused-test, and `make smoke-install` evidence. **Current status:** first SA112 child, but **SA117 runs before it** (`SA117-DEC-002`); implementation requires scoped plan-review `STATUS: ok`. This child alone does not depend on SA117 — it touches no module-embed path — but Track 3 is one-child-at-a-time, so the release blocker goes first. **Open decisions:** none.
     *(why →* `SA112-PR-002`; creates a green, independently reviewable provisioning seam before Docker lifecycle work*)*
 
-  - [ ] **SA112b — Capture the installed `apply` traceback with a literal diagnostic.** `Tier 2 · Track 3 · deps: SA112a`
+  - [ ] **SA112b — Capture the installed `apply` traceback with a literal diagnostic.** `Tier 2 · Track 3 · deps: SA112a + SA117`
+    **SA117 is a hard prerequisite (`SA117-DEC-002`).** Until the splits carry matching manifests, the all-module installed `apply` fails at billing's post-hook `KeyError` (`adapter.py:36`) from embedded-manifest skew — an already-diagnosed defect with an already-decided fix. Running this diagnostic first would record SA117's frame as if it were the unknown installed-context defect and mislead SA112c into changing the wrong seam. Before capturing, confirm SA117's stamp/assert has landed and the refreshed `splits/*` are pushed; if `apply` still fails at the billing post-hook, stop and re-open SA117 rather than proceeding.
     From an external workdir and the installed entrypoint produced by SA112a, run the exact all-module `plan` and current three-confirmation `apply` under `QUICKSCALE_DEBUG=1`. Record argv, cwd, sanitized environment, stdin bytes, timeouts, return handling, traceback path, final raising frame/call chain, and exact-prefix Docker/volume cleanup. This child is evidence-first and may complete with no source delta. If the checkpoint state unexpectedly passes, require a disposable negative control that reproduces the original failure; stop rather than infer a fix. **Open decisions:** ask only if the actual frame admits multiple contract-valid fixes with materially different compatibility effects.
     *(why →* `SA112-PR-002`; the static searches cannot identify the bare-name raising frame*)*
 
@@ -163,8 +254,8 @@ smoke gate. It belongs in a heavy lane gated like `ci-e2e`.
     Change only the production site(s) justified by SA112b's final raising frame. Add the nearest regression for the previously raising branch and enumerate callers whenever an exported/shared contract changes; an out-of-allowlist caller requires explicit scope expansion. Re-run the diagnostic to prove the original frame is gone without weakening fail-hard inventory behavior. **Open decisions:** inherited only if SA112b recorded multiple materially different valid fixes.
     *(why →* `SA112-PR-002`; prevents speculative broad fallbacks and preserves caller compatibility*)*
 
-  - [ ] **SA112d — Add the permanent installed-wheel lifecycle E2E.** `Tier 2 · Track 3 · deps: SA112c`
-    Add `quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py` using the installed binary, external cwd, all 12 modules, current apply stdin `"n\ny\ny\n"`, bounded subprocesses, and exact lane/container scoping. After `apply` completes its own start/migration path, run installed `down` without volumes to remove double-start ambiguity, then invoke installed `up` explicitly, poll the allocated application URL to a bounded deadline and require a successful HTTP response, then run `ps`, `manage migrate`, and final `down --volumes`. Cover provisioning failure before fixture yield and cleanup precedence for timeout, exception, and nonzero `down`: a primary lifecycle failure stays primary; cleanup failure is primary only when no earlier failure exists. Confirm `scripts/test_e2e.sh` already collects the CLI test directory; do not edit the runner if it does. **Open decisions:** none.
+  - [ ] **SA112d — Add the permanent installed-wheel lifecycle E2E.** `Tier 2 · Track 3 · deps: SA112c (transitively SA117)`
+    This test applies all 12 modules from an installed wheel and requires a served HTTP response, so it exercises the embed path SA117 fixes — it cannot go green while the published splits serve pre-derivation manifests. Add `quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py` using the installed binary, external cwd, all 12 modules, current apply stdin `"n\ny\ny\n"`, bounded subprocesses, and exact lane/container scoping. After `apply` completes its own start/migration path, run installed `down` without volumes to remove double-start ambiguity, then invoke installed `up` explicitly, poll the allocated application URL to a bounded deadline and require a successful HTTP response, then run `ps`, `manage migrate`, and final `down --volumes`. Cover provisioning failure before fixture yield and cleanup precedence for timeout, exception, and nonzero `down`: a primary lifecycle failure stays primary; cleanup failure is primary only when no earlier failure exists. Confirm `scripts/test_e2e.sh` already collects the CLI test directory; do not edit the runner if it does. **Open decisions:** none.
     *(why →* `SA112-PR-002`; supplies the permanent installed-artifact coverage after the root fix is known*)*
 
   - [ ] **SA112e — Add the exact E2E workflow-trigger contract.** `Tier 1 · Track 3 · deps: SA112d`
@@ -184,26 +275,35 @@ The AF7 installed-wheel discovery decision is recorded in [`decisions.md`](../te
 Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 ```
-Track 2 (validation-paused; merge queued)  Track 3 → release (CRITICAL PATH)
-───────────────────────────────   ──────────────────────────────────
-SA115 (e2e xdist; deps: none)     SA112a → b → c → d → e → f
-  │                                 │      serial reviewed handoffs
-  └── merge after SA112 ◄───────────┤
-                                     ▼
-                                 SA96-PUBLISH ── build → publish
-                                   (human-only; hold until SA112)
-
-Track 1: idle — no open ticket (SA114 ✓ / SA116 ✓); nothing eligible to move here.
+Track 1 (governance; fully parallel)   Track 2 (paused; merge queued)   Track 3 → release (CRITICAL PATH)
+──────────────────────────────────   ──────────────────────────────   ─────────────────────────────────
+SA120 (TA62 quiet parity)            SA115 (e2e xdist; deps: none)    SA117 (RELEASE BLOCKER) ◄─ next
+SA121 (baseline monotonicity)          │                                │  stamp + assert + push splits
+SA122a (gate registry) ──┐             │                                ▼
+  │                      │             │                              SA112a → b → c → d → e → f
+  │                      │             │                                 │  ▲   serial reviewed handoffs
+SA122b (migrate) ◄───────┴─────────────┼────── merge after SA112e ◄──────┤  └── SA117 required from b on
+                                       └────── merge after SA112 ◄───────┤      (evidence validity)
+                                                                         ▼
+                                                                  SA96-PUBLISH ── build → publish
+                                                                  (human-only; hold until SA112f)
 ```
 
-**Critical path:** `SA112a → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH`. That is the longest remaining dependency chain to release, and the only chain worth optimizing — the SA112 umbrella is also the merge gate SA115 waits behind, so it is the single scheduling bottleneck in the repo.
+SA120, SA121, and SA122a have `deps: none` and may run in any order or concurrently within Track 1; only SA122b carries an ordering bound.
 
-**Parallelism.** The three top-level open tickets occupy two tracks (SA112a–SA112f → SA96-PUBLISH sequentially on Track 3, SA115 on Track 2), and no rebalancing move is available that would speed the critical path:
+**Critical path:** `SA117 → SA112a → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH`. SA117 joined the head of this chain on 2026-07-26 (`SA117-DEC-002`): it was previously an order-free sibling that merely shared the SA96-PUBLISH blocker, but it gates SA112b's diagnostic evidence and SA112d's lifecycle assertion, so it is now genuinely upstream. That is the longest remaining dependency chain to release, and the only chain worth optimizing — the SA112 umbrella is also the merge gate SA115 waits behind, so this chain is the single scheduling bottleneck in the repo.
 
+**Parallelism.** The open tickets now occupy all three tracks: SA117 → SA112a–SA112f → SA96-PUBLISH sequentially on Track 3, SA115 on Track 2, and the audit-derived governance chain SA120 / SA121 / SA122a → SA122b on Track 1. No rebalancing move is available that would speed the critical path:
+
+- **Track 1 is now active and does not touch the critical path.** SA120 edits `Makefile` + `scripts/test_ci_coverage_policy.py`; SA121 edits `scripts/check_quality.sh` + the baseline gate; SA122a is purely additive (new registry + checker). None of these files appear in any SA112 child's allowlist or in SA117's stamp/assert scope, and none need PostgreSQL or Docker — so Track 1 can run fully concurrent with Track 3, including during SA112's exclusive-infra legs. SA122b is the single exception and is bounded below.
+- **SA122b merges after SA112e.** Both rewrite `.github/workflows/e2e.yml`'s `pull_request.paths`. SA112e appends an exact ordered five-path tuple and SA115-CI-001 appends its own; migrating that list to the registry first would force all three edits to be redone. This is the same coordination bound SA115 already carries, applied to the same file — deliberately not a Track reassignment, since the rest of SA122b (Make, `check_ci_locally.sh`, `ci.yml`, `publish.yml`) has no Track 3 overlap.
+- **SA122a should land early.** It is the registry SA112e and SA115-CI-001 write their paths into. Landing it before them makes those two edits registry-recorded rather than a fourth and fifth hand-sync, which is precisely the compounding arch Finding 11 measures.
+
+- **SA117 precedes the SA112 chain and cannot be parallelized with it.** The dependency is evidence validity, not file overlap: SA112b captures a traceback that SA112c is contractually restricted to acting on, and today that traceback would be SA117's already-diagnosed billing `KeyError`. Since SA117's scope (`module.yml` stamping, `embed_module` assertion) intersects no SA112 child allowlist, the temptation is to run them concurrently on different tracks — don't. SA112b's evidence is only trustworthy after SA117's refreshed splits are pushed, and Track 3's serial-handoff contract exists precisely to stop unreviewed or stale-evidence work crossing child boundaries.
 - **SA112 is split only as a serial Track 3 chain.** SA112a–SA112f are separate reviewed handoffs on the same worktree, each merged to `v87` before the next starts. They must not fan out across tracks: provisioning, traceback evidence, the root fix, lifecycle coverage, triggers, and closeout remain causally ordered, and parallel branches would recreate the shared-file and stale-evidence hazard the split is designed to remove.
 - **SA115 must stay on Track 2.** SA112d has no expected runner overlap because it must use existing CLI-directory collection without editing `scripts/test_e2e.sh`. SA112e and SA115-CI-001 do share the workflow `pull_request.paths` list and must preserve both ordered tuples. The `merge after SA112` bound remains for that path-list coordination, because SA112c's traceback-selected root-fix scope is still unknown, and because critical-path rebase risk belongs off Track 3. (Its infra contention is now with SA112 only — SA114's heavy legs are done.)
 - **Track 2 does not feed the critical path.** SA115 shortens a gate; it is not a dependency of SA112 or SA96-PUBLISH, so moving work onto Track 3 could only slow it.
-- **Track 1 is idle and stays idle — there is nothing eligible to move onto it.** The only open non-Track-3 ticket is SA115, whose implementation is already committed on `wt-track2`; reassigning it would force a re-home of committed work for zero schedule gain (its remaining steps are gated by human authorization and by the SA112 merge bound, not by track capacity). No SA112 child is eligible either, since the chain is causally serial. Track 1 is therefore held in reserve for the next audit-derived ticket.
+- **Track 1's reserve was drawn on as designed.** The prior pass held Track 1 for "the next audit-derived ticket"; the 2026-07-26 audits produced four, and they land there rather than on Track 2 (whose worktree carries committed SA115 work) or Track 3 (critical path). SA115 still must not be re-homed — its implementation is already committed on `wt-track2` and its remaining steps are gated by human authorization, not track capacity. No SA112 child is eligible to move either, since that chain is causally serial.
 
 **Infra serialization (not a track constraint).** SA112's and SA115's e2e lanes (and any future `make ci`/`make ci-e2e` rerun) all need the same live PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL`/per-lane-scope knobs namespace lanes *within* one invocation, not across worktrees — only one track may exercise PG/Docker at a time regardless of track assignment.
 
@@ -212,20 +312,62 @@ Track 1: idle — no open ticket (SA114 ✓ / SA116 ✓); nothing eligible to mo
 ### Track readiness (2026-07-26)
 
 - **Track 2 — IMPLEMENTATION-READY BUT VALIDATION-PAUSED; merge queued behind SA112 (off the critical path).** SA115 is committed (`5193f198`) and reconciled with current `v87` (`5b5de830`) as of 2026-07-25 — `SA115-DEC-001` steps 1–2 are done, and the `scripts/test_e2e.sh` drift (memory guard, heartbeat, provenance, swap-veto correction) is resolved with post-merge focus checks green. The branch is clean and current, but SA115-DEC-001 step 3 heavy validation remains unauthorized per the 2026-07-26 maintainer decision. Validation is human-authorization-gated, not SA112-gated. Only the *merge* is order-gated behind SA112. Legacy compatibility finding stands: the SA105 dormant-file guarantee covers only fresh current-theme recipients; legacy pre-SA105 recipients get no retroactive dormant guarantee, and the shipped continuation adopts only missing forms/social surfaces (no blog/crm/listings backfill).
-- **Track 1 — IDLE AND CLEAN (no assigned work).** SA114/SA116 closed on 2026-07-26 and the track carries no open ticket. Held in reserve; see the Parallelism bullet for why no open work is eligible to move here.
-- **Track 3 — CLEAN TO CONTINUE AT SA112a (on the critical path; no blocker).** The earlier monolithic-artifact plan-review cap is history (CHANGELOG.md); `SA112-CR-005` is resolved at plan-detail level, `SA112-PR-002` is carried forward into the per-child plans, the unreviewed prototype is neutralized, and the mergeable tree has no SA112 executable delta. **Next action:** start SA112a only, from a clean Track 3 worktree synced to latest `v87`, and obtain `STATUS: ok` on SA112a's narrow literal plan before editing. Complete and merge each child before opening the next. SA96-PUBLISH (human-only) holds until SA112f closes the umbrella. Non-gating advisories remain deferred (SA91 CR-SA91-REV-006; SA89B-CR-004; SA93-REV-005; SA93-ADV-001..004; SA104-ADV-001; SA105-ADV-001; CR-SA106-002; SA110-ADV-001).
+- **Track 1 — ACTIVE (2026-07-26 audit intake; off the critical path).** SA114/SA116 closed and the track was held in reserve; it now carries **SA120**, **SA121**, **SA122a**, and **SA122b**. First three have `deps: none` and need no PostgreSQL/Docker, so they may start immediately and run concurrently with Track 3's exclusive-infra legs. Suggested order: SA120 (Tier 1, smallest, closes the false-green pre-commit gate agents rely on) → SA121 (unblocks any further baseline edit) → SA122a (registry, land before SA112e writes its paths) → SA122b (after SA112e). **Next action:** SA120.
+- **Track 3 — CLEAN TO CONTINUE AT SA117 (on the critical path; no blocker).** The earlier monolithic-artifact plan-review cap is history (CHANGELOG.md); `SA112-CR-005` is resolved at plan-detail level, `SA112-PR-002` is carried forward into the per-child plans, the unreviewed prototype is neutralized, and the mergeable tree has no SA112 executable delta. **Next action:** **SA117** — stamp all twelve `module.yml` versions to `VERSION`, add the embed/regeneration mismatch assertion, then tag → push refreshed `splits/*` → (PyPI later, at SA96-PUBLISH). Only after SA117 closes, start SA112a from a clean Track 3 worktree synced to latest `v87`, with `STATUS: ok` on its narrow literal plan before editing. Complete and merge each child before opening the next. SA96-PUBLISH (human-only) holds until SA112f closes the umbrella. Non-gating advisories remain deferred (SA91 CR-SA91-REV-006; SA89B-CR-004; SA93-REV-005; SA93-ADV-001..004; SA104-ADV-001; SA105-ADV-001; CR-SA106-002; SA110-ADV-001).
 
-**Net.** One critical path — **SA112a → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH (human)**. Track 3's next action is only SA112a's scoped plan review; no umbrella implementation is authorized. Track 2 is implementation-ready but validation-paused pending explicit future maintainer approval (SA115-DEC-001 step 3: **Keep unauthorized**), merge after SA112.
+**Net.** One critical path — **SA117 → SA112a → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH (human)**. Track 3's next action is **SA117**; SA112a follows it, and no SA112 umbrella implementation is authorized. Track 2 is implementation-ready but validation-paused pending explicit future maintainer approval (SA115-DEC-001 step 3: **Keep unauthorized**), merge after SA112. Track 1 runs the audit-derived governance chain in parallel — **SA120 → SA121 → SA122a** are unblocked now, **SA122b** merges after SA112e.
 
-**Standing decisions.** `SA115-DEC-001` step 3 — **Keep unauthorized** (2026-07-26); `SA115-DEC-002` (guard clamps workers) — **ratified**, implementation rides along with the authorized validation phase. Both are stated in full in the SA115 section above; no roadmap surface may contradict them. See [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision) for the squash/guardrail/shrink-only-quality policies and §Bundled Module Inventory (AF7) for the fallback precedent SA113 follows; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
+**Standing decisions.** `SA117-DEC-002` (2026-07-26) — **SA117 runs first on Track 3, before SA112a**, and is a hard prerequisite for SA112b onward; rationale in the SA117 section. `SA115-DEC-001` step 3 — **Keep unauthorized** (2026-07-26); `SA115-DEC-002` (guard clamps workers) — **ratified**, implementation rides along with the authorized validation phase. Both are stated in full in the SA115 section above; no roadmap surface may contradict them. See [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision) for the squash/guardrail/shrink-only-quality policies and §Bundled Module Inventory (AF7) for the fallback precedent SA113 follows; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
+
+---
+
+## v88 backlog (not v87 scope)
+
+Deferred deliberately. Nothing here blocks the v87 release.
+
+### SA123 — Close the remaining tech-audit tooling gaps
+
+- [ ] **SA123 — Add dependency-vulnerability and security static analysis to the gate set.** `Tier 2 · v88 · deps: SA122a`
+
+  The 2026-07-26 tech-audit could not resolve lockfile CVEs because `pip-audit`/Safety are absent from local and CI tooling, and could not run implementation-security rules because Bandit/Semgrep are absent. Add both as read-only blocking scanners: a dependency audit with an explicit reviewed allowlist, and a focused rule set covering subprocess shell use, unsafe deserialization, TLS disabling, Django raw/`mark_safe` sinks, and committed credential signatures.
+
+  **Depends on SA122a** so the two new gates are registered in the topology from birth rather than adding two more hand-synchronized inventories — the exact compounding arch Finding 11 describes. The audit's fourth gap (a production-change testimony gate requiring a CHANGELOG/decision/ticket trail for first-party behavioral commits) is **not ticketed**: it governs maintainer process rather than artifact correctness, and the side-channel lane is currently covered by recurring audit scrutiny.
+
+  - Verify: both scanners run in the registered contexts and fail on a deliberately introduced fixture; the allowlist requires an explicit reviewed entry per suppression; current HEAD is green or its findings are dispositioned.
+  *(why →* tech-audit tooling gaps; two whole defect categories are currently unswept*)*
+
+### SA119 — Pin the module embed ref (SA117 step 3)
+
+- [ ] **SA119 — Embed modules from an immutable ref, not a moving branch.** `Tier 2 · v88 · deps: SA117`
+
+  `embed_module` fetches from `splits/<module>-module` (`module_commands.py:624`) — a branch, so a given core version embeds whatever that branch holds at embed time. SA117's stamp+assert makes a mismatch *visible and diagnosable*; only pinning makes it *impossible*. Replace the branch ref with an immutable ref (release tag or commit SHA) resolved from the running core's version.
+
+  **Open design question — where the mapping lives.** Three candidates, each with a different ownership story: in core (a version→ref table shipped in the wheel), in the manifest (each module declares its own compatible refs), or in a lockfile in the generated project (recording exactly what was embedded, closest to how `poetry.lock` behaves). Resolve this before implementing; it determines who must be updated on every release.
+
+  - Verify: embedding a module resolves to an immutable ref; moving a split branch afterwards does not change what a given core version embeds; the recorded ref appears in project state for reproducibility.
+  *(why →* SA117 makes skew detectable; this makes it structurally impossible*)*
+
+### SA118 — Materialize declared manifest defaults in the assembler (narrow-B)
+
+- [ ] **SA118 — Guarantee every declared `module.yml` default reaches the wiring spec.** `Tier 2 · v88 · deps: none`
+
+  Billing's post-hook (`quickscale_modules/billing/src/quickscale_modules_billing/adapter.py:34-36`) reads `settings["QUICKSCALE_BILLING_ENABLED"]` and assumes presence. When a manifest declares an option with a default but the projection does not run, the key is absent and the hook raises `KeyError` — a confusing crash instead of a clear contract error. Make the manifest layer authoritative for materialization: an option declared in `module.yml` with a `default` must always project its `django_setting`, whether or not the caller supplied a value.
+
+  **Scope discipline — this is narrow-B, not full-B.** Do **not** attempt to complete the imperative→declarative migration here. [decisions.md §module-derivation-schema](./decisions.md#module-derivation-schema) records that runtime derivation execution is active for **analytics and listings** only; finishing that migration across all twelve modules is a separate program. SA118 changes only the materialization guarantee.
+
+  - **Not a fail-hard violation.** [§fail-hard-principle](./decisions.md#fail-hard-principle) prohibits *inventing* values when configuration is absent or invalid. A default declared in `module.yml` is versioned, authoritative configuration — materializing it is reading config, not substituting for it. Inventing the value locally inside a consumer (the rejected option A) is the prohibited shape.
+  - **Expect emission-parity churn.** Materializing previously-absent settings will move `sa90_emission_manifests.json` hashes for multiple modules. Rebaseline deliberately and record which files moved and why — the tech-audit has flagged silent parity rebaselining as a recurring anomaly five passes running.
+  - **Not the fix for SA117.** The 2026-07-26 spike proved the billing `KeyError` is embedded-manifest version skew, not a materialization gap: the source manifest projects the setting correctly from an empty options dict. SA118 stands on its own architectural merits — it removes a latent crash class and moves materialization authority to the manifest, where [§module-derivation-schema](./decisions.md#module-derivation-schema) says it belongs.
+  - Verify: an option declared with a default always yields its `django_setting` in the built spec; consumers reading such a key unconditionally cannot raise `KeyError`; parity fixtures rebaselined with a per-file rationale.
+  *(why →* manifest-authoritative projection is the documented direction; the current gap lets a declared default silently fail to exist*)*
 
 ---
 
 ## References
 
 - **Completed and archived work:** [CHANGELOG.md](../../CHANGELOG.md)
-- **Structural autopsy:** [arch-audit.md](../others/arch-audit.md)
-- **Fail-hard violations audit:** [tech-audit.md](../others/tech-audit.md)
+- **Structural autopsy:** [arch-audit.md](../../arch-audit.md) (repository root as of 2026-07-26; formerly `docs/others/`)
+- **Codebase-wide defect sweep:** [tech-audit.md](../../tech-audit.md) (repository root as of 2026-07-26; formerly `docs/others/`)
 - **Release notes:** `docs/releases/`
 - **Technical SSOT:** [decisions.md](./decisions.md)
 - **Scaffolding SSOT:** [scaffolding.md](./scaffolding.md)

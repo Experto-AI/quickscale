@@ -45,8 +45,9 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 - ✅ CLI workflow: `quickscale plan myapp`, enter the generated directory, then run `quickscale apply`
 - ✅ Generates standalone Django project (Poetry + pyproject.toml)
 - ✅ Production-ready: Docker, PostgreSQL, pytest, CI/CD, security best practices
-- ✅ Git subtree for module distribution
+- ✅ Git subtree for module distribution — from published `splits/*` branches, **not** the working tree
 - ✅ Declarative YAML configuration (quickscale.yml)
+- ✅ Modules version in lockstep with `VERSION`; embed/core version mismatch is a hard error (§[Module Version Lockstep](#module-version-lockstep))
 
 **Development Stack:**
 - ✅ Poetry (package manager), Ruff (format + lint), MyPy (type check), pytest (testing)
@@ -1665,6 +1666,52 @@ catchers import Django's.
 
 ---
 
+### Module Version Lockstep and Embed Compatibility {#module-version-lockstep}
+
+**Architectural Decision (SA117):** Shipped modules are versioned in lockstep with the
+repository `VERSION`, and an embedded module manifest whose version does not match the
+running core is a hard error.
+
+**Rule 1 — Lockstep versioning.** Every `quickscale_modules/*/module.yml` `version:` field
+equals the repository `VERSION` at release time. Modules are not independently versioned.
+A module's version denotes *which release it shipped with*, not what changed inside it, so
+untouched modules are bumped along with everything else.
+
+**Why lockstep and not independent versions:** independent module versions only earn their
+keep when mixed-version combinations are supported. The global constraint above — *no
+existing users, no migration path, no backward compatibility; every change is a clean
+break* — means mixed versions are never a supported configuration. An independent version
+number therefore advertises a compatibility model that does not exist, and is worse than no
+number at all because consumers reach for it when checking compatibility.
+
+**Rule 2 — Embed compatibility is asserted, not assumed.** Module embedding and managed
+wiring regeneration must compare the embedded `module.yml` version against the running
+core's version and raise an explicit, descriptive error naming **both** versions when they
+differ. A version mismatch must never be allowed to surface as a downstream failure
+(missing setting, `KeyError`, absent derivation). This is a specific expression of the
+[Fail-Hard Principle](#fail-hard-principle): surface the root cause where it can be fixed.
+
+**Rule 3 — Release ordering is mandatory.** Modules are embedded by git subtree from
+`splits/<module>-module` on the public remote, so the published splits — not the working
+tree — are what users receive. The release sequence is therefore:
+
+1. Tag HEAD so the source is release-authoritative (`VERSION` matches the tag) — already
+   enforced by `scripts/publish_module.py`.
+2. Push refreshed `splits/*` carrying the tagged manifests.
+3. Publish to PyPI.
+
+Publishing core before the splits carry matching manifests ships a `quickscale apply` that
+fails for every user selecting any module. This ordering is not advisory.
+
+**Known limitation (tracked, not accepted as final):** the embed ref is a *branch*, so a
+matched version is not by itself a guaranteed-matched artifact — the branch can move after
+a release. Rules 1 and 2 make skew visible and diagnosable; making it structurally
+impossible requires pinning the embed to an immutable ref, tracked as roadmap **SA119**.
+Until SA119 lands, Rule 3 is the only thing preventing skew, which is why it is mandatory
+rather than advisory.
+
+---
+
 ## Prohibitions (Critical - DO NOT)
 
 **Database:**
@@ -1698,6 +1745,11 @@ catchers import Django's.
 - ❌ Core fallback adapters, compat shims, or silent degradation paths — see §fail-hard-principle
 - ❌ Ad hoc or undocumented module HTTP APIs beyond the documented module-owned routes and webhooks QuickScale wires today
 - ❌ Tight coupling themes to modules
+
+**Module Versioning & Embedding:**
+- ❌ Independent per-module version numbers — every `module.yml` `version:` tracks the repository `VERSION` (see §[Module Version Lockstep](#module-version-lockstep))
+- ❌ Publishing `quickscale_core`/`quickscale_cli` to PyPI before the matching `splits/*` branches are pushed — ships a `quickscale apply` that fails for every user
+- ❌ Letting an embedded/core version mismatch surface as a downstream failure (missing setting, `KeyError`) instead of an explicit version-mismatch error
 
 **Configuration:**
 - ❌ Execute code in config files (pure data YAML only)
