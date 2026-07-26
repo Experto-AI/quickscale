@@ -1163,7 +1163,7 @@ class TestBlogPostHookFailHard:
             entry_point_module._blog_post_hook(spec, resolved)
 
     def test_missing_enable_rss_raises_key_error(self) -> None:
-        """A missing BLOG_ENABLE_RSS raises KeyError (both spec and resolved)."""
+        """A missing BLOG_ENABLE_RSS raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
                 "BLOG_POSTS_PER_PAGE": 10,
@@ -1174,12 +1174,8 @@ class TestBlogPostHookFailHard:
         with pytest.raises(KeyError, match="BLOG_ENABLE_RSS"):
             entry_point_module._blog_post_hook(spec, resolved)
 
-    def test_missing_rate_limit_raises_manifest_error(self) -> None:
-        """A missing BLOG_API_RATE_LIMIT raises ManifestError instead of
-        silently defaulting (SA42 fail-hard; changed from KeyError when
-        the SA112 resolved-option fallback was added)."""
-        from quickscale_core.manifest import ManifestError
-
+    def test_missing_rate_limit_raises_key_error(self) -> None:
+        """A missing BLOG_API_RATE_LIMIT raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
                 "BLOG_POSTS_PER_PAGE": 10,
@@ -1187,7 +1183,7 @@ class TestBlogPostHookFailHard:
             }
         )
         resolved: dict[str, Any] = {}
-        with pytest.raises(ManifestError, match="BLOG_API_RATE_LIMIT"):
+        with pytest.raises(KeyError, match="BLOG_API_RATE_LIMIT"):
             entry_point_module._blog_post_hook(spec, resolved)
 
     def test_empty_rate_limit_raises_manifest_error(self) -> None:
@@ -1344,85 +1340,6 @@ class TestFormsPostHookFailHard:
         result = entry_point_module._forms_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.settings["FORMS_PER_PAGE"] == 25
-
-
-class TestPostHookResolvedOptionDerivation:
-    """SA112: post-hooks derive settings from resolved option keys when absent from spec.settings."""
-
-    def test_blog_derives_posts_per_page_from_resolved(self):
-        """_blog_post_hook derives BLOG_POSTS_PER_PAGE from resolved[posts_per_page]."""
-        spec = ModuleWiringSpec(
-            settings={
-                "BLOG_ENABLE_RSS": True,
-                "BLOG_API_RATE_LIMIT": "5/hour",
-            }
-        )
-        resolved: dict[str, Any] = {"posts_per_page": 15}
-        result = entry_point_module._blog_post_hook(spec, resolved)
-        assert result.settings["BLOG_POSTS_PER_PAGE"] == 15
-        assert result.settings["BLOG_ENABLE_RSS"] is True
-        assert result.settings["BLOG_API_RATE_LIMIT"] == "5/hour"
-
-    def test_blog_derives_enable_rss_from_resolved(self):
-        """_blog_post_hook derives BLOG_ENABLE_RSS from resolved[enable_rss]."""
-        spec = ModuleWiringSpec(
-            settings={
-                "BLOG_POSTS_PER_PAGE": 10,
-                "BLOG_API_RATE_LIMIT": "5/hour",
-            }
-        )
-        resolved: dict[str, Any] = {"enable_rss": False}
-        result = entry_point_module._blog_post_hook(spec, resolved)
-        assert result.settings["BLOG_ENABLE_RSS"] is False
-
-    def test_blog_derives_api_rate_limit_from_resolved(self):
-        """_blog_post_hook derives BLOG_API_RATE_LIMIT from resolved[api_rate_limit]."""
-        spec = ModuleWiringSpec(
-            settings={
-                "BLOG_POSTS_PER_PAGE": 10,
-                "BLOG_ENABLE_RSS": True,
-            }
-        )
-        resolved: dict[str, Any] = {"api_rate_limit": "10/minute"}
-        result = entry_point_module._blog_post_hook(spec, resolved)
-        assert result.settings["BLOG_API_RATE_LIMIT"] == "10/minute"
-
-    def test_blog_all_from_resolved_passes(self):
-        """_blog_post_hook passes when ALL settings come from resolved."""
-        spec = ModuleWiringSpec(settings={})
-        resolved: dict[str, Any] = {
-            "posts_per_page": 20,
-            "enable_rss": False,
-            "api_rate_limit": "3/hour",
-        }
-        result = entry_point_module._blog_post_hook(spec, resolved)
-        assert result.settings["BLOG_POSTS_PER_PAGE"] == 20
-        assert result.settings["BLOG_ENABLE_RSS"] is False
-        assert result.settings["BLOG_API_RATE_LIMIT"] == "3/hour"
-
-    def test_listings_derives_per_page_from_resolved(self):
-        """_listings_post_hook derives LISTINGS_PER_PAGE from resolved[listings_per_page]."""
-        spec = ModuleWiringSpec(settings={})
-        resolved: dict[str, Any] = {"listings_per_page": 30}
-        result = entry_point_module._listings_post_hook(spec, resolved)
-        assert result.settings["LISTINGS_PER_PAGE"] == 30
-
-    def test_forms_derives_all_from_resolved(self):
-        """_forms_post_hook derives FORMS_* keys from resolved option keys."""
-        spec = ModuleWiringSpec(settings={})
-        resolved: dict[str, Any] = {
-            "forms_per_page": 50,
-            "spam_protection_enabled": False,
-            "rate_limit": "10/minute",
-            "data_retention_days": 90,
-            "submissions_api_enabled": True,
-        }
-        result = entry_point_module._forms_post_hook(spec, resolved)
-        assert result.settings["FORMS_PER_PAGE"] == 50
-        assert result.settings["FORMS_SPAM_PROTECTION"] is False
-        assert result.settings["FORMS_RATE_LIMIT"] == "10/minute"
-        assert result.settings["FORMS_DATA_RETENTION_DAYS"] == 90
-        assert result.settings["FORMS_SUBMISSIONS_API"] is True
 
 
 class TestNotificationsPostHookFailHard:

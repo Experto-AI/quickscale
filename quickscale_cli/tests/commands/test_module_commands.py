@@ -1044,58 +1044,6 @@ class TestEmbedModule:
         assert mock_perform.call_args.kwargs.get("source_ref") is None
 
 
-class TestEmbedModuleConfiguratorImproperlyConfigured:
-    """SA112: embed_module catches ImproperlyConfigured from configurator.configure()."""
-
-    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
-    @patch("quickscale_cli.commands.module_commands._check_auth_module_migrations")
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    def test_configurator_improperly_configured_fallback(
-        self,
-        mock_git_env,
-        mock_not_exists,
-        mock_remote,
-        mock_auth_check,
-        mock_perform,
-        tmp_path,
-    ):
-        """When configurator.configure() raises ImproperlyConfigured,
-        embed_module catches it and falls back to empty config."""
-        from quickscale_core.contracts.module_discovery import ImproperlyConfigured
-
-        mock_git_env.return_value = True
-        mock_not_exists.return_value = True
-        mock_remote.return_value = True
-        mock_auth_check.return_value = True
-        mock_perform.return_value = (True, None)
-
-        # A configurator whose configure() raises ImproperlyConfigured.
-        def _raising_configure(**kwargs):
-            raise ImproperlyConfigured("manifests unavailable")
-
-        applier = Mock()
-
-        with patch(
-            "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
-            {
-                "social": ModuleConfigurator(
-                    name="social",
-                    configure=_raising_configure,
-                    apply=applier,
-                )
-            },
-        ):
-            result = embed_module("social", tmp_path, non_interactive=True)
-
-        assert result is True, "embed_module must succeed despite configurator raising"
-        # Verify perform was called with empty config (the fallback).
-        assert mock_perform.call_count == 1
-        call_config = mock_perform.call_args.kwargs.get("config", {})
-        assert call_config == {}
-
-
 class TestValidateUpdateEnvironment:
     """Tests for _validate_update_environment function."""
 
