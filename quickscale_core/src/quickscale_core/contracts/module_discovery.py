@@ -358,6 +358,34 @@ def get_bundled_manifests_path() -> Path:
     return Path(str(ref))
 
 
+def resolve_manifest_base_path() -> Path:
+    """Return the base directory to read shipped module manifests from.
+
+    Prefers the maintainer monorepo's ``quickscale_modules/`` workspace and
+    falls back to the manifest snapshots bundled inside the ``quickscale_core``
+    wheel when that workspace is absent (installed-wheel context).  This is the
+    AF7 discovery contract established by SA109/SA113/SA111a, single-homed here
+    so every manifest-reading call site resolves identically.
+
+    Fail-hard is preserved: when neither source resolves, ``ImproperlyConfigured``
+    propagates from :func:`get_bundled_manifests_path` rather than yielding a
+    silently empty or defaulted manifest.
+
+    Note this resolves *manifest* reads only.  Source-required operations
+    (:func:`get_modules_base_path`, :func:`discover_shipped_module_paths`,
+    ``load_module_manifest``, ``refresh_managed_adapters``) intentionally remain
+    fail-hard against the source tree and must not call this.
+
+    Raises:
+        ImproperlyConfigured: If neither the source workspace nor the bundled
+            manifests directory is available.
+    """
+    try:
+        return get_modules_base_path()
+    except ImproperlyConfigured:
+        return get_bundled_manifests_path()
+
+
 def discover_bundled_module_names() -> list[str]:
     """Return alphabetically sorted names of modules from the bundled
     manifests within the installed ``quickscale_core`` package.

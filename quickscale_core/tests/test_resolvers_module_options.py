@@ -762,8 +762,8 @@ class TestResolversNotifications:
     # Bundled-manifest fallback (SA111a fix)
     # ------------------------------------------------------------------
 
-    @patch("quickscale_core.contracts.resolvers.get_bundled_manifests_path")
-    @patch("quickscale_core.contracts.resolvers.get_modules_base_path")
+    @patch("quickscale_core.contracts.module_discovery.get_bundled_manifests_path")
+    @patch("quickscale_core.contracts.module_discovery.get_modules_base_path")
     @patch(_MANIFEST_PATCH_PATH)
     def test_default_notifications_fallback_on_improperly_configured(
         self,
@@ -795,8 +795,8 @@ class TestResolversNotifications:
         assert "/bundled/manifests" in bundled_call_path
         assert "notifications" in bundled_call_path
 
-    @patch("quickscale_core.contracts.resolvers.get_bundled_manifests_path")
-    @patch("quickscale_core.contracts.resolvers.get_modules_base_path")
+    @patch("quickscale_core.contracts.module_discovery.get_bundled_manifests_path")
+    @patch("quickscale_core.contracts.module_discovery.get_modules_base_path")
     @patch(_MANIFEST_PATCH_PATH)
     def test_resolve_notifications_fallback_on_improperly_configured(
         self,

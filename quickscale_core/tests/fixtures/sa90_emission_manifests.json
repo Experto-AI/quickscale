@@ -63,7 +63,7 @@
     },
     ".gitignore": {
       "mode": "664",
-      "sha256": "be8506e56e6898e60c96639cc7bb22f121e188fd2e87820e1589537e629b518d"
+      "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
     },
     ".pre-commit-config.yaml": {
       "mode": "664",
@@ -2469,7 +2469,7 @@
     },
     ".gitignore": {
       "mode": "664",
-      "sha256": "be8506e56e6898e60c96639cc7bb22f121e188fd2e87820e1589537e629b518d"
+      "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
     },
     ".pre-commit-config.yaml": {
       "mode": "664",
@@ -4875,7 +4875,7 @@
     },
     ".gitignore": {
       "mode": "664",
-      "sha256": "be8506e56e6898e60c96639cc7bb22f121e188fd2e87820e1589537e629b518d"
+      "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
     },
     ".pre-commit-config.yaml": {
       "mode": "664",

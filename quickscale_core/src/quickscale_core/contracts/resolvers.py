@@ -63,10 +63,26 @@ from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.manifest.resolver import resolve_module_config
 
 from quickscale_core.contracts.module_discovery import (
-    ImproperlyConfigured,
-    get_bundled_manifests_path,
-    get_modules_base_path,
+    resolve_manifest_base_path,
 )
+
+
+def load_module_manifest_with_fallback(module_name: str) -> Any:
+    """Load a shipped module's ``module.yml``, source tree first.
+
+    Follows the AF7 discovery contract established by SA109/SA113/SA111a: read
+    from the maintainer monorepo's ``quickscale_modules/`` workspace when it is
+    present, and fall back to the bundled manifest snapshots shipped inside the
+    ``quickscale_core`` wheel when it is not (installed-wheel context).
+
+    Fail-hard is preserved: when neither source resolves, the underlying
+    ``ImproperlyConfigured``/load error propagates rather than yielding a
+    silently empty or defaulted manifest.
+    """
+    return load_manifest_from_path(
+        resolve_manifest_base_path() / module_name / "module.yml"
+    )
+
 
 # ---------------------------------------------------------------------------
 # Analytics
@@ -87,9 +103,7 @@ def _normalize_posthog_host(value: Any) -> str:
 
 def default_analytics_module_options() -> dict[str, Any]:
     """Return defaults declared in analytics ``module.yml``."""
-    manifest = load_manifest_from_path(
-        get_modules_base_path() / "analytics" / "module.yml"
-    )
+    manifest = load_module_manifest_with_fallback("analytics")
     return dict(manifest.get_defaults())
 
 
@@ -112,9 +126,7 @@ def resolve_analytics_module_options(
     options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     """Resolve analytics module options via the manifest runtime path."""
-    manifest = load_manifest_from_path(
-        get_modules_base_path() / "analytics" / "module.yml"
-    )
+    manifest = load_module_manifest_with_fallback("analytics")
     schema = build_schema_from_manifest(
         manifest_name="analytics",
         wiring_projections=manifest.wiring_projections,
@@ -200,7 +212,7 @@ def analytics_production_targeted(options: Mapping[str, Any] | None) -> bool:
 
 
 def _load_auth_manifest() -> Any:
-    return load_manifest_from_path(get_modules_base_path() / "auth" / "module.yml")
+    return load_module_manifest_with_fallback("auth")
 
 
 def _build_auth_derivation_schema() -> ModuleDerivationSchema:
@@ -258,7 +270,7 @@ def format_auth_desired_config_contract() -> str:
 
 
 def _load_backups_manifest() -> Any:
-    return load_manifest_from_path(get_modules_base_path() / "backups" / "module.yml")
+    return load_module_manifest_with_fallback("backups")
 
 
 def default_backups_module_options() -> dict[str, Any]:
@@ -282,7 +294,7 @@ _BILLING_ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 def _load_billing_manifest() -> Any:
-    return load_manifest_from_path(get_modules_base_path() / "billing" / "module.yml")
+    return load_module_manifest_with_fallback("billing")
 
 
 def _build_billing_derivation_schema() -> ModuleDerivationSchema:
@@ -393,7 +405,7 @@ BLOG_MODULE_OPTION_KEYS = frozenset(
 
 
 def _load_blog_manifest() -> Any:
-    return load_manifest_from_path(get_modules_base_path() / "blog" / "module.yml")
+    return load_module_manifest_with_fallback("blog")
 
 
 def _build_blog_derivation_schema() -> ModuleDerivationSchema:
@@ -463,7 +475,7 @@ LEGACY_CRM_DEFAULT_PIPELINE_STAGES_OPTION = "default_pipeline_stages"
 
 
 def _load_crm_manifest() -> Any:
-    return load_manifest_from_path(get_modules_base_path() / "crm" / "module.yml")
+    return load_module_manifest_with_fallback("crm")
 
 
 def _build_crm_derivation_schema() -> ModuleDerivationSchema:
@@ -596,7 +608,7 @@ _FORMS_RATE_LIMIT_PATTERN = re.compile(r"^\d+/(second|minute|hour|day)$")
 
 
 def _load_forms_manifest() -> Any:
-    return load_manifest_from_path(get_modules_base_path() / "forms" / "module.yml")
+    return load_module_manifest_with_fallback("forms")
 
 
 def _build_forms_derivation_schema() -> ModuleDerivationSchema:
@@ -782,17 +794,7 @@ _LEGACY_NOTIFICATIONS_SECRET_OPTIONS = {
 
 
 def _load_notifications_manifest() -> Any:
-    try:
-        return load_manifest_from_path(
-            get_modules_base_path() / "notifications" / "module.yml"
-        )
-    except ImproperlyConfigured:
-        # SA113 pattern: fall back to bundled manifest snapshots when
-        # the source-tree modules workspace is unavailable (installed
-        # wheel context).
-        return load_manifest_from_path(
-            get_bundled_manifests_path() / "notifications" / "module.yml"
-        )
+    return load_module_manifest_with_fallback("notifications")
 
 
 def _normalize_tag(value: Any) -> str:
@@ -1184,7 +1186,7 @@ def validate_notifications_module_options(
 
 
 def _load_orgs_manifest() -> Any:
-    return load_manifest_from_path(get_modules_base_path() / "orgs" / "module.yml")
+    return load_module_manifest_with_fallback("orgs")
 
 
 def _build_orgs_derivation_schema() -> ModuleDerivationSchema:
@@ -1258,7 +1260,7 @@ _SOCIAL_MULTI_DASH_PATTERN = re.compile(r"-{2,}")
 
 
 def _load_social_manifest() -> Any:
-    return load_manifest_from_path(get_modules_base_path() / "social" / "module.yml")
+    return load_module_manifest_with_fallback("social")
 
 
 def _build_social_derivation_schema() -> ModuleDerivationSchema:
@@ -1512,7 +1514,7 @@ def validate_social_module_options(options: dict[str, Any] | None) -> list[str]:
 
 
 def _load_storage_manifest() -> Any:
-    return load_manifest_from_path(get_modules_base_path() / "storage" / "module.yml")
+    return load_module_manifest_with_fallback("storage")
 
 
 def _normalize_media_url(media_url: str) -> str:
