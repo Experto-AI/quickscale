@@ -915,10 +915,16 @@ check:
 		fi; \
 	fi; \
 	$(MAKE) check-core-compat check-module-core-imports check-manifest-sync check-org-context-primitives check-csrf-exempt
+	@if [ -n "$(QUIET)" ]; then \
+		if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then \
+			$(MAKE) lint-frontend > frontend_lint_log.txt 2>&1 || { cat frontend_lint_log.txt; rm -f frontend_lint_log.txt; exit 1; }; \
+			rm -f frontend_lint_log.txt; \
+		fi; \
+	fi
 	@if [ -z "$(QUIET)" ]; then \
 		if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then \
 			echo "📦 Linting rendered frontend..."; \
-			$(MAKE) lint-frontend; \
+			$(MAKE) lint-frontend || exit $$?; \
 		else \
 			echo "ℹ️ Skipping rendered frontend lint (node and pnpm are required)."; \
 		fi; \
