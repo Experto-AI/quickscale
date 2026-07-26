@@ -1125,6 +1125,22 @@ class TestCheckQuietSectionDispatch:
             tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             tool_path.chmod(0o755)
 
+    @staticmethod
+    def _write_fake_node_only(bin_dir: Path) -> None:
+        """Create a fake ``node`` executable that exits 0."""
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        tool_path = bin_dir / "node"
+        tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool_path.chmod(0o755)
+
+    @staticmethod
+    def _write_fake_pnpm_only(bin_dir: Path) -> None:
+        """Create a fake ``pnpm`` executable that exits 0."""
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        tool_path = bin_dir / "pnpm"
+        tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool_path.chmod(0o755)
+
     def _write_fake_make(self, tmp_path: Path) -> tuple[Path, Path, Path]:
         """
         Create a deterministic fake make that logs targets to a JSONL file.
@@ -1722,6 +1738,8 @@ class TestCheckQuietSectionDispatch:
 
             make check QUIET=1 SHELL=<wrapper-disabling-node-only>
         """
+        fake_pnpm_bin = tmp_path / "fake-pnpm-bin"
+        self._write_fake_pnpm_only(fake_pnpm_bin)
         shell_wrapper = tmp_path / "shell_wrapper.py"
         self._write_shell_wrapper_disabling_node_only(shell_wrapper)
         _, make_log, fake_make_wrapper = self._write_fake_make(tmp_path)
@@ -1730,6 +1748,9 @@ class TestCheckQuietSectionDispatch:
             tmp_path,
             make_override=str(fake_make_wrapper),
             shell_override=str(shell_wrapper),
+            extra_env={
+                "PATH": f"{fake_pnpm_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
         )
         assert result.returncode == 0, (
             f"QUIET=1 must succeed when node is absent; "
@@ -1758,6 +1779,8 @@ class TestCheckQuietSectionDispatch:
 
             make check QUIET=1 SHELL=<wrapper-disabling-pnpm-only>
         """
+        fake_node_bin = tmp_path / "fake-node-bin"
+        self._write_fake_node_only(fake_node_bin)
         shell_wrapper = tmp_path / "shell_wrapper.py"
         self._write_shell_wrapper_disabling_pnpm_only(shell_wrapper)
         _, make_log, fake_make_wrapper = self._write_fake_make(tmp_path)
@@ -1766,6 +1789,9 @@ class TestCheckQuietSectionDispatch:
             tmp_path,
             make_override=str(fake_make_wrapper),
             shell_override=str(shell_wrapper),
+            extra_env={
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
         )
         assert result.returncode == 0, (
             f"QUIET=1 must succeed when pnpm is absent; "
@@ -1807,14 +1833,9 @@ class TestCheckQuietSectionDispatch:
         assert result.returncode == 0, f"QUIET=1 must succeed; got rc={result.returncode}"
         output = result.stdout + result.stderr
 
-        # Quiet mode must NOT print the normal success banner
-        assert "🎉" not in output, f"QUIET=1 must not print a success banner; got output: {output}"
-        assert "📦 Linting rendered frontend" not in output, (
-            f"QUIET=1 must not print frontend lint banner; got output: {output}"
-        )
-        # Quiet mode must NOT print the skip message either
-        assert "Skipping rendered frontend lint" not in output, (
-            f"QUIET=1 must not print frontend skip message; got output: {output}"
+        # Quiet mode must produce no output at all on success (exact silence)
+        assert output.strip() == "", (
+            f"QUIET=1 must produce no output on success; got output: {output!r}"
         )
 
     def test_quiet_frontend_lint_failure_replays_captured_log(self, tmp_path: Path) -> None:
@@ -1846,8 +1867,13 @@ class TestCheckQuietSectionDispatch:
         )
         # Verify the unique diagnostic marker is replayed from the captured log
         output = result.stdout + result.stderr
-        assert "FAKE_MAKE: target 'lint-frontend' failed" in output, (
+        diagnostic = "FAKE_MAKE: target 'lint-frontend' failed"
+        assert diagnostic in output, (
             f"QUIET=1 must replay the captured log diagnostic on failure; got output: {output}"
+        )
+        assert output.count(diagnostic) == 1, (
+            f"QUIET=1 must replay the diagnostic exactly once; "
+            f"count={output.count(diagnostic)}, output={output}"
         )
         # Verify lint-frontend was attempted
         make_events: list[dict] = []
@@ -1984,26 +2010,6 @@ class TestCheckNormalFrontendLint:
         )
         path.chmod(0o755)
         return path
-        path.write_text(
-            textwrap.dedent("""\
-                #!/usr/bin/env python3
-                import os, sys
-                if len(sys.argv) >= 3 and sys.argv[1] == '-c':
-                    recipe = sys.argv[2]
-                    recipe = recipe.replace(
-                        'command -v node >/dev/null 2>&1',
-                        'false'
-                    ).replace(
-                        'command -v pnpm >/dev/null 2>&1',
-                        'false'
-                    )
-                    os.execvp('/bin/sh', ['/bin/sh', '-c', recipe])
-                os.execvp('/bin/sh', sys.argv[1:])
-            """).lstrip(),
-            encoding="utf-8",
-        )
-        path.chmod(0o755)
-        return path
 
     def _write_fake_python(self, tmp_path: Path) -> tuple[Path, Path]:
         """Create a deterministic fake Python that logs invocations and exits 0."""
@@ -2035,6 +2041,22 @@ class TestCheckNormalFrontendLint:
             tool_path = bin_dir / tool
             tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             tool_path.chmod(0o755)
+
+    @staticmethod
+    def _write_fake_node_only(bin_dir: Path) -> None:
+        """Create a fake node executable that exits 0."""
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        tool_path = bin_dir / "node"
+        tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool_path.chmod(0o755)
+
+    @staticmethod
+    def _write_fake_pnpm_only(bin_dir: Path) -> None:
+        """Create a fake pnpm executable that exits 0."""
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        tool_path = bin_dir / "pnpm"
+        tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool_path.chmod(0o755)
 
     @staticmethod
     def _write_fake_make(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -2191,12 +2213,17 @@ class TestCheckNormalFrontendLint:
 
             make check SHELL=<wrapper-disabling-node-only>
         """
+        fake_pnpm_bin = tmp_path / "fake-pnpm-bin"
+        self._write_fake_pnpm_only(fake_pnpm_bin)
         shell_wrapper = tmp_path / "shell_wrapper.py"
         self._write_shell_wrapper_disabling_node_only(shell_wrapper)
 
         result = self._run_normal_check(
             tmp_path,
             shell_override=str(shell_wrapper),
+            extra_env={
+                "PATH": f"{fake_pnpm_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
         )
         assert result.returncode == 0, (
             f"normal check must succeed when node is absent; "
@@ -2226,12 +2253,17 @@ class TestCheckNormalFrontendLint:
 
             make check SHELL=<wrapper-disabling-pnpm-only>
         """
+        fake_node_bin = tmp_path / "fake-node-bin"
+        self._write_fake_node_only(fake_node_bin)
         shell_wrapper = tmp_path / "shell_wrapper.py"
         self._write_shell_wrapper_disabling_pnpm_only(shell_wrapper)
 
         result = self._run_normal_check(
             tmp_path,
             shell_override=str(shell_wrapper),
+            extra_env={
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
         )
         assert result.returncode == 0, (
             f"normal check must succeed when pnpm is absent; "
