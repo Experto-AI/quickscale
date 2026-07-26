@@ -109,6 +109,12 @@ Ordering note from the arch-audit fix-order section: Finding 12 (SA121) is indep
   - Verify: the new focused policy test passes; `make -n check` and `make -n check QUIET=1` both contain `lint-frontend`; a temporary TypeScript error injected into scratch rendered output fails **both** commands at the same gate.
   *(why →* tech-audit `TA62` — the documented quiet pre-commit gate is false-green, and the active integration branch is outside the hosted CI push trigger*)*
 
+  **Recorded partial checkpoint (2026-07-26; review cap reached; SA120 remains open).**
+
+  - **Done:** `make check` and `make check QUIET=1` now run the same guarded `lint-frontend` target after the shared repository gates; quiet mode captures successful output and replays failures, while normal mode propagates frontend failures without printing a false success banner. Recursive-make policy coverage records target dispatch and covers common-gate ordering. Validation passed 29 focused tests and all 79 tests in `scripts/test_ci_coverage_policy.py`; the final independent quality-gate run also proved normal/quiet dry-run ordering and that a reversible rendered TypeScript defect fails both frontend paths.
+  - **Pending / blocking:** `SA120-REV-002` (**medium, blocking, test-gap**) — each absent-tool test must deterministically provide the opposite tool so pnpm absence cannot false-green on a host without Node. `SA120-REV-003` (**medium, blocking, test-gap**) — quiet success/replay coverage must prove exact silence and exactly-once diagnostics, and the fixed `frontend_lint_log.txt` must be replaced or guarded against overlapping-run collisions. `SA120-REV-006` (**low, advisory, consistency**) — remove the unreachable duplicate helper body in `scripts/test_ci_coverage_policy.py`.
+  - **Decisions needed:** none. A fresh scoped continuation must resolve the two blocking findings and obtain full-scope independent review `STATUS: ok` before changing this checkbox to `[x]`.
+
 #### SA121 — Quality baseline can authorize its own growth (arch Finding 12)
 
 - [ ] **SA121 — Enforce the shrink-only baseline against the merge base.** `Tier 2 · Track 1 · deps: none · blocks any further baseline edit`
