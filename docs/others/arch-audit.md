@@ -90,20 +90,6 @@ Reconciliation log, 2026-07-21.)*
 
 ---
 
-### Finding 10: Frontend theme source specialized at generation time — RESOLVED (SA104→SA108)
-
-- **ID:** `frontend-source-generation-specialized`
-- **Status: closed** (SA104→SA108; recorded in the Reconciliation log, 2026-07-21; finding
-  block dropped from the live sections during the 2026-07-23 roadmap/doc-consistency cleanup).
-  The SA104→SA108 chain delivered the recommended Option 1, staged — stage-1 static-source move
-  through runtime-config de-specialization, fail-hard seam validation, and the migration-doc
-  rewrite. `frontend/src` is now project-agnostic and byte-identical across projects on the same
-  theme version; all project/module facts flow through the `window.__QUICKSCALE__` runtime seam.
-  Closeout detail lives in [CHANGELOG.md](../../CHANGELOG.md) (SA104/SA105/SA106/SA107/SA108);
-  full finding text preserved in version control.
-
----
-
 ### Finding 7: Generated projects have no file-level ownership contract — the upgrade path re-encodes it by hand
 
 - **ID:** `generated-file-ownership-unmodeled`
@@ -188,17 +174,18 @@ Reconciliation log, 2026-07-21.)*
 
 ### Fix order and interactions
 
-1. **Finding 10 stage 1** (static-source move) — S, safe now, independent, verifiable by the SA90
-   fixture staying green.
-2. **Finding 10 stage 2** (runtime-config completion) — M, needs one maintainer decision (dormant
-   module files); unlocks the playbook simplification and shrinks Finding 7.
-3. **Finding 7's tuple-derivation remainder** — M, unscheduled; do it *after* Finding 10 stage 1/2
-   so the taxonomy it derives is the smaller one.
+> *Superseded in part (2026-07-21/2026-07-26): Finding 10 stages 1 and 2 are complete
+> (SA104→SA108) and the SA101 → SA96-GATE step of the release path is closed. Only items 3 and 4
+> below remain live; the current release critical path is SA112a–f → SA96-PUBLISH (roadmap.md).*
+
+1. ~~**Finding 10 stage 1** (static-source move)~~ — done (SA104).
+2. ~~**Finding 10 stage 2** (runtime-config completion)~~ — done (SA105/SA106/SA107/SA108).
+3. **Finding 7's tuple-derivation remainder** — M, unscheduled; the taxonomy it must derive is now
+   the smaller, post-Finding-10 one. Gated on a third consumer or a public "update my generated
+   project" command.
 4. **Findings 2 and 4** — deferred with teams; independent.
 
-No finding conflicts with the SA101 → SA96-GATE → SA96-PUBLISH critical path; Finding 10 stage 1
-touches the generator/template tree and should merge outside the release window or behind the
-SA90 parity proof.
+No live finding conflicts with the release critical path.
 
 ### Sound load-bearing decisions (protect these during remediation)
 
@@ -833,3 +820,11 @@ flag).
   and Finding 10's row is dropped; its detail section is reduced to a closed-status stub pointing
   here. No new audit was run and no finding status changed — this only reconciles the live sections
   with the already-recorded 2026-07-21 closure.
+- 2026-07-26 (roadmap/doc-consistency cleanup) — the last Finding 10 remnants in the live sections
+  are removed: the closed-status stub section is deleted (closure now lives only in the 2026-07-21
+  and 2026-07-23 log entries above, per this document's convention), and the Fix order section is
+  reconciled — stages 1 and 2 struck as done (SA104→SA108), the stale `SA101 → SA96-GATE →
+  SA96-PUBLISH` critical-path sentence replaced by a pointer to roadmap.md's current
+  `SA112a–f → SA96-PUBLISH` path. Live findings remain **3** (Findings 7, 2, 4); Finding 7 stays
+  unscheduled, Findings 2/4 stay deferred with teams. No new audit was run and no finding status
+  changed. Recorded in CHANGELOG.md (2026-07-26 arch-audit bookkeeping entry).
