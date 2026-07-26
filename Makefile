@@ -917,8 +917,9 @@ check:
 	$(MAKE) check-core-compat check-module-core-imports check-manifest-sync check-org-context-primitives check-csrf-exempt
 	@if [ -n "$(QUIET)" ]; then \
 		if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then \
-			$(MAKE) lint-frontend > frontend_lint_log.txt 2>&1 || { cat frontend_lint_log.txt; rm -f frontend_lint_log.txt; exit 1; }; \
-			rm -f frontend_lint_log.txt; \
+			frontend_lint_log=$$(mktemp /tmp/frontend_lint_log.XXXXXX); \
+			$(MAKE) lint-frontend > $$frontend_lint_log 2>&1 || { cat $$frontend_lint_log; rm -f $$frontend_lint_log; exit 1; }; \
+			rm -f $$frontend_lint_log; \
 		fi; \
 	fi
 	@if [ -z "$(QUIET)" ]; then \
