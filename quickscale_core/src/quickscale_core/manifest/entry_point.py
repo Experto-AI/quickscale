@@ -390,9 +390,34 @@ def _blog_post_hook(
     # SA42: direct required reads — no .get() defaults (SA18.2 pattern).
     # Missing/invalid raises KeyError or ManifestError instead of silently
     # defaulting to baked literals.
+    #
+    # The manifest resolver produces django_setting keys in derived_settings
+    # only when the manifest declares them as derived settings.  For blog the
+    # mutable config options have django_setting mappings that are NOT derived
+    # settings, so we read from the resolved option dict instead.
+    if "BLOG_POSTS_PER_PAGE" not in settings:
+        _ppp = resolved.get("posts_per_page")
+        if _ppp is not None:
+            settings["BLOG_POSTS_PER_PAGE"] = int(_ppp)
+    if "BLOG_ENABLE_RSS" not in settings:
+        _rss = resolved.get("enable_rss")
+        if _rss is not None:
+            settings["BLOG_ENABLE_RSS"] = bool(_rss)
+    # SA42 fail-hard guard: after resolved fallback, required keys must
+    # still be present in settings.  This preserves the original KeyError
+    # contract for callers that relied on direct access.
+    _blog_required = ("BLOG_POSTS_PER_PAGE", "BLOG_ENABLE_RSS")
+    for _key in _blog_required:
+        settings[_key]  # raises KeyError if missing
     settings["BLOG_POSTS_PER_PAGE"] = int(settings["BLOG_POSTS_PER_PAGE"])
     settings["BLOG_ENABLE_RSS"] = bool(settings["BLOG_ENABLE_RSS"])
-    api_rate = str(settings["BLOG_API_RATE_LIMIT"]).strip()
+    _api_rate_raw = (
+        settings["BLOG_API_RATE_LIMIT"]
+        if "BLOG_API_RATE_LIMIT" in settings
+        else resolved.get("api_rate_limit", "")
+    )
+    api_rate = str(_api_rate_raw).strip()
+    api_rate = str(_api_rate_raw).strip()
     if not api_rate:
         raise ManifestError(
             "Blog manifest setting BLOG_API_RATE_LIMIT resolved to empty value. "
@@ -459,7 +484,13 @@ def _listings_post_hook(
     settings = dict(spec.settings)
 
     # SA42: direct required read — no .get() default (SA18.2 pattern).
-    settings["LISTINGS_PER_PAGE"] = int(settings["LISTINGS_PER_PAGE"])
+    if "LISTINGS_PER_PAGE" not in settings:
+        _lpp = resolved.get("listings_per_page")
+        if _lpp is not None:
+            settings["LISTINGS_PER_PAGE"] = int(_lpp)
+    settings["LISTINGS_PER_PAGE"] = int(
+        settings["LISTINGS_PER_PAGE"]
+    )  # raises KeyError if missing
 
     # Static markdownx settings (identical to legacy).
     settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
@@ -528,7 +559,23 @@ def _forms_post_hook(
     settings = dict(spec.settings)
 
     # SA42: direct required reads — no .get() defaults (SA18.2 pattern).
-    settings["FORMS_PER_PAGE"] = int(settings["FORMS_PER_PAGE"])
+    # Obtain mutable config's django_setting keys from the resolved option
+    # dict when they are absent from derived_settings.
+    _forms_key_map = {
+        "FORMS_PER_PAGE": ("forms_per_page", int),
+        "FORMS_SPAM_PROTECTION": ("spam_protection_enabled", bool),
+        "FORMS_RATE_LIMIT": ("rate_limit", str),
+        "FORMS_DATA_RETENTION_DAYS": ("data_retention_days", int),
+        "FORMS_SUBMISSIONS_API": ("submissions_api_enabled", bool),
+    }
+    for _dk_key, (_opt_key, _cast) in _forms_key_map.items():
+        if _dk_key not in settings and _opt_key in resolved:
+            _val = resolved[_opt_key]
+            if _val is not None:
+                settings[_dk_key] = _cast(_val)
+    settings["FORMS_PER_PAGE"] = int(
+        settings["FORMS_PER_PAGE"]
+    )  # raises KeyError if missing
     settings["FORMS_SPAM_PROTECTION"] = bool(settings["FORMS_SPAM_PROTECTION"])
     settings["FORMS_RATE_LIMIT"] = str(settings["FORMS_RATE_LIMIT"])
     settings["FORMS_DATA_RETENTION_DAYS"] = int(settings["FORMS_DATA_RETENTION_DAYS"])

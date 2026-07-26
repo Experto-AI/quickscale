@@ -60,6 +60,7 @@ from quickscale_core.contracts.module_catalog import (
     find_not_ready_modules,
     get_module_readiness_reason,
 )
+from quickscale_core.contracts.module_discovery import ImproperlyConfigured
 from quickscale_core.manifest.implications import resolve_module_implications
 
 from quickscale_cli.commands.apply_support import (
@@ -1020,7 +1021,16 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
                     + ", ".join(implied_modules),
                     fg="green",
                 )
-        _validate_module_prerequisites(qs_config)
+        try:
+            _validate_module_prerequisites(qs_config)
+        except ImproperlyConfigured:
+            click.secho(
+                "\n⚠️  Module source tree unavailable — per-module option"
+                " validation skipped (installed-wheel context)."
+                " Options from plan are used as-is.",
+                fg="yellow",
+                err=True,
+            )
         return qs_config
     except ConfigValidationError as e:
         click.secho(f"\n❌ Configuration error:\n{e}", fg="red", err=True)
@@ -1283,9 +1293,16 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
 
 def _render_notifications_env_example_block(
     options: Mapping[str, Any] | None,
-) -> str:
-    """Render the managed notifications section for `.env.example`."""
-    resolved = resolve_notifications_module_options(options)
+) -> str | None:
+    """Render the managed notifications section for `.env.example`.
+
+    Returns ``None`` when module manifests are unavailable (installed-wheel
+    context), signalling the caller to skip the env block.
+    """
+    try:
+        resolved = resolve_notifications_module_options(options)
+    except ImproperlyConfigured:
+        return None
     resend_api_key_env_var = str(
         resolved.get(
             NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
@@ -1334,6 +1351,8 @@ def _sync_notifications_env_example_impl(
     rendered_block = _render_notifications_env_example_block(
         notifications_config.options or {}
     )
+    if rendered_block is None:
+        return True  # SA112 installed-wheel context — skip env block
     try:
         content = env_example_path.read_text()
     except OSError as e:
@@ -1431,8 +1450,15 @@ def _sync_analytics_env_example_impl(
         return False
     rendered_block: str | None = None
     if analytics_config is not None:
-        resolved = resolve_analytics_module_options(analytics_config.options or {})
-        if bool(resolved.get("enabled", True)):
+        try:
+            resolved = resolve_analytics_module_options(analytics_config.options or {})
+        except ImproperlyConfigured:
+            # SA112 installed-wheel context: module manifest files are
+            # unavailable, so option resolution cannot produce the required
+            # analytics settings for the .env.example block.  The generated
+            # file is already correct from the plan step, so skip the sync.
+            resolved = None
+        if resolved is not None and bool(resolved.get("enabled", True)):
             rendered_block = _render_analytics_env_example_block(resolved)
     if start_marker in content and end_marker in content:
         before, remainder = content.split(start_marker, maxsplit=1)
@@ -1474,9 +1500,16 @@ def _sync_analytics_env_example(
 
 def _render_billing_env_example_block(
     options: Mapping[str, Any] | None,
-) -> str:
-    """Render the managed billing section for `.env.example`."""
-    resolved = resolve_billing_module_options(options)
+) -> str | None:
+    """Render the managed billing section for `.env.example`.
+
+    Returns ``None`` when module manifests are unavailable (installed-wheel
+    context), signalling the caller to skip the env block.
+    """
+    try:
+        resolved = resolve_billing_module_options(options)
+    except ImproperlyConfigured:
+        return None
     publishable_key_env_var = str(
         resolved.get(
             "publishable_key_env_var",
@@ -1528,6 +1561,8 @@ def _sync_billing_env_example_impl(
     start_marker = "# QuickScale Billing (managed)"
     end_marker = "# End QuickScale Billing"
     rendered_block = _render_billing_env_example_block(billing_config.options or {})
+    if rendered_block is None:
+        return True  # SA112 installed-wheel context — skip env block
     try:
         content = env_example_path.read_text()
     except OSError:
@@ -1980,8 +2015,32 @@ def _init_git_with_config(output_path: Path) -> None:
         capture_output=True,
     )
 
+    # Ensure lock files under .quickscale/ are gitignored so the advisory
+    # lock file (state.lock) never shows as an untracked change that would
+    # cause embed_module's is_working_directory_clean() check to fail.
+    _ensure_quickscale_lock_ignored(output_path)
+
     if not _git_commit(output_path, "Initial project structure"):
         click.secho("⚠️  Initial commit failed, continuing...", fg="yellow")
+
+
+def _ensure_quickscale_lock_ignored(project_path: Path) -> None:
+    """Add ``.quickscale/*.lock`` to ``.gitignore`` if missing.
+
+    The advisory lock file (``state.lock``) is created after the initial
+    git commit, so without this entry any lock acquisition leaves the
+    working directory dirty.  The ``embed_module`` git-environment check
+    (``is_working_directory_clean``) then fails, even though the only
+    untracked change is a transient lock file.
+    """
+    gitignore_path = project_path / ".gitignore"
+    if not gitignore_path.exists():
+        return
+    pattern = ".quickscale/*.lock"
+    content = gitignore_path.read_text()
+    if pattern in content:
+        return
+    gitignore_path.write_text(content.rstrip() + "\n" + pattern + "\n")
 
 
 def _list_git_changed_paths(

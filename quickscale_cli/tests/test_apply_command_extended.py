@@ -90,6 +90,7 @@ from quickscale_core.schema.state_schema import (
     StateManager,
 )
 from quickscale_core.config import ConfigError
+from quickscale_core.contracts.module_discovery import ImproperlyConfigured
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest.loader import ManifestError
 
@@ -3083,6 +3084,66 @@ class TestBillingEnvExampleSync:
         assert "OPS_BILLING_WEBHOOK_SECRET=" in updated
         assert "# Billing currency from quickscale.yml: eur" in updated
         assert "KEEP_ME=1" in updated
+
+
+class TestEnvSyncImproperlyConfigured:
+    """SA112 installed-context: env sync skips gracefully when manifests unavailable."""
+
+    def test_render_billing_env_block_returns_none_on_improperly_configured(
+        self,
+    ):
+        """_render_billing_env_example_block returns None when ImproperlyConfigured."""
+        with patch(
+            "quickscale_cli.commands.apply_command.resolve_billing_module_options",
+            side_effect=ImproperlyConfigured("modules base path not found"),
+        ):
+            result = _render_billing_env_example_block({})
+        assert result is None
+
+    def test_sync_billing_env_example_returns_true_on_improperly_configured(
+        self, tmp_path
+    ):
+        """_sync_billing_env_example returns True when render returns None."""
+        env_example = tmp_path / ".env.example"
+        env_example.write_text("SECRET_KEY=test\n")
+        qs_config = Mock()
+        qs_config.modules = {"billing": Mock(options={})}
+        with patch(
+            "quickscale_cli.commands.apply_command._render_billing_env_example_block",
+            return_value=None,
+        ):
+            result = _sync_billing_env_example(tmp_path, qs_config)
+        assert result is True
+
+    def test_sync_analytics_env_example_returns_true_on_improperly_configured(
+        self, tmp_path
+    ):
+        """_sync_analytics_env_example returns True when resolve raises."""
+        env_example = tmp_path / ".env.example"
+        env_example.write_text("SECRET_KEY=test\n")
+        qs_config = Mock()
+        qs_config.modules = {"analytics": Mock(options={})}
+        with patch(
+            "quickscale_cli.commands.apply_command.resolve_analytics_module_options",
+            side_effect=ImproperlyConfigured("modules base path not found"),
+        ):
+            result = _sync_analytics_env_example(tmp_path, qs_config)
+        assert result is True
+
+    def test_sync_notifications_env_example_returns_true_on_improperly_configured(
+        self, tmp_path
+    ):
+        """_sync_notifications_env_example returns True when render returns None."""
+        env_example = tmp_path / ".env.example"
+        env_example.write_text("SECRET_KEY=test\n")
+        qs_config = Mock()
+        qs_config.modules = {"notifications": Mock(options={})}
+        with patch(
+            "quickscale_cli.commands.apply_command._render_notifications_env_example_block",
+            return_value=None,
+        ):
+            result = _sync_notifications_env_example(tmp_path, qs_config)
+        assert result is True
 
 
 # ============================================================================

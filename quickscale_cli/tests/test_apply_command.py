@@ -12,12 +12,14 @@ from click.testing import CliRunner
 
 from quickscale_cli.commands.apply_command import (
     _abort_for_not_ready_modules,
+    _ensure_quickscale_lock_ignored,
     _load_and_validate_config,
     _regenerate_managed_wiring_for_apply,
     _validate_module_prerequisites,
     _validate_required_module_versions,
     apply,
 )
+from quickscale_core.contracts.module_discovery import ImproperlyConfigured
 from quickscale_core.contracts.resolvers import default_notifications_module_options
 from quickscale_core.manifest.schema import ModuleManifest
 
@@ -634,6 +636,36 @@ docker:
             in error_output
         )
         assert "Module 'teams' remains placeholder inventory only" in error_output
+
+
+class TestApplyPrerequisiteImproperlyConfigured:
+    """SA112: _load_and_validate_config catches ImproperlyConfigured from prerequisites."""
+
+    def test_catches_improperly_configured_from_prerequisites(self, tmp_path):
+        """When a validator raises ImproperlyConfigured, validate continues."""
+        config_path = tmp_path / "quickscale.yml"
+        config_path.write_text(
+            "version: '1'\n"
+            "project:\n"
+            "  slug: testproj\n"
+            "  package: testproj\n"
+            "  theme: showcase_react\n"
+            "docker:\n"
+            "  start: false\n"
+            "modules:\n"
+            "  auth: {}\n"
+            "  orgs: {}\n"
+        )
+        with patch(
+            "quickscale_core.contracts.module_discovery.get_modules_base_path",
+            side_effect=ImproperlyConfigured("no monorepo"),
+        ):
+            result = _load_and_validate_config(config_path)
+        assert result is not None
+        assert result.project.slug == "testproj"
+        # Verify that modules were loaded and implied modules were added.
+        assert "auth" in result.modules
+        assert "orgs" in result.modules
 
 
 class TestApplyDirectoryHandling:
@@ -1751,3 +1783,29 @@ class TestApplyAF5ResumeCheckpointPreserved:
         assert "resume_checkpoint" not in rewritten, (
             "resume_checkpoint was incorrectly introduced during save"
         )
+
+
+class TestEnsureQuickscaleLockIgnored:
+    """Tests for _ensure_quickscale_lock_ignored (SA112)."""
+
+    def test_appends_pattern_when_absent(self, tmp_path):
+        """Appends .quickscale/*.lock to .gitignore when pattern is absent."""
+        gitignore = tmp_path / ".gitignore"
+        gitignore.write_text("*.pyc\n")
+        _ensure_quickscale_lock_ignored(tmp_path)
+        content = gitignore.read_text()
+        assert ".quickscale/*.lock" in content
+
+    def test_idempotent_when_pattern_present(self, tmp_path):
+        """Does not duplicate the pattern when already present."""
+        gitignore = tmp_path / ".gitignore"
+        gitignore.write_text(".quickscale/*.lock\n")
+        _ensure_quickscale_lock_ignored(tmp_path)
+        content = gitignore.read_text()
+        assert content.count(".quickscale/*.lock") == 1
+
+    def test_skips_missing_gitignore(self, tmp_path):
+        """Silently skips when .gitignore does not exist."""
+        path = tmp_path / "empty_dir"
+        path.mkdir()
+        _ensure_quickscale_lock_ignored(path)  # No exception

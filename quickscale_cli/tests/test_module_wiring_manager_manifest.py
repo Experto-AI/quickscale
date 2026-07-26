@@ -11,12 +11,16 @@ exercise the manager indirectly through CLI commands.
 
 from __future__ import annotations
 
+import sys as _sys
 from pathlib import Path
 
 import pytest
 import yaml
 
-from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
+from quickscale_cli.utils.module_wiring_manager import (
+    _add_module_src_paths,
+    regenerate_managed_wiring,
+)
 from quickscale_core.manifest.entry_point import MANIFEST_ADAPTER_REGISTRY
 
 
@@ -384,8 +388,10 @@ class TestRegenerateManagedWiringAdapterFailure:
         self, tmp_path: Path
     ) -> None:
         """When refresh_managed_adapters raises ImproperlyConfigured at
-        the embedded modules base path, regenerate_managed_wiring returns
-        (False, message), preserving the tuple[bool, str] return type."""
+        the embedded modules base path, regenerate_managed_wiring
+        CONTINUES instead of failing — _build_one_wiring_spec handles
+        missing adapters gracefully.  (SA112 changed this from a hard
+        failure to a logged warning + continuation.)"""
         from quickscale_core.manifest.entry_point import (
             MANIFEST_ADAPTER_REGISTRY as REGISTRY,
             MANAGED_ADAPTER_ORIGINS as ORIGINS,
@@ -416,17 +422,16 @@ class TestRegenerateManagedWiringAdapterFailure:
                 "version: '1'\nname: _test_missing_adapter\n"
             )
 
-            # The call to refresh_managed_adapters inside
-            # regenerate_managed_wiring should raise
-            # ImproperlyConfigured because
-            # quickscale_modules__test_missing_adapter is not
-            # importable. Our except ImproperlyConfigured handler
-            # converts it to (False, message).
+            # SA112: adapter refresh failure is now a warning, not a
+            # hard error.  regenerate_managed_wiring continues because
+            # _build_one_wiring_spec handles missing adapters gracefully.
             success, message = regenerate_managed_wiring(project)
 
-            assert success is False
-            assert "Managed adapter wiring failed" in message
-            assert "_test_missing_adapter" in message
+            # The call succeeds despite the adapter failure.
+            assert success is True, (
+                f"regenerate_managed_wiring should continue after adapter "
+                f"refresh warning, got: {message}"
+            )
         finally:
             REGISTRY.clear()
             REGISTRY.update(_orig_registry)
@@ -674,3 +679,74 @@ class TestRegenerateManagedWiringPriorBasePath:
             assert "quickscale_modules_billing" in content
         finally:
             _md._modules_base_path = original_override
+
+
+class TestAddModuleSrcPaths:
+    """Tests for _add_module_src_paths (SA112 installed-context sys.path)."""
+
+    def test_adds_src_dirs_to_sys_path(self, tmp_path):
+        """Adds module src/ dirs to sys.path."""
+        modules_dir = tmp_path / "modules"
+        (modules_dir / "auth" / "src" / "quickscale_modules_auth").mkdir(parents=True)
+        (modules_dir / "blog" / "src" / "quickscale_modules_blog").mkdir(parents=True)
+        original_path = list(_sys.path)
+        try:
+            _add_module_src_paths(modules_dir)
+            auth_src = str((modules_dir / "auth" / "src").resolve())
+            blog_src = str((modules_dir / "blog" / "src").resolve())
+            assert auth_src in _sys.path
+            assert blog_src in _sys.path
+        finally:
+            _sys.path[:] = original_path
+
+    def test_ignores_dirs_without_src(self, tmp_path):
+        """Skips module directories that have no src/ subdirectory."""
+        modules_dir = tmp_path / "modules"
+        (modules_dir / "auth" / "src").mkdir(parents=True)
+        (modules_dir / "empty_module").mkdir()
+        original_path = list(_sys.path)
+        try:
+            _add_module_src_paths(modules_dir)
+            auth_src = str((modules_dir / "auth" / "src").resolve())
+            assert auth_src in _sys.path
+            empty_src = str((modules_dir / "empty_module" / "src").resolve())
+            assert empty_src not in _sys.path
+        finally:
+            _sys.path[:] = original_path
+
+    def test_idempotent_no_duplicates(self, tmp_path):
+        """Does not add the same src/ path twice."""
+        modules_dir = tmp_path / "modules"
+        (modules_dir / "auth" / "src").mkdir(parents=True)
+        auth_src = str((modules_dir / "auth" / "src").resolve())
+        original_path = list(_sys.path)
+        try:
+            _add_module_src_paths(modules_dir)
+            first_count = _sys.path.count(auth_src)
+            _add_module_src_paths(modules_dir)
+            assert _sys.path.count(auth_src) == first_count
+        finally:
+            _sys.path[:] = original_path
+
+    def test_skips_hidden_dirs(self, tmp_path):
+        """Skips directories starting with a dot."""
+        modules_dir = tmp_path / "modules"
+        (modules_dir / ".hidden" / "src").mkdir(parents=True)
+        (modules_dir / "auth" / "src").mkdir(parents=True)
+        original_path = list(_sys.path)
+        try:
+            _add_module_src_paths(modules_dir)
+            hidden_src = str((modules_dir / ".hidden" / "src").resolve())
+            assert hidden_src not in _sys.path
+        finally:
+            _sys.path[:] = original_path
+
+    def test_empty_modules_dir_does_not_raise(self, tmp_path):
+        """An empty or nonexistent modules directory does not raise."""
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        _add_module_src_paths(empty_dir)  # No exception
+
+    def test_missing_modules_dir_does_not_raise(self, tmp_path):
+        """A nonexistent modules directory does not raise."""
+        _add_module_src_paths(tmp_path / "nonexistent")  # No exception

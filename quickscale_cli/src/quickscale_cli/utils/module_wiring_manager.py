@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -154,12 +155,50 @@ def _refresh_adapters() -> str | None:
     return None
 
 
+def _add_module_src_paths(modules_dir: Path) -> None:
+    """Add ``modules/<name>/src/`` directories to ``sys.path``.
+
+    Embedded module packages are placed under ``modules/<name>/src/`` as
+    git subtrees but are not pip-installed in the venv.  Managed wiring
+    regeneration needs to import their adapter packages, so the ``src/``
+    directory of every embedded module that has one must be on
+    ``sys.path``.
+    """
+    if not modules_dir.is_dir():
+        return
+    for entry in sorted(modules_dir.iterdir()):
+        if not entry.is_dir() or entry.name.startswith("."):
+            continue
+        src_dir = entry / "src"
+        if src_dir.is_dir():
+            src_str = str(src_dir.resolve())
+            if src_str not in sys.path:
+                sys.path.insert(0, src_str)
+
+
 def _prepare_modules_base_path(
     project_path: Path, prior_base_path: Path | None
 ) -> str | None:
     if _has_embedded_manifests(project_path):
         set_modules_base_path(project_path / "modules")
-        return _refresh_adapters()
+        # Ensure adapter packages in modules/<name>/src/ are importable
+        # during managed wiring regeneration.  In the installed-wheel
+        # context these packages are not pip-installed, so without this
+        # sys.path addition refresh_managed_adapters() would fail with
+        # an ImproperlyConfigured claiming the adapter is not importable.
+        _add_module_src_paths(project_path / "modules")
+        error = _refresh_adapters()
+        if error is not None:
+            # SA112 installed-wheel context: embedded modules from git
+            # subtrees may not ship adapter.py files, so the adapter
+            # registry will be incomplete.  _build_one_wiring_spec
+            # already handles missing adapters gracefully (returns
+            # None/None), so a partial adapter refresh is safe.
+            import sys as _sys
+
+            print(f"⚠️  {error}", file=_sys.stderr)
+            return None
+        return None
     if prior_base_path is not None:
         return _refresh_adapters()
     return (

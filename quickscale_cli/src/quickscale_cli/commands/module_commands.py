@@ -13,6 +13,7 @@ import click
 from quickscale_core.contracts.module_catalog import (
     get_module_readiness_reason,
 )
+from quickscale_core.contracts.module_discovery import ImproperlyConfigured
 from quickscale_core.schema.config_schema import validate_config
 from quickscale_core.schema.state_schema import StateError, StateManager
 from quickscale_cli.utils.module_dependency_sync import (
@@ -653,7 +654,16 @@ def embed_module(
         config: dict[str, Any] = {}
         configurator_entry = MODULE_CONFIGURATOR_REGISTRY.get(module)
         if configurator_entry is not None:
-            config = configurator_entry.configure(non_interactive=non_interactive)
+            try:
+                config = configurator_entry.configure(non_interactive=non_interactive)
+            except ImproperlyConfigured:
+                # SA112 installed-wheel context: module manifest files are
+                # unavailable from the source tree, so per-module option
+                # resolvers cannot load defaults.  Use the caller-provided
+                # quickscale.yml options (passed through to the embed step
+                # via the apply flow's _embed_module wrapper) or fall back
+                # to an empty config that skips the interactive prompt.
+                config = {}
 
         # Perform embedding
         success, provenance = _perform_module_embed(
