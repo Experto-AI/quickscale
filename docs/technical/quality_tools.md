@@ -448,10 +448,14 @@ consumers:
 4. ``quality_report.md`` — fenced JSON block after ``### Diagnostics``
 
 The shell failure summary (printed to stdout when the monotonicity gate fails)
-also reads from ``diagnostics`` — the same canonical 13-key records.  No raw
-``waiver_evaluations`` dicts are serialised to stdout or the policy artifact.
-Waiver lifecycle entries appear as canonical diagnostic records with
-``waiver_id`` and ``waiver_status`` fields alongside the standard 13-key set.
+also reads from ``diagnostics`` — the same canonical 13-key records.  Raw
+``waiver_evaluations`` dicts are serialised to the policy artifact
+(``quality_baseline_policy.json``) under the ``waiver_evaluations`` key for
+downstream consumers that need the full lifecycle evaluation list.  They are
+**not** printed to stdout — only canonical diagnostic records appear there.
+Waiver lifecycle entries also appear as canonical diagnostic records with
+``waiver_id`` and ``waiver_status`` fields alongside the standard 13-key set
+in the ``diagnostics`` list — the four-consumer canonical feed.
 
 ``violations`` and ``unresolved`` are compatibility subsets of the same
 canonical records (same shape, same keys), filtered to include only entries
