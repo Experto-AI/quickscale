@@ -1719,6 +1719,35 @@ rather than advisory.
 
 ---
 
+### Publish-Path Gate Coverage {#publish-path-gate-coverage}
+
+**Architectural Decision:** The publish path is a **full-coverage** gate context. Every
+repository conformance gate required in local and hosted contexts is also required in
+`.github/workflows/publish.yml`. Publish is not a narrower context.
+
+**Why publish does not get to trust upstream.** Publishing is the last step and the only
+irreversible one: a published artifact reaches users and cannot be recalled, only yanked
+after the fact. Every earlier context — local `check`, local CI, hosted CI — gates a state
+that is still editable, so a gap there costs a fix. A gap at publish costs a release. The
+asymmetry means the last step must **re-verify rather than trust**, even when the same
+gates already passed upstream on what is nominally the same commit. Re-running a gate that
+will pass is cheap; discovering at publish time that a required property was never checked
+in the path that ships is not.
+
+**Rule — no silent narrowing.** A gate absent from a required context is a defect unless
+that absence is a *declared exclusion* carried as registry metadata with a recorded
+rationale. An undeclared absence is an unowned gap, not an intentional design. This applies
+to every gate context, but publish specifically may not hold exclusions for reasons of
+redundancy or cost — those are exactly the reasons that produce a false-green release path.
+
+**Consequence.** The five repository conformance gates currently absent from `publish.yml`
+are a **known open gap**, not an accepted narrowing. The gate registry's parity checker is
+expected to fail on that omission until the consumer migration adds them; that failure is
+correct behavior reporting a real defect, and must not be silenced by declaring an
+exclusion.
+
+---
+
 ### Quality Baseline Monotonicity Gate (SA121) {#quality-baseline-monotonicity}
 
 **Architectural Decision:** The shrink-only quality baseline
