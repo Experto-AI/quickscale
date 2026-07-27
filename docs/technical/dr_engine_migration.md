@@ -82,6 +82,45 @@ The CLI no longer uses:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Current Responsibility Split
+
+- **Centrally owned DR engine (`quickscale_core.dr_engine`):**
+  - `primitives` — snapshot creation, archive packaging, database custom-dump
+    capture.
+  - `recovery` — restore validation, ordered execution sequencing,
+    destructive-operation gating, orchestration flow.
+  - `verification` — verification-record assembly, rollback-pin lifecycle and
+    pin-field logic.
+  - `adapter` — explicit typed adapter boundary (`capture_snapshot`,
+    `fetch_snapshot_report`, `record_verification`,
+    `set_rollback_pin`, `build_database_plan`, `execute_database_restore`,
+    `sync_media`) that the CLI calls through a single bridge management
+    command.
+- **Embeddable `backups` module (`quickscale_modules_backups.services`):**
+  retains Django-backed orchestration surfaces including snapshot capture,
+  archive upload, sidecar capture, media-sync orchestration, and report-assembly
+  logic that reference the `quickscale_modules` Django app environment — the
+  higher-level platform orchestration that depends on Django project context.
+  ``sync_backup_snapshot_media`` takes an explicit ``target_runtime_settings``
+  parameter, with an env-var fallback preserved for admin/manual use through
+  the management commands below.
+- **CLI protocol:** The CLI
+  (`quickscale_cli/src/quickscale_cli/commands/dr_commands.py`) drives DR
+  through the explicit typed adapter (`quickscale_core.dr_engine.adapter`), called
+  via the single ``dr_adapter_call`` management command bridge (subprocess +
+  JSON stdout). The route kind marker is carried explicitly via the
+  ``target_runtime_settings`` dict — there is no env-var protocol in CLI
+  orchestration. Remaining management commands (``backups_create``,
+  ``backups_report``, etc.) are thin Django/admin-facing surfaces for manual
+  use, with env-var fallback in the service layer
+  (``_load_target_runtime_settings``). Railway-target media sync fail-closed
+  guard is preserved through the explicit ``ROUTE_KIND`` marker in the adapter
+  path.
+
+The authoritative *target* ownership split, boundary-interface rules, and
+preserved invariants are in
+[decisions.md § DR Engine Boundary Contract](./decisions.md#disaster-recovery-engine-boundary-contract-f5--m10).
+
 ## Migration Path for Existing Generated Projects
 
 The DR engine split is a maintainer-side code reorganization. The `backups` module now imports from `quickscale-core` at runtime.

@@ -92,7 +92,7 @@ QuickScale is a mature, solo-maintained Python/Poetry monorepo at `VERSION 0.87.
 
 **Evidence:**
 
-- The decision record says maxima “may only reduce … or leave [them] unchanged” at [docs/technical/decisions.md](docs/technical/decisions.md#L1218-L1226).
+- The decision record says maxima “may only reduce … or leave [them] unchanged” at [docs/technical/decisions.md §Migration-Squash Decision](docs/technical/decisions.md#migration-squash-decision).
 - The quality checker trusts whatever maximum is currently in the file: complexity only regresses when actual exceeds `baseline_entry["max_complexity"]` at [scripts/check_quality.sh](scripts/check_quality.sh#L792-L814), and file size only when actual exceeds `baseline_entry["max_lines"]` at [scripts/check_quality.sh](scripts/check_quality.sh#L824-L846). It does not read a parent/base version.
 - Census of every numeric change since `76c5cc55`: 3 of 3 increased, 0 decreased. Commit `66157380` raised `_validate_modules_section` complexity 11→12, `module_commands.py` 1596→1608 lines, and `config_schema.py` 605→611 lines. Current values are at [scripts/quality_baseline.json](scripts/quality_baseline.json#L506-L510), [scripts/quality_baseline.json](scripts/quality_baseline.json#L945-L947), and [scripts/quality_baseline.json](scripts/quality_baseline.json#L1014-L1016).
 - `git blame` assigns all three increases to SA114's “gate drift remediation” commit. The edit makes current code pass but erases evidence of the prohibited growth; no explicit waiver, expiry, or decision amendment accompanies the three entries.

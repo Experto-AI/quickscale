@@ -37,6 +37,16 @@ This companion owns repository validation entrypoints, testing standards, covera
 <a id="testing-standards"></a>
 ## Testing Standards
 
+**Gate split** — the rule is authoritative in
+[decisions.md §Unit/Integration Gate Split](./decisions.md#unitintegration-gate-split).
+
+| Gate | Make target | Scope | Database | Role |
+|------|-------------|-------|----------|------|
+| Unit | `make test-unit` | `quickscale_core/tests`, `quickscale_cli/tests` (DB-free, marked `not integration and not e2e`) | None | N/A |
+| Integration | `make test-integration` | `quickscale_modules/*/tests` (PostgreSQL-required, marked `not e2e`) | PostgreSQL 18 per-module test DB | `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` |
+
+`make test` runs both gates sequentially as a combined check.
+
 **Coverage Targets:**
 - 90% equal-weight package mean coverage plus 80% minimum per file for `quickscale_core`, `quickscale_cli`, modules, and themes.
 - CI fails if the equal-weight package mean drops below 90% or any file falls below 80%.

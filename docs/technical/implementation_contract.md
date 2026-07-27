@@ -197,6 +197,16 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 - User registration and profile management.
 - Not admin interface enhancements.
 
+**Billing vs Payments:**
+
+| Concern | Billing Module | Payments Module |
+|---------|----------------|-----------------|
+| Role | Subscriptions, entitlements | Charge execution, refunds |
+| Models | Plan, Subscription | Transaction, WebhookEvent |
+| Integration | Stripe Billing API | Stripe Payments API |
+| Provides | Status checks, decorators | Payment execution services |
+| NOT | Charge execution | Subscription logic |
+
 **Dependency Injection (Testing Only):**
 - Production: direct imports.
 - Tests: constructor injection for mocking.
@@ -242,6 +252,27 @@ storage) are registered at import time in ``entry_point.py``.
 > billing, and CRM are too thin and do not preserve parity with the module-owned
 > implementations, and bundled-context regression coverage is missing. Treat the
 > fallback path as not-at-parity.
+
+#### Module Derivation Schema Types
+
+The declarative-derivation *rule* is authoritative in
+[decisions.md §Module Derivation Schema](./decisions.md#module-derivation-schema);
+this is the type reference.
+
+**Companion, not extension:** `ModuleDerivationSchema` and its six dataclasses (`NormalizationRule`, `ValidationRule`, `LegacyKeyAlias`, `DerivedSetting`, `OptionDerivation`, `ModuleDerivationSchema`) live in `quickscale_core/src/quickscale_core/manifest/derivation.py`. They are exported from `quickscale_core.manifest` alongside the existing `ModuleManifest` and `ConfigOption` types. They do **not** extend, subclass, or alter `ModuleManifest` or `ConfigOption`. The existing manifest loader, runtime behaviour, and CLI contract-file path are unchanged.
+
+**YAML-friendly shapes:** All dataclass fields use simple scalars (`str`, `int`, `float`, `bool`, `None`), lists, and dicts so `module.yml` `derivation:` sections round-trip through `yaml.safe_load` (via `load_manifest`/`build_schema_from_manifest`) without custom codecs.
+
+**Dataclass summary:**
+
+| Type | Purpose |
+|------|---------|
+| `NormalizationRule` | Declarative normalisation transformation (choice-map, lowercase, strip, coerce) |
+| `ValidationRule` | Declarative validation constraint (choices, range, required, pattern, type) |
+| `LegacyKeyAlias` | Mapping from deprecated configuration keys to current replacements |
+| `DerivedSetting` | Django setting projected from one or more configuration options |
+| `OptionDerivation` | Per-option bundle of normalisation, validation, alias, and derivation rules |
+| `ModuleDerivationSchema` | Top-level container keyed by module name with per-option derivations and shared rules |
 
 ### Configuration Boundaries
 
