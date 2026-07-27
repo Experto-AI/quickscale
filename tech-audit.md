@@ -10,15 +10,16 @@ QuickScale is a Python 3.13–3.14 Poetry monorepo whose product has two deploym
 
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| `TA62` / `quiet-check-skips-frontend-lint` | S3 | VIII — Tests/tooling integrity | Quiet pre-commit check omits the rendered frontend lint | Small — quick win | High | Open · new |
+| `TA62` / `quiet-check-skips-frontend-lint` | S3 | VIII — Tests/tooling integrity | Quiet pre-commit check omits the rendered frontend lint | Small — quick win | High | Resolved |
 
-**Counts:** S1: 0 · S2: 0 · S3: 1 · S4: 0 · Total: 1.
+**Counts:** S1: 0 · S2: 0 · S3: 0 · S4: 0 · Total: 0.
 
 ## Findings
 
 ### Finding TA62: Quiet pre-commit check omits the rendered frontend lint
 
 **ID:** `quiet-check-skips-frontend-lint` (sequence alias `TA62`)
+**Status:** Resolved via SA120 — the defect, evidence, and verification steps below document the pre-fix state.
 **Severity:** S3 — in the local CLI/generator development and release reality, the realistic `QUIET=1` + Node/pnpm-present cell can report a false-green pre-commit result; hosted and publish gates later catch the defect, so this is not S2. It violates the declared “same as check” contract and is a concrete instance of companion architectural Finding 11 (`quality-gate-topology-hand-synced`).
 **Category:** VIII — Tests: test tooling that neuters a guard.
 **Confidence:** High — source, help text, test harness, history, layer-up gates, and dry-run behavior were directly verified.
@@ -45,6 +46,10 @@ QuickScale is a Python 3.13–3.14 Poetry monorepo whose product has two deploym
 **Deliberate?** None found; documentation and help text contradict the omission.
 **Age:** Introduced by `6694b13c` on 2026-07-20; `b5b6f349` substantially expanded quiet-mode coverage on 2026-07-23 without adding frontend parity.
 
+**Resolution:** The fix runs the same Node/pnpm availability guard and `lint-frontend` target under both normal and quiet modes, capturing quiet-mode output and printing it only on failure while preserving the nonzero status. Behavioral policy tests cover both invocation and exit propagation.
+
+**Resolution evidence:** 79 focused policy tests pass; normal and quiet membership, order, and failure parity are covered; first full-scope executable review returned `STATUS: ok`; the final review pass found no executable defects. (GNU Make quiet recursive dry-run did not standalone-complete — no claim or regression attaches.)
+
 ## Per-subsystem verdicts
 
 - **Generator/core contracts (`quickscale_core`)** — clean; changed manifest discovery/resolvers, schema/theme validation, generator, Dockerfile, and React/template emission paths read in full. The installed-context fallback covers all twelve shipped module manifests and preserves source-mode fail-hard behavior.
@@ -66,11 +71,11 @@ QuickScale is a Python 3.13–3.14 Poetry monorepo whose product has two deploym
 - Prior frontend-proof and devtools-gate closures remain present: hosted/local/publish frontend checks are wired, and all ten scoped CI/local/publish lint/typecheck calls include devtools.
 - Secret scan returned only dummy token/key patterns in tests; no credential material was found in first-party production/configuration files.
 - Fix-regression pass over manifest fallback, CI checkpoint fixes, CLI extractions, frontend de-specialization, and migration constructor refactors found no sibling-case or caller-contract regression.
-- Chain-composition pass ran. `TA62` compounds with the accepted `v87` no-push-CI watch item and architectural Finding 11, but no two-to-three-step chain reached tenant data, credentials, backups, or money at a severity above S3.
+- Chain-composition pass ran. `TA62` (now resolved) compounded with the accepted `v87` no-push-CI watch item and architectural Finding 11, but no two-to-three-step chain reached tenant data, credentials, backups, or money at a severity above S3.
 
 ## Structural smells
 
-- **`quality-gate-topology-hand-synced` (arch-audit Finding 11):** local, hosted, publish, and E2E assurance inventories are independently edited; `TA62` is another paid drift instance, but the boundary-level fix is structural.
+- **`quality-gate-topology-hand-synced` (arch-audit Finding 11):** local, hosted, publish, and E2E assurance inventories are independently edited; `TA62` was another paid drift instance, but the boundary-level fix is structural.
 - **`quality-baseline-monotonicity-unenforced` (arch-audit Finding 12):** the mutable quality snapshot can authorize increases despite the shrink-only policy.
 - **`generated-file-ownership-unmodeled` (arch-audit Finding 7):** generator/updater ownership remains a hand-authored 138-entry taxonomy; defer until another updater consumer.
 - **`deletion-invariants-per-boundary-reimplementation` (arch-audit Finding 2):** non-ownership cleanup obligations still terminate at the account-delete boundary; defer until a second deletion/erasure boundary.
@@ -79,14 +84,14 @@ QuickScale is a Python 3.13–3.14 Poetry monorepo whose product has two deploym
 
 ## Tooling gaps
 
-- **Quiet/full gate-membership parity test (`TA62`):** extend `TestCheckQuietSectionDispatch` so recursive make targets are logged, membership is compared with normal `check`, and a frontend-lint failure must propagate in quiet mode.
+- **Quiet/full gate-membership parity test (`TA62`):** implemented as part of SA120 — 79 policy tests cover membership, invocation, and failure propagation in both normal and quiet modes.
 - **Dependency vulnerability audit:** `pip-audit`/Safety remains absent from local and CI tooling, so current lockfile CVEs could not be resolved in this pass; add a read-only blocking scanner with an explicit reviewed allowlist.
 - **Security static analysis:** Bandit/Semgrep remains absent; add a focused rule set for subprocess shell use, unsafe deserialization, TLS disabling, Django raw/marked-safe sinks, and committed credential signatures.
 - **Production-change testimony gate:** no automated check requires a CHANGELOG/decision/ticket trail for first-party behavioral commits, leaving the side-channel lane dependent on manual audit scrutiny.
 
 ## Notes (watch items)
 
-- **Integration-branch CI:** `.github/workflows/ci.yml` runs on pushes to `main`/`develop` and PRs to `main`, not pushes to `v87`. This remains an accepted solo-maintainer workflow choice; it materially amplifies `TA62` but is not re-litigated as a separate finding.
+- **Integration-branch CI:** `.github/workflows/ci.yml` runs on pushes to `main`/`develop` and PRs to `main`, not pushes to `v87`. This remains an accepted solo-maintainer workflow choice; it materially amplified `TA62` (now resolved) but is not re-litigated as a separate finding.
 - **Installed-wheel lifecycle:** roadmap SA112a–f explicitly owns the still-unproven installed-artifact `plan → apply → up` path. The newest manifest fallback is a partial prerequisite, not closure; duplicating it here would create two owners.
 - **Published split skew:** roadmap SA117 now blocks publishing after a diagnostic reproduced stale remote manifests in source and installed contexts. The new decision SSOT ratifies v87 lockstep stamping, explicit embed/core mismatch rejection, and mandatory tag → split-push → PyPI ordering; SA119 owns immutable-ref pinning. This is not duplicated as a technical finding because present functionality also requires reconciling external split branches and the durable prevention changes artifact ownership/compatibility.
 - **Generator lock generation:** `_generate_poetry_lock()` warns and completes generation on missing Poetry, timeout, or nonzero exit. Tests and comments pin this as a deliberate usability trade-off; downstream apply/install remains fail-loud.
@@ -96,10 +101,10 @@ QuickScale is a Python 3.13–3.14 Poetry monorepo whose product has two deploym
 ## Reconciliation log
 
 - 2026-07-26 — `TA1`, `TA2`, `TA3`, `TA4`, `TA5`, `TA6`, `TA7`, `TA8`, `TA9`, `TA10`, `TA11`, `TA12`, `TA13`, `TA14`, `TA15`, `TA16`, `TA17`, `TA18`, `TA19`, `TA20`, `TA21`, `TA22`, `TA23`, `TA24`, `TA25`, `TA26`, `TA27`, `TA28`, `TA29`, `TA30`, `TA31`, `TA32`, `TA33`, `TA34`, `TA35`, `TA36`, `TA37`, `TA38`, `TA39`, `TA40`, `TA41`, `TA42`, `TA43`, `TA44`, `TA45`, `TA46`, `TA47`, `TA48`, `TA49`, `TA50`, `TA51`, `TA52`, `TA53`, `TA54`, `TA55`, `TA56`, `TA57`, `TA58`, `TA59`: resolved — historical closures pre-date the prior audit baseline; no matching regression appeared in the full current production delta or sampled live surfaces.
-- 2026-07-26 — `TA60`: resolved — frontend proof closure reverified in code: hosted `lint-frontend`, local-CI frontend lint, and publish `frontend-proof` remain wired. `TA62` is a distinct quiet-mode parity defect, not a regression of the publish/hosted closure.
+- 2026-07-26 — `TA60`: resolved — frontend proof closure reverified in code: hosted `lint-frontend`, local-CI frontend lint, and publish `frontend-proof` remain wired. `TA62` was a distinct quiet-mode parity defect, not a regression of the publish/hosted closure.
 - 2026-07-26 — `TA61`: resolved — devtools closure reverified in code: all ten scoped lint/typecheck invocations across hosted CI, publishing, and local CI still include `--devtools`.
-- 2026-07-26 — `TA62` / `quiet-check-skips-frontend-lint`: still-open, new — quiet `check` omits the rendered frontend lint while documenting parity with normal `check`.
+- 2026-07-26 — `TA62` / `quiet-check-skips-frontend-lint`: resolved — SA120 adds frontend-lint parity under quiet mode with focused test coverage (79 policy tests); defect description above is historical pre-fix documentation.
 
-**Reconciliation counts:** prior still-open: 0 · prior resolved/carried: 61 · regressed: 0 · new: 1.
+**Reconciliation counts:** prior still-open: 0 · prior resolved/carried: 62 · regressed: 0 · new: 0.
 
 Categories swept with no qualifying finding: correctness, concurrency, implementation security/authentication/authorization, resources/I/O, performance, data handling, multi-tenant isolation, CLI destructive-path safety, generator output security, dependency manifest consistency, and runtime lifecycle transitions.
