@@ -19,36 +19,11 @@ QuickScale is a Python 3.13–3.14 Poetry monorepo whose product has two deploym
 ### Finding TA62: Quiet pre-commit check omits the rendered frontend lint
 
 **ID:** `quiet-check-skips-frontend-lint` (sequence alias `TA62`)
-**Status:** Resolved via SA120 — the defect, evidence, and verification steps below document the pre-fix state.
-**Severity:** S3 — in the local CLI/generator development and release reality, the realistic `QUIET=1` + Node/pnpm-present cell can report a false-green pre-commit result; hosted and publish gates later catch the defect, so this is not S2. It violates the declared “same as check” contract and is a concrete instance of companion architectural Finding 11 (`quality-gate-topology-hand-synced`).
-**Category:** VIII — Tests: test tooling that neuters a guard.
-**Confidence:** High — source, help text, test harness, history, layer-up gates, and dry-run behavior were directly verified.
-**Location:** `Makefile:12`, `Makefile:137`, `Makefile:833-834`, `Makefile:918-927`; test gap at `scripts/test_ci_coverage_policy.py:1075-1083,1114-1148,1187-1204`.
+**Status:** **Closed** — resolved by SA120 (2026-07-26). Severity S3, category VIII (test tooling that neuters a guard).
 
-**Defect and failure scenario:** The Makefile advertises `make check QUIET=1` as the same gate with quiet-on-success output, but wraps the only `lint-frontend` call in `if [ -z "$(QUIET)" ]`. An agent introduces an ESLint or TypeScript error in the generated React source, runs the documented quiet gate, and receives exit 0 after Python/repository checks; because `v87` pushes do not trigger hosted CI, the broken template can remain green locally until a PR to `main` or the publish workflow.
+`make check QUIET=1` advertised parity with `make check` but wrapped the only `lint-frontend` call in `if [ -z "$(QUIET)" ]`, so the documented quiet pre-commit gate was false-green for rendered-frontend errors. Normal and quiet `check` now share the same Node/pnpm guard and `lint-frontend` dispatch, with quiet-mode capture, silent success, exactly-once replay, and preserved nonzero exit; 79 focused policy tests cover membership, invocation, and failure propagation in both modes, and full-scope independent review returned `STATUS: ok`.
 
-**Evidence:** The contract says `make check QUIET=1 - Same as check, quiet on success` (`Makefile:12,137`). The implementation says:
-
-```make
-@if [ -z "$(QUIET)" ]; then
-    ...
-    $(MAKE) lint-frontend;
-```
-
-`make -n check QUIET=1` contained no frontend command, while `make -n check` scheduled `make lint-frontend`. The 65 passing policy tests exercise quiet Python directory/section dispatch, but their fake recursive make is `MAKE=true` and they never assert frontend invocation or failure propagation.
-
-**Refutation:** Hosted CI runs `make lint-frontend` (`.github/workflows/ci.yml:10-58`), local full CI runs it (`scripts/check_ci_locally.sh:183-192`), and publishing runs `make frontend-proof` (`.github/workflows/publish.yml:120-126`). Those safeguards reduce release impact but do not kill the finding: the documented quiet pre-commit command itself is false-green, and the active integration branch is outside the CI push trigger (`ci.yml:3-7`). No comment, test, suppression, or commit message blesses reduced quiet-mode coverage; every description frames `QUIET` as output suppression only.
-
-**Fix:** Run the same Node/pnpm availability guard and `lint-frontend` target for both modes; under `QUIET=1`, capture its output and print it only on failure while preserving the nonzero status. Add a behavioral policy test whose fake recursive make records `lint-frontend` and can force it to fail, asserting both invocation and exit propagation. **Effort:** Small.
-
-**Verification:** Run the new focused policy test, then confirm `make -n check` and `make -n check QUIET=1` both contain `lint-frontend`; inject a harmless temporary TypeScript type error in scratch rendered output and verify both commands fail at the same gate.
-
-**Deliberate?** None found; documentation and help text contradict the omission.
-**Age:** Introduced by `6694b13c` on 2026-07-20; `b5b6f349` substantially expanded quiet-mode coverage on 2026-07-23 without adding frontend parity.
-
-**Resolution:** The fix runs the same Node/pnpm availability guard and `lint-frontend` target under both normal and quiet modes, capturing quiet-mode output and printing it only on failure while preserving the nonzero status. Behavioral policy tests cover both invocation and exit propagation.
-
-**Resolution evidence:** 79 focused policy tests pass; normal and quiet membership, order, and failure parity are covered; first full-scope executable review returned `STATUS: ok`; the final review pass found no executable defects. (GNU Make quiet recursive dry-run did not standalone-complete — no claim or regression attaches.)
+Full pre-fix defect narrative, evidence, and closeout record: [CHANGELOG.md](CHANGELOG.md) (SA120 entries). No context from this finding is load-bearing for open work; the structural cause remains open as architectural Finding 11.
 
 ## Per-subsystem verdicts
 
