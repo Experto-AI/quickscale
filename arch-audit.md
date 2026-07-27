@@ -285,7 +285,7 @@ Fix Finding 11 before or as part of SA112e/SA115-CI-001: those pending edits are
 
 ## Reconciliation log
 
-- Historical reconciliation through 2026-07-26 remains preserved in [docs/others/arch-audit.md](docs/others/arch-audit.md) and version control. Prior Findings 1, 3, 5, 6, 8, 9 are resolved; their mechanisms were not found regressed in this pass.
+- Historical reconciliation through 2026-07-26 remains preserved in version control (this file's former path was `docs/others/arch-audit.md`). Prior Findings 1, 3, 5, 6, 8, 9 are resolved; their mechanisms were not found regressed in this pass.
 - 2026-07-26 — `generated-file-ownership-unmodeled`: **still-open**; anchors re-resolved. SA66/SA90 remove silent emission-membership gaps but pin, rather than remove, the hand-authored ownership station. SA114 is new paid synchronization evidence.
 - 2026-07-26 — `deletion-invariants-per-boundary-reimplementation`: **still-open, narrowed**; SA70 closure remains clean for last-owner safety, while cross-domain billing cleanup still has no deletion owner.
 - 2026-07-26 — `org-model-universe-hand-enumerated`: **still-open**; 45-entry membership census remains bidirectionally gated, 21-entry purge membership is exact, and purge ordering remains manual with only three asserted edges.

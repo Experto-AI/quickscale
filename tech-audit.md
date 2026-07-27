@@ -10,20 +10,13 @@ QuickScale is a Python 3.13–3.14 Poetry monorepo whose product has two deploym
 
 | ID | Severity | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| `TA62` / `quiet-check-skips-frontend-lint` | S3 | VIII — Tests/tooling integrity | Quiet pre-commit check omits the rendered frontend lint | Small — quick win | High | Resolved |
+| — | — | — | *No open findings.* | — | — | — |
 
 **Counts:** S1: 0 · S2: 0 · S3: 0 · S4: 0 · Total: 0.
 
 ## Findings
 
-### Finding TA62: Quiet pre-commit check omits the rendered frontend lint
-
-**ID:** `quiet-check-skips-frontend-lint` (sequence alias `TA62`)
-**Status:** **Closed** — resolved by SA120 (2026-07-26). Severity S3, category VIII (test tooling that neuters a guard).
-
-`make check QUIET=1` advertised parity with `make check` but wrapped the only `lint-frontend` call in `if [ -z "$(QUIET)" ]`, so the documented quiet pre-commit gate was false-green for rendered-frontend errors. Normal and quiet `check` now share the same Node/pnpm guard and `lint-frontend` dispatch, with quiet-mode capture, silent success, exactly-once replay, and preserved nonzero exit; 79 focused policy tests cover membership, invocation, and failure propagation in both modes, and full-scope independent review returned `STATUS: ok`.
-
-Full pre-fix defect narrative, evidence, and closeout record: [CHANGELOG.md](CHANGELOG.md) (SA120 entries). No context from this finding is load-bearing for open work; the structural cause remains open as architectural Finding 11.
+None open. Per this document's convention, closed findings exist only as dated Reconciliation-log lines; their pre-fix narrative, evidence, and closeout record live in [CHANGELOG.md](CHANGELOG.md). The most recent closure is `TA62` (quiet-check frontend-lint parity, resolved by SA120 on 2026-07-26); its structural cause remains open as architectural [Finding 11](arch-audit.md).
 
 ## Per-subsystem verdicts
 

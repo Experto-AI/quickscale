@@ -146,7 +146,7 @@ myproject/
 
 Billing now has a public-ready implementation line in `quickscale_modules/billing` through the current runtime APIs, module-owned billing pages, and React integration guide. Public `quickscale plan`, `quickscale.yml`, and `quickscale apply` flows now surface billing. The generated `showcase_react` SPA surfaces billing as a module flag only (`modules.billing`); it does not currently include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards/links, module paths for billing, or full-document links into billing Django pages. The org-switch blocker that originally prevented these entry points is now resolved — see "Multi-org membership and org-switch" below; restoration is separate implementation work. Teams remains placeholder inventory only.
 
-**Teams module status:** `quickscale_modules/teams/` is a README-only placeholder from early brainstorming; it has never been scoped, designed, or scheduled. It is **not next** and **not planned** — there is no committed timeline or kickoff date. Structural findings in [arch-audit.md](../others/arch-audit.md) that key their horizon or trigger off "teams kickoff"/"the teams build" (e.g. `deletion-invariants-per-boundary-reimplementation`, `org-model-universe-hand-enumerated`) describe conditions that would apply *if and when* teams is scheduled — they are not on a 6–18 month clock and should not be read as committed roadmap items. Treat them as open-ended/deferred until a separate scheduling decision is made and recorded here.
+**Teams module status:** `quickscale_modules/teams/` is a README-only placeholder from early brainstorming; it has never been scoped, designed, or scheduled. It is **not next** and **not planned** — there is no committed timeline or kickoff date. Structural findings in [arch-audit.md](../../arch-audit.md) that key their horizon or trigger off "teams kickoff"/"the teams build" (e.g. `deletion-invariants-per-boundary-reimplementation`, `org-model-universe-hand-enumerated`) describe conditions that would apply *if and when* teams is scheduled — they are not on a 6–18 month clock and should not be read as committed roadmap items. Treat them as open-ended/deferred until a separate scheduling decision is made and recorded here.
 
 **Key Characteristics:**
 - ✅ Runtime dependencies (in INSTALLED_APPS)
@@ -1141,7 +1141,7 @@ alias.
 |-----|----------|---------------|--------|
 | F12.2 | `project_state.py:_read_through_import_legacy()` and `materialize_authoritative_state()`; `remove_command.py:_load_legacy_tracking()` and `_record_mutation_snapshots()` (legacy `config.yml` / `file_hashes.yml` compatibility paths) | One-time compatibility window: projects predating the consolidated `state.yml` format may still depend on legacy `config.yml` / `file_hashes.yml` data while consolidated `state.yml` becomes authoritative. `project_state.py` logs-and-skips stale legacy import failures so consolidation is not blocked; `remove_command.py` still consults and snapshots legacy `config.yml` so rollback-safe module removal can preserve compatibility tracking during the same sunset window. Does NOT cover `_load_managed_file_records_for_drift()` — its legacy `file_hashes.yml` fallback is a drift-detection design choice, not a compatibility path. | Remove once the consolidated state format has been deployed for two full releases with no known pre-consolidation projects in active use. |
 
-**Known violations:** tracked in [tech-audit.md](../others/tech-audit.md), the SSOT for found-not-yet-fixed fail-hard violations. Remediated findings are dropped from that file and closed out in CHANGELOG.md.
+**Known violations:** tracked in [tech-audit.md](../../tech-audit.md), the SSOT for found-not-yet-fixed fail-hard violations. Remediated findings are dropped from that file and closed out in CHANGELOG.md.
 
 ---
 
@@ -1158,7 +1158,7 @@ alias.
 
 The CSRF CI gate continues to enforce the pairing requirement across all `csrf_exempt` callsites.
 
-**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../others/arch-audit.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../../arch-audit.md)
 
 ---
 
@@ -1240,7 +1240,7 @@ QuickScale's shared-schema + FORCE RLS model is structurally equivalent to Supab
 **Operator debug mode — shipped VIEW-AS contract:**
 Django superusers may activate a debug session that scopes the entire request to a selected organization so they can see the app exactly as that org's members see it. The shipped surface uses the session key `quickscale_modules_orgs.debug_as_org_id` (superuser-only); `TenantMiddleware._resolve_debug_org()` overrides Solo/SaaS resolution when the key is present; the admin surface activates or exits the session; a debug banner renders while active; and every activation is audit-logged. No BYPASSRLS — the debug session runs under the same restricted runtime role as all other tenant paths, so RLS remains fully enforced.
 
-**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (current open work) | [arch-audit.md](../others/arch-audit.md) (current risk posture)
+**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (current open work) | [arch-audit.md](../../arch-audit.md) (current risk posture)
 
 ---
 
@@ -1468,7 +1468,7 @@ and asserts every emitted file is classified.
    gate (rule 6) also checks ``MODE_REQUIRED_SPECS`` entries against
    ``INTENTIONALLY_UNMANAGED``.
 
-**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Finding 7](../others/arch-audit.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Finding 7](../../arch-audit.md)
 
 ---
 
@@ -1512,7 +1512,7 @@ manual-verification ask as a maintainer to-do in
 roadmap.md checklist entry — the roadmap tracks repo-local implementation
 work, not manual maintainer operations against external infrastructure.
 
-**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Red flags](../others/arch-audit.md) | [beta-site-migration.md](../planning/beta-site-migration.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Red flags](../../arch-audit.md) | [beta-site-migration.md](../planning/beta-site-migration.md)
 
 ---
 
@@ -2033,12 +2033,12 @@ the canonical `scripts/quality_baseline.json` path in the Git tree.
 
 **Relation to Finding 12 (`quality-baseline-monotonicity-unenforced`):** This
 gate directly implements the recommended Option 1 from
-[arch-audit.md](../others/arch-audit.md).  The three SA114 increases
+[arch-audit.md](../../arch-audit.md).  The three SA114 increases
 (`_validate_modules_section` 11→12, `module_commands.py` 1596→1608,
 `config_schema.py` 605→611) are the initial failing fixture and require
 matching waivers for a clean run.
 
-**Related docs:** [arch-audit.md Finding 12](../others/arch-audit.md) |
+**Related docs:** [arch-audit.md Finding 12](../../arch-audit.md) |
 [roadmap.md](./roadmap.md) | [CHANGELOG.md](../../CHANGELOG.md)
 
 ---
