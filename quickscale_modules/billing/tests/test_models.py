@@ -19,7 +19,7 @@ from quickscale_modules_orgs.models import Organization
 
 
 def test_package_version_is_exposed() -> None:
-    assert quickscale_modules_billing.__version__ == "0.85.0"
+    assert quickscale_modules_billing.__version__ == "0.87.0"
 
 
 @pytest.mark.django_db(transaction=True)

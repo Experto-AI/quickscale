@@ -1,6 +1,6 @@
 [project]
 name = "quickscale-module-orgs"
-version = "0.86.0"
+version = "0.87.0"
 description = "QuickScale organizations module with core multi-tenant organization, membership, and invitation models"
 requires-python = ">=3.13,<3.15"
 readme = "README.md"

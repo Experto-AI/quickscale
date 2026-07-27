@@ -1,6 +1,6 @@
 [project]
 name = "quickscale-module-storage"
-version = "0.76.0"
+version = "0.87.0"
 description = "QuickScale storage infrastructure module with local/S3-compatible helpers"
 requires-python = ">=3.13,<3.15"
 readme = "README.md"

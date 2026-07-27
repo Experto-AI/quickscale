@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 Provenance-aware split-publish wrapper for QuickScale modules (F2.8, F2.9a, F2.9b).
 
 This script replaces the hardcoded module-path and branch-resolution logic
@@ -20,10 +20,21 @@ local-vs-published SHAs, and explicit next-action guidance.  --status stays
 read-only and never fails closed; the mutating flows continue to fail closed
 with the same explicit next-action guidance.
 
-Usage:
-    poetry run python scripts/publish_module.py <module_name> [--clean]
-    poetry run python scripts/publish_module.py --status
-    poetry run python scripts/publish_module.py --publish-outdated [--clean]
+    Usage:
+        poetry run python scripts/publish_module.py \\
+            <module_name> --expected-remote-sha <sha|ABSENT> [--clean]
+        poetry run python scripts/publish_module.py --status
+        poetry run python scripts/publish_module.py --publish-outdated [--clean]
+
+    Phase 4 (SA117): All mutating single-module publish calls require
+    ``--expected-remote-sha``.  The value must be a 40-character hex SHA
+    or the literal ``ABSENT``.  ``--publish-outdated`` and ``--status``
+    reject the flag.
+
+    Phase 4 also disables ``--publish-outdated`` entirely: it used bare
+    ``--force`` internally, which violates the force-with-lease safety
+    contract.  Use single-module publish with per-module
+    ``--expected-remote-sha`` instead.
 """
 
 from __future__ import annotations
@@ -49,6 +60,7 @@ from quickscale_core.utils.git_utils import (  # noqa: E402
     resolve_module_path,
     resolve_split_branch,
     run_git_subtree_split,
+    validate_expected_sha,
     validate_module_name,
 )
 
@@ -152,8 +164,9 @@ def _check_release_authoritative() -> None:
 
     Raises SystemExit with a clear operator-facing message when the source is
     not release-authoritative.  This gate applies to mutating flows only
-    (single-module publish and --publish-outdated); --status remains read-only
+    (single-module publish); --status remains read-only
     and must not fail closed just because HEAD is untagged.
+    (--publish-outdated was disabled in SA117 Phase 4.)
     """
     is_auth, version, tag, reason = is_release_authoritative(_REPO_ROOT)
     if is_auth:
@@ -248,8 +261,15 @@ def _get_module_publish_state(
     return "outdated", local_sha, published_sha, published_source
 
 
-def _publish_module(module_name: str) -> None:
-    """Split and push a single module using the provenance-aware helpers."""
+def _publish_module(module_name: str, *, expected_remote_sha: str) -> None:
+    """
+    Split and push a single module using the provenance-aware helpers.
+
+    *expected_remote_sha* is required (SA117 Phase 4): a 40-character hex
+    SHA for force-with-lease pinning, or ``ABSENT`` for first-time publish
+    (no known remote SHA).  The legacy bare ``--force`` fallback has been
+    removed.
+    """
     # Defense-in-depth: validate name shape before any path/branch resolution
     # so callers that bypass main() still get a clean GitError, not a
     # traceback (CR-M5-P1-001).
@@ -285,7 +305,12 @@ def _publish_module(module_name: str) -> None:
 
     _print_info("Pushing split branch to origin...")
     try:
-        push_split_branch(split_branch, remote="origin", force=True, path=_REPO_ROOT)
+        push_split_branch(
+            split_branch,
+            remote="origin",
+            expected_remote_sha=expected_remote_sha,
+            path=_REPO_ROOT,
+        )
         _print_success("Split branch pushed to origin")
     except GitError as e:
         _print_error(f"Failed to push split branch to origin: {e}")
@@ -375,9 +400,11 @@ def _show_status() -> None:
         # "not release-authoritative"; the read-only status test asserts that
         # substring is absent so --status is never mistaken for the F2.9a gate.
         _print_info("  1. Tag HEAD to match VERSION so the source is release-authoritative.")
-        _print_info("  2. Re-run 'make publish-module MODULE=<name>' or '--publish-outdated'.")
+        _print_info("  2. Re-run single-module publish:")
+        _print_info("       make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40hex|ABSENT>")
     else:
-        _print_info("  Run '--publish-outdated' to publish missing/outdated split branches.")
+        _print_info("  Publish each outdated module individually:")
+        _print_info("    make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40hex|ABSENT>")
 
 
 def _publish_outdated(clean: bool) -> None:
@@ -432,12 +459,23 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--publish-outdated",
         action="store_true",
-        help="Publish only modules with missing or outdated split branches",
+        help=(
+            "[DISABLED in SA117 Phase 4] Previously published modules with "
+            "missing or outdated split branches.  Now exits with safety "
+            "guidance; use single-module publish instead."
+        ),
     )
     parser.add_argument(
         "--clean",
         action="store_true",
         help="Clear git subtree cache before splitting",
+    )
+    parser.add_argument(
+        "--expected-remote-sha",
+        help=(
+            "Exact 40-char hex SHA expected on remote, or ABSENT for first publish. "
+            "Required for single-module publish; rejected with --publish-outdated and --status."
+        ),
     )
     return parser
 
@@ -462,11 +500,39 @@ def main() -> None:
         sys.exit(1)
 
     if args.status:
+        if args.expected_remote_sha is not None:
+            _print_error("--expected-remote-sha is not supported with --status")
+            sys.exit(1)
         _show_status()
     elif args.publish_outdated:
-        _publish_outdated(clean=args.clean)
+        _print_error("--publish-outdated is disabled in SA117 Phase 4")
+        _print_info(
+            "Batch --publish-outdated used bare --force, which violates the "
+            "force-with-lease safety contract."
+        )
+        _print_info("Publish each module individually with --expected-remote-sha:")
+        for name in _list_modules():
+            _print_info(f"  make publish-module MODULE={name} EXPECTED_REMOTE_SHA=<40hex|ABSENT>")
+        sys.exit(1)
     elif args.module_name:
         module_name = args.module_name
+
+        # Phase 4: --expected-remote-sha is required for single-module publish
+        expected_sha = args.expected_remote_sha
+        if not expected_sha:
+            _print_error(
+                "--expected-remote-sha is required for single-module publish "
+                "(use: --expected-remote-sha <40hex|ABSENT>)"
+            )
+            sys.exit(1)
+
+        # Validate expected SHA format before any git operations
+        try:
+            validate_expected_sha(expected_sha)
+        except GitError as e:
+            _print_error(f"Invalid --expected-remote-sha: {e}")
+            sys.exit(1)
+
         # Validate module name shape BEFORE any path resolution or subtree
         # operations so invalid input fails closed with a clean error instead
         # of an uncaught traceback (CR-M5-P1-001).
@@ -495,7 +561,7 @@ def main() -> None:
             return
 
         _maybe_clean_subtree_cache(args.clean)
-        _publish_module(module_name)
+        _publish_module(module_name, expected_remote_sha=expected_sha)
     else:
         parser.print_help()
         sys.exit(1)

@@ -37,7 +37,12 @@ from quickscale_core.project_state import (
     ProjectStateManager,
     check_version_drift,
 )
-from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
+from quickscale_core.manifest.loader import (
+    ManifestError,
+    ModuleVersionMismatchError,
+    assert_manifest_version_matches_core,
+    get_manifest_for_module,
+)
 from quickscale_core.utils.git_utils import (
     GitError,
     check_remote_branch_exists,
@@ -280,9 +285,16 @@ def _resolve_embedded_module_install_path(
 
 
 def _read_embedded_module_version(project_path: Path, module: str) -> str:
-    """Read the canonical installed version from the embedded module manifest."""
+    """Read the canonical installed version from the embedded module manifest.
+
+    Raises:
+        ManifestError: If the manifest cannot be loaded or is invalid.
+        ModuleVersionMismatchError: If the manifest version is older than the
+            current core version.
+    """
     manifest = get_manifest_for_module(project_path, module, strict=True)
     assert manifest is not None
+    assert_manifest_version_matches_core(manifest.version, module)
     normalized = normalize_installed_version(manifest.version)
     return normalized or manifest.version
 
@@ -453,6 +465,21 @@ def _perform_module_embed(
         click.echo(
             "\n💡 Fix the embedded module.yml or remove the partial module embed "
             "before continuing.",
+            err=True,
+        )
+        if execution_mode == APPLY_MODULE_EXECUTION_MODE:
+            _cleanup_failed_apply_embed(project_path, module)
+        return False, None
+    except ModuleVersionMismatchError as error:
+        click.secho(
+            f"\n❌ {error}",
+            fg="red",
+            err=True,
+            bold=True,
+        )
+        click.echo(
+            "\n💡 Update QuickScale to the latest version before embedding "
+            "this module.",
             err=True,
         )
         if execution_mode == APPLY_MODULE_EXECUTION_MODE:
@@ -1299,6 +1326,13 @@ def _update_single_module(
     except GitError as e:
         click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
         click.echo(f"💡 Tip: Check for conflicts in modules/{name}/", err=True)
+        return False
+    except ModuleVersionMismatchError as e:
+        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
+        click.echo(
+            "\n💡 Update QuickScale to the latest version before updating modules.",
+            err=True,
+        )
         return False
     except RuntimeError as e:
         click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)

@@ -267,7 +267,7 @@ class TestPerformModuleEmbed:
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
-        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.87.0"\n')
 
         result = _perform_module_embed(
             tmp_path,
@@ -283,7 +283,7 @@ class TestPerformModuleEmbed:
             module_name="auth",
             prefix="modules/auth",
             branch="splits/auth-module",
-            version="0.82.0",
+            version="0.87.0",
             project_path=tmp_path,
         )
         mock_sync_dependencies.assert_called_once_with(tmp_path, {"auth": {}})
@@ -306,7 +306,7 @@ class TestPerformModuleEmbed:
         mock_install.return_value = True
         module_dir = tmp_path / "modules" / "blog"
         module_dir.mkdir(parents=True)
-        (module_dir / "module.yml").write_text('name: blog\nversion: "0.82.0"\n')
+        (module_dir / "module.yml").write_text('name: blog\nversion: "0.87.0"\n')
 
         # Mock configurator
         configurator = Mock(return_value={})
@@ -354,7 +354,7 @@ class TestPerformModuleEmbed:
         module_dir = tmp_path / "modules" / "listings"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
-        (module_dir / "module.yml").write_text('name: listings\nversion: "0.82.0"\n')
+        (module_dir / "module.yml").write_text('name: listings\nversion: "0.87.0"\n')
 
         result = _perform_module_embed(
             tmp_path,
@@ -400,7 +400,7 @@ class TestPerformModuleEmbed:
             del remote, branch, squash
             module_dir = tmp_path / prefix
             module_dir.mkdir(parents=True, exist_ok=True)
-            (module_dir / "module.yml").write_text('name: blog\nversion: "0.82.0"\n')
+            (module_dir / "module.yml").write_text('name: blog\nversion: "0.87.0"\n')
 
         def _failing_applier(
             project_path: Path,
@@ -462,7 +462,7 @@ class TestPerformModuleEmbed:
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
-        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.87.0"\n')
 
         resolved_sha = "b" * 40
         success, provenance = _perform_module_embed(
@@ -488,7 +488,107 @@ class TestPerformModuleEmbed:
         assert provenance.tracking_branch == "splits/auth-module"
         assert provenance.module_name == "auth"
         assert provenance.prefix == "modules/auth"
-        assert provenance.installed_version == "0.82.0"
+        assert provenance.installed_version == "0.87.0"
+
+
+class TestModuleVersionMismatchEnforcement:
+    """Tests for Phase 3 version mismatch enforcement in embed and update paths."""
+
+    def test_embed_fails_on_version_mismatch(self, tmp_path: Path) -> None:
+        """Embed must fail when the module version predates the core version."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.86.0"\n')
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+                {},
+            ),
+        ):
+            success, provenance = _perform_module_embed(
+                tmp_path,
+                "auth",
+                "https://example.com/repo.git",
+                "splits/auth-module",
+                {},
+                sync_dependencies=False,
+                install_dependencies=False,
+            )
+
+        assert success is False
+        assert provenance is None
+
+    def test_apply_embed_cleans_up_on_version_mismatch(self, tmp_path: Path) -> None:
+        """Apply embed must clean up partial artifacts on version mismatch."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        module_yml = module_dir / "module.yml"
+        module_yml.write_text('name: auth\nversion: "0.86.0"\n')
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+                {},
+            ),
+        ):
+            success, provenance = _perform_module_embed(
+                tmp_path,
+                "auth",
+                "https://example.com/repo.git",
+                "splits/auth-module",
+                {},
+                sync_dependencies=False,
+                install_dependencies=False,
+                execution_mode=APPLY_MODULE_EXECUTION_MODE,
+            )
+
+        assert success is False
+        assert provenance is None
+        # The partial embed directory must be cleaned up.
+        assert not (tmp_path / "modules" / "auth").exists()
+
+    def test_embed_accepts_matching_version(self, tmp_path: Path) -> None:
+        """Embed must succeed when the module version matches the core version."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.87.0"\n')
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.add_module",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._install_module_dependencies",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+                {},
+            ),
+        ):
+            success, provenance = _perform_module_embed(
+                tmp_path,
+                "auth",
+                "https://example.com/repo.git",
+                "splits/auth-module",
+                {},
+            )
+
+        assert success is True
 
 
 class TestInstallModuleDependencies:
@@ -673,7 +773,7 @@ class TestEmbedModule:
         """Standalone embed should keep its immediate managed-wiring pass."""
         module_dir = tmp_path / "modules" / "blog"
         module_dir.mkdir(parents=True)
-        (module_dir / "module.yml").write_text('name: blog\nversion: "0.82.0"\n')
+        (module_dir / "module.yml").write_text('name: blog\nversion: "0.87.0"\n')
 
         with (
             patch(
@@ -983,7 +1083,7 @@ class TestEmbedModule:
             prefix="modules/auth",
             tracking_branch="splits/auth-module",
             source_ref=resolved_sha,
-            installed_version="0.82.0",
+            installed_version="0.87.0",
         )
         mock_perform.return_value = (True, expected_provenance)
 

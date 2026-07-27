@@ -34,11 +34,21 @@ Preferred maintainer-facing command map:
 | `./scripts/publish.sh test` | `make publish-test` |
 | `./scripts/publish.sh prod` | `make publish-prod` |
 | `./scripts/publish.sh full` | `make publish-full` |
-| `./scripts/publish_module.sh <module>` | `make publish-module MODULE=<module>` |
+| `./scripts/publish_module.sh <module> --expected-remote-sha <sha|ABSENT>` | `make publish-module MODULE=<module> EXPECTED_REMOTE_SHA=<sha|ABSENT>` |
 | `./scripts/publish_module.sh --status` | `make publish-module-status` |
-| `./scripts/publish_module.sh --publish-outdated` | `make publish-modules-outdated` |
+| `./scripts/publish_module.sh --publish-outdated` | [DISABLED SA117 Phase 4] `make publish-modules-outdated` |
 | `./scripts/version_tool.sh check` | `make version-check` |
 | `./scripts/version_tool.sh update` | `make version-update` after editing `VERSION`, or `make bump-version X.Y.Z` to update `VERSION` first |
+| `poetry run python scripts/check_sa117_scope.py worktree` | `make sa117-check` (add `SCRIPTS_ONLY=1` for Phase 1 backward compat) |
+| `poetry run python scripts/check_sa117_scope.py emit` | `make sa117-emit` |
+| `poetry run python scripts/check_sa117_scope.py lock` | `make sa117-lock` (add `SCRIPTS_ONLY=1` for Phase 1 backward compat) |
+| `poetry run python scripts/verify_sa117_publication.py capture --version X --phase Y` | `make sa117-capture VERSION=X PHASE=Y` |
+| `poetry run python scripts/verify_sa117_publication.py verify --evidence PATH` | `make sa117-verify EVIDENCE=PATH` |
+| `poetry run python scripts/verify_sa117_publication.py authorize --version X --evidence-digest D` | `make sa117-authorize VERSION=X DIGEST=D` |
+| `poetry run python scripts/verify_sa117_publication.py rollback --auth-token T --evidence-digest D` | `make sa117-rollback TOKEN=T DIGEST=D` |
+| `poetry run python scripts/verify_public_module_apply.py apply --module M --target T --executable E --argv A` | `make sa117-apply MODULE=M TARGET=T EXEC=E ARGV=A` |
+| `poetry run python scripts/verify_public_module_apply.py check-origin --module M --declared-origin O --expected-origin E` | `make sa117-check-origin MODULE=M DECLARED=O EXPECTED=E` |
+| `poetry run python scripts/verify_public_module_apply.py check-containers --target T` | `make sa117-check-containers TARGET=T` |
 
 If a script is part of a larger repo workflow, assume the Makefile is the preferred maintainer-facing entrypoint.
 
@@ -72,8 +82,19 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 ### Release and distribution
 
 - [publish.sh](./publish.sh) — builds and publishes packages (prefer `make publish-build`, `make publish-test`, `make publish-prod`, or `make publish-full`)
-- [publish_module.sh](./publish_module.sh) — publishes module changes to split branches, reports module split-branch status, and can publish every outdated module (`make publish-module MODULE=<name>`, `make publish-module-status`, `make publish-modules-outdated`)
+- [publish_module.sh](./publish_module.sh) — publishes module changes to split branches using force-with-lease safety, reports module split-branch status (`make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<sha|ABSENT>`, `make publish-module-status`). **Note**: `--publish-outdated` / `make publish-modules-outdated` is **disabled** in SA117 Phase 4 — each module must be published individually with `--expected-remote-sha`.
 - [version_tool.sh](./version_tool.sh) — checks and synchronizes version metadata (`make version-check`, `make version-update`, or `make bump-version X.Y.Z`; direct script commands: `check`, `update`)
+
+### SA117 version lockstep
+
+- [sa117_scope.json](./sa117_scope.json) — scope-gate allowlist defining the SA117 path set across all phases, with phase tags for partial rollout. Source of truth for scope-gate verification.
+- [check_sa117_scope.py](./check_sa117_scope.py) — scope guard with `worktree` (check tracked paths against allowlist), `emit` (print filtered paths), and `lock` (exact path-set match) modes. NUL-path safe. Exit codes: 0 pass, 1 semantic rejection, 2 malformed invocation.
+- [test_check_sa117_scope.py](./test_check_sa117_scope.py) — focused pytest suite for scope guard: NUL rejection, path normalisation, allowlist loading, and all three modes. Hermetic (no git dependency for most tests; uses explicit path lists).
+- [test_version_tool.py](./test_version_tool.py) — hermetic contract tests for the version tool plus temp-repo update workflow tests. Contract tests define version-string parsing, check/update/lock modes, and error handling. Temp-repo update tests (``TestUpdateWithTempRepo``) build a complete 12-module fixture repository, run ``version_tool.sh update`` / ``make version-update`` / ``make bump-version`` via subprocess, and assert exact mutation sets, caller parity, and Markdown exclusion.
+- [verify_sa117_publication.py](./verify_sa117_publication.py) — publication gate with `capture`, `verify`, `authorize`, and `rollback` operations. Evidence is written to a configurable path (default: `/tmp/opencode/sa117-evidence/`). Authorization requires explicit parameters; rollback requires matching evidence digest. No production mutation.
+- [test_verify_sa117_publication.py](./test_verify_sa117_publication.py) — hermetic tests for publication verification: evidence schema, scope digest, capture/verify/authorize/rollback operations, full capture→verify→authorize→rollback workflow.
+- [verify_public_module_apply.py](./verify_public_module_apply.py) — public module apply verification covering argument validation, process execution (timeout, PGRP, failure precedence), evidence capture, origin-map consistency checks, resource cleanup, and zero container/volume checks. Testable with fake executables.
+- [test_verify_public_module_apply.py](./test_verify_public_module_apply.py) — hermetic tests for module apply verification: argument validation, process execution, process group kill, evidence building, origin map checks, `ResourceCleanup` context manager, container/volume detection.
 
 ## Notes for maintainers
 

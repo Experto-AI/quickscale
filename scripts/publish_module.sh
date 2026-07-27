@@ -6,6 +6,10 @@
 # The Python wrapper uses the helper surface from
 # quickscale_core.utils.git_utils for module-path and branch resolution,
 # replacing the hardcoded conventions that previously lived here.
+#
+# Phase 4 (SA117): All mutating single-module publish calls require
+# ``--expected-remote-sha <40hex|ABSENT>``.  Use via Makefile:
+#   make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<sha|ABSENT>
 
 set -euo pipefail
 
