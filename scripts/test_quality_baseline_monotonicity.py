@@ -1889,18 +1889,47 @@ class TestShellIntegration:
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
             },
         )
-        # CR-005: stdout contains JSON records, one per line
+        # CR-005/006: stdout contains exactly one canonical JSON record
         assert result.returncode == 1, (
             f"Expected exit 1 for invalid anchor waiver, got {result.returncode}\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
-        # Parse first JSON line and verify waiver_status is malformed
         json_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
-        assert len(json_lines) >= 1, f"Expected at least one JSON line in stdout:\n{result.stdout}"
-        record = json.loads(json_lines[0])
-        assert record.get("waiver_status") == "malformed", (
-            f"Expected malformed status, got: {record}"
+        assert len(json_lines) == 1, (
+            f"Expected exactly 1 JSON line in stdout, got {len(json_lines)}:\n{result.stdout}"
         )
+        record = json.loads(json_lines[0])
+        # CR-006: Exact canonical record — waiver_id, waiver_status, waiver_file, decision_ref
+        assert record.get("waiver_id") == "W-ANCHOR-001", (
+            f"Expected waiver_id W-ANCHOR-001, got {record.get('waiver_id')}"
+        )
+        assert record.get("waiver_status") == "malformed", (
+            f"Expected malformed status, got {record.get('waiver_status')}"
+        )
+        assert record.get("decision_ref") == "NONEXISTENT-ANCHOR-99999", (
+            f"Expected NONEXISTENT-ANCHOR-99999, got {record.get('decision_ref')}"
+        )
+        # CR-006: Canonical 13-key set present
+        _canonical_keys = frozenset(
+            {
+                "error_code",
+                "section",
+                "canonical_key",
+                "old_value",
+                "new_value",
+                "waiver_id",
+                "waiver_status",
+                "waiver_base_ceiling",
+                "waiver_ceiling",
+                "waiver_file",
+                "decision_ref",
+                "waiver_index",
+                "duplicate_kinds",
+            }
+        )
+        actual_keys = frozenset(record.keys())
+        missing = _canonical_keys - actual_keys
+        assert not missing, f"Record missing canonical keys: {missing}"
         assert "Traceback" not in result.stderr
 
     def test_helper_exit_1_stale_base_waiver(self, tmp_path: Path) -> None:
@@ -1945,7 +1974,8 @@ class TestShellIntegration:
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
             },
         )
-        # CR-005: stdout contains JSON records, one per line
+        # CR-005/006: stdout contains canonical JSON records, stale_base
+        # record at known waiver_id with full 13-key shape
         assert result.returncode == 1, (
             f"Expected exit 1 for stale base waiver, got {result.returncode}\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
@@ -1953,9 +1983,38 @@ class TestShellIntegration:
         json_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
         assert len(json_lines) >= 1, f"Expected at least one JSON line in stdout:\n{result.stdout}"
         records = [json.loads(line) for line in json_lines]
-        assert any(r.get("waiver_status") == "stale_base" for r in records), (
-            f"Expected stale_base status in records:\n{result.stdout}"
+        stale_records = [r for r in records if r.get("waiver_id") == "W-STALE-001"]
+        assert len(stale_records) == 1, (
+            f"Expected exactly 1 stale_base record for W-STALE-001, got {len(stale_records)}:\n"
+            f"{result.stdout}"
         )
+        record = stale_records[0]
+        assert record.get("waiver_status") == "stale_base", (
+            f"Expected stale_base status, got {record.get('waiver_status')}"
+        )
+        assert record.get("waiver_base_ceiling") == 999
+        assert record.get("waiver_ceiling") == 10
+        # CR-006: Canonical 13-key set present
+        _canonical_keys = frozenset(
+            {
+                "error_code",
+                "section",
+                "canonical_key",
+                "old_value",
+                "new_value",
+                "waiver_id",
+                "waiver_status",
+                "waiver_base_ceiling",
+                "waiver_ceiling",
+                "waiver_file",
+                "decision_ref",
+                "waiver_index",
+                "duplicate_kinds",
+            }
+        )
+        actual_keys = frozenset(record.keys())
+        missing = _canonical_keys - actual_keys
+        assert not missing, f"Record missing canonical keys: {missing}"
         assert "Traceback" not in result.stderr
 
     def test_helper_exit_1_over_ceiling_waiver(self, tmp_path: Path) -> None:
@@ -2000,7 +2059,8 @@ class TestShellIntegration:
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
             },
         )
-        # CR-005: stdout contains JSON records
+        # CR-005/006: stdout contains canonical JSON records, over_ceiling
+        # record at known waiver_id with full 13-key shape
         assert result.returncode == 1, (
             f"Expected exit 1 for over-ceiling waiver, got {result.returncode}\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
@@ -2008,9 +2068,37 @@ class TestShellIntegration:
         json_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
         assert len(json_lines) >= 1, f"Expected at least one JSON line in stdout:\n{result.stdout}"
         records = [json.loads(line) for line in json_lines]
-        assert any(r.get("waiver_status") == "over_ceiling" for r in records), (
-            f"Expected over_ceiling status in records:\n{result.stdout}"
+        over_records = [r for r in records if r.get("waiver_id") == "W-OVER-001"]
+        assert len(over_records) == 1, (
+            f"Expected exactly 1 over_ceiling record for W-OVER-001, got {len(over_records)}:\n"
+            f"{result.stdout}"
         )
+        record = over_records[0]
+        assert record.get("waiver_status") == "over_ceiling", (
+            f"Expected over_ceiling status, got {record.get('waiver_status')}"
+        )
+        assert record.get("waiver_ceiling") == 5
+        # CR-006: Canonical 13-key set present
+        _canonical_keys = frozenset(
+            {
+                "error_code",
+                "section",
+                "canonical_key",
+                "old_value",
+                "new_value",
+                "waiver_id",
+                "waiver_status",
+                "waiver_base_ceiling",
+                "waiver_ceiling",
+                "waiver_file",
+                "decision_ref",
+                "waiver_index",
+                "duplicate_kinds",
+            }
+        )
+        actual_keys = frozenset(record.keys())
+        missing = _canonical_keys - actual_keys
+        assert not missing, f"Record missing canonical keys: {missing}"
         assert "Traceback" not in result.stderr
 
     def test_helper_exit_1_expired_waiver(self, tmp_path: Path) -> None:
@@ -2055,7 +2143,8 @@ class TestShellIntegration:
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
             },
         )
-        # CR-005: stdout contains JSON records
+        # CR-005/006: stdout contains canonical JSON records, expired
+        # record at known waiver_id with full 13-key shape
         assert result.returncode == 1, (
             f"Expected exit 1 for expired waiver, got {result.returncode}\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
@@ -2063,9 +2152,36 @@ class TestShellIntegration:
         json_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
         assert len(json_lines) >= 1, f"Expected at least one JSON line in stdout:\n{result.stdout}"
         records = [json.loads(line) for line in json_lines]
-        assert any(r.get("waiver_status") == "expired" for r in records), (
-            f"Expected expired status in records:\n{result.stdout}"
+        expired_records = [r for r in records if r.get("waiver_id") == "W-EXP-001"]
+        assert len(expired_records) == 1, (
+            f"Expected exactly 1 expired record for W-EXP-001, got {len(expired_records)}:\n"
+            f"{result.stdout}"
         )
+        record = expired_records[0]
+        assert record.get("waiver_status") == "expired", (
+            f"Expected expired status, got {record.get('waiver_status')}"
+        )
+        # CR-006: Canonical 13-key set present
+        _canonical_keys = frozenset(
+            {
+                "error_code",
+                "section",
+                "canonical_key",
+                "old_value",
+                "new_value",
+                "waiver_id",
+                "waiver_status",
+                "waiver_base_ceiling",
+                "waiver_ceiling",
+                "waiver_file",
+                "decision_ref",
+                "waiver_index",
+                "duplicate_kinds",
+            }
+        )
+        actual_keys = frozenset(record.keys())
+        missing = _canonical_keys - actual_keys
+        assert not missing, f"Record missing canonical keys: {missing}"
         assert "Traceback" not in result.stderr
 
     def test_helper_exit_1_duplicate_both_dimensions(self, tmp_path: Path) -> None:
@@ -2120,7 +2236,7 @@ class TestShellIntegration:
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
             },
         )
-        # CR-005: stdout contains JSON records
+        # CR-005/006: stdout contains canonical JSON records with duplicate status
         assert result.returncode == 1, (
             f"Expected exit 1 for duplicate both dimensions, got {result.returncode}\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
@@ -2128,9 +2244,35 @@ class TestShellIntegration:
         json_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
         assert len(json_lines) >= 1, f"Expected at least one JSON line in stdout:\n{result.stdout}"
         records = [json.loads(line) for line in json_lines]
-        assert any(r.get("waiver_status") == "duplicate" for r in records), (
-            f"Expected duplicate status in records:\n{result.stdout}"
+        dup_records = [r for r in records if r.get("waiver_id") == "W-DUP-BOTH"]
+        assert len(dup_records) == 2, (
+            f"Expected 2 duplicate records for W-DUP-BOTH, got {len(dup_records)}:\n{result.stdout}"
         )
+        for dr in dup_records:
+            assert dr.get("waiver_status") == "duplicate", (
+                f"Expected duplicate status, got {dr.get('waiver_status')}: {dr}"
+            )
+            # CR-006: Canonical 13-key set present
+            _canonical_keys = frozenset(
+                {
+                    "error_code",
+                    "section",
+                    "canonical_key",
+                    "old_value",
+                    "new_value",
+                    "waiver_id",
+                    "waiver_status",
+                    "waiver_base_ceiling",
+                    "waiver_ceiling",
+                    "waiver_file",
+                    "decision_ref",
+                    "waiver_index",
+                    "duplicate_kinds",
+                }
+            )
+            actual_keys = frozenset(dr.keys())
+            missing = _canonical_keys - actual_keys
+            assert not missing, f"Duplicate record missing canonical keys: {missing}"
         assert "Traceback" not in result.stderr
 
     # ------------------------------------------------------------------
@@ -2705,6 +2847,191 @@ class TestShellIntegration:
         assert "Traceback" not in result.stderr
 
     # ------------------------------------------------------------------
+    # CR-003: DEL (0x7F) in waiver entry_key subprocess test
+    # ------------------------------------------------------------------
+
+    def test_helper_exit_1_del_in_waiver_entry_key(self, tmp_path: Path) -> None:
+        """A waiver entry_key with DEL (0x7F) → malformed → exit 1."""
+        baseline = {
+            "schema_version": 1,
+            "dead_code": {"allowed_messages": []},
+            "complexity": {"allowed_functions": {}},
+            "large_files": {"allowed_files": {}},
+            "duplication": {"allowed_blocks": 0},
+        }
+        temp_baseline = tmp_path / "baseline_waiver_del_key.json"
+        temp_baseline.write_text(json.dumps(baseline), encoding="utf-8")
+        future = (date.today() + timedelta(days=90)).isoformat()
+        temp_waivers = tmp_path / "waivers_del_key.json"
+        temp_waivers.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "waivers": [
+                        {
+                            "waiver_id": "W-DEL-KEY",
+                            "entry_key": "complexity:file.py::bad\x7ffunc",
+                            "base_ceiling": 0,
+                            "ceiling": 5,
+                            "owner": "test@example.com",
+                            "reason": "DEL in entry_key test",
+                            "expires_on": future,
+                            "decision_ref": "quality-baseline-monotonicity",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = self._run_helper(
+            extra_args=["--base-ref", "v87"],
+            env={
+                "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
+            },
+        )
+        assert result.returncode == 1, (
+            f"Expected exit 1 for DEL in waiver entry_key, got {result.returncode}\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        json_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
+        records = [json.loads(line) for line in json_lines]
+        assert any(
+            r.get("waiver_id") == "W-DEL-KEY" and r.get("waiver_status") == "malformed"
+            for r in records
+        ), f"Expected malformed waiver W-DEL-KEY, got:\n{result.stdout}"
+        assert "Traceback" not in result.stderr
+
+    # ------------------------------------------------------------------
+    # CR-003: Entry-key format parser edge classes — each named format
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        ("name", "entry_key"),
+        [
+            (
+                "empty_dead_code_message",
+                "dead_code:allowed_messages::multiplicity",
+            ),
+            (
+                "complexity_missing_separator",
+                "complexity:file.pyfunc",
+            ),
+            (
+                "complexity_extra_separator",
+                "complexity:file.py:::func",
+            ),
+            (
+                "complexity_empty_path",
+                "complexity:::func",
+            ),
+            (
+                "large_files_extra_colon",
+                "large_files:file.py:extra",
+            ),
+            (
+                "duplication_wrong_literal",
+                "duplication:allowed_blocks:extra",
+            ),
+        ],
+        ids=[
+            "empty-dead_code-message",
+            "complexity-missing-separator",
+            "complexity-extra-separator",
+            "complexity-empty-path",
+            "large-files-extra-colon",
+            "duplication-wrong-literal",
+        ],
+    )
+    def test_helper_exit_1_entry_key_parser_edge(
+        self, tmp_path: Path, name: str, entry_key: str
+    ) -> None:
+        """
+        Every named entry-key parser edge class → exit 1 with canonical
+
+        record and no traceback.
+
+        Note: format-syntax edge cases are caught by ``_parse_entry_key``
+        during the matching phase (not format validation), so the waiver
+        status may be ``orphan`` (no matching violation) rather than
+        ``malformed``.  Control-character edge cases (tab/DEL/surrogate)
+        are caught earlier and produce ``malformed`` — those are covered
+        by individual tests above.
+        """
+        baseline = {
+            "schema_version": 1,
+            "dead_code": {"allowed_messages": []},
+            "complexity": {"allowed_functions": {}},
+            "large_files": {"allowed_files": {}},
+            "duplication": {"allowed_blocks": 0},
+        }
+        temp_baseline = tmp_path / f"baseline_{name}.json"
+        temp_baseline.write_text(json.dumps(baseline), encoding="utf-8")
+        future = (date.today() + timedelta(days=90)).isoformat()
+        temp_waivers = tmp_path / f"waivers_{name}.json"
+        temp_waivers.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "waivers": [
+                        {
+                            "waiver_id": f"W-FMT-{name.upper()}",
+                            "entry_key": entry_key,
+                            "base_ceiling": 0,
+                            "ceiling": 5,
+                            "owner": "test@example.com",
+                            "reason": f"Format edge class: {name}",
+                            "expires_on": future,
+                            "decision_ref": "quality-baseline-monotonicity",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = self._run_helper(
+            extra_args=["--base-ref", "v87"],
+            env={
+                "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
+            },
+        )
+        assert result.returncode == 1, (
+            f"Expected exit 1 for {name} entry_key {entry_key!r}, "
+            f"got {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        json_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
+        assert len(json_lines) == 1, (
+            f"Expected exactly 1 JSON line for {name}, got {len(json_lines)}:\n{result.stdout}"
+        )
+        record = json.loads(json_lines[0])
+        assert record.get("waiver_id") == f"W-FMT-{name.upper()}", (
+            f"Expected waiver_id W-FMT-{name.upper()}, got {record.get('waiver_id')}"
+        )
+        # CR-006: Canonical 13-key set present
+        _canonical_keys = frozenset(
+            {
+                "error_code",
+                "section",
+                "canonical_key",
+                "old_value",
+                "new_value",
+                "waiver_id",
+                "waiver_status",
+                "waiver_base_ceiling",
+                "waiver_ceiling",
+                "waiver_file",
+                "decision_ref",
+                "waiver_index",
+                "duplicate_kinds",
+            }
+        )
+        actual_keys = frozenset(record.keys())
+        missing = _canonical_keys - actual_keys
+        assert not missing, f"Record missing canonical keys: {missing}"
+        assert "Traceback" not in result.stderr
+
+    # ------------------------------------------------------------------
     # UTC boundary: today stays active under extreme timezone offset
     # ------------------------------------------------------------------
 
@@ -2818,18 +3145,57 @@ class TestShellIntegration:
             extra_args=["--base-ref", "v87"],
             env={"QUALITY_BASELINE_FILE": str(temp_baseline)},
         )
-        # CR-005: stdout contains JSON records
+        # CR-005/006: stdout contains canonical JSON records sorted by
+        # (error_code, canonical_key).  The new-file key (new_file.py:new_function)
+        # is the first in sorted order (complexity < large_files < dead_code).
         assert result.returncode == 1, (
             f"Expected exit 1 for unwaived increase, got {result.returncode}\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
-        # Parse JSON lines and check for missing-waiver placeholder
+        # Parse JSON lines
         json_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
-        assert len(json_lines) >= 1, f"Expected at least one JSON line in stdout:\n{result.stdout}"
         records = [json.loads(line) for line in json_lines]
-        assert any(
-            r.get("decision_ref") == "<required: add waiver or revert increase>" for r in records
-        ), "Unwaived violation must include missing-waiver placeholder in JSON"
+        # CR-006: At least 1 record (the new-file violation) — there may be
+        # additional SA114 violation records if the real baseline has increases
+        # vs v87 that the current real waiver file does not override.
+        newfile_records = [
+            r for r in records if r.get("canonical_key", "").startswith("complexity:new_file.py")
+        ]
+        assert len(newfile_records) == 1, (
+            f"Expected exactly 1 record for new_file.py, got {len(newfile_records)}:\n"
+            f"{result.stdout}"
+        )
+        record = newfile_records[0]
+        assert record.get("decision_ref") == "<required: add waiver or revert increase>", (
+            f"Expected missing-waiver placeholder, got {record.get('decision_ref')}"
+        )
+        assert record.get("waiver_id") is None
+        assert record.get("waiver_status") is None
+        # waiver_file is the default waiver path since the test doesn't
+        # override QUALITY_WAIVERS_FILE
+        assert record.get("waiver_file") == str(_REPO_ROOT / "scripts" / "quality_waivers.json")
+        assert record.get("duplicate_kinds") == []
+        # CR-006: Canonical 13-key set present
+        _canonical_keys = frozenset(
+            {
+                "error_code",
+                "section",
+                "canonical_key",
+                "old_value",
+                "new_value",
+                "waiver_id",
+                "waiver_status",
+                "waiver_base_ceiling",
+                "waiver_ceiling",
+                "waiver_file",
+                "decision_ref",
+                "waiver_index",
+                "duplicate_kinds",
+            }
+        )
+        actual_keys = frozenset(record.keys())
+        missing = _canonical_keys - actual_keys
+        assert not missing, f"Record missing canonical keys: {missing}"
 
     def test_helper_exit_2_baseline_schema_failure(self, tmp_path: Path) -> None:
         """A non-dict baseline file produces exit 2 with deterministic error."""
@@ -3216,13 +3582,40 @@ class TestShellIntegration:
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
 
-        # CR-005: stdout contains JSON records with orphan status
+        # CR-005/006: stdout contains exactly 1 canonical JSON record with orphan status
         json_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
-        assert len(json_lines) >= 1, f"Expected at least one JSON line in stdout:\n{result.stdout}"
-        records = [json.loads(line) for line in json_lines]
-        assert any(r.get("waiver_status") == "orphan" for r in records), (
-            f"Expected orphan status in records:\n{result.stdout}"
+        assert len(json_lines) == 1, (
+            f"Expected exactly 1 JSON line (orphan lifecycle entry), "
+            f"got {len(json_lines)}:\n{result.stdout}"
         )
+        record = json.loads(json_lines[0])
+        assert record.get("waiver_id") == "W-ORPHAN-001", (
+            f"Expected W-ORPHAN-001, got {record.get('waiver_id')}"
+        )
+        assert record.get("waiver_status") == "orphan", (
+            f"Expected orphan status, got {record.get('waiver_status')}"
+        )
+        # CR-006: Canonical 13-key set present
+        _canonical_keys = frozenset(
+            {
+                "error_code",
+                "section",
+                "canonical_key",
+                "old_value",
+                "new_value",
+                "waiver_id",
+                "waiver_status",
+                "waiver_base_ceiling",
+                "waiver_ceiling",
+                "waiver_file",
+                "decision_ref",
+                "waiver_index",
+                "duplicate_kinds",
+            }
+        )
+        actual_keys = frozenset(record.keys())
+        missing = _canonical_keys - actual_keys
+        assert not missing, f"Record missing canonical keys: {missing}"
 
         # No traceback on any output stream
         assert "Traceback" not in result.stderr, f"No traceback expected, got:\n{result.stderr}"
@@ -3240,7 +3633,7 @@ class TestShellIntegration:
         # Waiver evaluations must include orphan status
         evals = data.get("waiver_evaluations", [])
         orphan_evals = [e for e in evals if e.get("status") == "orphan"]
-        assert len(orphan_evals) > 0, (
+        assert len(orphan_evals) >= 1, (
             f"Expected at least one orphan waiver evaluation, got:\n{json.dumps(evals, indent=2)}"
         )
         assert orphan_evals[0].get("waiver_index") == 0, (
@@ -3295,17 +3688,44 @@ class TestShellIntegration:
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
             },
         )
-        # CR-005: stdout contains JSON records with orphan status
+        # CR-005/006: stdout contains exactly 1 canonical JSON record with orphan status
         assert result.returncode == 1, (
             f"Expected exit 1 for orphan unchanged waiver, got {result.returncode}\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
         json_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
-        assert len(json_lines) >= 1, f"Expected at least one JSON line in stdout:\n{result.stdout}"
-        records = [json.loads(line) for line in json_lines]
-        assert any(r.get("waiver_status") == "orphan" for r in records), (
-            f"Expected orphan status in records:\n{result.stdout}"
+        assert len(json_lines) == 1, (
+            f"Expected exactly 1 JSON line (orphan lifecycle entry), "
+            f"got {len(json_lines)}:\n{result.stdout}"
         )
+        record = json.loads(json_lines[0])
+        assert record.get("waiver_id") == "W-ORPHAN-UC-001", (
+            f"Expected W-ORPHAN-UC-001, got {record.get('waiver_id')}"
+        )
+        assert record.get("waiver_status") == "orphan", (
+            f"Expected orphan status, got {record.get('waiver_status')}"
+        )
+        # CR-006: Canonical 13-key set present
+        _canonical_keys = frozenset(
+            {
+                "error_code",
+                "section",
+                "canonical_key",
+                "old_value",
+                "new_value",
+                "waiver_id",
+                "waiver_status",
+                "waiver_base_ceiling",
+                "waiver_ceiling",
+                "waiver_file",
+                "decision_ref",
+                "waiver_index",
+                "duplicate_kinds",
+            }
+        )
+        actual_keys = frozenset(record.keys())
+        missing = _canonical_keys - actual_keys
+        assert not missing, f"Record missing canonical keys: {missing}"
         assert "Traceback" not in result.stderr
 
     def test_helper_exit_1_orphan_waiver_reduced(self, tmp_path: Path) -> None:
@@ -3365,17 +3785,44 @@ class TestShellIntegration:
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
             },
         )
-        # CR-005: stdout contains JSON records with orphan status
+        # CR-005/006: stdout contains exactly 1 canonical JSON record with orphan status
         assert result.returncode == 1, (
             f"Expected exit 1 for orphan reduced waiver, got {result.returncode}\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
         json_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
-        assert len(json_lines) >= 1, f"Expected at least one JSON line in stdout:\n{result.stdout}"
-        records = [json.loads(line) for line in json_lines]
-        assert any(r.get("waiver_status") == "orphan" for r in records), (
-            f"Expected orphan status in records:\n{result.stdout}"
+        assert len(json_lines) == 1, (
+            f"Expected exactly 1 JSON line (orphan lifecycle entry), "
+            f"got {len(json_lines)}:\n{result.stdout}"
         )
+        record = json.loads(json_lines[0])
+        assert record.get("waiver_id") == "W-ORPHAN-RED-001", (
+            f"Expected W-ORPHAN-RED-001, got {record.get('waiver_id')}"
+        )
+        assert record.get("waiver_status") == "orphan", (
+            f"Expected orphan status, got {record.get('waiver_status')}"
+        )
+        # CR-006: Canonical 13-key set present
+        _canonical_keys = frozenset(
+            {
+                "error_code",
+                "section",
+                "canonical_key",
+                "old_value",
+                "new_value",
+                "waiver_id",
+                "waiver_status",
+                "waiver_base_ceiling",
+                "waiver_ceiling",
+                "waiver_file",
+                "decision_ref",
+                "waiver_index",
+                "duplicate_kinds",
+            }
+        )
+        actual_keys = frozenset(record.keys())
+        missing = _canonical_keys - actual_keys
+        assert not missing, f"Record missing canonical keys: {missing}"
         assert "Traceback" not in result.stderr
 
     def test_helper_exit_0_active_waivers(self, tmp_path: Path) -> None:
@@ -4188,6 +4635,42 @@ class TestShellSubprocess:
         return bin_dir
 
     @pytest.fixture
+    def find_stub(self, tmp_path: Path) -> Path:
+        """
+        Create a stub ``find`` script and return the bin directory path.
+
+        The stub returns no files (empty stdout, exit 0), which prevents
+        the shell's native ``find``/``wc`` large-file analysis from
+        consuming live repository file sizes.  Module discovery (also
+        uses ``find``) returns empty, causing ``get_module_paths`` to
+        use the fallback path list; the poetry stub then intercepts
+        vulture/radon/pylint and returns empty results regardless of
+        which paths are passed.
+        """
+        bin_dir = tmp_path / "findbin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        stub = bin_dir / "find"
+        # NB: Under ``set -o pipefail``, every stage of the large-file
+        # pipeline must produce non-empty output or ``grep -v "^$"``
+        # later will exit non-zero and kill the shell.  Emit one line
+        # whose line count is >= 500 (so awk passes it through) for a
+        # real repo-relative path that IS in the baseline's
+        # ``allowed_files`` with adequate headroom, so the downstream
+        # Python regression detector skips it (``count <= max_lines``).
+        # The ``find`` command is invoked with module-relative paths,
+        # so the stub must produce the same format.
+        stub.write_text(
+            "#!/bin/bash\n"
+            "# stub find -- emit one line for a baseline-tracked file\n"
+            "# with ample headroom, then exit 0.\n"
+            'echo "2000\tquickscale_core/src/quickscale_core/dr_engine/orchestration.py"\n'
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        stub.chmod(0o755)
+        return bin_dir
+
+    @pytest.fixture
     def quickscale_backup(self) -> dict[str, str | None]:
         """Backup key ``.quickscale`` artifacts and return their content."""
         qs = _REPO_ROOT / ".quickscale"
@@ -4220,11 +4703,24 @@ class TestShellSubprocess:
         self,
         extra_env: dict[str, str] | None = None,
         stub_dir: Path | None = None,
+        find_stub_dir: Path | None = None,
     ) -> subprocess.CompletedProcess:
-        """Run ``check_quality.sh`` as a subprocess and return the result."""
+        """
+        Run ``check_quality.sh`` as a subprocess and return the result.
+
+        *stub_dir* — a ``bin/`` directory whose ``poetry`` stub is
+        prepended to PATH (intercepts ``poetry run vulture`` etc.).
+
+        *find_stub_dir* — a separate ``findbin/`` directory whose
+        ``find`` stub is prepended to PATH **before** *stub_dir* so
+        that the shell's native ``find`` command is shimmed first.
+        """
         env = os.environ.copy()
         if stub_dir:
             env["PATH"] = f"{stub_dir}:{env.get('PATH', '')}"
+        if find_stub_dir:
+            # find stub goes before poetry stub so native find is shimmed
+            env["PATH"] = f"{find_stub_dir}:{env['PATH']}"
         if extra_env:
             env.update(extra_env)
         return subprocess.run(
@@ -4391,15 +4887,24 @@ class TestShellSubprocess:
                 f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
             )
 
-            # --- 2. Policy preservation (error envelope) ---
+            # --- 2. Policy preservation (complete error envelope) ---
             pf = _REPO_ROOT / ".quickscale" / "quality_baseline_policy.json"
             assert pf.exists(), "Policy file must be preserved on schema error"
             policy_data = json.loads(pf.read_text())
             assert policy_data.get("verdict") == "error"
+            # CR-006: Complete error envelope with all 4 fields.
+            # The path is the actual file path passed via QUALITY_BASELINE_FILE.
             error_meta = policy_data.get("error", {})
-            assert "code" in error_meta
-            assert "message" in error_meta
-            assert "source" in error_meta
+            assert error_meta.get("code") == "SCHEMA_ERROR"
+            assert error_meta.get("source") == "current_baseline"
+            assert error_meta.get("path").endswith("baseline_schema_error.json"), (
+                f"Expected path ending with baseline_schema_error.json, "
+                f"got {error_meta.get('path')}"
+            )
+            assert error_meta.get("message") is not None and len(error_meta["message"]) > 0
+            # Top-level structure complete
+            assert policy_data.get("schema_version") == 1
+            assert policy_data.get("diagnostics") == []
 
             # --- 3. Stale artifact removal ---
             qs = _REPO_ROOT / ".quickscale"
@@ -4412,11 +4917,7 @@ class TestShellSubprocess:
             # and in the policy file.
             assert "Verdict:" not in result.stdout, "No Verdict prose in CR-005 shell output"
             assert "ERROR:" in result.stderr, f"Expected ERROR: on stderr:\n{result.stderr}"
-            # Policy file has exact error envelope
-            policy_data = json.loads(pf.read_text())
-            assert "error" in policy_data
-            assert "code" in policy_data["error"]
-            assert "message" in policy_data["error"]
+            # Policy file has exact error envelope (already verified above)
 
             # --- 5. No analyzer invocation ---
             assert "Analyzing" not in result.stdout
@@ -4431,6 +4932,7 @@ class TestShellSubprocess:
     def test_shell_success_report_parity(
         self,
         poetry_stub: Path,
+        find_stub: Path,
         quickscale_backup: dict[str, str | None],
     ) -> None:
         """
@@ -4445,8 +4947,11 @@ class TestShellSubprocess:
         try:
             # Run with the actual checked-in baseline (no violations against
             # v87 merge-base) and stub analyzers returning empty results.
+            # The find stub prevents native find/wc large-file analysis
+            # from consuming live repository file sizes.
             result = self._run_shell(
                 stub_dir=poetry_stub,
+                find_stub_dir=find_stub,
                 extra_env={
                     "QUALITY_BASELINE_BASE_REF": "v87",
                 },
@@ -4655,6 +5160,7 @@ class TestShellSubprocess:
     def test_success_diagnostics_cross_artifact_equality(
         self,
         poetry_stub: Path,
+        find_stub: Path,
         quickscale_backup: dict[str, str | None],
     ) -> None:
         """
@@ -4668,6 +5174,7 @@ class TestShellSubprocess:
         try:
             result = self._run_shell(
                 stub_dir=poetry_stub,
+                find_stub_dir=find_stub,
                 extra_env={"QUALITY_BASELINE_BASE_REF": "v87"},
             )
             # Monotonicity gate must have passed; exit 0 with stubbed
@@ -4738,6 +5245,7 @@ class TestShellSubprocess:
         self,
         tmp_path: Path,
         poetry_stub: Path,
+        find_stub: Path,
         quickscale_backup: dict[str, str | None],
     ) -> None:
         """
@@ -4746,12 +5254,14 @@ class TestShellSubprocess:
         Uses a temp baseline with three values higher than the v87 merge-base
         and matching active waivers.  Helper exits 0 with nonempty diagnostics.
         The shell continues to produce reports with nonempty diagnostics in
-        policy/report/status/Markdown.
+        policy/report/status/Markdown.  The find stub isolates large-file
+        analysis from live repository file sizes.
         """
         try:
-            # Build from the real complete baseline so the shell's large-file
-            # analysis (find/wc -l on real files) does not detect new large-file
-            # regressions against an incomplete custom baseline.
+            # Build from the real complete baseline so any remaining real
+            # large-file regressions from the monitoring scope are captured.
+            # The find stub prevents unrelated file growth from affecting
+            # the result.
             # Override only the three SA114 target keys with higher values.
             real_baseline = json.loads(
                 (_REPO_ROOT / "scripts" / "quality_baseline.json").read_text()
@@ -4821,6 +5331,7 @@ class TestShellSubprocess:
 
             result = self._run_shell(
                 stub_dir=poetry_stub,
+                find_stub_dir=find_stub,
                 extra_env={
                     "QUALITY_BASELINE_FILE": str(temp_baseline),
                     "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -4829,8 +5340,9 @@ class TestShellSubprocess:
             )
 
             # CR-006: Monotonicity gate must pass (returncode == 0).
-            # The helper and downstream large-file analysis both use the custom
-            # baseline, which covers all relevant entries.
+            # The helper and downstream analysis both use the custom
+            # baseline and stub find, which isolates from unrelated
+            # repository growth.
             assert result.returncode == 0, (
                 f"Expected exit 0 with active waivers and stub analyzers, "
                 f"got {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
