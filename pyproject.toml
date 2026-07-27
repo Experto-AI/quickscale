@@ -1,6 +1,6 @@
 [project]
 name = "quickscale-module-forms"
-version = "0.75.0"
+version = "0.87.0"
 description = "QuickScale generic form-builder module with admin management and React frontend renderer"
 requires-python = ">=3.13,<3.15"
 readme = "README.md"
