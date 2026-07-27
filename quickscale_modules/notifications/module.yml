@@ -1,5 +1,5 @@
 name: notifications
-version: "0.78.0"
+version: "0.87.0"
 description: "Transactional email foundation with read-only operational settings, recipient-granular delivery tracking, and signed webhook ingestion"
 
 config:

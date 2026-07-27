@@ -354,6 +354,170 @@ version: "0.71.0"
 
 
 # ---------------------------------------------------------------------------
+# ModuleVersionMismatchError and assert_manifest_version_matches_core
+# ---------------------------------------------------------------------------
+
+
+class TestModuleVersionMismatch:
+    """Tests for ModuleVersionMismatchError and assert_manifest_version_matches_core."""
+
+    def test_mismatch_error_is_runtime_error_not_manifest_error(self) -> None:
+        """ModuleVersionMismatchError must be a RuntimeError, not ManifestError."""
+        from quickscale_core.manifest.loader import ModuleVersionMismatchError
+
+        with pytest.raises(RuntimeError) as exc_info:
+            raise ModuleVersionMismatchError("test error")
+        assert not issubclass(ModuleVersionMismatchError, ManifestError)
+        assert str(exc_info.value) == "test error"
+
+    def test_pass_when_manifest_matches_core(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """assert_manifest_version_matches_core passes when versions match."""
+        from quickscale_core.manifest.loader import (
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        # Same version — must not raise.
+        assert_manifest_version_matches_core("0.87.0", "auth")
+
+    def test_reject_when_manifest_newer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A manifest newer than the core version must be rejected (strict equality)."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.86.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("0.87.0", "auth")
+
+    def test_raise_on_mismatch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A manifest older than the core version must raise."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("0.86.0", "auth")
+
+    def test_mismatch_message_format(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Error message matches the stable format."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError) as exc_info:
+            assert_manifest_version_matches_core("0.86.0", "auth")
+
+        msg = str(exc_info.value)
+        assert "Module 'auth' version mismatch:" in msg
+        assert "found 0.86.0" in msg
+        assert "expected core version 0.87.0" in msg
+
+    def test_empty_version_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Empty manifest version must be rejected (strict equality)."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("", "auth")
+
+    def test_whitespace_version_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Whitespace-only manifest version must be rejected."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("  ", "auth")
+
+    def test_unparseable_version_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Unparseable manifest version (e.g. 'abc') must be rejected."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("abc", "auth")
+
+    def test_single_component_version_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A single-component version like '0' must be rejected."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("0", "auth")
+
+    def test_prerelease_version_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Pre-release suffixes like '0.87.0-alpha' must be rejected
+        (literal string equality — alpha does not equal the core version)."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("0.87.0-alpha", "auth")
+
+
+# ---------------------------------------------------------------------------
 # Managed files parsing
 # ---------------------------------------------------------------------------
 

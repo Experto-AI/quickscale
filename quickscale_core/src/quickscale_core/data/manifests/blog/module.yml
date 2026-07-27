@@ -2,7 +2,7 @@
 # Defines configuration options and their mutability for the blog module
 
 name: blog
-version: "0.73.0"
+version: "0.87.0"
 description: "Markdown-powered blog module"
 
 config:

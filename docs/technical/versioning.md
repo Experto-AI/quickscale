@@ -23,7 +23,9 @@ This command automatically:
 - Updates all `pyproject.toml` versions
 - Updates inter-package dependency constraints (e.g., `quickscale-core = "^0.58.0"`)
 - Embeds static `_version.py` files into packages
-- Updates version fields in documentation YAML files
+- Updates version fields in standalone documentation `.yml`/`.yaml` files
+
+> **Updater scope**: Only standalone `.yml`/`.yaml` files (e.g., `quickscale.yml` in docs examples, `.quickscale/state.yml` snapshots) are version-tool candidates. Version fields inside Markdown fenced code block examples are **never** modified by the version tool — those examples are human-authored documentation and must be updated manually when the schema version changes. If a standalone YAML file and a Markdown example both carry a version field, update both separately; the tool only touches the standalone file.
 
 ### 3. Verify (optional)
 Check that everything is consistent:

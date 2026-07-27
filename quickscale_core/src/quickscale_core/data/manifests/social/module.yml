@@ -1,5 +1,5 @@
 name: social
-version: "0.79.0"
+version: "0.87.0"
 description: "Curated social links and embeds with fixed public routes and normalized provider contracts"
 
 config:

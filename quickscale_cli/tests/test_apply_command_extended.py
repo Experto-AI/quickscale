@@ -502,7 +502,7 @@ class TestEmbedModule:
         """Apply embedding should skip the per-module managed-wiring pass."""
         module_dir = tmp_path / "modules" / "blog"
         module_dir.mkdir(parents=True)
-        (module_dir / "module.yml").write_text('name: blog\nversion: "0.82.0"\n')
+        (module_dir / "module.yml").write_text('name: blog\nversion: "0.87.0"\n')
 
         with (
             patch(

@@ -1,5 +1,5 @@
 name: orgs
-version: "0.86.0"
+version: "0.87.0"
 description: "Organizations and multi-tenant foundations with memberships and invitations"
 
 config:
