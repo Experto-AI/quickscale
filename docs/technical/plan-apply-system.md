@@ -195,6 +195,14 @@ config:
 
 ## State Management
 
+**Operational properties** the desired/applied state split produces:
+
+- **Declarative**: the user specifies desired state in YAML; the tool computes and executes the changes
+- **Idempotent**: running apply with unchanged config is a safe no-op
+- **Incremental**: apply computes the delta between desired and applied state and only applies what is necessary
+- **Traceable**: the state file records which modules, versions, and commits were applied, and when
+- **Recoverable**: state enables drift detection and recovery workflows
+
 **Consolidated State (Phase 2 / M2)**:
 1. **State file** (`.quickscale/state.yml`): Sole authoritative applied-state store, with consolidated sub-sections for module-tracking metadata (`prefix`, `branch`, `installed_at`) and managed-file drift/hash records (`managed_files`).
 2. **Advisory lock** (`.quickscale/<name>.lock`): Exclusive-create file-based lock that serializes concurrent `apply` operations. Fail-fast contention; stale-lock inspection and manual-clear guidance only.
