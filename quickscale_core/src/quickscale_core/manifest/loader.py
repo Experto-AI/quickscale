@@ -52,23 +52,71 @@ class ModuleVersionMismatchError(RuntimeError):
     """
 
 
+def _parse_canonical_version_triple(version_str: str) -> tuple[int, int, int]:
+    """Parse a dotted decimal version string into a (major, minor, patch) triple.
+
+    Enforces lockstep canonical form: exactly three dot-separated ASCII
+    decimal (U+0030-U+0039) components, each parsed as int, then
+    reserialized as ``major.minor.patch``.  Raises :exc:`ValueError` if
+    any component is empty, contains non-digit characters (including signs
+    or Unicode digits), or the raw input differs from canonical
+    reserialization.
+
+    This is a private lockstep-only parser — **never** call shared
+    normalizers, ``str.strip()``, or import ``packaging``.
+    """
+    parts = version_str.split(".")
+    if len(parts) != 3:
+        raise ValueError(
+            f"Version must have exactly 3 dot-separated components, got {len(parts)}"
+        )
+    # Reject non-ASCII-digit or empty components BEFORE int() so that
+    # signed (+1), Unicode-digit (١), and whitespace-padded (" 1") inputs
+    # fail the explicit ASCII 0-9 check rather than relying on int()'s
+    # implicit stripping and sign handling.
+    for i, part in enumerate(parts):
+        if not part:
+            raise ValueError(f"Version component {i} is empty")
+        if not part.isascii() or not part.isdigit():
+            raise ValueError(
+                f"Version component {i} must be ASCII decimal digits "
+                f"(0-9), got {part!r}"
+            )
+    try:
+        major, minor, patch = (int(p) for p in parts)
+    except ValueError:
+        raise ValueError("Version components must be decimal integers")
+    canonical = f"{major}.{minor}.{patch}"
+    if version_str != canonical:
+        raise ValueError(
+            f"Version must be canonical three-component dotted decimal "
+            f"(got {version_str!r}, expected {canonical!r})"
+        )
+    return (major, minor, patch)
+
+
 def assert_manifest_version_matches_core(
     manifest_version: str,
     module_name: str,
 ) -> None:
     """Assert that *manifest_version* matches the current core version
-    (:data:`quickscale_core.__version__`) as an exact literal string.
+    (:data:`quickscale_core.__version__`) as a lockstep canonical version
+    triple.
 
-    Literal canonical equality is enforced — the version string must equal
-    the core version after stripping:
+    Lockstep canonical equality is enforced — the version string must be a
+    canonical three-component dotted decimal (``major.minor.patch``):
     * Empty, whitespace-only, or non-string manifest versions are rejected.
     * Unparseable manifest versions (e.g. ``"abc"``) are rejected.
     * A single-component version (e.g. ``"0"``) is rejected.
     * A version that differs from the core version — including alpha,
       pre-release suffixes (e.g. ``"0.87.0-alpha"``), older, or **newer**
       — is rejected.
-    * Whitespace padding is stripped before comparison, but a
-      whitespace-only version is rejected.
+    * Non-canonical spellings — leading-zero components (``"0.87.00"``),
+      whitespace padding (``" 0.87.0 "``), extra components (``"0.87.0.1"``)
+      — are rejected **before** triple comparison.
+    * Signed (``"+1.2.3"``, ``"-1.2.3"``), Unicode-digit (``"١.2.3"``),
+      and empty-component (``"0..0"``) inputs are rejected by the explicit
+      ASCII ``0-9`` check **before** ``int()`` parsing.
 
     Args:
         manifest_version: Version string from a module manifest (e.g.
@@ -77,21 +125,35 @@ def assert_manifest_version_matches_core(
 
     Raises:
         ModuleVersionMismatchError: If *manifest_version* does not match
-            the current core version as an exact literal string.
+            the current core version as a canonical version triple.
     """
-    if not isinstance(manifest_version, str) or not manifest_version.strip():
+    if (
+        not isinstance(manifest_version, str)
+        or not manifest_version
+        or manifest_version.isspace()
+    ):
         raise ModuleVersionMismatchError(
             f"Module '{module_name}' version mismatch: "
             f"found {manifest_version!r}; expected core version "
             f"{_core_version}.",
         )
 
-    stripped = manifest_version.strip()
+    # Lockstep canonical version parsing: both the manifest version and
+    # the core version are independently parsed into (major, minor, patch)
+    # triples.  A manifest version that is not already in canonical form
+    # (exactly three dot-separated decimal components) is rejected before
+    # any comparison.
+    try:
+        manifest_triple = _parse_canonical_version_triple(manifest_version)
+        core_triple = _parse_canonical_version_triple(_core_version)
+    except ValueError:
+        raise ModuleVersionMismatchError(
+            f"Module '{module_name}' version mismatch: "
+            f"found {manifest_version}; expected core version "
+            f"{_core_version}.",
+        )
 
-    # Literal string equality: the manifest version must exactly match
-    # the core version string.  Alpha/suffix versions like "0.87.0-alpha"
-    # do NOT match "0.87.0".
-    if stripped != _core_version:
+    if manifest_triple != core_triple:
         raise ModuleVersionMismatchError(
             f"Module '{module_name}' version mismatch: "
             f"found {manifest_version}; expected core version "

@@ -516,6 +516,412 @@ class TestModuleVersionMismatch:
         with pytest.raises(ModuleVersionMismatchError):
             assert_manifest_version_matches_core("0.87.0-alpha", "auth")
 
+    # ------------------------------------------------------------------
+    # SA117a: lockstep canonical version parser — private parser tests
+    # ------------------------------------------------------------------
+
+    def test_leading_zero_component_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Leading-zero components like '0.87.00' must be rejected (not
+        canonical: canonical form would be 0.87.0)."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("0.87.00", "auth")
+
+    def test_whitespace_padded_version_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Whitespace-padded manifest version ' 0.87.0 ' must be rejected.
+        The lockstep parser does not strip before canonical comparison."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core(" 0.87.0 ", "auth")
+
+    def test_two_component_version_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A two-component version like '0.87' must be rejected (needs
+        exactly 3 dot-separated components)."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("0.87", "auth")
+
+    def test_four_component_version_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A four-component version like '0.87.0.1' must be rejected."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("0.87.0.1", "auth")
+
+    def test_non_decimal_component_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A component that is not pure decimal like '0.87.0a' must be rejected."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("0.87.0a", "auth")
+
+    def test_canonical_manifest_with_different_minor_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A canonical but different version (0.88.0) must be rejected,
+        proving triple comparison is semantic, not string-equality-only."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("0.88.0", "auth")
+
+    # ------------------------------------------------------------------
+    # SA117a-CR-001: ASCII-only-digit invariant, no-strip, complete
+    # expected strings including malformed core
+    # ------------------------------------------------------------------
+
+    def test_noncanonical_version_complete_message(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-canonical (leading-zero) version produces the exact
+        complete message with raw manifest and core spellings."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError) as exc_info:
+            assert_manifest_version_matches_core("0.87.00", "auth")
+
+        assert str(exc_info.value) == (
+            "Module 'auth' version mismatch: "
+            "found 0.87.00; expected core version 0.87.0."
+        )
+
+    def test_mismatch_complete_message(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Canonical-but-mismatched version produces the exact complete
+        message with raw manifest and core spellings."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError) as exc_info:
+            assert_manifest_version_matches_core("0.86.0", "auth")
+
+        assert str(exc_info.value) == (
+            "Module 'auth' version mismatch: "
+            "found 0.86.0; expected core version 0.87.0."
+        )
+
+    def test_malformed_core_complete_message(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When the core version itself is non-canonical, the complete
+        message preserves the raw core spelling exactly as-is."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.00",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError) as exc_info:
+            assert_manifest_version_matches_core("0.87.0", "auth")
+
+        assert str(exc_info.value) == (
+            "Module 'auth' version mismatch: "
+            "found 0.87.0; expected core version 0.87.00."
+        )
+
+    def test_signed_positive_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A signed positive version '+1.2.3' must be rejected (ASCII
+        digit check before int() would strip '+' sign)."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("+1.2.3", "auth")
+
+    def test_signed_negative_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A signed negative version '-1.2.3' must be rejected."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("-1.2.3", "auth")
+
+    def test_unicode_digit_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A version containing Unicode digits (Arabic-Indic ١) must be
+        rejected by the ASCII-only check before int()."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("١.2.3", "auth")
+
+    def test_empty_component_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A version with an empty component '0..1' must be rejected."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("0..1", "auth")
+
+    def test_whitespace_component_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A version with whitespace in a component '0.87.0 ' must be
+        rejected (trailing space after last component)."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError):
+            assert_manifest_version_matches_core("0.87.0 ", "auth")
+
+    def test_whitespace_only_version_uses_repr_in_message(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A whitespace-only version ('   ') produces repr in the
+        error message (the !r format for empty/invalid inputs)."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError) as exc_info:
+            assert_manifest_version_matches_core("   ", "auth")
+
+        msg = str(exc_info.value)
+        # Whitespace-only uses repr: found '   '
+        assert "found " in msg
+        assert "expected core version 0.87.0" in msg
+
+    # ------------------------------------------------------------------
+    # SA117-CR-001: exact complete-string message assertions for
+    # signed/Unicode/empty manifest versions and monkeypatched core.
+    # ------------------------------------------------------------------
+
+    def test_signed_positive_complete_message(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Signed positive version '+1.2.3' produces the exact complete
+        message with the raw manifest spelling preserved as-is (no repr)."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError) as exc_info:
+            assert_manifest_version_matches_core("+1.2.3", "auth")
+
+        assert str(exc_info.value) == (
+            "Module 'auth' version mismatch: "
+            "found +1.2.3; expected core version 0.87.0."
+        )
+
+    def test_signed_negative_complete_message(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Signed negative version '-1.2.3' produces the exact complete
+        message with the raw manifest spelling preserved as-is."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError) as exc_info:
+            assert_manifest_version_matches_core("-1.2.3", "auth")
+
+        assert str(exc_info.value) == (
+            "Module 'auth' version mismatch: "
+            "found -1.2.3; expected core version 0.87.0."
+        )
+
+    def test_unicode_digit_complete_message(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Unicode-digit version '١.2.3' produces the exact complete
+        message with the raw Unicode manifest spelling preserved."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError) as exc_info:
+            assert_manifest_version_matches_core("١.2.3", "auth")
+
+        assert str(exc_info.value) == (
+            "Module 'auth' version mismatch: "
+            "found \u0661.2.3; expected core version 0.87.0."
+        )
+
+    def test_empty_component_complete_message(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Version with empty component '0..1' produces the exact complete
+        message with the raw manifest spelling preserved."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "0.87.0",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError) as exc_info:
+            assert_manifest_version_matches_core("0..1", "auth")
+
+        assert str(exc_info.value) == (
+            "Module 'auth' version mismatch: found 0..1; expected core version 0.87.0."
+        )
+
+    def test_signed_positive_core_preserves_raw_spelling(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When the core version is monkeypatched to a signed value
+        ('+1.2.3'), the complete message preserves the raw core spelling
+        as-is — proving the ValueError path does not repr-escape the core
+        version."""
+        from quickscale_core.manifest.loader import (
+            ModuleVersionMismatchError,
+            assert_manifest_version_matches_core,
+        )
+
+        monkeypatch.setattr(
+            "quickscale_core.manifest.loader._core_version",
+            "+1.2.3",
+        )
+
+        with pytest.raises(ModuleVersionMismatchError) as exc_info:
+            assert_manifest_version_matches_core("0.87.0", "auth")
+
+        assert str(exc_info.value) == (
+            "Module 'auth' version mismatch: "
+            "found 0.87.0; expected core version +1.2.3."
+        )
+
 
 # ---------------------------------------------------------------------------
 # Managed files parsing

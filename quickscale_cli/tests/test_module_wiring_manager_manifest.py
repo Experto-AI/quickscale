@@ -16,6 +16,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from unittest.mock import patch
+
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_core.manifest.entry_point import MANIFEST_ADAPTER_REGISTRY
 
@@ -698,14 +700,21 @@ class TestRegenerateManagedWiringVersionMismatch:
             'name: analytics\nversion: "0.86.0"\n'
         )
 
-        success, message = regenerate_managed_wiring(
-            project, module_names=["analytics"]
-        )
+        with patch(
+            "quickscale_cli.utils.module_wiring_manager.build_manifest_wiring_spec",
+        ) as spy_spec:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
 
         assert success is False
-        assert "version mismatch" in message.lower()
-        assert "analytics" in message
-        assert "0.86.0" in message
+        # Complete expected message including trailing period.
+        assert message == (
+            "Module 'analytics' version mismatch: "
+            "found 0.86.0; expected core version 0.87.0."
+        )
+        # No spec building occurs when version mismatch is detected early.
+        spy_spec.assert_not_called()
 
     def test_known_module_with_matching_version_succeeds(self, tmp_path: Path) -> None:
         """A module whose version matches core must still succeed."""
@@ -758,14 +767,21 @@ class TestRegenerateManagedWiringVersionMismatch:
         (project / "modules" / "auth").mkdir(parents=True)
         (project / "modules" / "auth" / "module.yml").write_text(auth_yml.read_text())
 
-        success, message = regenerate_managed_wiring(
-            project, module_names=["analytics", "auth"]
-        )
+        with patch(
+            "quickscale_cli.utils.module_wiring_manager.build_manifest_wiring_spec",
+        ) as spy_spec:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics", "auth"]
+            )
 
         assert success is False
-        assert "version mismatch" in message.lower()
-        assert "analytics" in message
-        assert "0.86.0" in message
+        # Complete expected message including trailing period.
+        assert message == (
+            "Module 'analytics' version mismatch: "
+            "found 0.86.0; expected core version 0.87.0."
+        )
+        # First-mismatch blocks spec building for all modules.
+        spy_spec.assert_not_called()
 
     def test_unknown_module_still_skipped_before_version_check(
         self, tmp_path: Path
@@ -788,3 +804,66 @@ class TestRegenerateManagedWiringVersionMismatch:
         # no wiring written.
         assert success
         assert "regenerated" in message.lower()
+
+    # ------------------------------------------------------------------
+    # SA117a: non-canonical manifest version blocks regeneration
+    # ------------------------------------------------------------------
+
+    def test_embedded_module_with_noncanonical_version_blocks_regeneration(
+        self, tmp_path: Path
+    ) -> None:
+        """An embedded module with a non-canonical version (leading zeros)
+        must be rejected before any wiring is built."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            'name: analytics\nversion: "0.87.00"\n'
+        )
+
+        with patch(
+            "quickscale_cli.utils.module_wiring_manager.build_manifest_wiring_spec",
+        ) as spy_spec:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+
+        assert success is False
+        # Complete expected message including trailing period.
+        assert message == (
+            "Module 'analytics' version mismatch: "
+            "found 0.87.00; expected core version 0.87.0."
+        )
+        # No spec building — version rejection happens before _build_wiring_specs.
+        spy_spec.assert_not_called()
+
+    def test_embedded_module_with_whitespace_padded_version_blocks_regeneration(
+        self, tmp_path: Path
+    ) -> None:
+        """A manifest with whitespace-padded version must be rejected."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            'name: analytics\nversion: " 0.87.0 "\n'
+        )
+
+        with patch(
+            "quickscale_cli.utils.module_wiring_manager.build_manifest_wiring_spec",
+        ) as spy_spec:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+
+        assert success is False
+        # Exact whitespace-sensitive message: the raw " 0.87.0 " spelling
+        # (leading space before 0, trailing space before semicolon) is
+        # preserved verbatim without stripping or repr escaping.
+        assert message == (
+            "Module 'analytics' version mismatch: "
+            "found  0.87.0 ; expected core version 0.87.0."
+        )
+        # No spec building — version rejection happens before _build_wiring_specs.
+        spy_spec.assert_not_called()
