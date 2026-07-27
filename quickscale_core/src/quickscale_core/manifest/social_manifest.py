@@ -324,9 +324,7 @@ def normalize_social_url(url: str, *, provider: Any | None = None) -> str:
     return resolve_social_target(url, provider=provider).url
 
 
-# ---------------------------------------------------------------------------
 # Managed-file renderers
-# ---------------------------------------------------------------------------
 
 
 def render_social_managed_init_module() -> str:
