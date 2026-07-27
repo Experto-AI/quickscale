@@ -114,6 +114,30 @@ check_dependencies() {
     fi
 }
 
+check_baseline_monotonicity() {
+    print_header "Checking Baseline Monotonicity (SA121)"
+
+    local mon_exit=0
+    poetry run python scripts/check_quality_baseline_monotonicity.py || mon_exit=$?
+
+    if [ $mon_exit -ne 0 ]; then
+        echo ""
+        print_error "Baseline monotonicity gate FAILED (exit $mon_exit)"
+
+        # CR-005: Helper already emits canonical JSON to stdout.
+        # Shell inline summary does NOT duplicate output — only manages
+        # stale artifacts and lifecycle messages.
+
+        # Clear stale success artifacts (preserve policy artifact)
+        rm -f "$JSON_OUTPUT" "$MD_OUTPUT" "$STATUS_OUTPUT"
+        echo ""
+        print_error "Quality gate aborted — monotonicity policy violation (SA121)"
+        exit 1
+    fi
+
+    print_success "Baseline monotonicity gate passed"
+}
+
 discover_python_modules() {
     # Auto-discover Python packages with pyproject.toml and src/ directory
     # Returns: Space-separated list of src/ paths to analyze
@@ -695,6 +719,14 @@ for entry in duplication_raw:
     normalized_entry["identity"] = normalize_duplication_identity(normalized_entry)
     matching_duplication_blocks.append(normalized_entry)
 
+# Monotonicity gate results (written by check_quality_baseline_monotonicity.py)
+monotonicity_data = None
+monotonicity_file = output_dir / "quality_baseline_policy.json"
+try:
+    monotonicity_data = json.loads(monotonicity_file.read_text())
+except (OSError, json.JSONDecodeError):
+    pass
+
 high_complexity_count = sum(
     1 for entry in actual_complexity.values() if entry["complexity"] >= high_complexity_threshold
 )
@@ -971,6 +1003,7 @@ report = {
         ),
     },
     "duplication": duplication_raw,
+    "monotonicity": monotonicity_data,
 }
 
 status_payload = {
@@ -979,6 +1012,11 @@ status_payload = {
     "warning_regressions": regressions["warning_count"],
     "critical_regressions": regressions["critical_count"],
     "total_regressions": regressions["total_count"],
+    "monotonicity_verdict": monotonicity_data.get("verdict") if monotonicity_data else None,
+    "monotonicity_merge_base": monotonicity_data.get("merge_base") if monotonicity_data else None,
+    "monotonicity_base_ref": monotonicity_data.get("base_ref") if monotonicity_data else None,
+    "monotonicity_waiver_count": monotonicity_data.get("summary", {}).get("total_waivers") if monotonicity_data else None,
+    "monotonicity_diagnostics": monotonicity_data.get("diagnostics", []) if monotonicity_data else [],
 }
 
 json_output.write_text(json.dumps(report, indent=2) + "\n")
@@ -1174,6 +1212,35 @@ lines.extend(
         "",
         "---",
         "",
+        "## Baseline Monotonicity Gate (SA121)",
+        "",
+    ])
+
+monotonicity_data = report.get("monotonicity")
+if monotonicity_data and monotonicity_data.get("verdict"):
+    lines.extend([
+        f"- **Verdict:** {monotonicity_data['verdict']}",
+        f"- **Merge base:** {monotonicity_data.get('merge_base', 'unknown')}",
+        f"- **Base ref:** {monotonicity_data.get('base_ref', 'unknown')}",
+        f"- **Total waivers:** {monotonicity_data.get('summary', {}).get('total_waivers', 0)}",
+        f"- **Violations:** {monotonicity_data.get('summary', {}).get('total_violations', 0)} total, {monotonicity_data.get('summary', {}).get('unresolved_violations', 0)} unresolved",
+        "",
+        "### Diagnostics",
+        "",
+        json_block(monotonicity_data.get("diagnostics", [])),
+        "",
+    ])
+    # CR-005: No raw waiver_evaluations/lifecycle prose section.
+    # Canonical diagnostics fenced JSON above is authoritative.
+else:
+    lines.extend([
+        "- Baseline monotonicity gate not evaluated.",
+        "",
+    ])
+
+lines.extend([
+        "---",
+        "",
         "## Tool Details",
         "",
         "- vulture: Dead code detection",
@@ -1201,6 +1268,9 @@ main() {
 
     # Check all dependencies are installed
     check_dependencies
+
+    # Check baseline monotonicity before running analyzers
+    check_baseline_monotonicity
 
     # Run all analyses
     analyze_dead_code

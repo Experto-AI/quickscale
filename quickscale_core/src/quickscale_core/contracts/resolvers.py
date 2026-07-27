@@ -136,7 +136,6 @@ def resolve_analytics_module_options(
     )
     result = resolve_module_config(manifest, schema, overrides=dict(options or {}))
     resolved = dict(result.resolved)
-
     if "posthog_host" in resolved:
         resolved["posthog_host"] = _normalize_posthog_host(resolved["posthog_host"])
     resolved["provider"] = str(resolved.get("provider", "")).strip().lower()
@@ -147,7 +146,6 @@ def resolve_analytics_module_options(
         resolved.get("posthog_host_env_var", "")
     ).strip()
     resolved["posthog_host"] = _normalize_posthog_host(resolved.get("posthog_host", ""))
-
     return resolved
 
 

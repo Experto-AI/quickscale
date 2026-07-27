@@ -1712,6 +1712,337 @@ rather than advisory.
 
 ---
 
+### Quality Baseline Monotonicity Gate (SA121) {#quality-baseline-monotonicity}
+
+**Architectural Decision:** The shrink-only quality baseline
+(`scripts/quality_baseline.json`) must be enforced against its merge-base
+ancestor, not against its own mutable values.  A standalone monotonicity helper
+compares every current-blob ceiling against the merge-base blob and rejects
+increases unless covered by a structured, time-bounded waiver record.
+
+**Why this exists separately from the quality checker itself:** The quality
+checker (`check_quality.sh`) reads the current baseline and trusts it as
+authority, so any edit to the file simultaneously erases the evidence of the
+prohibited growth.  The monotonicity helper operates on a different comparison
+authority (the merge-base blob from Git) and requires explicit waivers for any
+positive delta.
+
+**Comparison scope** (every increase requires a waiver):
+
+| Section | Key | Compared value |
+|---------|-----|----------------|
+| `dead_code` | Per normalized message | Occurrence count (multiplicity) |
+| `complexity` | Per `path::symbol` key | `max_complexity` |
+| `large_files` | Per file path | `max_lines` |
+| `duplication` | Global | `allowed_blocks` |
+
+Missing base key is treated as 0 (any current value > 0 is an increase).
+Deleted, reduced, or unchanged entries pass without action.  A rename is
+modelled as delete plus new-exemption: the old key disappears (pass) and the
+new key appears as an increase (requires waiver if > 0).
+
+#### Exact Baseline Schema {#exact-baseline-schema}
+
+The baseline file (`scripts/quality_baseline.json`) must satisfy the following
+exact schema.  Every field is required unless marked optional; extra fields
+are tolerated but ignored.
+
+```json
+{
+  "schema_version": 1,
+  "dead_code": {
+    "allowed_messages": ["string", ...]
+  },
+  "complexity": {
+    "allowed_functions": {
+      "file::symbol": {
+        "file": "canonical/repo/relative/path.py",
+        "symbol": "function_or_method_name",
+        "type": "function|method|class",
+        "max_complexity": 11
+      }
+    }
+  },
+  "large_files": {
+    "allowed_files": {
+      "canonical/repo/relative/path.py": {
+        "max_lines": 500
+      }
+    }
+  },
+  "duplication": {
+    "allowed_blocks": 0,
+    "allowed_block_identities": ["optional, length equals blocks"]
+  }
+}
+```
+
+**Field-level rules:**
+
+- **`schema_version`:** Strict non-bool `int`.  Must be exactly `1`.  A `bool`
+  value (`true`/`false`) is rejected — Python `bool` is a subclass of `int` but
+  is explicitly excluded.
+- **`dead_code.allowed_messages`:** List of non-empty strings.  Multiplicity
+  (occurrence count of each distinct message) is the compared value.  Empty
+  strings are rejected.  Duplicate messages are valid (they just increase
+  multiplicity).
+- **`complexity.allowed_functions`:** Dict mapping canonical `file::symbol`
+  keys to records.  Each record must contain:
+  - `file`: Non-empty string, repo-relative POSIX path.  Validated by a strict
+    canonical-path checker that rejects absolute paths, Windows backslashes/drive
+    letters, empty/dot/dotdot segments, repeated separators, leading/trailing
+    whitespace, and surrogate/control characters.
+  - `symbol`: Non-empty string, function/method/class name.
+  - `type`: One of `"function"`, `"method"`, `"class"` (derived from actual
+    baseline contents).
+  - `max_complexity`: Strict non-negative non-bool `int`.
+  A `bool` value for `max_complexity` is rejected (not coerced to 0).
+- **`large_files.allowed_files`:** Dict mapping repo-relative POSIX file paths
+  to records.  Each path key is validated by the same strict canonical-path
+  checker used for complexity file fields.  Each record must contain:
+  - `max_lines`: Strict non-negative non-bool `int`.  A `bool` value is
+    rejected.
+- **`duplication.allowed_blocks`:** Strict non-negative non-bool `int`.
+- **`duplication.allowed_block_identities`:** Optional.  When present, must be
+  a list whose length exactly equals `allowed_blocks`.  Each element is a
+  non-empty string.
+
+#### Exact Waiver Ledger Schema {#exact-waiver-ledger-schema}
+
+The waiver file (`scripts/quality_waivers.json`) must satisfy the following
+exact schema:
+
+```json
+{
+  "schema_version": 1,
+  "description": "Optional human-readable ledger description",
+  "waivers": [
+    {
+      "waiver_id": "W001",
+      "entry_key": "complexity:path/to/file.py::function_name",
+      "base_ceiling": 12,
+      "ceiling": 13,
+      "owner": "user@example.com",
+      "reason": "Brief justification",
+      "expires_on": "YYYY-MM-DD",
+      "decision_ref": "anchor-id"
+    }
+  ]
+}
+```
+
+**Field-level rules:**
+
+- **`schema_version`:** Strict non-bool `int`.  Must be exactly `1`.
+- **`description`:** Optional.  When present, must be a non-empty string.
+- **`waivers`:** Array of waiver row objects.
+- **Each waiver row:**
+  - **`waiver_id`:** Non-empty string.  Must be unique across the ledger
+    (duplicate IDs disqualify every copy).
+  - **`entry_key`:** Non-empty string.  Must match the section's strict
+    canonical syntax validated by ``_parse_entry_key``:
+    ``complexity:<safe-repo-path>::<nonempty-symbol>``,
+    ``large_files:<safe-repo-path>``,
+    ``dead_code:allowed_messages:<nonempty-msg>:multiplicity``, or
+    ``duplication:allowed_blocks`` (exact literal).  Each format is
+    fully validated including path validation via
+    ``_validate_repo_relative_path`` for complexity and large_files.
+    Keys with extra/missing separators, empty components, or invalid
+    paths become ``malformed`` before any lifecycle matching.
+    Duplicate entry_keys disqualify every copy.
+  - **`base_ceiling`:** Strict non-negative non-bool number (int or float).
+  - **`ceiling`:** Strict non-negative non-bool number (int or float).
+  - **`owner`:** Non-empty string.
+  - **`reason`:** Non-empty string.
+  - **`expires_on`:** String in strict ASCII ``YYYY-MM-DD`` ISO date format
+    (``[0-9]{4}-[0-9]{2}-[0-9]{2}``, tested with `fullmatch`).  Unicode digit
+    characters (e.g. fullwidth ``２０２６``) are rejected.
+  - **`decision_ref`:** Non-empty string.  Must resolve to an exact
+    Markdown heading anchor `{#anchor-name}` or HTML `<a id="anchor-name">`
+    in `docs/technical/decisions.md`.
+
+#### Canonical Diagnostic Record {#canonical-diagnostic-record}
+
+Every non-schema-error diagnostic record carries the exact, always-present
+canonical key set.  Every key is present on every record; unavailable values
+are ``None`` and ``duplicate_kinds`` is a deterministic list (empty when no
+duplicate dimensions exist).
+
+```json
+{
+  "error_code": "CC-RISE",
+  "section": "complexity",
+  "canonical_key": "complexity:path/to/file.py::func_name",
+  "old_value": 11,
+  "new_value": 12,
+  "waiver_id": "W001",
+  "waiver_status": "active",
+  "waiver_base_ceiling": 11,
+  "waiver_ceiling": 12,
+  "waiver_file": "scripts/quality_waivers.json",
+  "decision_ref": "quality-baseline-monotonicity",
+  "waiver_index": 0,
+  "duplicate_kinds": []
+}
+```
+
+**Rules:**
+- `error_code` is the section-specific code (`DC-MULT`, `CC-RISE`, `LF-RISE`,
+  `DP-RISE`), or ``None`` for lifecycle-only waiver entries.
+- `waiver_id`, `waiver_status`, `waiver_base_ceiling`, `waiver_ceiling`,
+  `waiver_file`, and `waiver_index` are always present.  For unmatched
+  violations without waiver context, these fields carry ``None``.
+- `decision_ref` is always present: it carries the waiver's anchor ref when a
+  waiver was considered, the placeholder string
+  ``<required: add waiver or revert increase>`` for unwaived violations, or
+  ``None`` for lifecycle-only waiver entries.
+- `duplicate_kinds` is always a list (empty when the waiver row is not
+  involved in any duplicate dimension).
+- `waiver_index` is the 0-based index of the waiver row in the original
+  ledger array, or ``None`` for unwaived violations.
+- `waiver_status` is one of: ``active``, ``malformed``, ``duplicate``,
+  ``expired``, ``stale_base``, ``over_ceiling``, ``orphan``, or ``None`` for
+  unwaived violations.
+- ``violations`` and ``unresolved`` are compatibility subsets of the same
+  canonical records (same shape, same keys).  They are filtered to include
+  only entries whose ``error_code`` is not ``None`` (i.e. actual increases).
+
+#### Deterministic Error Envelope {#deterministic-error-envelope}
+
+When a structural error is detected (schema validation failure, Git failure,
+merge-base failure, or I/O error), the helper produces the following
+deterministic envelope atomically and byte-deterministically:
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "error",
+  "error": {
+    "code": "SCHEMA_ERROR",
+    "source": "current_baseline",
+    "path": "dead_code.allowed_messages",
+    "message": "dead_code.allowed_messages must be a list of strings"
+  },
+  "diagnostics": []
+}
+```
+
+**Rules:**
+- One stable line on stderr (prefixed `ERROR: `).
+- No Python traceback, no tempfile residue.
+- Exit code 2.
+- `source` is one of five canonical labels:
+  - `merge_base_baseline` — the blob from the merge-base commit
+  - `current_baseline` — the live baseline file
+  - `waiver_ledger` — the waiver file
+  - `git` — Git resolution failure (merge-base not found); `path` carries the
+    effective ref value (never empty)
+  - `main` — unexpected handler error; `path` carries ``sys.argv[0]`` (never
+    empty)
+- `path` identifies the exact JSON path that failed validation (e.g.
+  `schema_version`, `complexity.allowed_functions`,
+  `complexity.allowed_functions[key].max_complexity`), or the file/repo path
+  when structural validation is not applicable.
+- `code` is `SCHEMA_ERROR` for schema violations, `MERGE_BASE_ERROR` for
+  merge-base resolution or missing-blob failures, and `UNEXPECTED_ERROR`
+  for unhandled exceptions.
+- `diagnostics` is always an empty list in the error envelope.
+
+#### Waiver State Machine {#waiver-state-machine}
+
+Every waiver ledger row is evaluated independently with the following
+precedence.  Only the first matching state applies:
+
+1. **Malformed** — row fails per-row schema validation (missing required field,
+   invalid type, bad date format, unresolvable `decision_ref`).
+2. **Duplicate ID** — `waiver_id` appears more than once in the ledger.
+   Disqualifies every copy (no waiver with that ID resolves anything).
+3. **Duplicate entry_key** — `entry_key` appears more than once in the ledger.
+   Disqualifies every copy.
+4. **Expired** — `expires_on < datetime.now(UTC).date()`.  Uses UTC date for
+   comparison regardless of local timezone.
+5. **No positive increase** — the waiver's `entry_key` does not correspond to
+   any detected increase in the comparison (the value is absent, unchanged, or
+   decreased relative to the merge-base).  Flagged as **orphan**.
+6. **Stale base** — `base_ceiling` does not match the merge-base value for
+   that `entry_key`.
+7. **Over ceiling** — `new_value > ceiling`.
+8. **Active** — the waiver is well-formed, unique, unexpired, matches a real
+   increase, has the correct `base_ceiling`, and the new value is within the
+   allowed `ceiling`.
+
+**Blocking rule:** Every non-active ledger state blocks the gate for that
+violation (the increase remains unresolved).  Missing coverage (no matching
+waiver for a detected increase) also blocks.  Only an `active` waiver clears
+the increase.
+
+There is exactly one evaluation per ledger index.  The waiver evaluation
+output in the policy file is an array ordered by ledger index, with the
+evaluation status and diagnostic metadata for each row.
+
+#### Validated Ceiling Indexes {#validated-ceiling-indexes}
+
+The helper builds validated ceiling indexes from the merge-base baseline and
+current baseline after structural validation completes.  Never
+`.get(..., 0)` on malformed input — if a value fails strict type/range
+validation after the structural pass, the helper exits 2 with a
+`SCHEMA_ERROR` envelope.
+
+The validated indexes are:
+
+- **Merge-base ceilings:** `dict[str, int]` keyed by canonical key
+  (`dead_code:allowed_messages:<msg>:multiplicity`,
+  `complexity:<file::symbol>`, `large_files:<path>`,
+  `duplication:allowed_blocks`).
+- **Current ceilings:** Same key scheme.
+
+These indexes are compared directly to find increases, never derived from
+inline per-section dictionaries that could silently produce default values.
+
+#### Merge-base resolution precedence {#merge-base-resolution-precedence}
+
+1. `--base-ref` CLI argument — explicit override.
+2. `QUALITY_BASELINE_BASE_REF` environment variable.
+3. `GITHUB_BASE_REF` environment variable — tries `origin/<branch>` first,
+   then local `<branch>`.
+4. Local `v87` tag fallback.
+
+**No fetch, no HEAD/HEAD^ fallback, no silent skipping.** The helper reads the
+merge-base blob from the local Git object store.  Missing base baseline file
+at the resolved merge-base commit is an exit-2 failure, except for the
+separate waiver file which is empty only for initial rollout (missing waiver
+file is treated as empty waiver ledger).
+
+**`QUALITY_BASELINE_FILE` preservation:** The environment variable may override
+the current-baseline file path, but the merge-base comparison always reads from
+the canonical `scripts/quality_baseline.json` path in the Git tree.
+
+**Helper behaviour** (`scripts/check_quality_baseline_monotonicity.py`):
+
+- **Exit 0:** no violations (current <= base for every compared value), or
+  every increase is covered by an active, well-formed waiver.
+- **Exit 1:** at least one policy violation (increase without valid waiver).
+- **Exit 2:** schema error, Git failure, merge-base resolution failure, or
+  other prerequisite problem.
+- Builds the canonical output dict **before** printing human-readable
+  diagnostics to stdout.  All stdout messages are derived from canonical
+  records only: the 13-key ``output["unresolved"]`` and ``output["diagnostics"]``
+  records (CR-005).  Raw ``waiver_evaluations`` dicts are never printed.
+- Atomically writes `.quickscale/quality_baseline_policy.json` with the full
+  comparison result, violation list, waiver evaluation, and final verdict.
+
+**Relation to Finding 12 (`quality-baseline-monotonicity-unenforced`):** This
+gate directly implements the recommended Option 1 from
+[arch-audit.md](../others/arch-audit.md).  The three SA114 increases
+(`_validate_modules_section` 11→12, `module_commands.py` 1596→1608,
+`config_schema.py` 605→611) are the initial failing fixture and require
+matching waivers for a clean run.
+
+**Related docs:** [arch-audit.md Finding 12](../others/arch-audit.md) |
+[roadmap.md](./roadmap.md) | [CHANGELOG.md](../../CHANGELOG.md)
+
+---
+
 ## Prohibitions (Critical - DO NOT)
 
 **Database:**

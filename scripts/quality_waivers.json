@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "description": "Structured waiver ledger for quality baseline monotonicity violations. Each entry permits a specific ceiling increase above the merge-base baseline, with an owner, reason, expiry, and decision record anchor.",
+  "waivers": []
+}
