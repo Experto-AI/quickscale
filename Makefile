@@ -61,6 +61,9 @@
         check-core-compat check-module-core-imports check-manifest-sync \
         check-org-context-primitives \
         check-csrf-exempt \
+        sa117-check sa117-emit sa117-lock sa117-lock-diff \
+        sa117-capture sa117-verify sa117-authorize sa117-rollback \
+        sa117-apply sa117-check-origin sa117-check-containers \
         help
 
 # Default Python command (uses root Poetry environment)
@@ -169,9 +172,9 @@ help:
 	@echo "  make publish-test         - Publish to TestPyPI"
 	@echo "  make publish-prod         - Publish to production PyPI"
 	@echo "  make publish-full         - Publish TestPyPI → verify → PyPI"
-	@echo "  make publish-module       - Publish module to split branch (MODULE=<name>)"
+	@echo "  make publish-module       - Publish module to split branch (MODULE=<name> EXPECTED_REMOTE_SHA=<sha|ABSENT>)"
 	@echo "  make publish-module-status - Show split-branch status for all modules"
-	@echo "  make publish-modules-outdated - Publish modules with missing or outdated branches"
+	@echo "  make publish-modules-outdated - [DISABLED SA117 Phase 4] Was publish outdated modules; use per-module publish instead"
 	@echo "  make clean                - Remove build artifacts"
 	@echo ""
 	@echo "Legacy:"
@@ -186,6 +189,18 @@ help:
 	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
+	@echo ""
+	@echo "SA117 scope / publication / apply gates:"
+	@echo "  make sa117-check PATHS='...'      - Scope-guard: compare candidate changed paths against baseline (SCRIPTS_ONLY=1)"
+	@echo "  make sa117-emit                   - Emit scope allowlist paths (PHASE=name to filter)"
+	@echo "  make sa117-lock PATHS='...'       - Lock check: verify candidate paths match allowlist exactly"
+	@echo "  make sa117-capture VERSION=0.87.0 PHASE=final - Capture publication evidence"
+	@echo "  make sa117-verify EVIDENCE=path   - Verify publication evidence"
+	@echo "  make sa117-authorize VERSION=X DIGEST=D - Authorize a publication"
+	@echo "  make sa117-rollback TOKEN=T DIGEST=D - Rollback a prior authorization"
+	@echo "  make sa117-apply MODULE=M TARGET=T EXEC=E ARGV=A - Execute and verify a module apply"
+	@echo "  make sa117-check-origin MODULE=M DECLARED=O EXPECTED=E - Check origin map consistency"
+	@echo "  make sa117-check-containers TARGET=T - Check for zero container/volume configuration"
 	@echo ""
 	@echo "Version Management:"
 	@echo "  make version-check        - Verify VERSION matches all pyproject.toml files"
@@ -820,6 +835,105 @@ check-org-context-primitives:
 check-csrf-exempt:
 	@$(PYTHON) scripts/check_csrf_exempt_gate.py
 
+# --- SA117 Scope / Publication / Apply Gates ---
+
+# Scope-guard worktree check (compare a candidate changed-path set against
+# the baseline allowlist).  PATHS is required — pass the changed file set
+# explicitly as a space-separated list.  Add SCRIPTS_ONLY=1 for Phase 1
+# backward compat.
+sa117-check:
+	@if [ -z "$(PATHS)" ]; then \
+		echo "Error: PATHS is required (space-separated list of changed files)."; \
+		echo "  e.g. make sa117-check PATHS='scripts/foo.py Makefile'"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/check_sa117_scope.py worktree \
+		--paths $(PATHS) \
+		$(if $(SCRIPTS_ONLY),--scripts-only,)
+
+# Emit allowlist paths (optionally filtered by PHASE).
+sa117-emit:
+	@$(PYTHON) scripts/check_sa117_scope.py emit $(if $(PHASE),--phase $(PHASE),)
+
+# Lock check: verify candidate paths match allowlist exactly.
+sa117-lock:
+	@if [ -z "$(PATHS)" ]; then \
+		echo "Error: PATHS is required (space-separated list)."; \
+		echo "  e.g. make sa117-lock PATHS='scripts/foo.py Makefile'"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/check_sa117_scope.py lock \
+		--paths $(PATHS) \
+		$(if $(SCRIPTS_ONLY),--scripts-only,)
+
+# Capture publication evidence.
+sa117-capture:
+	@if [ -z "$(VERSION)" ] || [ -z "$(PHASE)" ]; then \
+		echo "Error: VERSION and PHASE are required (e.g. make sa117-capture VERSION=0.87.0 PHASE=final)"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_sa117_publication.py capture --version $(VERSION) --phase $(PHASE)
+
+# Verify publication evidence.
+sa117-verify:
+	@if [ -z "$(EVIDENCE)" ]; then \
+		echo "Error: EVIDENCE path is required (e.g. make sa117-verify EVIDENCE=/path/to/evidence.json)"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_sa117_publication.py verify --evidence $(EVIDENCE)
+
+# Authorize a publication.
+sa117-authorize:
+	@if [ -z "$(VERSION)" ] || [ -z "$(DIGEST)" ]; then \
+		echo "Error: VERSION and DIGEST are required (e.g. make sa117-authorize VERSION=0.87.0 DIGEST=abc123)"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_sa117_publication.py authorize --version $(VERSION) --evidence-digest $(DIGEST)
+
+# Rollback a prior authorization.
+sa117-rollback:
+	@if [ -z "$(TOKEN)" ] || [ -z "$(DIGEST)" ]; then \
+		echo "Error: TOKEN and DIGEST are required (e.g. make sa117-rollback TOKEN=sa117_auth_xxx DIGEST=abc123)"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_sa117_publication.py rollback --auth-token $(TOKEN) --evidence-digest $(DIGEST)
+
+# Execute and verify a module apply.
+sa117-apply:
+	@if [ -z "$(MODULE)" ] || [ -z "$(TARGET)" ] || [ -z "$(EXEC)" ] || [ -z "$(ARGV)" ] || [ -z "$(DECLARED)" ] || [ -z "$(EXPECTED)" ]; then \
+		echo "Error: MODULE, TARGET, EXEC, ARGV, DECLARED, and EXPECTED are required."; \
+		echo "  e.g. make sa117-apply MODULE=auth TARGET=/tmp/test EXEC=/usr/bin/git ARGV='git clone repo' DECLARED=url1 EXPECTED=url2"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_public_module_apply.py apply \
+		--module $(MODULE) \
+		--target $(TARGET) \
+		--executable $(EXEC) \
+		--argv $(ARGV) \
+		--version $(VERSION) \
+		--declared-origin $(DECLARED) \
+		--expected-origin $(EXPECTED)
+
+# Check origin map consistency.
+sa117-check-origin:
+	@if [ -z "$(MODULE)" ] || [ -z "$(DECLARED)" ] || [ -z "$(EXPECTED)" ]; then \
+		echo "Error: MODULE, DECLARED, and EXPECTED are required."; \
+		echo "  e.g. make sa117-check-origin MODULE=auth DECLARED=url1 EXPECTED=url2"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_public_module_apply.py check-origin \
+		--module $(MODULE) \
+		--declared-origin $(DECLARED) \
+		--expected-origin $(EXPECTED)
+
+# Check for zero container/volume configuration.
+sa117-check-containers:
+	@if [ -z "$(TARGET)" ]; then \
+		echo "Error: TARGET is required (e.g. make sa117-check-containers TARGET=/tmp/test)"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_public_module_apply.py check-containers --target $(TARGET)
+
 # --- Combined Checks ---
 
 # Auto-format and auto-fix lint across the active sections (write mode).
@@ -978,10 +1092,15 @@ publish-prod:
 publish-full:
 	@scripts/publish.sh full
 
-# Publish module changes to its split branch (e.g. make publish-module MODULE=auth)
+# Publish module changes to its split branch using force-with-lease safety (SA117 Phase 4).
+# Usage: make publish-module MODULE=auth EXPECTED_REMOTE_SHA=<40hex|ABSENT>
+#   EXPECTED_REMOTE_SHA is required: 40-char hex SHA expected on remote,
+#   or ABSENT for first-time publish (branch does not exist remotely).
+#   --clean clears the git subtree cache.
 publish-module:
-	@if [ -z "$(MODULE)" ]; then echo "Error: MODULE is required (e.g. make publish-module MODULE=auth)"; exit 1; fi
-	@scripts/publish_module.sh $(MODULE) $(if $(CLEAN),--clean,)
+	@if [ -z "$(MODULE)" ]; then echo "Error: MODULE is required (e.g. make publish-module MODULE=auth EXPECTED_REMOTE_SHA=40hex_or_ABSENT)"; exit 1; fi
+	@if [ -z "$(EXPECTED_REMOTE_SHA)" ]; then echo "Error: EXPECTED_REMOTE_SHA is required (e.g. make publish-module MODULE=auth EXPECTED_REMOTE_SHA=40hex_or_ABSENT)"; exit 1; fi
+	@scripts/publish_module.sh $(MODULE) --expected-remote-sha $(EXPECTED_REMOTE_SHA) $(if $(CLEAN),--clean,)
 
 # Show split-branch status for all modules
 publish-module-status:

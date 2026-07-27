@@ -1,5 +1,5 @@
 name: storage
-version: "0.76.0"
+version: "0.87.0"
 description: "Shared media storage infrastructure with local and S3-compatible backends"
 
 config:

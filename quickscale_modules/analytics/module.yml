@@ -1,5 +1,5 @@
 name: analytics
-version: "0.80.0"
+version: "0.87.0"
 description: "Service-style PostHog analytics foundation with flat settings, capture helpers, and manual template-tag support"
 
 config:

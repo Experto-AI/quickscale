@@ -1,5 +1,5 @@
 name: backups
-version: "0.77.0"
+version: "0.87.0"
 description: "Private operational database backups with admin workflows and guarded CLI restores"
 
 config:
@@ -86,7 +86,7 @@ contract_vintage:
 dependencies:
   - django-storages>=1.14.6
   - boto3>=1.40.46
-  - quickscale-core>=0.86.0,<0.87.0
+  - quickscale-core>=0.87.0,<0.88.0
 
 django_apps:
   - quickscale_modules_backups

@@ -3,7 +3,7 @@
 # See decisions.md §Module Manifest Architecture for schema specification
 
 name: crm
-version: "0.73.0"
+version: "0.87.0"
 description: "Lightweight CRM module with contacts, companies, deals, and pipeline management"
 
 config:

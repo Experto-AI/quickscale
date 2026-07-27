@@ -12,6 +12,7 @@ from typing import Any
 
 import yaml
 
+from quickscale_core import __version__ as _core_version
 from quickscale_core.manifest.schema import (
     MANAGED_FILE_ROOT_PREFIX,
     ConfigOption,
@@ -35,6 +36,67 @@ class ManifestError(Exception):
         if self.module_name:
             return f"[{self.module_name}] {self.message}"
         return self.message
+
+
+class ModuleVersionMismatchError(RuntimeError):
+    """Raised when an embedded module's manifest version predates the current
+    core version, indicating the module content is too old to wire safely.
+
+    This error is intentionally a plain ``RuntimeError`` subclass — **not**
+    ``ManifestError`` — so that callers can catch it independently from
+    structural manifest loading/validation errors.  The stable message
+    format is::
+
+        Module '{module_name}' version mismatch: found {found};
+        expected core version {core_version}.
+    """
+
+
+def assert_manifest_version_matches_core(
+    manifest_version: str,
+    module_name: str,
+) -> None:
+    """Assert that *manifest_version* matches the current core version
+    (:data:`quickscale_core.__version__`) as an exact literal string.
+
+    Literal canonical equality is enforced — the version string must equal
+    the core version after stripping:
+    * Empty, whitespace-only, or non-string manifest versions are rejected.
+    * Unparseable manifest versions (e.g. ``"abc"``) are rejected.
+    * A single-component version (e.g. ``"0"``) is rejected.
+    * A version that differs from the core version — including alpha,
+      pre-release suffixes (e.g. ``"0.87.0-alpha"``), older, or **newer**
+      — is rejected.
+    * Whitespace padding is stripped before comparison, but a
+      whitespace-only version is rejected.
+
+    Args:
+        manifest_version: Version string from a module manifest (e.g.
+            ``"0.87.0"``).
+        module_name: Module name for error messages.
+
+    Raises:
+        ModuleVersionMismatchError: If *manifest_version* does not match
+            the current core version as an exact literal string.
+    """
+    if not isinstance(manifest_version, str) or not manifest_version.strip():
+        raise ModuleVersionMismatchError(
+            f"Module '{module_name}' version mismatch: "
+            f"found {manifest_version!r}; expected core version "
+            f"{_core_version}.",
+        )
+
+    stripped = manifest_version.strip()
+
+    # Literal string equality: the manifest version must exactly match
+    # the core version string.  Alpha/suffix versions like "0.87.0-alpha"
+    # do NOT match "0.87.0".
+    if stripped != _core_version:
+        raise ModuleVersionMismatchError(
+            f"Module '{module_name}' version mismatch: "
+            f"found {manifest_version}; expected core version "
+            f"{_core_version}.",
+        )
 
 
 def _parse_config_option(

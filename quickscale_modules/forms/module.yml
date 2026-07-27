@@ -3,7 +3,7 @@
 # See decisions.md §Module Manifest Architecture for schema specification
 
 name: forms
-version: "0.75.0"
+version: "0.87.0"
 description: "Generic, customizable form builder module with admin management and React frontend renderer."
 
 config:

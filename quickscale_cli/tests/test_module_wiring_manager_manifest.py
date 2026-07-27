@@ -674,3 +674,117 @@ class TestRegenerateManagedWiringPriorBasePath:
             assert "quickscale_modules_billing" in content
         finally:
             _md._modules_base_path = original_override
+
+
+class TestRegenerateManagedWiringVersionMismatch:
+    """SA117: version mismatch enforcement in regenerate_managed_wiring.
+
+    When a loaded module manifest has a version older than the current core
+    version, ``regenerate_managed_wiring`` must return ``(False, message)``
+    with the dedicated mismatch message, before any ``ManifestError`` from
+    the spec builder.
+    """
+
+    def test_embedded_module_with_old_version_blocks_regeneration(
+        self, tmp_path: Path
+    ) -> None:
+        """An embedded module with version < core must be rejected."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        # Create an embedded analytics module with an old version.
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            'name: analytics\nversion: "0.86.0"\n'
+        )
+
+        success, message = regenerate_managed_wiring(
+            project, module_names=["analytics"]
+        )
+
+        assert success is False
+        assert "version mismatch" in message.lower()
+        assert "analytics" in message
+        assert "0.86.0" in message
+
+    def test_known_module_with_matching_version_succeeds(self, tmp_path: Path) -> None:
+        """A module whose version matches core must still succeed."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        # Use the real analytics module.yml from the repository.
+        analytics_yml = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_modules"
+            / "analytics"
+            / "module.yml"
+        )
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            analytics_yml.read_text()
+        )
+
+        success, message = regenerate_managed_wiring(
+            project, module_names=["analytics"]
+        )
+
+        assert success, f"regenerate_managed_wiring failed: {message}"
+
+    def test_mixed_versions_blocks_on_first_mismatch(self, tmp_path: Path) -> None:
+        """When multiple modules are processed, the first version mismatch
+        must block regeneration with a dedicated message (deterministic
+        sorted order)."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(
+            project,
+            modules={
+                "analytics": {"enabled": True},
+                "auth": {},
+            },
+        )
+
+        # analytics has version 0.86.0 (will be processed first in sorted order).
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            'name: analytics\nversion: "0.86.0"\n'
+        )
+        # auth has version 0.87.0 (matching core).
+        auth_yml = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_modules"
+            / "auth"
+            / "module.yml"
+        )
+        (project / "modules" / "auth").mkdir(parents=True)
+        (project / "modules" / "auth" / "module.yml").write_text(auth_yml.read_text())
+
+        success, message = regenerate_managed_wiring(
+            project, module_names=["analytics", "auth"]
+        )
+
+        assert success is False
+        assert "version mismatch" in message.lower()
+        assert "analytics" in message
+        assert "0.86.0" in message
+
+    def test_unknown_module_still_skipped_before_version_check(
+        self, tmp_path: Path
+    ) -> None:
+        """A module without a registered adapter must be skipped before the
+        version check runs, preserving the skip-unknown contract."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project)
+
+        (project / "modules" / "nonexistent").mkdir(parents=True)
+        (project / "modules" / "nonexistent" / "module.yml").write_text(
+            'name: nonexistent\nversion: "0.86.0"\n'
+        )
+
+        success, message = regenerate_managed_wiring(
+            project, module_names=["nonexistent"]
+        )
+
+        # Unknown module should be skipped — regeneration succeeds with
+        # no wiring written.
+        assert success
+        assert "regenerated" in message.lower()

@@ -93,7 +93,7 @@ myapp/
 ### `quickscale.yml` (Desired State)
 
 ```yaml
-version: 0.87.0
+version: "1"
 
 project:
   slug: myapp

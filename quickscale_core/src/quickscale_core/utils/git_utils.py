@@ -290,26 +290,69 @@ def run_git_subtree_split(
     return split_sha
 
 
+def validate_expected_sha(expected_remote_sha: str) -> None:
+    """Validate an expected-remote-SHA value for force-with-lease safety.
+
+    *expected_remote_sha* must be exactly one of:
+    - A 40-character hex SHA (rejects all-zero and non-hex strings).
+    - The literal string ``"ABSENT"`` (meaning no known previous SHA).
+
+    Raises :class:`GitError` with an operator-facing message when the value
+    is malformed.
+    """
+    if not expected_remote_sha:
+        raise GitError("expected_remote_sha must not be empty")
+    if expected_remote_sha == "ABSENT":
+        return
+    if len(expected_remote_sha) != 40:
+        raise GitError(
+            f"expected_remote_sha must be exactly 40 hex characters or 'ABSENT'; "
+            f"got {len(expected_remote_sha)}-char value"
+        )
+    if not all(c in "0123456789abcdefABCDEF" for c in expected_remote_sha):
+        raise GitError(
+            f"expected_remote_sha contains non-hex characters: {expected_remote_sha!r}"
+        )
+    if all(c == "0" for c in expected_remote_sha):
+        raise GitError("expected_remote_sha must not be all-zero")
+
+
 def push_split_branch(
     branch: str,
     remote: str = "origin",
     *,
-    force: bool = True,
+    expected_remote_sha: str | None = None,
     path: Path | None = None,
 ) -> None:
-    """Push a split *branch* to *remote*.
+    """Push a split *branch* to *remote* using force-with-lease safety.
 
-    Split branches are force-pushed by default because they are rewritten
-    history derived from subtree splits.  Set *force* to ``False`` for a
-    non-destructive push.
+    When *expected_remote_sha* is provided, the push uses
+    ``--force-with-lease`` instead of bare ``--force``:
+
+    - A 40-character hex SHA produces
+      ``--force-with-lease=refs/heads/<branch>:<sha>``, which rejects the
+      push if the remote ref has moved away from the expected commit.
+    - The literal ``"ABSENT"`` produces plain ``--force-with-lease`` (no
+      refspec), which protects only refs that have a tracking ref.
+
+    When *expected_remote_sha* is ``None``, the push is performed without
+    any ``--force`` flag (fast-forward-only).  Callers that require
+    force-capable pushes **must** provide ``expected_remote_sha`` (SA117
+    Phase 4).  The legacy bare ``--force`` fallback has been removed.
 
     Raises:
-        GitError: If the push fails.
+        GitError: If validation fails or the push fails.
     """
     cwd = path or Path.cwd()
     cmd = ["git", "push"]
-    if force:
-        cmd.append("--force")
+
+    if expected_remote_sha is not None:
+        validate_expected_sha(expected_remote_sha)
+        if expected_remote_sha == "ABSENT":
+            cmd.append("--force-with-lease")
+        else:
+            cmd.append(f"--force-with-lease=refs/heads/{branch}:{expected_remote_sha}")
+
     cmd.extend([remote, branch])
 
     try:
