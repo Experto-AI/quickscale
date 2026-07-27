@@ -218,6 +218,84 @@ QUALITY_BASELINE_BASE_REF=v87 poetry run python scripts/check_quality_baseline_m
 poetry run python scripts/check_quality_baseline_monotonicity.py --base-ref v87
 ```
 
+### Comparison Scope
+
+Every increase in the following values requires a waiver:
+
+| Section | Key | Compared value |
+|---------|-----|----------------|
+| `dead_code` | Per normalized message | Occurrence count (multiplicity) |
+| `complexity` | Per `path::symbol` key | `max_complexity` |
+| `large_files` | Per file path | `max_lines` |
+| `duplication` | Global | `allowed_blocks` |
+
+A missing base key is treated as 0 (any current value > 0 is an increase).
+Deleted, reduced, or unchanged entries pass without action.  A rename is
+modelled as delete plus new-exemption: the old key disappears (pass) and the
+new key appears as an increase (requires a waiver if > 0).
+
+### Baseline File Schema
+
+`scripts/quality_baseline.json` must satisfy this exact schema.  Every field is
+required unless marked optional; extra fields are tolerated but ignored.
+
+```json
+{
+  "schema_version": 1,
+  "dead_code": {
+    "allowed_messages": ["string", "..."]
+  },
+  "complexity": {
+    "allowed_functions": {
+      "file::symbol": {
+        "file": "canonical/repo/relative/path.py",
+        "symbol": "function_or_method_name",
+        "type": "function|method|class",
+        "max_complexity": 11
+      }
+    }
+  },
+  "large_files": {
+    "allowed_files": {
+      "canonical/repo/relative/path.py": {
+        "max_lines": 500
+      }
+    }
+  },
+  "duplication": {
+    "allowed_blocks": 0,
+    "allowed_block_identities": ["optional, length equals allowed_blocks"]
+  }
+}
+```
+
+Field-level rules:
+
+- **`schema_version`** — strict non-bool `int`, exactly `1`.  A `bool` value is
+  rejected (Python `bool` subclasses `int` but is explicitly excluded).
+- **`dead_code.allowed_messages`** — list of non-empty strings.  Multiplicity
+  (occurrence count of each distinct message) is the compared value.  Empty
+  strings are rejected; duplicates are valid and simply raise multiplicity.
+- **`complexity.allowed_functions`** — dict mapping canonical `file::symbol`
+  keys to records with `file` (non-empty repo-relative POSIX path), `symbol`
+  (non-empty), `type` (`function`/`method`/`class`), and `max_complexity`
+  (strict non-negative non-bool `int`).  Paths are validated by a strict
+  canonical-path checker that rejects absolute paths, Windows
+  backslashes/drive letters, empty/dot/dotdot segments, repeated separators,
+  leading/trailing whitespace, and surrogate/control characters.
+- **`large_files.allowed_files`** — dict mapping repo-relative POSIX paths
+  (same strict path validation) to records with `max_lines` (strict
+  non-negative non-bool `int`).
+- **`duplication.allowed_blocks`** — strict non-negative non-bool `int`.
+- **`duplication.allowed_block_identities`** — optional; when present, a list
+  of non-empty strings whose length exactly equals `allowed_blocks`.
+
+The helper builds validated ceiling indexes (`dict[str, int]` keyed by
+canonical key) from the merge-base and current baselines after structural
+validation, and compares those indexes directly.  It never applies
+`.get(..., 0)` to malformed input — a value that fails strict type/range
+validation exits 2 with a `SCHEMA_ERROR` envelope rather than defaulting.
+
 ### Base-Ref Precedence
 
 The merge-base is resolved in this order (first match wins):
@@ -234,7 +312,12 @@ The helper reads the base baseline from the local Git object store.  The
 repository must have the necessary history and tags (v87) available.  There
 is **no automatic fetch** and **no fallback** to `HEAD^` — if the merge-base
 commit does not contain `scripts/quality_baseline.json`, the gate fails with
-exit 2.
+exit 2.  A missing *waiver* file is tolerated and treated as an empty ledger
+(initial-rollout allowance only).
+
+`QUALITY_BASELINE_FILE` may override the current-baseline file path, but the
+merge-base side of the comparison always reads the canonical
+`scripts/quality_baseline.json` path from the Git tree.
 
 ### Waiver Schema & Lifecycle
 
@@ -252,7 +335,7 @@ Waivers are stored in `scripts/quality_waivers.json`:
       "owner": "user@example.com",
       "reason": "Brief justification",
       "expires_on": "YYYY-MM-DD",
-      "decision_ref": "SA###"
+      "decision_ref": "quality-baseline-monotonicity"
     }
   ]
 }
@@ -365,10 +448,14 @@ consumers:
 4. ``quality_report.md`` — fenced JSON block after ``### Diagnostics``
 
 The shell failure summary (printed to stdout when the monotonicity gate fails)
-also reads from ``diagnostics`` — the same canonical 13-key records.  No raw
-``waiver_evaluations`` dicts are serialised to stdout or the policy artifact.
-Waiver lifecycle entries appear as canonical diagnostic records with
-``waiver_id`` and ``waiver_status`` fields alongside the standard 13-key set.
+also reads from ``diagnostics`` — the same canonical 13-key records.  Raw
+``waiver_evaluations`` dicts are serialised to the policy artifact
+(``quality_baseline_policy.json``) under the ``waiver_evaluations`` key for
+downstream consumers that need the full lifecycle evaluation list.  They are
+**not** printed to stdout — only canonical diagnostic records appear there.
+Waiver lifecycle entries also appear as canonical diagnostic records with
+``waiver_id`` and ``waiver_status`` fields alongside the standard 13-key set
+in the ``diagnostics`` list — the four-consumer canonical feed.
 
 ``violations`` and ``unresolved`` are compatibility subsets of the same
 canonical records (same shape, same keys), filtered to include only entries

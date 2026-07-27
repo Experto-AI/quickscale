@@ -154,7 +154,7 @@ In the current shipped foundation slice, that platform-owner `✅` for org-scope
 | **Invitation** | A pending email-based request to join an organization before the recipient has a user account. |
 | **Personal Org** | In Solo mode, the single organization auto-created for each user at signup. |
 
-A user account is global (one email, one login). A user's role is org-scoped. Regular users belong to exactly one organization. The server session is the sole authority for org resolution — no org switcher in the user-facing UI. VIEW-AS (superuser-only) provides operator org-scope switching for debugging; see `docs/technical/decisions.md` §D1.
+A user account is global (one email, one login). A user's role is org-scoped. Regular users belong to exactly one organization. The server session is the sole authority for org resolution — no org switcher in the user-facing UI. VIEW-AS (superuser-only) provides operator org-scope switching for debugging; see [decisions.md §Module & Theme Architecture](./decisions.md#module-theme-architecture).
 
 ---
 
@@ -529,7 +529,7 @@ No org management pages are exposed in solo mode.
 
 **Note:** The generated `showcase_react` SaaS surface keeps org-management pages under `/orgs/:orgSlug/...`, serves CRM and forms at flat routes, and uses legacy redirect shims (`/blog`, `/listings`, `/settings`) to land the user on the active-org route when needed. Billing remains Django-page navigation (`/billing/dashboard/`, `/billing/pricing/`) rather than a generated React billing page.
 
-`OrgLayout` is a React wrapper that injects `orgSlug` from `useParams()` into the generated org pages. No org switcher is rendered in the user-facing UI — regular users belong to exactly one org. VIEW-AS (superuser-only) provides the debug path for operators; see `docs/technical/decisions.md` §D1.
+`OrgLayout` is a React wrapper that injects `orgSlug` from `useParams()` into the generated org pages. No org switcher is rendered in the user-facing UI — regular users belong to exactly one org. VIEW-AS (superuser-only) provides the debug path for operators; see [decisions.md §Module & Theme Architecture](./decisions.md#module-theme-architecture).
 
 #### Solo mode
 
