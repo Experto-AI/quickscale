@@ -1691,6 +1691,13 @@ differ. A version mismatch must never be allowed to surface as a downstream fail
 (missing setting, `KeyError`, absent derivation). This is a specific expression of the
 [Fail-Hard Principle](#fail-hard-principle): surface the root cause where it can be fixed.
 
+**Rule 2a — The comparison is canonical, not literal (2026-07-27, `SA117-CR-001`).** Version
+equality is decided on a canonical parse, so padded, whitespace-bearing, or otherwise
+non-canonical spellings (`0.87.0 `, `0.087.0`) do not satisfy a lockstep check they should
+fail. A version string that cannot be canonically parsed is itself a hard error, never a
+fallback to literal string comparison — a permissive comparison is the same defect class as
+the missing assertion Rule 2 exists to close.
+
 **Rule 3 — Release ordering is mandatory.** Modules are embedded by git subtree from
 `splits/<module>-module` on the public remote, so the published splits — not the working
 tree — are what users receive. The release sequence is therefore:
