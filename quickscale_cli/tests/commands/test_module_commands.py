@@ -505,6 +505,17 @@ class TestModuleVersionMismatchEnforcement:
                 "quickscale_cli.commands.module_commands.run_git_subtree_add",
             ),
             patch(
+                "quickscale_cli.commands.module_commands.add_module",
+            ) as spy_add_module,
+            patch(
+                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                return_value=True,
+            ) as spy_sync_deps,
+            patch(
+                "quickscale_cli.commands.module_commands._install_module_dependencies",
+                return_value=True,
+            ) as spy_install,
+            patch(
                 "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
                 {},
             ),
@@ -515,12 +526,17 @@ class TestModuleVersionMismatchEnforcement:
                 "https://example.com/repo.git",
                 "splits/auth-module",
                 {},
-                sync_dependencies=False,
-                install_dependencies=False,
+                sync_dependencies=True,
+                install_dependencies=True,
             )
 
         assert success is False
         assert provenance is None
+        # No standalone tracking, dependency sync, or install continuation
+        # when version mismatch is detected before those paths.
+        spy_add_module.assert_not_called()
+        spy_sync_deps.assert_not_called()
+        spy_install.assert_not_called()
 
     def test_apply_embed_cleans_up_on_version_mismatch(self, tmp_path: Path) -> None:
         """Apply embed must clean up partial artifacts on version mismatch."""
@@ -534,6 +550,17 @@ class TestModuleVersionMismatchEnforcement:
                 "quickscale_cli.commands.module_commands.run_git_subtree_add",
             ),
             patch(
+                "quickscale_cli.commands.module_commands.add_module",
+            ) as spy_add_module,
+            patch(
+                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                return_value=True,
+            ) as spy_sync_deps,
+            patch(
+                "quickscale_cli.commands.module_commands._install_module_dependencies",
+                return_value=True,
+            ) as spy_install,
+            patch(
                 "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
                 {},
             ),
@@ -544,8 +571,8 @@ class TestModuleVersionMismatchEnforcement:
                 "https://example.com/repo.git",
                 "splits/auth-module",
                 {},
-                sync_dependencies=False,
-                install_dependencies=False,
+                sync_dependencies=True,
+                install_dependencies=True,
                 execution_mode=APPLY_MODULE_EXECUTION_MODE,
             )
 
@@ -553,6 +580,11 @@ class TestModuleVersionMismatchEnforcement:
         assert provenance is None
         # The partial embed directory must be cleaned up.
         assert not (tmp_path / "modules" / "auth").exists()
+        # No tracking or dependency continuation when version mismatch
+        # is detected before those paths.
+        spy_add_module.assert_not_called()
+        spy_sync_deps.assert_not_called()
+        spy_install.assert_not_called()
 
     def test_embed_accepts_matching_version(self, tmp_path: Path) -> None:
         """Embed must succeed when the module version matches the core version."""
@@ -589,6 +621,108 @@ class TestModuleVersionMismatchEnforcement:
             )
 
         assert success is True
+
+    # ------------------------------------------------------------------
+    # SA117a: standalone / apply embed rejects non-canonical versions
+    # ------------------------------------------------------------------
+
+    def test_standalone_embed_rejects_noncanonical_manifest_version(
+        self, tmp_path: Path
+    ) -> None:
+        """Standalone embed must fail when the embedded module's manifest
+        version has a non-canonical (leading-zero) spelling."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.87.00"\n')
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.add_module",
+            ) as spy_add_module,
+            patch(
+                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                return_value=True,
+            ) as spy_sync_deps,
+            patch(
+                "quickscale_cli.commands.module_commands._install_module_dependencies",
+                return_value=True,
+            ) as spy_install,
+            patch(
+                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+                {},
+            ),
+        ):
+            success, provenance = _perform_module_embed(
+                tmp_path,
+                "auth",
+                "https://example.com/repo.git",
+                "splits/auth-module",
+                {},
+                sync_dependencies=True,
+                install_dependencies=True,
+            )
+
+        assert success is False
+        assert provenance is None
+        # No standalone tracking or dependency continuation when
+        # non-canonical version is detected before those paths.
+        spy_add_module.assert_not_called()
+        spy_sync_deps.assert_not_called()
+        spy_install.assert_not_called()
+
+    def test_apply_embed_cleanup_on_noncanonical_manifest_version(
+        self, tmp_path: Path
+    ) -> None:
+        """Apply embed must clean up partial artifacts when the embedded
+        manifest version is non-canonical."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        module_yml = module_dir / "module.yml"
+        module_yml.write_text('name: auth\nversion: "0.87.00"\n')
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.add_module",
+            ) as spy_add_module,
+            patch(
+                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                return_value=True,
+            ) as spy_sync_deps,
+            patch(
+                "quickscale_cli.commands.module_commands._install_module_dependencies",
+                return_value=True,
+            ) as spy_install,
+            patch(
+                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+                {},
+            ),
+        ):
+            success, provenance = _perform_module_embed(
+                tmp_path,
+                "auth",
+                "https://example.com/repo.git",
+                "splits/auth-module",
+                {},
+                sync_dependencies=True,
+                install_dependencies=True,
+                execution_mode=APPLY_MODULE_EXECUTION_MODE,
+            )
+
+        assert success is False
+        assert provenance is None
+        # The partial embed directory must be cleaned up.
+        assert not (tmp_path / "modules" / "auth").exists()
+        # No tracking or dependency continuation when non-canonical version
+        # is detected before those paths.
+        spy_add_module.assert_not_called()
+        spy_sync_deps.assert_not_called()
+        spy_install.assert_not_called()
 
 
 class TestInstallModuleDependencies:
@@ -1415,6 +1549,114 @@ class TestUpdateSingleModule:
         assert state_path.read_text() == original_state
         # pyproject.toml should also be restored (SA9.1-REV-002)
         assert (tmp_path / "pyproject.toml").read_text() == original_pyproject
+
+    # ------------------------------------------------------------------
+    # SA117a: update rolls back when the pulled manifest version is
+    # non-canonical.  Uses the REAL _read_embedded_module_version so
+    # assert_manifest_version_matches_core sees the non-canonical
+    # version and raises ModuleVersionMismatchError, triggering rollback.
+    # ------------------------------------------------------------------
+
+    def test_update_rolls_back_noncanonical_manifest_version(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """Update must roll back when the pulled manifest has a non-canonical
+        version, using the real _read_embedded_module_version so the
+        lockstep parser catches the bad spelling."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        module_manifest = module_dir / "module.yml"
+        module_manifest.write_text('name: auth\nversion: "0.71.0"\n')
+
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        legacy_config_path = quickscale_dir / "config.yml"
+        legacy_config_path.write_text(
+            "modules:\n  auth:\n    installed_version: 0.71.0\n"
+        )
+        state_path = quickscale_dir / "state.yml"
+        original_state = (
+            "\n".join(
+                [
+                    'version: "1"',
+                    "project:",
+                    "  slug: myproject",
+                    "  package: myproject",
+                    "  theme: showcase_react",
+                    '  created_at: "2025-01-01T00:00:00"',
+                    '  last_applied: "2025-01-01T00:00:00"',
+                    "modules:",
+                    "  auth:",
+                    "    name: auth",
+                    '    version: "0.71.0"',
+                    '    commit_sha: "abc123"',
+                    '    embedded_at: "2025-01-01T00:00:00"',
+                    "    options: {}",
+                ]
+            )
+            + "\n"
+        )
+        state_path.write_text(original_state)
+        # Provide pyproject.toml so dependency sync can attempt to load it
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        def _fake_subtree_pull(*, prefix: str, remote: str, branch: str, squash: bool):
+            """Subtree pull that writes a non-canonical manifest version."""
+            del remote, branch, squash
+            (tmp_path / prefix / "module.yml").write_text(
+                'name: auth\nversion: "0.87.00"\n'
+            )
+            return "updated"
+
+        # Use the REAL _read_embedded_module_version so the lockstep
+        # parser catches the non-canonical "0.87.00" spelling and raises
+        # ModuleVersionMismatchError, which triggers rollback.
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                return_value="a" * 40,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                side_effect=_fake_subtree_pull,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._sync_state_module_version",
+            ) as spy_sync_state,
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update",
+            ) as spy_commit,
+        ):
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=True,
+            )
+
+        # The update must fail (ModuleVersionMismatchError triggers
+        # rollback).
+        assert result is False
+
+        # No downstream commit, state sync, or dependency continuation
+        # when non-canonical version is detected by the real
+        # _read_embedded_module_version before those paths.
+        spy_commit.assert_not_called()
+        spy_sync_state.assert_not_called()
+
+        # Verify all tracked files were restored from snapshot.
+        assert module_manifest.read_text() == 'name: auth\nversion: "0.71.0"\n'
+        assert (
+            legacy_config_path.read_text()
+            == "modules:\n  auth:\n    installed_version: 0.71.0\n"
+        )
+        assert state_path.read_text() == original_state
 
     @patch(
         "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
@@ -3111,3 +3353,176 @@ class TestAF5RecoveryLedgerRegression:
 
         result = _load_update_recovery_state(tmp_path)
         assert result is None
+
+
+# ============================================================================
+# SA117a: hermetic all-12 local-manifest apply-wrapper acceptance test.
+# Uses the real regenerate_managed_wiring — not the CLI or apply_command —
+# so there are no network/git/Docker/database mutations.
+# All 12 module manifests in quickscale_modules/ are already canonical
+# and in sync with VERSION (0.87.0).
+# ============================================================================
+
+
+class TestApplyAllModulesManagedWiringAcceptance:
+    """SA117a hermetic acceptance test: all 12 local module manifests
+    reach managed wiring through the real apply wrapper
+    (_regenerate_managed_wiring_for_apply -> step_regenerate_wiring ->
+    regenerate_managed_wiring) without KeyError or version mismatch."""
+
+    ALL_MODULES = [
+        "analytics",
+        "auth",
+        "backups",
+        "billing",
+        "blog",
+        "crm",
+        "forms",
+        "listings",
+        "notifications",
+        "orgs",
+        "social",
+        "storage",
+    ]
+
+    def test_all_twelve_local_manifests_reach_managed_wiring_without_keyerror(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """All 12 real local module manifests must pass through the real
+        apply wiring wrapper (_regenerate_managed_wiring_for_apply ->
+        step_regenerate_wiring -> regenerate_managed_wiring) without
+        version-mismatch or KeyError.
+
+        This is a hermetic test:
+        - No network, git subtree, Docker, or database mutations.
+        - Uses real module.yml files from quickscale_modules/.
+        - Calls real _regenerate_managed_wiring_for_apply.
+        """
+        from quickscale_core.schema.config_schema import validate_config
+        from quickscale_core.schema.delta import ConfigDelta
+        from quickscale_core.schema.state_schema import StateManager
+        from quickscale_core.manifest.entry_point import (
+            MANIFEST_ADAPTER_REGISTRY,
+            MANAGED_ADAPTER_ORIGINS,
+            refresh_managed_adapters,
+        )
+        from quickscale_cli.commands.apply_command import (
+            ApplyContext,
+            _regenerate_managed_wiring_for_apply,
+        )
+
+        project = tmp_path / "myapp"
+        project.mkdir(parents=True)
+
+        # Minimal project structure
+        (project / "myapp" / "settings").mkdir(parents=True)
+        (project / "myapp" / "settings" / "__init__.py").write_text("")
+        (project / "quickscale.yml").write_text(
+            yaml.safe_dump(
+                {
+                    "version": "1",
+                    "project": {
+                        "slug": "myapp",
+                        "package": "myapp",
+                        "theme": "showcase_react",
+                    },
+                    "docker": {"start": False},
+                    "modules": {
+                        mod: {"enabled": True}
+                        if mod in ("analytics", "billing")
+                        else {}
+                        for mod in self.ALL_MODULES
+                    },
+                },
+                sort_keys=False,
+                default_flow_style=False,
+            )
+        )
+
+        # Copy real module.yml files from the maintainer monorepo into
+        # the embedded modules directory so the wiring function finds
+        # them.  All 12 manifests are already at version 0.87.0 which
+        # matches the current core version.
+        #
+        # __file__ is quickscale_cli/tests/commands/test_module_commands.py;
+        # parents[3] goes up to the repo root.
+        repo_root = Path(__file__).resolve().parents[3]
+        modules_src = repo_root / "quickscale_modules"
+
+        for mod in self.ALL_MODULES:
+            src_yml = modules_src / mod / "module.yml"
+            assert src_yml.exists(), f"Missing module.yml for {mod}"
+            (project / "modules" / mod).mkdir(parents=True)
+            (project / "modules" / mod / "module.yml").write_text(src_yml.read_text())
+
+        # Set the modules base path to the embedded modules directory and
+        # refresh managed adapters (required for billing, crm, social).
+        from quickscale_core.contracts import module_discovery as _md
+
+        original_base_path = _md._modules_base_path
+        _md._modules_base_path = project / "modules"
+
+        _orig_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        _orig_origins = set(MANAGED_ADAPTER_ORIGINS)
+        try:
+            refresh_managed_adapters()
+
+            # Verify all 12 are now in the registry.
+            for mod in self.ALL_MODULES:
+                assert mod in MANIFEST_ADAPTER_REGISTRY, (
+                    f"Module '{mod}' not registered after refresh"
+                )
+
+            # --- Construct the real ApplyContext ---
+            qs_config = validate_config((project / "quickscale.yml").read_text())
+            state_manager = StateManager(project)
+
+            delta = ConfigDelta(has_changes=True, modules_unchanged=self.ALL_MODULES)
+
+            ctx = ApplyContext(
+                config_path=project / "quickscale.yml",
+                qs_config=qs_config,
+                output_path=project,
+                state_manager=state_manager,
+                existing_state=None,
+                manifests={},
+                delta=delta,
+            )
+
+            # --- Call the real apply wrapper ---
+            # This traverses _regenerate_managed_wiring_for_apply ->
+            # _build_step_context -> step_regenerate_wiring -> _wiring_fn ->
+            # regenerate_managed_wiring.
+            success = _regenerate_managed_wiring_for_apply(
+                ctx, embedded_modules=self.ALL_MODULES
+            )
+
+            assert success, (
+                "_regenerate_managed_wiring_for_apply failed for all-12 modules"
+            )
+
+            # Verify the managed wiring settings file was actually written.
+            settings_modules = project / "myapp" / "settings" / "modules.py"
+            assert settings_modules.exists()
+
+            # Verify at least a few known app-producing modules appear
+            # in settings.  Not every module produces an app entry
+            # (social is managed-files-only), so we spot-check the
+            # core set.
+            content = settings_modules.read_text()
+            for mod in ("analytics", "auth", "billing", "blog", "listings", "orgs"):
+                app_label = f"quickscale_modules_{mod}"
+                assert app_label in content, (
+                    f"Managed wiring for '{mod}' ({app_label}) "
+                    f"not found in generated settings/modules.py"
+                )
+
+            # Managed __init__.py (shared artifact for managed wiring).
+            managed_init = project / "myapp" / "quickscale_managed" / "__init__.py"
+            assert managed_init.exists()
+        finally:
+            _md._modules_base_path = original_base_path
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(_orig_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(_orig_origins)
