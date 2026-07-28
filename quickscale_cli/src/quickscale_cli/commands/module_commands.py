@@ -421,6 +421,16 @@ def _record_embed_provenance(
         provenance_sink.append(provenance)
 
 
+def _cleanup_failed_apply_embed_if_needed(
+    project_path: Path,
+    module: str,
+    execution_mode: ModuleExecutionMode,
+) -> None:
+    """Clean up a failed embed only for apply-side execution."""
+    if execution_mode == APPLY_MODULE_EXECUTION_MODE:
+        _cleanup_failed_apply_embed(project_path, module)
+
+
 def _perform_module_embed(
     project_path: Path,
     module: str,
@@ -467,8 +477,7 @@ def _perform_module_embed(
             "before continuing.",
             err=True,
         )
-        if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-            _cleanup_failed_apply_embed(project_path, module)
+        _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
         return False, None
     except ModuleVersionMismatchError as error:
         click.secho(
@@ -482,8 +491,7 @@ def _perform_module_embed(
             "this module.",
             err=True,
         )
-        if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-            _cleanup_failed_apply_embed(project_path, module)
+        _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
         return False, None
 
     if execution_mode != APPLY_MODULE_EXECUTION_MODE:
@@ -519,8 +527,7 @@ def _perform_module_embed(
 
     if sync_dependencies:
         if not _sync_module_dependencies(project_path, {module: config}):
-            if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-                _cleanup_failed_apply_embed(project_path, module)
+            _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
             return False, None
 
     if (
@@ -528,8 +535,7 @@ def _perform_module_embed(
         and _resolve_embedded_module_install_path(project_path, module) is not None
     ):
         if not _install_module_dependencies(project_path, module):
-            if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-                _cleanup_failed_apply_embed(project_path, module)
+            _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
             return False, None
 
     if execution_mode == APPLY_MODULE_EXECUTION_MODE:
@@ -1174,6 +1180,36 @@ def _rollback_failed_module_update(
     return None
 
 
+def _report_module_update_error(name: str, error: Exception) -> None:
+    """Preserve the update command's type-specific failure reports."""
+    if isinstance(error, StateError):
+        click.secho(
+            f"❌ Failed to load .quickscale/state.yml: {error}",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "💡 Fix .quickscale/state.yml or regenerate it with 'quickscale apply' "
+            "before updating modules.",
+            err=True,
+        )
+        return
+
+    click.secho(f"❌ Failed to update {name}: {error}", fg="red", err=True)
+    if isinstance(error, ManifestError):
+        click.echo(
+            f"💡 Fix modules/{name}/module.yml or remove and re-embed the module.",
+            err=True,
+        )
+    elif isinstance(error, GitError):
+        click.echo(f"💡 Tip: Check for conflicts in modules/{name}/", err=True)
+    elif isinstance(error, ModuleVersionMismatchError):
+        click.echo(
+            "\n💡 Update QuickScale to the latest version before updating modules.",
+            err=True,
+        )
+
+
 def _update_single_module(
     name: str, info: Any, default_remote: str, no_preview: bool
 ) -> bool:
@@ -1304,41 +1340,8 @@ def _update_single_module(
 
         return True
 
-    except StateError as error:
-        click.secho(
-            f"❌ Failed to load .quickscale/state.yml: {error}",
-            fg="red",
-            err=True,
-        )
-        click.echo(
-            "💡 Fix .quickscale/state.yml or regenerate it with 'quickscale apply' "
-            "before updating modules.",
-            err=True,
-        )
-        return False
-    except ManifestError as e:
-        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
-        click.echo(
-            f"💡 Fix modules/{name}/module.yml or remove and re-embed the module.",
-            err=True,
-        )
-        return False
-    except GitError as e:
-        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
-        click.echo(f"💡 Tip: Check for conflicts in modules/{name}/", err=True)
-        return False
-    except ModuleVersionMismatchError as e:
-        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
-        click.echo(
-            "\n💡 Update QuickScale to the latest version before updating modules.",
-            err=True,
-        )
-        return False
-    except RuntimeError as e:
-        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
-        return False
-    except Exception as e:
-        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
+    except Exception as error:
+        _report_module_update_error(name, error)
         return False
 
 
