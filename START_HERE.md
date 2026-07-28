@@ -163,7 +163,7 @@ Reference these when performing specific tasks:
 
 | Document | Use When... | Length |
 |----------|-------------|--------|
-| **[roadmap.md](./docs/technical/roadmap.md)** | Planning features, checking timeline | 477 lines |
+| **[roadmap.md](./docs/technical/roadmap.md)** | Planning features, checking timeline | 462 lines |
 | **[user_manual.md](./docs/technical/user_manual.md)** | Running commands, workflows | 660 lines |
 | **[development.md](./docs/technical/development.md)** | Setting up dev environment | 520 lines |
 | **[contrib/contributing.md](./docs/contrib/contributing.md)** | Contributing to QuickScale | 200 lines |
