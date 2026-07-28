@@ -4,10 +4,9 @@ Focused tests for ``check_quality_baseline_monotonicity.py``.
 Test matrix (CR-003..006)
 --------------------------
 * SA114 increase 1 — complexity 11→12 (``_validate_modules_section``)
-* SA114 increase 2 — large_files 1596→1608 (``module_commands.py``)
-* SA114 increase 3 — large_files 605→611 (``config_schema.py``)
-* All three pass with exact active waivers
-* All three without waivers — exit 1, three sorted canonical records
+* Retired ``large_files.max_lines`` values are ignored and never indexed
+* Complexity increases still require active waivers
+* A 2,000-line advisory file does not affect the quality gate exit status
 * Empty baseline comparison (no violations)
 * Shape/ref/date/lifecycle/determinism cases
 * Schema version mismatch (int, string, bool) via subprocess
@@ -54,6 +53,9 @@ import pytest
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _SCRIPT_DIR.parent
+# Keep the documented direct invocation working as well as pytest collection.
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 # Import the helpers but not main() — we test the logic directly
 import scripts.check_quality_baseline_monotonicity as monotonicity_mod  # noqa: E402
 
@@ -202,15 +204,17 @@ def v87_baseline() -> dict[str, Any]:
                     "symbol": "_validate_modules_section",
                     "type": "function",
                 },
-            },
-        },
-        "large_files": {
-            "allowed_files": {
-                "quickscale_cli/src/quickscale_cli/commands/module_commands.py": {
-                    "max_lines": 1596,
+                "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_perform_module_embed": {  # noqa: E501
+                    "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                    "max_complexity": 20,
+                    "symbol": "_perform_module_embed",
+                    "type": "function",
                 },
-                "quickscale_core/src/quickscale_core/schema/config_schema.py": {
-                    "max_lines": 605,
+                "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_update_single_module": {  # noqa: E501
+                    "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                    "max_complexity": 17,
+                    "symbol": "_update_single_module",
+                    "type": "function",
                 },
             },
         },
@@ -240,15 +244,17 @@ def current_baseline_with_increases() -> dict[str, Any]:
                     "symbol": "_validate_modules_section",
                     "type": "function",
                 },
-            },
-        },
-        "large_files": {
-            "allowed_files": {
-                "quickscale_cli/src/quickscale_cli/commands/module_commands.py": {
-                    "max_lines": 1608,
+                "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_perform_module_embed": {  # noqa: E501
+                    "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                    "max_complexity": 22,
+                    "symbol": "_perform_module_embed",
+                    "type": "function",
                 },
-                "quickscale_core/src/quickscale_core/schema/config_schema.py": {
-                    "max_lines": 611,
+                "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_update_single_module": {  # noqa: E501
+                    "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                    "max_complexity": 18,
+                    "symbol": "_update_single_module",
+                    "type": "function",
                 },
             },
         },
@@ -259,6 +265,10 @@ def current_baseline_with_increases() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Comparison tests (use validated indexes via _compare_indexes)
 # ---------------------------------------------------------------------------
+
+
+CLI_PATH = "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+CFG_PATH = "quickscale_core/src/quickscale_core/schema/config_schema.py"
 
 
 def _build_dead_code_indexes(messages: list[str]) -> dict[str, int]:
@@ -278,14 +288,6 @@ def _build_complexity_indexes(
     indexes: dict[str, int] = {}
     for ck, entry in functions.items():
         indexes[f"complexity:{ck}"] = int(entry["max_complexity"])
-    return indexes
-
-
-def _build_large_files_indexes(files: dict[str, dict[str, Any]]) -> dict[str, int]:
-    """Build ceiling indexes for large_files from allowed_files."""
-    indexes: dict[str, int] = {}
-    for fp, entry in files.items():
-        indexes[f"large_files:{fp}"] = int(entry["max_lines"])
     return indexes
 
 
@@ -311,14 +313,15 @@ class TestCompareIndexes:
         old_idx = _check._validate_baseline_structure(v87_baseline, "old")
         new_idx = _check._validate_baseline_structure(current_baseline_with_increases, "new")
         results = _check._compare_indexes(old_idx, new_idx)
-        assert len(results) == 3  # complexity(11→12) + large_files(1596→1608, 605→611)
+        # SA125-DEC-001 retired the line-ceiling surface, so the historical
+        # line-count cases are replayed as two surviving complexity increases.
+        assert len(results) == 3  # complexity 11→12, 20→22, 17→18
 
         # CR-006: Exact canonical keys, not substring/any()
         expected_keys = [
-            "complexity:quickscale_core/src/quickscale_core/schema/config_schema.py"
-            "::_validate_modules_section",
-            "large_files:quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-            "large_files:quickscale_core/src/quickscale_core/schema/config_schema.py",
+            f"complexity:{CLI_PATH}::_perform_module_embed",
+            f"complexity:{CLI_PATH}::_update_single_module",
+            f"complexity:{CFG_PATH}::_validate_modules_section",
         ]
         actual_keys = sorted(r["canonical_key"] for r in results)
         assert actual_keys == expected_keys, (
@@ -327,14 +330,14 @@ class TestCompareIndexes:
 
         # Verify specific values by exact key
         key_values = {r["canonical_key"]: (r["old_value"], r["new_value"]) for r in results}
-        assert key_values[expected_keys[0]] == (11, 12), (
-            f"Complexity key expected (11, 12), got {key_values[expected_keys[0]]}"
+        assert key_values[expected_keys[0]] == (20, 22), (
+            f"_perform_module_embed expected (20, 22), got {key_values[expected_keys[0]]}"
         )
-        assert key_values[expected_keys[1]] == (1596, 1608), (
-            f"module_commands key expected (1596, 1608), got {key_values[expected_keys[1]]}"
+        assert key_values[expected_keys[1]] == (17, 18), (
+            f"_update_single_module expected (17, 18), got {key_values[expected_keys[1]]}"
         )
-        assert key_values[expected_keys[2]] == (605, 611), (
-            f"config_schema key expected (605, 611), got {key_values[expected_keys[2]]}"
+        assert key_values[expected_keys[2]] == (11, 12), (
+            f"_validate_modules_section expected (11, 12), got {key_values[expected_keys[2]]}"
         )
 
     def test_new_message_increases(self, v87_baseline: dict) -> None:
@@ -389,14 +392,11 @@ class TestCompareIndexes:
     def test_removed_key_passes(self, v87_baseline: dict) -> None:
         """Removing a key is never a violation."""
         new = json.loads(json.dumps(v87_baseline))
-        new["large_files"]["allowed_files"] = {}
+        new["complexity"]["allowed_functions"] = {}
         old_idx = _check._validate_baseline_structure(v87_baseline, "old")
         new_idx = _check._validate_baseline_structure(new, "new")
         results = _check._compare_indexes(old_idx, new_idx)
-        # Only dead_code and complexity increases remain
-        assert all(r["section"] != "large_files" for r in results), (
-            "No large_files increases expected after removal"
-        )
+        assert results == [], "Removing every key must never be a violation"
 
     def test_error_codes_match_section(self) -> None:
         """Each section produces the correct error_code."""
@@ -405,16 +405,16 @@ class TestCompareIndexes:
             {
                 "dead_code:allowed_messages:msg:a:multiplicity": 2,
                 "complexity:a.py::f": 5,
-                "large_files:a.py": 300,
                 "duplication:allowed_blocks": 3,
             },
         )
-        assert len(results) == 4
+        assert len(results) == 3
         codes = {(r["section"], r["error_code"]) for r in results}
-        assert ("dead_code", "DC-MULT") in codes
-        assert ("complexity", "CC-RISE") in codes
-        assert ("large_files", "LF-RISE") in codes
-        assert ("duplication", "DP-RISE") in codes
+        assert codes == {
+            ("dead_code", "DC-MULT"),
+            ("complexity", "CC-RISE"),
+            ("duplication", "DP-RISE"),
+        }, f"SA125-DEC-001: large_files must not be a recognized section; got {codes}"
 
 
 # ---------------------------------------------------------------------------
@@ -613,18 +613,18 @@ class TestWaiverEvaluation:
                 "error_code": "CC-RISE",
             },
             {
-                "section": "large_files",
-                "canonical_key": "large_files:quickscale_cli/src/quickscale_cli/commands/module_commands.py",  # noqa: E501
-                "old_value": 1596,
-                "new_value": 1608,
-                "error_code": "LF-RISE",
+                "section": "complexity",
+                "canonical_key": f"complexity:{CLI_PATH}::_perform_module_embed",
+                "old_value": 20,
+                "new_value": 22,
+                "error_code": "CC-RISE",
             },
             {
-                "section": "large_files",
-                "canonical_key": "large_files:quickscale_core/src/quickscale_core/schema/config_schema.py",  # noqa: E501
-                "old_value": 605,
-                "new_value": 611,
-                "error_code": "LF-RISE",
+                "section": "complexity",
+                "canonical_key": f"complexity:{CLI_PATH}::_update_single_module",
+                "old_value": 17,
+                "new_value": 18,
+                "error_code": "CC-RISE",
             },
         ]
         waivers = [
@@ -640,9 +640,9 @@ class TestWaiverEvaluation:
             },
             {
                 "waiver_id": "W002",
-                "entry_key": "large_files:quickscale_cli/src/quickscale_cli/commands/module_commands.py",  # noqa: E501
-                "base_ceiling": 1596,
-                "ceiling": 1608,
+                "entry_key": f"complexity:{CLI_PATH}::_perform_module_embed",
+                "base_ceiling": 20,
+                "ceiling": 22,
                 "owner": "dev@example.com",
                 "reason": "SA114 gate-drift remediation",
                 "expires_on": future_date,
@@ -650,9 +650,9 @@ class TestWaiverEvaluation:
             },
             {
                 "waiver_id": "W003",
-                "entry_key": "large_files:quickscale_core/src/quickscale_core/schema/config_schema.py",  # noqa: E501
-                "base_ceiling": 605,
-                "ceiling": 611,
+                "entry_key": f"complexity:{CLI_PATH}::_update_single_module",
+                "base_ceiling": 17,
+                "ceiling": 18,
                 "owner": "dev@example.com",
                 "reason": "SA114 gate-drift remediation",
                 "expires_on": future_date,
@@ -1014,8 +1014,6 @@ class TestValidateBaselineStructure:
             "complexity:quickscale_core/src/quickscale_core/schema/config_schema.py"
             "::_validate_modules_section",
             "duplication:allowed_blocks",
-            "large_files:quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-            "large_files:quickscale_core/src/quickscale_core/schema/config_schema.py",
         ]
         # Dead code multiplicity keys (5 messages, some duplicates)
         dc_msg = "quickscale_cli/src/quickscale_cli/commands/apply_command.py: unused variable 'q'"
@@ -1023,7 +1021,7 @@ class TestValidateBaselineStructure:
         # Verify every expected key exists
         for key in expected_keys:
             assert key in indexes, f"Expected key not found in indexes: {key}"
-        # Verify exact count: 3 dead_code + 1 complexity + 2 large_files + 1 duplication
+        # Verify exact count: 3 dead_code + 3 complexity + 1 duplication
         assert len(indexes) == 7, f"Expected exactly 7 index entries, got {len(indexes)}"
 
     def test_bool_schema_version_rejected(self) -> None:
@@ -1064,7 +1062,7 @@ class TestValidateBaselineStructure:
 
     def test_non_dict_sections_rejected(self) -> None:
         """Non-dict top-level sections are rejected."""
-        for section in ("dead_code", "complexity", "large_files", "duplication"):
+        for section in ("dead_code", "complexity", "duplication"):
             data: dict[str, Any] = {
                 "schema_version": 1,
                 "dead_code": {"allowed_messages": []},
@@ -1172,29 +1170,25 @@ class TestValidateBaselineStructure:
         with pytest.raises(RuntimeError, match="type"):
             _check._validate_baseline_structure(data, "test")
 
-    def test_bool_max_lines_rejected(self) -> None:
-        """A bool max_lines is rejected."""
-        data = {
-            "schema_version": 1,
-            "dead_code": {"allowed_messages": []},
-            "complexity": {"allowed_functions": {}},
-            "large_files": {"allowed_files": {"big.py": {"max_lines": True}}},
-            "duplication": {"allowed_blocks": 0},
-        }
-        with pytest.raises(RuntimeError, match="non-negative integer"):
-            _check._validate_baseline_structure(data, "test")
+    def test_stale_large_files_section_is_ignored(self) -> None:
+        """
+        SA125-DEC-001: a pre-SA125 large_files section validates but never indexes.
 
-    def test_negative_max_lines_rejected(self) -> None:
-        """A negative max_lines is rejected."""
+        The merge-base side of a comparison still carries the retired section, so
+        it must not raise; it must also contribute no keys, so no LF-RISE can be
+        computed from either side.
+        """
         data = {
             "schema_version": 1,
             "dead_code": {"allowed_messages": []},
             "complexity": {"allowed_functions": {}},
-            "large_files": {"allowed_files": {"big.py": {"max_lines": -100}}},
+            "large_files": {"allowed_files": {"big.py": {"max_lines": 1234}}},
             "duplication": {"allowed_blocks": 0},
         }
-        with pytest.raises(RuntimeError, match="non-negative integer"):
-            _check._validate_baseline_structure(data, "test")
+        indexes = _check._validate_baseline_structure(data, "test")
+        assert indexes == {"duplication:allowed_blocks": 0}, (
+            f"large_files must contribute no index keys; got {indexes}"
+        )
 
     def test_bool_allowed_blocks_rejected(self) -> None:
         """A bool allowed_blocks is rejected."""
@@ -2510,72 +2504,6 @@ class TestShellIntegration:
             "must be a non-negative integer",
         ),
         (
-            "non_dict_large_files",
-            {
-                "schema_version": 1,
-                "dead_code": {"allowed_messages": []},
-                "complexity": {"allowed_functions": {}},
-                "large_files": "not-a-dict",
-                "duplication": {"allowed_blocks": 0},
-            },
-            "non-dict section 'large_files'",
-        ),
-        (
-            "non_dict_allowed_files",
-            {
-                "schema_version": 1,
-                "dead_code": {"allowed_messages": []},
-                "complexity": {"allowed_functions": {}},
-                "large_files": {"allowed_files": "not-a-dict"},
-                "duplication": {"allowed_blocks": 0},
-            },
-            "large_files.allowed_files must be a dict",
-        ),
-        (
-            "non_dict_large_files_entry",
-            {
-                "schema_version": 1,
-                "dead_code": {"allowed_messages": []},
-                "complexity": {"allowed_functions": {}},
-                "large_files": {"allowed_files": {"big.py": "not-a-dict"}},
-                "duplication": {"allowed_blocks": 0},
-            },
-            "must be a dict",
-        ),
-        (
-            "float_max_lines",
-            {
-                "schema_version": 1,
-                "dead_code": {"allowed_messages": []},
-                "complexity": {"allowed_functions": {}},
-                "large_files": {"allowed_files": {"big.py": {"max_lines": 100.5}}},
-                "duplication": {"allowed_blocks": 0},
-            },
-            "must be a non-negative integer",
-        ),
-        (
-            "negative_max_lines",
-            {
-                "schema_version": 1,
-                "dead_code": {"allowed_messages": []},
-                "complexity": {"allowed_functions": {}},
-                "large_files": {"allowed_files": {"big.py": {"max_lines": -100}}},
-                "duplication": {"allowed_blocks": 0},
-            },
-            "must be a non-negative integer",
-        ),
-        (
-            "bool_max_lines",
-            {
-                "schema_version": 1,
-                "dead_code": {"allowed_messages": []},
-                "complexity": {"allowed_functions": {}},
-                "large_files": {"allowed_files": {"big.py": {"max_lines": True}}},
-                "duplication": {"allowed_blocks": 0},
-            },
-            "must be a non-negative integer",
-        ),
-        (
             "non_dict_duplication",
             {
                 "schema_version": 1,
@@ -3147,7 +3075,7 @@ class TestShellIntegration:
         )
         # CR-005/006: stdout contains canonical JSON records sorted by
         # (error_code, canonical_key).  The new-file key (new_file.py:new_function)
-        # is the first in sorted order (complexity < large_files < dead_code).
+        # is the first in sorted order among the retained baseline sections.
         assert result.returncode == 1, (
             f"Expected exit 1 for unwaived increase, got {result.returncode}\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
@@ -3528,15 +3456,19 @@ class TestShellIntegration:
                         "symbol": "_validate_modules_section",
                         "type": "function",
                     },
-                },
-            },
-            "large_files": {
-                "allowed_files": {
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py": {
-                        "max_lines": 1596,
+                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                    "::_perform_module_embed": {
+                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                        "max_complexity": 20,
+                        "symbol": "_perform_module_embed",
+                        "type": "function",
                     },
-                    "quickscale_core/src/quickscale_core/schema/config_schema.py": {
-                        "max_lines": 605,
+                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                    "::_update_single_module": {
+                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                        "max_complexity": 17,
+                        "symbol": "_update_single_module",
+                        "type": "function",
                     },
                 },
             },
@@ -3846,18 +3778,24 @@ class TestShellIntegration:
                     },
                 },
             },
-            "large_files": {
-                "allowed_files": {
-                    "new_active_large.py": {
-                        "max_lines": 200,
-                    },
-                    "new_active_large2.py": {
-                        "max_lines": 300,
-                    },
-                },
-            },
             "duplication": {"allowed_blocks": 0},
         }
+        baseline["complexity"]["allowed_functions"].update(
+            {
+                "new_active_large.py::f2": {
+                    "file": "new_active_large.py",
+                    "max_complexity": 200,
+                    "symbol": "f2",
+                    "type": "function",
+                },
+                "new_active_large2.py::f3": {
+                    "file": "new_active_large2.py",
+                    "max_complexity": 300,
+                    "symbol": "f3",
+                    "type": "function",
+                },
+            }
+        )
         temp_baseline = tmp_path / "baseline_active_waivers.json"
         temp_baseline.write_text(json.dumps(baseline), encoding="utf-8")
 
@@ -3880,7 +3818,7 @@ class TestShellIntegration:
                         },
                         {
                             "waiver_id": "W-ACT-002",
-                            "entry_key": "large_files:new_active_large.py",
+                            "entry_key": "complexity:new_active_large.py::f2",
                             "base_ceiling": 0,
                             "ceiling": 200,
                             "owner": "test@example.com",
@@ -3890,7 +3828,7 @@ class TestShellIntegration:
                         },
                         {
                             "waiver_id": "W-ACT-003",
-                            "entry_key": "large_files:new_active_large2.py",
+                            "entry_key": "complexity:new_active_large2.py::f3",
                             "base_ceiling": 0,
                             "ceiling": 300,
                             "owner": "test@example.com",
@@ -3986,15 +3924,19 @@ class TestShellIntegration:
                         "symbol": "_validate_modules_section",
                         "type": "function",
                     },
-                },
-            },
-            "large_files": {
-                "allowed_files": {
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py": {
-                        "max_lines": 1596,
+                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                    "::_perform_module_embed": {
+                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                        "max_complexity": 20,
+                        "symbol": "_perform_module_embed",
+                        "type": "function",
                     },
-                    "quickscale_core/src/quickscale_core/schema/config_schema.py": {
-                        "max_lines": 605,
+                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                    "::_update_single_module": {
+                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                        "max_complexity": 17,
+                        "symbol": "_update_single_module",
+                        "type": "function",
                     },
                 },
             },
@@ -4017,15 +3959,19 @@ class TestShellIntegration:
                         "symbol": "_validate_modules_section",
                         "type": "function",
                     },
-                },
-            },
-            "large_files": {
-                "allowed_files": {
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py": {
-                        "max_lines": 1608,
+                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                    "::_perform_module_embed": {
+                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                        "max_complexity": 22,
+                        "symbol": "_perform_module_embed",
+                        "type": "function",
                     },
-                    "quickscale_core/src/quickscale_core/schema/config_schema.py": {
-                        "max_lines": 611,
+                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                    "::_update_single_module": {
+                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                        "max_complexity": 18,
+                        "symbol": "_update_single_module",
+                        "type": "function",
                     },
                 },
             },
@@ -4049,7 +3995,7 @@ class TestShellIntegration:
         pf = self._policy_file()
         data = json.loads(pf.read_text())
         violations = data.get("violations", [])
-        # Exactly 3 SA114 increases (complexity 11→12, large_files 1596→1608, 605→611)
+        # Exactly 3 surviving complexity increases.
         assert len(violations) == 3, (
             f"Expected exactly 3 violation records, got {len(violations)}:\n"
             f"{json.dumps(violations, indent=2)}"
@@ -4090,10 +4036,12 @@ class TestShellIntegration:
 
         # CR-006: Exact canonical keys, not substring/any()
         expected_keys = [
+            "complexity:quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+            "::_perform_module_embed",
+            "complexity:quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+            "::_update_single_module",
             "complexity:quickscale_core/src/quickscale_core/schema/config_schema.py"
             "::_validate_modules_section",
-            "large_files:quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-            "large_files:quickscale_core/src/quickscale_core/schema/config_schema.py",
         ]
         actual_keys = sorted(v["canonical_key"] for v in violations)
         assert actual_keys == expected_keys, (
@@ -4101,9 +4049,9 @@ class TestShellIntegration:
         )
         # Exact old/new pairs
         key_values = {v["canonical_key"]: (v["old_value"], v["new_value"]) for v in violations}
-        assert key_values[expected_keys[0]] == (11, 12)
-        assert key_values[expected_keys[1]] == (1596, 1608)
-        assert key_values[expected_keys[2]] == (605, 611)
+        assert key_values[expected_keys[0]] == (20, 22)
+        assert key_values[expected_keys[1]] == (17, 18)
+        assert key_values[expected_keys[2]] == (11, 12)
 
         codes = [v["error_code"] for v in violations]
         assert codes == sorted(codes), f"Violations not sorted by error_code: {codes}"
@@ -4131,15 +4079,19 @@ class TestShellIntegration:
                         "symbol": "_validate_modules_section",
                         "type": "function",
                     },
-                },
-            },
-            "large_files": {
-                "allowed_files": {
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py": {
-                        "max_lines": 1596,
+                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                    "::_perform_module_embed": {
+                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                        "max_complexity": 20,
+                        "symbol": "_perform_module_embed",
+                        "type": "function",
                     },
-                    "quickscale_core/src/quickscale_core/schema/config_schema.py": {
-                        "max_lines": 605,
+                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                    "::_update_single_module": {
+                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                        "max_complexity": 17,
+                        "symbol": "_update_single_module",
+                        "type": "function",
                     },
                 },
             },
@@ -4161,15 +4113,19 @@ class TestShellIntegration:
                         "symbol": "_validate_modules_section",
                         "type": "function",
                     },
-                },
-            },
-            "large_files": {
-                "allowed_files": {
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py": {
-                        "max_lines": 1608,
+                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                    "::_perform_module_embed": {
+                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                        "max_complexity": 22,
+                        "symbol": "_perform_module_embed",
+                        "type": "function",
                     },
-                    "quickscale_core/src/quickscale_core/schema/config_schema.py": {
-                        "max_lines": 611,
+                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                    "::_update_single_module": {
+                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                        "max_complexity": 18,
+                        "symbol": "_update_single_module",
+                        "type": "function",
                     },
                 },
             },
@@ -4198,10 +4154,11 @@ class TestShellIntegration:
                 {
                     "waiver_id": "W-SA114-LF1",
                     "entry_key": (
-                        "large_files:quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                        "complexity:quickscale_cli/src/quickscale_cli/commands/"
+                        "module_commands.py::_perform_module_embed"
                     ),
-                    "base_ceiling": 1596,
-                    "ceiling": 1608,
+                    "base_ceiling": 20,
+                    "ceiling": 22,
                     "owner": "test@example.com",
                     "reason": "CR-006: exact SA114 active waiver",
                     "expires_on": future,
@@ -4210,10 +4167,11 @@ class TestShellIntegration:
                 {
                     "waiver_id": "W-SA114-LF2",
                     "entry_key": (
-                        "large_files:quickscale_core/src/quickscale_core/schema/config_schema.py"
+                        "complexity:quickscale_cli/src/quickscale_cli/commands/"
+                        "module_commands.py::_update_single_module"
                     ),
-                    "base_ceiling": 605,
-                    "ceiling": 611,
+                    "base_ceiling": 17,
+                    "ceiling": 18,
                     "owner": "test@example.com",
                     "reason": "CR-006: exact SA114 active waiver",
                     "expires_on": future,
@@ -4389,14 +4347,23 @@ class TestShellIntegration:
         assert "Traceback" not in result.stderr
 
     def test_helper_exit_2_backslash_path_rejected(self, tmp_path: Path) -> None:
-        """A path with backslashes in large_files key is rejected."""
+        """
+        A path with backslashes in a complexity key is rejected.
+
+        SA125-DEC-001 retired the large_files surface this originally exercised;
+        the repo-relative path rule is unchanged and is proven on complexity.
+        """
         data = {
             "schema_version": 1,
             "dead_code": {"allowed_messages": []},
-            "complexity": {"allowed_functions": {}},
-            "large_files": {
-                "allowed_files": {
-                    "windows\\path\\file.py": {"max_lines": 100},
+            "complexity": {
+                "allowed_functions": {
+                    "windows\\path\\file.py::func": {
+                        "file": "windows\\path\\file.py",
+                        "max_complexity": 5,
+                        "symbol": "func",
+                        "type": "function",
+                    },
                 },
             },
             "duplication": {"allowed_blocks": 0},
@@ -4496,12 +4463,7 @@ class TestShellIntegration:
                     },
                 },
             },
-            "large_files": {
-                "allowed_files": {
-                    "new_unwaived_large.py": {"max_lines": 300},
-                },
-            },
-            "duplication": {"allowed_blocks": 0},
+            "duplication": {"allowed_blocks": 1},
         }
         temp_baseline = tmp_path / "baseline_no_waivers.json"
         temp_baseline.write_text(json.dumps(baseline), encoding="utf-8")
@@ -4517,7 +4479,7 @@ class TestShellIntegration:
         pf = self._policy_file()
         data = json.loads(pf.read_text())
         violations = data.get("violations", [])
-        # Fixture creates 2 complexity + 1 large_files = exactly 3 new violations
+        # Fixture creates 2 complexity + 1 duplication = exactly 3 new violations
         assert len(violations) == 3, (
             f"Expected exactly 3 violation records, got {len(violations)}:\n"
             f"{json.dumps(violations, indent=2)}"
@@ -4653,10 +4615,9 @@ class TestShellSubprocess:
         # NB: Under ``set -o pipefail``, every stage of the large-file
         # pipeline must produce non-empty output or ``grep -v "^$"``
         # later will exit non-zero and kill the shell.  Emit one line
-        # whose line count is >= 500 (so awk passes it through) for a
-        # real repo-relative path that IS in the baseline's
-        # ``allowed_files`` with adequate headroom, so the downstream
-        # Python regression detector skips it (``count <= max_lines``).
+        # whose line count is >= 500 (so awk passes it through).  The
+        # large-file result is intentionally advisory: it must remain in
+        # the raw report without entering baseline comparison or gate status.
         # The ``find`` command is invoked with module-relative paths,
         # so the stub must produce the same format.
         stub.write_text(
@@ -5050,6 +5011,12 @@ class TestShellSubprocess:
             report_keys = set(report_data.keys())
             missing_report = expected_report_keys - report_keys
             assert not missing_report, f"Report JSON missing expected keys: {missing_report}"
+            # The find fixture emits a 2,000-line Python file. It remains visible
+            # in raw diagnostics but contributes no baseline regression or gate
+            # failure.
+            assert report_data["summary"]["large_files_error"] == 1
+            assert report_data["regressions"]["large_files"]["critical_count"] == 0
+            assert report_data["regressions"]["total_count"] == 0
 
         finally:
             self._restore_quickscale(quickscale_backup)
@@ -5272,12 +5239,14 @@ class TestShellSubprocess:
                 "quickscale_core/src/quickscale_core/schema/config_schema.py"
                 "::_validate_modules_section"
             ]["max_complexity"] = 13
-            higher_baseline["large_files"]["allowed_files"][
+            higher_baseline["complexity"]["allowed_functions"][
                 "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-            ]["max_lines"] = 1700
-            higher_baseline["large_files"]["allowed_files"][
-                "quickscale_core/src/quickscale_core/schema/config_schema.py"
-            ]["max_lines"] = 650
+                "::_perform_module_embed"
+            ]["max_complexity"] = 25
+            higher_baseline["complexity"]["allowed_functions"][
+                "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
+                "::_update_single_module"
+            ]["max_complexity"] = 20
             temp_baseline = tmp_path / "baseline_higher.json"
             temp_baseline.write_text(json.dumps(higher_baseline), encoding="utf-8")
 
@@ -5299,26 +5268,26 @@ class TestShellSubprocess:
                         "decision_ref": "quality-baseline-monotonicity",
                     },
                     {
-                        "waiver_id": "W-NE-LF1",
+                        "waiver_id": "W-NE-CPX2",
                         "entry_key": (
-                            "large_files:quickscale_cli/src/quickscale_cli/commands/"
-                            "module_commands.py"
+                            "complexity:quickscale_cli/src/quickscale_cli/commands/"
+                            "module_commands.py::_perform_module_embed"
                         ),
-                        "base_ceiling": 1608,
-                        "ceiling": 1700,
+                        "base_ceiling": 20,
+                        "ceiling": 25,
                         "owner": "test@example.com",
                         "reason": "Nonempty diagnostic shell test",
                         "expires_on": future,
                         "decision_ref": "quality-baseline-monotonicity",
                     },
                     {
-                        "waiver_id": "W-NE-LF2",
+                        "waiver_id": "W-NE-CPX3",
                         "entry_key": (
-                            "large_files:quickscale_core/src/quickscale_core/schema/"
-                            "config_schema.py"
+                            "complexity:quickscale_cli/src/quickscale_cli/commands/"
+                            "module_commands.py::_update_single_module"
                         ),
-                        "base_ceiling": 611,
-                        "ceiling": 650,
+                        "base_ceiling": 17,
+                        "ceiling": 20,
                         "owner": "test@example.com",
                         "reason": "Nonempty diagnostic shell test",
                         "expires_on": future,

@@ -1225,6 +1225,11 @@ authority — the merge-base blob from Git — so the growth stays visible.
 - ❌ No migration or other historical artifact may be allowlisted, threshold-
   exempted, or gate-exempted to avoid this check (see
   §[Migration-Squash Decision](#migration-squash-decision) rule 5)
+- ✅ Per-file line ceilings (`large_files.*.max_lines`) are retired; see
+  [File-Size Metric Policy](#file-size-metric-policy). The large-file analyzer
+  may report advisory diagnostics, but line counts are not baseline entries,
+  monotonicity keys, waiver keys, regressions, or gate exit-status inputs. The
+  retained baseline sections are `dead_code`, `complexity`, and `duplication`.
 
 **Specification** — the baseline and waiver-ledger schemas, the waiver state
 machine, the canonical diagnostic record, the deterministic error envelope,
@@ -1244,6 +1249,19 @@ ceiling-index construction, and merge-base resolution precedence are owned by
 **Related docs:** [quality_tools.md](./quality_tools.md#baseline-monotonicity-gate-sa121) |
 [arch-audit.md Finding 12](../../arch-audit.md) | [roadmap.md](./roadmap.md) |
 [CHANGELOG.md](../../CHANGELOG.md)
+
+---
+
+### File-Size Metric Policy {#file-size-metric-policy}
+
+**Rule:** Per-file line ceilings are retired from the blocking quality policy.
+The large-file analyzer may continue to report advisory diagnostics, but line
+counts are not baseline entries, monotonicity keys, waiver keys, regressions, or
+gate exit-status inputs. The retained baseline sections are `dead_code`,
+`complexity`, and `duplication`.
+
+**Related docs:** [Quality Baseline Monotonicity Gate](#quality-baseline-monotonicity) |
+[roadmap.md](./roadmap.md) | [CHANGELOG.md](../../CHANGELOG.md)
 
 ---
 
