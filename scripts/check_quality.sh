@@ -583,20 +583,9 @@ def validate_baseline(data):
             "max_complexity": max_complexity,
         }
 
-    large_files = require_mapping(baseline.get("large_files"), "large_files")
-    allowed_files_raw = require_mapping(
-        large_files.get("allowed_files"),
-        "large_files.allowed_files",
-    )
-    allowed_files = {}
-    for key, entry in allowed_files_raw.items():
-        file_path = require_string(key, "large_files.allowed_files key")
-        item = require_mapping(entry, f"large_files.allowed_files[{key}]")
-        max_lines = require_non_negative_int(
-            item.get("max_lines"),
-            f"large_files.allowed_files[{key}].max_lines",
-        )
-        allowed_files[file_path] = {"max_lines": max_lines}
+    # SA125-DEC-001: per-file line ceilings are retired. Legacy/extra
+    # large_files data is intentionally ignored; only the surviving sections
+    # below participate in baseline comparisons or exit status.
 
     duplication = require_mapping(baseline.get("duplication"), "duplication")
     allowed_blocks = require_non_negative_int(
@@ -619,7 +608,6 @@ def validate_baseline(data):
         "schema_version": schema_version,
         "dead_code": {"allowed_messages": allowed_messages},
         "complexity": {"allowed_functions": allowed_functions},
-        "large_files": {"allowed_files": allowed_files},
         "duplication": {
             "allowed_blocks": allowed_blocks,
             "allowed_block_identities": allowed_block_identities,
@@ -853,40 +841,9 @@ if baseline_data is not None:
         resolved_entry["key"] = key
         complexity_resolved.append(resolved_entry)
 
+    # SA125-DEC-001: large files are reported advisorily but never gate.
     large_file_regressions = []
-    for file_path, actual_entry in actual_large_files.items():
-        baseline_entry = baseline_data["large_files"]["allowed_files"].get(file_path)
-        if baseline_entry is None:
-            allowed_max_lines = None
-            regression_type = "new"
-        elif actual_entry["lines"] > baseline_entry["max_lines"]:
-            allowed_max_lines = baseline_entry["max_lines"]
-            regression_type = "grown"
-        else:
-            continue
-
-        regression = dict(actual_entry)
-        regression["severity"] = (
-            "critical"
-            if actual_entry["lines"] >= large_file_error_threshold
-            else "warning"
-        )
-        regression["regression_type"] = regression_type
-        regression["allowed_max_lines"] = allowed_max_lines
-        if allowed_max_lines is not None:
-            regression["delta"] = actual_entry["lines"] - allowed_max_lines
-        large_file_regressions.append(regression)
-
     large_files_resolved = []
-    for file_path, baseline_entry in baseline_data["large_files"]["allowed_files"].items():
-        if file_path in actual_large_files:
-            continue
-        large_files_resolved.append(
-            {
-                "file": file_path,
-                "max_lines": baseline_entry["max_lines"],
-            }
-        )
 
     allowed_duplication_blocks = baseline_data["duplication"]["allowed_blocks"]
     remaining_allowed_duplication_blocks = Counter(
@@ -909,7 +866,6 @@ if baseline_data is not None:
     warning_regressions = (
         len(new_dead_code)
         + sum(1 for entry in complexity_regressions if entry["severity"] == "warning")
-        + sum(1 for entry in large_file_regressions if entry["severity"] == "warning")
         + len(duplication_regressions)
     )
     critical_regressions = sum(
@@ -928,16 +884,9 @@ if baseline_data is not None:
                 for entry in baseline_data["complexity"]["allowed_functions"].values()
                 if entry["max_complexity"] >= error_complexity_threshold
             ),
-            "large_files_warning": sum(
-                1
-                for entry in baseline_data["large_files"]["allowed_files"].values()
-                if large_file_warning_threshold <= entry["max_lines"] < large_file_error_threshold
-            ),
-            "large_files_error": sum(
-                1
-                for entry in baseline_data["large_files"]["allowed_files"].values()
-                if entry["max_lines"] >= large_file_error_threshold
-            ),
+            # SA125-DEC-001: no accepted large-file ceilings exist any more.
+            "large_files_warning": 0,
+            "large_files_error": 0,
             "duplication_blocks": allowed_duplication_blocks,
         },
     }
@@ -1154,15 +1103,6 @@ else:
             else:
                 lines.append(
                     f"- [{entry['severity']}] Complexity: {entry['file']}::{entry['symbol']} is {entry['complexity']} (baseline {entry['allowed_max_complexity']})"
-                )
-        for entry in regressions["large_files"]["new_or_grown"]:
-            if entry["allowed_max_lines"] is None:
-                lines.append(
-                    f"- [{entry['severity']}] Large file: {entry['file']} is {entry['lines']} lines (new above threshold)"
-                )
-            else:
-                lines.append(
-                    f"- [{entry['severity']}] Large file: {entry['file']} is {entry['lines']} lines (baseline {entry['allowed_max_lines']})"
                 )
         for entry in regressions["duplication"]["new_blocks"]:
             path = entry.get("path") or "unknown-path"

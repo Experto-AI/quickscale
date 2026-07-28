@@ -159,7 +159,6 @@ def _parse_entry_key(entry_key: str) -> tuple[str, str]:
 
     - ``dead_code:allowed_messages:<msg>:multiplicity``
     - ``complexity:<safe-repo-path>::<nonempty-symbol>``
-    - ``large_files:<safe-repo-path>``
     - ``duplication:allowed_blocks``
 
     Returns ``(section, entry_key)`` where *section* is the validated prefix.
@@ -211,22 +210,6 @@ def _parse_entry_key(entry_key: str) -> tuple[str, str]:
             f"entry_key symbol component in {entry_key!r}",
         )
         return ("complexity", entry_key)
-
-    if entry_key.startswith("large_files:"):
-        remainder = entry_key[len("large_files:") :]
-        if not remainder:
-            raise ValueError(f"large_files entry_key must have nonempty path: {entry_key!r}")
-        # Must be exactly ``<safe-repo-path>`` — no extra colons
-        if ":" in remainder:
-            raise ValueError(
-                f"large_files entry_key must not contain extra ':' after prefix: {entry_key!r}"
-            )
-        _validate_repo_relative_path(
-            remainder,
-            "waiver_ledger",
-            f"entry_key path component in {entry_key!r}",
-        )
-        return ("large_files", entry_key)
 
     if entry_key == "duplication:allowed_blocks":
         return ("duplication", entry_key)
@@ -484,52 +467,12 @@ def _validate_baseline_structure(
             )
         indexes[f"complexity:{ck}"] = int(mc)
 
-    # ---- large_files ----
-    lf = data.get("large_files")
-    if not isinstance(lf, dict):
-        raise SchemaValidationError(
-            source,
-            "large_files",
-            f"missing or non-dict section 'large_files' "
-            f"(got {type(lf).__name__ if lf is not None else 'None'})",
-        )
-    lf_files = lf.get("allowed_files")
-    if not isinstance(lf_files, dict):
-        raise SchemaValidationError(
-            source,
-            "large_files.allowed_files",
-            f"large_files.allowed_files must be a dict "
-            f"(got {type(lf_files).__name__ if lf_files is not None else 'None'})",
-        )
-    for fp, entry in lf_files.items():
-        if not isinstance(fp, str) or not fp:
-            raise SchemaValidationError(
-                source,
-                "large_files.allowed_files",
-                "large_files.allowed_files key must be a non-empty string",
-            )
-        # CR-003: validate repo-relative path for large_files keys
-        _validate_repo_relative_path(
-            fp,
-            source,
-            f"large_files.allowed_files[{fp!r}]",
-        )
-        if not isinstance(entry, dict):
-            raise SchemaValidationError(
-                source,
-                f"large_files.allowed_files[{fp!r}]",
-                f"large_files.allowed_files[{fp!r}] must be a dict (got {type(entry).__name__})",
-            )
-        ml = entry.get("max_lines")
-        if not _is_strict_int(ml) or ml < 0:
-            raise SchemaValidationError(
-                source,
-                f"large_files.allowed_files[{fp!r}].max_lines",
-                f"large_files.allowed_files[{fp!r}].max_lines "
-                f"must be a non-negative integer "
-                f"(got {type(ml).__name__ if ml is not None else 'None'})",
-            )
-        indexes[f"large_files:{fp}"] = int(ml)
+    # ---- large_files: RETIRED (SA125-DEC-001) ----
+    # A pre-SA125 baseline (e.g. the merge-base side of the comparison) may still
+    # carry the section. It is ignored, never indexed, so no LF key can enter the
+    # monotonicity index from either side and no LF-RISE can ever be computed.
+    # Rejecting a resurrected section is check_quality.sh's job, on the live
+    # baseline only -- doing it here would break every run until the parent ages out.
 
     # ---- duplication ----
     dup = data.get("duplication")
@@ -784,14 +727,12 @@ def _is_strict_number(value: object) -> bool:
 _SECTION_ERROR_CODES: dict[str, str] = {
     "dead_code": "DC-MULT",
     "complexity": "CC-RISE",
-    "large_files": "LF-RISE",
     "duplication": "DP-RISE",
 }
 
 _SECTION_NAMES: dict[str, str] = {
     "dead_code": "dead_code",
     "complexity": "complexity",
-    "large_files": "large_files",
     "duplication": "duplication",
 }
 
@@ -822,9 +763,6 @@ def _compare_indexes(
             elif ck.startswith("complexity:"):
                 section = "complexity"
                 error_code = "CC-RISE"
-            elif ck.startswith("large_files:"):
-                section = "large_files"
-                error_code = "LF-RISE"
             elif ck.startswith("duplication:"):
                 section = "duplication"
                 error_code = "DP-RISE"
@@ -891,8 +829,6 @@ def _evaluate_violations(
             return "dead_code", "DC-MULT"
         if ck.startswith("complexity:"):
             return "complexity", "CC-RISE"
-        if ck.startswith("large_files:"):
-            return "large_files", "LF-RISE"
         if ck.startswith("duplication:"):
             return "duplication", "DP-RISE"
         return "unknown", "UNKNOWN"

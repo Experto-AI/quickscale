@@ -1225,6 +1225,11 @@ authority — the merge-base blob from Git — so the growth stays visible.
 - ❌ No migration or other historical artifact may be allowlisted, threshold-
   exempted, or gate-exempted to avoid this check (see
   §[Migration-Squash Decision](#migration-squash-decision) rule 5)
+- ✅ Per-file line ceilings (`large_files.*.max_lines`) are retired. The
+  large-file analyzer may report advisory diagnostics, but line counts are not
+  baseline entries, monotonicity keys, waiver keys, regressions, or gate
+  exit-status inputs. The retained baseline sections are `dead_code`,
+  `complexity`, and `duplication`.
 
 **Specification** — the baseline and waiver-ledger schemas, the waiver state
 machine, the canonical diagnostic record, the deterministic error envelope,

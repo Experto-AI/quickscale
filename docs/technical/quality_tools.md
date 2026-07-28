@@ -61,11 +61,16 @@ quickscale_core/src/models.py:15: unused import 'datetime' (100% confidence)
 }
 ```
 
-### 3. Large File Detection
+### 3. Large File Detection (Advisory)
 
 Identifies files that may benefit from splitting:
 - **Warning:** 500-799 lines
 - **Critical:** >=800 lines
+
+These findings are advisory only. They remain in the raw quality report to
+identify files that may benefit from splitting, but they are not baseline
+entries, monotonicity comparisons, regressions, or exit-status inputs. A file
+of any size cannot block `make quality` through line count alone.
 
 **Why it matters:**
 - Large files are harder to understand and navigate
@@ -183,18 +188,16 @@ The quality analysis script complements existing tools:
 ### When to Refactor
 
 **Immediate action required:**
-- Files >=800 lines
 - Functions with CC >20
 - Duplicate code in critical paths
 
 **Plan for next sprint:**
-- Files 500-799 lines
 - Functions with CC 11-20
 - Confirmed dead code (not framework-related)
 
 **Monitor but don't block:**
+- Files >=500 lines (advisory large-file diagnostic)
 - Dead code with <80% confidence
-- Files approaching 500 lines
 - Functions with CC 6-10
 
 ## Baseline Monotonicity Gate (SA121)
@@ -220,14 +223,17 @@ poetry run python scripts/check_quality_baseline_monotonicity.py --base-ref v87
 
 ### Comparison Scope
 
-Every increase in the following values requires a waiver:
+Every increase in the following retained baseline values requires a waiver:
 
 | Section | Key | Compared value |
 |---------|-----|----------------|
 | `dead_code` | Per normalized message | Occurrence count (multiplicity) |
 | `complexity` | Per `path::symbol` key | `max_complexity` |
-| `large_files` | Per file path | `max_lines` |
 | `duplication` | Global | `allowed_blocks` |
+
+Per-file line counts are not part of the comparison scope. The large-file
+analyzer remains diagnostic-only and does not create a waiver or regression
+entry.
 
 A missing base key is treated as 0 (any current value > 0 is an increase).
 Deleted, reduced, or unchanged entries pass without action.  A rename is
@@ -255,13 +261,6 @@ required unless marked optional; extra fields are tolerated but ignored.
       }
     }
   },
-  "large_files": {
-    "allowed_files": {
-      "canonical/repo/relative/path.py": {
-        "max_lines": 500
-      }
-    }
-  },
   "duplication": {
     "allowed_blocks": 0,
     "allowed_block_identities": ["optional, length equals allowed_blocks"]
@@ -283,9 +282,6 @@ Field-level rules:
   canonical-path checker that rejects absolute paths, Windows
   backslashes/drive letters, empty/dot/dotdot segments, repeated separators,
   leading/trailing whitespace, and surrogate/control characters.
-- **`large_files.allowed_files`** — dict mapping repo-relative POSIX paths
-  (same strict path validation) to records with `max_lines` (strict
-  non-negative non-bool `int`).
 - **`duplication.allowed_blocks`** — strict non-negative non-bool `int`.
 - **`duplication.allowed_block_identities`** — optional; when present, a list
   of non-empty strings whose length exactly equals `allowed_blocks`.
@@ -351,8 +347,6 @@ key that does not match its section's strict canonical syntax:
   separator between a validated repo-relative path and a non-empty symbol.
   Extra or missing separators are rejected.  The path component is validated
   by the same ``_validate_repo_relative_path`` used during baseline loading.
-- ``large_files:<safe-repo-path>`` — a validated repo-relative path with no
-  extra ``:`` characters.
 - ``duplication:allowed_blocks`` — exact literal match only.
 
 Waivers whose ``entry_key`` fails parsing are assigned the ``malformed``
