@@ -193,6 +193,13 @@ def _parse_entry_key(entry_key: str) -> tuple[str, str]:
                 f"(got {len(parts) - 1}): {entry_key!r}"
             )
         path_part, symbol_part = parts
+        # A third colon immediately after the separator is an overlapping
+        # extra separator (``file.py:::func``), not part of the symbol.
+        if symbol_part.startswith(":"):
+            raise ValueError(
+                f"complexity entry_key must have exactly one '::' separator "
+                f"(got an extra separator): {entry_key!r}"
+            )
         if not path_part:
             raise ValueError(f"complexity entry_key path must be nonempty: {entry_key!r}")
         if not symbol_part:
