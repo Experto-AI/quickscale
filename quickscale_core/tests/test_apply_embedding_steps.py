@@ -13,6 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from quickscale_core.apply.steps.embedding import (
     EmbedModulesResult,
     GitIndexSnapshot,
@@ -292,6 +294,26 @@ class TestStepEmbedModulesFailure:
             "Module embedding failed for required module: auth",
         )
         assert commit_calls == []
+
+    def test_cleanliness_callback_error_stops_embedding(self) -> None:
+        """An unavailable status check must not be treated as a clean tree."""
+        from quickscale_core.utils.git_utils import GitError
+
+        ctx = _make_context()
+
+        def _status_error(*args: Any, **kwargs: Any) -> bool:
+            del args, kwargs
+            raise GitError("status unavailable")
+
+        with pytest.raises(GitError, match="status unavailable"):
+            step_embed_modules(
+                ctx,
+                modules_to_embed=["auth"],
+                no_modules=False,
+                embed_one_module=lambda *a, **kw: False,
+                commit_changes=lambda *a, **kw: True,
+                is_working_directory_clean_fn=_status_error,
+            )
 
     def test_commit_after_successful_embed_fails(self) -> None:
         """Embed succeeds but checkpoint commit after embed fails."""

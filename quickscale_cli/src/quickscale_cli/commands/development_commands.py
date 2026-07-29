@@ -1,5 +1,6 @@
 """Development lifecycle commands for QuickScale projects."""
 
+import os
 import re
 import subprocess
 import sys
@@ -32,6 +33,18 @@ from quickscale_cli.utils.project_manager import (
     is_in_quickscale_project,
     ProjectConfigLoadError,
 )
+
+
+VERIFY_COMPOSE_PROJECT_ENV_VAR = "QUICKSCALE_VERIFY_COMPOSE_PROJECT"
+_VERIFY_COMPOSE_PROJECT_PATTERN = re.compile(r"qs-sa117b-[0-9a-f]{32}\Z")
+
+
+def _validated_verifier_compose_project() -> str | None:
+    """Return the exact verifier-owned Compose identity, if present."""
+    marker = os.environ.get(VERIFY_COMPOSE_PROJECT_ENV_VAR)
+    if marker is None or _VERIFY_COMPOSE_PROJECT_PATTERN.fullmatch(marker) is None:
+        return None
+    return marker
 
 
 def _validate_project_and_docker() -> bool:
@@ -134,10 +147,14 @@ def _validate_theme_preflight_for_up() -> None:
 
 def _run_docker_compose_up(compose_cmd: list, build: bool, no_cache: bool) -> None:
     """Execute docker compose up with appropriate flags."""
+    project_name = _validated_verifier_compose_project()
+    compose_prefix = compose_cmd + (
+        ["--project-name", project_name] if project_name else []
+    )
     if build or no_cache:
-        cmd = compose_cmd + ["--progress", "plain", "up", "-d"]
+        cmd = compose_prefix + ["--progress", "plain", "up", "-d"]
     else:
-        cmd = compose_cmd + ["up", "-d"]
+        cmd = compose_prefix + ["up", "-d"]
 
     if build or no_cache:
         cmd.append("--build")

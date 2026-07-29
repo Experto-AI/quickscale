@@ -9,6 +9,7 @@ from click.testing import CliRunner
 from quickscale_cli.commands.development_commands import (
     _dependencies_changed_since_last_build,
     _handle_up_error,
+    _run_docker_compose_up,
     _run_docker_exec_command,
     _show_port_conflict_error,
     _superuser_exists_in_backend,
@@ -81,6 +82,85 @@ class TestHandleUpError:
         error.stderr = "Bind for 0.0.0.0:8000 failed: port is already allocated"
         error.stdout = ""
         _handle_up_error(error)
+
+
+class TestVerifierComposeProjectPropagation:
+    """Only an exact verifier marker changes Compose project selection."""
+
+    @patch("quickscale_cli.commands.development_commands.subprocess.run")
+    def test_valid_marker_is_inserted_before_compose_up(self, mock_run, monkeypatch):
+        monkeypatch.setenv(
+            "QUICKSCALE_VERIFY_COMPOSE_PROJECT",
+            "qs-sa117b-" + "a" * 32,
+        )
+        mock_run.return_value = Mock(returncode=0)
+
+        _run_docker_compose_up(["docker", "compose"], build=False, no_cache=False)
+
+        assert mock_run.call_args.args[0] == [
+            "docker",
+            "compose",
+            "--project-name",
+            "qs-sa117b-" + "a" * 32,
+            "up",
+            "-d",
+        ]
+
+    @patch("quickscale_cli.commands.development_commands.subprocess.run")
+    def test_valid_marker_is_inserted_before_verbose_compose_up(
+        self, mock_run, monkeypatch
+    ):
+        """The marker is preserved on the build/verbose Compose route."""
+        marker = "qs-sa117b-" + "b" * 32
+        monkeypatch.setenv("QUICKSCALE_VERIFY_COMPOSE_PROJECT", marker)
+        mock_run.return_value = Mock(returncode=0)
+
+        _run_docker_compose_up(["docker", "compose"], build=True, no_cache=False)
+
+        assert mock_run.call_args.args[0] == [
+            "docker",
+            "compose",
+            "--project-name",
+            marker,
+            "--progress",
+            "plain",
+            "up",
+            "-d",
+            "--build",
+        ]
+
+    @pytest.mark.parametrize("marker", [None, "qs-sa117b-bad", "qs-sa117b-" + "A" * 32])
+    @patch("quickscale_cli.commands.development_commands.subprocess.run")
+    def test_absent_or_malformed_marker_preserves_ordinary_command(
+        self, mock_run, monkeypatch, marker
+    ):
+        if marker is None:
+            monkeypatch.delenv("QUICKSCALE_VERIFY_COMPOSE_PROJECT", raising=False)
+        else:
+            monkeypatch.setenv("QUICKSCALE_VERIFY_COMPOSE_PROJECT", marker)
+        mock_run.return_value = Mock(returncode=0)
+
+        _run_docker_compose_up(["docker", "compose"], build=False, no_cache=False)
+
+        assert mock_run.call_args.args[0] == ["docker", "compose", "up", "-d"]
+
+    @patch("quickscale_cli.commands.development_commands.subprocess.run")
+    def test_absent_marker_preserves_verbose_compose_argv(self, mock_run, monkeypatch):
+        """No marker must leave the build/verbose Compose argv unchanged."""
+        monkeypatch.delenv("QUICKSCALE_VERIFY_COMPOSE_PROJECT", raising=False)
+        mock_run.return_value = Mock(returncode=0)
+
+        _run_docker_compose_up(["docker", "compose"], build=True, no_cache=False)
+
+        assert mock_run.call_args.args[0] == [
+            "docker",
+            "compose",
+            "--progress",
+            "plain",
+            "up",
+            "-d",
+            "--build",
+        ]
 
     def test_generic_error(self):
         """Handle generic error output"""

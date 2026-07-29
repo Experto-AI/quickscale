@@ -295,6 +295,70 @@ class TestSA65SubprocessEnvScoping:
             True,
         )
 
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    def test_verifier_compose_marker_reaches_nested_up(self, mock_run, monkeypatch):
+        """The verifier-owned Compose marker survives apply's env hop."""
+        marker = "qs-sa117b-" + "a" * 32
+        monkeypatch.setenv("QUICKSCALE_VERIFY_COMPOSE_PROJECT", marker)
+        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+
+        assert _start_docker_impl(Path("/tmp/test"), False, False) is True
+
+        nested_env = mock_run.call_args.kwargs["env"]
+        assert nested_env["QUICKSCALE_VERIFY_COMPOSE_PROJECT"] == marker
+
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    def test_verifier_compose_marker_reaches_verbose_nested_up(
+        self, mock_run, monkeypatch
+    ):
+        """The verifier marker survives apply's verbose subprocess path."""
+        marker = "qs-sa117b-" + "b" * 32
+        monkeypatch.setenv("QUICKSCALE_VERIFY_COMPOSE_PROJECT", marker)
+        mock_run.return_value = Mock(returncode=0)
+
+        assert _start_docker_impl(Path("/tmp/test"), False, True) is True
+
+        assert (
+            mock_run.call_args.kwargs["env"]["QUICKSCALE_VERIFY_COMPOSE_PROJECT"]
+            == marker
+        )
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    def test_nonverbose_nested_up_without_marker_preserves_argv(
+        self, mock_run, monkeypatch
+    ):
+        """Without a marker, apply's nonverbose nested command is unchanged."""
+        monkeypatch.delenv("QUICKSCALE_VERIFY_COMPOSE_PROJECT", raising=False)
+        mock_run.return_value = (True, "")
+
+        assert _start_docker_impl(Path("/tmp/test"), True, False) is True
+
+        assert mock_run.call_args.args[0] == [
+            sys.executable,
+            "-m",
+            "quickscale_cli.main",
+            "up",
+            "--build",
+        ]
+
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    def test_verbose_nested_up_without_marker_preserves_argv(
+        self, mock_run, monkeypatch
+    ):
+        """Without a marker, apply's verbose nested command is unchanged."""
+        monkeypatch.delenv("QUICKSCALE_VERIFY_COMPOSE_PROJECT", raising=False)
+        mock_run.return_value = Mock(returncode=0)
+
+        assert _start_docker_impl(Path("/tmp/test"), True, True) is True
+
+        assert mock_run.call_args.args[0] == [
+            sys.executable,
+            "-m",
+            "quickscale_cli.main",
+            "up",
+            "--build",
+        ]
+
 
 # ============================================================================
 # _generate_project
@@ -1650,6 +1714,17 @@ class TestCommitPendingConfigChanges:
             _commit_pending_config_changes(Path("/tmp/test"))
 
         mock_run.assert_not_called()
+
+    def test_status_error_is_not_treated_as_clean(self):
+        """Apply pre-embed safety must propagate an unavailable status check."""
+        from quickscale_core.utils.git_utils import GitError
+
+        with patch(
+            "quickscale_cli.commands.apply_command.is_working_directory_clean",
+            side_effect=GitError("status unavailable"),
+        ):
+            with pytest.raises(GitError, match="status unavailable"):
+                _commit_pending_config_changes(Path("/tmp/test"))
 
     @patch("quickscale_cli.commands.apply_command._run_command")
     @patch("quickscale_cli.commands.apply_command.subprocess.run")

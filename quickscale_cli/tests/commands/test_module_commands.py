@@ -12,6 +12,7 @@ from quickscale_cli.commands.module_config import (
     ModuleConfigurator,
 )
 from quickscale_core.manifest.loader import ManifestError
+from quickscale_core.utils.git_utils import GitError
 
 from quickscale_cli.commands.module_commands import (
     _check_auth_module_migrations,
@@ -903,6 +904,32 @@ class TestPrintInstallationError:
 class TestEmbedModule:
     """Tests for embed_module function."""
 
+    def test_standalone_embed_fails_closed_when_git_status_is_unavailable(
+        self, tmp_path
+    ):
+        """Standalone embedding must stop when cleanliness cannot be checked."""
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands._validate_embed_theme",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.is_git_repo",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.is_working_directory_clean",
+                side_effect=GitError("status unavailable"),
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._validate_remote_branch"
+            ) as mock_remote,
+        ):
+            result = embed_module("auth", tmp_path)
+
+        assert result is False
+        mock_remote.assert_not_called()
+
     def test_standalone_embed_regenerates_managed_wiring_immediately(self, tmp_path):
         """Standalone embed should keep its immediate managed-wiring pass."""
         module_dir = tmp_path / "modules" / "blog"
@@ -1309,6 +1336,16 @@ class TestValidateUpdateEnvironment:
         with pytest.raises(click.Abort):
             _validate_update_environment()
 
+    @patch("quickscale_cli.commands.module_commands.is_git_repo", return_value=True)
+    @patch(
+        "quickscale_cli.commands.module_commands.is_working_directory_clean",
+        side_effect=GitError("status unavailable"),
+    )
+    def test_git_status_error_propagates(self, mock_clean, mock_repo):
+        """Update must not treat an unavailable cleanliness check as clean."""
+        with pytest.raises(GitError, match="status unavailable"):
+            _validate_update_environment()
+
 
 class TestUpdateSingleModule:
     """Tests for _update_single_module function."""
@@ -1630,6 +1667,9 @@ class TestUpdateSingleModule:
                 "quickscale_cli.commands.module_commands._sync_state_module_version",
             ) as spy_sync_state,
             patch(
+                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+            ) as spy_sync_deps,
+            patch(
                 "quickscale_cli.commands.module_commands._commit_module_update",
             ) as spy_commit,
         ):
@@ -1649,6 +1689,7 @@ class TestUpdateSingleModule:
         # _read_embedded_module_version before those paths.
         spy_commit.assert_not_called()
         spy_sync_state.assert_not_called()
+        spy_sync_deps.assert_not_called()
 
         # Verify all tracked files were restored from snapshot.
         assert module_manifest.read_text() == 'name: auth\nversion: "0.71.0"\n'
