@@ -27,9 +27,9 @@ Add to your project's `INSTALLED_APPS`:
 ```python
 INSTALLED_APPS = [
     # ...
-    'rest_framework',
-    'django_filters',
-    'quickscale_modules_crm',
+    "rest_framework",
+    "django_filters",
+    "quickscale_modules_crm",
 ]
 ```
 
@@ -44,7 +44,7 @@ Add URL patterns:
 ```python
 urlpatterns = [
     # ...
-    path('crm/', include('quickscale_modules_crm.urls')),
+    path("crm/", include("quickscale_modules_crm.urls")),
 ]
 ```
 
