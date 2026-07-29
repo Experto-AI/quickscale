@@ -867,3 +867,125 @@ class TestRegenerateManagedWiringVersionMismatch:
         )
         # No spec building — version rejection happens before _build_wiring_specs.
         spy_spec.assert_not_called()
+
+
+class TestRegenerateManagedWiringEmptySelection:
+    """SA127: empty module selection bypasses base-path preparation and adapter
+    refresh. Empty selection succeeds in unconfigured contexts; non-empty
+    selection still fails hard with the established error message."""
+
+    # ------------------------------------------------------------------
+    # SA127a: empty selection succeeds without base path
+    # ------------------------------------------------------------------
+
+    def test_empty_selection_succeeds_without_base_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """regenerate_managed_wiring with module_names=[] must succeed even
+        when no modules base path is configured and no embedded manifests
+        exist, because the empty-selection short-circuit skips base-path
+        preparation and adapter refresh entirely."""
+        from quickscale_core.contracts import module_discovery as _md
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(project)  # No modules in config.
+
+        # Ensure unconfigured state: no prior base path.  Also monkeypatch
+        # the monorepo path to appear non-existent so get_modules_base_path
+        # raises ImproperlyConfigured (simulating an installed-context project
+        # outside the maintainer monorepo).
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+
+        monorepo_path = Path(_md.__file__).resolve().parents[4] / "quickscale_modules"
+        _real_is_dir = Path.is_dir
+
+        def _selective_is_dir(self: Path) -> bool:
+            if str(self.resolve()) == str(monorepo_path.resolve()):
+                return False
+            return _real_is_dir(self)
+
+        monkeypatch.setattr(Path, "is_dir", _selective_is_dir)
+
+        try:
+            success, message = regenerate_managed_wiring(project, module_names=[])
+            assert success, (
+                "Empty module selection should succeed without base path, "
+                f"but got: {message}"
+            )
+            assert "regenerated" in message.lower()
+
+            # Empty wiring files should still be written.
+            modules_file = project / "myapp" / "settings" / "modules.py"
+            assert modules_file.exists()
+            content = modules_file.read_text()
+            assert "MODULE_INSTALLED_APPS: list[str] = []" in content
+            assert "MODULE_MIDDLEWARE: list[str] = []" in content
+            assert "MODULE_SETTINGS: dict[str, object] = {}" in content
+
+            urls_file = project / "myapp" / "urls_modules.py"
+            assert urls_file.exists()
+            urls_content = urls_file.read_text()
+            assert (
+                "PRE_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []"
+                in urls_content
+            )
+            assert (
+                "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []"
+                in urls_content
+            )
+
+            # No managed files when no module specs exist.
+            managed_init = project / "myapp" / "quickscale_managed" / "__init__.py"
+            assert not managed_init.exists()
+        finally:
+            _md._modules_base_path = original_override
+
+    # ------------------------------------------------------------------
+    # SA127b: non-empty selection still fails with exact message
+    # ------------------------------------------------------------------
+
+    def test_non_empty_selection_fails_without_base_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """regenerate_managed_wiring with a non-empty module_names must still
+        fail when no modules base path is configured and no embedded manifests
+        exist, preserving the exact established error message."""
+        from quickscale_core.contracts import module_discovery as _md
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(project)  # No modules in config.
+
+        # Ensure unconfigured state: no prior base path.  Also monkeypatch
+        # the monorepo path to appear non-existent so get_modules_base_path
+        # raises ImproperlyConfigured (simulating an installed-context project
+        # outside the maintainer monorepo).
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+
+        monorepo_path = Path(_md.__file__).resolve().parents[4] / "quickscale_modules"
+        _real_is_dir = Path.is_dir
+
+        def _selective_is_dir(self: Path) -> bool:
+            if str(self.resolve()) == str(monorepo_path.resolve()):
+                return False
+            return _real_is_dir(self)
+
+        monkeypatch.setattr(Path, "is_dir", _selective_is_dir)
+
+        try:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+            assert not success, (
+                "Non-empty module selection should fail without base path, "
+                f"but succeeded with: {message}"
+            )
+            assert message == (
+                "Modules base path not configured and no embedded module "
+                "manifests found. Run inside the maintainer monorepo, call "
+                "set_modules_base_path(), or embed at least one module with "
+                "a module.yml file."
+            )
+        finally:
+            _md._modules_base_path = original_override

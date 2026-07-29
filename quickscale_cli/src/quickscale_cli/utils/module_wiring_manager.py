@@ -301,6 +301,11 @@ def regenerate_managed_wiring(
         return False, error
     assert module_options is not None
 
+    if not selected_modules:
+        # SA127: empty module selection requires no base path, manifests, or
+        # adapter refresh. Write empty managed wiring and return success.
+        return _write_wiring_files(project_path, package_name, {})
+
     prior_base_path: Path | None = None
     try:
         prior_base_path = _get_prior_modules_base_path()
