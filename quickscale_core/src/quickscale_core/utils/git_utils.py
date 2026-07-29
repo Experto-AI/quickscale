@@ -1,14 +1,154 @@
 """Git utilities for module management via git subtree operations."""
 
+from dataclasses import dataclass
+import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
+from typing import Any, Mapping, cast
 
 
 class GitError(Exception):
     """Raised when a git operation fails."""
 
     pass
+
+
+@dataclass(frozen=True)
+class GitRunner:
+    """Run Git with an optional, publication-scoped execution environment.
+
+    The default helpers continue to invoke ``git`` directly when no runner is
+    supplied.  Publication callers use a runner created by
+    :func:`build_publication_git_runner`; this keeps the hardening controls out
+    of unrelated module-management callers while ensuring every publication
+    subprocess uses the same validated executable and environment.
+    """
+
+    executable: str = "git"
+    env: Mapping[str, str] | None = None
+    publication: bool = False
+
+    def run(self, args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        """Run *args* without a shell, using this runner's executable/env."""
+        run_kwargs = dict(kwargs)
+        run_kwargs["env"] = dict(self.env) if self.env is not None else None
+        run_kwargs["shell"] = False
+        return subprocess.run([self.executable, *args], **run_kwargs)
+
+
+_PUBLICATION_EXECUTABLE_ENV = "QUICKSCALE_GIT_EXECUTABLE"
+_PUBLICATION_ENV_STRIP_EXACT = {
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_CONFIG",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_DIR",
+    "GIT_EXEC_PATH",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_WORK_TREE",
+}
+
+
+def _publication_environment() -> dict[str, str]:
+    """Return a sanitized environment for publication-only Git commands.
+
+    Repository/config redirection and indexed ``GIT_CONFIG`` injection are
+    removed.  Credential transports (for example ``SSH_AUTH_SOCK``,
+    ``GIT_SSH_COMMAND``, credential helpers, and proxy settings) remain
+    available; publication identity is enforced independently through the
+    effective ``origin`` URLs.
+    """
+    env = os.environ.copy()
+    for key in list(env):
+        if (
+            key in _PUBLICATION_ENV_STRIP_EXACT
+            or key.startswith("GIT_CONFIG_KEY_")
+            or key.startswith("GIT_CONFIG_VALUE_")
+        ):
+            env.pop(key, None)
+
+    # These controls are intentionally explicit rather than inherited from a
+    # user's shell.  Keep the repository-local config available, while
+    # disabling system/global config and interactive credential prompts.
+    env["GIT_CONFIG_NOSYSTEM"] = "1"
+    env["GIT_CONFIG_GLOBAL"] = os.devnull
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GIT_LITERAL_PATHSPECS"] = "1"
+    return env
+
+
+def build_publication_git_runner(
+    executable: str | Path | None = None,
+) -> GitRunner:
+    """Validate and build the trusted runner used by publication Git calls.
+
+    An explicit executable must be an absolute executable file.  Otherwise
+    ``git`` is resolved through the normal ``PATH`` using :func:`shutil.which`.
+    No Git subprocess is started until all executable and environment checks
+    have completed.
+    """
+    requested = executable
+    if requested is None:
+        requested = os.environ.get(_PUBLICATION_EXECUTABLE_ENV)
+
+    if requested is None:
+        resolved = shutil.which("git")
+        if resolved is None:
+            raise GitError("Git executable 'git' was not found on PATH")
+        executable_path = Path(resolved)
+    else:
+        requested_text = os.fspath(requested)
+        if "\x00" in requested_text:
+            raise GitError("Git executable contains an embedded NUL character")
+        executable_path = Path(requested_text)
+        if not executable_path.is_absolute():
+            raise GitError(
+                "Explicit Git executable must be an absolute executable path"
+            )
+
+    if not executable_path.is_file() or not os.access(executable_path, os.X_OK):
+        raise GitError(f"Git executable is not executable: {executable_path}")
+
+    return GitRunner(
+        executable=str(executable_path),
+        env=_publication_environment(),
+        publication=True,
+    )
+
+
+def _run_git(
+    args: list[str],
+    *,
+    runner: GitRunner | None = None,
+    **kwargs: Any,
+) -> subprocess.CompletedProcess[Any]:
+    """Run a Git command, preserving legacy defaults when no runner is given."""
+    if runner is None:
+        return subprocess.run(["git", *args], **kwargs)
+    return runner.run(args, **kwargs)
+
+
+def _parse_nul_records(output: bytes | str, *, description: str) -> list[bytes]:
+    """Parse a Git NUL-delimited stream, rejecting ambiguous output."""
+    raw = output.encode() if isinstance(output, str) else output
+    if not raw:
+        return []
+    if not raw.endswith(b"\x00"):
+        raise GitError(
+            f"Malformed {description}: non-empty output is not NUL-terminated"
+        )
+    records = raw[:-1].split(b"\x00")
+    if any(not record for record in records):
+        raise GitError(f"Malformed {description}: empty NUL-delimited path")
+    return records
 
 
 # Strict module-name allowlist: alphanumeric, hyphens, underscores; must start
@@ -34,34 +174,45 @@ def validate_module_name(module_name: str) -> None:
         )
 
 
-def is_git_repo(path: Path | None = None) -> bool:
+def is_git_repo(path: Path | None = None, *, runner: GitRunner | None = None) -> bool:
     """Check if current directory or specified path is a git repository"""
     cwd = path or Path.cwd()
     try:
-        subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
+        _run_git(
+            ["rev-parse", "--git-dir"],
             cwd=cwd,
             check=True,
             capture_output=True,
             text=True,
+            runner=runner,
         )
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
 
-def is_working_directory_clean(path: Path | None = None) -> bool:
+def is_working_directory_clean(
+    path: Path | None = None, *, runner: GitRunner | None = None
+) -> bool:
     """Check if there are uncommitted changes in the git working directory"""
     cwd = path or Path.cwd()
     try:
-        result = subprocess.run(
-            ["git", "status", "--porcelain"],
+        result = _run_git(
+            [
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=normal",
+                "-z",
+            ],
             cwd=cwd,
             check=True,
             capture_output=True,
-            text=True,
+            text=False,
+            runner=runner,
         )
-        return len(result.stdout.strip()) == 0
+        return not _parse_nul_records(
+            result.stdout, description="git status porcelain output"
+        )
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to check git status: {e.stderr}")
 
@@ -200,20 +351,184 @@ def resolve_remote_ref(remote: str, branch: str, path: Path | None = None) -> st
     return sha
 
 
-def get_remote_url(remote_name: str = "origin", path: Path | None = None) -> str:
+def get_remote_url(
+    remote_name: str = "origin",
+    path: Path | None = None,
+    *,
+    runner: GitRunner | None = None,
+) -> str:
     """Get the URL of a git remote"""
     cwd = path or Path.cwd()
     try:
-        result = subprocess.run(
-            ["git", "remote", "get-url", remote_name],
+        result = _run_git(
+            ["remote", "get-url", remote_name],
             cwd=cwd,
             check=True,
             capture_output=True,
             text=True,
+            runner=runner,
         )
-        return result.stdout.strip()
+        return cast(str, result.stdout).strip()
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to get remote URL: {e.stderr}")
+
+
+_TRUSTED_PUBLICATION_ORIGIN_URLS = frozenset(
+    {
+        "https://github.com/Experto-AI/quickscale",
+        "https://github.com/Experto-AI/quickscale.git",
+        "git@github.com:Experto-AI/quickscale",
+        "git@github.com:Experto-AI/quickscale.git",
+        "ssh://git@github.com/Experto-AI/quickscale",
+        "ssh://git@github.com/Experto-AI/quickscale.git",
+    }
+)
+
+
+def _publication_origin_identity(url: str) -> str | None:
+    """Return the reviewed repository identity for an exact URL spelling."""
+    if url in _TRUSTED_PUBLICATION_ORIGIN_URLS:
+        return "github.com/Experto-AI/quickscale"
+    return None
+
+
+def _effective_remote_url_args(remote_name: str, *, push: bool) -> list[str]:
+    """Build the Git arguments for reading effective remote URLs."""
+    args = ["remote", "get-url"]
+    if push:
+        args.append("--push")
+    args.extend(["--all", remote_name])
+    return args
+
+
+def _effective_remote_url_kind(*, push: bool) -> str:
+    """Return the operator-facing URL kind for a fetch or push lookup."""
+    return "push" if push else "fetch"
+
+
+def _raise_effective_remote_url_error(
+    error: subprocess.CalledProcessError,
+    *,
+    push: bool,
+) -> None:
+    """Translate a failed effective-URL lookup into a stable Git error."""
+    kind = _effective_remote_url_kind(push=push)
+    stderr = error.stderr or ""
+    if "No such remote" in stderr or "does not appear" in stderr:
+        raise GitError(f"Origin {kind} URL is blank or unset") from error
+    raise GitError(
+        f"Failed to read origin {kind} URL: {stderr or 'remote is unavailable'}"
+    ) from error
+
+
+def _validate_effective_remote_urls(urls: list[str], *, push: bool) -> list[str]:
+    """Reject missing, blank, or whitespace-padded effective remote URLs."""
+    kind = _effective_remote_url_kind(push=push)
+    if not urls or any(not url for url in urls):
+        raise GitError(f"Origin {kind} URL is blank or unset")
+    for url in urls:
+        stripped_url = url.strip()
+        if not stripped_url:
+            raise GitError(f"Origin {kind} URL is blank or unset")
+        if url != stripped_url:
+            raise GitError(
+                f"Origin {kind} URL contains surrounding whitespace and is untrusted"
+            )
+    return urls
+
+
+def _get_effective_remote_urls(
+    remote_name: str,
+    *,
+    push: bool,
+    path: Path,
+    runner: GitRunner | None,
+) -> list[str]:
+    """Read all effective fetch or push URLs for one remote."""
+    try:
+        result = _run_git(
+            _effective_remote_url_args(remote_name, push=push),
+            cwd=path,
+            check=True,
+            capture_output=True,
+            text=True,
+            runner=runner,
+        )
+    except subprocess.CalledProcessError as e:
+        _raise_effective_remote_url_error(e, push=push)
+
+    urls = result.stdout.splitlines()
+    return _validate_effective_remote_urls(urls, push=push)
+
+
+def validate_publication_origin(
+    path: Path,
+    *,
+    remote_name: str = "origin",
+    runner: GitRunner | None = None,
+) -> tuple[str, str]:
+    """Require exact trusted fetch and push identities for publication.
+
+    Only the named remote is checked, so unrelated remotes remain allowed.
+    Every effective URL configured for that remote must be one of the explicit
+    HTTPS/SSH forms for ``github.com/Experto-AI/quickscale`` and fetch/push
+    identities must agree.  A missing push URL is handled by Git's effective
+    URL resolution, which reports the fetch URL as the push URL.
+    """
+    fetch_urls = _get_effective_remote_urls(
+        remote_name, push=False, path=path, runner=runner
+    )
+    push_urls = _get_effective_remote_urls(
+        remote_name, push=True, path=path, runner=runner
+    )
+
+    fetch_identities = {_publication_origin_identity(url) for url in fetch_urls}
+    push_identities = {_publication_origin_identity(url) for url in push_urls}
+    if None in fetch_identities:
+        raise GitError(
+            "Publication origin fetch URL is not the trusted "
+            "github.com/Experto-AI/quickscale repository"
+        )
+    if None in push_identities:
+        raise GitError(
+            "Publication origin push URL is not the trusted "
+            "github.com/Experto-AI/quickscale repository"
+        )
+
+    # Compare repository identity, not transport spelling: HTTPS and SSH are
+    # both authorized, but fetch and push must target the same exact project.
+    if fetch_identities != push_identities:
+        raise GitError("Publication origin fetch and push identities differ")
+    return fetch_urls[0], push_urls[0]
+
+
+def assert_staged_index_empty(
+    path: Path | None = None,
+    *,
+    runner: GitRunner | None = None,
+) -> None:
+    """Fail unless the index has no staged paths, using filename-safe NUL I/O."""
+    cwd = path or Path.cwd()
+    try:
+        result = _run_git(
+            ["diff", "--cached", "--name-only", "-z", "--"],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=False,
+            runner=runner,
+        )
+    except subprocess.CalledProcessError as e:
+        raise GitError(f"Failed to inspect staged index: {e.stderr}") from e
+
+    staged_paths = _parse_nul_records(
+        result.stdout, description="cached Git path output"
+    )
+    if staged_paths:
+        raise GitError(
+            f"Staged index is not empty ({len(staged_paths)} staged path(s)); "
+            "publication aborted"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +568,7 @@ def run_git_subtree_split(
     rejoin: bool = True,
     ignore_joins: bool = True,
     path: Path | None = None,
+    runner: GitRunner | None = None,
 ) -> str:
     """Execute ``git subtree split`` and return the resulting commit SHA.
 
@@ -274,8 +590,8 @@ def run_git_subtree_split(
         cmd.append("--ignore-joins")
 
     try:
-        result = subprocess.run(
-            cmd, cwd=cwd, check=True, capture_output=True, text=True
+        result = _run_git(
+            cmd[1:], cwd=cwd, check=True, capture_output=True, text=True, runner=runner
         )
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to split git subtree: {e.stderr}") from e
@@ -323,6 +639,7 @@ def push_split_branch(
     *,
     expected_remote_sha: str | None = None,
     path: Path | None = None,
+    runner: GitRunner | None = None,
 ) -> None:
     """Push a split *branch* to *remote* using force-with-lease safety.
 
@@ -356,7 +673,15 @@ def push_split_branch(
     cmd.extend([remote, branch])
 
     try:
-        subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)
+        if runner is not None and runner.publication:
+            assert_staged_index_empty(path=cwd, runner=runner)
+
+        _run_git(
+            cmd[1:], cwd=cwd, check=True, capture_output=True, text=True, runner=runner
+        )
+
+        if runner is not None and runner.publication:
+            assert_staged_index_empty(path=cwd, runner=runner)
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to push split branch {branch}: {e.stderr}") from e
 
@@ -386,7 +711,9 @@ def read_version_file(repo_root: Path) -> str:
         raise GitError(f"Failed to read VERSION file: {e}") from e
 
 
-def get_all_tags_at_head(path: Path | None = None) -> list[str]:
+def get_all_tags_at_head(
+    path: Path | None = None, *, runner: GitRunner | None = None
+) -> list[str]:
     """Return all tag names pointing at HEAD (may be empty if untagged).
 
     Uses ``git tag --points-at HEAD`` to find tags that point directly at
@@ -399,11 +726,12 @@ def get_all_tags_at_head(path: Path | None = None) -> list[str]:
     """
     cwd = path or Path.cwd()
     try:
-        result = subprocess.run(
-            ["git", "tag", "--points-at", "HEAD"],
+        result = _run_git(
+            ["tag", "--points-at", "HEAD"],
             cwd=cwd,
             capture_output=True,
             text=True,
+            runner=runner,
         )
         if result.returncode != 0:
             raise GitError(f"Failed to get tags at HEAD: {result.stderr}")
@@ -413,7 +741,9 @@ def get_all_tags_at_head(path: Path | None = None) -> list[str]:
         raise GitError(f"git command not found: {e}") from e
 
 
-def get_tag_at_head(path: Path | None = None) -> str | None:
+def get_tag_at_head(
+    path: Path | None = None, *, runner: GitRunner | None = None
+) -> str | None:
     """Return the tag name pointing at HEAD, or None if HEAD is untagged.
 
     Uses ``git tag --points-at HEAD`` to find tags that point directly at
@@ -424,12 +754,14 @@ def get_tag_at_head(path: Path | None = None) -> str | None:
     Raises:
         GitError: If the git command fails.
     """
-    tags = get_all_tags_at_head(path)
+    tags = get_all_tags_at_head(path, runner=runner)
     return tags[0] if tags else None
 
 
 def is_release_authoritative(
     repo_root: Path,
+    *,
+    runner: GitRunner | None = None,
 ) -> tuple[bool, str, str | None, str | None]:
     """Check if the source state is release-authoritative (F2.9a).
 
@@ -464,7 +796,7 @@ def is_release_authoritative(
     except GitError as e:
         return False, "", None, str(e)
 
-    tags_at_head = get_all_tags_at_head(repo_root)
+    tags_at_head = get_all_tags_at_head(repo_root, runner=runner)
 
     if not tags_at_head:
         return (
