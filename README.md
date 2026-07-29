@@ -54,20 +54,20 @@ the current organization correctly.
 1. Add to `INSTALLED_APPS` in `settings.py`:
    ```python
    INSTALLED_APPS = [
-        # ... other apps
-        'markdownx',
-        'quickscale_modules_orgs',
-        'quickscale_modules_blog',
-    ]
+       # ... other apps
+       "markdownx",
+       "quickscale_modules_orgs",
+       "quickscale_modules_blog",
+   ]
     ```
 
 2. Add the orgs tenant middleware after session/auth middleware in `settings.py`:
    ```python
    MIDDLEWARE = [
        # ... other middleware
-       'django.contrib.sessions.middleware.SessionMiddleware',
-       'django.contrib.auth.middleware.AuthenticationMiddleware',
-       'quickscale_modules_orgs.middleware.TenantMiddleware',
+       "django.contrib.sessions.middleware.SessionMiddleware",
+       "django.contrib.auth.middleware.AuthenticationMiddleware",
+       "quickscale_modules_orgs.middleware.TenantMiddleware",
    ]
    ```
 
@@ -75,11 +75,11 @@ the current organization correctly.
    ```python
    # Markdownx settings
    MARKDOWNX_MARKDOWN_EXTENSIONS = [
-        'markdown.extensions.fenced_code',
-        'markdown.extensions.tables',
-       'markdown.extensions.toc',
+       "markdown.extensions.fenced_code",
+       "markdown.extensions.tables",
+       "markdown.extensions.toc",
    ]
-   MARKDOWNX_MEDIA_PATH = 'blog/markdownx/'
+   MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
    ```
 
 4. Root-include blog URLs and the Markdownx upload URLs in `urls.py`:
@@ -87,9 +87,9 @@ the current organization correctly.
    from django.urls import include, path
 
    urlpatterns = [
-        # ... other patterns
-        path('', include('quickscale_modules_blog.urls')),
-        path('markdownx/', include('markdownx.urls')),
+       # ... other patterns
+       path("", include("quickscale_modules_blog.urls")),
+       path("markdownx/", include("markdownx.urls")),
    ]
    ```
 
@@ -196,10 +196,10 @@ For pipelines, configure bearer tokens in Django settings:
 
 ```python
 BLOG_API_TOKENS = [
-        {
-                "token": os.environ["BLOG_API_TOKEN"],
-                "username": "blogpublisher",
-        },
+    {
+        "token": os.environ["BLOG_API_TOKEN"],
+        "username": "blogpublisher",
+    },
 ]
 ```
 
@@ -336,6 +336,7 @@ To add custom fields to the Post model:
    # myapp/models.py
    from quickscale_modules_blog.models import Post
 
+
    class RealEstatePost(Post):
        property_price = models.DecimalField(max_digits=10, decimal_places=2)
        bedrooms = models.IntegerField()
@@ -352,9 +353,10 @@ To add custom fields to the Post model:
    from markdownx.admin import MarkdownxModelAdmin
    from .models import RealEstatePost
 
+
    @admin.register(RealEstatePost)
    class RealEstatePostAdmin(MarkdownxModelAdmin):
-       list_display = ['title', 'property_price', 'bedrooms', 'bathrooms']
+       list_display = ["title", "property_price", "bedrooms", "bathrooms"]
    ```
 
 ### RSS Feed Customization
@@ -366,6 +368,7 @@ To customize the RSS feed:
 ```python
 # myproject/feeds.py
 from quickscale_modules_blog.feeds import LatestPostsFeed
+
 
 class CustomBlogFeed(LatestPostsFeed):
     title = "My Custom Blog Feed"
@@ -381,7 +384,7 @@ Then update your urls.py:
 from myproject.feeds import CustomBlogFeed
 
 urlpatterns = [
-    path('blog/feed/', CustomBlogFeed(), name='feed'),
+    path("blog/feed/", CustomBlogFeed(), name="feed"),
 ]
 ```
 
@@ -394,34 +397,34 @@ Add these to your `settings.py` to customize blog behavior:
 ```python
 # Blog pagination
 BLOG_POSTS_PER_PAGE = 10  # Posts per page
-BLOG_ENABLE_RSS = True    # Enable the /blog/feed/ route at runtime
+BLOG_ENABLE_RSS = True  # Enable the /blog/feed/ route at runtime
 
 # Markdownx configuration
 MARKDOWNX_MARKDOWN_EXTENSIONS = [
-    'markdown.extensions.fenced_code',  # Code blocks
-    'markdown.extensions.tables',       # Tables
-    'markdown.extensions.toc',          # Table of contents
-    'markdown.extensions.extra',        # Extra features
+    "markdown.extensions.fenced_code",  # Code blocks
+    "markdown.extensions.tables",  # Tables
+    "markdown.extensions.toc",  # Table of contents
+    "markdown.extensions.extra",  # Extra features
 ]
 
 # Image upload settings
-MARKDOWNX_MEDIA_PATH = 'blog/markdownx/'
+MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
 MARKDOWNX_UPLOAD_MAX_SIZE = 5 * 1024 * 1024  # 5MB
-MARKDOWNX_IMAGE_MAX_SIZE = {'size': (1920, 1080), 'quality': 90}
+MARKDOWNX_IMAGE_MAX_SIZE = {"size": (1920, 1080), "quality": 90}
 
 # Blog automation API settings
 BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
-BLOG_API_ALLOWED_IMAGE_FORMATS = ['PNG', 'JPEG', 'WEBP', 'GIF']
+BLOG_API_ALLOWED_IMAGE_FORMATS = ["PNG", "JPEG", "WEBP", "GIF"]
 BLOG_API_UPLOAD_MAX_WIDTH = 4096
 BLOG_API_UPLOAD_MAX_HEIGHT = 4096
-BLOG_API_RATE_LIMIT = '5/hour'
+BLOG_API_RATE_LIMIT = "5/hour"
 BLOG_API_TOKENS = []  # Optional machine-auth tokens for automation pipelines
 
 # Featured image settings
 BLOG_THUMBNAIL_SIZES = {
-    'small': (300, 200),
-    'medium': (800, 450),
-    'large': (1200, 675),
+    "small": (300, 200),
+    "medium": (800, 450),
+    "large": (1200, 675),
 }
 ```
 
@@ -462,8 +465,8 @@ python manage.py migrate quickscale_modules_blog
 
 **Solution**: Check media settings:
 ```python
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 ```
 
 And ensure your urls.py serves media files in development:
