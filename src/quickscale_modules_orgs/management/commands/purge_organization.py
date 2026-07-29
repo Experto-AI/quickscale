@@ -334,7 +334,7 @@ class Command(BaseCommand):
         assert raw_org_id is not None
         try:
             org_id = uuid.UUID(raw_org_id.strip())
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             raise CommandError(
                 f"Invalid --organization-id value: {raw_org_id!r}. "
                 "Must be a valid UUID."

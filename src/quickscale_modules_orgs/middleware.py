@@ -151,7 +151,7 @@ class TenantMiddleware:
         if isinstance(org_id, str):
             try:
                 org_id = uuid.UUID(org_id)
-            except (ValueError, AttributeError):
+            except ValueError, AttributeError:
                 return None
         if not isinstance(org_id, uuid.UUID):
             return None
