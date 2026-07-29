@@ -113,14 +113,11 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.sites",  # Required by allauth
-
     # Third-party apps
     "allauth",
     "allauth.account",
-
     # QuickScale modules
     "quickscale_modules_auth",
-
     # Your apps
     # ...
 ]
