@@ -65,7 +65,7 @@ config:
       description: "Maximum accepted webhook timestamp skew in seconds."
 
 dependencies:
-  - django-anymail>=13.0
+  - django-anymail>=15.0,<16.0
 
 django_apps:
   - quickscale_modules_notifications
