@@ -51,7 +51,7 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active work.
 
-The green-gate join (SA96-GATE), the installed-wheel discovery/resolver chain (SA109 ✓, SA110 ✓, SA113 ✓, SA111a ✓, SA111b ✓), the Track 2 frontend de-specialization chain (SA104 → SA108 ✓), the Track 1 re-verification chain (SA114 ✓, SA116 ✓), SA120 (quiet `check` parity), SA125 (file line-ceiling retirement), SA126 (module-command complexity remediation), and SA117b (split-publication safety) are closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md). The remaining open work is grouped as the five entries below — SA117 (split into serial children on 2026-07-27 as `SA117-DEC-003`, with SA117a and SA117b now closed) remains a release blocker through SA117c and SA117e, while SA128 → SA122b are the remaining gate-governance chain. SA127 (a second release blocker found by manual `apply` on 2026-07-29, closed 2026-07-29 at commit `a2eb7a6c`) is complete — SA121 is also closed, which **closes arch-audit Finding 12**. The Track 1 queue reordered to SA127 → SA128 → SA122b: SA127 is the only one that ran and is closed; SA128 is next and still pending; SA122b remains pending, depends on SA128, and merges after SA112e. **No open ticket is Tier 3.**
+The green-gate join (SA96-GATE), the installed-wheel discovery/resolver chain (SA109 ✓, SA110 ✓, SA113 ✓, SA111a ✓, SA111b ✓), the Track 2 frontend de-specialization chain (SA104 → SA108 ✓), the Track 1 re-verification chain (SA114 ✓, SA116 ✓), SA120 (quiet `check` parity), SA125 (file line-ceiling retirement), SA126 (module-command complexity remediation), and SA117b (split-publication safety) are closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md). The remaining open work is grouped as the five entries below — SA117 (split into serial children on 2026-07-27 as `SA117-DEC-003`, with SA117a and SA117b now closed) remains a release blocker through SA117c and SA117e, while SA128 → SA122b are the remaining gate-governance chain. SA127 (a second release blocker found by manual `apply` on 2026-07-29, closed 2026-07-29 at commit `a2eb7a6c`) is complete — SA121 is also closed, which **closes arch-audit Finding 12**. The Track 1 queue reordered to SA127 → SA128 → SA129 → SA130 → SA122b: SA127 is the only one that ran and is closed; SA128 is **in flight**; **SA129** (superuser probe defeated by Django 5.2+ shell auto-imports) and **SA130** (dead Poetry timeout variable in the generated Dockerfile) queue behind it — both found by the same manual `apply` session on 2026-07-29, both Tier 2, **neither a release blocker**; SA122b remains pending, depends on SA128, and merges after SA112e. **No open ticket is Tier 3.**
 
 1. **SA112a → SA112f** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — six serial, handoff-sized tasks covering provisioning, diagnosis, the traceback-selected fix, permanent lifecycle coverage, CI triggers, and closeout. **Critical path.** Deps: SA110 ✓ + SA111a ✓ + SA113 ✓, **plus SA117e (transitively SA117c; SA117b ✓) from SA112b onward** (see the evidence-validity dependency below — the binding node is the *pushed* splits, not the local stamp/assert). Next: **SA117c**, then SA117e and SA112a.
 2. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Baseline prerequisites met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓ + SA111a ✓ + SA113 ✓); awaits a human maintainer to execute the irreversible publish. Hold: must not publish while SA112 remains open.
@@ -119,9 +119,10 @@ The green-gate join (SA96-GATE), the installed-wheel discovery/resolver chain (S
 
 Track 1 holds the gate-governance work: it changes how "green" is decided, not what the generator emits. `TA62`/SA120, **SA125**, **SA126**, and **SA127** are closed (see [CHANGELOG.md](../../CHANGELOG.md)); **SA121** is closed (`SA121-DOC-CR-002` resolved), followed by **SA128/SA122b** from [arch-audit.md](../../arch-audit.md) Finding 11 (SA122a closed as superseded, `SA122A-AUTH-001`).
 
-**Ordering on this track (one worktree, serial):** **SA127 ✓ → SA128 → SA122b** (SA127 ✓, SA121 and SA122a closed), with SA127 completed, and SA122b merge-gated behind SA112e.
+**Ordering on this track (one worktree, serial):** **SA127 ✓ → SA128 (in flight) → SA129 → SA130 → SA122b** (SA127 ✓, SA121 and SA122a closed), with SA127 completed, and SA122b merge-gated behind SA112e. **SA129 and SA130 queue behind the in-flight SA128 and do not interrupt it:** both are file-disjoint from SA128's checker/test allowlist, from SA122b's registry consumers, and from each other (SA129 is `quickscale_cli` CLI code, SA130 is a `quickscale_core` generator template), so nothing forces a rebase in any direction, and both slot ahead of SA122b, which cannot land first regardless. SA129 before SA130 is arbitrary — they are independent and may swap.
 - **SA127 — CLOSED (2026-07-29; `a2eb7a6c`).** The zero-module installed `apply` release blocker is resolved and independently reviewed. SA127 no longer blocks Track 1 or the release. Detail in [CHANGELOG.md](../../CHANGELOG.md).
 - **SA128 follows.** Track 1's next action. Finding 11 should be centralized **before or as part of** the SA112e/`SA115-CI-001` path-list edits. The registry those edits write into is **already merged and usable** (SA122a's kept half); SA128 makes the checker over it trustworthy, and SA122b's consumer migration waits for SA112e so the e2e path list is rewritten once. SA122A-AUTH-001 is resolved — SA122a is superseded, SA128 replaces its checker; SA122b depends on SA128 and merges after SA112e.
+- **SA129 then SA130 follow SA128.** Track 1's next actions once SA128 returns. Both are product defects, not gate governance — they are on Track 1 only because that is the serial worktree with capacity. Both Tier 2, `deps: none`, independent of each other; see the tickets below.
 - **`SA122A-AUTH-001` — RESOLVED 2026-07-29 as option (b): replace the checker.** The registry, `make check-gate-parity`, and the documentation stay; the regex extractors are rebuilt on structural parsing as **SA128**. Until SA128 returns `STATUS: ok`, the parity checker's output is **not authoritative** — SA112e, `SA115-CI-001`, and SA122b may register paths in the registry but may not rely on the checker to prove coverage.
 
 #### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
@@ -222,6 +223,97 @@ So `regenerate_managed_wiring` is asked to build specs for zero modules — need
   **Dependency check (why `deps: none` is real).** `module_wiring_manager.py` appears in no open allowlist: SA117b/c/e own `publish_module.py`, `verify_public_module_apply.py`, and `git_utils.py`; SA112a owns `scripts/`; SA112d a new test file; SA112e the workflow path list; SA128 the parity checker and its tests; SA122b the registry's consumers. Validation is service-free — no PostgreSQL, no Docker — so SA127 never competes for the exclusive infra Track 3 has priority on. **One residual risk, accepted:** SA112c's scope is by definition unknown until SA112b captures its traceback, and could in principle land in this same file. SA112b runs the **all-12-module** `apply`, which never reaches the empty-selection branch, so overlap is unlikely; if it happens the cost is one rebase of a two-file delta.
 
   **Open decisions:** none.
+
+#### SA129 — `create_superuser` is dead: the probe is defeated by Django's shell auto-import banner
+
+Found 2026-07-29 by the same manual zero-module `plan`/`apply` session that produced SA127. `apply` completes the whole lifecycle, then ends with:
+
+```
+⚠️  Could not verify superuser status.
+   Run: quickscale manage createsuperuser
+```
+
+with `create_superuser: true` in `quickscale.yml`, a healthy backend container, and migrations already applied. **This is not environmental and not intermittent.** It fires on every `apply`/`up` against a Django 5.2+ project, and `django_constraint` currently resolves generated projects to 6.0.7 — so the `create_superuser` config option is effectively **dead for every project QuickScale generates**.
+
+**Not a release blocker, and not SA127's shape.** `apply` does not abort, the lifecycle completes, and the printed fallback (`quickscale manage createsuperuser`) is correct and works. This is Tier 2: a supported config option is silently inert, not a broken install path. Do not widen the release gate for it.
+
+**Diagnosis (complete — no diagnostic child needed).** `quickscale_cli/src/quickscale_cli/commands/development_commands.py:232-263`, `_superuser_exists_in_backend`, signals "no superuser exists" out of band — by exit code **and both streams being empty**:
+
+```python
+result = subprocess.run(check_cmd, capture_output=True, text=True)
+if result.returncode == 0:
+    return True
+stdout_output = (result.stdout or "").strip()
+stderr_output = (result.stderr or "").strip()
+if result.returncode == 1 and not stdout_output and not stderr_output:
+    return False
+return None
+```
+
+Django 5.2 added shell auto-imports, which print `N objects imported automatically (use -v 2 for details).` to **stdout**. Reproduced live against a running backend container:
+
+```
+$ docker exec <project>_backend python manage.py shell -c \
+    "from django.contrib.auth import get_user_model; import sys; \
+     sys.exit(0 if get_user_model().objects.filter(is_superuser=True).exists() else 1)"
+12 objects imported automatically (use -v 2 for details).
+RC=1
+```
+
+The banner is on stdout and absent from stderr (verified by stream-splitting the same command), so `stdout_output` is never empty, the `False` branch is **unreachable in every real container**, and the honest "no superuser exists" answer is coerced into "cannot verify". The probe is asserting Django's banner policy, not the database — the exact out-of-band-signal shape [tech-audit.md](../../tech-audit.md) is the SSOT for.
+
+**Two non-fixes, both rejected up front.** Do **not** string-match and strip the banner: that pins the CLI to one Django release's wording and fails again on the next phrasing. Do **not** relax to `returncode == 1 → False`: `manage.py shell -c` exits non-zero for a genuine `OperationalError` too, so that would report "no superuser exists" for an unreachable database — the fail-hard violation the `None` branch was written to prevent ([decisions.md §fail-hard-principle](./decisions.md#fail-hard-principle)). Make the answer **in band** instead.
+
+**Why every gate missed it.** All three cases in `TestSuperuserExistsInBackend` (`test_development_commands_extended.py:226-256`) mock `stdout=""`, which is the one thing a real container never produces. The tests encode the same assumption as the code they cover, so they agree with it and pass. No E2E asserts on superuser creation.
+
+**Sibling seam — verify, do not change blindly.** `quickscale_cli/src/quickscale_cli/commands/module_config.py:151-215` (`_migration_probe_script` / `assess_auth_migration_state`) runs the same `manage.py shell -c` pattern. It currently **survives** the banner because it JSON-parses the *last* non-empty stdout line and the banner is emitted first. That is a latent copy of the same assumption, not a live defect: confirm it, and either leave it with a comment naming why it holds or make the reverse-scan uniform. Do not spend a refactor here.
+
+- [ ] **SA129 — Carry the superuser answer on an explicit sentinel line.** `Tier 2 · Track 1 · deps: none · queues behind in-flight SA128`
+
+  Replace the exit-code-plus-stream-emptiness signalling in `_superuser_exists_in_backend`. The probe prints `QUICKSCALE_SUPERUSER=1` or `=0`; the reader returns `None` on any non-zero exit, and otherwise scans stdout lines in reverse for that exact sentinel, returning `None` when it is absent. This is banner-immune and Django-version-independent — **do not** reach for `--no-imports`, which does not exist before Django 5.2 and would break older generated projects. Keep `_handle_superuser_after_up`'s branching and all three of its user-facing messages byte-unchanged: only the accuracy of the input changes, and a project with no superuser must now reach the `False` path and say so.
+
+  **File allowlist (exact, 2 files):**
+  - `quickscale_cli/src/quickscale_cli/commands/development_commands.py`
+  - `quickscale_cli/tests/commands/test_development_commands_extended.py` (extend `TestSuperuserExistsInBackend`; do not create a second test module)
+
+  - Verify: the regression the current tests cannot express — `returncode=0` with the auto-import banner **plus** `QUICKSCALE_SUPERUSER=0` returns `False`, its `=1` twin returns `True`, banner-with-no-sentinel returns `None`, and a non-zero exit with an `OperationalError` on stderr still returns `None`. End to end: `quickscale apply` with `create_superuser: true` against a fresh project no longer prints "Could not verify superuser status" and instead reports the real state. `make quality` left no worse than found.
+  - Rollback: revert the two files; the seam has no state, migration, or on-disk format implications.
+
+  **Adjacent gap, observed but deliberately not in scope.** `DJANGO_SUPERUSER_USERNAME/EMAIL/PASSWORD` exported around `quickscale apply` have no effect in dev: `docker exec` does not forward host environment, and the compose `backend` service overrides `command:` with `runserver`, so `start.sh.j2:69-86` — which *does* honour those variables — never runs locally. Fixing SA129 makes the CLI report the state correctly; it does **not** make those variables work. Ticket separately if non-interactive superuser creation is wanted.
+
+#### SA130 — The Dockerfile's Poetry network-timeout setting is a no-op
+
+Found 2026-07-29 while triaging the `poetry install` read timeouts in the same manual `apply` session that produced SA127 and SA129. **The timeouts themselves were network conditions, not a defect** — the 3-attempt retry loop recovered on attempt 2 and the build went green. Verifying *why* single packages kept dying at short intervals is what surfaced the real bug.
+
+`quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2:88`:
+
+```dockerfile
+export POETRY_HTTP_TIMEOUT=120 && \
+```
+
+**`POETRY_HTTP_TIMEOUT` is not a Poetry variable and never has been.** Poetry 2.4.0 — the version pinned at `Dockerfile.j2:62` — reads exactly one timeout variable, extracted from the 2.4.0 wheel:
+
+```python
+# poetry/utils/constants.py
+REQUESTS_TIMEOUT = int(os.getenv("POETRY_REQUESTS_TIMEOUT", 15))
+```
+
+and that constant is what `http_repository.py`, `pypi_repository.py`, `utils/authenticator.py`, and `utils/helpers.py` all pass as `timeout=`. So every HTTP read in every generated project's image build has used the **15-second default**, not 120. The export sets a variable nothing reads.
+
+**Why it stayed invisible.** The `timeout 600` wrapper and the 3-attempt loop around it are real and do work, so the build recovers on a retry and prints `✅ Python dependencies installed`. The failure mode is not a broken build — it is builds that are slower and more retry-dependent than intended on any non-fast link, with no signal that the configured mitigation is absent. Nothing asserts the variable name; `TestDockerfileContent` covers the multi-stage pattern, the non-root user, and Poetry's presence, but not this line.
+
+**Adjacent lines verified clean, do not "fix" them.** The frontend loop's `--config.fetch-retries=5` (`Dockerfile.j2:28`) is a real pnpm/npm config and does take effect. `[ "$INSTALL_DEV" = "true" ]` is correct in the template — it renders as `[ "true" = "true" ]` only in BuildKit's echoed command output, which is expansion in the log, not a constant in the source.
+
+- [ ] **SA130 — Use Poetry's actual timeout variable.** `Tier 2 · Track 1 · deps: none · queues behind SA129`
+
+  Replace `POETRY_HTTP_TIMEOUT` with `POETRY_REQUESTS_TIMEOUT` in the builder stage. Keep the value, the `timeout 600` wrapper, the retry count, and all surrounding output byte-unchanged — this ticket changes one identifier. While there, confirm against the pinned Poetry version rather than from memory: if `Dockerfile.j2:62`'s `poetry==` pin is ever moved, the variable name is a version-coupled fact and must be re-verified from that release's `poetry/utils/constants.py`.
+
+  **File allowlist (exact, 2 files):**
+  - `quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2`
+  - `quickscale_core/tests/test_generator/test_templates.py` (extend `TestDockerfileContent`, ~line 3724; do not create a second module)
+
+  - Verify: a rendered Dockerfile contains `POETRY_REQUESTS_TIMEOUT` and **no** occurrence of `POETRY_HTTP_TIMEOUT` — assert both directions, since the point of the ticket is that the wrong name reads as configured. A generated project still builds end to end. `make quality` left no worse than found.
+  - Rollback: revert the two files; no state, migration, or on-disk format implications. A stale image layer cache is the only side effect, and it self-invalidates on the changed `RUN` line.
 
 Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unscheduled** — gated on a third consumer or a public "update my generated project" command. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module. Tech-audit tooling gaps other than `TA62` (dependency-vulnerability scanning, security static analysis, production-change testimony gate) are parked in the v88 backlog as **SA123**. With SA120 and SA121 closed — SA121 **closing arch Finding 12** — and SA128/SA122b ticketed, both audits stand at zero unscheduled `now`-horizon findings. Arch Finding 11 is the only remaining ticketed audit finding.
 
@@ -357,6 +449,12 @@ SA127 ✓ (zero-module apply fixed)       SA115 (e2e xdist; deps: none)  SA117c 
 SA128 (structural parity check)         │  cannot merge  → SA112e     SA117e (review + push splits)
   │  deps: none · replaces SA122a       │                              │  human-confirmed public push
   │                                    │                              │  (scope tooling → v88 SA124)
+  ▼  IN FLIGHT                          │                              │
+SA129 (superuser probe; Tier 2)         │                              │
+  │  deps: none · not a blocker         │                              │
+  ▼                                     │                              │
+SA130 (dead poetry timeout; Tier 2)     │                              │
+  │  deps: none · not a blocker         │                              │
   ▼                                     │                              │
 SA122b (migrate consumers)              │                              │
         ▲                               │                              │
