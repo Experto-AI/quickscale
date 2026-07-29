@@ -85,7 +85,7 @@ contract_vintage:
 
 dependencies:
   - django-storages>=1.14.6
-  - boto3>=1.40.46
+  - boto3>=1.43.58
   - quickscale-core>=0.87.0,<0.88.0
 
 django_apps:
