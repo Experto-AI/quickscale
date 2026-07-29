@@ -82,7 +82,7 @@ def sample_repo(tmp_path: Path) -> Path:
             packages = [{include = "quickscale_core", from = "src"}]
 
             [tool.poetry.dependencies]
-            python = ">=3.13,<3.15"
+            python = ">=3.14,<3.15"
             """
         ),
         "quickscale_cli": textwrap.dedent(
@@ -96,7 +96,7 @@ def sample_repo(tmp_path: Path) -> Path:
             packages = [{include = "quickscale_cli", from = "src"}]
 
             [tool.poetry.dependencies]
-            python = ">=3.13,<3.15"
+            python = ">=3.14,<3.15"
             click = "^8.3.1"
             quickscale-core = {path = "../quickscale_core"}
             """
@@ -112,7 +112,7 @@ def sample_repo(tmp_path: Path) -> Path:
             packages = []
 
             [tool.poetry.dependencies]
-            python = ">=3.13,<3.15"
+            python = ">=3.14,<3.15"
             quickscale-core = {path = "../quickscale_core", develop = true}
             quickscale-cli = {path = "../quickscale_cli"}
             """

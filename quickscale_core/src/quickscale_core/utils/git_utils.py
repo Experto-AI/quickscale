@@ -187,7 +187,7 @@ def is_git_repo(path: Path | None = None, *, runner: GitRunner | None = None) ->
             runner=runner,
         )
         return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return False
 
 

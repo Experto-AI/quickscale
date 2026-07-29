@@ -3163,7 +3163,7 @@ class TestShellIntegration:
             import zoneinfo
 
             zoneinfo.ZoneInfo("Pacific/Kiritimati")
-        except (ModuleNotFoundError, KeyError, zoneinfo.ZoneInfoNotFoundError):
+        except ModuleNotFoundError, KeyError, zoneinfo.ZoneInfoNotFoundError:
             skip_reason = "Pacific/Kiritimati timezone not available"
         if skip_reason:
             pytest.skip(skip_reason)

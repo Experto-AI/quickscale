@@ -32,4 +32,13 @@ export default tseslint.config(
       'react-refresh/only-export-components': 'off',
     },
   },
+  {
+    // Bootstrap seam: exports a render factory (not a component) alongside
+    // module-level lazy() components, which fast refresh cannot track.
+    // This file is only ever called once at mount, so refresh is moot.
+    files: ['src/renderQuickScaleRoot.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 )

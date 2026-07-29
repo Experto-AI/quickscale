@@ -474,7 +474,7 @@ def _resolve_git_ref(ref: str, repo_path: Path | None = None) -> str | None:
             text=True,
             timeout=15,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return None
     sha = result.stdout.strip()
     if result.returncode or len(sha) != 40 or any(char not in "0123456789abcdef" for char in sha):
@@ -492,13 +492,13 @@ def _git_top_level(repo_path: Path) -> Path | None:
             text=True,
             timeout=15,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return None
     if result.returncode or not result.stdout.strip():
         return None
     try:
         return Path(result.stdout.strip()).resolve()
-    except (OSError, RuntimeError):
+    except OSError, RuntimeError:
         return None
 
 

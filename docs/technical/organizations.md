@@ -47,7 +47,7 @@ However, runtime resolution is preferable for QuickScale because:
 
 ```python
 # settings.py
-QUICKSCALE_MODE = 'solo'   # or 'saas'
+QUICKSCALE_MODE = "solo"  # or 'saas'
 ```
 
 `TenantMiddleware` reads this setting and changes two behaviours:
@@ -58,7 +58,7 @@ QUICKSCALE_MODE = 'solo'   # or 'saas'
 The orgs module now ships a single URL module. The deployment mode changes request behavior, not which Django URL module is imported:
 
 ```python
-urlpatterns += [path('', include('quickscale_modules_orgs.urls'))]
+urlpatterns += [path("", include("quickscale_modules_orgs.urls"))]
 ```
 
 The same org views serve both modes. Org-management pages keep `org_slug` where needed (`/orgs/<slug>/...`), while tenant content routes do not use org-scoped URL kwargs. The active org is resolved from middleware-established context.
@@ -239,8 +239,7 @@ Views check org membership and minimum role via a decorator or mixin:
 ```python
 # Conceptual — not final implementation
 @require_org_role(min_role=OrgRole.ADMIN)
-def org_settings(request, org_slug):
-    ...
+def org_settings(request, org_slug): ...
 ```
 
 The decorator resolves the current organization from the URL (`org_slug`), looks up the `OrganizationMembership` for `request.user`, and returns HTTP 403 if the user is not a member or their role is below the minimum. The organization is also stored on `request.org` for downstream use.
@@ -249,8 +248,8 @@ The decorator resolves the current organization from the URL (`org_slug`), looks
 ROLE_HIERARCHY = {
     OrgRole.VIEWER: 0,
     OrgRole.MEMBER: 1,
-    OrgRole.ADMIN:  2,
-    OrgRole.OWNER:  3,
+    OrgRole.ADMIN: 2,
+    OrgRole.OWNER: 3,
 }
 ```
 
@@ -303,7 +302,7 @@ The organizations module ships a `TenantModel` abstract base class. Any module t
 ```python
 class TenantModel(models.Model):
     organization = tenant_org_fk(
-        related_name='%(app_label)s_%(class)s_set',
+        related_name="%(app_label)s_%(class)s_set",
     )
 
     objects = TenantManager()
@@ -311,7 +310,7 @@ class TenantModel(models.Model):
 
     class Meta:
         abstract = True
-        base_manager_name = 'all_objects'
+        base_manager_name = "all_objects"
 ```
 
 The shipped repo-enrolled surface currently covers CRM, blog, forms, listings, billing, and social. Cross-module migration dependency ordering must be documented in the organizations release note when new tenant tables join the contract.
@@ -390,9 +389,8 @@ Plan
 Views check feature access via a decorator:
 
 ```python
-@require_org_feature('crm')
-def crm_index(request):
-    ...
+@require_org_feature("crm")
+def crm_index(request): ...
 ```
 
 This decorator resolves the current organization's active subscription through the billing ORM, selects its `Plan`, and checks `Plan.features` as the sole entitlement source. It returns HTTP 402 when the org has no active subscription or when the feature key is absent.
@@ -432,10 +430,10 @@ The allauth adapter handles both modes:
 class OrgsAccountAdapter(DefaultAccountAdapter):
     def get_login_redirect_url(self, request):
         if not OrganizationMembership.objects.filter(user=request.user).exists():
-            if settings.QUICKSCALE_MODE == 'solo':
+            if settings.QUICKSCALE_MODE == "solo":
                 Organization.objects.create_personal_for(request.user)
-                return '/'
-            return '/orgs/new/'
+                return "/"
+            return "/orgs/new/"
         return super().get_login_redirect_url(request)
 ```
 
@@ -555,7 +553,7 @@ org_id = request.session.get(ACTIVE_ORG_SESSION_KEY)
 
 # Future (subdomain-based):
 host = request.get_host()
-slug = host.split('.')[0] if host.count('.') >= 2 else None
+slug = host.split(".")[0] if host.count(".") >= 2 else None
 if slug:
     org = Organization.objects.get(slug=slug)
     # then set request.org and the current-org ContextVar as today

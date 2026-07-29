@@ -39,8 +39,8 @@ If embedding manually:
    ```python
    INSTALLED_APPS = [
        # ... other apps
-       'django_filters',
-       'quickscale_modules_listings',
+       "django_filters",
+       "quickscale_modules_listings",
    ]
    ```
 
@@ -50,7 +50,7 @@ If embedding manually:
 
    urlpatterns = [
        # ... other patterns
-       path('listings/', include('quickscale_modules_listings.urls')),
+       path("listings/", include("quickscale_modules_listings.urls")),
    ]
    ```
 
@@ -59,8 +59,10 @@ If embedding manually:
    # myapp/models.py
    from quickscale_modules_listings.models import AbstractListing
 
+
    class PropertyListing(AbstractListing):
        """Real estate property listing"""
+
        bedrooms = models.IntegerField(default=0)
        bathrooms = models.IntegerField(default=0)
        square_feet = models.IntegerField(default=0)
@@ -103,8 +105,10 @@ Extend `AbstractListing` to create vertical-specific listings:
 from quickscale_modules_listings.models import AbstractListing
 from django.db import models
 
+
 class JobListing(AbstractListing):
     """Job posting listing"""
+
     company = models.CharField(max_length=200)
     job_type = models.CharField(max_length=50)  # full-time, part-time, contract
     remote = models.BooleanField(default=False)
@@ -117,6 +121,7 @@ class JobListing(AbstractListing):
 
 class EventListing(AbstractListing):
     """Event listing"""
+
     event_date = models.DateTimeField()
     venue = models.CharField(max_length=200)
     capacity = models.IntegerField(default=0)
@@ -207,8 +212,8 @@ Add these to your `settings.py` to customize listings behavior:
 LISTINGS_PER_PAGE = 12  # Listings per page
 
 # Image upload settings
-LISTINGS_UPLOAD_PATH = 'listings/images/'
-LISTINGS_IMAGE_MAX_SIZE = {'size': (1920, 1080), 'quality': 90}
+LISTINGS_UPLOAD_PATH = "listings/images/"
+LISTINGS_IMAGE_MAX_SIZE = {"size": (1920, 1080), "quality": 90}
 ```
 
 ## Testing

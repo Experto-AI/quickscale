@@ -128,7 +128,7 @@ def _format_datetime(iso_string: str) -> str:
 
         dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
         return dt.strftime("%Y-%m-%d %H:%M")
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return iso_string
 
 
@@ -378,7 +378,7 @@ def _state_file_has_consolidated_sections(state_dir: Path) -> bool:
     try:
         with open(state_file) as handle:
             data = yaml.safe_load(handle) or {}
-    except (yaml.YAMLError, OSError):
+    except yaml.YAMLError, OSError:
         return False
 
     if not isinstance(data, dict):
@@ -463,7 +463,7 @@ def _compute_drift_diagnostics(
     try:
         loaded_state = project_state_manager.load_state()
         loaded_config = project_state_manager.load_config()
-    except (ConfigError, StateError, OSError):
+    except ConfigError, StateError, OSError:
         loaded_state = None
         loaded_config = None
 

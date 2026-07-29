@@ -10,10 +10,11 @@ relationship defined by the F7.2/F7.3 contract:
 * All packaged-module Python constraints must match
   :data:`runtime_pins.PYTHON_CONSTRAINT`.
 * All packaged-module Django constraints must equal the expected module
-  Django constraint that shares the same upper bound as
-  :data:`runtime_pins.DJANGO_CONSTRAINT` while preserving the
-  documented tighter lower bound (``>=6.0.5`` vs the template's
-  ``>=6.0.3``).
+  Django constraint, which shares the same upper bound as
+  :data:`runtime_pins.DJANGO_CONSTRAINT`.  The module lower bound is
+  allowed to be tighter than the template's; it is passed in by the
+  caller rather than derived, so any divergence has to be stated
+  explicitly.  As of the 6.0.7 bump the two bounds coincide.
 
 Each public function returns a list of human-readable drift messages
 (empty list = all constraints pass).  Callers should treat any non-empty
@@ -255,7 +256,7 @@ def check_module_django_constraints(
     """Verify module Django constraints match the expected tighter constraint.
 
     All packaged modules must carry Django with *expected_django*, which
-    preserves the intentional tighter lower bound (``>=6.0.5``) while
+    allows an intentionally tighter lower bound than the template while
     sharing :data:`runtime_pins.DJANGO_CONSTRAINT`'s upper bound
     (``<6.1.0``).
 
@@ -265,7 +266,7 @@ def check_module_django_constraints(
         Absolute path to the repository root.
     expected_django:
         The full Django constraint string that every packaged module must
-        carry (e.g. ``>=6.0.5,<6.1.0``).
+        carry (e.g. ``>=6.0.7,<6.1.0``).
 
     Returns
     -------

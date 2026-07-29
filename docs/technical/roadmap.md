@@ -184,12 +184,12 @@ Found 2026-07-29 by manual `plan`/`apply` from an installed wheel with modules s
 
 ```python
 def _prepare_modules_base_path(project_path, prior_base_path):
-    if _has_embedded_manifests(project_path):   # no modules/ dir  -> False
+    if _has_embedded_manifests(project_path):  # no modules/ dir  -> False
         set_modules_base_path(project_path / "modules")
         return _refresh_adapters()
-    if prior_base_path is not None:             # installed wheel  -> None
+    if prior_base_path is not None:  # installed wheel  -> None
         return _refresh_adapters()
-    return ("Modules base path not configured and no embedded module manifests found. ...")
+    return "Modules base path not configured and no embedded module manifests found. ..."
 ```
 
 The guard is evaluated **before** anything consults the selection, yet `apply_command.py:2816-2817` has already decided there is nothing to do:

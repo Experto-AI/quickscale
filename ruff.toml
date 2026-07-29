@@ -2,7 +2,12 @@
 # This configuration is used by all packages unless overridden
 
 line-length = 100
-target-version = "py313"
+# Matches ``requires-python`` (>=3.14) across the repo. This lets the
+# formatter emit PEP 758 unparenthesized ``except A, B:``, which nothing
+# below 3.14 can parse — deliberate now that 3.14 is the floor everywhere.
+# Anything that executes repo sources must therefore use the project
+# interpreter (sys.executable / the venv), never a bare ``python`` off PATH.
+target-version = "py314"
 
 [lint]
 select = [

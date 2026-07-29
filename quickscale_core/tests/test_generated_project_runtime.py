@@ -336,7 +336,7 @@ def _wait_for_server(
         try:
             with socket.create_connection((host, port), timeout=2):
                 return
-        except (OSError, ConnectionRefusedError):
+        except OSError, ConnectionRefusedError:
             time.sleep(0.5)
 
     error_msg = f"Server did not start within {timeout} seconds."

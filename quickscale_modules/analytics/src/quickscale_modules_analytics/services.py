@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import os
-import posthog
+from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Protocol, cast
 
+import posthog
 from django.conf import settings
 from django.http import HttpRequest
 
@@ -233,11 +233,11 @@ def configure_analytics_client() -> bool:
             else:
                 client = cast(AnalyticsClient, posthog_module)
                 if hasattr(client, "project_api_key"):
-                    setattr(client, "project_api_key", api_key)
+                    client.project_api_key = api_key
                 if hasattr(client, "host"):
-                    setattr(client, "host", snapshot.resolve_posthog_host())
+                    client.host = snapshot.resolve_posthog_host()
                 if hasattr(client, "disabled"):
-                    setattr(client, "disabled", False)
+                    client.disabled = False
 
             _close_existing_client()
             _ANALYTICS_CLIENT = client

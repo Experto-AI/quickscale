@@ -380,7 +380,7 @@ def _docker_resource_ids(resource: str, project_name: str) -> list[str]:
             text=True,
             check=True,
         )
-    except (OSError, subprocess.CalledProcessError):
+    except OSError, subprocess.CalledProcessError:
         return []
     return [line for line in result.stdout.splitlines() if line]
 
@@ -412,7 +412,7 @@ def cleanup_compose_project(project_dir: Path, project_name: str | None) -> None
             text=True,
             check=True,
         )
-    except (OSError, subprocess.CalledProcessError):
+    except OSError, subprocess.CalledProcessError:
         pass
 
     for resource, remove_command in (
@@ -426,7 +426,7 @@ def cleanup_compose_project(project_dir: Path, project_name: str | None) -> None
         command = ["docker", *remove_command.split(), *resource_ids]
         try:
             subprocess.run(command, capture_output=True, text=True, check=True)
-        except (OSError, subprocess.CalledProcessError):
+        except OSError, subprocess.CalledProcessError:
             pass
 
 

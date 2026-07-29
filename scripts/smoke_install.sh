@@ -79,7 +79,7 @@ read_version() {
 }
 
 # Check whether a Python interpreter satisfies the full requires-python spec
-# (e.g. >=3.13,<3.15).  Returns 0 if the interpreter is within bounds, 1 if
+# (e.g. >=3.14,<3.15).  Returns 0 if the interpreter is within bounds, 1 if
 # not.  Can be used as a filter predicate — does not call exit.
 python_within_spec() {
     local python_bin="$1"
@@ -101,12 +101,12 @@ sys.exit(0 if min_ver <= v < max_ver else 1)
 # Read candidate Python interpreter paths from stdin (one per line), check
 # each against the full requires-python spec, and return the first valid one.
 # Continues past invalid candidates so a newer (e.g. 3.15) or too-old (e.g.
-# 3.12) interpreter on the PATH does not prevent finding a valid one.
+# 3.13) interpreter on the PATH does not prevent finding a valid one.
 #
 # Pipe-testable: passing known paths with controlled Python shims validates
 # the selection order without needing actual 3.14/3.15 binaries.
 #
-#   printf '%s\n' /path/fake3.15 /path/python3.14 | smoke_select_python '>=3.13,<3.15'
+#   printf '%s\n' /path/fake3.15 /path/python3.14 | smoke_select_python '>=3.14,<3.15'
 smoke_select_python() {
     local spec="$1"
     local candidate
@@ -133,7 +133,7 @@ ensure_compatible_python_available() {
     local python_bin
 
     # Iterate through all system candidates and pick the first one that
-    # satisfies the full >=3.13,<3.15 spec.  Unlike the upstream helper
+    # satisfies the full >=3.14,<3.15 spec.  Unlike the upstream helper
     # (which only checks the minimum), this continues past invalid
     # candidates so a 3.15 on PATH does not block finding a valid 3.14.
     python_bin="$(smoke_select_python "$REQUIRED_PYTHON_SPEC" \

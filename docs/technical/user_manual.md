@@ -86,7 +86,7 @@ Purpose: get a development environment ready to run tests and use the CLI.
 Recommended sequence:
 
 ```bash
-# Ensure prerequisites are installed (Python 3.13+, Git, and Poetry)
+# Ensure prerequisites are installed (Python 3.14, Git, and Poetry)
 make bootstrap
 
 # If Poetry is already configured and you only need dependencies:

@@ -383,7 +383,7 @@ def op_rollback(
                     found = True
                     revoked_digest = record.get("evidence_digest", "")
                     break
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 continue
 
         if not found:

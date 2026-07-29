@@ -73,7 +73,7 @@ def get_container_status(container_name: str) -> str | None:
             timeout=5,
         )
         return result.stdout.strip() or None
-    except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+    except subprocess.SubprocessError, subprocess.TimeoutExpired:
         return None
 
 
@@ -106,7 +106,7 @@ def get_running_containers() -> list[str]:
         )
         containers = [c for c in result.stdout.strip().split("\n") if c]
         return containers
-    except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+    except subprocess.SubprocessError, subprocess.TimeoutExpired:
         return []
 
 

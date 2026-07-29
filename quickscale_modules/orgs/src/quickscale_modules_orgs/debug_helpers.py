@@ -28,7 +28,7 @@ def _resolve_debug_org_id(org_id: object) -> uuid.UUID | None:
     if isinstance(org_id, str):
         try:
             return uuid.UUID(org_id)
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             return None
     return None
 

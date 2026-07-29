@@ -233,7 +233,7 @@ def get_railway_project_info() -> dict[str, Any] | None:
         # Parse status output for project information
         info = {"status": result.stdout.strip()}
         return info
-    except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+    except subprocess.SubprocessError, subprocess.TimeoutExpired:
         return None
 
 
@@ -479,7 +479,7 @@ def get_deployment_url(service: str | None = None) -> str | None:
                     f"{result.stdout.strip()[:200]}"
                 )
         return None
-    except (TimeoutError, FileNotFoundError):
+    except TimeoutError, FileNotFoundError:
         return None
 
 
@@ -554,7 +554,7 @@ def generate_railway_domain(service: str) -> str | None:
                 )
 
         return None
-    except (TimeoutError, FileNotFoundError):
+    except TimeoutError, FileNotFoundError:
         return None
 
 
@@ -803,7 +803,7 @@ def get_railway_variables(
                 )
             return variables
         return None
-    except (TimeoutError, FileNotFoundError):
+    except TimeoutError, FileNotFoundError:
         return None
 
 

@@ -2,6 +2,7 @@
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -1378,7 +1379,10 @@ class TestPublishModuleWrapperSmoke:
         repo_root = self._repo_root()
         script = repo_root / "scripts" / "publish_module.py"
         return subprocess.run(
-            ["python", str(script), *args],
+            # sys.executable, not a bare "python": the latter resolves to
+            # whatever interpreter is first on PATH, which may be older than
+            # the project floor and fail to parse repo sources at import time.
+            [sys.executable, str(script), *args],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -1890,7 +1894,10 @@ class TestPublishModuleReleaseAuthoritativeGate:
         """Run the publish wrapper as a subprocess in the hermetic repo."""
         script = repo_root / "scripts" / "publish_module.py"
         return subprocess.run(
-            ["python", str(script), *args],
+            # sys.executable, not a bare "python": the latter resolves to
+            # whatever interpreter is first on PATH, which may be older than
+            # the project floor and fail to parse repo sources at import time.
+            [sys.executable, str(script), *args],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -2177,7 +2184,10 @@ class TestPublishModuleExpectedRemoteSha:
         """Run the publish wrapper as a subprocess in the hermetic repo."""
         script = repo_root / "scripts" / "publish_module.py"
         return subprocess.run(
-            ["python", str(script), *args],
+            # sys.executable, not a bare "python": the latter resolves to
+            # whatever interpreter is first on PATH, which may be older than
+            # the project floor and fail to parse repo sources at import time.
+            [sys.executable, str(script), *args],
             cwd=repo_root,
             capture_output=True,
             text=True,

@@ -73,9 +73,9 @@ config:
       description: "Reserved extension point for future private media authorization flows"
 
 dependencies:
-  - django-storages>=1.14.4
-  - boto3>=1.35.0
-  - Pillow>=12.1.1,<13.0.0
+  - django-storages>=1.14.6
+  - boto3>=1.43.58
+  - Pillow>=12.3.0,<13.0.0
 
 django_apps:
   - quickscale_modules_storage

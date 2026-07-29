@@ -113,7 +113,7 @@ def _apply_normalization_rule(value: Any, rule: NormalizationRule) -> Any:
     if rule_type == "coerce_int":
         try:
             return int(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return value
 
     if rule_type == "coerce_bool":
@@ -197,7 +197,7 @@ def _check_validation_rule(
         if value is not None:
             try:
                 numeric = float(value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return rule.description or f"{option_key} must be a numeric value"
             if rule.min_value is not None and numeric < rule.min_value:
                 return rule.description or f"{option_key} must be >= {rule.min_value}"
@@ -403,7 +403,7 @@ def _project_derived_setting(setting: DerivedSetting, resolved: dict[str, Any]) 
                     k: str(v) if v is not None else "" for k, v in resolved.items()
                 }
                 return template.format(**context)
-            except (KeyError, IndexError, ValueError):
+            except KeyError, IndexError, ValueError:
                 return setting.default
         return setting.default
 
@@ -530,7 +530,7 @@ def _project_wiring_contribution(
             try:
                 rendered = str(template).format(**context)
                 result.append(rendered)
-            except (KeyError, IndexError, ValueError):
+            except KeyError, IndexError, ValueError:
                 pass
         if result:
             return _coerce_contribution(result, wiring_field)

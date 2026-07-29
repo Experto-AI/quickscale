@@ -81,7 +81,7 @@ def parse_version_tuple(version_str: str) -> tuple[int, ...]:
     try:
         core = version_str.split("-")[0]
         return tuple(int(p) for p in core.split("."))
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         return (0,)
 
 

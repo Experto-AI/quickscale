@@ -13,7 +13,7 @@ so a single change here propagates to every emitted file.
 # ── Python ──────────────────────────────────────────────────────────
 # The Python major.minor version used in CI matrix, Docker tags,
 # MyPy configuration, and the Poetry constraint.
-PYTHON_VERSION: str = "3.13"
+PYTHON_VERSION: str = "3.14"
 # Full Poetry-compatible constraint string for ``[tool.poetry.dependencies] python``.
 PYTHON_CONSTRAINT: str = f">={PYTHON_VERSION},<3.15"
 # Docker image tag for the Python slim-bookworm base image.
@@ -21,7 +21,7 @@ PYTHON_DOCKER_TAG: str = f"{PYTHON_VERSION}-slim-bookworm"
 
 # ── Django ──────────────────────────────────────────────────────────
 # Full Poetry-compatible constraint string for ``[tool.poetry.dependencies] Django``.
-DJANGO_CONSTRAINT: str = ">=6.0.3,<6.1.0"
+DJANGO_CONSTRAINT: str = ">=6.0.7,<6.1.0"
 # The Django major.minor version used in the CI matrix.
 DJANGO_CI_MATRIX_VERSION: str = "6.0"
 

@@ -455,7 +455,7 @@ def validate_blog_module_options(options: Mapping[str, Any] | None) -> list[str]
     try:
         if int(posts) <= 0:  # type: ignore[arg-type]
             issues.append("modules.blog.posts_per_page must be a positive integer")
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         issues.append("modules.blog.posts_per_page must be a positive integer")
     if not isinstance(resolved.get("enable_rss"), bool):
         issues.append("modules.blog.enable_rss must be a boolean")
@@ -754,7 +754,7 @@ def validate_forms_module_options(options: Mapping[str, Any] | None) -> list[str
         forms_per_page = int(resolved.get("forms_per_page", 0))
         if forms_per_page < 1:
             issues.append("modules.forms.forms_per_page must be at least 1")
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         issues.append("modules.forms.forms_per_page must be a positive integer")
     try:
         data_retention_days = int(resolved.get("data_retention_days", -1))
@@ -762,7 +762,7 @@ def validate_forms_module_options(options: Mapping[str, Any] | None) -> list[str
             issues.append(
                 "modules.forms.data_retention_days must be a non-negative integer"
             )
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         issues.append(
             "modules.forms.data_retention_days must be a non-negative integer"
         )
@@ -1164,7 +1164,7 @@ def validate_notifications_module_options(
             issues.append(
                 "modules.notifications.webhook_ttl_seconds must be at least 1"
             )
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         issues.append("modules.notifications.webhook_ttl_seconds must be an integer")
     if notifications_production_targeted(resolved):
         if _uses_placeholder_sender_email(sender_email):
@@ -1501,7 +1501,7 @@ def validate_social_module_options(options: dict[str, Any] | None) -> list[str]:
             value = int(resolved.get(option_name, 0))
             if value < 1:
                 issues.append(f"modules.social.{option_name} must be at least 1")
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             issues.append(f"modules.social.{option_name} must be an integer")
     return issues
 

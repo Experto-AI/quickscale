@@ -264,7 +264,7 @@ class StateManager:
                             continue
                         try:
                             record = ManagedFileRecord.from_dict(entry)
-                        except (KeyError, TypeError, ValueError):
+                        except KeyError, TypeError, ValueError:
                             continue
                         managed_files[record.path] = record
                 elif isinstance(managed_files_data, dict):
@@ -275,7 +275,7 @@ class StateManager:
                             record = ManagedFileRecord.from_dict(
                                 {**file_info, "path": file_path}
                             )
-                        except (KeyError, TypeError, ValueError):
+                        except KeyError, TypeError, ValueError:
                             continue
                         managed_files[record.path] = record
 
@@ -383,7 +383,7 @@ class StateManager:
         try:
             with open(self.state_file) as fh:
                 data = yaml.safe_load(fh) or {}
-        except (yaml.YAMLError, OSError):
+        except yaml.YAMLError, OSError:
             return
 
         if not isinstance(data, dict):

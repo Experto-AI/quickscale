@@ -534,7 +534,7 @@ def _parse_contract_vintage(
     try:
         core = minimum.split("-")[0]
         [int(p) for p in core.split(".")]
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         raise ManifestError(
             "'contract_vintage.minimum' must be a valid dotted-numeric "
             "version string (e.g. '0.87.0')",

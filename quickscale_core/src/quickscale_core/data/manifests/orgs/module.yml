@@ -17,7 +17,7 @@ required_modules:
   - auth
 
 dependencies:
-  - django-allauth>=65.14.1,<66.0.0
+  - django-allauth>=65.18.0,<66.0.0
 
 django_apps:
   - quickscale_modules_orgs

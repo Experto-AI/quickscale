@@ -112,7 +112,7 @@ export function FormRenderer({ slug, apiBasePath }: FormRendererProps) {
 
       if (response.status === 201) {
         if (schema?.redirect_url) {
-          window.location.href = schema.redirect_url
+          window.location.assign(schema.redirect_url)
         } else {
           setSubmitted(true)
         }

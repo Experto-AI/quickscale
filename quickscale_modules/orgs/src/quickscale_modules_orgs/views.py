@@ -757,7 +757,7 @@ class MemberListView(
         organization = self.get_organization()
         try:
             membership_id = int(request.POST["membership_id"])
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             context = self.get_context_data(form_error="Invalid member selection.")
             return self.render_to_response(context, status=400)
 

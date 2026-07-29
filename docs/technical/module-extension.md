@@ -201,7 +201,7 @@ coverage minimums, and the service-style exception — are authoritative in
 name = "quickscale-module-<name>"
 version = "0.XX.0"
 description = "QuickScale <name> module - brief description"
-requires-python = ">=3.13,<3.15"
+requires-python = ">=3.14,<3.15"
 authors = [{name = "Experto AI", email = "victor@experto.ai"}]
 license = "Apache-2.0"
 readme = "README.md"
@@ -211,8 +211,8 @@ dynamic = ["dependencies"]
 packages = [{include = "quickscale_modules_<name>", from = "src"}]
 
 [tool.poetry.dependencies]
-python = ">=3.13,<3.15"
-Django = ">=6.0.3,<7.0.0"
+python = ">=3.14,<3.15"
+Django = ">=6.0.7,<6.1.0"
 # Add module-specific runtime dependencies here (e.g., django-allauth, Pillow)
 
 [tool.poetry.group.dev.dependencies]
@@ -222,6 +222,18 @@ pytest-django = "^4.7.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+# Required. Any [tool.ruff.*] table makes this file Ruff's config root for the
+# module, so the repo-root ruff.toml no longer applies here and these values
+# have to be restated. Without the explicit `select`, the module falls back to
+# whatever Ruff's built-in defaults happen to be in the installed version, and
+# a release that widens them breaks `make lint`. Keep these in step with the
+# other modules — see the runtime-pin inventory in implementation_contract.md.
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"

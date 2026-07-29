@@ -233,7 +233,7 @@ class TestRuntimePins:
             PYTHON_VERSION,
         )
 
-        assert PYTHON_VERSION == "3.13"
+        assert PYTHON_VERSION == "3.14"
         assert PYTHON_CONSTRAINT == f">={PYTHON_VERSION},<3.15"
         assert PYTHON_DOCKER_TAG == f"{PYTHON_VERSION}-slim-bookworm"
 
@@ -244,7 +244,7 @@ class TestRuntimePins:
             DJANGO_CONSTRAINT,
         )
 
-        assert DJANGO_CONSTRAINT == ">=6.0.3,<6.1.0"
+        assert DJANGO_CONSTRAINT == ">=6.0.7,<6.1.0"
         assert DJANGO_CI_MATRIX_VERSION == "6.0"
 
     def test_postgres_pins_defined(self) -> None:
@@ -300,8 +300,8 @@ class TestRuntimePins:
 # These are the F7.3-contract values that all packaged modules and
 # generator packages must carry.  They are duplicated here only for test
 # self-containment; the authoritative values live in runtime_pins.py.
-_EXPECTED_PYTHON_CONSTRAINT = ">=3.13,<3.15"
-_EXPECTED_MODULE_DJANGO_CONSTRAINT = ">=6.0.5,<6.1.0"
+_EXPECTED_PYTHON_CONSTRAINT = ">=3.14,<3.15"
+_EXPECTED_MODULE_DJANGO_CONSTRAINT = ">=6.0.7,<6.1.0"
 
 
 @pytest.fixture(scope="module")
@@ -319,9 +319,16 @@ class TestRuntimePinDriftDetection:
 
     These tests encode the F7.3 contract: generator Python constraints
     and module Python constraints must match
-    ``runtime_pins.PYTHON_CONSTRAINT``, while module Django constraints
-    preserve the intentionally tighter lower bound (``>=6.0.5``) with
-    the same upper bound as ``runtime_pins.DJANGO_CONSTRAINT``.
+    ``runtime_pins.PYTHON_CONSTRAINT``, and module Django constraints
+    must match ``_EXPECTED_MODULE_DJANGO_CONSTRAINT``.
+
+    The modules previously carried an intentionally tighter Django lower
+    bound than ``runtime_pins.DJANGO_CONSTRAINT``.  Both sides now sit
+    at ``>=6.0.7,<6.1.0``, so the
+    expected module value and the runtime pin currently coincide.  The
+    two remain separately expressed on purpose: a future bump may
+    reintroduce a tighter module bound, and this test forces any such
+    change to be made deliberately on both sides.
     """
 
     def test_generator_python_parity(self, repo_root: Path) -> None:
@@ -360,11 +367,11 @@ class TestRuntimePinDriftDetection:
         """Module Django constraints must match the tighter expected value.
 
         The documented intentional drift is:
-          - Template: ``>=6.0.3,<6.1.0`` (runtime_pins.DJANGO_CONSTRAINT)
-          - Modules: ``>=6.0.5,<6.1.0`` (tighter lower bound)
+          - Template: ``>=6.0.7,<6.1.0`` (runtime_pins.DJANGO_CONSTRAINT)
+          - Modules: ``>=6.0.7,<6.1.0`` (may be a tighter lower bound)
 
         This test verifies every packaged module carries the tighter
-        ``>=6.0.5,<6.1.0`` constraint.  If a version bump changes either
+        ``_EXPECTED_MODULE_DJANGO_CONSTRAINT`` value.  If a version bump changes either
         side, this test will fail and the maintainer must update both
         values intentionally.
         """
@@ -509,7 +516,7 @@ class TestRuntimePinDriftDetection:
             check_generator_python_constraints,
         )
 
-        expected = ">=3.13,<3.15"
+        expected = ">=3.14,<3.15"
         # Create the full generator package tree so the existing
         # check_generator_python_constraints can find every expected
         # pyproject.toml.  Each file has correct requires-python but the
@@ -557,7 +564,7 @@ class TestRuntimePinDriftDetection:
             check_module_python_constraints,
         )
 
-        expected = ">=3.13,<3.15"
+        expected = ">=3.14,<3.15"
         modules_dir = tmp_path / "quickscale_modules" / "testmod"
         modules_dir.mkdir(parents=True)
         pyproject = modules_dir / "pyproject.toml"
@@ -3356,8 +3363,8 @@ class TestDevOpsTemplateRendering:
         assert "testproject" in output
         assert "[tool.poetry]" in output
         assert f'python = "{PYTHON_CONSTRAINT}"' in output
-        assert 'Django = ">=6.0.3,<6.1.0"' in output
-        assert 'django-stubs = "^6.0.2"' in output
+        assert 'Django = ">=6.0.7,<6.1.0"' in output
+        assert 'django-stubs = "^6.0.7"' in output
         _ruff_target = f"py{PYTHON_VERSION.replace('.', '')}"
         assert f'target-version = "{_ruff_target}"' in output
         assert f'python_version = "{PYTHON_VERSION}"' in output
@@ -3386,7 +3393,7 @@ class TestDevOpsTemplateRendering:
         assert "name: CI" in output
         assert "pytest --cov=testproject" in output
         assert "runs-on: ubuntu-24.04" in output
-        assert 'python-version: ["3.13"]' in output
+        assert 'python-version: ["3.14"]' in output
         assert "apt.postgresql.org" in output
         assert "apt.postgresql.org.asc" in output
         assert "postgresql-client-18" in output
@@ -3402,10 +3409,10 @@ class TestDevOpsTemplateRendering:
         assert "pg_dump --version" in output
         assert "pg_restore --version" in output
         assert (
-            "if: matrix.python-version == '3.13' && matrix.django-version == '6.0'"
+            "if: matrix.python-version == '3.14' && matrix.django-version == '6.0'"
             in output
         )
-        assert "3.14" not in output
+        assert "3.13" not in output
         assert "gpg --dearmor" not in output
         assert "gnupg" not in output
 
@@ -3418,7 +3425,7 @@ class TestDevOpsTemplateRendering:
         assert output is not None
         assert len(output) > 0
         assert "testproject" in output
-        assert "FROM python:3.13-slim-bookworm" in output
+        assert "FROM python:3.14-slim-bookworm" in output
 
     def test_docker_compose_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -3644,7 +3651,7 @@ class TestPyprojectTomlContent:
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
         assert "Django" in output
-        assert 'Django = ">=6.0.3,<6.1.0"' in output
+        assert 'Django = ">=6.0.7,<6.1.0"' in output
 
     def test_postgresql_driver(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -3730,8 +3737,8 @@ class TestDockerfileContent:
         """Test Dockerfile uses multi-stage build pattern."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
-        assert "FROM python:3.13-slim-bookworm as builder" in output
-        assert "FROM python:3.13-slim-bookworm" in output
+        assert "FROM python:3.14-slim-bookworm as builder" in output
+        assert "FROM python:3.14-slim-bookworm" in output
         assert "bookworm-pgdg" in output
         assert "apt.postgresql.org.asc" in output
         assert "postgresql-client-18" in output
@@ -3754,7 +3761,7 @@ class TestDockerfileContent:
         """Test Dockerfile installs Poetry for dependency management."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
-        assert "pip install poetry==2.4.0" in output
+        assert "pip install poetry==2.4.1" in output
 
     def test_optimized_layers(
         self, jinja_env: Environment, test_context: dict[str, str]

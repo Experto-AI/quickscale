@@ -600,9 +600,17 @@ class TestFullE2EWorkflow:
                 'quickscale-module-auth = {path = "./modules/auth", develop = true}\n'
                 'quickscale-module-orgs = {path = "./modules/orgs", develop = true}\n'
             )
+            # Anchor on the section boundary rather than a specific
+            # dependency pin so routine version bumps don't silently
+            # break this insertion point.
+            anchor = "\n[tool.poetry.group.dev.dependencies]"
+            assert anchor in pyproject_content, (
+                "Generated pyproject.toml is missing the dev-dependencies "
+                "section used as the path-dependency insertion anchor"
+            )
             pyproject_content = pyproject_content.replace(
-                'dj-database-url = "^3.1.0"\n',
-                f'dj-database-url = "^3.1.0"\n{path_deps}',
+                anchor,
+                f"{path_deps}{anchor}",
             )
             pyproject_path.write_text(pyproject_content)
 
@@ -975,7 +983,7 @@ class TestFullE2EWorkflow:
 
         ci_content = ci_file.read_text()
         assert "runs-on: ubuntu-24.04" in ci_content
-        assert 'python-version: ["3.13"]' in ci_content
+        assert 'python-version: ["3.14"]' in ci_content
         assert "apt.postgresql.org" in ci_content
         assert "apt.postgresql.org.asc" in ci_content
         assert "postgresql-client-18" in ci_content
@@ -995,7 +1003,7 @@ class TestFullE2EWorkflow:
         assert "file: ./coverage.xml" not in ci_content
         assert "version: 11.0.9" in ci_content
         assert (
-            "if: matrix.python-version == '3.13' && matrix.django-version == '6.0'"
+            "if: matrix.python-version == '3.14' && matrix.django-version == '6.0'"
             in ci_content
         )
         assert "3.14" not in ci_content
