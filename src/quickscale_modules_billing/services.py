@@ -2141,7 +2141,7 @@ def _map_stripe_subscription_status(stripe_status: str) -> str:
 def _normalize_integer(value: Any) -> int | None:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
