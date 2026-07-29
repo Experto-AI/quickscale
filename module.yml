@@ -45,8 +45,8 @@ config:
 
 # Dependencies required by this module
 dependencies:
-  - djangorestframework>=3.16.1
-  - django-filter>=25.2
+  - djangorestframework>=3.17.1
+  - django-filter>=26.1
 
 # Django apps that must be in INSTALLED_APPS
 django_apps:
