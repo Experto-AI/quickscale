@@ -60,7 +60,7 @@
         version-check version-update bump-version \
         check-core-compat check-module-core-imports check-manifest-sync \
         check-org-context-primitives \
-        check-csrf-exempt \
+        check-csrf-exempt check-gate-parity \
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
         sa117-capture sa117-verify sa117-authorize sa117-rollback \
         sa117-apply sa117-check-origin sa117-check-containers \
@@ -189,6 +189,7 @@ help:
 	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
+	@echo "  make check-gate-parity            - SA122a: verify declared gates match every execution context (exit 0 = parity, 1 = JSONL diffs)"
 	@echo ""
 	@echo "SA117 scope / publication / apply gates:"
 	@echo "  make sa117-check PATHS='...'      - Scope-guard: compare candidate changed paths against baseline (SCRIPTS_ONLY=1)"
@@ -834,6 +835,26 @@ check-org-context-primitives:
 # Exits 1 on any unprotected csrf_exempt usage.
 check-csrf-exempt:
 	@$(PYTHON) scripts/check_csrf_exempt_gate.py
+
+# --- Gate Registry Parity Check (SA122a) ---
+
+# Verify that every gate declared in scripts/gate_registry.json is present in
+# every execution context (Makefile, check_ci_locally.sh, ci.yml, publish.yml,
+# e2e.yml).  Exits 0 when all declared gates are wired; exits 1 with JSONL
+# diagnostics when conformance gates are missing from a required context.
+# This is a standalone diagnostic — it is NOT wired into make check/ci yet.
+check-gate-parity:
+	@tmp=$$(mktemp); \
+	$(PYTHON) scripts/check_gate_parity.py > $$tmp 2>&1; \
+	exit_code=$$?; \
+	output=$$(cat $$tmp); \
+	rm -f $$tmp; \
+	if [ "$$exit_code" -ne 0 ]; then \
+		echo "ERROR: [GATE_FAILED] check-gate-parity exited with code $$exit_code" >&2; \
+		echo "$$output" >&2; \
+		exit 2; \
+	fi; \
+	echo "$$output"
 
 # --- SA117 Scope / Publication / Apply Gates ---
 

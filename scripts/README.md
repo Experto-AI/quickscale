@@ -49,6 +49,8 @@ Preferred maintainer-facing command map:
 | `poetry run python scripts/verify_public_module_apply.py apply --module M --target T --executable E --argv A` | `make sa117-apply MODULE=M TARGET=T EXEC=E ARGV=A` |
 | `poetry run python scripts/verify_public_module_apply.py check-origin --module M --declared-origin O --expected-origin E` | `make sa117-check-origin MODULE=M DECLARED=O EXPECTED=E` |
 | `poetry run python scripts/verify_public_module_apply.py check-containers --target T` | `make sa117-check-containers TARGET=T` |
+| `poetry run python scripts/check_gate_parity.py` | `make check-gate-parity` |
+| `poetry run python scripts/test_gate_parity.py` | `poetry run pytest scripts/test_gate_parity.py -q --tb=short` |
 
 If a script is part of a larger repo workflow, assume the Makefile is the preferred maintainer-facing entrypoint.
 
@@ -84,6 +86,30 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 - [publish.sh](./publish.sh) — builds and publishes packages (prefer `make publish-build`, `make publish-test`, `make publish-prod`, or `make publish-full`)
 - [publish_module.sh](./publish_module.sh) — publishes module changes to split branches using force-with-lease safety, reports module split-branch status (`make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<sha|ABSENT>`, `make publish-module-status`). **Note**: `--publish-outdated` / `make publish-modules-outdated` is **disabled** in SA117 Phase 4 — each module must be published individually with `--expected-remote-sha`.
 - [version_tool.sh](./version_tool.sh) — checks and synchronizes version metadata (`make version-check`, `make version-update`, or `make bump-version X.Y.Z`; direct script commands: `check`, `update`)
+
+### SA122a gate registry parity
+
+- [gate_registry.json](./gate_registry.json) — strict JSON v1 declarative gate registry declaring every gating checkpoint across all five execution contexts (local-serial, local-parallel, hosted CI, publish, e2e-trigger). Loaded and validated at startup by `check_gate_parity.py`. Only plain JSON is accepted (no YAML constructs, no trailing commas, no unquoted keys). Duplicate mapping keys are explicitly rejected at the JSON parser level before structural schema validation.
+- [check_gate_parity.py](./check_gate_parity.py) — diagnostic parity checker that compares the declared gate registry against every execution-context source (Makefile, check_ci_locally.sh, ci.yml, publish.yml, e2e.yml). Exit codes: 0 = perfect parity, 1 = JSONL semantic diffs on stdout (no ERROR on stderr), 2 = malformed/ambiguous input (ERROR on stderr, no traceback).
+
+  **Exit/stream behavior**:
+  - **Direct CLI** (`poetry run python scripts/check_gate_parity.py`): stdout carries JSONL diagnostics (exit 1) or nothing (exit 0); stderr carries the success confirmation on exit 0 or leading `ERROR:` prefix messages on exit 2. Exit 1 has no `ERROR:` prefix on stderr.
+  - **Make** (`make check-gate-parity`): translates ALL nonzero script exits to exit 2 for deterministic Make failure handling. On nonzero exit, both stdout and stderr from the script are merged and redirected to stderr with an additional `ERROR: [GATE_FAILED]` prefix. On exit 0, the success message is printed to stdout. This means `make check-gate-parity` exits 2 when the script returns 1 (semantic diffs) or 2 (schema/parse error), unlike the direct CLI which distinguishes them.
+
+  **Diagnostic levels**:
+  - `missing` — a gate declared in the registry is absent from a required execution context, or an e2e path declared in `trigger_inputs` is absent from `e2e.yml`.
+  - `extra` — a path present in `e2e.yml` has no corresponding `trigger_inputs` entry in any registry gate.
+  - `order` — common paths between registry `trigger_inputs` and `e2e.yml` appear in different relative sequence order.
+
+  **Source extraction scope**:
+  - `local-serial`/`local-parallel`: extracts `make <target>` invocations from bounded function bodies (`run_static_gates_serial` / `run_static_gates_parallel`) in `check_ci_locally.sh`. Echo statements and shell comments are excluded.
+  - `hosted`: extracts top-level YAML job names under `jobs:` in `ci.yml` using structural YAML parsing with duplicate-key rejection (BaseLoader-safe for the `on:` key).
+  - `publish`: extracts job names and `make <target>` calls from `run:` blocks in `publish.yml`. Comments and echo-only lines are excluded.
+  - `e2e-trigger`: extracts the ordered path allowlist from the `pull_request.paths:` block in `e2e.yml` only.
+  - `makefile`: validates every gate's `make_target` exists as a defined Makefile target with an actual recipe (tab-indented commands) or as a `.PHONY` declaration in the root `Makefile`.
+- [test_gate_parity.py](./test_gate_parity.py) — focused pytest suite covering current reproduction (the five known publish gaps: check-core-compat, check-module-core-imports, check-manifest-sync, check-org-context-primitives, check-csrf-exempt), fake-gate fan-out, complete schema validation (including strict JSON v1 duplicate-key rejection, unknown/missing keys, unsafe IDs/paths, dependency validation, binding collisions, string "null" rejection), fail-closed source parsing (missing/duplicate/unclosed function detection), YAML structural parsing with duplicate-key rejection, e2e ownership collision detection, stream behavior (exit 0/1/2), Make wrapper exit translation, Makefile target+recipe validation, and e2e exact sequence mutation (reorder, interior swap, missing, extra, duplicate paths).
+
+**Expected-gap semantics**: SA122-DEC-001 established that publish.yml has full coverage of the release pipeline but currently omits the five standalone repo conformance gates. The checker reports these as `level: "missing"` diagnostics in the `publish` context. These five omissions are the sole expected gap in Phase 1; any additional missing gate is a regression.
 
 ### SA117 version lockstep
 

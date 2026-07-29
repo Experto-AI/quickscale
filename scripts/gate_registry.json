@@ -1,0 +1,166 @@
+{
+    "schema_version": 1,
+    "description": "QuickScale gate registry \u2014 declares every gating checkpoint across all execution contexts (local serial/parallel, hosted CI, publish, e2e-trigger). Source of truth for gate-parity diagnostics.",
+    "contexts": {
+        "local-serial": "scripts/check_ci_locally.sh serial mode (QS_CI_PARALLEL=0)",
+        "local-parallel": "scripts/check_ci_locally.sh parallel mode (default)",
+        "hosted": ".github/workflows/ci.yml hosted CI",
+        "publish": ".github/workflows/publish.yml release workflow",
+        "e2e-trigger": ".github/workflows/e2e.yml ordered path allowlist"
+    },
+    "gates": [
+        {
+            "id": "check-core-compat",
+            "description": "Module quickscale_core imports resolve against current core API",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish",
+                "e2e-trigger"
+            ],
+            "bindings": {
+                "make_target": "check-core-compat",
+                "ci_job": "module-core-compat",
+                "local_ci_stage": 3
+            },
+            "depends_on": [],
+            "trigger_inputs": [
+                "quickscale_modules/backups/**"
+            ]
+        },
+        {
+            "id": "check-module-core-imports",
+            "description": "Module code imports only from quickscale_core.runtime",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish",
+                "e2e-trigger"
+            ],
+            "bindings": {
+                "make_target": "check-module-core-imports",
+                "ci_job": "module-core-import-linter",
+                "local_ci_stage": 4
+            },
+            "depends_on": [],
+            "trigger_inputs": [
+                "quickscale_cli/src/quickscale_cli/commands/plan_command.py",
+                "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
+                "quickscale_cli/src/quickscale_cli/commands/development_commands.py",
+                "quickscale_cli/src/quickscale_cli/utils/docker_utils.py",
+                "quickscale_cli/tests/test_apply_command_extended.py"
+            ]
+        },
+        {
+            "id": "check-manifest-sync",
+            "description": "Module-owned module.yml files match their core snapshots",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish",
+                "e2e-trigger"
+            ],
+            "bindings": {
+                "make_target": "check-manifest-sync",
+                "ci_job": "manifest-sync-gate",
+                "local_ci_stage": 5
+            },
+            "depends_on": [],
+            "trigger_inputs": [
+                "quickscale_core/src/quickscale_core/generator/**",
+                "quickscale_cli/tests/test_module_lifecycle_cycle.py",
+                "quickscale_cli/tests/test_e2e_development_workflow.py",
+                "quickscale_cli/tests/test_react_theme_e2e.py"
+            ]
+        },
+        {
+            "id": "check-org-context-primitives",
+            "description": "No external use of privatized org-context primitives",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish",
+                "e2e-trigger"
+            ],
+            "bindings": {
+                "make_target": "check-org-context-primitives",
+                "ci_job": "org-context-primitives-gate",
+                "local_ci_stage": 6
+            },
+            "depends_on": [],
+            "trigger_inputs": [
+                "quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2",
+                "quickscale_core/src/quickscale_core/generator/templates/github/workflows/ci.yml.j2"
+            ]
+        },
+        {
+            "id": "check-csrf-exempt",
+            "description": "Every csrf_exempt callsite is paired with CSRF/signature enforcement",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish",
+                "e2e-trigger"
+            ],
+            "bindings": {
+                "make_target": "check-csrf-exempt",
+                "ci_job": "csrf-exempt-gate",
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": [
+                "quickscale_core/tests/test_generator/test_templates.py",
+                "quickscale_core/tests/test_react_theme_integration.py",
+                "quickscale_core/tests/test_integration.py",
+                "quickscale_core/tests/test_e2e_full_workflow.py",
+                "quickscale_core/tests/test_generated_project_runtime.py",
+                "quickscale_core/tests/generator/test_themes.py",
+                "quickscale_core/tests/fixtures/sa90_emission_manifests.json"
+            ]
+        },
+        {
+            "id": "frontend-proof",
+            "description": "Render showcase_react and run pnpm install/type-check/build",
+            "required_contexts": [
+                "publish",
+                "e2e-trigger"
+            ],
+            "bindings": {
+                "make_target": "frontend-proof",
+                "ci_job": null,
+                "local_ci_stage": null
+            },
+            "depends_on": [],
+            "trigger_inputs": [
+                "Makefile",
+                "scripts/check_ci_locally.sh",
+                "scripts/_qs_jobs.sh",
+                "scripts/test_e2e.sh",
+                "scripts/test_e2e_parallel.py"
+            ]
+        },
+        {
+            "id": "smoke-install",
+            "description": "Build wheels, install into throwaway venv, run non-mutating CLI smoke tests",
+            "required_contexts": [
+                "publish",
+                "e2e-trigger"
+            ],
+            "bindings": {
+                "make_target": "smoke-install",
+                "ci_job": null,
+                "local_ci_stage": null
+            },
+            "depends_on": [],
+            "trigger_inputs": [
+                ".github/workflows/ci.yml",
+                ".github/workflows/e2e.yml"
+            ]
+        }
+    ]
+}
