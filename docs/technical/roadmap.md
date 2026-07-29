@@ -51,13 +51,14 @@ git merge --no-ff wt-track{N}
 
 > Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active work.
 
-The green-gate join (SA96-GATE), the installed-wheel discovery/resolver chain (SA109 ✓, SA110 ✓, SA113 ✓, SA111a ✓, SA111b ✓), the Track 2 frontend de-specialization chain (SA104 → SA108 ✓), the Track 1 re-verification chain (SA114 ✓, SA116 ✓), SA120 (quiet `check` parity), SA125 (file line-ceiling retirement), and SA126 (module-command complexity remediation) are closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md). The remaining open work is grouped as the five entries below — SA117 (now the four serial children SA117a, SA117b, SA117c, SA117e, split on 2026-07-27 as `SA117-DEC-003`) is a release blocker from the 2026-07-26 diagnostic spike, while SA122a–SA122b are the remaining gate-governance chain — SA121 is closed (`SA121-DOC-CR-002` resolved). The open Track 1 order is SA122a → SA122b. **No open ticket is Tier 3.**
+The green-gate join (SA96-GATE), the installed-wheel discovery/resolver chain (SA109 ✓, SA110 ✓, SA113 ✓, SA111a ✓, SA111b ✓), the Track 2 frontend de-specialization chain (SA104 → SA108 ✓), the Track 1 re-verification chain (SA114 ✓, SA116 ✓), SA120 (quiet `check` parity), SA125 (file line-ceiling retirement), and SA126 (module-command complexity remediation) are closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md). The remaining open work is grouped as the six entries below — SA117 (now the four serial children SA117a, SA117b, SA117c, SA117e, split on 2026-07-27 as `SA117-DEC-003`) is a release blocker from the 2026-07-26 diagnostic spike, while SA122a–SA122b are the remaining gate-governance chain and SA127 is a second release blocker found by manual `apply` on 2026-07-29 — SA121 is closed (`SA121-DOC-CR-002` resolved). The open Track 1 order is SA122a (in process) → SA127 → SA122b. **No open ticket is Tier 3.**
 
 1. **SA112a → SA112f** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — six serial, handoff-sized tasks covering provisioning, diagnosis, the traceback-selected fix, permanent lifecycle coverage, CI triggers, and closeout. **Critical path.** Deps: SA110 ✓ + SA111a ✓ + SA113 ✓, **plus SA117e (transitively SA117a → SA117b → SA117c) from SA112b onward** (see the evidence-validity dependency below — the binding node is the *pushed* splits, not the local stamp/assert). Next: **SA117b**, then the rest of the SA117 chain, then SA112a.
 2. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Baseline prerequisites met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓ + SA111a ✓ + SA113 ✓); awaits a human maintainer to execute the irreversible publish. Hold: must not publish while SA112 remains open.
 3. **SA115** (E2E in-lane parallelization, Track 2, `deps: none` · **merge after SA112**) — `pytest-xdist` in-lane fan-out for the e2e suite. Implementation committed and reconciled with current `v87`. Heavy validation is **AUTHORIZED** (`SA115-DEC-001` step 3 granted 2026-07-27, reversing the 2026-07-26 hold), and carries the `SA115-DEC-002` guard clamp along with it. Validation must yield exclusive Docker/PostgreSQL to Track 3 on demand. The merge remains order-gated behind SA112.
 4. **SA122a → SA122b** (gate-topology registry, Track 1) — arch Finding 11. Release assurance is four hand-synchronized inventories; `TA62` and `SA115-CI-001` are its latest paid drift instances. SA122a builds the registry + parity checker (deps: none); SA122b migrates the consumers and **merges after SA112e**, which owns the last manual e2e path-list append.
 5. **SA117b → SA117c → SA117e** (embedded-manifest / split-branch version skew, Track 3) — **RELEASE BLOCKER, and Track 3's next action.** Originally four serial, handoff-sized children covering exact lockstep comparison (SA117a ✓), publish-path safety, publication completeness, and the reviewed split push (`SA117-DEC-003`, 2026-07-27 — the former single ticket was Tier 3; the fifth child was deferred to v88 by `SA117-DEC-004`). `apply` embeds modules by git subtree from `splits/<module>-module` on the public remote, so embedded `module.yml` files are whatever was last published, not the working tree. The published splits predate the derivation sections v87's core requires, so `apply` fails for every module set. Approach decided (`SA117-DEC-001`): **stamp + assert in v87, pin in v88 (SA119)**; rules in [decisions.md §module-version-lockstep](./decisions.md#module-version-lockstep). Blocks SA96-PUBLISH **and SA112b–SA112f** (2026-07-26 sequencing decision: `SA117-DEC-002`). Next: **SA117b** (SA117a ✓ closed 2026-07-28 by `SA117-DEC-005`).
+6. **SA127** (zero-module installed `apply` fails at managed wiring, Track 1) — **RELEASE BLOCKER, independent of SA117.** `_prepare_modules_base_path` fails hard when neither embedded manifests nor a monorepo base path exist, *before* consulting the selection — so a module-less project, whose selection is already `[]` and which needs no manifest at all, cannot `apply` from an installed wheel. Found 2026-07-29 by manual `plan`/`apply` with modules skipped. Together with SA117 this means installed `apply` currently fails for **every** configuration: with modules on the version assert, without modules here. Deps: none; file-disjoint from every open SA112/SA117/SA122 allowlist.
 
 ### SA117 — Embedded-manifest / split-branch version skew
 
@@ -149,7 +150,8 @@ The green-gate join (SA96-GATE), the installed-wheel discovery/resolver chain (S
 
 Track 1 holds the gate-governance work: it changes how "green" is decided, not what the generator emits. `TA62`/SA120, **SA125**, and **SA126** are closed (see [CHANGELOG.md](../../CHANGELOG.md)); **SA121** is closed (`SA121-DOC-CR-002` resolved), followed by **SA122a/SA122b** from [arch-audit.md](../../arch-audit.md) Finding 11.
 
-**Ordering on this track (one worktree, serial):** **SA122a → SA122b** (SA121 closed), with SA122b merge-gated behind SA112e.
+**Ordering on this track (one worktree, serial):** **SA122a (in process) → SA127 → SA122b** (SA121 closed), with SA122b merge-gated behind SA112e.
+- **SA127 is the release-blocking entry on this track.** Added 2026-07-29; `deps: none`, file-disjoint from SA122a, and it starts as soon as SA122a merges back. It is the only Track 1 ticket that is not governance filler, and it preempts SA122a if that ticket stalls.
 - **SA121 — CLOSED.** `SA121-DOC-CR-002` resolved by full-scope documentation review; functional delivery green at `9448a0f7`. `SA121-CR-007` remains low/advisory (historical CHANGELOG prose consistency).
 - **SA122a follows.** Finding 11 should be centralized **before or as part of** the SA112e/`SA115-CI-001` path-list edits, so SA122a should land early enough that those edits have a registry to write into; SA122b's consumer migration waits for SA112e so the e2e path list is rewritten once.
 
@@ -201,6 +203,65 @@ Required release properties have no authoritative topology. The five repository 
   - **Merge-order bound.** SA112e appends the installed-wheel path tuple to `.github/workflows/e2e.yml`, and `SA115-CI-001` appends its own; both preserve exact ordered tuples with `yaml.BaseLoader` regression coverage. Migrating that list before those land would force rework of all three edits. **Land SA122b after SA112e** — the same coordination bound SA115 already carries. SA122a is unaffected and should land first so SA112e and SA115-CI-001 register their paths as they go.
   - Verify: the five conformance gates run in `publish.yml` and the parity checker goes green on the publish context; adding one new gate requires editing only the registry and its implementation, proven by a test that adds a gate and asserts all five contexts pick it up; the ordered e2e path tuples from SA112e and SA115-CI-001 are both preserved byte-exact; `make check`, `make ci`, and hosted CI stay green with unchanged effective inventories.
   *(why →* arch Finding 11 — removes the 7–10 coordination stations per cross-cutting property while preserving environment-specific execution*)*
+
+#### SA127 — Zero-module installed `apply` fails at managed wiring
+
+Found 2026-07-29 by manual `plan`/`apply` from an installed wheel with modules skipped. `apply` aborts at the managed-wiring step with:
+
+```
+❌ Managed wiring regeneration failed: Modules base path not configured and no embedded
+   module manifests found. Run inside the maintainer monorepo, call
+   set_modules_base_path(), or embed at least one module with a module.yml file.
+```
+
+**This is a second, independent release blocker.** It is *not* SA117: no module is being embedded, no version is compared, and pushing refreshed splits does not touch it. With SA117 open, installed `apply` fails for every project **with** modules (version assert); with SA127 open it fails for every project **without** them. Both must close before `apply` works for any user.
+
+**Diagnosis (complete — no diagnostic child needed).** `quickscale_cli/src/quickscale_cli/utils/module_wiring_manager.py:163-174`:
+
+```python
+def _prepare_modules_base_path(project_path, prior_base_path):
+    if _has_embedded_manifests(project_path):   # no modules/ dir  -> False
+        set_modules_base_path(project_path / "modules")
+        return _refresh_adapters()
+    if prior_base_path is not None:             # installed wheel  -> None
+        return _refresh_adapters()
+    return ("Modules base path not configured and no embedded module manifests found. ...")
+```
+
+The guard is evaluated **before** anything consults the selection, yet `apply_command.py:2816-2817` has already decided there is nothing to do:
+
+```python
+if not desired_module_names:
+    selected = []
+```
+
+So `regenerate_managed_wiring` is asked to build specs for zero modules — needing zero manifests — and still hard-fails because it cannot locate a manifest source it will never read. `_build_wiring_specs` over an empty list returns `{}` without touching the loader, and `write_managed_wiring(package_dir, {})` is the correct outcome for a module-less project: empty managed settings/URL/integration files.
+
+**Why every gate missed it.** `test_e2e_development_workflow.py:277` already drives the full `plan → apply → up → migrate → down` lifecycle with `modules(skip)` and passes — but from the **monorepo**, where `_get_prior_modules_base_path()` returns a real path and execution takes the `prior_base_path is not None` branch. The uncovered cell is *installed wheel × zero modules*, and no ticket covers it: **SA113 ✓** added the bundled-manifest fallback to `resolve_module_implications` only (a different call site); **SA112d** specifies the permanent installed-wheel E2E with **all 12 modules**; `roadmap.md`'s SA117 verify line likewise exercises the all-12 path.
+
+**This does not change AF7.** [decisions.md §af7-installed-wheel-module-discovery](./decisions.md#af7-installed-wheel-module-discovery) keeps `get_modules_base_path`, `discover_shipped_module_paths`, `load_module_manifest`, and `refresh_managed_adapters` fail-hard, and that stays correct — see [decisions.md §fail-hard-principle](./decisions.md#fail-hard-principle). The defect is **invoking them at all on an empty selection**. Do not add a bundled-manifest fallback here and do not soften the error; the empty case must simply not reach the guard.
+
+**No module is universally required.** Confirmed against every `implies:` block: auth/billing/crm/listings/social → `orgs`; `orgs` → `notifications`; analytics/backups/blog/forms/notifications/storage imply nothing. Nothing implies `auth`, and nothing is implied unconditionally. Making any module mandatory to dodge this failure is **explicitly out of scope** — the planner offers "press Enter to skip" and the zero-module project is a supported, already-tested configuration.
+
+- [ ] **SA127 — Short-circuit managed wiring on an empty module selection.** `Tier 1 · Track 1 · deps: none · after SA122a`
+
+  In `regenerate_managed_wiring`, skip base-path preparation and adapter refresh when `selected_modules` is empty, and write empty managed wiring directly. Keep `_prepare_modules_base_path` and its message byte-unchanged for the non-empty case. Add the missing regression at the *installed-context* boundary — a test that leaves `get_modules_base_path()` unconfigured, passes `module_names=[]`, and asserts success plus written-but-empty managed files; and its negative control, a non-empty selection under the same unconfigured context, which must still fail with the existing message.
+
+  **File allowlist (exact, 2 files):**
+  - `quickscale_cli/src/quickscale_cli/utils/module_wiring_manager.py`
+  - `quickscale_cli/tests/test_module_wiring_manager_manifest.py` (the existing focused test module for this seam — extend it; do not create a second one)
+
+  - Verify: from an installed wheel in an external workdir, `quickscale plan <slug>` with modules skipped followed by `quickscale apply` reaches `poetry install` and completes the lifecycle; the same flow in the monorepo is unchanged; a non-empty selection with no manifest source still fails with the exact existing message; `make quality` is left no worse than found.
+  - Rollback: revert the two files; the seam has no state, migration, or on-disk format implications.
+  *(why →* installed `apply` cannot succeed for a module-less project, which is the simplest configuration the planner offers and the one a first-time user reaches first*)*
+
+  **Ordering.** Track 1 is one worktree and serial, and **SA122a is in process** — SA127 starts when SA122a merges back to `v87`. It is file-disjoint from SA122a's registry + parity checker, so nothing forces a rebase in either direction. **SA127 runs before SA122b**, which is merge-gated behind SA112e anyway and therefore cannot land first. If SA122a stalls, SA127 is the correct preemption: it is a release blocker and SA122a is governance filler.
+
+  **Track 2 was considered and is unavailable** (`roadmap.md` §Standing decisions): `wt-track2` carries `5193f198` + `5b5de830`, and a track merges as a branch, so any ticket homed there drags SA115 onto `v87` in violation of its `merge after SA112` bound. A fourth worktree remains declined (`SA112A-TRACK-001`).
+
+  **Dependency check (why `deps: none` is real).** `module_wiring_manager.py` appears in no open allowlist: SA117b/c/e own `publish_module.py`, `verify_public_module_apply.py`, and `git_utils.py`; SA112a owns `scripts/`; SA112d a new test file; SA112e the workflow path list; SA122a/SA122b a new registry and its consumers. Validation is service-free — no PostgreSQL, no Docker — so SA127 never competes for the exclusive infra Track 3 has priority on. **One residual risk, accepted:** SA112c's scope is by definition unknown until SA112b captures its traceback, and could in principle land in this same file. SA112b runs the **all-12-module** `apply`, which never reaches the empty-selection branch, so overlap is unlikely; if it happens the cost is one rebase of a two-file delta.
+
+  **Open decisions:** none.
 
 Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unscheduled** — gated on a third consumer or a public "update my generated project" command. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module. Tech-audit tooling gaps other than `TA62` (dependency-vulnerability scanning, security static analysis, production-change testimony gate) are parked in the v88 backlog as **SA123**. With SA120 closed, SA121 closed (`SA121-DOC-CR-002` resolved), and SA122a-b ticketed, both audits stand at zero unscheduled `now`-horizon findings.
 
@@ -328,17 +389,21 @@ The AF7 installed-wheel discovery decision is recorded in [`decisions.md`](../te
 Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 ```
-Track 1 (governance; serial)      Track 2 (CLOSED to new work)   Track 3 → release (CRITICAL PATH)
+Track 1 (governance + SA127; serial) Track 2 (CLOSED to new work)  Track 3 → release (CRITICAL PATH)
 ─────────────────────────────     ────────────────────────────   ─────────────────────────────────
 SA121 ✓ CLOSED                      SA115 (e2e xdist; deps: none)  SA117b (publish-path safety) ◄─ next
   │  SA121-DOC-CR-002 resolved ✓      │  validation AUTHORIZED       │  deps: none (SA117a ✓)
   │  functional ✓ (9448a0f7)          │  cannot finish → SA112f      │  + absorbed CR-002 spy
   ▼                                   │  cannot merge  → SA112e      ▼
-SA122a (gate registry) ◄─ next       │                             SA117c (lock-drift completeness)
+SA122a (gate registry) ◄─ in process │                             SA117c (lock-drift completeness)
   │  deps: none                     │                              │
   ▼                                 │                              ▼
-SA122b (migrate consumers)          │                             SA117e (review + push splits)
-        ▲                           │                              │   (scope tooling → v88 SA124)
+SA127 (zero-module apply fix)       │                             SA117e (review + push splits)
+  │  deps: none · RELEASE BLOCKER   │                              │   (scope tooling → v88 SA124)
+  │  independent of SA117           │                              │
+  ▼                                 │                              │
+SA122b (migrate consumers)          │                              │
+        ▲                           │                              │
         └──── merge after SA112e ───┼──────────────────────────────┤
                                     │                              ▼
                                     └──── merge after SA112 ──────► SA112a → b → c → d → e → f
@@ -355,7 +420,7 @@ SA122b (migrate consumers)          │                             SA117e (revi
 
 **Critical path:** `SA117b → SA117c → SA117e → SA112a → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH`. SA117 joined the head of this chain on 2026-07-26 (`SA117-DEC-002`): it was previously an order-free sibling that merely shared the SA96-PUBLISH blocker, but it gates SA112b's diagnostic evidence and SA112d's lifecycle assertion, so it is now genuinely upstream. The 2026-07-27 split (`SA117-DEC-003`) lengthened the chain in node count but not in work — and `SA117-DEC-004` then removed the scope meta-tooling from v87 entirely (deferred to v88 as SA124), since it gates no release property. That is the longest remaining dependency chain to release, and the only chain worth optimizing — the SA112 umbrella is also the merge gate SA115 waits behind, so this chain is the single scheduling bottleneck in the repo.
 
-**Parallelism.** The open tickets occupy all three tracks: SA117b–SA117e → SA112a–SA112f → SA96-PUBLISH sequentially on Track 3, SA115 on Track 2, and SA122a → SA122b on Track 1 (SA121 closed); SA126 is complete. **The repository runs exactly three worktrees; a fourth is not created** (`SA112A-TRACK-001`, resolved 2026-07-28 — see Standing decisions). **One rebalancing question remains open — `SA112A-TRACK-002`, below — and it needs no new worktree.** The last parallelism gain came from **splitting a ticket instead of adding a track**:
+**Parallelism.** The open tickets occupy all three tracks: SA117b–SA117e → SA112a–SA112f → SA96-PUBLISH sequentially on Track 3, SA115 on Track 2, and SA122a (in process) → SA127 → SA122b on Track 1 (SA121 closed); SA126 is complete. **The repository runs exactly three worktrees; a fourth is not created** (`SA112A-TRACK-001`, resolved 2026-07-28 — see Standing decisions). **One rebalancing question remains open — `SA112A-TRACK-002`, below — and it needs no new worktree.** The last parallelism gain came from **splitting a ticket instead of adding a track**:
 
 - **`SA126` — the quality-remediation split (2026-07-28): taken, and now complete.** The two `make quality` blockers were extracted from SA117a/SA117b into one Tier 1 ticket on Track 1 because both lived in the same file, `module_commands.py`, and splitting them across two serial critical-path children was itself the only reason that file was shared. The move removed a conflict surface rather than adding one, converted Track 1 from *cannot finish* to *can finish*, and reduced SA117a to a test-file-only change. It closed at CC 18 and CC 13; rationale and evidence are in [CHANGELOG.md](../../CHANGELOG.md). **`module_commands.py` is now unowned by any open ticket.**
 - **OPEN DECISION `SA112A-TRACK-002` (2026-07-28) — move SA112a to Track 1, or keep Track 1 on governance?** This is the same SA112a parallelization declined last pass as `SA112A-TRACK-001`, but the situation changed twice: SA126 closed, and **SA117a took a fourth review cap with still zero source delta**. Track 1's remaining queue (SA122a, SA122b) is now **off the critical path**, while Track 3 is stalled at the critical-path head. Track 1 is a real existing worktree, so unlike last pass **no fourth track is required**.
@@ -389,11 +454,11 @@ SA122b (migrate consumers)          │                             SA117e (revi
 
 Each track reports **three independent states**. A track is **truly green** only when all three are yes.
 
-- **Track 1 (SA122a → SA122b; SA121 closed) — start: YES · finish: YES · merge: YES. TRULY GREEN, but OFF the critical path — this is filler work.**
-  - **Can start — YES.** SA122a is the current action (SA121 closed) and needs no PostgreSQL/Docker; SA122b follows with its stated SA112e merge bound.
-  - **Can finish — YES.** `SA121-DOC-CR-002` is resolved (SA121 closed); SA126 has cleared the quality findings that previously blocked this track; SA122b retains its stated SA112e merge bound.
-  - **Can merge — YES.** SA121, SA126, and SA122a carry no merge-order gate. SA122b alone is order-gated behind **SA112e** (shared `.github/workflows/e2e.yml` path list) — a hard dependency that only that upstream work clears.
-  - **On the critical path? NO — the remaining ticket is off it.** SA126 was this track's only critical-path contribution and it is closed, so Track 1's queue (SA122a before SA122b) is now entirely governance filler: real work that shortens nothing on the release chain. This is precisely what makes `SA112A-TRACK-002` worth deciding — it would put a critical-path node (SA112a) on an otherwise off-path track.
+- **Track 1 (SA122a → SA127 → SA122b; SA121 closed) — start: YES · finish: YES · merge: YES. TRULY GREEN, and no longer pure filler — SA127 is a release blocker.**
+  - **Can start — YES.** SA122a is in process (SA121 closed) and needs no PostgreSQL/Docker; SA127 follows with `deps: none` and service-free validation; SA122b follows with its stated SA112e merge bound.
+  - **Can finish — YES.** `SA121-DOC-CR-002` is resolved (SA121 closed); SA126 has cleared the quality findings that previously blocked this track; SA127 depends on nothing and needs no infra; SA122b retains its stated SA112e merge bound.
+  - **Can merge — YES.** SA121, SA126, SA122a, and SA127 carry no merge-order gate. SA122b alone is order-gated behind **SA112e** (shared `.github/workflows/e2e.yml` path list) — a hard dependency that only that upstream work clears.
+  - **On the critical path? PARTLY — SA127 is, the SA122 chain is not.** SA127 blocks the release independently of Track 3: installed `apply` cannot succeed for a module-less project until it lands, and no Track 3 ticket fixes it. SA122a and SA122b remain governance filler that shortens nothing on the release chain. This is precisely what makes `SA112A-TRACK-002` worth deciding — it would put a critical-path node (SA112a) on an otherwise off-path track.
 - **Track 2 (SA115) — start: YES · finish: NO · merge: NO. NOT truly green. Off the critical path; closed to new work.**
   - **Can start — YES.** `SA115-DEC-001` step 3 heavy validation was authorized 2026-07-27; phases 1–2 are committed (`5193f198`, `5b5de830`) with post-merge focus checks green. Next action: serial-baseline vs. parallel comparison, `make ci-e2e`, local `check_ci_locally.sh --e2e`, plus implementing the ratified `SA115-DEC-002` guard clamp — scheduled around Track 3's exclusive-infra legs.
   - **Can finish — NO. Hard dependency.** The checkbox requires the post-SA112 re-merge, the confirmation that SA112d added nothing to `scripts/test_e2e.sh`, and independent review. **Blocking ticket: SA112f.** Validation itself is *not* blocked — SA115 may go fully green on evidence and still not be checkable.
@@ -405,7 +470,7 @@ Each track reports **three independent states**. A track is **truly green** only
   - **Process note (`SA117-DEC-005`, 2026-07-28).** SA117a was closed rather than continued after four review cycles produced zero lines against a two-line test change. The new **proportionality rule** in the handoff contract means SA117b's absorbed test assertion needs no plan-review of its own; SA117b's *production* findings — one of them a security boundary — still do.
 - **Track 3 detail — SA117a CLOSED; SA117b IS NEXT; NO OPEN PRODUCT DECISIONS.** `43d9b8fc` remains recorded partial delivery, and SA117a's reviewed lockstep correction landed with `SA117-CR-001` resolved — verified in code this pass (canonical parser in `manifest/loader.py`; all 24 source and bundled manifests at `0.87.0`). `SA117-DEC-005` closed SA117a and folded its last obligation, the `SA117A-CR-002` spy, into SA117b with a pre-written literal diff; `SA117A-PLAN-010` and `SA117A-PLAN-013` were retired as ticket blockers and restated once as standing merge-procedure guidance. **Next action: SA117b** — resolve `SA117-CR-003` (security: blank direct-CLI origin bypasses the pre-mutation public-source gate), `SA117-CONT-PR-003` (resilience: arm container cleanup before creation), and `SA117-CONT-PR-006` (completeness: secure literal bootstrap, NUL-safe staged-index assertion), and transcribe the absorbed spy. **Do not reduce `module_commands.py` or `manifest/loader.py` line counts** — those ceilings were deleted, not met — and do not reopen the complexity work, which SA126 closed. Do not publish splits (SA117e), start SA112, or treat the candidate as release-ready until the serial SA117 chain and SA117e's full-scope review complete; SA96-PUBLISH (human-only) holds until SA112f. Non-gating advisories remain deferred (SA91 CR-SA91-REV-006; SA89B-CR-004; SA93-REV-005; SA93-ADV-001..004; SA104-ADV-001; SA105-ADV-001; CR-SA106-002; SA110-ADV-001).
 
-**Net.** One critical path — **SA117b → SA117c → SA117e → SA112a → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH (human)**. **Two tracks are truly green: Track 1 (SA122a → SA122b; SA121 closed) and Track 3 (SA117b).** Of those, **only Track 3 is on the critical path — SA117b is the only real progress; SA122a and SA122b are filler**, valuable governance work that shortens nothing on the release chain. Track 2 (SA115 validation) is startable filler that additionally cannot finish (**SA112f**) or merge (**SA112e**) — both hard dependencies no maintainer decision can clear.
+**Net.** One critical path — **SA117b → SA117c → SA117e → SA112a → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH (human)**. **Two tracks are truly green: Track 1 (SA122a → SA127 → SA122b; SA121 closed) and Track 3 (SA117b).** Track 3's chain is the critical path, but **Track 1 now also carries release-blocking work: SA127** — a second, independent `apply` failure (zero-module projects) that no Track 3 ticket resolves, so the release needs both chains. **SA122a and SA122b remain filler**, valuable governance work that shortens nothing on the release chain. Track 2 (SA115 validation) is startable filler that additionally cannot finish (**SA112f**) or merge (**SA112e**) — both hard dependencies no maintainer decision can clear.
 
 **No ticket changed state in the sixth (cleaning) pass. The four state changes below landed in the fifth pass, all verified against code rather than prose, and remain current.** SA126 closed at CC 18 and CC 13, so `make quality` now exits **0** with zero regressions and `QUARANTINE_TICKETS` is empty; that cleared `SA121-QG-001` and made **Track 1 truly green** for the first time in this release train. **SA121 closed**: `SA121-DOC-CR-002` resolved by full-scope documentation review returning `STATUS: ok`; functional commit `9448a0f7` passed QG run 2 with 153 focused tests in 6.68s, helper 0 violations / 0 waivers, `bash -n`, `make quality` with 0 baseline regressions, and full-scope functional review `STATUS: ok`; `SA121-CR-003` and `SA121-CR-006` resolved; `SA121-CR-007` remains low/advisory (historical CHANGELOG prose consistency). **SA117a is closed** (`SA117-DEC-005`) after four review cycles produced zero lines against a two-line test change: its lockstep delivery was verified in code, its last obligation was folded into SA117b with a pre-written literal diff, and its two surviving plan findings were retired as generic merge ceremony. **Track 1's next action is SA122a (SA121 closed); Track 3's next action is SA117b**, which is real production work — a security boundary, a resilience fix, and a correctness fix — rather than a stalled test assertion. A **proportionality rule** was added so a test-or-docs-only child no longer requires its own plan-review cycle.
 
