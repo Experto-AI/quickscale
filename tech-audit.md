@@ -44,7 +44,6 @@ None open. Per this document's convention, closed findings exist only as dated R
 ## Structural smells
 
 - **`quality-gate-topology-hand-synced` (arch-audit Finding 11):** local, hosted, publish, and E2E assurance inventories are independently edited; `TA62` was another paid drift instance, but the boundary-level fix is structural.
-- **`quality-baseline-monotonicity-unenforced` (arch-audit Finding 12):** the mutable quality snapshot can authorize increases despite the shrink-only policy.
 - **`generated-file-ownership-unmodeled` (arch-audit Finding 7):** generator/updater ownership remains a hand-authored 138-entry taxonomy; defer until another updater consumer.
 - **`deletion-invariants-per-boundary-reimplementation` (arch-audit Finding 2):** non-ownership cleanup obligations still terminate at the account-delete boundary; defer until a second deletion/erasure boundary.
 - **`org-model-universe-hand-enumerated` (arch-audit Finding 4):** purge membership is checked, but ordering remains a manual FK-graph shadow with only three asserted edges; defer until `teams` or model-universe growth.
@@ -63,7 +62,7 @@ None open. Per this document's convention, closed findings exist only as dated R
 - **Installed-wheel lifecycle:** roadmap SA112a–f explicitly owns the still-unproven installed-artifact `plan → apply → up` path. The newest manifest fallback is a partial prerequisite, not closure; duplicating it here would create two owners.
 - **Published split skew:** roadmap SA117 now blocks publishing after a diagnostic reproduced stale remote manifests in source and installed contexts. The new decision SSOT ratifies v87 lockstep stamping, explicit embed/core mismatch rejection, and mandatory tag → split-push → PyPI ordering; SA119 owns immutable-ref pinning. This is not duplicated as a technical finding because present functionality also requires reconciling external split branches and the durable prevention changes artifact ownership/compatibility.
 - **Generator lock generation:** `_generate_poetry_lock()` warns and completes generation on missing Poetry, timeout, or nonzero exit. Tests and comments pin this as a deliberate usability trade-off; downstream apply/install remains fail-loud.
-- **Quality baseline:** the larger v87 baseline is governed by the ratified remediation/exemption decision; lack of an enforceable monotonicity boundary is already architectural Finding 12.
+- **Quality baseline:** the larger v87 baseline is governed by the ratified remediation/exemption decision; the monotonicity boundary is now enforced (SA121, arch Finding 12 resolved 2026-07-29).
 - Carried accepted items: SA68 persistent-env cell; dev `docker exec` unsets `RUNTIME_DATABASE_URL`; module packages omit real orgs dependencies by decision; forms anonymization uses one multi-org transaction; worker pools can exhibit head-of-line blocking; React `auth` is typed/defaulted false by decision; two `ImproperlyConfigured` identities coexist; sole-member self-removal can orphan an org; Stripe cancellation occurs inside the account-deletion atomic block; DR recovery fallbacks, analytics missing-key disablement, and public-context fail-closed broad catches are deliberate.
 
 ## Reconciliation log
