@@ -52,7 +52,7 @@ def _get_positive_int_setting(setting_name: str) -> int:
         )
     try:
         parsed_value = int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         raise ImproperlyConfigured(
             f"{setting_name} must be a valid positive integer, got {value!r}"
         )
