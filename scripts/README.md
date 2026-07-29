@@ -42,6 +42,7 @@ Preferred maintainer-facing command map:
 | `poetry run python scripts/check_sa117_scope.py worktree` | `make sa117-check` (add `SCRIPTS_ONLY=1` for Phase 1 backward compat) |
 | `poetry run python scripts/check_sa117_scope.py emit` | `make sa117-emit` |
 | `poetry run python scripts/check_sa117_scope.py lock` | `make sa117-lock` (add `SCRIPTS_ONLY=1` for Phase 1 backward compat) |
+| `poetry run python scripts/check_sa117_scope.py lock-diff --baseline-ref REF --candidate poetry.lock --expected-version X.Y.Z` | `make sa117-lock-diff SA117_BASELINE_REF=REF` (candidate/evidence/version variables are overridable) |
 | `poetry run python scripts/verify_sa117_publication.py capture --version X --phase Y` | `make sa117-capture VERSION=X PHASE=Y` |
 | `poetry run python scripts/verify_sa117_publication.py verify --evidence PATH` | `make sa117-verify EVIDENCE=PATH` |
 | `poetry run python scripts/verify_sa117_publication.py authorize --version X --evidence-digest D` | `make sa117-authorize VERSION=X DIGEST=D` |
@@ -121,6 +122,48 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 - [test_verify_sa117_publication.py](./test_verify_sa117_publication.py) — hermetic tests for publication verification: evidence schema, scope digest, capture/verify/authorize/rollback operations, full capture→verify→authorize→rollback workflow.
 - [verify_public_module_apply.py](./verify_public_module_apply.py) — public module apply verification covering argument validation, process execution (timeout, PGRP, failure precedence), evidence capture, origin-map consistency checks, resource cleanup, and zero container/volume checks. Testable with fake executables.
 - [test_verify_public_module_apply.py](./test_verify_public_module_apply.py) — hermetic tests for module apply verification: argument validation, process execution, process group kill, evidence building, origin map checks, `ResourceCleanup` context manager, container/volume detection.
+
+#### SA117c lock-diff contract
+
+`lock-diff` is the sole lock-drift route. It requires `--baseline-ref`, the
+repository-root `--candidate` (`poetry.lock`), and `--expected-version`; the
+candidate root is derived from the supplied lock path. The checker validates
+that this root is exactly the Git top-level repository, then validates exactly
+55 regular inventory files and 66 canonical version values on each
+side, including the twelve module package records in `poetry.lock`. Baseline
+Git entries must be regular blobs in mode `100644` or `100755`; candidate
+paths must be regular non-symlink files. Structural TOML, YAML, Python AST,
+and `VERSION` parsing is strict and fail-closed. YAML anchors, aliases,
+merges, and duplicate keys are rejected. The production canonical version
+parser is used through a fail-closed wrapper.
+
+Only those twelve validated `package.version` leaves are normalised when
+comparing lock structures. Any other lock drift is a semantic failure. All
+inventory values, including snapshots and lock module versions, must equal
+that side's `VERSION`; `--expected-version` must agree with the candidate and
+never overrides it.
+
+Direct exit codes are `0` clean, `1` unauthorized lock drift, and `2`
+malformed or unverifiable input. Evidence is schema version 1 JSON at
+`/tmp/sa117-lock-diff-evidence.json` by default, written atomically for exits
+0/1 and removed after output-path safety checks (no evidence remains on exit
+2). An output path resolving to any candidate inventory input is
+rejected before stale-evidence removal. It binds
+the resolved full baseline SHA plus candidate/root/lock digests.
+
+The preferred Make route is:
+
+```text
+make sa117-lock-diff SA117_BASELINE_REF=<ref>
+```
+
+`SA117_CANDIDATE` defaults to `$(CURDIR)/poetry.lock`, `SA117_EXPECTED_VERSION`
+defaults to `$(VERSION)`, and `SA117_EVIDENCE` defaults to the path above.
+Make translates missing required variables to exit `2`; the checker retains
+the direct `0/1/2` contract. Quoted root and candidate arguments support
+worktrees whose paths contain spaces. SA117c proves lock drift only and does
+not authorize or perform SA117e publication, remote split-branch, or module
+publishing operations.
 
 ## Notes for maintainers
 

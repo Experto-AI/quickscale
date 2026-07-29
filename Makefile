@@ -195,6 +195,7 @@ help:
 	@echo "  make sa117-check PATHS='...'      - Scope-guard: compare candidate changed paths against baseline (SCRIPTS_ONLY=1)"
 	@echo "  make sa117-emit                   - Emit scope allowlist paths (PHASE=name to filter)"
 	@echo "  make sa117-lock PATHS='...'       - Lock check: verify candidate paths match allowlist exactly"
+	@echo "  make sa117-lock-diff              - Fail-closed poetry.lock drift proof (SA117_BASELINE_REF required)"
 	@echo "  make sa117-capture VERSION=0.87.0 PHASE=final - Capture publication evidence"
 	@echo "  make sa117-verify EVIDENCE=path   - Verify publication evidence"
 	@echo "  make sa117-authorize VERSION=X DIGEST=D - Authorize a publication"
@@ -886,6 +887,34 @@ sa117-lock:
 	@$(PYTHON) scripts/check_sa117_scope.py lock \
 		--paths $(PATHS) \
 		$(if $(SCRIPTS_ONLY),--scripts-only,)
+
+# SA117c lock-drift proof. The candidate is always the supplied repository-root
+# poetry.lock; the checker derives its root from that path and requires it to
+# be the exact Git top-level. Keep the root anchor and every path argument
+# quoted so worktrees with spaces are supported.
+SA117_BASELINE_REF ?=
+SA117_CANDIDATE ?= $(CURDIR)/poetry.lock
+SA117_EXPECTED_VERSION ?= $(VERSION)
+SA117_EVIDENCE ?= /tmp/sa117-lock-diff-evidence.json
+
+sa117-lock-diff:
+	@if [ -z "$(SA117_BASELINE_REF)" ]; then \
+		echo "Error: SA117_BASELINE_REF is required (full or resolvable Git commit ref)."; \
+		exit 2; \
+	fi
+	@if [ -z "$(SA117_EXPECTED_VERSION)" ]; then \
+		echo "Error: SA117_EXPECTED_VERSION is required (defaults to VERSION)."; \
+		exit 2; \
+	fi
+	@set -e; \
+	root="$(CURDIR)"; \
+	candidate="$(SA117_CANDIDATE)"; \
+	cd "$$root"; \
+	$(PYTHON) "$$root/scripts/check_sa117_scope.py" lock-diff \
+		--baseline-ref "$(SA117_BASELINE_REF)" \
+		--candidate "$$candidate" \
+		--expected-version "$(SA117_EXPECTED_VERSION)" \
+		--output "$(SA117_EVIDENCE)"
 
 # Capture publication evidence.
 sa117-capture:
