@@ -22,9 +22,13 @@ Covers:
 
 from __future__ import annotations
 
+import os
 import pathlib
+import signal
 import subprocess
 import tempfile
+import threading
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -33,9 +37,12 @@ from scripts.verify_public_module_apply import (
     build_apply_evidence,
     check_no_container_or_volume,
     check_origin_map,
+    cleanup_compose_project,
     compute_state_digest,
     execute_apply,
+    generate_compose_project_name,
     kill_process_group,
+    main,
     validate_apply_args,
 )
 
@@ -228,6 +235,32 @@ class TestExecuteApply:
         )
         assert completed.returncode == 0
         assert "MY_VAR=hello" in completed.stdout
+
+    @pytest.mark.parametrize(
+        ("signum", "expected_returncode"),
+        [(signal.SIGINT, 130), (signal.SIGTERM, 143)],
+    )
+    def test_parent_signal_preserves_status_after_child_group_reap(
+        self, tmp_path: pathlib.Path, signum: signal.Signals, expected_returncode: int
+    ) -> None:
+        """SIGINT/SIGTERM terminate the child group before returning status."""
+        script = tmp_path / "signal_target.sh"
+        script.write_text("#!/usr/bin/env bash\nsleep 60\n", encoding="utf-8")
+        script.chmod(0o755)
+
+        timer = threading.Timer(0.2, lambda: os.kill(os.getpid(), signum))
+        timer.start()
+        try:
+            completed = execute_apply(
+                executable=script,
+                argv=["signal_target.sh"],
+                timeout=10,
+            )
+        finally:
+            timer.cancel()
+            timer.join()
+
+        assert completed.returncode == expected_returncode
 
 
 # ---------------------------------------------------------------------------
@@ -531,15 +564,37 @@ class TestCheckOriginMap:
             is False
         )
 
-    def test_empty_origin_match(self) -> None:
-        """Empty origins that match are treated as valid."""
+    def test_empty_origin_is_rejected(self) -> None:
+        """Empty origins fail closed even when both sides are empty."""
         assert (
             check_origin_map(
                 module="auth",
                 declared_origin="",
                 expected_origin="",
             )
-            is True
+            is False
+        )
+
+    @pytest.mark.parametrize("origin", [None, "", "   ", "\t\n"])
+    def test_blank_declared_origin_is_rejected(self, origin: str | None) -> None:
+        assert (
+            check_origin_map(
+                module="auth",
+                declared_origin=origin,
+                expected_origin="https://github.com/quickscale/module.git",
+            )
+            is False
+        )
+
+    @pytest.mark.parametrize("origin", [None, "", "   ", "\t\n"])
+    def test_blank_expected_origin_is_rejected(self, origin: str | None) -> None:
+        assert (
+            check_origin_map(
+                module="auth",
+                declared_origin="https://github.com/quickscale/module.git",
+                expected_origin=origin,
+            )
+            is False
         )
 
     def test_empty_vs_nonempty_mismatch(self) -> None:
@@ -683,6 +738,63 @@ class TestMismatchBeforeMutation:
         assert "ORIGIN MISMATCH" in captured.err
         assert "auth" in captured.err
 
+    @pytest.mark.parametrize("option", ["--declared-origin", "--expected-origin"])
+    @pytest.mark.parametrize("invalid_value", ["", "   ", "\t\n"])
+    def test_blank_origin_blocks_execution_and_names_option(
+        self,
+        fake_executable: pathlib.Path,
+        project_dir: pathlib.Path,
+        capsys,
+        option: str,
+        invalid_value: str,
+    ) -> None:
+        args = [
+            "apply",
+            "--module",
+            "auth",
+            "--target",
+            str(project_dir),
+            "--executable",
+            str(fake_executable),
+            "--argv",
+            "fake_apply.sh",
+            "--version",
+            "0.87.0",
+            "--declared-origin",
+            "https://github.com/quickscale/module.git",
+            "--expected-origin",
+            "https://github.com/quickscale/module.git",
+        ]
+        args[args.index(option) + 1] = invalid_value
+
+        with patch("scripts.verify_public_module_apply.execute_apply") as mock_execute:
+            assert main(args) == 1
+
+        mock_execute.assert_not_called()
+        assert option in capsys.readouterr().err
+
+    def test_omitted_origin_is_argparse_error(
+        self, fake_executable: pathlib.Path, project_dir: pathlib.Path
+    ) -> None:
+        args = [
+            "apply",
+            "--module",
+            "auth",
+            "--target",
+            str(project_dir),
+            "--executable",
+            str(fake_executable),
+            "--argv",
+            "fake_apply.sh",
+            "--version",
+            "0.87.0",
+            "--declared-origin",
+            "https://github.com/quickscale/module.git",
+        ]
+        with pytest.raises(SystemExit) as exc_info:
+            main(args)
+        assert exc_info.value.code == 2
+
 
 # ---------------------------------------------------------------------------
 # Resource cleanup
@@ -754,6 +866,143 @@ class TestResourceCleanup:
         cleanup = ResourceCleanup()
         cleanup.register_temp_file(pathlib.Path("/nonexistent/file.txt"))
         cleanup.cleanup()  # no raise
+
+
+class TestComposeOwnership:
+    """Verifier Compose identities and cleanup remain narrowly scoped."""
+
+    def test_project_identity_is_safe_and_unique(self) -> None:
+        first = generate_compose_project_name()
+        second = generate_compose_project_name()
+        assert first.startswith("qs-sa117b-")
+        assert first != second
+        assert len(first) == len("qs-sa117b-") + 32
+        assert all(char.isalnum() or char == "-" for char in first)
+
+    def test_malformed_marker_does_not_run_destructive_cleanup(self, tmp_path) -> None:
+        with patch("scripts.verify_public_module_apply.subprocess.run") as mock_run:
+            cleanup_compose_project(tmp_path, "qs-sa117b-not-a-uuid")
+        mock_run.assert_not_called()
+
+    def test_cleanup_uses_exact_project_and_labels(self, tmp_path) -> None:
+        project_name = "qs-sa117b-" + "a" * 32
+        calls: list[list[str]] = []
+
+        def _record_run(command: list[str], **kwargs: object) -> Mock:
+            del kwargs
+            calls.append(command)
+            resource_ids = {
+                "container": "container-id",
+                "volume": "volume-id",
+                "network": "network-id",
+            }
+            if len(command) > 2 and command[2] == "ls":
+                return Mock(stdout=f"{resource_ids[command[1]]}\n")
+            return Mock(stdout="")
+
+        with patch(
+            "scripts.verify_public_module_apply.subprocess.run",
+            side_effect=_record_run,
+        ):
+            cleanup_compose_project(tmp_path, project_name)
+
+        assert calls[0] == [
+            "docker",
+            "compose",
+            "--project-name",
+            project_name,
+            "down",
+            "--volumes",
+            "--remove-orphans",
+        ]
+        assert [
+            "docker",
+            "container",
+            "ls",
+            "-aq",
+            "--filter",
+            f"label=com.docker.compose.project={project_name}",
+        ] in calls
+        assert [
+            "docker",
+            "volume",
+            "ls",
+            "-q",
+            "--filter",
+            f"label=com.docker.compose.project={project_name}",
+        ] in calls
+        assert [
+            "docker",
+            "network",
+            "ls",
+            "-q",
+            "--filter",
+            f"label=com.docker.compose.project={project_name}",
+        ] in calls
+        assert ["docker", "rm", "-f", "container-id"] in calls
+        assert ["docker", "volume", "rm", "volume-id"] in calls
+        assert ["docker", "network", "rm", "network-id"] in calls
+
+    def test_failed_compose_down_removes_all_owned_resources_only(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """Fallback cleanup removes every owned resource without touching peers."""
+        project_name = "qs-sa117b-" + "b" * 32
+        calls: list[list[str]] = []
+        compose_down_failed = False
+
+        def _record_run(command: list[str], **kwargs: object) -> Mock:
+            nonlocal compose_down_failed
+            del kwargs
+            calls.append(command)
+            if command[:3] == ["docker", "compose", "--project-name"]:
+                compose_down_failed = True
+                raise subprocess.CalledProcessError(1, command)
+            if command[:3] == ["docker", "container", "ls"]:
+                return Mock(stdout="owned-stopped\n")
+            if command[:3] == ["docker", "volume", "ls"]:
+                return Mock(stdout="owned-volume\n")
+            if command[:3] == ["docker", "network", "ls"]:
+                return Mock(stdout="owned-network\n")
+            return Mock(stdout="")
+
+        with patch(
+            "scripts.verify_public_module_apply.subprocess.run",
+            side_effect=_record_run,
+        ):
+            cleanup_compose_project(tmp_path, project_name)
+
+        assert compose_down_failed is True
+        assert [
+            [
+                "docker",
+                "container",
+                "ls",
+                "-aq",
+                "--filter",
+                f"label=com.docker.compose.project={project_name}",
+            ],
+            [
+                "docker",
+                "volume",
+                "ls",
+                "-q",
+                "--filter",
+                f"label=com.docker.compose.project={project_name}",
+            ],
+            [
+                "docker",
+                "network",
+                "ls",
+                "-q",
+                "--filter",
+                f"label=com.docker.compose.project={project_name}",
+            ],
+        ] == [call for call in calls if len(call) > 2 and call[2] == "ls"]
+        assert ["docker", "rm", "-f", "owned-stopped"] in calls
+        assert ["docker", "volume", "rm", "owned-volume"] in calls
+        assert ["docker", "network", "rm", "owned-network"] in calls
+        assert not any("unrelated" in argument for call in calls for argument in call)
 
 
 # ---------------------------------------------------------------------------

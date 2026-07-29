@@ -7,8 +7,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from scripts.publish_module import _has_uncommitted_changes
+
 from quickscale_core.utils.git_utils import (
     GitError,
+    GitRunner,
+    assert_staged_index_empty,
+    build_publication_git_runner,
     check_remote_branch_exists,
     get_all_tags_at_head,
     get_remote_url,
@@ -25,6 +30,7 @@ from quickscale_core.utils.git_utils import (
     run_git_subtree_pull,
     run_git_subtree_push,
     run_git_subtree_split,
+    validate_publication_origin,
     validate_expected_sha,
     validate_module_name,
 )
@@ -73,8 +79,15 @@ class TestIsWorkingDirectoryClean:
     @patch("subprocess.run")
     def test_dirty_working_directory(self, mock_run: MagicMock) -> None:
         """Test detecting dirty working directory"""
-        mock_run.return_value = MagicMock(stdout="M  file.py\n", returncode=0)
+        mock_run.return_value = MagicMock(stdout=b"M  file.py\0", returncode=0)
         assert is_working_directory_clean() is False
+
+    @patch("subprocess.run")
+    def test_malformed_status_stream_fails_closed(self, mock_run: MagicMock) -> None:
+        """A non-empty status stream without its final NUL is rejected."""
+        mock_run.return_value = MagicMock(stdout=b"M  file.py", returncode=0)
+        with pytest.raises(GitError, match="Malformed git status"):
+            is_working_directory_clean()
 
     @patch("subprocess.run")
     def test_git_status_failure(self, mock_run: MagicMock) -> None:
@@ -208,6 +221,237 @@ class TestGetRemoteUrl:
         mock_run.side_effect = subprocess.CalledProcessError(1, "git", stderr="error")
         with pytest.raises(GitError, match="Failed to get remote URL"):
             get_remote_url()
+
+
+class TestPublicationGitControls:
+    """Tests for publication-only executable, environment, and origin gates."""
+
+    @patch("scripts.publish_module.is_working_directory_clean", return_value=True)
+    def test_publisher_cleanliness_accepts_clean_worktree(
+        self, mock_clean: MagicMock
+    ) -> None:
+        """Publisher cleanliness checks preserve the clean-worktree route."""
+        runner = GitRunner(executable="git", env={}, publication=True)
+
+        assert _has_uncommitted_changes(runner) is False
+        mock_clean.assert_called_once_with(
+            Path(__file__).resolve().parent.parent.parent,
+            runner=runner,
+        )
+
+    @patch("scripts.publish_module.is_working_directory_clean", return_value=False)
+    def test_publisher_cleanliness_detects_dirty_worktree(
+        self, mock_clean: MagicMock
+    ) -> None:
+        """Publisher cleanliness checks preserve the dirty-worktree route."""
+        runner = GitRunner(executable="git", env={}, publication=True)
+
+        assert _has_uncommitted_changes(runner) is True
+        mock_clean.assert_called_once()
+
+    @patch(
+        "scripts.publish_module.is_working_directory_clean",
+        side_effect=GitError("status unavailable"),
+    )
+    def test_publisher_cleanliness_fails_closed_on_status_error(
+        self, mock_clean: MagicMock
+    ) -> None:
+        """Publisher status errors are treated as dirty/fail-closed."""
+        runner = GitRunner(executable="git", env={}, publication=True)
+
+        assert _has_uncommitted_changes(runner) is True
+        mock_clean.assert_called_once()
+
+    def test_bootstrap_sanitizes_repository_and_indexed_config_controls(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GIT_DIR", "/hostile/repository")
+        monkeypatch.setenv("GIT_WORK_TREE", "/hostile/worktree")
+        monkeypatch.setenv("GIT_EXEC_PATH", "/hostile/git")
+        monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
+        monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.gitdir")
+        monkeypatch.setenv("GIT_CONFIG_VALUE_0", "/hostile/repository")
+        monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
+
+        runner = build_publication_git_runner(shutil.which("git"))
+
+        assert runner.publication is True
+        assert runner.env is not None
+        assert "GIT_DIR" not in runner.env
+        assert "GIT_WORK_TREE" not in runner.env
+        assert "GIT_EXEC_PATH" not in runner.env
+        assert "GIT_CONFIG_COUNT" not in runner.env
+        assert "GIT_CONFIG_KEY_0" not in runner.env
+        assert runner.env["GIT_CONFIG_NOSYSTEM"] == "1"
+        assert runner.env["GIT_CONFIG_GLOBAL"] == "/dev/null"
+        assert runner.env["GIT_TERMINAL_PROMPT"] == "0"
+        assert runner.env["GIT_LITERAL_PATHSPECS"] == "1"
+        assert runner.env["SSH_AUTH_SOCK"] == "/tmp/agent.sock"
+
+    def test_bootstrap_rejects_relative_or_missing_explicit_executable(self) -> None:
+        with pytest.raises(GitError, match="absolute"):
+            build_publication_git_runner("git")
+        with pytest.raises(GitError, match="not executable"):
+            build_publication_git_runner("/definitely/missing/git")
+
+    def test_bootstrap_accepts_non_default_valid_git_executable(self) -> None:
+        git_path = shutil.which("git")
+        assert git_path is not None
+        runner = build_publication_git_runner(git_path)
+        assert runner.executable == git_path
+
+    @staticmethod
+    def _remote_result(mock_run: MagicMock, *, fetch: str, push: str) -> None:
+        def result(args: list[str], **_: object) -> MagicMock:
+            output = push if "--push" in args else fetch
+            return MagicMock(stdout=output, returncode=0)
+
+        mock_run.side_effect = result
+
+    @patch("subprocess.run")
+    def test_origin_accepts_effective_https_fetch_and_ssh_push(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        self._remote_result(
+            mock_run,
+            fetch="https://github.com/Experto-AI/quickscale.git\n",
+            push="git@github.com:Experto-AI/quickscale.git\n",
+        )
+        assert validate_publication_origin(tmp_path) == (
+            "https://github.com/Experto-AI/quickscale.git",
+            "git@github.com:Experto-AI/quickscale.git",
+        )
+
+    @pytest.mark.parametrize("blank", ["", "   \n"])
+    @patch("subprocess.run")
+    def test_origin_rejects_blank_fetch_or_push(
+        self, mock_run: MagicMock, tmp_path: Path, blank: str
+    ) -> None:
+        self._remote_result(
+            mock_run,
+            fetch=blank,
+            push="https://github.com/Experto-AI/quickscale.git\n",
+        )
+        with pytest.raises(GitError, match="fetch URL is blank"):
+            validate_publication_origin(tmp_path)
+
+    @pytest.mark.parametrize("push", [False, True], ids=["fetch", "push"])
+    @pytest.mark.parametrize("padding", [" leading", "trailing "])
+    @patch("subprocess.run")
+    def test_origin_rejects_surrounding_whitespace_before_allowlist(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        push: bool,
+        padding: str,
+    ) -> None:
+        """Whitespace-padded effective URLs are not normalized into trust."""
+        trusted_url = "https://github.com/Experto-AI/quickscale.git"
+        fetch = trusted_url
+        push_url = trusted_url
+        if push:
+            push_url = (
+                f"{padding}{trusted_url}"
+                if padding.startswith(" ")
+                else f"{trusted_url}{padding}"
+            )
+        else:
+            fetch = (
+                f"{padding}{trusted_url}"
+                if padding.startswith(" ")
+                else f"{trusted_url}{padding}"
+            )
+        self._remote_result(mock_run, fetch=f"{fetch}\n", push=f"{push_url}\n")
+
+        with pytest.raises(
+            GitError,
+            match=f"Origin {'push' if push else 'fetch'} URL contains surrounding whitespace",
+        ):
+            validate_publication_origin(tmp_path)
+
+    @patch("subprocess.run")
+    def test_origin_rejects_mixed_push_identity(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        self._remote_result(
+            mock_run,
+            fetch="https://github.com/Experto-AI/quickscale.git\n",
+            push="https://github.com/other/project.git\n",
+        )
+        with pytest.raises(GitError, match="push URL is not"):
+            validate_publication_origin(tmp_path)
+
+    @patch("subprocess.run")
+    def test_origin_rejects_unset_remote_as_blank(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.side_effect = subprocess.CalledProcessError(
+            128, "git", stderr="error: No such remote 'origin'"
+        )
+        with pytest.raises(GitError, match="fetch URL is blank or unset"):
+            validate_publication_origin(tmp_path)
+
+    @patch("subprocess.run")
+    def test_staged_index_nul_parser_handles_special_filenames(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = MagicMock(
+            stdout=b'path with spaces\nquotes"\x00', returncode=0
+        )
+        with pytest.raises(GitError, match="Staged index is not empty"):
+            assert_staged_index_empty(tmp_path)
+
+    @patch("subprocess.run")
+    def test_staged_index_rejects_malformed_nonempty_stream(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = MagicMock(stdout=b"path-without-nul", returncode=0)
+        with pytest.raises(GitError, match="Malformed cached Git path"):
+            assert_staged_index_empty(tmp_path)
+
+    @patch("subprocess.run")
+    def test_publication_push_asserts_index_before_and_after_success(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        runner = GitRunner(executable="git", env={}, publication=True)
+        mock_run.side_effect = [
+            MagicMock(stdout=b"", returncode=0),
+            MagicMock(stdout=b"", returncode=0),
+            MagicMock(stdout=b"", returncode=0),
+        ]
+        push_split_branch(
+            "splits/auth-module",
+            expected_remote_sha="a" * 40,
+            path=tmp_path,
+            runner=runner,
+        )
+        commands = [call.args[0][1:] for call in mock_run.call_args_list]
+        assert commands[0][:4] == ["diff", "--cached", "--name-only", "-z"]
+        assert commands[1][0:2] == [
+            "push",
+            "--force-with-lease=refs/heads/splits/auth-module:" + "a" * 40,
+        ]
+        assert commands[2][:4] == ["diff", "--cached", "--name-only", "-z"]
+
+    @patch("subprocess.run")
+    def test_publication_push_rejects_index_dirtied_after_success(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        """The post-push assertion is active and remains NUL/path-safe."""
+        runner = GitRunner(executable="git", env={}, publication=True)
+        mock_run.side_effect = [
+            MagicMock(stdout=b"", returncode=0),
+            MagicMock(stdout=b"", returncode=0),
+            MagicMock(stdout=b"generated\nartifact\0", returncode=0),
+        ]
+        with pytest.raises(GitError, match="Staged index is not empty"):
+            push_split_branch(
+                "splits/auth-module",
+                expected_remote_sha="a" * 40,
+                path=tmp_path,
+                runner=runner,
+            )
+        assert mock_run.call_count == 3
 
 
 class TestResolveRemoteRef:
@@ -1711,6 +1955,33 @@ class TestPublishModuleReleaseAuthoritativeGate:
         assert "not release-authoritative" in combined
         assert "Traceback" not in result.stderr
         assert "Traceback" not in result.stdout
+
+    def test_single_module_publish_rejects_untrusted_origin_before_split(
+        self, tmp_path: Path
+    ) -> None:
+        """The origin gate fails before the first mutating subtree process."""
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="0.86.0")
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "remote",
+                "add",
+                "origin",
+                "https://evil.invalid/repo.git",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        result = self._run_wrapper(
+            repo_dir, "auth", "--expected-remote-sha", "a" * 40, timeout=120
+        )
+        combined = result.stdout + result.stderr
+        assert result.returncode != 0
+        assert "Publication origin validation failed" in combined
+        assert "Running git subtree split" not in combined
+        assert "Traceback" not in combined
 
     def test_publish_outdated_blocked_regardless_of_version_tag_mismatch(
         self, tmp_path: Path
