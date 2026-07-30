@@ -229,8 +229,16 @@ def _run_migrations_after_up() -> None:
     click.secho("✅ Database migrations applied", fg="green")
 
 
+_SUPERUSER_SENTINEL = "QUICKSCALE_SUPERUSER="
+
+
 def _superuser_exists_in_backend(container_name: str) -> bool | None:
-    """Check whether a Django superuser already exists
+    """Check whether a Django superuser already exists.
+
+    The probe prints an explicit ``QUICKSCALE_SUPERUSER=1`` or ``=0`` sentinel
+    to stdout so that the reader can determine the result without relying on
+    exit codes or stream emptiness (Django 5.2+ emits an auto-import banner to
+    stdout on every ``manage.py shell`` invocation).
 
     Returns:
         True when at least one superuser exists
@@ -246,20 +254,26 @@ def _superuser_exists_in_backend(container_name: str) -> bool | None:
         "shell",
         "-c",
         (
-            "from django.contrib.auth import get_user_model; import sys; "
-            "sys.exit(0 if get_user_model().objects.filter(is_superuser=True).exists() else 1)"
+            "from django.contrib.auth import get_user_model; "
+            "import sys; "
+            "exists = get_user_model().objects.filter(is_superuser=True).exists(); "
+            "print(f'QUICKSCALE_SUPERUSER={int(exists)}'); "
+            "sys.exit(0)"
         ),
     ]
     result = subprocess.run(check_cmd, capture_output=True, text=True)
-    if result.returncode == 0:
-        return True
+    if result.returncode != 0:
+        return None
 
-    stdout_output = (result.stdout or "").strip()
-    stderr_output = (result.stderr or "").strip()
-
-    if result.returncode == 1 and not stdout_output and not stderr_output:
-        return False
-
+    for line in reversed((result.stdout or "").splitlines()):
+        stripped = line.strip()
+        if stripped.startswith(_SUPERUSER_SENTINEL):
+            value = stripped[len(_SUPERUSER_SENTINEL) :]
+            if value == "1":
+                return True
+            if value == "0":
+                return False
+            return None
     return None
 
 
