@@ -446,7 +446,7 @@ SA122b (migrate consumers)              │                              │
 
 ### Track readiness (2026-07-30)
 
-> **Re-verified on 2026-07-30 (second pass).** SA117a/b/c are closed and fully merged; SA117e is Track 3's next action. Branch state re-measured: `wt-track3` carries **zero** commits unmerged into `v87`; `wt-track1` carries the documentation-only SA128 second blocked checkpoint pending merge-back, with no executable/test delta retained; `wt-track2` still carries `5193f198` + `5b5de830` and remains closed to new work.
+> **Re-verified on 2026-07-30 (second pass).** SA117a/b/c are closed and fully merged; SA117e is Track 3's next action. Branch state re-measured: `wt-track3` carries **zero** commits unmerged into `v87`; the documentation-only SA128 second blocked checkpoint merged to `v87` at `347ad879`, with no executable/test delta retained, and `wt-track1` carries zero commits unmerged; `wt-track2` still carries `5193f198` + `5b5de830` and remains closed to new work.
 >
 > **Fifth-pass code measurements, carried.** `make quality` was **rerun directly: exit 0**, with 0 warning and 0 critical baseline regressions. `radon cc` confirms SA126's closeout — `_perform_module_embed` **18** (ceiling 20) and `_update_single_module` **13** (ceiling 17), down from 22 and 18. `QUARANTINE_TICKETS` in `scripts/test_integration.sh` is **empty** (declared, no entries). `scripts/quality_baseline.json` still carries **zero** `large_files` entries and `scripts/quality_waivers.json` is still an empty ledger.
 
