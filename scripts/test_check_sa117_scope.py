@@ -360,6 +360,16 @@ class TestStrictParsers:
             '__version__ = other = "2.3.4"\n',
             'def set_version():\n    __version__ = "2.3.4"\n\n__version__ = "2.3.4"\n',
             'match value:\n    case {**__version__}:\n        pass\n\n__version__ = "2.3.4"\n',
+            'import __version__\n__version__ = "2.3.4"\n',
+            'import __version__.package\n__version__ = "2.3.4"\n',
+            'import package as __version__\n__version__ = "2.3.4"\n',
+            'from package import *\n__version__ = "2.3.4"\n',
+            'from package import __version__\n__version__ = "2.3.4"\n',
+            'from package import value as __version__\n__version__ = "2.3.4"\n',
+            'def versioned[__version__]():\n    pass\n\n__version__ = "2.3.4"\n',
+            'def versioned[**__version__]():\n    pass\n\n__version__ = "2.3.4"\n',
+            'def versioned[*__version__]():\n    pass\n\n__version__ = "2.3.4"\n',
+            'class C[__version__]:\n    pass\n\n__version__ = "2.3.4"\n',
         ],
     )
     def test_every_noncanonical_version_binding_is_unverifiable(
@@ -376,6 +386,63 @@ class TestStrictParsers:
         output.write_text("stale", encoding="utf-8")
 
         assert _run_fixture(version_fixture, output) == 2
+        assert not output.exists()
+
+    @pytest.mark.parametrize(
+        "replacement",
+        [
+            'import package.__version__ as package_version\n__version__ = "2.3.4"\n',
+            'from package import __version__ as package_version\n__version__ = "2.3.4"\n',
+            'package.__version__\n__version__ = "2.3.4"\n',
+            'from __version__ import something\n__version__ = "2.3.4"\n',
+            'import __version__ as other\n__version__ = "2.3.4"\n',
+            'from .__version__ import something\n__version__ = "2.3.4"\n',
+        ],
+    )
+    def test_version_references_without_forbidden_local_binding_are_accepted(
+        self,
+        version_fixture: dict[str, pathlib.Path | str],
+        tmp_path: pathlib.Path,
+        replacement: str,
+    ) -> None:
+        target = pathlib.Path(version_fixture["root"]) / (
+            "quickscale_modules/auth/src/quickscale_modules_auth/__init__.py"
+        )
+        target.write_text(replacement, encoding="utf-8")
+
+        assert _run_fixture(version_fixture, tmp_path / "evidence.json") == 0
+
+    def test_python_binding_failure_is_controlled_cli_error(
+        self, version_fixture: dict[str, pathlib.Path | str], tmp_path: pathlib.Path
+    ) -> None:
+        target = pathlib.Path(version_fixture["root"]) / (
+            "quickscale_modules/auth/src/quickscale_modules_auth/__init__.py"
+        )
+        target.write_text('from package import *\n__version__ = "2.3.4"\n', encoding="utf-8")
+        output = tmp_path / "evidence.json"
+        output.write_text("stale", encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(pathlib.Path(__file__).with_name("check_sa117_scope.py")),
+                "lock-diff",
+                "--baseline-ref",
+                "HEAD",
+                "--candidate",
+                str(version_fixture["candidate"]),
+                "--expected-version",
+                "2.3.4",
+                "--output",
+                str(output),
+            ],
+            cwd=version_fixture["root"],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 2
+        assert "Traceback" not in result.stdout + result.stderr
+        assert "ERROR:" in result.stderr
         assert not output.exists()
 
     def test_cli_temporal_toml_failure_has_controlled_output(
