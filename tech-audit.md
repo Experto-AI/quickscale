@@ -67,7 +67,7 @@ None open. Per this document's convention, closed findings exist only as dated R
 
 ## Reconciliation log
 
-- 2026-07-26 — `TA1`, `TA2`, `TA3`, `TA4`, `TA5`, `TA6`, `TA7`, `TA8`, `TA9`, `TA10`, `TA11`, `TA12`, `TA13`, `TA14`, `TA15`, `TA16`, `TA17`, `TA18`, `TA19`, `TA20`, `TA21`, `TA22`, `TA23`, `TA24`, `TA25`, `TA26`, `TA27`, `TA28`, `TA29`, `TA30`, `TA31`, `TA32`, `TA33`, `TA34`, `TA35`, `TA36`, `TA37`, `TA38`, `TA39`, `TA40`, `TA41`, `TA42`, `TA43`, `TA44`, `TA45`, `TA46`, `TA47`, `TA48`, `TA49`, `TA50`, `TA51`, `TA52`, `TA53`, `TA54`, `TA55`, `TA56`, `TA57`, `TA58`, `TA59`: resolved — historical closures pre-date the prior audit baseline; no matching regression appeared in the full current production delta or sampled live surfaces.
+- 2026-07-26 — `TA1`–`TA59` (59 findings): resolved — historical closures pre-date the prior audit baseline; no matching regression appeared in the full current production delta or sampled live surfaces. Per-finding closeout detail is in [CHANGELOG.md](CHANGELOG.md) and version control.
 - 2026-07-26 — `TA60`: resolved — frontend proof closure reverified in code: hosted `lint-frontend`, local-CI frontend lint, and publish `frontend-proof` remain wired. `TA62` was a distinct quiet-mode parity defect, not a regression of the publish/hosted closure.
 - 2026-07-26 — `TA61`: resolved — devtools closure reverified in code: all ten scoped lint/typecheck invocations across hosted CI, publishing, and local CI still include `--devtools`.
 - 2026-07-26 — `TA62` / `quiet-check-skips-frontend-lint`: resolved — SA120 adds frontend-lint parity under quiet mode with focused test coverage (79 policy tests); defect description above is historical pre-fix documentation.
