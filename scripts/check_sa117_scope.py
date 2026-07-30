@@ -327,8 +327,23 @@ def _parse_python_version(content: bytes, path: str) -> str:
             raise LockDiffError(binding_error)
         elif isinstance(node, ast.ExceptHandler) and node.name == "__version__":
             raise LockDiffError(binding_error)
-        elif isinstance(node, ast.alias) and (
-            node.name == "__version__" or node.asname == "__version__"
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                bound_name = (
+                    alias.asname if alias.asname is not None else alias.name.partition(".")[0]
+                )
+                if bound_name == "__version__":
+                    raise LockDiffError(binding_error)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == "*":
+                    raise LockDiffError(binding_error)
+                bound_name = alias.asname if alias.asname is not None else alias.name
+                if bound_name == "__version__":
+                    raise LockDiffError(binding_error)
+        elif (
+            isinstance(node, (ast.TypeVar, ast.ParamSpec, ast.TypeVarTuple))
+            and node.name == "__version__"
         ):
             raise LockDiffError(binding_error)
         elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == "__version__":
