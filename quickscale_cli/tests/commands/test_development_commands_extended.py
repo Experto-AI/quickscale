@@ -298,9 +298,24 @@ class TestSuperuserExistsInBackend:
 
     # --- SA129-TEST-001: producer argv / script / subprocess inspection ---
 
+    # Independent expected probe script — matches the literal inline script in
+    # _superuser_exists_in_backend but is NOT derived from observed argv.
+    _EXPECTED_PROBE_SCRIPT = (
+        "from django.contrib.auth import get_user_model; "
+        "import sys; "
+        "exists = get_user_model().objects.filter(is_superuser=True).exists(); "
+        "print(f'QUICKSCALE_SUPERUSER={int(exists)}'); "
+        "sys.exit(0)"
+    )
+
     @patch("subprocess.run")
     def test_probe_complete_argv(self, mock_run):
-        """The probe passes the exact docker exec argv to subprocess.run."""
+        """The probe passes the exact docker exec argv to subprocess.run.
+
+        The expected script is a literal independent of the observed argv so
+        that any future change to the inline probe script is caught as a
+        diff, not silently accepted.
+        """
         mock_run.return_value = Mock(
             returncode=0,
             stdout="QUICKSCALE_SUPERUSER=0\n",
@@ -308,8 +323,7 @@ class TestSuperuserExistsInBackend:
         )
         _superuser_exists_in_backend("myapp-backend-1")
 
-        argv = mock_run.call_args.args[0]
-        assert argv == [
+        assert mock_run.call_args.args[0] == [
             "docker",
             "exec",
             "myapp-backend-1",
@@ -317,17 +331,7 @@ class TestSuperuserExistsInBackend:
             "manage.py",
             "shell",
             "-c",
-            argv[7],  # script slot; asserted structurally below
-        ]
-        # Structural: first 7 elements are the fixed docker/exec/python prefix.
-        assert argv[:7] == [
-            "docker",
-            "exec",
-            "myapp-backend-1",
-            "python",
-            "manage.py",
-            "shell",
-            "-c",
+            self._EXPECTED_PROBE_SCRIPT,
         ]
 
     @patch("subprocess.run")
@@ -448,11 +452,12 @@ class TestHandleSuperuserAfterUp:
 
     # --- True path: superuser exists, skip creation ---
 
+    @patch("quickscale_cli.commands.development_commands._run_docker_exec_command")
     @patch("quickscale_cli.commands.development_commands.is_interactive")
     @patch("quickscale_cli.commands.development_commands._superuser_exists_in_backend")
     @patch("quickscale_cli.commands.development_commands.get_backend_container_name")
     def test_true_skips_creation_with_message(
-        self, mock_container, mock_probe, mock_interactive, capsys
+        self, mock_container, mock_probe, mock_interactive, mock_exec, capsys
     ):
         """When probe returns True, print skip message and do not create."""
         mock_container.return_value = "myapp-backend-1"
@@ -462,20 +467,22 @@ class TestHandleSuperuserAfterUp:
         _handle_superuser_after_up(self._make_config())
         captured = capsys.readouterr()
 
-        # The handler prints the exact skip message and nothing else.
+        # Byte-exact stdout: skip message only, no createsuperuser.
         assert (
             captured.out
             == "ℹ️  Superuser already exists. Skipping createsuperuser step.\n"
         )
         assert captured.err == ""
+        mock_exec.assert_not_called()
 
     # --- False path: no superuser, non-interactive ---
 
+    @patch("quickscale_cli.commands.development_commands._run_docker_exec_command")
     @patch("quickscale_cli.commands.development_commands.is_interactive")
     @patch("quickscale_cli.commands.development_commands._superuser_exists_in_backend")
     @patch("quickscale_cli.commands.development_commands.get_backend_container_name")
     def test_false_noninteractive_prints_warning_and_manual_hint(
-        self, mock_container, mock_probe, mock_interactive, capsys
+        self, mock_container, mock_probe, mock_interactive, mock_exec, capsys
     ):
         """When probe returns False in non-interactive mode, warn and hint."""
         mock_container.return_value = "myapp-backend-1"
@@ -485,13 +492,13 @@ class TestHandleSuperuserAfterUp:
         _handle_superuser_after_up(self._make_config())
         captured = capsys.readouterr()
 
-        # Exact output: secho warning + echo hint, then return (no createsuperuser).
-        assert (
-            "⚠️  Superuser creation is enabled but requires interactive input."
-            in captured.out
+        # Byte-exact stdout: secho warning + echo hint, then return.
+        assert captured.out == (
+            "⚠️  Superuser creation is enabled but requires interactive input.\n"
+            "   Run: quickscale manage createsuperuser\n"
         )
-        assert "   Run: quickscale manage createsuperuser" in captured.out
-        assert "Creating Django superuser..." not in captured.out
+        assert captured.err == ""
+        mock_exec.assert_not_called()
 
     # --- False path: no superuser, interactive ---
 
@@ -510,7 +517,9 @@ class TestHandleSuperuserAfterUp:
         _handle_superuser_after_up(self._make_config())
         captured = capsys.readouterr()
 
-        assert "👤 Creating Django superuser..." in captured.out
+        # Byte-exact stdout: banner only, no warning lines.
+        assert captured.out == "👤 Creating Django superuser...\n"
+        assert captured.err == ""
         mock_exec.assert_called_once_with(
             "myapp-backend-1",
             ["python", "manage.py", "createsuperuser"],
@@ -519,11 +528,12 @@ class TestHandleSuperuserAfterUp:
 
     # --- None path: probe returns None, non-interactive ---
 
+    @patch("quickscale_cli.commands.development_commands._run_docker_exec_command")
     @patch("quickscale_cli.commands.development_commands.is_interactive")
     @patch("quickscale_cli.commands.development_commands._superuser_exists_in_backend")
     @patch("quickscale_cli.commands.development_commands.get_backend_container_name")
     def test_none_noninteractive_prints_could_not_verify(
-        self, mock_container, mock_probe, mock_interactive, capsys
+        self, mock_container, mock_probe, mock_interactive, mock_exec, capsys
     ):
         """When probe returns None in non-interactive mode, warn with exact message."""
         mock_container.return_value = "myapp-backend-1"
@@ -533,9 +543,13 @@ class TestHandleSuperuserAfterUp:
         _handle_superuser_after_up(self._make_config())
         captured = capsys.readouterr()
 
-        assert "⚠️  Could not verify superuser status." in captured.out
-        assert "   Run: quickscale manage createsuperuser" in captured.out
-        assert "Creating Django superuser..." not in captured.out
+        # Byte-exact stdout: warning + manual hint, no createsuperuser banner.
+        assert captured.out == (
+            "⚠️  Could not verify superuser status.\n"
+            "   Run: quickscale manage createsuperuser\n"
+        )
+        assert captured.err == ""
+        mock_exec.assert_not_called()
 
     # --- None path: probe returns None, interactive ---
 
@@ -554,9 +568,13 @@ class TestHandleSuperuserAfterUp:
         _handle_superuser_after_up(self._make_config())
         captured = capsys.readouterr()
 
-        assert "⚠️  Could not verify superuser status." in captured.out
-        assert "   Proceeding with interactive superuser creation." in captured.out
-        assert "👤 Creating Django superuser..." in captured.out
+        # Byte-exact stdout: warning + proceed banner + createsuperuser banner.
+        assert captured.out == (
+            "⚠️  Could not verify superuser status.\n"
+            "   Proceeding with interactive superuser creation.\n"
+            "👤 Creating Django superuser...\n"
+        )
+        assert captured.err == ""
         mock_exec.assert_called_once_with(
             "myapp-backend-1",
             ["python", "manage.py", "createsuperuser"],
