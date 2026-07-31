@@ -94,30 +94,15 @@ SA122b-1 → -2 → -3 → -4 → -5               │                          
 
 - [ ] **SA132 — Fix the three exact quiet/E2E gate blockers so SA117e can resume.** `Tier 2 · deps: none · Track 3 head` — release-blocking by position, not by content
 
-  Its scope is **exactly** the three findings below and nothing else. It carries **no** tag, split push, or other public mutation — those stay with SA117e. Its E2E legs need exclusive Docker/PostgreSQL.
+  Its scope is **exactly** the three authorized gate findings (`SA117E-QG-001`–`003`) and nothing else. It carries **no** tag, split push, or other public mutation — those stay with SA117e. Its E2E legs need exclusive Docker/PostgreSQL.
 
-  1. ~~**Exact `make check QUIET=1` hangs** in the redirected pytest/xdist recipe although the same component gates pass individually. Diagnose the hang first — the redirection/xdist interaction is the prime suspect, not the gates. A fix that passes by removing coverage is out of scope.~~ **Resolved** by SA132's partial merge (`eac4d82e`): unit marker/timeout parity restored; `make check QUIET=1` now passes.
-  2. ~~**Core E2E collection cannot import `scripts.publish_module`** under the runner's package-root `PYTHONPATH`.~~ **Resolved** by SA132's partial merge (`eac4d82e`): collection collects 35 tests cleanly.
-  3. ~~**CLI E2E `test_update_auto_commits_each_module_e2e` receives update exit 1.** Determine whether this is a test defect or a real `update` regression **before** choosing a fix; a production defect is a finding to record, not to silently absorb into a validation slice.~~ **Resolved** by SA132's partial merge (`eac4d82e`): passes using canonical `_core_version` fixture.
+  All three original findings (quiet-check hang, Core E2E `scripts.publish_module` import, CLI update E2E exit 1) are **resolved** by SA132's partial merge `eac4d82e`; evidence is in [CHANGELOG.md](../../CHANGELOG.md). What remains open is the pending-blocking ledger below.
 
   - Verify: exact `make check QUIET=1` completes and exits 0; Core E2E imports `scripts.publish_module` cleanly; `test_update_auto_commits_each_module_e2e` passes with update exit 0; `make ci-e2e` exits 0 with `QUARANTINE_TICKETS` empty; `make quality` exits 0 with zero baseline regressions; full-scope review returns `STATUS: ok`.
   - Rollback: revert the allowlisted files. No tag, split, artifact, or workflow mutation exists to undo.
   *(why →* SA117e's mandatory full-scope review, tag, twelve split pushes, parity proof, and installed all-module `apply` cannot run until the exact gates are green*)*
 
-  **SA132 recorded partial delivery (2026-07-31; functional commit `eac4d82e`; task remains unchecked).**
-
-  **Done.**
-  - `make check QUIET=1` now passes — unit test marker/timeout parity restored.
-  - Core E2E imports `scripts.publish_module` cleanly; collection collects 35 tests.
-  - Focused CLI update E2E (`test_update_auto_commits_each_module_e2e`) passes using canonical `_core_version` fixture.
-  - `make test-cov-policy` 86 passed.
-  - `make test-unit` 4,660 passed.
-  - CLI E2E 29 passed.
-  - All 11 pre-E2E `ci-e2e` subgates pass.
-  - `make quality` passes.
-  - `make test-cov` passes 93.01%, all files ≥80%.
-  - Two full functional reviews returned `STATUS: ok` for partial merge.
-  - No public mutation (no tag, split push, or publication).
+  **SA132 recorded partial delivery (2026-07-31; functional commit `eac4d82e`; task remains unchecked).** Completed-work recital — gates, test counts, reviews, and the no-public-mutation statement — is in [CHANGELOG.md](../../CHANGELOG.md).
 
   **Pending-Blocking.**
   - `make ci-e2e` exits 1: Core E2E is 31 passed / 4 failed in `quickscale_core/tests/test_e2e_full_workflow.py`:
@@ -178,7 +163,7 @@ No gate ever runs `apply`/`up` from an installed wheel: `test_e2e_development_wo
     Extract the reusable staging/build/venv helpers from `scripts/smoke_install.sh` into a sourceable `scripts/_installed_wheel_venv.sh`, add the thin `scripts/provision_installed_venv.sh` wrapper, and keep all 20 smoke probes unchanged. The scoped plan specifies helper-owned temporary directories and signal/exit cleanup, caller-owned output cleanup, exact core → CLI → umbrella build/install order, one-line stdout, stderr chatter, usage exits, and caller-trap/status preservation tests.
     - Files: `scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`
     - Verify: `bash -n`, focused tests, `make smoke-install` with all 20 probes — all service-free.
-    - Note: this child alone does not depend on SA117e, but Track 3 runs one child at a time so the release blocker goes first. Homing it on Track 1 was considered and declined — see [Settled decisions on track topology](#settled-decisions-on-track-topology).
+    - Note: this child alone does not depend on SA117e, but Track 3 runs one child at a time so the release blocker goes first. Homing it on Track 1 instead is **an open maintainer decision** (`SA112A-TRACK-003`) — see [Track topology](#track-topology--one-open-decision).
     *(why →* creates a green, independently reviewable provisioning seam before Docker lifecycle work*)*
 
   - [ ] **SA112b — Capture the installed `apply` traceback with a literal diagnostic.** `Tier 2 · deps: SA112a + SA117e`
@@ -238,22 +223,7 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** off the critical path (filler work). Track 1 changes how "green" is decided, not what the generator emits. Queue: **SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree.
-
-### SA130 — The Dockerfile's Poetry network-timeout setting is a no-op
-
-`quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2:88` exports `POETRY_HTTP_TIMEOUT=120`. **That is not a Poetry variable and never has been.** Poetry 2.4.1 — the version pinned at `Dockerfile.j2:62` — reads exactly one timeout variable, `POETRY_REQUESTS_TIMEOUT` (`poetry/utils/constants.py`, default 15), and that constant is what `http_repository.py`, `pypi_repository.py`, `utils/authenticator.py`, and `utils/helpers.py` all pass as `timeout=`. Every HTTP read in every generated image build has used the 15-second default.
-
-It stayed invisible because the `timeout 600` wrapper and 3-attempt retry loop are real and do work, so builds recover on a retry and print success. The failure mode is builds that are slower and more retry-dependent than intended on any non-fast link, with no signal that the configured mitigation is absent. Nothing asserts the variable name. **Adjacent lines are verified clean — do not "fix" them:** the frontend loop's `--config.fetch-retries=5` is a real pnpm/npm config, and `[ "$INSTALL_DEV" = "true" ]` is correct in the template (it renders as `[ "true" = "true" ]` only in BuildKit's echoed log output).
-
-- [x] **SA130 — Use Poetry's actual timeout variable.** `Tier 2 · deps: none`
-
-  Replace `POETRY_HTTP_TIMEOUT` with `POETRY_REQUESTS_TIMEOUT` in the builder stage. Keep the value, the `timeout 600` wrapper, the retry count, and all surrounding output byte-unchanged — this changes one identifier. The variable name is a version-coupled fact: if `Dockerfile.j2:62`'s `poetry==` pin moves, re-verify from that release's `poetry/utils/constants.py`.
-  - Files: `quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2`, `quickscale_core/tests/test_generator/test_templates.py` (extend `TestDockerfileContent`; do not create a second module)
-  - Verify: a rendered Dockerfile contains `POETRY_REQUESTS_TIMEOUT` and **no** occurrence of `POETRY_HTTP_TIMEOUT` — assert both directions, since the point is that the wrong name reads as configured. The service-free actual `ProjectGenerator` emitted-Dockerfile proof — correct identifier present, wrong identifier absent — is the accepted criterion. (2026-07-31: the maintainer waived the original Docker image/network build criterion; literal proof requires shared Docker capacity and Track 3 currently owns it.)
-  - Rollback: revert the two files. A stale image layer cache is the only side effect and self-invalidates on the changed `RUN` line.
-
-  **SA130 complete (2026-07-31; functional commit `196e6770`).** `Dockerfile.j2` now exports `POETRY_REQUESTS_TIMEOUT=120` — Poetry's actual timeout variable — instead of the no-op `POETRY_HTTP_TIMEOUT`. The value (120), `timeout 600` wrapper, 3-retry loop, and all surrounding output are byte-unchanged; this changes one identifier. **Validation:** positive/negative direct rendering plus actual service-free `ProjectGenerator` emitted-Dockerfile assertions; `TestDockerfileContent` 11 passed, 216 deselected; `make quality` exit 0 with zero baseline regressions. Full-scope Adaptive-change-review returned `STATUS: ok`. **Finding lifecycle:** `SA130-CR-001` (medium, test-gap) resolved by actual ProjectGenerator emission test; `SA130-CR-002` (low, advisory, consistency) resolved by exact pinned Poetry 2.4.1 wording. No unresolved blocker or finding remains under the revised acceptance criterion. (2026-07-31: the maintainer waived the original Docker image/network build criterion; literal proof requires shared Docker capacity and Track 3 currently owns it.) The service-free actual `ProjectGenerator` emitted-Dockerfile proof — correct identifier present, wrong identifier absent — is the accepted criterion. Track 1 advances to SA128a.
+**Status:** off the critical path (filler work). Track 1 changes how "green" is decided, not what the generator emits. Queue: **SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree. One open maintainer decision (`SA112A-TRACK-003`) would insert SA112a ahead of SA128a — see [Track topology](#track-topology--one-open-decision).
 
 ### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
 
@@ -384,13 +354,21 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 ---
 
-## Settled decisions on track topology
+## Track topology — one open decision
 
-**Track topology decisions are settled. Nothing on track sequencing or worktree assignment is waiting on a maintainer choice. SA132's three remediation decisions (out-of-scope ticket scope/allowlist, unpublished-core lock strategy, DRF/Python 3.14 assertion alignment) remain open — see the Decisions-needed block above.**
+**`SA112A-TRACK-003` — reopened 2026-07-31: move SA112a to Track 1, ahead of SA128a?** The prior decline (2026-07-31, while SA130 headed Track 1) rested on SA112a displacing an immediately-executable, fully-diagnosed product fix. SA130 is now complete and the Track 1 head is **SA128a**, off the critical path. Meanwhile Track 3's head SA132 is *decision*-blocked, not work-blocked, so the critical path currently advances only when the maintainer answers SA132's three questions.
 
-**SA112a stays on Track 3; SA130 was the Track 1 head until completion — decided 2026-07-31.** Moving SA112a to Track 1 was considered and **declined**. SA112a is genuinely independent (deps satisfied, no SA117e bound — that begins at SA112b, three-file allowlist disjoint from every other open ticket, service-free validation that never contends for PostgreSQL/Docker), but Track 1 is one serial worktree, so it would run *instead of* SA130 — displacing an immediately-executable, fully-diagnosed Tier 2 product fix to advance a critical-path node that blocks no release property. SA117a's four caps were *plan-review* failures, not implementation failures, so a second plan-gated ticket in parallel likely yields two stalled tickets rather than one. The move changed no track's can-start/can-finish/can-merge — only sequencing. SA130 is now complete; SA128a is the Track 1 head.
+- **Independence — verified in all three directions.** SA112a is `deps: none`; its SA117e bound begins at SA112b. Allowlist (`scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`) is disjoint from SA128a's (`scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`) and from every other open ticket. Validation is service-free — no PostgreSQL, no Docker — so it never contends with Track 3's infra priority. It does not split one logical change: SA112b consumes SA112a's merged seam, not its working tree.
+- **Cost of taking it.** Track 1 is one serial worktree, so SA112a runs *instead of* SA128a, delaying an otherwise-mergeable ticket. SA128a's downstream consumer SA122b-1 is itself gated behind SA128d, so the delay propagates only inside Track 1 and reaches no release property.
+- **Benefit.** The critical path's first non-blocked node starts today rather than after SA132 + SA117e, and SA112b's precondition set shrinks to SA117e alone.
+- **Conflict surface if taken.** Shared closeout files only (`CHANGELOG.md`, this file, `decisions.md` on policy change); the `git merge v87`-before-merge-back step in [Merge a phase back](#parallel-execution-tracks) covers it. No executable surface becomes shared.
+- **Recommendation: take it**, unless the maintainer intends to answer SA132's three questions immediately, in which case Track 3 resumes and the parallelism buys less.
 
-**Reopen only if** SA117e stalls and SA112a's critical-path start becomes the binding constraint. The *fourth-worktree* variant is permanently declined ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
+If taken, update in one pass: SA112a's ticket tag and its Track-1 note, the Track 1 header queue, the Track 3 status line, the dependency diagram, the critical-path sentence, the shared-executable-surfaces paragraph, and the track-readiness bullets.
+
+**The *fourth-worktree* variant is permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
+
+**SA132's three remediation decisions** (out-of-scope ticket scope/allowlist, unpublished-core lock strategy, DRF/Python 3.14 assertion alignment) remain open — see the Decisions-needed block above. No other track-sequencing or worktree-assignment question is open.
 
 ---
 
