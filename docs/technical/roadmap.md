@@ -58,10 +58,10 @@ Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../.
 ```
 Track 1 (governance + defects; serial)  Track 2 (CLOSED to new work)   Track 3 → release (CRITICAL PATH)
 ──────────────────────────────────     ────────────────────────────   ─────────────────────────────────
-SA129 (superuser probe; Tier 2) ◄─ next  SA115 (e2e xdist; deps: none)  SA132 (QG remediation) ◄─ next
+SA129 (superuser probe; Tier 2) ✓  SA115 (e2e xdist; deps: none)  SA132 (QG remediation) ◄─ next
   │  deps: none · not a blocker          │  validation AUTHORIZED       │  exact gates green
   ▼                                      │  cannot finish → SA112f      ▼
-SA130 (dead poetry timeout; Tier 2)     │  cannot merge  → SA112e      SA117e (review + push splits)
+SA130 (dead poetry timeout; Tier 2) ◄─ next     │  cannot merge  → SA112e      SA117e (review + push splits)
   │  deps: none · not a blocker         │                              │  human-confirmed public push
   ▼                                     │                              │
 SA128a → b → c → d (parity check)       │                              │
@@ -213,7 +213,7 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** off the critical path (filler work). Track 1 changes how "green" is decided, not what the generator emits — except SA129/SA130, which are non-blocking product defects. Queue: **SA129 → SA130 → SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree.
+**Status:** off the critical path (filler work). Track 1 changes how "green" is decided, not what the generator emits — except SA130, which is a non-blocking product defect. Queue: **SA130 → SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree.
 
 ### SA129 — `create_superuser` is dead: the probe is defeated by Django's shell auto-import banner
 
@@ -231,16 +231,16 @@ Django 5.2's shell auto-imports print `N objects imported automatically…` to *
 
 **Two rejected non-fixes.** Do **not** string-match and strip the banner — that pins the CLI to one Django release's wording. Do **not** relax to `returncode == 1 → False` — `manage.py shell -c` also exits non-zero for a genuine `OperationalError`, so that reports "no superuser" for an unreachable database, the fail-hard violation the `None` branch prevents ([decisions.md §fail-hard-principle](./decisions.md#fail-hard-principle)). Make the answer **in band** instead.
 
-- [ ] **SA129 — Carry the superuser answer on an explicit sentinel line.** `Tier 2 · deps: none · Track 1 head`
+- [x] **SA129 — Carry the superuser answer on an explicit sentinel line.** `Tier 2 · deps: none`
 
   The probe prints `QUICKSCALE_SUPERUSER=1` or `=0`; the reader returns `None` on any non-zero exit, and otherwise scans stdout lines in reverse for that exact sentinel, returning `None` when absent. Banner-immune and Django-version-independent — **do not** reach for `--no-imports`, which does not exist before Django 5.2 and would break older generated projects. Keep `_handle_superuser_after_up`'s branching and all three user-facing messages byte-unchanged: only the accuracy of the input changes.
   - Files: `quickscale_cli/src/quickscale_cli/commands/development_commands.py`, `quickscale_cli/tests/commands/test_development_commands_extended.py` (extend `TestSuperuserExistsInBackend`; do not create a second module)
   - Verify: `returncode=0` with the banner **plus** `QUICKSCALE_SUPERUSER=0` returns `False`, its `=1` twin returns `True`, banner-with-no-sentinel returns `None`, and a non-zero exit with an `OperationalError` on stderr still returns `None`. End to end, `quickscale apply` with `create_superuser: true` reports the real state instead of "Could not verify".
-  **SECOND RECORDED PARTIAL DELIVERY (2026-07-31; review cap reached; task remains open).**
-  - **Done:** functional commit `c7e53f9d` resolves `SA129-TEST-001` with a literal independent probe-script expectation plus byte-exact stdout/stderr and create-command presence/absence coverage for every handler branch. Fresh validation passed all 54 tests in the touched module and `make quality` with zero baseline regressions; full-scope review reconfirmed the sentinel behavior and test coverage. The rejected completion-document candidate was restored to the synced `v87` baseline before this checkpoint, so no contradictory queue rewrite is retained.
-  - **Pending / blocking:** `SA129-DOC-002` (**medium**, consistency) — pre-commit inspection found the completion-document candidate duplicated the `SA128a → b → c → d` node in the open-work diagram after the two-cycle review cap. A fresh continuation must re-author the SA129 closure/topology update without duplication and obtain full-scope `STATUS: ok` before checking SA129. `SA129-E2E-002` remains **low/advisory, `waived-not-passed`**: the fresh-project `quickscale apply` proof was not run because Track 3 held the shared Docker/PostgreSQL infrastructure.
-  - **Decisions needed:** none. SA129 remains unchecked; this checkpoint preserves the reviewed functional/test improvement without claiming task completion or advancing Track 1 to SA130.
-  - Sibling seam — verify, do not change blindly: `module_config.py:151-215` (`_migration_probe_script`/`assess_auth_migration_state`) runs the same `manage.py shell -c` pattern and survives the banner only because it JSON-parses the *last* non-empty stdout line. Confirm it, then either leave a comment naming why it holds or make the reverse-scan uniform. Do not spend a refactor here.
+  **SA129 complete (2026-07-31; functional commit `c7e53f9d`; docs-only closeout).**
+  - **Done:** `_superuser_exists_in_backend` emits and reverse-scans `QUICKSCALE_SUPERUSER=0|1` on an explicit sentinel line, avoiding Django 5.2+ shell auto-import banner coupling while preserving fail-closed nonzero/absent/malformed handling. The exact two-file delta includes producer/parser/caller regressions; `SA129-TEST-001` is resolved by a literal independent complete-probe expectation and byte-exact stdout/stderr plus create-command presence/absence assertions across every handler branch. Fresh evidence is green: all 54 tests in `test_development_commands_extended.py` passed and `make quality` reported zero baseline regressions; full-scope review reconfirmed production/test correctness. `SA129-DOC-002` is resolved: this closeout re-authors the SA129 closure and topology update without duplicating the `SA128a → b → c → d` node in the open-work diagram.
+  - **Advisory:** `SA129-E2E-002` remains **low/advisory, `waived-not-passed`**: the fresh-project `quickscale apply` end-to-end proof was not run because Track 3 held the shared Docker/PostgreSQL infrastructure. No E2E run is claimed.
+  - **Decisions needed:** none. Track 1 advances to SA130.
+  - Sibling seam — verified, not changed: `module_config.py:151-215` (`_migration_probe_script`/`assess_auth_migration_state`) runs the same `manage.py shell -c` pattern and avoids banner coupling by consuming producer-owned structured output. The sibling parses the final non-empty stdout line as JSON; SA129 reverse-scans for an exact sentinel line. Both are banner-immune, but the mechanics differ — no refactor needed.
   - Out of scope: `DJANGO_SUPERUSER_USERNAME/EMAIL/PASSWORD` around `quickscale apply` have no effect in dev — `docker exec` does not forward host environment and the compose `backend` service overrides `command:`, so `start.sh.j2:69-86`, which does honour them, never runs locally. Ticket separately if non-interactive superuser creation is wanted.
 
 ### SA130 — The Dockerfile's Poetry network-timeout setting is a no-op
@@ -389,11 +389,11 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 **Move SA112a to Track 1, or leave Track 1 on its current queue?** Reusing Track 1 requires no fourth worktree, and SA112a is genuinely independent: its deps are satisfied, it does not carry the SA117e bound (that begins at SA112b), its three-file allowlist is disjoint from every other open ticket, and its validation is service-free so it never contends for PostgreSQL/Docker.
 
-**The cost.** Track 1 is one serial worktree, so SA112a would run *instead of* its queue head — now two immediately-executable, fully-diagnosed Tier 2 product fixes (SA129, SA130) rather than a stalled continuation. The move advances a critical-path node but trades against no release blocker.
+**The cost.** Track 1 is one serial worktree, so SA112a would run *instead of* its queue head — now one immediately-executable, fully-diagnosed Tier 2 product fix (SA130) rather than a stalled continuation. The move advances a critical-path node but trades against no release blocker.
 
 **The counter-argument.** SA117a's four caps were all *plan-review* failures, not implementation failures. If the bottleneck is the plan-gate process rather than engineering capacity, adding a second plan-gated ticket in parallel produces two stalled tickets instead of one. This buys time only if Track 3's stall is capacity-bound.
 
-**Recommendation: decline while SA129/SA130 are the head.** Take it only if SA117e stalls and SA112a's critical-path start becomes the binding constraint. It changes no track's can-start/can-finish/can-merge — only sequencing. **Default while undecided: SA112a stays on Track 3.** The *fourth-worktree* variant is permanently declined.
+**Recommendation: decline while SA130 is the head.** Take it only if SA117e stalls and SA112a's critical-path start becomes the binding constraint. It changes no track's can-start/can-finish/can-merge — only sequencing. **Default while undecided: SA112a stays on Track 3.** The *fourth-worktree* variant is permanently declined.
 
 ---
 
