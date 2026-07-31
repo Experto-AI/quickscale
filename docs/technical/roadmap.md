@@ -96,13 +96,44 @@ SA122b-1 → -2 → -3 → -4 → -5               │                          
 
   Its scope is **exactly** the three findings below and nothing else. It carries **no** tag, split push, or other public mutation — those stay with SA117e. Its E2E legs need exclusive Docker/PostgreSQL.
 
-  1. **Exact `make check QUIET=1` hangs** in the redirected pytest/xdist recipe although the same component gates pass individually. Diagnose the hang first — the redirection/xdist interaction is the prime suspect, not the gates. A fix that passes by removing coverage is out of scope.
+  1. ~~**Exact `make check QUIET=1` hangs** in the redirected pytest/xdist recipe although the same component gates pass individually. Diagnose the hang first — the redirection/xdist interaction is the prime suspect, not the gates. A fix that passes by removing coverage is out of scope.~~ **Resolved** by SA132's partial merge (`eac4d82e`): unit marker/timeout parity restored; `make check QUIET=1` now passes.
   2. **Core E2E collection cannot import `scripts.publish_module`** under the runner's package-root `PYTHONPATH`.
   3. **CLI E2E `test_update_auto_commits_each_module_e2e` receives update exit 1.** Determine whether this is a test defect or a real `update` regression **before** choosing a fix; a production defect is a finding to record, not to silently absorb into a validation slice.
 
   - Verify: exact `make check QUIET=1` completes and exits 0; Core E2E imports `scripts.publish_module` cleanly; `test_update_auto_commits_each_module_e2e` passes with update exit 0; `make ci-e2e` exits 0 with `QUARANTINE_TICKETS` empty; `make quality` exits 0 with zero baseline regressions; full-scope review returns `STATUS: ok`.
   - Rollback: revert the allowlisted files. No tag, split, artifact, or workflow mutation exists to undo.
   *(why →* SA117e's mandatory full-scope review, tag, twelve split pushes, parity proof, and installed all-module `apply` cannot run until the exact gates are green*)*
+
+  **SA132 recorded partial delivery (2026-07-31; functional commit `eac4d82e`; task remains unchecked).**
+
+  **Done.**
+  - `make check QUIET=1` now passes — unit test marker/timeout parity restored.
+  - Core E2E imports `scripts.publish_module` cleanly; collection collects 35 tests.
+  - Focused CLI update E2E (`test_update_auto_commits_each_module_e2e`) passes using canonical `_core_version` fixture.
+  - `make test-cov-policy` 86 passed.
+  - `make test-unit` 4,660 passed.
+  - CLI E2E 29 passed.
+  - All 11 pre-E2E `ci-e2e` subgates pass.
+  - `make quality` passes.
+  - `make test-cov` passes 93.01%, all files ≥80%.
+  - Two full functional reviews returned `STATUS: ok` for partial merge.
+  - No public mutation (no tag, split push, or publication).
+
+  **Pending-Blocking.**
+  - `make ci-e2e` exits 1: Core E2E is 31 passed / 4 failed in `quickscale_core/tests/test_e2e_full_workflow.py`:
+    - **SA132-BLK-01** (medium, external): stale DRF version assertion at line 312.
+    - **SA132-BLK-02** (medium, external): generated-project Poetry lock cannot resolve unpublished `quickscale-core >=0.87.0,<0.88.0` at line 420.
+    - **SA132-BLK-03** (medium, external): two stale Python 3.14 rejection assertions at line 1009.
+  - These three Core E2E failures are causally independent of `eac4d82e` but block SA132 completion and the release claim.
+
+  **Decisions-needed.**
+  - Define separate ticket scope/allowlist before touching out-of-scope Core test/harness behavior.
+  - Select a valid unpublished-core lock-resolution strategy.
+  - Align DRF and Python 3.14 assertions with authoritative current policy.
+
+  **Deferred advisory.** The `test-cov` QUIET path remains unfiltered and must be separately ticketed if pursued. This is not a completion blocker.
+
+  *(SA132 remains unchecked; the functional commit is a checkpoint, not a completion claim.)*
 
 ### SA117 — Embedded-manifest / split-branch version skew
 
@@ -349,7 +380,7 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 **Current state.** `make quality` is **green** — exit 0, zero warning and zero critical baseline regressions, `QUARANTINE_TICKETS` empty, zero line-count blockers and zero complexity blockers (`_perform_module_embed` CC 18 against ceiling 20, `_update_single_module` CC 13 against ceiling 17, measured with `radon cc`). `scripts/quality_baseline.json` carries zero `large_files` entries and `scripts/quality_waivers.json` is an empty ledger.
 
-**The milestone is unclaimed.** The exact four-command join remains unproved: exact `make check QUIET=1` hangs and `make ci-e2e` fails on two of SA132's three findings. **SA132 is the work that restores this milestone's reachability**; SA112f owns the eventual clean closeout rerun, and SA96-PUBLISH requires that evidence before release.
+**The milestone is unclaimed.** The exact four-command join remains unproved: `make check QUIET=1` is now green, but `make ci-e2e` remains red — Core E2E 31 passed / 4 failed under external blockers SA132-BLK-01 (DRF assertion), SA132-BLK-02 (unpublished-core lock), SA132-BLK-03 (Python 3.14 assertions). **SA132 is the work that restores this milestone's reachability**; SA112f owns the eventual clean closeout rerun, and SA96-PUBLISH requires that evidence before release.
 
 ---
 
