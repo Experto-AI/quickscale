@@ -58,14 +58,11 @@ Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../.
 ```
 Track 1 (governance + defects; serial)  Track 2 (CLOSED to new work)   Track 3 → release (CRITICAL PATH)
 ──────────────────────────────────     ────────────────────────────   ─────────────────────────────────
-SA129 (superuser probe; Tier 2) ✓  SA115 (e2e xdist; deps: none)  SA132 (QG remediation) ◄─ next
-  │  deps: none · not a blocker          │  validation AUTHORIZED       │  exact gates green
-  ▼                                      │  cannot finish → SA112f      ▼
-SA130 (dead poetry timeout; Tier 2) ◄─ next     │  cannot merge  → SA112e      SA117e (review + push splits)
-  │  deps: none · not a blocker         │                              │  human-confirmed public push
-  ▼                                     │                              │
-SA128a → b → c → d (parity check)       │                              │
-  │  Umbrella, split by domain          │                              │
+SA130 (dead poetry timeout) ◄─ next     SA115 (e2e xdist; deps: none)  SA132 (QG remediation) ◄─ next
+  │  Tier 2 · deps: none                 │  validation AUTHORIZED       │  exact gates green
+  ▼                                     │  cannot finish → SA112f      ▼
+SA128a → b → c → d (parity check)       │  cannot merge  → SA112e      SA117e (review + push splits)
+  │  Umbrella, split by domain          │                              │  human-confirmed public push
   │  Make · Bash · YAML · contracts     │                              │
   ▼  serial reviewed handoffs           │                              │
 SA122b-1 → -2 → -3 → -4 → -5            │                              │
@@ -153,7 +150,7 @@ No gate ever runs `apply`/`up` from an installed wheel: `test_e2e_development_wo
     Extract the reusable staging/build/venv helpers from `scripts/smoke_install.sh` into a sourceable `scripts/_installed_wheel_venv.sh`, add the thin `scripts/provision_installed_venv.sh` wrapper, and keep all 20 smoke probes unchanged. The scoped plan specifies helper-owned temporary directories and signal/exit cleanup, caller-owned output cleanup, exact core → CLI → umbrella build/install order, one-line stdout, stderr chatter, usage exits, and caller-trap/status preservation tests.
     - Files: `scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`
     - Verify: `bash -n`, focused tests, `make smoke-install` with all 20 probes — all service-free.
-    - Note: this child alone does not depend on SA117e, but Track 3 runs one child at a time so the release blocker goes first. See the open decision below.
+    - Note: this child alone does not depend on SA117e, but Track 3 runs one child at a time so the release blocker goes first. Homing it on Track 1 was considered and declined — see [Settled decisions on track topology](#settled-decisions-on-track-topology).
     *(why →* creates a green, independently reviewable provisioning seam before Docker lifecycle work*)*
 
   - [ ] **SA112b — Capture the installed `apply` traceback with a literal diagnostic.** `Tier 2 · deps: SA112a + SA117e`
@@ -214,34 +211,6 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 ## Track 1 — Release governance and product defects
 
 **Status:** off the critical path (filler work). Track 1 changes how "green" is decided, not what the generator emits — except SA130, which is a non-blocking product defect. Queue: **SA130 → SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree.
-
-### SA129 — `create_superuser` is dead: the probe is defeated by Django's shell auto-import banner
-
-`apply` completes the whole lifecycle, then ends with `⚠️ Could not verify superuser status.` even with `create_superuser: true`, a healthy backend container, and migrations applied. **Not environmental, not intermittent** — it fires on every `apply`/`up` against a Django 5.2+ project, and `django_constraint` resolves generated projects to 6.0.7, so the config option is effectively dead for every project QuickScale generates. **Not a release blocker:** `apply` does not abort and the printed fallback (`quickscale manage createsuperuser`) is correct and works.
-
-**Diagnosis (complete).** `_superuser_exists_in_backend` (`quickscale_cli/src/quickscale_cli/commands/development_commands.py:232-263`) signals "no superuser exists" out of band — by exit code **and both streams being empty**:
-
-```python
-if result.returncode == 1 and not stdout_output and not stderr_output:
-    return False
-return None
-```
-
-Django 5.2's shell auto-imports print `N objects imported automatically…` to **stdout** (verified live by stream-splitting), so `stdout_output` is never empty, the `False` branch is unreachable in every real container, and the honest answer is coerced into "cannot verify". The probe asserts Django's banner policy, not the database — the out-of-band-signal shape [tech-audit.md](../../tech-audit.md) is the SSOT for. Every gate missed it because all three cases in `TestSuperuserExistsInBackend` mock `stdout=""`, the one thing a real container never produces.
-
-**Two rejected non-fixes.** Do **not** string-match and strip the banner — that pins the CLI to one Django release's wording. Do **not** relax to `returncode == 1 → False` — `manage.py shell -c` also exits non-zero for a genuine `OperationalError`, so that reports "no superuser" for an unreachable database, the fail-hard violation the `None` branch prevents ([decisions.md §fail-hard-principle](./decisions.md#fail-hard-principle)). Make the answer **in band** instead.
-
-- [x] **SA129 — Carry the superuser answer on an explicit sentinel line.** `Tier 2 · deps: none`
-
-  The probe prints `QUICKSCALE_SUPERUSER=1` or `=0`; the reader returns `None` on any non-zero exit, and otherwise scans stdout lines in reverse for that exact sentinel, returning `None` when absent. Banner-immune and Django-version-independent — **do not** reach for `--no-imports`, which does not exist before Django 5.2 and would break older generated projects. Keep `_handle_superuser_after_up`'s branching and all three user-facing messages byte-unchanged: only the accuracy of the input changes.
-  - Files: `quickscale_cli/src/quickscale_cli/commands/development_commands.py`, `quickscale_cli/tests/commands/test_development_commands_extended.py` (extend `TestSuperuserExistsInBackend`; do not create a second module)
-  - Verify: `returncode=0` with the banner **plus** `QUICKSCALE_SUPERUSER=0` returns `False`, its `=1` twin returns `True`, banner-with-no-sentinel returns `None`, and a non-zero exit with an `OperationalError` on stderr still returns `None`. End to end, `quickscale apply` with `create_superuser: true` reports the real state instead of "Could not verify".
-  **SA129 complete (2026-07-31; functional commit `c7e53f9d`; docs-only closeout).**
-  - **Done:** `_superuser_exists_in_backend` emits and reverse-scans `QUICKSCALE_SUPERUSER=0|1` on an explicit sentinel line, avoiding Django 5.2+ shell auto-import banner coupling while preserving fail-closed nonzero/absent/malformed handling. The exact two-file delta includes producer/parser/caller regressions; `SA129-TEST-001` is resolved by a literal independent complete-probe expectation and byte-exact stdout/stderr plus create-command presence/absence assertions across every handler branch. Fresh evidence is green: all 54 tests in `test_development_commands_extended.py` passed and `make quality` reported zero baseline regressions; full-scope review reconfirmed production/test correctness. `SA129-DOC-002` is resolved: this closeout re-authors the SA129 closure and topology update without duplicating the `SA128a → b → c → d` node in the open-work diagram.
-  - **Advisory:** `SA129-E2E-002` remains **low/advisory, `waived-not-passed`**: the fresh-project `quickscale apply` end-to-end proof was not run because Track 3 held the shared Docker/PostgreSQL infrastructure. No E2E run is claimed.
-  - **Decisions needed:** none. Track 1 advances to SA130.
-  - Sibling seam — verified, not changed: `module_config.py:151-215` (`_migration_probe_script`/`assess_auth_migration_state`) runs the same `manage.py shell -c` pattern and avoids banner coupling by consuming producer-owned structured output. The sibling parses the final non-empty stdout line as JSON; SA129 reverse-scans for an exact sentinel line. Both are banner-immune, but the mechanics differ — no refactor needed.
-  - Out of scope: `DJANGO_SUPERUSER_USERNAME/EMAIL/PASSWORD` around `quickscale apply` have no effect in dev — `docker exec` does not forward host environment and the compose `backend` service overrides `command:`, so `start.sh.j2:69-86`, which does honour them, never runs locally. Ticket separately if non-interactive superuser creation is wanted.
 
 ### SA130 — The Dockerfile's Poetry network-timeout setting is a no-op
 
@@ -385,15 +354,13 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 ---
 
-## Open decision
+## Settled decisions on track topology
 
-**Move SA112a to Track 1, or leave Track 1 on its current queue?** Reusing Track 1 requires no fourth worktree, and SA112a is genuinely independent: its deps are satisfied, it does not carry the SA117e bound (that begins at SA112b), its three-file allowlist is disjoint from every other open ticket, and its validation is service-free so it never contends for PostgreSQL/Docker.
+**No open decision. Nothing anywhere in this roadmap is waiting on a maintainer choice.**
 
-**The cost.** Track 1 is one serial worktree, so SA112a would run *instead of* its queue head — now one immediately-executable, fully-diagnosed Tier 2 product fix (SA130) rather than a stalled continuation. The move advances a critical-path node but trades against no release blocker.
+**SA112a stays on Track 3; SA130 remains the Track 1 head — decided 2026-07-31.** Moving SA112a to Track 1 was considered and **declined**. SA112a is genuinely independent (deps satisfied, no SA117e bound — that begins at SA112b, three-file allowlist disjoint from every other open ticket, service-free validation that never contends for PostgreSQL/Docker), but Track 1 is one serial worktree, so it would run *instead of* SA130 — displacing an immediately-executable, fully-diagnosed Tier 2 product fix to advance a critical-path node that blocks no release property. SA117a's four caps were *plan-review* failures, not implementation failures, so a second plan-gated ticket in parallel likely yields two stalled tickets rather than one. The move changed no track's can-start/can-finish/can-merge — only sequencing.
 
-**The counter-argument.** SA117a's four caps were all *plan-review* failures, not implementation failures. If the bottleneck is the plan-gate process rather than engineering capacity, adding a second plan-gated ticket in parallel produces two stalled tickets instead of one. This buys time only if Track 3's stall is capacity-bound.
-
-**Recommendation: decline while SA130 is the head.** Take it only if SA117e stalls and SA112a's critical-path start becomes the binding constraint. It changes no track's can-start/can-finish/can-merge — only sequencing. **Default while undecided: SA112a stays on Track 3.** The *fourth-worktree* variant is permanently declined.
+**Reopen only if** SA117e stalls and SA112a's critical-path start becomes the binding constraint. The *fourth-worktree* variant is permanently declined ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 
 ---
 
