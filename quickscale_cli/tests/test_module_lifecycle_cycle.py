@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 import yaml
 from click.testing import CliRunner
+from quickscale_core import __version__ as _core_version
 
 # AF5 Phase 4: Bypass the late destructive/remote confirmation gate so test
 # assertions remain stable with the new two-phase confirmation flow.
@@ -1183,7 +1184,13 @@ def test_update_after_partial_remove_on_non_consolidated_project_targets_survivi
 
 @pytest.mark.e2e
 def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
-    """Test update creates one git commit per successful module update"""
+    """Test update creates one git commit per successful module update.
+
+    Uses ``quickscale_core.__version__`` as the canonical lockstep version
+    so the fixture models the current lockstep invariant: after a subtree
+    pull, the embedded module.yml version must match the core version for
+    ``assert_manifest_version_matches_core`` to pass.
+    """
     project_path = tmp_path / "update-e2e"
     project_path.mkdir()
 
@@ -1205,7 +1212,7 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
         module_dir.mkdir(parents=True, exist_ok=True)
         (module_dir / "README.md").write_text(f"{module_name} baseline\n")
         (module_dir / "module.yml").write_text(
-            f'name: {module_name}\nversion: "0.1.0"\n'
+            f'name: {module_name}\nversion: "{_core_version}"\n'
         )
 
     # AF5: the update command now reads module state from .quickscale/state.yml
@@ -1225,12 +1232,12 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
                 },
                 "modules": {
                     "auth": {
-                        "version": "v0.1.0",
+                        "version": _core_version,
                         "prefix": "modules/auth",
                         "branch": "splits/auth-module",
                     },
                     "listings": {
-                        "version": "v0.1.0",
+                        "version": _core_version,
                         "prefix": "modules/listings",
                         "branch": "splits/listings-module",
                     },
@@ -1258,12 +1265,12 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
     auth_info = Mock(
         prefix="modules/auth",
         branch="splits/auth-module",
-        installed_version="v0.1.0",
+        installed_version=_core_version,
     )
     listings_info = Mock(
         prefix="modules/listings",
         branch="splits/listings-module",
-        installed_version="v0.1.0",
+        installed_version=_core_version,
     )
     config = Mock(
         modules={"auth": auth_info, "listings": listings_info},
@@ -1275,6 +1282,9 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
         touched_file = project_path / prefix / "README.md"
         current = touched_file.read_text()
         touched_file.write_text(current + "updated\n")
+        module_name = prefix.rsplit("/", 1)[-1]
+        module_yml = project_path / prefix / "module.yml"
+        module_yml.write_text(f'name: {module_name}\nversion: "{_core_version}"\n')
         return "updated"
 
     runner = CliRunner()

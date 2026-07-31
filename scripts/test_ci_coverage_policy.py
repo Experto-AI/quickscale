@@ -1578,6 +1578,123 @@ class TestCheckQuietSectionDispatch:
             "QUIET=1 pytest must NOT include module test dirs"
         )
 
+    def test_quiet_pytest_excludes_integration_and_e2e_markers(self, tmp_path: Path) -> None:
+        """
+        QUIET=1 pytest excludes integration and e2e tests via marker.
+
+        Behavioural contract test: the ``make check QUIET=1`` pytest command
+        must include ``-m "not integration and not e2e"`` so that the quiet
+        check gate runs only unit/static tests while integration and E2E
+        tests remain in the CI E2E lane.
+        """
+        result, events = self._run_quiet_check(tmp_path)
+        assert result.returncode == 0, (
+            f"make check QUIET=1 failed: {result.stdout}\n{result.stderr}"
+        )
+
+        pytest_calls = self._pytest_invocations(events)
+        assert len(pytest_calls) >= 1, "Expected at least one pytest invocation"
+        for args in pytest_calls:
+            # Skip the ``python -m pytest`` prefix to find pytest's own ``-m``.
+            pytest_args = args[args.index("pytest") + 1 :]
+            marker_idx = pytest_args.index("-m") if "-m" in pytest_args else -1
+            assert marker_idx >= 0, f"QUIET pytest invocation missing pytest -m flag: {args}"
+            marker_value = pytest_args[marker_idx + 1]
+            assert "not integration" in marker_value and "not e2e" in marker_value, (
+                f"QUIET pytest must exclude integration and e2e markers; got -m {marker_value!r}"
+            )
+
+    def test_quiet_pytest_forwards_xdist_args(self, tmp_path: Path) -> None:
+        """
+        QUIET=1 pytest forwards configured xdist arguments.
+
+        The parallel case with an explicit worker count proves the
+        forwarding end-to-end.  Serial disable is covered by the
+        structural Makefile assertion in
+        ``test_quiet_pytest_xdist_serial_filter``.
+        """
+        parallel_result, parallel_events = self._run_quiet_check(
+            tmp_path,
+            extra_env={"PYTEST_XDIST_WORKERS": "3"},
+        )
+        assert parallel_result.returncode == 0
+
+        parallel_calls = self._pytest_invocations(parallel_events)
+        for args in parallel_calls:
+            pytest_args = args[args.index("pytest") + 1 :]
+            worker_idx = pytest_args.index("-n")
+            assert pytest_args[worker_idx : worker_idx + 4] == [
+                "-n",
+                "3",
+                "--dist",
+                "loadfile",
+            ]
+
+    def test_quiet_pytest_xdist_serial_filter(self) -> None:
+        """
+        Makefile QUIET=1 pytest uses ``$(PYTEST_XDIST_ARGS)`` for serial worker filtering.
+
+        Structural assertion: the Makefile recipe includes
+        ``$(PYTEST_XDIST_ARGS)`` which, per the ``$(filter ...)``
+        definition, produces empty args for serial worker counts.
+        """
+        with open(self.MAKEFILE_PATH, encoding="utf-8") as fh:
+            content = fh.read()
+
+        check_start = content.find("\ncheck:")
+        assert check_start >= 0
+        section = content[check_start:]
+
+        # Find the QUIET pytest line specifically
+        quiet_start = section.find("$(QUIET)")
+        assert quiet_start >= 0
+        quiet_section = section[quiet_start:]
+        else_start = quiet_section.find("\n\telse")
+        quiet_then = quiet_section[:else_start] if else_start >= 0 else quiet_section
+
+        assert "$(PYTEST_XDIST_ARGS)" in quiet_then, (
+            "QUIET=1 pytest must reference $(PYTEST_XDIST_ARGS) for xdist forwarding"
+        )
+
+    def test_quiet_pytest_forwards_timeout_args(self, tmp_path: Path) -> None:
+        """QUIET=1 pytest forwards configured timeout arguments."""
+        result, events = self._run_quiet_check(
+            tmp_path,
+            extra_env={"PYTEST_TIMEOUT": "60"},
+        )
+        assert result.returncode == 0, (
+            f"make check QUIET=1 with PYTEST_TIMEOUT=60 failed: {result.stdout}\n{result.stderr}"
+        )
+
+        pytest_calls = self._pytest_invocations(events)
+        assert len(pytest_calls) >= 1
+        for args in pytest_calls:
+            pytest_args = args[args.index("pytest") + 1 :]
+            timeout_flag = next((a for a in pytest_args if a.startswith("--timeout=")), None)
+            assert timeout_flag is not None, (
+                f"QUIET pytest invocation missing --timeout flag: {args}"
+            )
+            assert timeout_flag == "--timeout=60", f"Expected --timeout=60, got {timeout_flag!r}"
+            assert "--timeout-method=thread" in pytest_args, (
+                f"QUIET pytest invocation missing --timeout-method=thread: {args}"
+            )
+
+    def test_quiet_pytest_timeout_disabled_when_zero(self, tmp_path: Path) -> None:
+        """QUIET=1 pytest omits timeout args when PYTEST_TIMEOUT=0."""
+        result, events = self._run_quiet_check(
+            tmp_path,
+            extra_env={"PYTEST_TIMEOUT": "0"},
+        )
+        assert result.returncode == 0
+
+        pytest_calls = self._pytest_invocations(events)
+        assert len(pytest_calls) >= 1
+        for args in pytest_calls:
+            pytest_args = args[args.index("pytest") + 1 :]
+            assert not any(a.startswith("--timeout=") for a in pytest_args), (
+                f"QUIET pytest must not include --timeout when PYTEST_TIMEOUT=0: {args}"
+            )
+
     # ------------------------------------------------------------------
     # SA120 — QUIET=1 frontend lint dispatch parity
     # ------------------------------------------------------------------
@@ -2410,3 +2527,61 @@ class TestCheckNormalFrontendLint:
         )
         # Verify no success banner
         assert "🎉" not in output, "Normal mode must not print success banner when a gate fails"
+
+
+class TestE2EScriptPythonpath:
+    """Structural assertions for ``scripts/test_e2e.sh`` lane PYTHONPATH setup."""
+
+    SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "test_e2e.sh")
+
+    def _read_script(self) -> str:
+        with open(self.SCRIPT_PATH, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_core_lane_pythonpath_includes_project_root(self) -> None:
+        """
+        Core E2E lane PYTHONPATH prepends ``$PROJECT_ROOT`` for repo-root imports.
+
+        The Core E2E tests need to resolve ``scripts.*`` imports (e.g.
+        ``scripts.publish_module``) via the repository root, so the
+        ``lane_pythonpath`` for the ``core`` lane must include
+        ``$PROJECT_ROOT`` before the package-specific ``$CORE_DIR`` entries.
+        """
+        content = self._read_script()
+
+        # Find the core lane assignment block
+        core_block_start = content.find('if [ "$lane" = "core" ]; then')
+        assert core_block_start >= 0, "run_e2e_lane must have a core lane branch"
+
+        # Find the closing else/fi for the core lane
+        else_pos = content.find("\n    else", core_block_start)
+        core_block = content[core_block_start:else_pos]
+
+        assert 'lane_pythonpath="$PROJECT_ROOT:$CORE_DIR:$CORE_DIR/src"' in core_block, (
+            "Core lane PYTHONPATH must include $PROJECT_ROOT for repo-root import visibility; "
+            f"got block: {core_block}"
+        )
+
+    def test_cli_lane_pythonpath_does_not_include_project_root(self) -> None:
+        """
+        CLI E2E lane PYTHONPATH does NOT include ``$PROJECT_ROOT``.
+
+        The CLI package does not need repo-root import visibility, so its
+        ``lane_pythonpath`` must remain at ``$CLI_DIR:$CLI_DIR/src`` to
+        avoid polluting the import namespace.
+        """
+        content = self._read_script()
+
+        else_pos = content.find('\n    else\n        lane_label="CLI"')
+        assert else_pos >= 0, "run_e2e_lane must have a CLI lane branch"
+
+        # Find the fi that closes the if/else block
+        fi_pos = content.find("\n    fi", else_pos)
+        cli_block = content[else_pos:fi_pos]
+
+        assert 'lane_pythonpath="$CLI_DIR:$CLI_DIR/src"' in cli_block, (
+            f"CLI lane PYTHONPATH must not include $PROJECT_ROOT; got block: {cli_block}"
+        )
+        assert "PROJECT_ROOT" not in cli_block, (
+            "CLI lane PYTHONPATH must not reference $PROJECT_ROOT"
+        )
