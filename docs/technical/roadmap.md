@@ -56,22 +56,22 @@ git merge --no-ff wt-track{N}
 Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 ```
-Track 1 (SA112a, then governance)      Track 2 (CLOSED to new work)   Track 3 → release (CRITICAL PATH)
-──────────────────────────────────     ────────────────────────────   ─────────────────────────────────
-SA112a (provisioner; plan blocked) ◄─ next  SA115 (e2e xdist; deps: none)  SA133 ✓ (Core E2E blockers)
-  │  ON THE CRITICAL PATH                │  validation AUTHORIZED         │  make ci-e2e exit 0 ✓
-  │  scripts/_installed_wheel_venv.sh    │  cannot finish → SA112f        ▼
-  ▼  service-free; deps: none            │  cannot merge  → SA112e        SA117e (review + push splits) ◄─ next
-SA128a → b → c → d (parity check)        │                              │
-  │  Umbrella, split by domain           │                              │
-  ▼  Make · Bash · YAML · contracts      │                              │
-SA122b-1 → -2 → -3 → -4 → -5             │                              │
-  │  Umbrella, split by consumer     │                              │
-  │  Make · sh · ci · publish · e2e  │                              │
-        ▲ (-5 only)                  │                              │
-        └──── merge after SA112e ────┼──────────────────────────────┤
-                                     │                              ▼
-                                     └──── merge after SA112 ──────► SA112b → c → d → e → f
+Track 1 (SA112a, then governance)   Track 2 (CLOSED to new work)  Track 3 → release (CRITICAL PATH)
+─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
+SA112a (provisioner) ◄─ next        SA115 (e2e xdist; deps: none) SA117e (splits) ◄─ next
+  │  ON THE CRITICAL PATH             │  validation AUTHORIZED      │  ON THE CRITICAL PATH
+  │  plan-blocked (SA112A-PLAN-002)   │  cannot finish → SA112f     │  deps: none; human-only push
+  ▼  service-free; deps: none         │  cannot merge  → SA112e     │
+SA128a → b → c → d (parity check)     │                             │
+  │  Umbrella, split by domain        │                             │
+  ▼  Make · Bash · YAML · contracts   │                             │
+SA122b-1 → -2 → -3 → -4 → -5          │                             │
+  │  Umbrella, split by consumer      │                             │
+  │  Make · sh · ci · publish · e2e   │                             │
+        ▲ (-5 only)                   │                             │
+        └──── merge after SA112e ─────┼─────────────────────────────┤
+                                      │                             ▼
+                                      └──── merge after SA112 ────► SA112b → c → d → e → f
                                                                     │  serial reviewed handoffs
                                                                     │  SA112a (Track 1) + SA117e
                                                                     ▼  required from b on
@@ -79,81 +79,19 @@ SA122b-1 → -2 → -3 → -4 → -5             │                            
                                                                    (human-only; hold until SA112f)
 ```
 
-**Critical path:** `SA117e → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH` (SA133 complete 2026-07-31 and off the path), with **SA112a on Track 1 running in parallel** and joining as a merge-order precondition of SA112b. Track 2 is entirely off it; Track 1 is on it only for SA112a.
+**Critical path:** `SA117e → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH` (the SA133 gate precondition is satisfied and off the path), with **SA112a on Track 1 running in parallel** and joining as a merge-order precondition of SA112b. Track 2 is entirely off it; Track 1 is on it only for SA112a.
 
 **Cross-track edges — three, all merge-order only.** SA122b-5 merges after SA112e, and SA115 merges after SA112; both share `.github/workflows/e2e.yml`'s `pull_request.paths` list. **SA112a (Track 1) merges before SA112b starts (Track 3)** — SA112b consumes SA112a's merged provisioning seam, so the edge is satisfied by an ordinary merge-back to `v87`, not by co-scheduling. None blocks a track from starting or working.
 
-**Infra serialization (not a track constraint).** SA112's and SA115's e2e lanes, SA117e's `apply` verification, SA133's E2E legs (complete 2026-07-31), and any `make ci`/`make ci-e2e` rerun all need the same PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL` knobs namespace lanes *within* one invocation, not across worktrees — **only one track exercises PG/Docker at a time, and Track 3 has priority.** Abandon or restart an SA115 run rather than make a critical-path leg queue behind it.
+**Infra serialization (not a track constraint).** SA112's and SA115's e2e lanes, SA117e's `apply` verification, and any `make ci`/`make ci-e2e` rerun all need the same PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL` knobs namespace lanes *within* one invocation, not across worktrees — **only one track exercises PG/Docker at a time, and Track 3 has priority.** Abandon or restart an SA115 run rather than make a critical-path leg queue behind it.
 
-**Shared executable surfaces.** `.github/workflows/e2e.yml`'s path list is written by SA112e, SA115, and SA122b-5 — serialized by the merge bounds above. SA112a's three provisioning scripts are **written only by SA112a (Track 1)**; SA112e (Track 3) merely *names* those paths in the workflow trigger list and never edits them, so the cross-track split creates no shared writer. `quickscale_core/tests/test_e2e_full_workflow.py` was owned solely by SA133 (complete 2026-07-31). `scripts/quality_baseline.json` and `quickscale_cli/.../module_commands.py` are owned by no open ticket. No other executable surface is shared, so no additional procedure is required.
+**Shared executable surfaces.** `.github/workflows/e2e.yml`'s path list is written by SA112e, SA115, and SA122b-5 — serialized by the merge bounds above. SA112a's three provisioning scripts are **written only by SA112a (Track 1)**; SA112e (Track 3) merely *names* those paths in the workflow trigger list and never edits them, so the cross-track split creates no shared writer. `quickscale_core/tests/test_e2e_full_workflow.py`, `scripts/quality_baseline.json`, and `quickscale_cli/.../module_commands.py` are owned by no open v87 ticket. No other executable surface is shared, so no additional procedure is required.
 
 ---
 
 ## Track 3 — Core/CLI plumbing, release path
 
-**Status:** on the critical path. **Head is SA117e** (SA133 complete; SA135 complete). **SA112a now runs on Track 1** (`SA112A-TRACK-003`, accepted 2026-07-31), so Track 3's next SA112 child is SA112b. Do not publish splits, start SA112b, or treat anything as release-ready until SA117e closes.
-
-### SA135 — Refresh the three SA90 Dockerfile emission hashes
-
-SA130's commit `196e6770` changed the `Dockerfile.j2` Poetry timeout variable and the SA90 emission-parity fixture was not refreshed in that closeout. The fixture therefore still pins the pre-SA130 Dockerfile digest `676edaa0…` for all three react variants while the generator now emits `beda7d0…` — the pre-existing three-react drift behind **QG-SA90-BASELINE** (**medium**, blocking, at `quickscale_core/tests/fixtures/sa90_emission_manifests.json`). It fails `make check QUIET=1` (exit 2) and `make ci-e2e` (exit 2 before E2E) identically with or without SA133's delta, so it must be cleared before SA133's acceptance rerun can be evidence. No rebaseline script exists; the refresh is done by regeneration below.
-
-- [x] **SA135 — Refresh the three SA90 Dockerfile emission hashes.** `Tier 2 · deps: none · Track 3 head` — the immediate Track 3 head; clears the fixture baseline blocking SA133's broad gates
-
-  **Files (exact):** `quickscale_core/tests/fixtures/sa90_emission_manifests.json` — one file, exactly three `sha256` records: the `Dockerfile` entries under `react_default`, `react_empty`, and `react_selected`. No other file is authorized, and nothing else in the fixture may change (0 removed, 0 added, `_provenance` preserved).
-  **Prerequisite:** a clean worktree synced to `v87`. Service-free — no Docker/PostgreSQL.
-
-  **Method — regenerate, do not hand-type.** Never hand-type an unverified hash. Run the deterministic `ProjectGenerator` procedure below, confirm the three printed digests are identical and start with `beda7d0…`, then update exactly those three values. Provenance stays minimal — three hash lines only, with the rationale in the commit message and changelog — per the SA114 precedent (the SA90 fixture was the sole data delta, three `sha256`-only lines).
-
-  - Literal deterministic generator command (expect exit 0; three identical `beda7d0…` digests):
-
-    ```bash
-    QS_SKIP_POETRY_LOCK=1 poetry run python - <<'PY'
-    import hashlib, tempfile
-    from pathlib import Path
-    from quickscale_core.generator import ProjectGenerator
-
-    for modules in (None, [], ["blog", "forms", "social"]):
-        with tempfile.TemporaryDirectory() as td:
-            out = Path(td) / "out"
-            ProjectGenerator(theme="showcase_react", selected_modules=modules).generate(
-                "testproject", out
-            )
-            print(hashlib.sha256((out / "Dockerfile").read_bytes()).hexdigest())
-    PY
-    ```
-
-  - Verify (focused): `poetry run pytest quickscale_core/tests/test_generator/test_generator.py::TestSa90ExactManifestParity -q` — expect **6 passed** (pre-refresh baseline is exit 1, 3 failed / 3 passed); `poetry run pytest quickscale_core/tests/test_generator/test_templates.py::TestDockerfileContent -q` — expect **11 passed**.
-  - Verify (broad): `make check QUIET=1` and `make quality` — expect exit 0. Independent full-scope change review must return `STATUS: ok` before merge-back.
-  - Rollback: revert the single fixture file.
-  *(why →* `QG-SA90-BASELINE` is the same pre-existing fixture drift reproduced with SA133's delta removed — SA133's broad rerun cannot be evidence until it is gone*)*
-
-  **Complete (2026-07-31; functional commit `6a779dbb`; synced to `v87` `a0ed6d39`).** The deterministic `ProjectGenerator` procedure printed three identical `beda7d0…` digests (exit 0); the fixture delta is exactly the three `Dockerfile` `sha256` records under `react_default`/`react_empty`/`react_selected` — `676edaa0…` → `beda7d0…`, 0 removed, 0 added, `_provenance` preserved. Focused: `TestSa90ExactManifestParity` **6 passed**, `TestDockerfileContent` **11 passed** (isolated `-o addopts=` runs exit 0; the raw literal selections exit 1 on the deselected coverage remainder only). Broad: `make check QUIET=1` **exit 0**; `make quality` **exit 0** with zero warning/critical regressions. Full-scope independent review returned `STATUS: ok` with **no findings**. **QG-SA90-BASELINE cleared** — SA133's acceptance rerun is no longer blocked on this fixture.
-
-### SA133 — Clear the three Core E2E blockers so `make ci-e2e` exits 0
-
-**Historical original diagnosis.** When SA132 discovered the blockers, `make ci-e2e` exited 1 with Core E2E at **31 passed / 4 failed** in `quickscale_core/tests/test_e2e_full_workflow.py`. All three causes were discovered by SA132 and are **causally independent of it** — two are stale test assertions left by the 2026-07-29 dependency upgrade, one is a real resolution gap. SA132 was closed on its own authorized scope (see [CHANGELOG.md](../../CHANGELOG.md)); this ticket owns what it found. That 31/4 result is the pre-delta diagnosis, not the current gate state — the complete acceptance evidence is recorded in the completion recital below.
-
-- [x] **SA133 — Fix the three Core E2E blockers.** `Tier 2 · deps: SA135 ✓ closed` — release-blocking; restores the green-gate milestone's reachability
-
-  **Files (exact):** `quickscale_core/tests/test_e2e_full_workflow.py`, plus whatever single production/module site `SA133-BLK-02`'s diagnosis names. No other file is authorized; a finding outside these three is recorded and ticketed, not fixed in place. Its E2E legs need exclusive Docker/PostgreSQL. It carries **no** tag, split push, or other public mutation.
-
-  - **SA133-BLK-01 — stale DRF assertion** (`test_e2e_full_workflow.py:312`). The test asserts the generated `pyproject.toml` contains `djangorestframework = "^3.16.1"`; the forms module pins `^3.17.1` (`quickscale_modules/forms/pyproject.toml:17`, manifest floor `>=3.17.1`). **Ratified policy: track the latest DRF.** The module pin is authoritative — correct the *assertion* to match it, and if a newer DRF release exists, moving the module pin is a separate dependency bump, not this ticket. Do not downgrade any pin to satisfy a test.
-  - **SA133-BLK-02 — generated-project lock cannot resolve unpublished core** (`test_e2e_full_workflow.py:420`). `poetry lock` inside the generated project cannot resolve `quickscale-core >=0.87.0,<0.88.0`, which is not on PyPI and must not be published to satisfy a gate — that would invert SA117's mandatory tag → split-push → PyPI ordering. **Ratified fix: rewrite the copied module's core dependency to a path/`develop` dependency on the monorepo core for the duration of the E2E**, exactly as the test already proves for module path-dependencies (`quickscale-module-forms = {path = "./modules/forms", develop = true}`). **Diagnose before changing:** the prime suspect is `quickscale_modules/backups/pyproject.toml:19`, the only module declaring core, as `{path = "../../quickscale_core", develop = true}` — valid in the monorepo, broken once copied to `./modules/backups` in a generated project. Confirm the actual mechanism first; if it is not that site, stop and record rather than widening. Resolution against a *published* core is deliberately **not** proved here — that axis belongs to SA112d's installed-artifact lifecycle E2E, so the gap is owned, not created.
-  - **SA133-BLK-03 — self-contradicting Python assertions** (`test_e2e_full_workflow.py:1009`). The test asserts both `"if: matrix.python-version == '3.14' ..." in ci_content` **and** `"3.14" not in ci_content` — logically unsatisfiable. The second is a negative control that was guarding against the *previous* pin and was mechanically rewritten by the 3.14 upgrade. **Ratified policy: 3.14 is the runtime pin and stays.** `runtime_pins.PYTHON_VERSION` is authoritative; restore the negative assertion's original intent by naming the retired version (`"3.13"`), and change no product pin.
-
-  **Deliberately out of scope — derive-instead-of-restate.** Deriving these assertions from `runtime_pins` and the module manifests would stop this class recurring on the next upgrade, and is the right long-term shape. It is **not** done here: widening a remediation ticket into a test-architecture change is the pattern that capped two reviews on this board. Recorded as v88 **SA134** below.
-
-  - Verify: `make ci-e2e` exits 0 with `QUARANTINE_TICKETS` empty; Core E2E is 35 passed / 0 failed; `make check QUIET=1` stays green; `make quality` exits 0 with zero baseline regressions; no product pin changed (`git diff` touches no `pyproject.toml` `version`/constraint except as named by `SA133-BLK-02`'s diagnosis); full-scope review returns `STATUS: ok`.
-  - Rollback: revert the allowlisted files. No tag, split, artifact, or workflow mutation exists to undo.
-  *(why →* the green-gate milestone's four-command join cannot be claimed while `ci-e2e` is red, and SA117e's review/tag/push may not run against a red gate*)*
-
-  **Complete (2026-07-31; functional commit `167ddd23`; synced to `v87` `026246a5`).** SA135 satisfied the prerequisite (functional commit `6a779dbb`; **QG-SA90-BASELINE cleared**), then the acceptance rerun was executed **entirely in the Track 3 worktree** (`/home/victor/code/quickscale-wt-track3` at `v87` `026246a5`) as the ordered chain `make ci-e2e` → `make check QUIET=1` → `make quality` — this workspace-correct terminal recovery, not any sibling-worktree run, is the completion evidence. **`make ci-e2e` exit 0:** Core E2E **35 passed / 0 failed** (2,676 deselected, 321.16s), CLI E2E **29 passed / 0 failed** (2,043 deselected, 1,003.80s), all 12 stages green, unit 4,717 passed / 2 skipped, backups 323 passed / 2 skipped, all 12 module suites passed (mean 94.40%), combined coverage **93.01%** with all 90 files ≥80%, `QUARANTINE_TICKETS` **empty**; only expected migration skips and Django runtime warnings. **`make check QUIET=1` exit 0** and **`make quality` exit 0** with **zero warning/critical baseline regressions**; worktree clean. **SA133-BLK-01/02/03 and QG-SA90-BASELINE resolved**; final full-scope review returned `STATUS: ok`. **Remaining low advisories, carried:** CR-SA133-001 (exotic legal checkout paths containing quotes/control characters could require TOML-safe serialization; normal paths validated) and CR-SA133-002 (one pre-existing `PytestRemovedIn10Warning` in CLI E2E; expected Django runtime warnings/skips were non-blocking). The focused command resolving `CR-SA133-META-001` is preserved exactly:
-
-  ```bash
-  PYTHONPATH="$PWD:$PWD/quickscale_core:$PWD/quickscale_core/src" poetry run pytest quickscale_core/tests/test_e2e_full_workflow.py -m e2e --rootdir=quickscale_core -o addopts= --tb=long -ra -q -k "forms_module_cli_install or ready_modules_install or ci_workflow_is_valid"
-  ```
-
-  **Green-gate milestone remains unclaimed:** this chain did not rerun `make ci`, so the four-command join (`make check` + `make quality` + `make ci` + `make ci-e2e`) is not yet proved at one clean rerun even though three of the four commands are green at this HEAD. **Track 3 head is now SA117e** (not started; the SA133 gate precondition it needed is satisfied). SA112f owns the eventual clean closeout rerun.
+**Status:** on the critical path. **Head is SA117e**, whose gate precondition (`make ci-e2e` exit 0) is satisfied. **SA112a now runs on Track 1** (`SA112A-TRACK-003`, accepted 2026-07-31), so Track 3's next SA112 child is SA112b. Do not publish splits, start SA112b, or treat anything as release-ready until SA117e closes.
 
 ### SA117 — Embedded-manifest / split-branch version skew
 
@@ -173,11 +111,11 @@ SA130's commit `196e6770` changed the `Dockerfile.j2` Poetry timeout variable an
   - Verify (umbrella): all twelve `module.yml` versions equal `VERSION`; an `apply` selecting all 12 modules reaches managed-wiring regeneration with no `KeyError`; a deliberately skewed embedded manifest is rejected with an explicit version-mismatch error, not a downstream crash.
   *(why →* `apply` with any module has zero end-to-end coverage — `test_e2e_development_workflow.py:276` plans with modules skipped — so this skew class has never been exercised*)*
 
-  - [ ] **SA117e — Push refreshed splits, full-scope review, and close SA117.** `Tier 2 · deps: SA133 ✓ closed` — critical path; contains a human-only step
+  - [ ] **SA117e — Push refreshed splits, full-scope review, and close SA117.** `Tier 2 · deps: none` — critical path; contains a human-only step
 
     Obtain **full-scope independent review over the complete executable delta including `43d9b8fc`** — the children's slice reviews do not substitute for it. Then execute the release ordering: tag HEAD to match `VERSION` → push refreshed `splits/*` (PyPI publish stays with SA96-PUBLISH). **Pushing splits mutates a public remote and is outward-facing — a human maintainer confirms before the push.** Only after the push, verify the published manifests carry the derivation sections and re-run the all-module installed `apply`.
     - Verify: full-scope review returns `STATUS: ok`; published `splits/*` manifests are byte-identical to the working-tree manifests for all twelve modules; an all-module installed `apply` reaches managed-wiring regeneration with no `KeyError`; SA112b's precondition is affirmatively satisfied.
-    - Open: no local release tag or public split exists yet. SA133's gate precondition is satisfied (`make ci-e2e` exit 0; SA133 complete, functional commit `167ddd23`), but the full-scope review, tag, and push remain to run — with a human maintainer confirming before the split push.
+    - Open: no local release tag or public split exists yet. The gate precondition is satisfied (`make ci-e2e` exit 0 at `v87` `026246a5`), but the full-scope review, tag, and push remain to run — with a human maintainer confirming before the split push.
     *(why →* SA117 is only actually resolved once the *published* splits match the core; everything before this child is local*)*
 
 ### SA112 — Installed-wheel full-lifecycle e2e (`plan → apply → up`)
@@ -390,7 +328,7 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 **Current state.** `make quality` is **green** — exit 0, zero warning and zero critical baseline regressions, `QUARANTINE_TICKETS` empty, zero line-count blockers and zero complexity blockers (`_perform_module_embed` CC 18 against ceiling 20, `_update_single_module` CC 13 against ceiling 17, measured with `radon cc`). `scripts/quality_baseline.json` carries zero `large_files` entries and `scripts/quality_waivers.json` is an empty ledger.
 
-**The milestone is unclaimed.** The exact four-command join remains unproved, though three of its four commands are green at this HEAD: SA135 cleared the pre-existing three-react SA90 Dockerfile fixture drift (**QG-SA90-BASELINE**, functional commit `6a779dbb`), and SA133's ordered broad rerun has now been run **entirely in the Track 3 worktree at `v87` `026246a5`** — `make ci-e2e` **exit 0** (Core E2E 35 passed / 0 failed, CLI E2E 29 passed / 0 failed, `QUARANTINE_TICKETS` empty, combined coverage 93.01% with all 90 files ≥80%), then `make check QUIET=1` **exit 0**, then `make quality` **exit 0** with zero warning/critical regressions — and the final full-scope review returned `STATUS: ok`, so **SA133 is checked complete**. **That chain did not rerun `make ci`**, so the four-command join on one clean rerun remains unproved; SA112f owns the eventual clean closeout rerun, and SA96-PUBLISH requires that evidence before release. The 31 passed / 4 failed Core E2E result behind `SA133-BLK-01` (stale DRF assertion), `SA133-BLK-02` (unpublished-core lock), and `SA133-BLK-03` (self-contradicting Python assertions) is the **historical original diagnosis**, not a current observation.
+**The milestone is unclaimed.** Three of the four commands are green at `v87` `026246a5` — `make ci-e2e`, `make check QUIET=1`, and `make quality` all exit 0 on one ordered chain run in the Track 3 worktree (closeout evidence in [CHANGELOG.md](../../CHANGELOG.md)). **That chain did not rerun `make ci`**, so the four-command join on one clean rerun remains unproved. **SA112f owns the eventual clean closeout rerun**, and SA96-PUBLISH requires that evidence before release.
 
 ---
 
@@ -400,14 +338,14 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 **`SA112A-TRACK-003` — ACCEPTED 2026-07-31: SA112a moves to Track 1, ahead of SA128a.** The earlier decline rested on SA112a displacing SA130, an immediately-executable diagnosed product fix; SA130 closed, leaving off-path SA128a as the Track 1 head, so that cost no longer exists.
 
-- **Independence — verified in all three directions.** SA112a is `deps: none`; its SA117e bound begins at SA112b. Its allowlist (`scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`) is disjoint from SA128a's (`scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`), from SA133's allowlist (`quickscale_core/tests/test_e2e_full_workflow.py`; SA133 complete 2026-07-31), and from every other open ticket. Validation is service-free — no PostgreSQL, no Docker — so it never contends with Track 3's infra priority. It does not split one logical change: SA112b consumes SA112a's *merged* seam, not its working tree.
+- **Independence — verified in all three directions.** SA112a is `deps: none`; its SA117e bound begins at SA112b. Its allowlist (`scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`) is disjoint from SA128a's (`scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`), and from every other open ticket. Validation is service-free — no PostgreSQL, no Docker — so it never contends with Track 3's infra priority. It does not split one logical change: SA112b consumes SA112a's *merged* seam, not its working tree.
 - **Effect.** The critical path's first non-blocked node now runs in parallel with SA117e instead of queueing behind it. SA112b's precondition set becomes *SA112a merged* + *SA117e*. Track 1's head flips from off-path filler to on-path work; SA128a is delayed, and since its consumer SA122b-1 is independently gated behind SA128d, that delay reaches no release property.
 - **Conflict surface.** Shared closeout files only (`CHANGELOG.md`, this file, `decisions.md` on policy change), covered by the Merge procedure's `git merge v87`-before-merge-back preserve-both-sides step. No executable surface gains a second writer — SA112e (Track 3) only *names* SA112a's scripts in the e2e trigger list and never edits them.
 - **Current state.** SA112a is plan-blocked at the recorded partial-delivery checkpoint above; no executable delta exists, and implementation awaits plan-review `STATUS: ok`.
 
 **The *fourth-worktree* variant is permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 
-**SA132's three remediation decisions are resolved** (2026-07-31): scope → SA132 closed on its authorized scope with the `make ci-e2e` clause retired, and the three discovered blockers ticketed as **SA133**; lock strategy → path/`develop` core dependency during the E2E, never publish-to-satisfy-a-gate; assertion alignment → 3.14 and latest DRF are the ratified policy, so the *assertions* move, never the pins. Full rationale is in [CHANGELOG.md](../../CHANGELOG.md).
+**SA132's three remediation decisions are resolved** (2026-07-31): scope → SA132 closed on its authorized scope with the `make ci-e2e` clause retired, and its three discovered blockers ticketed and closed as SA133; lock strategy → path/`develop` core dependency during the E2E, never publish-to-satisfy-a-gate; assertion alignment → 3.14 and latest DRF are the ratified policy, so the *assertions* move, never the pins. Full rationale is in [CHANGELOG.md](../../CHANGELOG.md).
 
 ## v88 backlog (not v87 scope)
 
@@ -427,8 +365,8 @@ Deferred deliberately. Nothing here blocks the v87 release. Backlog items carry 
 
 - [ ] **SA134 — Derive generated-project test assertions from the authoritative pins.** `Tier 2 · deps: none`
 
-  `quickscale_core/tests/test_e2e_full_workflow.py` restates runtime and dependency versions as string literals (DRF `^3.16.1` against a `^3.17.1` module pin; a `"3.14" not in ci_content` negative control that the 3.14 upgrade rewrote into a self-contradiction). Every dependency bump therefore drifts these assertions, and SA133 is the third recorded instance of the class. Derive them instead: Python from `runtime_pins.PYTHON_VERSION`, dependency floors from the module manifests/pins, keeping negative controls meaningful by naming the *retired* value explicitly.
-  - **Deliberately deferred out of SA133.** Widening a remediation ticket into a test-architecture change is the pattern that capped two full-scope reviews on this board; SA133 fixes the literals, SA134 removes the class.
+  `quickscale_core/tests/test_e2e_full_workflow.py` restates runtime and dependency versions as string literals (DRF `^3.16.1` against a `^3.17.1` module pin; a `"3.14" not in ci_content` negative control that the 3.14 upgrade rewrote into a self-contradiction). Every dependency bump therefore drifts these assertions, and SA133 (closed) was the third recorded instance of the class. Derive them instead: Python from `runtime_pins.PYTHON_VERSION`, dependency floors from the module manifests/pins, keeping negative controls meaningful by naming the *retired* value explicitly.
+  - **Deliberately deferred out of SA133.** Widening a remediation ticket into a test-architecture change is the pattern that capped two full-scope reviews on this board; SA133 fixed the literals, SA134 removes the class.
   - Verify: no generated-project version assertion restates a literal that an authoritative pin already owns; a deliberate pin bump makes the derived assertions follow with no test edit; a negative control still fails when a retired version reappears.
   *(why →* hand-synced version literals are the same restate-instead-of-derive shape as arch Finding 11, at test scope*)*
 

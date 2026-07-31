@@ -51,7 +51,6 @@ None open. Per this document's convention, closed findings exist only as dated R
 
 ## Tooling gaps
 
-- **Quiet/full gate-membership parity test (`TA62`):** implemented as part of SA120 — 79 policy tests cover membership, invocation, and failure propagation in both normal and quiet modes.
 - **Dependency vulnerability audit:** `pip-audit`/Safety remains absent from local and CI tooling, so current lockfile CVEs could not be resolved in this pass; add a read-only blocking scanner with an explicit reviewed allowlist.
 - **Security static analysis:** Bandit/Semgrep remains absent; add a focused rule set for subprocess shell use, unsafe deserialization, TLS disabling, Django raw/marked-safe sinks, and committed credential signatures.
 - **Production-change testimony gate:** no automated check requires a CHANGELOG/decision/ticket trail for first-party behavioral commits, leaving the side-channel lane dependent on manual audit scrutiny.
