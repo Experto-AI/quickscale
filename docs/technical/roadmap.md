@@ -58,7 +58,7 @@ Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../.
 ```
 Track 1 (SA112a, then governance)      Track 2 (CLOSED to new work)   Track 3 → release (CRITICAL PATH)
 ──────────────────────────────────     ────────────────────────────   ─────────────────────────────────
-SA112a (provisioner) ◄─ next           SA115 (e2e xdist; deps: none)  SA135 (SA90 fixture refresh) ◄─ next
+SA112a (provisioner; plan blocked) ◄─ next  SA115 (e2e xdist; deps: none)  SA135 (SA90 fixture refresh) ◄─ next
   │  ON THE CRITICAL PATH                │  validation AUTHORIZED         │  one file · three hashes
   │  scripts/_installed_wheel_venv.sh    │  cannot finish → SA112f        ▼
   ▼  service-free; deps: none            │  cannot merge  → SA112e        SA133 (Core E2E blockers)
@@ -197,6 +197,11 @@ No gate ever runs `apply`/`up` from an installed wheel: `test_e2e_development_wo
     - Files: `scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`
     - Verify: `bash -n`, focused tests, `make smoke-install` with all 20 probes — all service-free.
     - **Homed on Track 1, not Track 3** (`SA112A-TRACK-003`, accepted 2026-07-31). It is the sole SA112 child with no SA117e bound — that begins at SA112b — so it runs in parallel with Track 3's SA135/SA133/SA117e instead of queueing behind them. It must be **merged back to `v87` before SA112b starts**; that is the whole cross-track edge. See [Track topology](#track-topology--settled).
+    **SA112a recorded partial delivery (2026-07-31; no functional commit; task remains unchecked).**
+    **Done.** Track assignment resolved; `wt-track1` was clean and synced to `v87`; the Poetry environment, discovery snapshot, scoped contract, rollback, and dual-review identity plan were established. No executable or test file was changed.
+    **Pending-Blocking.** **SA112A-PLAN-002** (medium, completeness): the literal plan must make documentation validation locally fail-fast and must materialize each Git NUL-path query in a scoped temporary file, check the producer exit, then feed the verified bytes to allowlist/required/empty readers. Plan review stayed `STATUS: partial` at the two-cycle cap (`medium/1 → medium/1`).
+    **Decisions-needed.** None — continuation is a mechanical, explicitly authorized future plan/review attempt; implementation remains forbidden until plan review returns `STATUS: ok`.
+    *(SA112a remains unchecked; this checkpoint records planning progress and the blocker, not implementation completion.)*
     *(why →* creates a green, independently reviewable provisioning seam before Docker lifecycle work*)*
 
   - [ ] **SA112b — Capture the installed `apply` traceback with a literal diagnostic.** `Tier 2 · deps: SA112a + SA117e`
@@ -256,7 +261,7 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** **head is SA112a, which is on the critical path** (`SA112A-TRACK-003`, accepted 2026-07-31; the ticket text lives with the SA112 umbrella on Track 3). Everything after it is governance filler that changes how "green" is decided, not what the generator emits. Queue: **SA112a → SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree.
+**Status:** **head is SA112a, which is plan-blocked and on the critical path** (`SA112A-TRACK-003`, accepted 2026-07-31; the ticket text lives with the SA112 umbrella on Track 3). Everything after it is governance filler that changes how "green" is decided, not what the generator emits. Queue: **SA112a (plan-blocked) → SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree.
 
 ### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
 
@@ -396,6 +401,7 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 - **Independence — verified in all three directions.** SA112a is `deps: none`; its SA117e bound begins at SA112b. Its allowlist (`scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`) is disjoint from SA128a's (`scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`), from SA133's (`quickscale_core/tests/test_e2e_full_workflow.py`), and from every other open ticket. Validation is service-free — no PostgreSQL, no Docker — so it never contends with Track 3's infra priority. It does not split one logical change: SA112b consumes SA112a's *merged* seam, not its working tree.
 - **Effect.** The critical path's first non-blocked node now runs in parallel with SA135/SA133/SA117e instead of queueing behind them. SA112b's precondition set becomes *SA112a merged* + *SA117e*. Track 1's head flips from off-path filler to on-path work; SA128a is delayed, and since its consumer SA122b-1 is independently gated behind SA128d, that delay reaches no release property.
 - **Conflict surface.** Shared closeout files only (`CHANGELOG.md`, this file, `decisions.md` on policy change), covered by the Merge procedure's `git merge v87`-before-merge-back preserve-both-sides step. No executable surface gains a second writer — SA112e (Track 3) only *names* SA112a's scripts in the e2e trigger list and never edits them.
+- **Current state.** SA112a is plan-blocked at the recorded partial-delivery checkpoint above; no executable delta exists, and implementation awaits plan-review `STATUS: ok`.
 
 **The *fourth-worktree* variant is permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 
