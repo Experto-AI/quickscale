@@ -3830,6 +3830,47 @@ class TestDockerfileContent:
         assert '--workers "${gunicorn_workers}"' in output
         assert "--workers 4" not in output
 
+    def test_poetry_requests_timeout_variable(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Dockerfile must export POETRY_REQUESTS_TIMEOUT (the identifier
+        Poetry 2.4.1 reads) instead of the legacy POETRY_HTTP_TIMEOUT."""
+        template = jinja_env.get_template("Dockerfile.j2")
+        output = template.render(test_context)
+        assert "POETRY_REQUESTS_TIMEOUT" in output, (
+            "Rendered Dockerfile must contain POETRY_REQUESTS_TIMEOUT"
+        )
+
+    def test_poetry_http_timeout_variable_absent(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Rendered Dockerfile must not contain the legacy POETRY_HTTP_TIMEOUT."""
+        template = jinja_env.get_template("Dockerfile.j2")
+        output = template.render(test_context)
+        assert "POETRY_HTTP_TIMEOUT" not in output, (
+            "Rendered Dockerfile must not contain the legacy POETRY_HTTP_TIMEOUT"
+        )
+
+    def test_emitted_dockerfile_contains_poetry_requests_timeout(
+        self, generated_project_path: Path
+    ) -> None:
+        """A freshly ProjectGenerator-emitted Dockerfile must contain
+        POETRY_REQUESTS_TIMEOUT and must not contain the legacy
+        POETRY_HTTP_TIMEOUT identifier.
+
+        SA130-CR-001 regression: exercises the actual service-free
+        ProjectGenerator emission path (file on disk) rather than
+        the direct Jinja2 render path, proving the identifier is
+        wired end-to-end through the generator.
+        """
+        dockerfile = (generated_project_path / "Dockerfile").read_text()
+        assert "POETRY_REQUESTS_TIMEOUT" in dockerfile, (
+            "Emitted Dockerfile must contain POETRY_REQUESTS_TIMEOUT"
+        )
+        assert "POETRY_HTTP_TIMEOUT" not in dockerfile, (
+            "Emitted Dockerfile must not contain the legacy POETRY_HTTP_TIMEOUT"
+        )
+
 
 class TestDockerComposeContent:
     """Verify docker-compose.yml contains complete development environment."""
