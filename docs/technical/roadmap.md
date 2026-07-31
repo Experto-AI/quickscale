@@ -58,37 +58,37 @@ Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../.
 ```
 Track 1 (governance + defects; serial)  Track 2 (CLOSED to new work)   Track 3 → release (CRITICAL PATH)
 ──────────────────────────────────     ────────────────────────────   ─────────────────────────────────
-SA128a → b → c → d (parity check) ◄─ next  SA115 (e2e xdist; deps: none)  SA132 (QG remediation) ◄─ next
-  │  Umbrella, split by domain              │  validation AUTHORIZED         │  exact gates green
-  │  Make · Bash · YAML · contracts         │  cannot finish → SA112f        ▼
-  ▼  serial reviewed handoffs               │  cannot merge  → SA112e        SA117e (review + push splits)
-SA122b-1 → -2 → -3 → -4 → -5               │                              │
-  │  Umbrella, split by consumer        │                              │
-  │  Make · sh · ci · publish · e2e     │                              │
-        ▲ (-5 only)                     │                              │
-        └──── merge after SA112e ───────┼──────────────────────────────┤
-                                        │                              ▼
-                                        └──── merge after SA112 ──────► SA112a → b → c → d → e → f
-                                                                       │  serial reviewed handoffs
-                                                                       │  SA117e required from b on
-                                                                       ▼  (evidence validity)
-                                                                      SA96-PUBLISH ── build → publish
+SA112a (provisioner; plan blocked) ◄─ next  SA115 (e2e xdist; deps: none)  SA132 (QG remediation) ◄─ next
+  │  deps: none; service-free                  │  validation AUTHORIZED         │  exact gates green
+  ▼  merge before SA112b                      │  cannot finish → SA112f        ▼
+SA128a → b → c → d (parity check)             │  cannot merge  → SA112e        SA117e (review + push splits)
+  │  Umbrella, split by domain                │                              │
+  ▼  serial reviewed handoffs                 │                              │
+SA122b-1 → -2 → -3 → -4 → -5                 │                              │
+        ▲ (-5 only)                           │                              │
+        └──── merge after SA112e ─────────────┼──────────────────────────────┤
+                                              │                              ▼
+                                              └──── merge after SA112 ──────► SA112b → c → d → e → f
+                                                                             │  serial reviewed handoffs
+                                                                             │  SA117e required from b on
+                                                                             ▼  (evidence validity)
+                                                                            SA96-PUBLISH ── build → publish
                                                                       (human-only; hold until SA112f)
 ```
 
-**Critical path:** `SA132 → SA117e → SA112a → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH`. Track 1 and Track 2 are entirely off it.
+**Critical path:** `SA132 → SA117e → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH`. Track 1 and Track 2 are entirely off it; SA112a is the Track 1 prerequisite seam for SA112b.
 
-**Cross-track edges — two, both merge-order only.** SA122b-5 merges after SA112e, and SA115 merges after SA112; both share `.github/workflows/e2e.yml`'s `pull_request.paths` list. Neither blocks a track from starting or working.
+**Cross-track edges — one dependency and two merge-order bounds.** SA112b consumes the merged SA112a provisioner seam from Track 1. SA122b-5 merges after SA112e, and SA115 merges after SA112; those two share `.github/workflows/e2e.yml`'s `pull_request.paths` list. None creates a shared writer while its predecessor remains open.
 
 **Infra serialization (not a track constraint).** SA112's and SA115's e2e lanes, SA117e's `apply` verification, SA132's E2E legs, and any `make ci`/`make ci-e2e` rerun all need the same PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL` knobs namespace lanes *within* one invocation, not across worktrees — **only one track exercises PG/Docker at a time, and Track 3 has priority.** Abandon or restart an SA115 run rather than make a critical-path leg queue behind it.
 
-**Shared executable surfaces.** `.github/workflows/e2e.yml`'s path list is written by SA112e, SA115, and SA122b-5 — serialized by the merge bounds above. `scripts/quality_baseline.json` and `quickscale_cli/.../module_commands.py` are owned by no open ticket. No other executable surface is shared, so no additional procedure is required.
+**Shared executable surfaces.** `.github/workflows/e2e.yml`'s path list is written by SA112e, SA115, and SA122b-5 — serialized by the merge bounds above. SA112a alone owns its three provisioner scripts; SA112b consumes the merged seam without writing them. `scripts/quality_baseline.json` and `quickscale_cli/.../module_commands.py` are owned by no open ticket. No other executable surface is shared, so no additional procedure is required.
 
 ---
 
 ## Track 3 — Core/CLI plumbing, release path
 
-**Status:** on the critical path. Head is SA132. Do not publish splits, start SA112, or treat anything as release-ready until SA117e closes.
+**Status:** on the critical path. Head is SA132. Do not publish splits, start SA112b, or treat anything as release-ready until SA117e closes; SA112a is assigned to Track 1 independently.
 
 ### SA132 — Remediate the SA117e exact-gate blockers
 
@@ -159,11 +159,16 @@ No gate ever runs `apply`/`up` from an installed wheel: `test_e2e_development_wo
 
   *(why →* `apply`/`up` have zero installed-artifact coverage; the existing lifecycle e2e runs only from source, which cannot reproduce install-context discovery bugs*)*
 
-  - [ ] **SA112a — Extract the installed-wheel provisioner and preserve smoke parity.** `Tier 2 · deps: none`
+  - [ ] **SA112a — Extract the installed-wheel provisioner and preserve smoke parity.** `Tier 2 · deps: none · Track 1 head`
     Extract the reusable staging/build/venv helpers from `scripts/smoke_install.sh` into a sourceable `scripts/_installed_wheel_venv.sh`, add the thin `scripts/provision_installed_venv.sh` wrapper, and keep all 20 smoke probes unchanged. The scoped plan specifies helper-owned temporary directories and signal/exit cleanup, caller-owned output cleanup, exact core → CLI → umbrella build/install order, one-line stdout, stderr chatter, usage exits, and caller-trap/status preservation tests.
     - Files: `scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`
     - Verify: `bash -n`, focused tests, `make smoke-install` with all 20 probes — all service-free.
-    - Note: this child alone does not depend on SA117e, but Track 3 runs one child at a time so the release blocker goes first. Homing it on Track 1 instead is **an open maintainer decision** (`SA112A-TRACK-003`) — see [Track topology](#track-topology--one-open-decision).
+    - Note: `SA112A-TRACK-003` was resolved on 2026-07-31 by assigning this child to Track 1 ahead of SA128a; SA117e remains a prerequisite only from SA112b onward.
+    **SA112a recorded partial delivery (2026-07-31; no functional commit; task remains unchecked).**
+    **Done.** Track assignment resolved; `wt-track1` was clean and synced to `v87`; the Poetry environment, discovery snapshot, scoped contract, rollback, and dual-review identity plan were established. No executable or test file was changed.
+    **Pending-Blocking.** **SA112A-PLAN-002** (medium, completeness): the literal plan must make documentation validation locally fail-fast and must materialize each Git NUL-path query in a scoped temporary file, check the producer exit, then feed the verified bytes to allowlist/required/empty readers. Plan review stayed `STATUS: partial` at the two-cycle cap (`medium/1 → medium/1`).
+    **Decisions-needed.** None — continuation is a mechanical, explicitly authorized future plan/review attempt; implementation remains forbidden until plan review returns `STATUS: ok`.
+    *(SA112a remains unchecked; this checkpoint records planning progress and the blocker, not implementation completion.)*
     *(why →* creates a green, independently reviewable provisioning seam before Docker lifecycle work*)*
 
   - [ ] **SA112b — Capture the installed `apply` traceback with a literal diagnostic.** `Tier 2 · deps: SA112a + SA117e`
@@ -223,7 +228,7 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** off the critical path (filler work). Track 1 changes how "green" is decided, not what the generator emits. Queue: **SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree. One open maintainer decision (`SA112A-TRACK-003`) would insert SA112a ahead of SA128a — see [Track topology](#track-topology--one-open-decision).
+**Status:** off the critical path (filler work). Queue: **SA112a (plan-blocked) → SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). SA112a is service-free and disjoint from SA128 and Track 3 allowlists; Track 1 remains serial because it is one worktree.
 
 ### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
 
@@ -354,20 +359,15 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 ---
 
-## Track topology — one open decision
+## Track topology — assignment resolved
 
-**`SA112A-TRACK-003` — reopened 2026-07-31: move SA112a to Track 1, ahead of SA128a?** The prior decline (2026-07-31, while SA130 headed Track 1) rested on SA112a displacing an immediately-executable, fully-diagnosed product fix. SA130 is now complete and the Track 1 head is **SA128a**, off the critical path. Meanwhile Track 3's head SA132 is *decision*-blocked, not work-blocked, so the critical path currently advances only when the maintainer answers SA132's three questions.
+**`SA112A-TRACK-003` — resolved 2026-07-31: SA112a moved to Track 1 ahead of SA128a.** The maintainer accepted the roadmap recommendation because SA112a has `deps: none`, a service-free allowlist disjoint from SA128 and Track 3, and supplies a merged seam consumed by SA112b.
 
-- **Independence — verified in all three directions.** SA112a is `deps: none`; its SA117e bound begins at SA112b. Allowlist (`scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`) is disjoint from SA128a's (`scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`) and from every other open ticket. Validation is service-free — no PostgreSQL, no Docker — so it never contends with Track 3's infra priority. It does not split one logical change: SA112b consumes SA112a's merged seam, not its working tree.
-- **Cost of taking it.** Track 1 is one serial worktree, so SA112a runs *instead of* SA128a, delaying an otherwise-mergeable ticket. SA128a's downstream consumer SA122b-1 is itself gated behind SA128d, so the delay propagates only inside Track 1 and reaches no release property.
-- **Benefit.** The critical path's first non-blocked node starts today rather than after SA132 + SA117e, and SA112b's precondition set shrinks to SA117e alone.
-- **Conflict surface if taken.** Shared closeout files only (`CHANGELOG.md`, this file, `decisions.md` on policy change); the `git merge v87`-before-merge-back step in [Merge a phase back](#parallel-execution-tracks) covers it. No executable surface becomes shared.
-- **Recommendation: take it**, unless the maintainer intends to answer SA132's three questions immediately, in which case Track 3 resumes and the parallelism buys less.
+- **Assignment.** Track 1 owns SA112a, then resumes the SA128/SA122b queue; Track 3's remaining installed-wheel chain starts at SA112b after SA117e.
+- **Dependency.** SA112b requires both the merged SA112a provisioner and pushed SA117e splits; the track move changes scheduling, not acceptance.
+- **Current state.** SA112a is plan-blocked at the recorded partial-delivery checkpoint above; no executable delta exists, and implementation awaits plan-review `STATUS: ok`.
 
-If taken, update in one pass: SA112a's ticket tag and its Track-1 note, the Track 1 header queue, the Track 3 status line, the dependency diagram, the critical-path sentence, the shared-executable-surfaces paragraph, and the track-readiness bullets.
-
-**The *fourth-worktree* variant is permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
-
+**The *fourth-worktree* variant remains permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 **SA132's three remediation decisions** (out-of-scope ticket scope/allowlist, unpublished-core lock strategy, DRF/Python 3.14 assertion alignment) remain open — see the Decisions-needed block above. No other track-sequencing or worktree-assignment question is open.
 
 ---
