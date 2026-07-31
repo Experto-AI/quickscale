@@ -58,14 +58,11 @@ Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../.
 ```
 Track 1 (governance + defects; serial)  Track 2 (CLOSED to new work)   Track 3 → release (CRITICAL PATH)
 ──────────────────────────────────     ────────────────────────────   ─────────────────────────────────
-SA130 (dead poetry timeout) ◄─ next     SA115 (e2e xdist; deps: none)  SA132 (QG remediation) ◄─ next
-  │  Tier 2 · deps: none                 │  validation AUTHORIZED       │  exact gates green
-  ▼                                     │  cannot finish → SA112f      ▼
-SA128a → b → c → d (parity check)       │  cannot merge  → SA112e      SA117e (review + push splits)
-  │  Umbrella, split by domain          │                              │  human-confirmed public push
-  │  Make · Bash · YAML · contracts     │                              │
-  ▼  serial reviewed handoffs           │                              │
-SA122b-1 → -2 → -3 → -4 → -5            │                              │
+SA128a → b → c → d (parity check) ◄─ next  SA115 (e2e xdist; deps: none)  SA132 (QG remediation) ◄─ next
+  │  Umbrella, split by domain              │  validation AUTHORIZED         │  exact gates green
+  │  Make · Bash · YAML · contracts         │  cannot finish → SA112f        ▼
+  ▼  serial reviewed handoffs               │  cannot merge  → SA112e        SA117e (review + push splits)
+SA122b-1 → -2 → -3 → -4 → -5               │                              │
   │  Umbrella, split by consumer        │                              │
   │  Make · sh · ci · publish · e2e     │                              │
         ▲ (-5 only)                     │                              │
@@ -210,20 +207,22 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** off the critical path (filler work). Track 1 changes how "green" is decided, not what the generator emits — except SA130, which is a non-blocking product defect. Queue: **SA130 → SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree.
+**Status:** off the critical path (filler work). Track 1 changes how "green" is decided, not what the generator emits. Queue: **SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree.
 
 ### SA130 — The Dockerfile's Poetry network-timeout setting is a no-op
 
-`quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2:88` exports `POETRY_HTTP_TIMEOUT=120`. **That is not a Poetry variable and never has been.** Poetry 2.4.0 — the version pinned at `Dockerfile.j2:62` — reads exactly one timeout variable, `POETRY_REQUESTS_TIMEOUT` (`poetry/utils/constants.py`, default 15), and that constant is what `http_repository.py`, `pypi_repository.py`, `utils/authenticator.py`, and `utils/helpers.py` all pass as `timeout=`. Every HTTP read in every generated image build has used the 15-second default.
+`quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2:88` exports `POETRY_HTTP_TIMEOUT=120`. **That is not a Poetry variable and never has been.** Poetry 2.4.1 — the version pinned at `Dockerfile.j2:62` — reads exactly one timeout variable, `POETRY_REQUESTS_TIMEOUT` (`poetry/utils/constants.py`, default 15), and that constant is what `http_repository.py`, `pypi_repository.py`, `utils/authenticator.py`, and `utils/helpers.py` all pass as `timeout=`. Every HTTP read in every generated image build has used the 15-second default.
 
 It stayed invisible because the `timeout 600` wrapper and 3-attempt retry loop are real and do work, so builds recover on a retry and print success. The failure mode is builds that are slower and more retry-dependent than intended on any non-fast link, with no signal that the configured mitigation is absent. Nothing asserts the variable name. **Adjacent lines are verified clean — do not "fix" them:** the frontend loop's `--config.fetch-retries=5` is a real pnpm/npm config, and `[ "$INSTALL_DEV" = "true" ]` is correct in the template (it renders as `[ "true" = "true" ]` only in BuildKit's echoed log output).
 
-- [ ] **SA130 — Use Poetry's actual timeout variable.** `Tier 2 · deps: none`
+- [x] **SA130 — Use Poetry's actual timeout variable.** `Tier 2 · deps: none`
 
   Replace `POETRY_HTTP_TIMEOUT` with `POETRY_REQUESTS_TIMEOUT` in the builder stage. Keep the value, the `timeout 600` wrapper, the retry count, and all surrounding output byte-unchanged — this changes one identifier. The variable name is a version-coupled fact: if `Dockerfile.j2:62`'s `poetry==` pin moves, re-verify from that release's `poetry/utils/constants.py`.
   - Files: `quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2`, `quickscale_core/tests/test_generator/test_templates.py` (extend `TestDockerfileContent`; do not create a second module)
-  - Verify: a rendered Dockerfile contains `POETRY_REQUESTS_TIMEOUT` and **no** occurrence of `POETRY_HTTP_TIMEOUT` — assert both directions, since the point is that the wrong name reads as configured. A generated project still builds end to end.
+  - Verify: a rendered Dockerfile contains `POETRY_REQUESTS_TIMEOUT` and **no** occurrence of `POETRY_HTTP_TIMEOUT` — assert both directions, since the point is that the wrong name reads as configured. The service-free actual `ProjectGenerator` emitted-Dockerfile proof — correct identifier present, wrong identifier absent — is the accepted criterion. (2026-07-31: the maintainer waived the original Docker image/network build criterion; literal proof requires shared Docker capacity and Track 3 currently owns it.)
   - Rollback: revert the two files. A stale image layer cache is the only side effect and self-invalidates on the changed `RUN` line.
+
+  **SA130 complete (2026-07-31; functional commit `196e6770`).** `Dockerfile.j2` now exports `POETRY_REQUESTS_TIMEOUT=120` — Poetry's actual timeout variable — instead of the no-op `POETRY_HTTP_TIMEOUT`. The value (120), `timeout 600` wrapper, 3-retry loop, and all surrounding output are byte-unchanged; this changes one identifier. **Validation:** positive/negative direct rendering plus actual service-free `ProjectGenerator` emitted-Dockerfile assertions; `TestDockerfileContent` 11 passed, 216 deselected; `make quality` exit 0 with zero baseline regressions. Full-scope Adaptive-change-review returned `STATUS: ok`. **Finding lifecycle:** `SA130-CR-001` (medium, test-gap) resolved by actual ProjectGenerator emission test; `SA130-CR-002` (low, advisory, consistency) resolved by exact pinned Poetry 2.4.1 wording. No unresolved blocker or finding remains under the revised acceptance criterion. (2026-07-31: the maintainer waived the original Docker image/network build criterion; literal proof requires shared Docker capacity and Track 3 currently owns it.) The service-free actual `ProjectGenerator` emitted-Dockerfile proof — correct identifier present, wrong identifier absent — is the accepted criterion. Track 1 advances to SA128a.
 
 ### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
 
@@ -358,7 +357,7 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 **No open decision. Nothing anywhere in this roadmap is waiting on a maintainer choice.**
 
-**SA112a stays on Track 3; SA130 remains the Track 1 head — decided 2026-07-31.** Moving SA112a to Track 1 was considered and **declined**. SA112a is genuinely independent (deps satisfied, no SA117e bound — that begins at SA112b, three-file allowlist disjoint from every other open ticket, service-free validation that never contends for PostgreSQL/Docker), but Track 1 is one serial worktree, so it would run *instead of* SA130 — displacing an immediately-executable, fully-diagnosed Tier 2 product fix to advance a critical-path node that blocks no release property. SA117a's four caps were *plan-review* failures, not implementation failures, so a second plan-gated ticket in parallel likely yields two stalled tickets rather than one. The move changed no track's can-start/can-finish/can-merge — only sequencing.
+**SA112a stays on Track 3; SA130 was the Track 1 head until completion — decided 2026-07-31.** Moving SA112a to Track 1 was considered and **declined**. SA112a is genuinely independent (deps satisfied, no SA117e bound — that begins at SA112b, three-file allowlist disjoint from every other open ticket, service-free validation that never contends for PostgreSQL/Docker), but Track 1 is one serial worktree, so it would run *instead of* SA130 — displacing an immediately-executable, fully-diagnosed Tier 2 product fix to advance a critical-path node that blocks no release property. SA117a's four caps were *plan-review* failures, not implementation failures, so a second plan-gated ticket in parallel likely yields two stalled tickets rather than one. The move changed no track's can-start/can-finish/can-merge — only sequencing. SA130 is now complete; SA128a is the Track 1 head.
 
 **Reopen only if** SA117e stalls and SA112a's critical-path start becomes the binding constraint. The *fourth-worktree* variant is permanently declined ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 
