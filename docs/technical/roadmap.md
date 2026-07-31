@@ -97,8 +97,8 @@ SA122b-1 → -2 → -3 → -4 → -5               │                          
   Its scope is **exactly** the three findings below and nothing else. It carries **no** tag, split push, or other public mutation — those stay with SA117e. Its E2E legs need exclusive Docker/PostgreSQL.
 
   1. ~~**Exact `make check QUIET=1` hangs** in the redirected pytest/xdist recipe although the same component gates pass individually. Diagnose the hang first — the redirection/xdist interaction is the prime suspect, not the gates. A fix that passes by removing coverage is out of scope.~~ **Resolved** by SA132's partial merge (`eac4d82e`): unit marker/timeout parity restored; `make check QUIET=1` now passes.
-  2. **Core E2E collection cannot import `scripts.publish_module`** under the runner's package-root `PYTHONPATH`.
-  3. **CLI E2E `test_update_auto_commits_each_module_e2e` receives update exit 1.** Determine whether this is a test defect or a real `update` regression **before** choosing a fix; a production defect is a finding to record, not to silently absorb into a validation slice.
+  2. ~~**Core E2E collection cannot import `scripts.publish_module`** under the runner's package-root `PYTHONPATH`.~~ **Resolved** by SA132's partial merge (`eac4d82e`): collection collects 35 tests cleanly.
+  3. ~~**CLI E2E `test_update_auto_commits_each_module_e2e` receives update exit 1.** Determine whether this is a test defect or a real `update` regression **before** choosing a fix; a production defect is a finding to record, not to silently absorb into a validation slice.~~ **Resolved** by SA132's partial merge (`eac4d82e`): passes using canonical `_core_version` fixture.
 
   - Verify: exact `make check QUIET=1` completes and exits 0; Core E2E imports `scripts.publish_module` cleanly; `test_update_auto_commits_each_module_e2e` passes with update exit 0; `make ci-e2e` exits 0 with `QUARANTINE_TICKETS` empty; `make quality` exits 0 with zero baseline regressions; full-scope review returns `STATUS: ok`.
   - Rollback: revert the allowlisted files. No tag, split, artifact, or workflow mutation exists to undo.
@@ -386,7 +386,7 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 ## Settled decisions on track topology
 
-**No open decision. Nothing anywhere in this roadmap is waiting on a maintainer choice.**
+**Track topology decisions are settled. Nothing on track sequencing or worktree assignment is waiting on a maintainer choice. SA132's three remediation decisions (out-of-scope ticket scope/allowlist, unpublished-core lock strategy, DRF/Python 3.14 assertion alignment) remain open — see the Decisions-needed block above.**
 
 **SA112a stays on Track 3; SA130 was the Track 1 head until completion — decided 2026-07-31.** Moving SA112a to Track 1 was considered and **declined**. SA112a is genuinely independent (deps satisfied, no SA117e bound — that begins at SA112b, three-file allowlist disjoint from every other open ticket, service-free validation that never contends for PostgreSQL/Docker), but Track 1 is one serial worktree, so it would run *instead of* SA130 — displacing an immediately-executable, fully-diagnosed Tier 2 product fix to advance a critical-path node that blocks no release property. SA117a's four caps were *plan-review* failures, not implementation failures, so a second plan-gated ticket in parallel likely yields two stalled tickets rather than one. The move changed no track's can-start/can-finish/can-merge — only sequencing. SA130 is now complete; SA128a is the Track 1 head.
 
