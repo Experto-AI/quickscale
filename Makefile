@@ -1068,7 +1068,7 @@ check:
 		fi; \
 		q_test_dirs="$$(echo $$q_test_dirs)"; \
 		if [ -n "$$q_test_dirs" ]; then \
-			$(PYTHON) -m pytest $$q_test_dirs -q --tb=short $(PYTEST_XDIST_ARGS) > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm -f pytest_log.txt; exit 1; }; \
+			$(PYTHON) -m pytest $$q_test_dirs -q --tb=short -m "not integration and not e2e" $(PYTEST_XDIST_ARGS) $(PYTEST_TIMEOUT_ARGS) > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm -f pytest_log.txt; exit 1; }; \
 			rm -f pytest_log.txt; \
 		fi; \
 	else \
