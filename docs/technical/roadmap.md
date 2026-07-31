@@ -150,7 +150,7 @@ No gate ever runs `apply`/`up` from an installed wheel: `test_e2e_development_wo
     Extract the reusable staging/build/venv helpers from `scripts/smoke_install.sh` into a sourceable `scripts/_installed_wheel_venv.sh`, add the thin `scripts/provision_installed_venv.sh` wrapper, and keep all 20 smoke probes unchanged. The scoped plan specifies helper-owned temporary directories and signal/exit cleanup, caller-owned output cleanup, exact core → CLI → umbrella build/install order, one-line stdout, stderr chatter, usage exits, and caller-trap/status preservation tests.
     - Files: `scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`
     - Verify: `bash -n`, focused tests, `make smoke-install` with all 20 probes — all service-free.
-    - Note: this child alone does not depend on SA117e, but Track 3 runs one child at a time so the release blocker goes first. See the open decision below.
+    - Note: this child alone does not depend on SA117e, but Track 3 runs one child at a time so the release blocker goes first. Homing it on Track 1 was considered and declined — see [Settled decisions on track topology](#settled-decisions-on-track-topology).
     *(why →* creates a green, independently reviewable provisioning seam before Docker lifecycle work*)*
 
   - [ ] **SA112b — Capture the installed `apply` traceback with a literal diagnostic.** `Tier 2 · deps: SA112a + SA117e`
@@ -354,15 +354,13 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 ---
 
-## Open decision
+## Settled decisions on track topology
 
-**Move SA112a to Track 1, or leave Track 1 on its current queue?** Reusing Track 1 requires no fourth worktree, and SA112a is genuinely independent: its deps are satisfied, it does not carry the SA117e bound (that begins at SA112b), its three-file allowlist is disjoint from every other open ticket, and its validation is service-free so it never contends for PostgreSQL/Docker.
+**No open decision. Nothing anywhere in this roadmap is waiting on a maintainer choice.**
 
-**The cost.** Track 1 is one serial worktree, so SA112a would run *instead of* its queue head — now one immediately-executable, fully-diagnosed Tier 2 product fix (SA130) rather than a stalled continuation. The move advances a critical-path node but trades against no release blocker.
+**SA112a stays on Track 3; SA130 remains the Track 1 head — decided 2026-07-31.** Moving SA112a to Track 1 was considered and **declined**. SA112a is genuinely independent (deps satisfied, no SA117e bound — that begins at SA112b, three-file allowlist disjoint from every other open ticket, service-free validation that never contends for PostgreSQL/Docker), but Track 1 is one serial worktree, so it would run *instead of* SA130 — displacing an immediately-executable, fully-diagnosed Tier 2 product fix to advance a critical-path node that blocks no release property. SA117a's four caps were *plan-review* failures, not implementation failures, so a second plan-gated ticket in parallel likely yields two stalled tickets rather than one. The move changed no track's can-start/can-finish/can-merge — only sequencing.
 
-**The counter-argument.** SA117a's four caps were all *plan-review* failures, not implementation failures. If the bottleneck is the plan-gate process rather than engineering capacity, adding a second plan-gated ticket in parallel produces two stalled tickets instead of one. This buys time only if Track 3's stall is capacity-bound.
-
-**Recommendation: decline while SA130 is the head.** Take it only if SA117e stalls and SA112a's critical-path start becomes the binding constraint. It changes no track's can-start/can-finish/can-merge — only sequencing. **Default while undecided: SA112a stays on Track 3.** The *fourth-worktree* variant is permanently declined.
+**Reopen only if** SA117e stalls and SA112a's critical-path start becomes the binding constraint. The *fourth-worktree* variant is permanently declined ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 
 ---
 
