@@ -60,7 +60,7 @@ Track 1 (SA112a, then governance)   Track 2 (CLOSED to new work)  Track 3 → re
 ─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
 SA112a (provisioner) ◄─ next        SA115 (e2e xdist; deps: none) SA117e (splits) ◄─ next
   │  ON THE CRITICAL PATH             │  validation AUTHORIZED      │  ON THE CRITICAL PATH
-  │  plan-blocked (SA112A-PLAN-002)   │  cannot finish → SA112f     │  deps: none; human-only push
+  │  plan-blocked (SA112A-PLAN-003)   │  cannot finish → SA112f     │  deps: none; human-only push
   ▼  service-free; deps: none         │  cannot merge  → SA112e     │
 SA128a → b → c → d (parity check)     │                             │
   │  Umbrella, split by domain        │                             │
@@ -138,9 +138,9 @@ No gate ever runs `apply`/`up` from an installed wheel: `test_e2e_development_wo
     - Verify: `bash -n`, focused tests, `make smoke-install` with all 20 probes — all service-free.
     - **Homed on Track 1, not Track 3** (`SA112A-TRACK-003`, accepted 2026-07-31). It is the sole SA112 child with no SA117e bound — that begins at SA112b — so it runs in parallel with Track 3's SA117e instead of queueing behind it. It must be **merged back to `v87` before SA112b starts**; that is the whole cross-track edge. See [Track topology](#track-topology--settled).
     **SA112a recorded partial delivery (2026-07-31; no functional commit; task remains unchecked).**
-    **Done.** Track assignment resolved; `wt-track1` was clean and synced to `v87`; the Poetry environment, discovery snapshot, scoped contract, rollback, and dual-review identity plan were established. No executable or test file was changed.
-    **Pending-Blocking.** **SA112A-PLAN-002** (medium, completeness): the literal plan must make documentation validation locally fail-fast and must materialize each Git NUL-path query in a scoped temporary file, check the producer exit, then feed the verified bytes to allowlist/required/empty readers. Plan review stayed `STATUS: partial` at the two-cycle cap (`medium/1 → medium/1`).
-    **Decisions-needed.** None — continuation is a mechanical, explicitly authorized future plan/review attempt; implementation remains forbidden until plan review returns `STATUS: ok`.
+    **Done.** Track assignment remains resolved; `wt-track1` was clean and synced to `v87`; the user-authorized plan/review re-attempt produced the scoped implementation, validation, rollback, reviewed-tip, and merge-back plan. **SA112A-PLAN-002** (fail-fast Git NUL-path evidence), **SA112A-PLAN-004** (retain and check the existing roadmap item), and **SA112A-PLAN-005** (post-commit and merge-back recovery) are resolved. No executable or test file was changed.
+    **Pending-Blocking.** **SA112A-PLAN-003** (medium, completeness): validation must parse exact complete build/install marker lines rather than substring matches, assert the exact six-marker sequence, and allocate plus verify all four distinct helper-owned directory classes (stage, build-venv, wheel, output) across cleanup and signal paths while preserving successful caller-owned output. Plan review remained `STATUS: partial` after the bounded retry and explicitly authorized post-cap cycle (`medium/4 → medium/2 → medium/1`); implementation remains forbidden until plan review returns `STATUS: ok`.
+    **Decisions-needed.** None — the remaining correction is mechanical, but the authorized review continuations are exhausted; a future attempt requires explicit new plan/review authorization.
     *(SA112a remains unchecked; this checkpoint records planning progress and the blocker, not implementation completion.)*
     *(why →* creates a green, independently reviewable provisioning seam before Docker lifecycle work*)*
 
