@@ -458,6 +458,101 @@ class TestOpRollback:
         )
         assert rc == 2
 
+    def test_rollback_scan_skips_malformed_json_and_finds_later_record(
+        self, evidence_dir: pathlib.Path
+    ) -> None:
+        # A malformed record that sorts before the valid record.  The
+        # fallback scan must skip it and keep scanning.
+        malformed_path = evidence_dir / "sa117_auth_0000_bad.json"
+        malformed_path.write_text("not json", encoding="utf-8")
+
+        # Valid record stored under a filename that does NOT match the
+        # token suffix, forcing the fallback scan instead of the fast path.
+        token = "sa117_auth_" + "a" * 32
+        valid_path = evidence_dir / "sa117_auth_0000_valid.json"
+        _write_evidence(
+            {
+                "token": token,
+                "version": "0.87.0",
+                "evidence_digest": "abc123",
+                "authorized_at": "2026-01-01T00:00:00+00:00",
+                "schema_version": "1",
+            },
+            valid_path,
+        )
+
+        rc = op_rollback(
+            auth_token=token,
+            evidence_digest="abc123",
+            auth_dir=evidence_dir,
+        )
+        assert rc == 0
+        assert not valid_path.is_file()
+        # Only the matched record is removed; the malformed one is skipped.
+        assert malformed_path.is_file()
+
+    def test_rollback_scan_skips_unreadable_record_and_finds_later_record(
+        self, evidence_dir: pathlib.Path
+    ) -> None:
+        # An unreadable entry (a directory) that sorts before the valid
+        # record.  Reading it raises OSError, which the fallback scan must
+        # skip while continuing to scan.
+        unreadable_path = evidence_dir / "sa117_auth_0000_unreadable.json"
+        unreadable_path.mkdir()
+
+        token = "sa117_auth_" + "c" * 32
+        valid_path = evidence_dir / "sa117_auth_0000_valid.json"
+        _write_evidence(
+            {
+                "token": token,
+                "version": "0.87.0",
+                "evidence_digest": "abc123",
+                "authorized_at": "2026-01-01T00:00:00+00:00",
+                "schema_version": "1",
+            },
+            valid_path,
+        )
+
+        rc = op_rollback(
+            auth_token=token,
+            evidence_digest="abc123",
+            auth_dir=evidence_dir,
+        )
+        assert rc == 0
+        assert not valid_path.is_file()
+        # The unreadable entry is left untouched.
+        assert unreadable_path.is_dir()
+
+    def test_rollback_scan_digest_mismatch_rejected_after_skipping_malformed(
+        self, evidence_dir: pathlib.Path
+    ) -> None:
+        malformed_path = evidence_dir / "sa117_auth_0000_bad.json"
+        malformed_path.write_text("not json", encoding="utf-8")
+
+        token = "sa117_auth_" + "b" * 32
+        valid_path = evidence_dir / "sa117_auth_0000_valid.json"
+        _write_evidence(
+            {
+                "token": token,
+                "version": "0.87.0",
+                "evidence_digest": "abc123",
+                "authorized_at": "2026-01-01T00:00:00+00:00",
+                "schema_version": "1",
+            },
+            valid_path,
+        )
+
+        # The fallback scan finds the later valid record, but the digest
+        # mismatch must still be rejected.
+        rc = op_rollback(
+            auth_token=token,
+            evidence_digest="wrong_digest",
+            auth_dir=evidence_dir,
+        )
+        assert rc == 1  # semantic rejection; record retained
+        assert valid_path.is_file()
+        assert malformed_path.is_file()
+
 
 # ---------------------------------------------------------------------------
 # Integration: capture → verify → authorize → rollback

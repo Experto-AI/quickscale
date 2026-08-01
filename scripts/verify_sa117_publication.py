@@ -383,7 +383,11 @@ def op_rollback(
                     found = True
                     revoked_digest = record.get("evidence_digest", "")
                     break
-            except json.JSONDecodeError, OSError:
+            except (json.JSONDecodeError, OSError) as _:
+                # Skip malformed or unreadable records and keep scanning
+                # for a later exact token.  ``_`` keeps the parenthesized
+                # tuple form (the bare comma clause is a SyntaxError on
+                # Python < 3.14).
                 continue
 
         if not found:
