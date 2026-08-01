@@ -60,7 +60,7 @@ Track 1 (SA112a, then governance)   Track 2 (CLOSED to new work)  Track 3 → re
 ─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
 SA112a (provisioner) ◄─ next        SA115 (e2e xdist; deps: none) SA117e (splits) ◄─ next
   │  ON THE CRITICAL PATH             │  validation AUTHORIZED      │  ON THE CRITICAL PATH
-  │  plan-blocked (SA112A-PLAN-003)   │  cannot finish → SA112f     │  deps: none; human-only push
+  │  plan re-authorized (AUTH-006)    │  cannot finish → SA112f     │  deps: none; human-only push
   ▼  service-free; deps: none         │  cannot merge  → SA112e     │
 SA128a → b → c → d (parity check)     │                             │
   │  Umbrella, split by domain        │                             │
@@ -91,7 +91,7 @@ SA122b-1 → -2 → -3 → -4 → -5          │                             �
 
 ## Track 3 — Core/CLI plumbing, release path
 
-**Status:** on the critical path. **Head is SA117e**, whose gate precondition (`make ci-e2e` exit 0) is satisfied. **SA112a now runs on Track 1** (`SA112A-TRACK-003`, accepted 2026-07-31), so Track 3's next SA112 child is SA112b. Do not publish splits, start SA112b, or treat anything as release-ready until SA117e closes.
+**Status:** on the critical path and **executable today** — `SA117E-VAL-001` is resolved (baseline `43d9b8fc` approved 2026-08-01), so the continuation resumes at ordered command 4. **Head is SA117e**, whose gate precondition (`make ci-e2e` exit 0) is satisfied. **SA112a now runs on Track 1** (`SA112A-TRACK-003`, accepted 2026-07-31), so Track 3's next SA112 child is SA112b. Do not publish splits, start SA112b, or treat anything as release-ready until SA117e closes.
 
 ### SA117 — Embedded-manifest / split-branch version skew
 
@@ -118,7 +118,7 @@ SA122b-1 → -2 → -3 → -4 → -5          │                             �
     - Open: no local release tag or public split exists yet. The gate precondition is satisfied (`make ci-e2e` exit 0 at `v87` `026246a5`), but the full-scope review, tag, and push remain to run — with a human maintainer confirming before the split push.
     *(why →* SA117 is only actually resolved once the *published* splits match the core; everything before this child is local*)*
 
-    **Blocked — `SA117E-VAL-001` (high).** The lock-diff baseline `SA117_BASELINE_REF=97404f3e…` is internally inconsistent (VERSION `0.87.0` with 60 pre-lockstep module values), so ordered command 4 exits 2 and validation stopped there. Continuation requires explicit **maintainer revision/reapproval of the baseline** — recommended `43d9b8fc0abd1c3193a3358f41dee0e09a3c106c`, the first internally consistent 0.87.0 lockstep checkpoint — with no weakening of checker semantics. Prior reviewed progress (plan review `ok`, correction `b11c24c5` reviewed `ok`, source validation, reviewed-but-unexecuted harness) is recorded in [CHANGELOG.md](../../CHANGELOG.md).
+    **`SA117E-VAL-001` RESOLVED — baseline `43d9b8fc` APPROVED (2026-08-01).** The maintainer approved `43d9b8fc0abd1c3193a3358f41dee0e09a3c106c` as the lock-diff baseline, replacing the internally inconsistent `97404f3e…` (VERSION `0.87.0` carrying 60 pre-lockstep module values) that made ordered command 4 exit 2. `43d9b8fc` is the first internally consistent 0.87.0 lockstep checkpoint and is immutable. **Checker semantics are not weakened** — only `SA117_BASELINE_REF` changes; any tolerance or exception logic added to make the lock diff pass is out of scope and rejected. The continuation resumes at ordered command 4. Prior reviewed progress (plan review `ok`, correction `b11c24c5` reviewed `ok`, source validation, reviewed-but-unexecuted harness) is recorded in [CHANGELOG.md](../../CHANGELOG.md).
     **Still required after the baseline resolves:** full historical executable-delta review including `43d9b8fc`; the remaining ordered validation (`sa117-capture`, `sa117-verify`, `make check`, `make quality`, `make ci-e2e`); a rematerialized/revalidated harness; exclusive Docker/PG state with a host-PG negative control; fresh human public-push confirmation (an execution-time gate, never pre-granted); a local-only tag; the 12 protected split pushes; public/source/bundled parity; an installed all-module `apply`; the final closeout review. Advisories `CR-SA117E-005` (evidence wording) and `CR-SA117E-006` (handoff command exactness) remain open and non-blocking.
 
 ### SA112 — Installed-wheel full-lifecycle e2e (`plan → apply → up`)
@@ -140,7 +140,7 @@ No gate ever runs `apply`/`up` from an installed wheel: `test_e2e_development_wo
     - Files: `scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`
     - Verify: `bash -n`, focused tests, `make smoke-install` with all 20 probes — all service-free.
     - **Homed on Track 1, not Track 3** (`SA112A-TRACK-003`, accepted 2026-07-31). It is the sole SA112 child with no SA117e bound — that begins at SA112b — so it runs in parallel with Track 3's SA117e instead of queueing behind it. It must be **merged back to `v87` before SA112b starts**; that is the whole cross-track edge. See [Track topology](#track-topology--settled).
-    **Blocked — `SA112A-PLAN-003` (medium, completeness) plus exhausted review authorization.** The plan must parse exact complete build/install marker lines rather than substring matches, assert the exact six-marker sequence, and allocate plus verify all four helper-owned directory classes (stage, build-venv, wheel, output) across cleanup and signal paths while preserving successful caller-owned output. The correction is mechanical, but plan review stayed `STATUS: partial` through the bounded retry and the authorized post-cap cycle (`medium/4 → medium/2 → medium/1`), so **a further attempt requires explicit new maintainer plan/review authorization (`SA112A-AUTH-006`)**. Implementation remains forbidden until plan review returns `STATUS: ok`. Prior planning progress is recorded in [CHANGELOG.md](../../CHANGELOG.md).
+    **`SA112A-AUTH-006` GRANTED — fresh plan/review authorization (2026-08-01).** A new plan/review attempt is authorized to resolve `SA112A-PLAN-003` (medium, completeness). The plan must parse exact complete build/install marker lines rather than substring matches, assert the exact six-marker sequence, and allocate plus verify all four helper-owned directory classes (stage, build-venv, wheel, output) across cleanup and signal paths while preserving successful caller-owned output. The correction is mechanical, but plan review stayed `STATUS: partial` through the bounded retry and the authorized post-cap cycle (`medium/4 → medium/2 → medium/1`), which is why a fresh authorization was required. **Implementation remains forbidden until plan review returns `STATUS: ok`** — the grant restores the review budget, it does not waive the gate. Prior planning progress is recorded in [CHANGELOG.md](../../CHANGELOG.md).
     *(why →* creates a green, independently reviewable provisioning seam before Docker lifecycle work*)*
 
   - [ ] **SA112b — Capture the installed `apply` traceback with a literal diagnostic.** `Tier 2 · deps: SA112a + SA117e`
@@ -200,7 +200,7 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** **head is SA112a, which is plan-blocked and on the critical path** (`SA112A-TRACK-003`, accepted 2026-07-31; the ticket text lives with the SA112 umbrella on Track 3). Everything after it is governance filler that changes how "green" is decided, not what the generator emits. Queue: **SA112a (plan-blocked) → SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree.
+**Status:** **head is SA112a, which is on the critical path and executable today** — `SA112A-AUTH-006` granted a fresh plan/review authorization on 2026-08-01 (`SA112A-TRACK-003`, accepted 2026-07-31; the ticket text lives with the SA112 umbrella on Track 3). Everything after it is governance filler that changes how "green" is decided, not what the generator emits. Queue: **SA112a → SA128a → SA128b → SA128c → SA128d → SA122b-1 → … → SA122b-5**, with only SA122b-5 merge-gated (behind SA112e). All allowlists are disjoint from one another and from every Track 3 surface, and none needs PostgreSQL or Docker; they run serially only because Track 1 is one worktree.
 
 ### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
 
@@ -333,17 +333,19 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 ## Track topology — settled
 
-**No track-sequencing or worktree-assignment question is open.** Two *authorization* decisions are open and both sit on the critical path — neither changes topology:
+**No track-sequencing or worktree-assignment question is open. No decision of any kind is open anywhere on this board.** The two authorization decisions were both resolved on 2026-08-01:
 
-1. **`SA117E-VAL-001`** — revise/reapprove the SA117e lock-diff baseline (recommended `43d9b8fc`). Blocks Track 3 from starting its next action.
-2. **`SA112A-AUTH-006`** — grant a fresh plan/review authorization for SA112a, whose bounded and post-cap review cycles are exhausted. Blocks Track 1 from starting its next action.
+1. **`SA117E-VAL-001` — RESOLVED, baseline `43d9b8fc` approved.** Track 3's *can start* is cleared; SA117e resumes at ordered command 4.
+2. **`SA112A-AUTH-006` — GRANTED.** Track 1's *can start* is cleared; SA112a may re-enter plan/review, still gated on `STATUS: ok` before implementation.
+
+Both tracks are now startable in parallel. The one remaining human gate on the board — SA117e's public split-push confirmation, and later SA96-PUBLISH — is an **execution-time** gate obtained at the moment of the push, not a standing decision.
 
 **`SA112A-TRACK-003` — ACCEPTED 2026-07-31: SA112a moves to Track 1, ahead of SA128a.** The earlier decline rested on SA112a displacing SA130, an immediately-executable diagnosed product fix; SA130 closed, leaving off-path SA128a as the Track 1 head, so that cost no longer exists.
 
 - **Independence — verified in all three directions.** SA112a is `deps: none`; its SA117e bound begins at SA112b. Its allowlist (`scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`) is disjoint from SA128a's (`scripts/check_gate_parity.py`, `scripts/test_gate_parity.py`), and from every other open ticket. Validation is service-free — no PostgreSQL, no Docker — so it never contends with Track 3's infra priority. It does not split one logical change: SA112b consumes SA112a's *merged* seam, not its working tree.
 - **Effect.** The critical path's first non-blocked node now runs in parallel with SA117e instead of queueing behind it. SA112b's precondition set becomes *SA112a merged* + *SA117e*. Track 1's head flips from off-path filler to on-path work; SA128a is delayed, and since its consumer SA122b-1 is independently gated behind SA128d, that delay reaches no release property.
 - **Conflict surface.** Shared closeout files only (`CHANGELOG.md`, this file, `decisions.md` on policy change), covered by the Merge procedure's `git merge v87`-before-merge-back preserve-both-sides step. No executable surface gains a second writer — SA112e (Track 3) only *names* SA112a's scripts in the e2e trigger list and never edits them.
-- **Current state.** SA112a is plan-blocked at the recorded partial-delivery checkpoint above; no executable delta exists, and implementation awaits plan-review `STATUS: ok`.
+- **Current state.** SA112a holds a fresh plan/review authorization (`SA112A-AUTH-006`, 2026-08-01) and is startable; no executable delta exists, and implementation still awaits plan-review `STATUS: ok`.
 
 **The *fourth-worktree* variant is permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 
