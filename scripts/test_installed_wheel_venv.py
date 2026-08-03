@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -421,6 +422,301 @@ def test_seam_rejects_non_repo_and_non_empty_output(tmp_path: Path) -> None:
     assert "OUTPUT_DIR must not exist or must be empty" in result.stderr
     # The helper never deletes pre-existing caller data.
     assert (pre_filled / "caller-data.txt").exists()
+
+
+@pytest.mark.parametrize(
+    ("kind", "needle"),
+    [
+        ("regular-file", "is not a directory"),
+        ("broken-symlink", "must not be a symlink"),
+        ("symlink-to-dir", "must not be a symlink"),
+        ("symlink-to-file", "must not be a symlink"),
+        ("fifo", "is not a directory"),
+        ("socket", "is not a directory"),
+    ],
+    ids=[
+        "regular-file",
+        "broken-symlink",
+        "symlink-to-dir",
+        "symlink-to-file",
+        "fifo",
+        "socket",
+    ],
+)
+def test_output_dir_shape_rejected_before_trap_arming(
+    tmp_path: Path, kind: str, needle: str
+) -> None:
+    """F-005: non-directory / disallowed-symlink OUTPUT_DIR shapes exit 2 before trap arming."""
+    repo, env = _fake_environment(tmp_path)
+    output = tmp_path / "output"
+    target: Path | None = None
+    if kind == "regular-file":
+        output.write_text("caller data\n", encoding="utf-8")
+    elif kind == "broken-symlink":
+        output.symlink_to(tmp_path / "missing-target")
+    elif kind == "symlink-to-dir":
+        target = tmp_path / "symlink-target"
+        target.mkdir()
+        (target / "inside.txt").write_text("caller data\n", encoding="utf-8")
+        output.symlink_to(target, target_is_directory=True)
+    elif kind == "symlink-to-file":
+        target = tmp_path / "target-file"
+        target.write_text("caller data\n", encoding="utf-8")
+        output.symlink_to(target)
+    elif kind == "fifo":
+        os.mkfifo(output)
+    else:  # socket
+        sock = socket.socket(socket.AF_UNIX)
+        try:
+            sock.bind(str(output))
+        finally:
+            sock.close()
+
+    result = _run_wrapper(env, repo, output)
+
+    assert result.returncode == 2, (kind, result.stderr)
+    assert result.stdout == "", kind
+    assert needle in result.stderr, (kind, result.stderr)
+    assert "[installed-wheel]" not in result.stderr, kind
+    # Caller data preserved: the node itself still exists, and no write ever
+    # happens through a symlink into its target.
+    assert output.exists() or output.is_symlink(), kind
+    if kind == "symlink-to-dir":
+        assert target is not None
+        assert (target / "inside.txt").read_text(encoding="utf-8") == "caller data\n"
+    elif kind == "symlink-to-file":
+        assert target is not None
+        assert target.read_text(encoding="utf-8") == "caller data\n"
+    elif kind == "regular-file":
+        assert output.read_text(encoding="utf-8") == "caller data\n"
+
+
+def test_output_dir_shape_rejection_direct_source_preserves_caller_traps(
+    tmp_path: Path,
+) -> None:
+    """F-005: a shape rejection precedes trap arming, so the caller's traps fire natively."""
+    repo, env = _fake_environment(tmp_path)
+    output = tmp_path / "output-file"
+    output.write_text("caller data\n", encoding="utf-8")
+
+    script = f"""#!/usr/bin/env bash
+set -euo pipefail
+source '{HELPER}'
+trap 'echo "CALLER_EXIT_STATUS=$?"' EXIT
+trap 'echo CALLER_HUP' HUP
+trap 'echo CALLER_INT' INT
+trap 'echo CALLER_TERM' TERM
+quickscale_provision_installed_venv '{repo}' '{output}'
+"""
+    result = subprocess.run(
+        ["bash", "-c", script], env=env, capture_output=True, text=True, timeout=30
+    )
+
+    assert result.returncode == 2, result.stderr
+    # The helper never armed its own traps and wrote nothing to stdout; the
+    # caller's EXIT trap fires natively with the exact argument-error status.
+    assert result.stdout == "CALLER_EXIT_STATUS=2\n"
+    assert output.read_text(encoding="utf-8") == "caller data\n"
+    assert _internal_leftovers(tmp_path, env) == []
+
+
+@pytest.mark.parametrize(
+    ("kind", "needle"),
+    [
+        ("regular-file", "is not a directory"),
+        ("symlink-to-dir", "must not be a symlink"),
+        ("non-empty-dir", "must not exist or must be empty"),
+    ],
+    ids=["regular-file", "symlink-to-dir", "non-empty-dir"],
+)
+def test_output_dir_trailing_slash_shape_rejected(tmp_path: Path, kind: str, needle: str) -> None:
+    """F-005: a trailing slash cannot smuggle a bad OUTPUT_DIR shape past validation."""
+    repo, env = _fake_environment(tmp_path)
+    output = tmp_path / "output"
+    if kind == "regular-file":
+        output.write_text("caller data\n", encoding="utf-8")
+    elif kind == "symlink-to-dir":
+        target = tmp_path / "symlink-target"
+        target.mkdir()
+        output.symlink_to(target, target_is_directory=True)
+    else:
+        output.mkdir()
+        (output / "caller-data.txt").write_text("keep me\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [str(WRAPPER), str(repo), f"{output}/"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+
+    assert result.returncode == 2, (kind, result.stderr)
+    assert result.stdout == "", kind
+    assert needle in result.stderr, (kind, result.stderr)
+    assert "[installed-wheel]" not in result.stderr, kind
+
+
+def test_output_dir_trailing_slash_empty_dir_accepted(tmp_path: Path) -> None:
+    """F-005: a trailing slash on a real empty directory is normalized and accepted."""
+    repo, env = _fake_environment(tmp_path)
+    output = tmp_path / "output"
+    output.mkdir()
+
+    result = subprocess.run(
+        [str(WRAPPER), str(repo), f"{output}/"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+
+    assert result.returncode == 0, result.stderr
+    # Success stdout is the canonical absolute path (no trailing slash).
+    assert result.stdout == f"{output}\n"
+    assert (output / "venv" / "bin" / "python").exists()
+    assert (output / "work").is_dir()
+    assert _internal_leftovers(tmp_path, env) == []
+
+
+@pytest.mark.parametrize(
+    ("spelling", "needle"),
+    [
+        ("link/.", "must not be a symlink"),
+        ("link/./", "must not be a symlink"),
+        ("link//", "must not be a symlink"),
+        ("link/sub/..", "must not be a symlink"),
+        ("link/missing/..", "must not be a symlink"),
+        ("link/..", "must not exist or must be empty"),
+    ],
+    ids=[
+        "link-dot",
+        "link-dot-slash",
+        "link-double-slash",
+        "link-sub-dotdot",
+        "link-missing-dotdot",
+        "link-dotdot-parent",
+    ],
+)
+def test_output_dir_dot_component_alias_rejected(
+    tmp_path: Path, spelling: str, needle: str
+) -> None:
+    """
+    F-005: the tested dot-component spellings cannot re-select a symlink
+
+    target past the leaf checks; a `..` that cancels a nonexistent tail
+    before a later existing directory symlink is not re-checked (F-005).
+    """
+    repo, env = _fake_environment(tmp_path)
+    target = tmp_path / "symlink-target"
+    target.mkdir()
+    (target / "inside.txt").write_text("caller data\n", encoding="utf-8")
+    link = tmp_path / "link"
+    link.symlink_to(target, target_is_directory=True)
+
+    result = subprocess.run(
+        [str(WRAPPER), str(repo), str(tmp_path / spelling)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 2, (spelling, result.stderr)
+    assert result.stdout == "", spelling
+    assert needle in result.stderr, (spelling, result.stderr)
+    assert "[installed-wheel]" not in result.stderr, spelling
+    # No write ever happens through the symlink into the target.
+    assert (target / "inside.txt").read_text(encoding="utf-8") == "caller data\n"
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    ["output/.", "output/./", "output/sub/.."],
+    ids=["dot", "dot-slash", "sub-dotdot"],
+)
+def test_output_dir_dot_component_alias_on_real_dir_accepted(tmp_path: Path, spelling: str) -> None:
+    """
+    F-005: dot-component aliases on a real empty directory (all components
+
+    existing) are normalized, not overbroad.
+    """
+    repo, env = _fake_environment(tmp_path)
+    env["FAKE_POETRY_VERSION_EXIT"] = "1"
+    output = tmp_path / "output"
+    output.mkdir()
+
+    # A shape rejection would exit 2 with a symlink/non-directory diagnostic.
+    # Acceptance is proven by reaching the post-validation toolchain check
+    # instead (exit 1), with the canonical output adopted and cleaned on the
+    # real directory — never on a `/.`-style spelling rm -rf would refuse.
+    script = f"""#!/usr/bin/env bash
+set -euo pipefail
+source '{HELPER}'
+FAKE_POETRY_VERSION_EXIT=1 quickscale_provision_installed_venv '{repo}' '{tmp_path / spelling}'
+"""
+    result = subprocess.run(
+        ["bash", "-c", script], env=env, capture_output=True, text=True, timeout=30
+    )
+
+    assert result.returncode == 1, (spelling, result.stderr)
+    assert result.stdout == ""
+    assert "must not be a symlink" not in result.stderr, spelling
+    assert not output.exists()
+    assert _internal_leftovers(tmp_path, env) == []
+
+
+def test_output_dir_dot_component_alias_success_stdout_canonical(tmp_path: Path) -> None:
+    """F-005: a `/.` spelling on a real empty dir succeeds with the canonical stdout."""
+    repo, env = _fake_environment(tmp_path)
+    output = tmp_path / "output"
+    output.mkdir()
+
+    result = subprocess.run(
+        [str(WRAPPER), str(repo), f"{output}/."],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == f"{output}\n"
+    assert (output / "venv" / "bin" / "python").exists()
+    assert (output / "work").is_dir()
+    assert _internal_leftovers(tmp_path, env) == []
+
+
+def test_dot_component_alias_rejection_direct_source_preserves_caller_traps(
+    tmp_path: Path,
+) -> None:
+    """F-005: an alias rejection precedes trap arming, so the caller's traps fire natively."""
+    repo, env = _fake_environment(tmp_path)
+    target = tmp_path / "symlink-target"
+    target.mkdir()
+    (target / "inside.txt").write_text("caller data\n", encoding="utf-8")
+    link = tmp_path / "link"
+    link.symlink_to(target, target_is_directory=True)
+
+    script = f"""#!/usr/bin/env bash
+set -euo pipefail
+source '{HELPER}'
+trap 'echo "CALLER_EXIT_STATUS=$?"' EXIT
+trap 'echo CALLER_HUP' HUP
+trap 'echo CALLER_INT' INT
+trap 'echo CALLER_TERM' TERM
+quickscale_provision_installed_venv '{repo}' '{link}/.'
+"""
+    result = subprocess.run(
+        ["bash", "-c", script], env=env, capture_output=True, text=True, timeout=30
+    )
+
+    assert result.returncode == 2, result.stderr
+    # The helper never armed its own traps and wrote nothing to stdout; the
+    # caller's EXIT trap fires natively with the exact argument-error status.
+    assert result.stdout == "CALLER_EXIT_STATUS=2\n"
+    assert (target / "inside.txt").read_text(encoding="utf-8") == "caller data\n"
+    assert _internal_leftovers(tmp_path, env) == []
 
 
 def test_success_streams_markers_and_output_survival(tmp_path: Path) -> None:
