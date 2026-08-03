@@ -613,8 +613,12 @@ quickscale_provision_installed_venv() {
     # the walk is still probing.  A leaf reached only through `..`
     # cancellation of a nonexistent tail is re-checked too: the pop recomputes
     # probe state on the popped-to prefix, so a later existing directory
-    # symlink cannot receive output (F-005).
-    if [[ "${_qs_iv_named_link[-1]:-0}" == "1" ]]; then
+    # symlink cannot receive output (F-005).  An empty walk — a root spelling
+    # (`/`, `//`, `/.`, `/./`) or a `..` cancellation that pops all the way
+    # back to the root — has no leaf to test; it falls through to the root
+    # checks below, which reject `/` (never empty) with the emptiness
+    # diagnostic instead of dereferencing an empty stack (F-005).
+    if [[ "${#_qs_iv_named_link[@]}" -gt 0 ]] && [[ "${_qs_iv_named_link[-1]}" == "1" ]]; then
         echo "ERROR: OUTPUT_DIR must not be a symlink: $output_dir" >&2
         exit 2
     fi
