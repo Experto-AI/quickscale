@@ -18,15 +18,25 @@
 #   quickscale_provision_installed_venv REPO_ROOT OUTPUT_DIR
 #
 # Both arguments must be absolute.  REPO_ROOT must contain VERSION and
-# pyproject.toml; OUTPUT_DIR must not exist or must be an empty directory
-# (the helper never deletes pre-existing caller data, and a pre-existing
-# empty directory becomes helper-owned once validation accepts it).  On
-# success the helper transfers OUTPUT_DIR (containing venv/ and work/) to the
-# caller and returns 0; on failure or signal it removes OUTPUT_DIR and exits
-# non-zero (signal exits are 129/130/143 for HUP/INT/TERM).  Repeated calls in
-# one shell are supported: every invocation resets its own allocation state
-# first, so a failed or signaled run after a successful one never leaks its
-# output class.
+# pyproject.toml; OUTPUT_DIR must not exist, or must be an empty real
+# directory — a regular file, symlink (including broken and
+# directory-targeting links), or other non-directory node (FIFO, socket,
+# device) is rejected with argument-error status 2 before any trap is armed
+# or caller data touched.  A trailing slash is stripped, and the tested
+# dot-component spellings (`/.`, `/./`, `//`, and a `name/..` that
+# re-selects the same directory while every component exists) cannot
+# bypass the shape checks: the symlink test applies to the final named
+# component after dot-component resolution.  A `..` that cancels a
+# nonexistent tail does not resume probing, so a later existing directory
+# symlink reached through such a cancellation is not re-checked (F-005).
+# Emptiness is checked only on a real directory (the helper never
+# deletes pre-existing caller data, and a pre-existing empty directory
+# becomes helper-owned once validation accepts it).  On success the helper
+# transfers OUTPUT_DIR (containing venv/ and work/) to the caller and returns
+# 0; on failure or signal it removes OUTPUT_DIR and exits non-zero (signal
+# exits are 129/130/143 for HUP/INT/TERM).  Repeated calls in one shell are
+# supported: every invocation resets its own allocation state first, so a
+# failed or signaled run after a successful one never leaks its output class.
 #
 # The helper owns four allocation classes:
 #   1. stage             — per-run staged package copies for building
@@ -498,10 +508,111 @@ quickscale_provision_installed_venv() {
         echo "ERROR: pyproject.toml not found at $repo_root/pyproject.toml" >&2
         exit 2
     fi
-    if [[ -e "$output_dir" ]] && [[ -n "$(ls -A "$output_dir" 2>/dev/null || true)" ]]; then
+    # F-005: enforce the OUTPUT_DIR argument-shape invariant before any trap
+    # is armed, so a regular file, symlink (including broken or
+    # directory-targeting links), or other non-directory node (FIFO, socket,
+    # device) is rejected with argument-error status 2 and an empty stdout
+    # instead of passing validation and failing later with a different status
+    # (or, for a directory-targeting link, writing through the link into an
+    # unowned target).  Emptiness is checked only on a real directory;
+    # pre-existing caller data is never touched.
+    #
+    # The checks run against a component walk that mirrors mkdir -p while
+    # every component exists: trailing slashes are stripped, `.` components
+    # are skipped, `..` components pop the resolved path, existing
+    # components are canonicalized with realpath, and a nonexistent tail is
+    # appended textually.  The tested dot-component spellings — `/link/.`,
+    # `/link/./`, `/link//`, and `/link/sub/..` — all fail the symlink test
+    # against the final named component, exactly like `/link` itself.  This
+    # is not complete `name/..` handling: a `..` that cancels a nonexistent
+    # tail does not resume probing, so a later existing directory symlink
+    # reached through such a cancellation is not re-checked (F-005).
+    # Symlinks earlier in the path are traversed like any other parent
+    # directory, matching the "empty real directory" contract.  On acceptance
+    # the canonical resolved path replaces the argument, so the later
+    # mkdir -p, adoption, and cleanup never operate on a `/.`-style spelling
+    # (GNU rm refuses to remove such a path).
+    while [[ "$output_dir" == */ && "$output_dir" != "/" ]]; do
+        output_dir="${output_dir%/}"
+    done
+    local -a _qs_iv_named=()         # resolved path per named component (stack)
+    local -a _qs_iv_named_link=()    # 1 when that component is a symlink
+    local _qs_iv_remainder="$output_dir"
+    local _qs_iv_component=""
+    local _qs_iv_real="/"
+    local _qs_iv_resolved=""
+    local _qs_iv_is_link=0
+    local _qs_iv_probe=1             # 1 while every component still exists
+    while [[ -n "$_qs_iv_remainder" ]]; do
+        _qs_iv_component="${_qs_iv_remainder%%/*}"
+        if [[ "$_qs_iv_component" == "$_qs_iv_remainder" ]]; then
+            _qs_iv_remainder=""
+        else
+            _qs_iv_remainder="${_qs_iv_remainder#*/}"
+        fi
+
+        if [[ -z "$_qs_iv_component" || "$_qs_iv_component" == "." ]]; then
+            continue
+        fi
+        if [[ "$_qs_iv_component" == ".." ]]; then
+            if [[ "${#_qs_iv_named[@]}" -gt 0 ]]; then
+                unset '_qs_iv_named[-1]' '_qs_iv_named_link[-1]'
+            fi
+            if [[ "$_qs_iv_real" != "/" ]]; then
+                _qs_iv_real="${_qs_iv_real%/*}"
+                [[ -z "$_qs_iv_real" ]] && _qs_iv_real="/"
+            fi
+            continue
+        fi
+
+        # Named component; the parent is canonical, so -e/-L here see exactly
+        # the entry the argument names.
+        if [[ "$_qs_iv_probe" == "1" ]] \
+            && { [[ -e "$_qs_iv_real/$_qs_iv_component" || -L "$_qs_iv_real/$_qs_iv_component" ]]; }; then
+            if [[ -L "$_qs_iv_real/$_qs_iv_component" ]]; then
+                _qs_iv_is_link=1
+            else
+                _qs_iv_is_link=0
+            fi
+            _qs_iv_named+=("$_qs_iv_real/$_qs_iv_component")
+            _qs_iv_named_link+=("$_qs_iv_is_link")
+            _qs_iv_resolved="$(realpath "$_qs_iv_real/$_qs_iv_component" 2>/dev/null || true)"
+            if [[ -n "$_qs_iv_resolved" ]]; then
+                _qs_iv_real="$_qs_iv_resolved"
+            else
+                # Broken symlink (exists as a link but resolves to nothing).
+                _qs_iv_real="$_qs_iv_real/$_qs_iv_component"
+            fi
+        else
+            # Nonexistent (or past the first nonexistent component): the tail
+            # will be created as real directories by mkdir -p, so it is
+            # appended textually and probing stops.
+            _qs_iv_real="$_qs_iv_real/$_qs_iv_component"
+            _qs_iv_named+=("$_qs_iv_real")
+            _qs_iv_named_link+=(0)
+            _qs_iv_probe=0
+        fi
+    done
+
+    # The final named component after dot-component resolution is the node
+    # mkdir -p will treat as OUTPUT_DIR; a symlink there is rejected while
+    # the walk is still probing.  A leaf reached only through `..`
+    # cancellation of a nonexistent tail is not re-checked (F-005).
+    if [[ "${_qs_iv_named_link[-1]:-0}" == "1" ]]; then
+        echo "ERROR: OUTPUT_DIR must not be a symlink: $output_dir" >&2
+        exit 2
+    fi
+    if [[ -e "$_qs_iv_real" ]] && [[ ! -d "$_qs_iv_real" ]]; then
+        echo "ERROR: OUTPUT_DIR exists but is not a directory: $output_dir" >&2
+        exit 2
+    fi
+    if [[ -d "$_qs_iv_real" ]] && [[ -n "$(ls -A "$_qs_iv_real" 2>/dev/null || true)" ]]; then
         echo "ERROR: OUTPUT_DIR must not exist or must be empty: $output_dir" >&2
         exit 2
     fi
+    # Canonicalize for the downstream mkdir -p / adoption / cleanup, so no
+    # `/.`-style spelling survives into rm -rf.
+    output_dir="$_qs_iv_real"
 
     # ---- Save the caller's traps; arm our own before allocation ----
     # The registrations are kept in globals so the trap handlers can restore
