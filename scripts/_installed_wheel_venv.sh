@@ -27,8 +27,9 @@
 # re-selects the same directory while every component exists) cannot
 # bypass the shape checks: the symlink test applies to the final named
 # component after dot-component resolution.  A `..` that cancels a
-# nonexistent tail does not resume probing, so a later existing directory
-# symlink reached through such a cancellation is not re-checked (F-005).
+# nonexistent tail recomputes probe state on the popped-to prefix, so
+# probing resumes iff that prefix exists and a later existing directory
+# symlink reached through such a cancellation is re-checked (F-005).
 # Emptiness is checked only on a real directory (the helper never
 # deletes pre-existing caller data, and a pre-existing empty directory
 # becomes helper-owned once validation accepts it).  On success the helper
@@ -523,10 +524,13 @@ quickscale_provision_installed_venv() {
     # components are canonicalized with realpath, and a nonexistent tail is
     # appended textually.  The tested dot-component spellings — `/link/.`,
     # `/link/./`, `/link//`, and `/link/sub/..` — all fail the symlink test
-    # against the final named component, exactly like `/link` itself.  This
-    # is not complete `name/..` handling: a `..` that cancels a nonexistent
-    # tail does not resume probing, so a later existing directory symlink
-    # reached through such a cancellation is not re-checked (F-005).
+    # against the final named component, exactly like `/link` itself.  The
+    # `..` pop is the canonical %/* trimming — mkdir -p resolves `..`
+    # through symlink targets, so no saved parent is restored — and after
+    # the pop probe state is recomputed: a `..` that cancels a nonexistent
+    # tail resumes probing iff the popped-to prefix exists, so a later
+    # existing directory symlink reached through such a cancellation is
+    # re-checked (F-005).
     # Symlinks earlier in the path are traversed like any other parent
     # directory, matching the "empty real directory" contract.  On acceptance
     # the canonical resolved path replaces the argument, so the later
@@ -561,6 +565,16 @@ quickscale_provision_installed_venv() {
             if [[ "$_qs_iv_real" != "/" ]]; then
                 _qs_iv_real="${_qs_iv_real%/*}"
                 [[ -z "$_qs_iv_real" ]] && _qs_iv_real="/"
+            fi
+            # F-005: a `..` that cancels a nonexistent tail can land back on an
+            # existing prefix.  The pop above is the canonical %/* trimming
+            # (mkdir -p resolves `..` through symlink targets, so no saved
+            # parent is restored), but probe state must be recomputed: resume
+            # probing iff the popped-to path exists, so a later existing
+            # component — a directory symlink included — is re-checked instead
+            # of being appended textually.
+            if [[ -e "$_qs_iv_real" || -L "$_qs_iv_real" ]]; then
+                _qs_iv_probe=1
             fi
             continue
         fi
@@ -597,8 +611,14 @@ quickscale_provision_installed_venv() {
     # The final named component after dot-component resolution is the node
     # mkdir -p will treat as OUTPUT_DIR; a symlink there is rejected while
     # the walk is still probing.  A leaf reached only through `..`
-    # cancellation of a nonexistent tail is not re-checked (F-005).
-    if [[ "${_qs_iv_named_link[-1]:-0}" == "1" ]]; then
+    # cancellation of a nonexistent tail is re-checked too: the pop recomputes
+    # probe state on the popped-to prefix, so a later existing directory
+    # symlink cannot receive output (F-005).  An empty walk — a root spelling
+    # (`/`, `//`, `/.`, `/./`) or a `..` cancellation that pops all the way
+    # back to the root — has no leaf to test; it falls through to the root
+    # checks below, which reject `/` (never empty) with the emptiness
+    # diagnostic instead of dereferencing an empty stack (F-005).
+    if [[ "${#_qs_iv_named_link[@]}" -gt 0 ]] && [[ "${_qs_iv_named_link[-1]}" == "1" ]]; then
         echo "ERROR: OUTPUT_DIR must not be a symlink: $output_dir" >&2
         exit 2
     fi

@@ -605,7 +605,8 @@ def test_output_dir_dot_component_alias_rejected(
     F-005: the tested dot-component spellings cannot re-select a symlink
 
     target past the leaf checks; a `..` that cancels a nonexistent tail
-    before a later existing directory symlink is not re-checked (F-005).
+    resumes probing on the popped-to prefix, so a later existing directory
+    symlink reached through such a cancellation is re-checked (F-005).
     """
     repo, env = _fake_environment(tmp_path)
     target = tmp_path / "symlink-target"
@@ -628,6 +629,279 @@ def test_output_dir_dot_component_alias_rejected(
     assert "[installed-wheel]" not in result.stderr, spelling
     # No write ever happens through the symlink into the target.
     assert (target / "inside.txt").read_text(encoding="utf-8") == "caller data\n"
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    ["missing/../link", "link/missing/../link2", "missing/../link/."],
+    ids=["missing-dotdot-link", "link-missing-dotdot-link2", "missing-dotdot-link-dot"],
+)
+def test_output_dir_dotdot_resume_probes_later_symlink(tmp_path: Path, spelling: str) -> None:
+    """
+    F-005: a `..` that cancels a nonexistent tail resumes probing on the
+
+    popped-to prefix, so a later existing directory symlink is re-checked
+    and cannot receive output — even when its target is empty (the pre-fix
+    walk accepted that shape and provisioned through the link).
+    """
+    repo, env = _fake_environment(tmp_path)
+    target = tmp_path / "symlink-target"
+    target.mkdir()  # empty target: the pre-fix walk accepted this and wrote through
+    link = tmp_path / "link"
+    link.symlink_to(target, target_is_directory=True)
+    if spelling.startswith("link/"):
+        # link/missing/../link2: link -> target, target/link2 -> target2.
+        target2 = tmp_path / "symlink-target2"
+        target2.mkdir()
+        (target / "link2").symlink_to(target2, target_is_directory=True)
+
+    result = _run_wrapper(env, repo, tmp_path / spelling)
+
+    assert result.returncode == 2, (spelling, result.stderr)
+    assert result.stdout == "", spelling
+    assert "must not be a symlink" in result.stderr, (spelling, result.stderr)
+    assert "[installed-wheel]" not in result.stderr, spelling
+    # No write ever happens through any symlink into a target.
+    if spelling.startswith("link/"):
+        # target legitimately holds the link2 symlink from the scenario
+        # setup; target2 (the link2 target) must have received nothing.
+        assert list(target.iterdir()) == [target / "link2"]
+        target2 = tmp_path / "symlink-target2"
+        assert list(target2.iterdir()) == []
+    else:
+        assert list(target.iterdir()) == []
+
+
+def test_output_dir_dotdot_resume_rejects_with_symlink_diagnostic(
+    tmp_path: Path,
+) -> None:
+    """
+    F-005: a non-empty symlink target behind `..` cancellation gets the
+
+    symlink diagnostic, not the emptiness diagnostic (which is what the
+    pre-fix walk reported for `missing/../link/.`).
+    """
+    repo, env = _fake_environment(tmp_path)
+    target = tmp_path / "symlink-target"
+    target.mkdir()
+    (target / "inside.txt").write_text("caller data\n", encoding="utf-8")
+    link = tmp_path / "link"
+    link.symlink_to(target, target_is_directory=True)
+
+    result = _run_wrapper(env, repo, tmp_path / "missing/../link")
+
+    assert result.returncode == 2, result.stderr
+    assert result.stdout == ""
+    assert "must not be a symlink" in result.stderr, result.stderr
+    assert "must not exist or must be empty" not in result.stderr, result.stderr
+    # No write ever happens through the symlink into the target.
+    assert (target / "inside.txt").read_text(encoding="utf-8") == "caller data\n"
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        "missing/a/../../link",
+        "base/../missing/../link",
+        "base/../missing/a/../../link",
+    ],
+    ids=["repeated-cancellation", "reverse-order", "reverse-and-repeated"],
+)
+def test_output_dir_dotdot_resume_repeated_and_reverse_rejects_symlink(
+    tmp_path: Path, spelling: str
+) -> None:
+    """
+    F-005: repeated and reverse-order `..` cancellation resumes probing on the
+
+    popped-to prefix every time it lands on an existing path.  A later
+    existing directory symlink is re-checked regardless of how many pops
+    preceded it, and the symlink diagnostic wins over the emptiness one even
+    when the target is non-empty.
+    """
+    repo, env = _fake_environment(tmp_path)
+    target = tmp_path / "symlink-target"
+    target.mkdir()
+    (target / "inside.txt").write_text("caller data\n", encoding="utf-8")
+    link = tmp_path / "link"
+    link.symlink_to(target, target_is_directory=True)
+    base = tmp_path / "base"
+    base.mkdir()
+
+    result = _run_wrapper(env, repo, tmp_path / spelling)
+
+    assert result.returncode == 2, (spelling, result.stderr)
+    assert result.stdout == "", spelling
+    assert "must not be a symlink" in result.stderr, (spelling, result.stderr)
+    assert "must not exist or must be empty" not in result.stderr, (spelling, result.stderr)
+    assert "[installed-wheel]" not in result.stderr, spelling
+    # No write ever happens through the symlink into the target.
+    assert (target / "inside.txt").read_text(encoding="utf-8") == "caller data\n"
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    ["/missing/../..", "missing/../.."],
+    ids=["root-relative", "tmp-relative"],
+)
+def test_output_dir_dotdot_cancellation_to_root_rejected(tmp_path: Path, spelling: str) -> None:
+    """
+    F-005: a `..` that cancels a nonexistent tail all the way back to an
+
+    existing prefix — the root included — resumes probing there and never
+    adopts it: the landing prefix fails the emptiness check and exits 2
+    instead of dereferencing an empty component stack.
+    """
+    repo, env = _fake_environment(tmp_path)
+    output = tmp_path / spelling
+
+    result = _run_wrapper(env, repo, output)
+
+    assert result.returncode == 2, (spelling, result.stderr)
+    assert result.stdout == "", spelling
+    assert "must not exist or must be empty" in result.stderr, (spelling, result.stderr)
+    assert "must not be a symlink" not in result.stderr, spelling
+    assert "[installed-wheel]" not in result.stderr, spelling
+    assert "bad array subscript" not in result.stderr, spelling
+    assert _internal_leftovers(tmp_path, env) == []
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    ["/", "//", "/.", "/./", "/.."],
+    ids=["root", "root-double-slash", "root-dot", "root-dot-slash", "root-dotdot"],
+)
+def test_output_dir_root_spellings_rejected(tmp_path: Path, spelling: str) -> None:
+    """
+    F-005: root spellings of OUTPUT_DIR resolve to the root itself, which is
+
+    never empty, so every spelling exits 2 with the emptiness diagnostic —
+    with an empty stdout, no provisioning markers, and no component-walk
+    crash on the empty stack.
+    """
+    repo, env = _fake_environment(tmp_path)
+
+    result = _run_wrapper(env, repo, Path(spelling))
+
+    assert result.returncode == 2, (spelling, result.stderr)
+    assert result.stdout == "", spelling
+    assert "must not exist or must be empty" in result.stderr, (spelling, result.stderr)
+    assert "[installed-wheel]" not in result.stderr, spelling
+    assert "bad array subscript" not in result.stderr, spelling
+
+
+def test_output_dir_link_dotdot_sibling_accepted_at_canonical_location(
+    tmp_path: Path,
+) -> None:
+    """
+    F-005: `link/../sibling` stays filesystem-correct — the walk resolves the
+
+    link, pops `..` through the link target (canonical %/* trimming, no saved
+    lexical parent), and provisions the sibling at the canonical location a
+    real mkdir -p would use.  The textual sibling is never created and the
+    link target receives nothing.
+    """
+    repo, env = _fake_environment(tmp_path)
+    x = tmp_path / "x"
+    x.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    target = elsewhere / "target"
+    target.mkdir(parents=True)
+    link = x / "link"
+    link.symlink_to(target, target_is_directory=True)
+
+    output = x / "link" / ".." / "sibling"
+    result = _run_wrapper(env, repo, output)
+
+    assert result.returncode == 0, result.stderr
+    # The output lands beside the link target, not beside the link itself.
+    assert result.stdout == f"{elsewhere / 'sibling'}\n"
+    assert (elsewhere / "sibling" / "venv" / "bin" / "python").exists()
+    assert (elsewhere / "sibling" / "work").is_dir()
+    # The textual sibling never exists; the link and its target are untouched.
+    assert not (x / "sibling").exists()
+    assert link.is_symlink()
+    assert link.readlink() == target
+    assert list(target.iterdir()) == []
+    assert _internal_leftovers(tmp_path, env) == []
+
+
+def test_output_dir_dotdot_resume_rejection_direct_source_preserves_caller_traps(
+    tmp_path: Path,
+) -> None:
+    """
+    F-005: a `missing/../link` rejection precedes trap arming, so the
+
+    caller's traps fire natively.
+    """
+    repo, env = _fake_environment(tmp_path)
+    target = tmp_path / "symlink-target"
+    target.mkdir()
+    (target / "inside.txt").write_text("caller data\n", encoding="utf-8")
+    link = tmp_path / "link"
+    link.symlink_to(target, target_is_directory=True)
+
+    script = f"""#!/usr/bin/env bash
+set -euo pipefail
+source '{HELPER}'
+trap 'echo "CALLER_EXIT_STATUS=$?"' EXIT
+trap 'echo CALLER_HUP' HUP
+trap 'echo CALLER_INT' INT
+trap 'echo CALLER_TERM' TERM
+quickscale_provision_installed_venv '{repo}' '{tmp_path / "missing" / ".." / "link"}'
+"""
+    result = subprocess.run(
+        ["bash", "-c", script], env=env, capture_output=True, text=True, timeout=30
+    )
+
+    assert result.returncode == 2, result.stderr
+    # The helper never armed its own traps and wrote nothing to stdout; the
+    # caller's EXIT trap fires natively with the exact argument-error status.
+    assert result.stdout == "CALLER_EXIT_STATUS=2\n"
+    assert (target / "inside.txt").read_text(encoding="utf-8") == "caller data\n"
+    assert _internal_leftovers(tmp_path, env) == []
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    ["missing/../real-dir", "missing/../new-leaf"],
+    ids=["resume-to-real-empty-dir", "resume-then-nonexistent-leaf"],
+)
+def test_output_dir_dotdot_resume_accepts_real_targets(tmp_path: Path, spelling: str) -> None:
+    """
+    F-005: resuming probing after `..` cancellation is not overbroad — a
+
+    real empty directory or a nonexistent leaf behind the cancellation is
+    still accepted.  Acceptance is proven by reaching the post-validation
+    toolchain check instead (exit 1), with the canonical output adopted and
+    cleaned on the real path.
+    """
+    repo, env = _fake_environment(tmp_path)
+    env["FAKE_POETRY_VERSION_EXIT"] = "1"
+    real_dir = tmp_path / "real-dir"
+    real_dir.mkdir()
+
+    script = f"""#!/usr/bin/env bash
+set -euo pipefail
+source '{HELPER}'
+FAKE_POETRY_VERSION_EXIT=1 quickscale_provision_installed_venv '{repo}' '{tmp_path / spelling}'
+"""
+    result = subprocess.run(
+        ["bash", "-c", script], env=env, capture_output=True, text=True, timeout=30
+    )
+
+    assert result.returncode == 1, (spelling, result.stderr)
+    assert result.stdout == ""
+    assert "must not be a symlink" not in result.stderr, spelling
+    assert "must not exist or must be empty" not in result.stderr, spelling
+    # The adopted output (the popped-to real dir or the created leaf) was
+    # cleaned on the toolchain failure; the untouched sibling survives.
+    if spelling == "missing/../real-dir":
+        assert not (tmp_path / "real-dir").exists()
+        assert not (tmp_path / "new-leaf").exists()
+    else:
+        assert (tmp_path / "real-dir").is_dir()
+        assert not (tmp_path / "new-leaf").exists()
+    assert _internal_leftovers(tmp_path, env) == []
 
 
 @pytest.mark.parametrize(
