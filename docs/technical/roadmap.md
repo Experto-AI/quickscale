@@ -58,7 +58,7 @@ Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../.
 ```
 Track 1 (SA112a, then governance)   Track 2 (CLOSED to new work)  Track 3 → release (CRITICAL PATH)
 ─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
-SA112a (provisioner) ◄─ next        SA115 (e2e xdist; deps: none) SA117e-1 → -2 → -3 → -4 → -5
+SA112a (provisioner) ◄─ next        SA115 (e2e xdist; deps: none) SA117e-2 → -3 → -4 → -5
   │  ON THE CRITICAL PATH             │  validation AUTHORIZED      │  Umbrella, split by risk class
   │  PARTIAL — fresh dispatch GRANTED │  cannot finish → SA112f     │  review · source · infra ·
   ▼  service-free; deps: none         │  cannot merge  → SA112e     │  PUSH(human) · closeout
@@ -79,7 +79,7 @@ SA122b-1 → -2 → -3 → -4 → -5          │                             �
                                                                    (human-only; hold until SA112f)
 ```
 
-**Critical path:** `SA117e-1 → -2 → -3 → -4 → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH` (the SA133 gate precondition is satisfied and off the path), with **SA112a on Track 1 still open at a recorded-partial review checkpoint** and remaining a merge-order precondition of SA112b. **SA117e-5 is closeout and sits *off* the critical path** — SA112b's other precondition is the *pushed* splits, delivered by SA117e-4, so SA112b does not wait for the umbrella to close. Track 2 is entirely off it; Track 1 is on it only for SA112a.
+**Critical path:** `SA117e-2 → -3 → -4 → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH` (the SA133 gate precondition is satisfied and off the path), with **SA112a on Track 1 still open at a recorded-partial review checkpoint** and remaining a merge-order precondition of SA112b. **SA117e-5 is closeout and sits *off* the critical path** — SA112b's other precondition is the *pushed* splits, delivered by SA117e-4, so SA112b does not wait for the umbrella to close. Track 2 is entirely off it; Track 1 is on it only for SA112a.
 
 **Cross-track edges — three, all merge-order only.** SA122b-5 merges after SA112e, and SA115 merges after SA112; both share `.github/workflows/e2e.yml`'s `pull_request.paths` list. **SA112a (Track 1) must complete and merge before SA112b starts (Track 3)** — the recorded-partial checkpoint below preserves work but does not satisfy that edge. SA112b consumes the independently approved provisioning seam, so the edge is satisfied only by SA112a's later completion merge-back to `v87`, not by co-scheduling.
 
@@ -87,7 +87,7 @@ SA122b-1 → -2 → -3 → -4 → -5          │                             �
 
 | Track (head) | Can start | Can finish | Can merge | Truly green | On critical path |
 |---|---|---|---|---|---|
-| **Track 3** — SA117e-1 | **yes** — a documentation closeout review, executable today | **yes** — own-track work only | **yes** — no order gate | ✅ **yes** | ✅ **yes** — real progress |
+| **Track 3** — SA117e-2 | **yes** — SA117e-1 closed; SA117e-2 is next and its ordered commands have not run | **yes** — own-track work only | **yes** — no order gate | ✅ **yes** | ✅ **yes** — real progress |
 | **Track 1** — SA112a | **yes** — `SA112A-HANDOFF-002` granted 2026-08-03; fresh implementation + QG + full-scope review authorized | **yes** — `F-003`/`F-005` correction plus one full-scope review, all track-local | **yes** — recorded-partial merge explicitly authorized | ✅ **yes** | ✅ **yes** — critical-path node |
 | **Track 2** — SA115 | yes (validation authorized; yields infra to Track 3) | **no** — **hard dep** on SA112d | **no** — **hard dep** on SA112e | no | no — filler |
 
@@ -101,7 +101,7 @@ SA122b-1 → -2 → -3 → -4 → -5          │                             �
 
 ## Track 3 — Core/CLI plumbing, release path
 
-**Status:** on the critical path; **head is SA117e-1, and this track is truly green — can start, can finish, and can merge on its own work alone** (Track 1 is the other truly-green leg). Its remaining action is a fresh full-scope documentation closeout review, executable today with no authorization and no upstream dependency. `SA117E-VAL-001` is resolved (baseline `43d9b8fc` approved 2026-08-01), and the required 106-path historical review ran, but returned `STATUS: partial`. `SA117E1-REV-001` (high/blocking, explicit-absence lease safety) and `SA117E1-REV-002` (medium/blocking, unbound publication authorization) are ticketed to SA117e-4; plan-review `F-002` remains the separate medium/blocking host-PostgreSQL lifecycle requirement on SA117e-3. SA117e-2 remains dependency-blocked until SA117e-1 receives a clean documentation closeout review. **SA112a runs on Track 1** (`SA112A-TRACK-003`, accepted 2026-07-31), so Track 3's next SA112 child is SA112b. Do not start SA117e-3 before its scoped plan review returns `STATUS: ok`, do not publish splits before SA117e-4's human gate and both SA117e-4 blockers close, do not start SA112b until SA117e-4 has merged, and do not treat anything as release-ready until SA117e closes at `-5`.
+**Status:** on the critical path; **head is now SA117e-2, and this track is truly green — can start, can finish, and can merge on its own work alone** (Track 1 is the other truly-green leg). **SA117e-1 closed 2026-08-03:** the fresh full-scope documentation closeout review over the corrected SA117e-2 handoff returned `STATUS: ok` (DC-14), resolving `CR-SA117E-006` and `SA117E1-REV-003` with evidence only and no source delta. `SA117E-VAL-001` is resolved (baseline `43d9b8fc` approved 2026-08-01), and the required 106-path historical review ran, but returned `STATUS: partial`. `SA117E1-REV-001` (high/blocking, explicit-absence lease safety) and `SA117E1-REV-002` (medium/blocking, unbound publication authorization) are ticketed to SA117e-4; plan-review `F-002` remains the separate medium/blocking host-PostgreSQL lifecycle requirement on SA117e-3. **SA117e-2 is the next pending Track 3 child, dependency-satisfied but unexecuted — its ordered commands have not run.** **SA112a runs on Track 1** (`SA112A-TRACK-003`, accepted 2026-07-31), so Track 3's next SA112 child is SA112b. Do not start SA117e-3 before its scoped plan review returns `STATUS: ok`, do not publish splits before SA117e-4's human gate and both SA117e-4 blockers close, do not start SA112b until SA117e-4 has merged, and do not treat anything as release-ready until SA117e closes at `-5`.
 
 ### SA117 — Embedded-manifest / split-branch version skew
 
@@ -132,13 +132,13 @@ SA122b-1 → -2 → -3 → -4 → -5          │                             �
     - Verify (SA117e umbrella): all five children closed and independently reviewed; published `splits/*` manifests byte-identical to the working-tree manifests for all twelve modules; an all-module installed `apply` reaches managed-wiring regeneration with no `KeyError`; SA112b's precondition affirmatively satisfied.
     *(why →* SA117 is only actually resolved once the *published* splits match the core; everything before SA117e-4 is local*)*
 
-    - [ ] **SA117e-1 — Full-scope historical review of the complete executable delta.** `Tier 2 · deps: none` — evidence-only
+    - [x] **SA117e-1 — Full-scope historical review of the complete executable delta.** `Tier 2 · deps: none` — evidence-only
       Obtain **one full-scope independent review over the complete executable delta including `43d9b8fc` and `b11c24c5`**. The children's prior slice reviews do not substitute for it — `43d9b8fc` sits on `v87` as merged-but-unapproved code, so this is a review over existing history, not over a new candidate. **No source delta is authorized**: a finding is recorded and ticketed, never fixed in place ([No scope widening](#rules-every-ticket-inherits)). Resolve advisories `CR-SA117E-005` (evidence wording) and `CR-SA117E-006` (handoff command exactness) here, since both are evidence/documentation artifacts.
       - Verify: full-scope review returns `STATUS: ok`, or returns findings that are each ticketed with an owner; `CR-SA117E-005` and `-006` closed.
       - Rollback: none needed — the child mutates no tracked file.
       *(why →* the umbrella's oldest unmet obligation, and the one gate that must not be entangled with new work*)*
 
-      **State (2026-08-01).** The required full-scope historical review **ran** at tip `fc82ba64` over the complete delta including `43d9b8fc` and `b11c24c5`, and returned `STATUS: partial`; advisory `CR-SA117E-005` is closed. **Remaining to close this child:** a fresh full-scope documentation closeout review approving the SA117e-2 handoff commands below, which closes `CR-SA117E-006`/`SA117E1-REV-003`. No source delta; SA117e-2 must not start first. Full checkpoint narrative is in [CHANGELOG.md](../../CHANGELOG.md).
+      **State (2026-08-03).** The required full-scope historical review **ran** at tip `fc82ba64` over the complete delta including `43d9b8fc` and `b11c24c5`, and returned `STATUS: partial`; advisory `CR-SA117E-005` is closed. The fresh full-scope documentation closeout review over the corrected SA117e-2 handoff then returned **`STATUS: ok`** (DC-14, 2026-08-03), resolving **`CR-SA117E-006`** (handoff command exactness) and **`SA117E1-REV-003`** (command consistency for default and overridden evidence directories) by approving the full-value `EVIDENCE=` substitution; command 3 below is preserved verbatim. **Closed 2026-08-03 — evidence only, no source delta.** SA117e-2 is now the next pending Track 3 child and remains **unexecuted**: its ordered commands have not run. Full checkpoint narrative is in [CHANGELOG.md](../../CHANGELOG.md).
 
       **Findings ticketed to owners** (a separate `SA117E1-REV-*` ledger, deliberately not colliding with the older plan-review `F-001`/`F-002` IDs):
 
@@ -146,14 +146,14 @@ SA122b-1 → -2 → -3 → -4 → -5          │                             �
       |---|---|---|---|
       | `SA117E1-REV-001` | high, security boundary | `quickscale_core/.../utils/git_utils.py:636-680` — an `ABSENT` expectation emits bare `--force-with-lease` instead of proving explicit remote absence | **SA117e-4** |
       | `SA117E1-REV-002` | medium, completeness | `scripts/verify_sa117_publication.py:199-439,498-530`, `Makefile:919-949`, `scripts/README.md:115-124` — publication authorization is not bound to the exact verified evidence nor consumed by the publisher | **SA117e-4** |
-      | `SA117E1-REV-003` | low, advisory | command consistency; candidate correction is the literal SA117e-2 handoff below | **SA117e-1** |
+      | `SA117E1-REV-003` | low, advisory — **resolved** (DC-14, 2026-08-03) | command consistency; candidate correction is the literal SA117e-2 handoff below, now approved with command 3 preserved | **SA117e-1** |
       | `SA117E1-REV-004` | low, advisory | deferred scope inventory; no whole-file certification claimed for the absent `quickscale/src/quickscale/_version.py` | **SA124** |
 
-    - [ ] **SA117e-2 — Complete the rebaselined ordered source validation.** `Tier 2 · deps: SA117e-1` — local, service-free
-      **Candidate command-exactness improvement for `CR-SA117E-006` (not yet approved):** after SA117e-1 closes, run from the repository root in this exact order, recording each command, exit, and artifact:
+    - [ ] **SA117e-2 — Complete the rebaselined ordered source validation.** `Tier 2 · deps: SA117e-1 ✓ closed` — local, service-free
+      **Approved command handoff (`CR-SA117E-006`/`SA117E1-REV-003` resolved by the SA117e-1 closeout review, DC-14 `STATUS: ok`):** run from the repository root in this exact order, recording each command, exit, and artifact:
       1. `make sa117-lock-diff SA117_BASELINE_REF=43d9b8fc0abd1c3193a3358f41dee0e09a3c106c` — expected exit 0 with clean evidence; checker semantics stay unchanged.
       2. `make sa117-capture VERSION=0.87.0 PHASE=final` — expected exit 0; retain the exact evidence path printed by the target.
-      3. `make sa117-verify EVIDENCE=/tmp/opencode/sa117-evidence/sa117_evidence_<timestamp>.json` — replace `<timestamp>` with the exact path printed by command 2; expected exit 0.
+      3. `make sa117-verify EVIDENCE=/tmp/opencode/sa117-evidence/sa117_evidence_<timestamp>.json` — the path after `EVIDENCE=` is the literal default shape only; replace the entire value after `EVIDENCE=` (not just `<timestamp>`) with the exact complete path printed after `Evidence captured:` by command 2; expected exit 0.
       4. `make check` — expected exit 0.
       5. `make quality` — expected exit 0.
       Evidence-first — **may complete with no source delta**. If a command fails for a reason other than the retired baseline, stop and ticket it rather than repairing in place.
