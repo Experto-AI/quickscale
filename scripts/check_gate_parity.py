@@ -47,9 +47,11 @@ import json
 import os
 import re
 import selectors
+import shlex
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -1160,163 +1162,532 @@ def _assert_canonical_makefile_input(path: Path) -> None:
         raise SchemaValidationError(str(path), "", "Makefile must reside inside the repository")
 
 
-def _iter_significant_lines(text: str, start: int, end: int) -> Iterator[str]:
-    """Yield non-comment, non-echo, non-empty lines from *text[start:end]."""
-    for line in text[start:end].splitlines(keepends=False):
-        stripped = line.strip()
-        # Skip empty, comments, and echo statements
-        if not stripped:
-            continue
-        if stripped.startswith("#"):
-            continue
-        if stripped.startswith("echo"):
-            continue
-        if stripped.startswith('echo "'):
-            continue
-        yield stripped
+# ---------------------------------------------------------------------------
+# Bash semantic observation (SA128b)
+# ---------------------------------------------------------------------------
+
+_BASH_TIMEOUT_SECONDS = 30.0
+_BASH_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+_BASH_ERROR_DETAIL_BYTES = 400
+_BASH_RESULT_MARKER = "__SA128B_RESULT__"
+_BASH_PROCESS_GROUP_SETTLE_SECONDS = 0.05
+_BASH_PROCESS_GROUP_CLEANUP_SECONDS = 5.0
+_SHELL_GATE_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
+_OBSERVED_GATE_NAMES: frozenset[str] = frozenset({"frontend-proof", "smoke-install"})
+_BASH_ARGV_HEADER_RE = re.compile(r"^ARGV:([0-9]+)$")
 
 
-def _find_function_body(
-    text: str,
-    func_name: str,
-    label: str = "script",
-) -> tuple[int, int]:
-    """
-    Locate the opening ``{`` and closing ``}`` of a bash function body.
-
-    Returns ``(start, end)`` where *start* is the index of the character
-    immediately after ``{`` and *end* is the index of the matching ``}``.
-
-    Raises ``SchemaValidationError`` when the function is not found, appears
-    multiple times, or has an unclosed brace (ambiguous/malformed).
-    """
-    # Find all occurrences to detect duplicates.
-    # Require exact column-zero function header: ``func_name() {``
-    matches = list(
-        re.finditer(
-            rf"^{func_name}\s*\(\s*\)\s*{{",
-            text,
-            re.MULTILINE,
-        )
+def _is_observed_shell_gate(value: str) -> bool:
+    """Return whether a recorder argument is a local gate target."""
+    return (value.startswith("check-") or value in _OBSERVED_GATE_NAMES) and bool(
+        _SHELL_GATE_RE.fullmatch(value)
     )
-    if not matches:
-        raise SchemaValidationError(
-            label,
-            func_name,
-            f"function {func_name}() not found in source",
-        )
-    if len(matches) > 1:
-        raise SchemaValidationError(
-            label,
-            func_name,
-            f"duplicate function definition: {func_name}() appears {len(matches)} times",
-        )
 
-    func_match = matches[0]
-    # Verify column-zero header (no leading whitespace before func_name)
-    header_line_start = text.rfind("\n", 0, func_match.start()) + 1
-    if func_match.start() != header_line_start:
-        raise SchemaValidationError(
-            label,
-            func_name,
-            f"function {func_name}() header not at column 0 — ambiguous/malformed",
-        )
 
-    start = func_match.end()
-    depth = 1
-    end = start
-    i = start
-    while i < len(text):
-        ch = text[i]
-        # Skip ${...} variable expansions
-        if ch == "$" and i + 1 < len(text) and text[i + 1] == "{":
-            i += 2
-            var_depth = 1
-            while i < len(text) and var_depth > 0:
-                if text[i] == "{":
-                    var_depth += 1
-                elif text[i] == "}":
-                    var_depth -= 1
-                i += 1
-            continue
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                # Verify the closing ``}`` is at column 0
-                close_line_start = text.rfind("\n", 0, i) + 1
-                if close_line_start != i:
-                    raise SchemaValidationError(
-                        label,
-                        func_name,
-                        f"closing brace of {func_name}() not at column 0 "
-                        f"— ambiguous/malformed source",
-                    )
-                end = i
-                break
-        i += 1
+def _canonical_shell_harness(path: Path, function_name: str) -> str | None:
+    """
+    Build a function-only Bash program for the canonical local CI script.
+
+    The production script has a command-oriented entrypoint after its function
+    declarations.  Feeding that entrypoint to Bash would install dependencies
+    and run database checks, so the declaration prefix is retained and the
+    selected function is invoked by the harness instead.  The declarations and
+    the selected function are still parsed and executed by Bash; this helper
+    never inspects their command text to infer gates.
+    """
+    try:
+        canonical = path.resolve() == (_REPO_ROOT / "scripts" / "check_ci_locally.sh").resolve()
+    except OSError:
+        canonical = False
+    if not canonical:
+        return None
+
+    text = path.read_text(encoding="utf-8")
+    entrypoint = '\necho "[1/${TOTAL_STAGES}] Installing dependencies..."'
+    marker = text.find(entrypoint)
+    if marker < 0:
+        raise SchemaValidationError(
+            str(path),
+            function_name,
+            "canonical local CI entrypoint marker is missing",
+        )
+    root_line = 'ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)'
+    prefix = text[:marker].replace(root_line, f"ROOT={shlex.quote(str(_REPO_ROOT))}", 1)
+    return prefix
+
+
+def _shell_observation_harness(path: Path, function_name: str) -> str:
+    """Return a Bash program that invokes one source-defined gate function."""
+    canonical_prefix = _canonical_shell_harness(path, function_name)
+    if canonical_prefix is None:
+        source_block = """
+source "$1"
+source_status=$?
+if [ "$source_status" -ne 0 ]; then
+    printf '%s source failed with status %s\\n' "$__SA128B_RESULT__" "$source_status" >&2
+    exit "$source_status"
+fi
+: > "$SA128_RECORDER_LOG"
+"""
     else:
-        raise SchemaValidationError(
-            label,
-            func_name,
-            f"unclosed brace in function {func_name}() — ambiguous/malformed source",
+        source_block = canonical_prefix + "\n"
+
+    # Keep the observer PATH limited to the recorder.  The source function is
+    # still run by Bash, but parallel launches are observed through a wrapper
+    # that gives every worker its own argv log.  This makes the postcondition
+    # check independent of worker completion timing and lets it prove that all
+    # launched workers were joined in declaration order.
+    return (
+        source_block
+        + """
+unset -f make 2>/dev/null || true
+cleanup_temp_files() { :; }
+save_worker_traps() { :; }
+restore_worker_traps() { :; }
+_qs_replay_worker_logs() { :; }
+mktemp() { printf '%s\\n' "${SA128_WORKER_DIR:?}"; }
+
+# The recorder uses an argc-prefixed NUL-delimited transport.  NUL cannot
+# occur in a Unix argv element, while spaces, newlines, quotes, and wildcard
+# characters remain ordinary data.
+launch_static_gate() {
+    local stage_id="$1"
+    local stage_number="$2"
+    local description="$3"
+    local success_message="$4"
+    local failure_label="$5"
+    local worker_index="${SA128_LAUNCH_COUNT:-0}"
+    local worker_log="$SA128_WORKER_DIR/worker_${worker_index}.argv"
+    shift 5
+
+    : "$stage_number" "$description" "$success_message" "$failure_label"
+    SA128_LAUNCH_COUNT=$((worker_index + 1))
+    (
+        export SA128_RECORDER_LOG="$worker_log"
+        "$@"
+    ) >/dev/null 2>&1 &
+    local worker_pid="$!"
+    printf '%s\\t%s\\t%s\\n' "$stage_id" "$worker_pid" "$worker_log" >> "$SA128_LAUNCH_LOG"
+    WORKER_PIDS+=("$worker_pid")
+    WORKER_ORDER+=("$stage_id")
+    STATIC_STAGE_NAMES+=("$stage_id")
+    STATIC_FAILURE_LABELS+=("$failure_label")
+}
+
+# Record every explicit wait and its result without changing the source
+# function's wait status.  A missing wait therefore remains observable even
+# if a fast worker has already exited by the time the function returns.
+wait() {
+    local wait_status=0
+    local worker_pid
+    local worker_status
+    if [ "$#" -eq 0 ] || [[ "$1" == -* ]]; then
+        if builtin wait "$@"; then
+            worker_status=0
+        else
+            worker_status=$?
+        fi
+        printf 'SPECIAL\\t%s\\n' "$worker_status" >> "$SA128_WAIT_LOG"
+        return "$worker_status"
+    fi
+    for worker_pid in "$@"; do
+        if builtin wait "$worker_pid"; then
+            worker_status=0
+        else
+            worker_status=$?
+            wait_status="$worker_status"
+        fi
+        printf '%s\\t%s\\n' "$worker_pid" "$worker_status" >> "$SA128_WAIT_LOG"
+    done
+    return "$wait_status"
+}
+
+declare -a WORKER_PIDS=()
+declare -a WORKER_ORDER=()
+declare -a STATIC_STAGE_NAMES=()
+declare -a STATIC_FAILURE_LABELS=()
+declare -a launch_pids=()
+declare -a launch_logs=()
+declare -a wait_pids=()
+declare -a wait_statuses=()
+
+if ! declare -F "${2:-run_static_gates}" >/dev/null; then
+    printf '%s function %s() not found\\n' "$__SA128B_RESULT__" "${2:-run_static_gates}" >&2
+    exit 2
+fi
+
+# Run the function in a child shell so its own errexit setting remains active
+# while the parent captures the resulting status with a conditional builtin
+# wait.  Calling the function directly from an `if` would suppress errexit in
+# the function body and create a false-green partial inventory.
+"${2:-run_static_gates}" &
+observed_pid="$!"
+if builtin wait "$observed_pid"; then
+    observed_status=0
+else
+    observed_status=$?
+fi
+
+if [ "$observed_status" -eq 0 ] && [ "${2:-run_static_gates}" = "run_static_gates_parallel" ]; then
+    validation_error=""
+    launch_count=0
+    expected_pid=""
+    actual_pid=""
+    worker_status=0
+    while IFS=$'\\t' read -r stage_id worker_pid worker_log; do
+        [ -n "${worker_pid:-}" ] || continue
+        launch_count=$((launch_count + 1))
+        launch_pids[$((launch_count - 1))]="$worker_pid"
+        launch_logs[$((launch_count - 1))]="$worker_log"
+    done < "$SA128_LAUNCH_LOG"
+
+    wait_count=0
+    special_wait=false
+    while IFS=$'\\t' read -r actual_pid worker_status; do
+        if [ "${actual_pid:-}" = "SPECIAL" ]; then
+            special_wait=true
+            continue
+        fi
+        [ -n "${actual_pid:-}" ] || continue
+        wait_pids[$wait_count]="$actual_pid"
+        wait_statuses[$wait_count]="${worker_status:-127}"
+        wait_count=$((wait_count + 1))
+    done < "$SA128_WAIT_LOG"
+
+    if [ "$special_wait" = true ] || [ "$wait_count" -ne "$launch_count" ]; then
+        validation_error="parallel observation did not explicitly join every launched worker"
+    else
+        for ((i = 0; i < launch_count; i++)); do
+            expected_pid="${launch_pids[$i]}"
+            actual_pid="${wait_pids[$i]}"
+            if [ "$expected_pid" != "$actual_pid" ]; then
+                validation_error="parallel workers were not joined in declaration order"
+                break
+            fi
+            worker_status="${wait_statuses[$i]}"
+            if [ "$worker_status" -ne 0 ]; then
+                validation_error="parallel worker $expected_pid failed with status $worker_status"
+                break
+            fi
+        done
+    fi
+
+    if [ -z "$validation_error" ]; then
+        for ((i = 0; i < launch_count; i++)); do
+            worker_pid="${launch_pids[$i]}"
+            if kill -0 "$worker_pid" 2>/dev/null; then
+                validation_error="parallel observation left worker $worker_pid running"
+                break
+            fi
+        done
+    fi
+    if [ -n "$validation_error" ]; then
+        printf '%s\\n' "$validation_error" >&2
+        observed_status=2
+    fi
+fi
+
+printf '%s%s\\n' "$__SA128B_RESULT__" "$observed_status"
+exit "$observed_status"
+"""
+    )
+
+
+def _live_process_group_members(process_group_id: int) -> dict[int, str]:
+    """Return live process IDs and states currently in *process_group_id*."""
+    members: dict[int, str] = {}
+    proc_root = Path("/proc")
+    try:
+        entries = tuple(proc_root.iterdir())
+    except OSError:
+        return members
+
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text(encoding="utf-8")
+        except FileNotFoundError, PermissionError, OSError:
+            continue
+        closing_paren = stat.rfind(") ")
+        if closing_paren < 0:
+            continue
+        fields = stat[closing_paren + 2 :].split()
+        # After the comm field: state, ppid, pgrp, ...
+        if len(fields) < 3:
+            continue
+        try:
+            process_id = int(entry.name)
+            pgrp = int(fields[2])
+        except ValueError:
+            continue
+        if pgrp == process_group_id and fields[0] != "Z":
+            members[process_id] = fields[0]
+    return members
+
+
+def _wait_for_process_group_cleanup(process_group_id: int) -> dict[int, str]:
+    """Wait until a process group has no live members, returning residuals."""
+    deadline = time.monotonic() + _BASH_PROCESS_GROUP_CLEANUP_SECONDS
+    while True:
+        members = _live_process_group_members(process_group_id)
+        if not members:
+            return {}
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return members
+        time.sleep(min(_BASH_PROCESS_GROUP_SETTLE_SECONDS, remaining))
+
+
+def _terminate_process_group(proc: subprocess.Popen[bytes]) -> dict[int, str]:
+    """Terminate and wait for every live member of an observed process group."""
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        proc.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=5)
+
+    residual = _live_process_group_members(proc.pid)
+    if residual:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    return _wait_for_process_group_cleanup(proc.pid)
+
+
+def _assert_observation_process_group_clean(proc: subprocess.Popen[bytes]) -> None:
+    """Reject successful observation when its process group leaves live work."""
+    residual = _live_process_group_members(proc.pid)
+    if not residual:
+        # Require a second empty observation to close the fork-after-check race.
+        time.sleep(_BASH_PROCESS_GROUP_SETTLE_SECONDS)
+        residual = _live_process_group_members(proc.pid)
+    if not residual:
+        return
+
+    residual_ids = ", ".join(str(process_id) for process_id in sorted(residual))
+    cleanup_residual = _terminate_process_group(proc)
+    if cleanup_residual:
+        remaining_ids = ", ".join(str(process_id) for process_id in sorted(cleanup_residual))
+        cleanup_detail = f"; cleanup left live members {remaining_ids}"
+    else:
+        cleanup_detail = "; residual process group terminated and reaped"
+    raise SchemaValidationError(
+        "Bash observation",
+        "process-group",
+        f"observation left live descendants in process group {proc.pid}: "
+        f"{residual_ids}; failing closed{cleanup_detail}",
+    )
+
+
+def _run_bash_observation(
+    path: Path,
+    function_name: str,
+    recorder_fail_target: str | None = None,
+) -> list[tuple[str, ...]]:
+    """Execute a local CI function and return exact recorder argv frames."""
+    if not path.exists():
+        raise SchemaValidationError(str(path), function_name, "script not found")
+    if not path.is_file():
+        raise SchemaValidationError(str(path), function_name, "script is not a regular file")
+
+    with tempfile.TemporaryDirectory(prefix="sa128b-") as temp_name:
+        temp_dir = Path(temp_name)
+        bin_dir = temp_dir / "bin"
+        bin_dir.mkdir()
+        recorder = bin_dir / "make"
+        recorder.write_text(
+            "#!/bin/bash\n"
+            "set -u\n"
+            'printf \'ARGV:%d\\0\' "$#" >> "${SA128_RECORDER_LOG:?}"\n'
+            'printf \'%s\\0\' "$@" >> "${SA128_RECORDER_LOG:?}"\n'
+            'for arg in "$@"; do\n'
+            '    if [ "${SA128_RECORDER_FAIL_TARGET:-}" = "$arg" ]; then\n'
+            '        exit "${SA128_RECORDER_FAIL_STATUS:-17}"\n'
+            "    fi\n"
+            "done\n"
+            "exit 0\n",
+            encoding="utf-8",
         )
-    return start, end
+        recorder.chmod(0o700)
+        log_path = temp_dir / "make.log"
+        log_path.touch()
+        worker_dir = temp_dir / "workers"
+        worker_dir.mkdir()
+        env = {
+            "PATH": str(bin_dir),
+            "HOME": str(temp_dir),
+            "TMPDIR": str(temp_dir),
+            "LANG": "C",
+            "LC_ALL": "C",
+            "SA128_RECORDER_LOG": str(log_path),
+            "SA128_WORKER_DIR": str(worker_dir),
+            "SA128_LAUNCH_LOG": str(temp_dir / "launch.log"),
+            "SA128_WAIT_LOG": str(temp_dir / "wait.log"),
+            "SA128_LAUNCH_COUNT": "0",
+            "__SA128B_RESULT__": _BASH_RESULT_MARKER,
+        }
+        (temp_dir / "launch.log").touch()
+        (temp_dir / "wait.log").touch()
+        if recorder_fail_target is not None:
+            env["SA128_RECORDER_FAIL_TARGET"] = recorder_fail_target
+        harness = _shell_observation_harness(path, function_name)
+        try:
+            proc = subprocess.Popen(
+                [
+                    "/bin/bash",
+                    "--noprofile",
+                    "--norc",
+                    "-c",
+                    harness,
+                    "sa128b",
+                    str(path),
+                    function_name,
+                ],
+                cwd=str(path.parent),
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            raise SchemaValidationError(
+                str(path), function_name, f"failed to start Bash: {exc}"
+            ) from None
+
+        try:
+            stdout, stderr = _communicate_bounded(
+                proc, _BASH_MAX_OUTPUT_BYTES, _BASH_TIMEOUT_SECONDS
+            )
+        except subprocess.TimeoutExpired:
+            _kill_make_process_group(proc)
+            raise SchemaValidationError(
+                str(path),
+                function_name,
+                f"Bash exceeded the {_BASH_TIMEOUT_SECONDS:g}s observation timeout",
+            ) from None
+        except _MakeOutputError as exc:
+            _kill_make_process_group(proc)
+            raise SchemaValidationError(
+                str(path), function_name, str(exc).replace("GNU make", "Bash")
+            ) from None
+
+        returncode = proc.wait()
+        output = stdout.decode("utf-8", errors="replace")
+        error = stderr.decode("utf-8", errors="replace").strip()
+        marker_lines = [
+            line for line in output.splitlines() if line.startswith(_BASH_RESULT_MARKER)
+        ]
+        if not marker_lines:
+            detail = (
+                error or output.strip() or f"Bash exited with status {returncode} before completion"
+            )
+            raise SchemaValidationError(
+                str(path),
+                function_name,
+                f"incomplete Bash observation: {detail[:_BASH_ERROR_DETAIL_BYTES]}",
+            )
+        if returncode != 0:
+            _kill_make_process_group(proc)
+            detail = error or f"Bash exited with status {returncode}"
+            raise SchemaValidationError(
+                str(path),
+                function_name,
+                f"Bash gate execution failed: {detail[:_BASH_ERROR_DETAIL_BYTES]}",
+            )
+        marker_value = marker_lines[-1][len(_BASH_RESULT_MARKER) :]
+        try:
+            observed_status = int(marker_value)
+        except ValueError:
+            raise SchemaValidationError(
+                str(path), function_name, "invalid Bash completion marker"
+            ) from None
+        if observed_status != 0:
+            raise SchemaValidationError(
+                str(path), function_name, f"Bash gate execution returned status {observed_status}"
+            )
+
+        _assert_observation_process_group_clean(proc)
+
+        if function_name == "run_static_gates_parallel":
+            launch_records: list[tuple[str, str, Path]] = []
+            for line in (temp_dir / "launch.log").read_text(encoding="utf-8").splitlines():
+                stage_id, worker_pid, worker_log = line.split("\t", 2)
+                launch_records.append((stage_id, worker_pid, Path(worker_log)))
+            log_paths = [worker_log for _, _, worker_log in launch_records]
+        else:
+            log_paths = [log_path]
+
+        invocations: list[tuple[str, ...]] = []
+        for argv_log in log_paths:
+            if not argv_log.exists():
+                continue
+            raw = argv_log.read_bytes()
+            if not raw:
+                continue
+            if not raw.endswith(b"\0"):
+                raise SchemaValidationError(
+                    str(path), function_name, "incomplete Bash recorder transport"
+                )
+            fields = raw[:-1].split(b"\0")
+            field_index = 0
+            while field_index < len(fields):
+                try:
+                    header = fields[field_index].decode("ascii")
+                except UnicodeDecodeError:
+                    raise SchemaValidationError(
+                        str(path), function_name, "invalid Bash recorder frame header"
+                    ) from None
+                match = _BASH_ARGV_HEADER_RE.fullmatch(header)
+                if match is None:
+                    raise SchemaValidationError(
+                        str(path), function_name, "invalid Bash recorder frame header"
+                    )
+                argc = int(match.group(1))
+                first_arg = field_index + 1
+                last_arg = first_arg + argc
+                if last_arg > len(fields):
+                    raise SchemaValidationError(
+                        str(path), function_name, "truncated Bash recorder frame"
+                    )
+                try:
+                    invocation = tuple(
+                        field.decode("utf-8") for field in fields[first_arg:last_arg]
+                    )
+                except UnicodeDecodeError:
+                    raise SchemaValidationError(
+                        str(path), function_name, "Bash recorder argv is not UTF-8"
+                    ) from None
+                invocations.append(invocation)
+                field_index = last_arg
+        return invocations
+
+
+def _extract_observed_shell_gates(path: Path, function_name: str) -> set[str]:
+    """Run a shell gate function and map recorder arguments to gate targets."""
+    invocations = _run_bash_observation(path, function_name)
+    gates: set[str] = set()
+    for invocation in invocations:
+        for argument in invocation:
+            if _is_observed_shell_gate(argument):
+                gates.add(argument)
+    return gates
 
 
 def _extract_check_ci_serial_gates(path: Path) -> set[str]:
-    """
-    Extract gate make targets from the serial path in check_ci_locally.sh.
-
-    Looks for ``make <target>`` calls inside the ``run_static_gates_serial``
-    function body.  Skips echo lines and comments so only actual gate
-    invocations are counted.
-
-    Raises ``SchemaValidationError`` when the function is missing, duplicated,
-    or has an unclosed body.  An empty return means the function exists but
-    contains no matching make invocations (valid absent membership).
-    """
-    text = path.read_text(encoding="utf-8")
-    start, end = _find_function_body(text, "run_static_gates_serial", str(path))
-
-    gates: set[str] = set()
-    for sig_line in _iter_significant_lines(text, start, end):
-        for m in re.finditer(r"\bmake\s+([a-z][a-z0-9_-]+)", sig_line):
-            target = m.group(1)
-            if target.startswith("check-") or target in ("frontend-proof", "smoke-install"):
-                gates.add(target)
-    return gates
+    """Derive serial local-CI gates from actual Bash execution."""
+    return _extract_observed_shell_gates(path, "run_static_gates_serial")
 
 
 def _extract_check_ci_parallel_gates(path: Path) -> set[str]:
-    """
-    Extract gate make targets from the parallel path in check_ci_locally.sh.
-
-    Looks for ``launch_static_gate`` calls whose last arguments end with
-    a ``make <target>`` pattern inside the ``run_static_gates_parallel``
-    function body.  Comments and echo lines are skipped.
-
-    Raises ``SchemaValidationError`` when the function is missing, duplicated,
-    or has an unclosed body.  An empty return means the function exists but
-    contains no matching make invocations (valid absent membership).
-    """
-    text = path.read_text(encoding="utf-8")
-    start, end = _find_function_body(text, "run_static_gates_parallel", str(path))
-
-    body_lines: list[str] = []
-    for sig_line in _iter_significant_lines(text, start, end):
-        body_lines.append(sig_line)
-    body = "\n".join(body_lines)
-    gates: set[str] = set()
-    for m in re.finditer(
-        r"launch_static_gate\s+[^)]+?\bmake\s+([a-z][a-z0-9_-]*)",
-        body,
-    ):
-        target = m.group(1)
-        if target.startswith("check-") or target in ("frontend-proof", "smoke-install"):
-            gates.add(target)
-    return gates
+    """Derive parallel local-CI gates from actual Bash execution and joining."""
+    return _extract_observed_shell_gates(path, "run_static_gates_parallel")
 
 
 def _extract_ci_job_names(path: Path) -> set[str]:

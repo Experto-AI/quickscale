@@ -14,6 +14,7 @@ Test matrix
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,7 @@ from scripts.check_gate_parity import (
     _extract_makefile_targets,
     _extract_publish_gates,
     _is_subsequence,
+    _run_bash_observation,
     _validate_registry,
 )
 
@@ -787,6 +789,7 @@ class TestParserPrecision:
             "}\n"
             "run_static_gates_parallel() {\n"
             '    launch_static_gate foo 1 "desc" "ok" "label" make check-only-parallel\n'
+            '    wait "${WORKER_PIDS[0]}"\n'
             "}\n"
         )
         serial = _extract_check_ci_serial_gates(script)
@@ -817,6 +820,7 @@ class TestParserPrecision:
             "run_static_gates_parallel() {\n"
             '    # launch_static_gate old-gate 0 "desc" "ok" "label" make check-old-gate\n'
             '    launch_static_gate compat 1 "desc" "ok" "label" make check-core-compat\n'
+            '    wait "${WORKER_PIDS[0]}"\n'
             "}\n"
         )
         gates = _extract_check_ci_parallel_gates(script)
@@ -879,6 +883,235 @@ class TestParserPrecision:
         )
         with pytest.raises(SchemaValidationError, match="Duplicate YAML key"):
             _parse_yaml_strict(bad_yaml.read_text(encoding="utf-8"), str(bad_yaml))
+
+
+# =========================================================================
+# SA128b Bash execution
+# =========================================================================
+
+
+class TestSA128bBashObservation:
+    """Local shell inventories come from Bash execution, not source text."""
+
+    @staticmethod
+    def _write_serial_fixture(tmp_path: Path) -> Path:
+        script = tmp_path / "sa128b_serial.sh"
+        script.write_text(
+            "run_static_gates_serial() {\n"
+            '    echo "make check-echoed"\n'
+            "    while IFS= read -r _line; do :; done <<'EOF'\n"
+            "make check-heredoc\n"
+            "EOF\n"
+            "    uncalled_gate() { make check-uncalled; }\n"
+            "    false && make check-short-circuit\n"
+            "    # make check-commented \\\n"
+            "    # check-commented-continuation\n"
+            "    if true; then\n"
+            "        make check-first\n"
+            "        make check-second\n"
+            "    fi\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        return script
+
+    def test_serial_inert_forms_are_absent_and_reached_order_is_observed(
+        self, tmp_path: Path
+    ) -> None:
+        """Inert forms do not count, while reached commands retain order."""
+        script = self._write_serial_fixture(tmp_path)
+        observed = _run_bash_observation(script, "run_static_gates_serial")
+        assert observed == [("check-first",), ("check-second",)]
+        assert _extract_check_ci_serial_gates(script) == {"check-first", "check-second"}
+
+    def test_parallel_join_observes_all_workers(self, tmp_path: Path) -> None:
+        """A parallel function that joins its workers reports every completed gate."""
+        script = tmp_path / "sa128b_parallel.sh"
+        script.write_text(
+            "run_static_gates_parallel() {\n"
+            "    launch_static_gate first 1 desc ok label make check-first\n"
+            "    launch_static_gate second 2 desc ok label make check-second\n"
+            '    for pid in "${WORKER_PIDS[@]}"; do wait "$pid"; done\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        assert _extract_check_ci_parallel_gates(script) == {"check-first", "check-second"}
+
+    def test_parallel_worker_failure_fails_closed(self, tmp_path: Path) -> None:
+        """A joined worker failure rejects the otherwise partial inventory."""
+        script = tmp_path / "sa128b_parallel_failure.sh"
+        script.write_text(
+            "run_static_gates_parallel() {\n"
+            "    launch_static_gate failing 1 desc ok label make check-failing\n"
+            "    failed=0\n"
+            '    for pid in "${WORKER_PIDS[@]}"; do wait "$pid" || failed=1; done\n'
+            '    return "$failed"\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(SchemaValidationError, match="failed|status"):
+            _run_bash_observation(
+                script,
+                "run_static_gates_parallel",
+                recorder_fail_target="check-failing",
+            )
+
+    def test_failed_recorder_command_fails_closed(self, tmp_path: Path) -> None:
+        """A recorder failure cannot produce a partial inventory."""
+        script = tmp_path / "sa128b_failure.sh"
+        after_failure = tmp_path / "after-failure"
+        script.write_text(
+            "set -e\n"
+            "run_static_gates_serial() {\n"
+            "    make check-failing\n"
+            "    make check-after-failure\n"
+            f"    printf reached > {after_failure}\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(SchemaValidationError, match="failed|status"):
+            _run_bash_observation(
+                script,
+                "run_static_gates_serial",
+                recorder_fail_target="check-failing",
+            )
+        assert not after_failure.exists(), "inherited errexit allowed later work to run"
+
+    def test_parallel_join_order_is_declaration_order(self, tmp_path: Path) -> None:
+        """A completion handshake proves fast-before-slow without timing inference."""
+        script = tmp_path / "sa128b_parallel_order.sh"
+        fast_completed = tmp_path / "fast-completed"
+        fast_completed_path = shlex.quote(str(fast_completed))
+        script.write_text(
+            "run_static_gates_parallel() {\n"
+            "    slow_gate() {\n"
+            f"        while [ ! -f {fast_completed_path} ]; do :; done\n"
+            "        make check-slow\n"
+            "    }\n"
+            "    fast_gate() {\n"
+            "        make check-fast\n"
+            f"        printf 'fast-completed\\n' > {fast_completed_path}\n"
+            "    }\n"
+            "    launch_static_gate slow 1 desc ok label slow_gate\n"
+            "    launch_static_gate fast 2 desc ok label fast_gate\n"
+            '    wait "${WORKER_PIDS[0]}"\n'
+            '    wait "${WORKER_PIDS[1]}"\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        assert _run_bash_observation(script, "run_static_gates_parallel") == [
+            ("check-slow",),
+            ("check-fast",),
+        ]
+        assert fast_completed.read_text(encoding="utf-8") == "fast-completed\n"
+
+    def test_parallel_join_with_residual_descendant_fails_and_cleans_up(
+        self, tmp_path: Path
+    ) -> None:
+        """A joined worker's delayed child cannot mutate logs after acceptance."""
+        script = tmp_path / "sa128b_parallel_residual_descendant.sh"
+        residual_marker = tmp_path / "residual-marker"
+        script.write_text(
+            "run_static_gates_parallel() {\n"
+            "    joined_worker() {\n"
+            f"        ( /bin/sleep 0.25; printf late > {residual_marker} ) &\n"
+            "    }\n"
+            "    launch_static_gate joined 1 desc ok label joined_worker\n"
+            '    wait "${WORKER_PIDS[0]}"\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(SchemaValidationError, match="live descendants|process group"):
+            _run_bash_observation(script, "run_static_gates_parallel")
+
+        # The cleanup must happen before the observer accepts the inventory;
+        # waiting past the child delay proves that no delayed recorder work
+        # remains able to mutate the external marker.
+        import time
+
+        time.sleep(0.35)
+        assert not residual_marker.exists(), "residual descendant survived cleanup"
+
+    def test_parallel_omitted_wait_fails_closed(self, tmp_path: Path) -> None:
+        """A parallel function that returns without joining is incomplete."""
+        script = tmp_path / "sa128b_parallel_omitted_wait.sh"
+        script.write_text(
+            "run_static_gates_parallel() {\n"
+            "    launch_static_gate first 1 desc ok label make check-first\n"
+            "    launch_static_gate second 2 desc ok label make check-second\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(SchemaValidationError, match="join|worker"):
+            _run_bash_observation(script, "run_static_gates_parallel")
+
+    def test_parallel_reverse_wait_order_fails_closed(self, tmp_path: Path) -> None:
+        """A complete but reverse-order join does not satisfy ordered replay."""
+        script = tmp_path / "sa128b_parallel_reverse_wait.sh"
+        script.write_text(
+            "run_static_gates_parallel() {\n"
+            "    launch_static_gate first 1 desc ok label make check-first\n"
+            "    launch_static_gate second 2 desc ok label make check-second\n"
+            '    wait "${WORKER_PIDS[1]}"\n'
+            '    wait "${WORKER_PIDS[0]}"\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(SchemaValidationError, match="order"):
+            _run_bash_observation(script, "run_static_gates_parallel")
+
+    def test_parallel_worker_failure_cannot_be_swallowed(self, tmp_path: Path) -> None:
+        """A joined worker failure is rejected even when the function returns zero."""
+        script = tmp_path / "sa128b_parallel_swallowed_failure.sh"
+        script.write_text(
+            "run_static_gates_parallel() {\n"
+            "    launch_static_gate failing 1 desc ok label make check-failing\n"
+            '    wait "${WORKER_PIDS[0]}" || true\n'
+            "    return 0\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(SchemaValidationError, match="failed|status"):
+            _run_bash_observation(
+                script,
+                "run_static_gates_parallel",
+                recorder_fail_target="check-failing",
+            )
+
+    def test_recorder_preserves_argv_boundaries(self, tmp_path: Path) -> None:
+        """A multiword gate-shaped argv element is not reparsed as a target."""
+        script = tmp_path / "sa128b_argv_boundaries.sh"
+        script.write_text(
+            "run_static_gates_serial() {\n"
+            "    make 'check-deceptive target' 'frontend proof' check-real\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        assert _run_bash_observation(script, "run_static_gates_serial") == [
+            ("check-deceptive target", "frontend proof", "check-real")
+        ]
+        assert _extract_check_ci_serial_gates(script) == {"check-real"}
+
+    def test_recorder_rejects_multiword_gate_as_target(self, tmp_path: Path) -> None:
+        """A deceptive multiword gate-shaped argument cannot create a gate."""
+        script = tmp_path / "sa128b_argv_deceptive.sh"
+        script.write_text(
+            "run_static_gates_serial() {\n    make 'check-only deceptive'\n}\n",
+            encoding="utf-8",
+        )
+        assert _extract_check_ci_serial_gates(script) == set()
+
+    def test_bash_timeout_fails_closed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An executing shell that never completes is bounded and rejected."""
+        import scripts.check_gate_parity as parity
+
+        monkeypatch.setattr(parity, "_BASH_TIMEOUT_SECONDS", 0.2)
+        script = tmp_path / "sa128b_timeout.sh"
+        script.write_text("run_static_gates_serial() { while :; do :; done; }\n", encoding="utf-8")
+        with pytest.raises(SchemaValidationError, match="timeout"):
+            _extract_check_ci_serial_gates(script)
 
 
 # =========================================================================
@@ -1367,8 +1600,8 @@ class TestSourceFailClosed:
         with pytest.raises(SchemaValidationError, match="not found"):
             _extract_check_ci_parallel_gates(script)
 
-    def test_duplicate_serial_function_raises(self, tmp_path: Path) -> None:
-        """Duplicate serial function definition raises SchemaValidationError."""
+    def test_duplicate_serial_function_uses_bash_definition(self, tmp_path: Path) -> None:
+        """Bash semantics select the last definition of a duplicate function."""
         script = tmp_path / "dup_serial.sh"
         script.write_text(
             "run_static_gates_serial() {\n"
@@ -1378,8 +1611,7 @@ class TestSourceFailClosed:
             "    make check-module-core-imports\n"
             "}\n"
         )
-        with pytest.raises(SchemaValidationError, match="duplicate"):
-            _extract_check_ci_serial_gates(script)
+        assert _extract_check_ci_serial_gates(script) == {"check-module-core-imports"}
 
     def test_unclosed_serial_function_raises(self, tmp_path: Path) -> None:
         """Unclosed brace in serial function raises SchemaValidationError."""
@@ -1408,27 +1640,25 @@ class TestSourceFailClosed:
         gates = _extract_check_ci_serial_gates(script)
         assert gates == set()
 
-    def test_non_column_zero_header_not_found(self, tmp_path: Path) -> None:
-        """Function header not at column 0 is not found (^ anchor)."""
+    def test_indented_function_header_is_executed_by_bash(self, tmp_path: Path) -> None:
+        """Bash, rather than a column-sensitive parser, recognizes the function."""
         script = tmp_path / "indented_header.sh"
         script.write_text(
             " run_static_gates_serial() {\n"  # Leading space
             "    make check-core-compat\n"
             "}\n"
         )
-        with pytest.raises(SchemaValidationError, match="not found"):
-            _extract_check_ci_serial_gates(script)
+        assert _extract_check_ci_serial_gates(script) == {"check-core-compat"}
 
-    def test_non_column_zero_close_raises(self, tmp_path: Path) -> None:
-        """Closing brace not at column 0 raises SchemaValidationError."""
+    def test_indented_function_close_is_executed_by_bash(self, tmp_path: Path) -> None:
+        """Bash accepts an indented function close as valid shell syntax."""
         script = tmp_path / "indented_close.sh"
         script.write_text(
             "run_static_gates_serial() {\n"
             "    make check-core-compat\n"
             " }\n"  # Leading space before }
         )
-        with pytest.raises(SchemaValidationError, match="not at column 0"):
-            _extract_check_ci_serial_gates(script)
+        assert _extract_check_ci_serial_gates(script) == {"check-core-compat"}
 
     def test_echo_and_comments_not_counted(self, tmp_path: Path) -> None:
         """Echo and comments in serial function are not counted as gates."""
