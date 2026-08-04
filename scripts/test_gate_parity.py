@@ -23,8 +23,10 @@ import pytest
 
 from scripts.check_gate_parity import (
     SchemaValidationError,
+    _assert_canonical_makefile_input,
     _extract_check_ci_parallel_gates,
     _extract_check_ci_serial_gates,
+    _extract_check_members,
     _extract_ci_job_names,
     _extract_e2e_trigger_paths,
     _extract_makefile_targets,
@@ -1017,8 +1019,7 @@ class TestAdditiveBoundary:
         result = _run_checker(["--registry", str(reg_path)])
         assert result.returncode == 1
         lines = [line for line in result.stdout.splitlines() if line.strip()]
-        # One for local-serial missing (check-gate-parity is PHONY but not in serial extraction)
-        # No makefile diagnostic because check-gate-parity IS in Makefile
+        # One for local-serial missing (check-gate-parity is not in serial extraction)
         serial_diags = [
             json.loads(ln) for ln in lines if json.loads(ln).get("context") == "local-serial"
         ]
@@ -1026,6 +1027,16 @@ class TestAdditiveBoundary:
         record = serial_diags[0]
         assert record["gate_id"] == "new-boundary-gate"
         assert record["level"] == "missing"
+        # One for makefile: check-gate-parity is a standalone recipe-owning
+        # target that is NOT reachable from the check target, so it must not
+        # satisfy the registry (F-001: global effectiveness is not check
+        # aggregation).
+        makefile_diags = [
+            json.loads(ln) for ln in lines if json.loads(ln).get("context") == "makefile"
+        ]
+        assert len(makefile_diags) == 1, f"Expected 1 makefile diagnostic, got: {lines}"
+        assert makefile_diags[0]["gate_id"] == "new-boundary-gate"
+        assert "check-gate-parity" in makefile_diags[0]["detail"]
 
     def test_non_phony_make_target_detected(self, tmp_path: Path) -> None:
         """A gate with make_target not in Makefile's .PHONY is reported."""
@@ -1678,3 +1689,267 @@ class TestMakefileRecipeValidation:
         assert "real-target" in targets
         # .PHONY-only targets without a recipe should NOT be counted
         assert "no-recipe-target" not in targets
+
+
+# =========================================================================
+# SA128a — GNU Make semantic observation
+# =========================================================================
+
+
+class TestMakefileSemanticObservation:
+    """make -qp database + --dry-run delegation proof (SA128a)."""
+
+    def test_variable_composed_target_resolved(self, tmp_path: Path) -> None:
+        """Variable-composed target names are resolved by GNU make itself."""
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("SUFFIX := core-compat\ncheck-$(SUFFIX):\n\t@echo gate\n")
+        targets = _extract_makefile_targets(makefile)
+        assert "check-core-compat" in targets
+
+    def test_variable_composed_prerequisite_resolved(self, tmp_path: Path) -> None:
+        """A delegation prereq written as $(VAR) resolves to the concrete target."""
+        makefile = tmp_path / "Makefile"
+        makefile.write_text(
+            "SUFFIX := core-compat\ncheck-$(SUFFIX):\n\t@echo gate\ndelegate: check-$(SUFFIX)\n"
+        )
+        targets = _extract_makefile_targets(makefile)
+        assert "check-core-compat" in targets
+        assert "delegate" in targets
+
+    def test_delegated_target_present(self, tmp_path: Path) -> None:
+        """A command-less target that delegates to a check target is present."""
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("delegate: check-core-compat\ncheck-core-compat:\n\t@echo gate\n")
+        targets = _extract_makefile_targets(makefile)
+        assert "delegate" in targets
+
+    def test_check_aggregation_target_present(self, tmp_path: Path) -> None:
+        """A check-only aggregation target (no recipe of its own) is present."""
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("all: check-a check-b\ncheck-a:\n\t@echo A\ncheck-b:\n\techo B\n")
+        targets = _extract_makefile_targets(makefile)
+        assert "all" in targets
+
+    def test_recipe_owner_present_alongside_delegation(self, tmp_path: Path) -> None:
+        """Recipe owners stay present next to delegation targets."""
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("gate:\n\t@echo gate\naggregate: gate\n")
+        targets = _extract_makefile_targets(makefile)
+        assert "gate" in targets
+        assert "aggregate" in targets
+
+    def test_delegation_to_phony_only_target_absent(self, tmp_path: Path) -> None:
+        """Delegation to a .PHONY-only target without a rule runs nothing."""
+        makefile = tmp_path / "Makefile"
+        makefile.write_text(".PHONY: ghost\ndelegate-ghost: ghost\n")
+        targets = _extract_makefile_targets(makefile)
+        assert "delegate-ghost" not in targets
+        assert "ghost" not in targets
+
+    def test_recursive_make_delegation_never_dry_run(self, tmp_path: Path) -> None:
+        """
+        Delegation through a $(MAKE) recipe is effective and never dry-run.
+
+        GNU make executes $(MAKE) recipe lines even under --dry-run, so the
+        observer must classify such targets from the database alone.  A real
+        side effect would appear if the target were dry-run, proving the
+        deterministic-observation bound holds.
+        """
+        makefile = tmp_path / "Makefile"
+        marker = tmp_path / "marker.txt"
+        makefile.write_text(
+            "delegate: recursive\n"
+            "recursive:\n"
+            "\t$(MAKE) touch-side-effect\n"
+            "touch-side-effect:\n"
+            f"\ttouch {marker}\n"
+        )
+        targets = _extract_makefile_targets(makefile)
+        assert "delegate" in targets
+        assert "recursive" in targets
+        assert not marker.exists(), "dry-run executed a $(MAKE) recipe line for real"
+
+    def test_malformed_makefile_raises(self, tmp_path: Path) -> None:
+        """A Makefile GNU make cannot parse fails hard (exit-2 contract)."""
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("VALUE := $(UNTERMINATED\n")
+        with pytest.raises(SchemaValidationError, match="unterminated"):
+            _extract_makefile_targets(makefile)
+
+    def test_missing_separator_raises(self, tmp_path: Path) -> None:
+        """A tab-indented line before any target fails hard."""
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("\techo stray\n")
+        with pytest.raises(SchemaValidationError, match="missing separator|commences before"):
+            _extract_makefile_targets(makefile)
+
+    def test_missing_makefile_raises(self, tmp_path: Path) -> None:
+        """A nonexistent Makefile path fails hard."""
+        missing = tmp_path / "nope" / "Makefile"
+        with pytest.raises(SchemaValidationError, match="not found"):
+            _extract_makefile_targets(missing)
+
+    def test_timeout_fails_hard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A make observation that exceeds the timeout bound fails hard."""
+        import scripts.check_gate_parity as parity
+
+        monkeypatch.setattr(parity, "_MAKE_TIMEOUT_SECONDS", 0.5)
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("SLOW := $(shell sleep 5)\ntarget:\n\techo ok\n")
+        with pytest.raises(SchemaValidationError, match="timeout"):
+            _extract_makefile_targets(makefile)
+
+    def test_output_overrun_fails_hard(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A make observation that exceeds the output bound fails hard."""
+        import scripts.check_gate_parity as parity
+
+        # The real Makefile database is tens of KB; a tiny bound must trip.
+        monkeypatch.setattr(parity, "_MAKE_MAX_OUTPUT_BYTES", 64)
+        with pytest.raises(SchemaValidationError, match="output bound"):
+            _extract_makefile_targets(REPO_ROOT / "Makefile")
+
+
+class TestCanonicalMakefileInput:
+    """Canonical in-repo Makefile security checks (SA128a)."""
+
+    def test_real_makefile_accepted(self) -> None:
+        """The repository Makefile passes the canonical input check."""
+        _assert_canonical_makefile_input(REPO_ROOT / "Makefile")  # no exception
+
+    def test_symlink_rejected(self, tmp_path: Path) -> None:
+        """A symlinked Makefile is a security-boundary violation."""
+        target = tmp_path / "real_makefile.txt"
+        target.write_text("target:\n\techo hi\n", encoding="utf-8")
+        link = tmp_path / "Makefile"
+        link.symlink_to(target)
+        with pytest.raises(SchemaValidationError, match="symlink"):
+            _assert_canonical_makefile_input(link)
+
+    def test_missing_rejected(self, tmp_path: Path) -> None:
+        """A missing canonical Makefile raises FileNotFoundError (FILE_NOT_FOUND)."""
+        missing = tmp_path / "Makefile"
+        with pytest.raises(FileNotFoundError):
+            _assert_canonical_makefile_input(missing)
+
+
+# =========================================================================
+# SA128a F-001/F-002 — check aggregation membership (real check target)
+# =========================================================================
+
+
+def _write_make_fixture(
+    tmp_path: Path,
+    makefile: str,
+    extra: dict[str, str] | None = None,
+) -> Path:
+    """Write a Makefile fixture (plus optional include fragments) and return its path."""
+    path = tmp_path / "Makefile"
+    path.write_text(makefile, encoding="utf-8")
+    for name, content in (extra or {}).items():
+        (tmp_path / name).write_text(content, encoding="utf-8")
+    return path
+
+
+class TestCheckAggregationMembership:
+    """Effective membership is derived through the real check target (F-001)."""
+
+    def test_prereq_delegated_check_member_present(self, tmp_path: Path) -> None:
+        """A gate aggregated as a check prerequisite is a member."""
+        path = _write_make_fixture(tmp_path, "check: check-a\ncheck-a:\n\t@echo A\n")
+        members = _extract_check_members(path)
+        assert "check-a" in members
+        assert "check" in members
+
+    def test_recursive_make_recipe_member_present(self, tmp_path: Path) -> None:
+        """A gate invoked through $(MAKE) in the check recipe is a member."""
+        path = _write_make_fixture(tmp_path, "check:\n\t$(MAKE) check-a\ncheck-a:\n\t@echo A\n")
+        members = _extract_check_members(path)
+        assert "check-a" in members
+
+    def test_variable_composed_prereq_member_present(self, tmp_path: Path) -> None:
+        """A variable-composed prerequisite resolves to a concrete member."""
+        path = _write_make_fixture(
+            tmp_path,
+            "SUFFIX := core-compat\ncheck: check-$(SUFFIX)\ncheck-core-compat:\n\t@echo gate\n",
+        )
+        members = _extract_check_members(path)
+        assert "check-core-compat" in members
+
+    def test_variable_composed_recipe_goal_present(self, tmp_path: Path) -> None:
+        """A $(MAKE) goal composed from make variables resolves to a member."""
+        path = _write_make_fixture(
+            tmp_path,
+            "SUFFIX := core-compat\nREC := check-$(SUFFIX)\n"
+            "check:\n\t$(MAKE) $(REC)\ncheck-core-compat:\n\t@echo gate\n",
+        )
+        members = _extract_check_members(path)
+        assert "check-core-compat" in members
+
+    def test_delegation_chain_reaches_member(self, tmp_path: Path) -> None:
+        """Membership is transitive through the prerequisite closure."""
+        path = _write_make_fixture(tmp_path, "check: all\nall: check-a\ncheck-a:\n\t@echo A\n")
+        members = _extract_check_members(path)
+        assert "all" in members
+        assert "check-a" in members
+
+    def test_standalone_recipe_owner_removed_from_check_absent(self, tmp_path: Path) -> None:
+        """A recipe-owning gate removed from check is NOT a member (F-001)."""
+        path = _write_make_fixture(
+            tmp_path, "check: check-a\ncheck-a:\n\t@echo A\ncheck-b:\n\t@echo B\n"
+        )
+        members = _extract_check_members(path)
+        assert "check-a" in members
+        assert "check-b" not in members
+
+    def test_makefile_without_check_root_yields_empty_members(self, tmp_path: Path) -> None:
+        """No check target means nothing is a check member (fail-closed)."""
+        path = _write_make_fixture(tmp_path, "check-a:\n\t@echo A\n")
+        members = _extract_check_members(path)
+        assert members == set()
+
+    def test_include_fixture_members_present(self, tmp_path: Path) -> None:
+        """Check members defined in an included fragment are present (F-002)."""
+        path = _write_make_fixture(
+            tmp_path,
+            "include gates.mk\ncheck:\n\t$(MAKE) check-included\n",
+            {"gates.mk": "check-included:\n\t@echo included\n"},
+        )
+        members = _extract_check_members(path)
+        assert "check-included" in members
+
+
+class TestIncludeFailHard:
+    """Missing/malformed includes fail hard with named errors (F-002)."""
+
+    def test_missing_include_fails_hard_named(self, tmp_path: Path) -> None:
+        """A missing included file makes observation fail hard naming the file."""
+        path = _write_make_fixture(tmp_path, "include missing.mk\ncheck:\n\t@echo ok\n")
+        with pytest.raises(SchemaValidationError, match="missing.mk"):
+            _extract_check_members(path)
+
+    def test_malformed_include_fails_hard_named(self, tmp_path: Path) -> None:
+        """A malformed included fragment fails hard naming the file."""
+        path = _write_make_fixture(
+            tmp_path,
+            "include gates.mk\ncheck:\n\t@echo ok\n",
+            {"gates.mk": "$(UNTERMINATED\n"},
+        )
+        with pytest.raises(SchemaValidationError, match="gates.mk"):
+            _extract_check_members(path)
+
+
+class TestRealCheckMembership:
+    """The repository Makefile's check aggregation invariant (F-001)."""
+
+    def test_five_conformance_gates_are_check_members(self) -> None:
+        """All five conformance gates are reachable from the real check target."""
+        members = _extract_check_members(REPO_ROOT / "Makefile")
+        for target in CONFORMANCE_MAKE_TARGETS:
+            assert target in members, f"Expected {target} in check members"
+
+    def test_standalone_targets_absent_from_check(self) -> None:
+        """Standalone gates not wired into check are absent (F-001 false-green)."""
+        members = _extract_check_members(REPO_ROOT / "Makefile")
+        assert "frontend-proof" not in members
+        assert "smoke-install" not in members
+        assert "check-gate-parity" not in members

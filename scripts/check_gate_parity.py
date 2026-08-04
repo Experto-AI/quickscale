@@ -22,17 +22,38 @@ One JSON object per line (JSONL).  Each diagnostic record carries:
   ``gate_id``   — the gate identifier
   ``source``    — the source file path
   ``detail``    — human-readable explanation
+
+SA128a
+------
+The Makefile context is observed through GNU Make's own semantics instead of
+regex text extraction: ``make -qp`` supplies the resolved target/recipe
+database and ``make --dry-run`` proves pure-delegation / check-aggregation
+targets.  Observation runs in a controlled environment with a hard timeout,
+an output byte bound, and process-group cleanup; a malformed Makefile fails
+hard (exit 2).
+
+Check-gate membership is derived through the real ``check`` target: the
+``make -qp`` database is walked from ``check`` through resolved prerequisites
+and ``$(MAKE)`` recipe goals, so a standalone recipe-owning gate that is
+removed from ``check`` no longer satisfies the registry — global target
+effectiveness is not check aggregation.  Missing or malformed ``include``
+files fail hard with the named file (exit 2).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import selectors
+import signal
+import subprocess
 import sys
+import time
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 try:
     import yaml as _yaml
@@ -563,102 +584,580 @@ def _parse_yaml_strict(raw: str, label: str = "workflow") -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Makefile target+recipe extraction
+# Makefile semantic observation (SA128a)
 # ---------------------------------------------------------------------------
+#
+# Gate make_target presence is derived from GNU Make's own semantics instead
+# of regex-parsing Makefile text:
+#
+#   * ``make -qp`` prints the authoritative target database with every
+#     variable-composed target name already resolved and every recipe
+#     attributed to its owner.
+#   * ``make --dry-run <target>`` prints the commands that would actually run
+#     for a target, which proves pure-delegation / check-aggregation targets
+#     (no recipe of their own) are effective.
+#   * Check-gate membership is derived through the real ``check`` target:
+#     the database is walked from ``check`` through resolved prerequisites
+#     and ``$(MAKE)`` recipe goals.  A standalone recipe-owning gate that is
+#     removed from ``check`` is absent — global target effectiveness is not
+#     check aggregation.  ``include`` resolution is part of the same
+#     observation: included files' targets appear in the database, and a
+#     missing or malformed include makes GNU make exit 2 (fail hard, named).
+#
+# Observation is bounded: a controlled environment (no inherited
+# MAKEFLAGS/jobserver), a hard timeout, an output byte bound, and process-
+# group cleanup keep the observation deterministic.  GNU make exit codes
+# discriminate malformed input (>= 2) from a valid database (0/1), and a
+# malformed Makefile fails hard with ``SchemaValidationError`` (exit 2).
+
+_MAKE_TIMEOUT_SECONDS = 30.0
+_MAKE_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+_MAKE_ERROR_DETAIL_BYTES = 400
+
+_MAKE_VARIABLES_HEADER = "\n# Variables"
+_MAKE_VARIABLE_LINE_RE = re.compile(r"^([A-Za-z0-9_.-]+)\s*(:=|=|\?=|\+=|!=|::=)\s*(.*)$")
+_MAKE_VAR_REF_RE = re.compile(r"(?<!\$)\$\(([^()]+)\)|(?<!\$)\$\{([^{}]+)\}")
+_MAKE_RECURSIVE_MAKE_RE = re.compile(r"(?<!\$)\$\(MAKE\)|(?<!\$)\$\{MAKE\}")
+# Shell metacharacters that end a goal run on a ``$(MAKE)`` recipe line.
+# ``$`` and ``(``/``)`` are deliberately absent: make variable references
+# such as ``$(GATES)`` legitimately contain them and resolve to goal text.
+_MAKE_GOAL_STOP_RE = re.compile(r'[|&;<>{}`"\'#=:!?*\[\]~\\]')
+# GNU make options that consume a following argument (defensive goal parsing).
+_MAKE_ARG_TAKING_OPTIONS: frozenset[str] = frozenset(
+    {
+        "-C",
+        "-f",
+        "-I",
+        "-o",
+        "-W",
+        "--directory",
+        "--file",
+        "--include-dir",
+        "--old-file",
+        "--assume-old",
+        "--new-file",
+        "--assume-new",
+    }
+)
+_MAKE_EXPANSION_PASSES = 10
+
+
+class _MakeOutputError(RuntimeError):
+    """GNU make produced more output than the observation bound allows."""
+
+
+class _MakeTargetRecord:
+    """One target record parsed from the ``make -qp`` database."""
+
+    __slots__ = ("has_commands", "prereqs", "recipe_lines")
+
+    def __init__(self, prereqs: str) -> None:
+        self.has_commands = False
+        self.prereqs = prereqs
+        self.recipe_lines: list[str] = []
+
+
+class _MakeResult(NamedTuple):
+    """Bounded GNU make subprocess result (raw bytes)."""
+
+    returncode: int
+    stdout: bytes
+    stderr: bytes
+
+
+def _make_observation_env() -> dict[str, str]:
+    """
+    Return the controlled environment for GNU make observation.
+
+    Only the variables GNU make needs to parse the Makefile are passed.
+    ``MAKEFLAGS``/``MFLAGS``/``MAKELEVEL``/``GNUMAKEFLAGS`` from an enclosing
+    ``make`` run are deliberately not inherited, so the observed make cannot
+    join a parent jobserver or pick up parent flags — observation is
+    deterministic.
+    """
+    return {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": os.environ.get("HOME", "/tmp"),
+        "TMPDIR": os.environ.get("TMPDIR", "/tmp"),
+        "LANG": "C",
+        "LC_ALL": "C",
+    }
+
+
+def _kill_make_process_group(proc: subprocess.Popen[bytes]) -> None:
+    """Kill the observed make and its whole process group (``$(shell)`` children)."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+def _communicate_bounded(
+    proc: subprocess.Popen[bytes],
+    max_bytes: int,
+    timeout: float,
+) -> tuple[bytes, bytes]:
+    """
+    Read both pipes with a combined byte bound and a hard deadline.
+
+    Raises ``subprocess.TimeoutExpired`` when the process outlives *timeout*
+    and ``_MakeOutputError`` when combined output exceeds *max_bytes*.
+    """
+    assert proc.stdout is not None and proc.stderr is not None
+    deadline = time.monotonic() + timeout
+    selector = selectors.DefaultSelector()
+    out_sink = bytearray()
+    err_sink = bytearray()
+    selector.register(proc.stdout, selectors.EVENT_READ, out_sink)
+    selector.register(proc.stderr, selectors.EVENT_READ, err_sink)
+    total = 0
+
+    def drain(key: selectors.SelectorKey) -> None:
+        nonlocal total
+        sink: bytearray = key.data
+        fileobj = key.fileobj
+        while True:
+            if isinstance(fileobj, int):
+                chunk = os.read(fileobj, 65536)
+            else:
+                chunk = os.read(fileobj.fileno(), 65536)
+            if not chunk:
+                selector.unregister(fileobj)
+                return
+            sink.extend(chunk)
+            total += len(chunk)
+            if total > max_bytes:
+                raise _MakeOutputError(
+                    f"GNU make exceeded the {max_bytes} byte observation output bound"
+                )
+
+    try:
+        while selector.get_map():
+            if proc.poll() is not None:
+                # Process finished: drain remaining pipe data without a deadline.
+                for key in tuple(selector.get_map().values()):
+                    drain(key)
+                continue
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(proc.args, timeout)
+            for key, _ in selector.select(timeout=remaining):
+                drain(key)
+    finally:
+        selector.close()
+    return bytes(out_sink), bytes(err_sink)
+
+
+def _run_make(args: list[str], cwd: Path, label: str) -> _MakeResult:
+    """
+    Run GNU make with a controlled environment and hard observation bounds.
+
+    Raises ``SchemaValidationError`` when make cannot be started, exceeds the
+    timeout or output bound, or exits with a GNU make error code (>= 2) —
+    which for a query/dry-run invocation means the Makefile is malformed.
+    Exit codes 0 and 1 are valid database output (``-q`` returns 1 when the
+    default goal would need updating).
+    """
+    try:
+        proc = subprocess.Popen(
+            ["make", *args],
+            cwd=str(cwd),
+            env=_make_observation_env(),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except FileNotFoundError:
+        raise SchemaValidationError(label, "", "GNU make executable not found on PATH") from None
+    except OSError as exc:
+        raise SchemaValidationError(label, "", f"failed to start GNU make: {exc}") from None
+
+    try:
+        stdout, stderr = _communicate_bounded(proc, _MAKE_MAX_OUTPUT_BYTES, _MAKE_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        _kill_make_process_group(proc)
+        raise SchemaValidationError(
+            label, "", f"GNU make exceeded the {_MAKE_TIMEOUT_SECONDS:g}s observation timeout"
+        ) from None
+    except _MakeOutputError as exc:
+        _kill_make_process_group(proc)
+        raise SchemaValidationError(label, "", str(exc)) from None
+
+    returncode = proc.wait()
+    if returncode not in (0, 1):
+        detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
+        if detail:
+            detail = detail[:_MAKE_ERROR_DETAIL_BYTES]
+            message = f"GNU make exited with status {returncode}: {detail}"
+        else:
+            message = f"GNU make exited with status {returncode}"
+        raise SchemaValidationError(label, "", message)
+    return _MakeResult(returncode, stdout, stderr)
+
+
+_MAKE_DATABASE_HEADER_RE = re.compile(r"^([^\t#].*?):\s*(.*)$")
+
+
+def _parse_make_database(text: str, label: str) -> dict[str, _MakeTargetRecord]:
+    """
+    Parse ``make -qp`` output into per-target records.
+
+    Only the ``# Files`` section is parsed; variable definitions, implicit
+    rules, and hash-table statistics never appear there.  A record starts at
+    a column-0 ``name: [prereqs]`` line — GNU make has already resolved
+    variable-composed names, so the database carries concrete target names.
+    Recipe lines are tab-indented and stored raw so ``$(MAKE)`` recursion
+    hazards can be detected later.
+    """
+    files_idx = text.find("\n# Files")
+    if files_idx < 0:
+        raise SchemaValidationError(label, "", "GNU make database has no # Files section")
+    body = text[files_idx + len("\n# Files") :]
+    stats_idx = body.find("# files hash-table stats:")
+    if stats_idx >= 0:
+        body = body[:stats_idx]
+    records: dict[str, _MakeTargetRecord] = {}
+    current_names: tuple[str, ...] = ()
+    for line in body.splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        if line[0] in "\t ":
+            # Recipe line belonging to the current record (raw, unexpanded).
+            for name in current_names:
+                record = records[name]
+                record.has_commands = True
+                record.recipe_lines.append(line)
+            continue
+        match = _MAKE_DATABASE_HEADER_RE.match(line)
+        if not match:
+            continue
+        names = tuple(n for n in match.group(1).split() if n)
+        if not names:
+            continue
+        current_names = names
+        prereqs = match.group(2).strip()
+        for name in names:
+            records.setdefault(name, _MakeTargetRecord(prereqs))
+    return records
+
+
+def _is_observable_make_target(name: str) -> bool:
+    """
+    Return True when *name* is a concrete, user-invocable goal.
+
+    Special targets (``.PHONY``, ``.DEFAULT``, ...), pattern rules (containing
+    ``%``), and the makefile itself are not concrete goals.
+    """
+    return not name.startswith(".") and "%" not in name and name != "Makefile"
+
+
+def _parse_make_variables(text: str) -> dict[str, str]:
+    """
+    Parse ``make -qp`` variable definitions into a name -> value map.
+
+    Only the ``# Variables`` section is parsed; it ends where ``# Files``
+    begins.  Simple assignments (``:=``, ``=``, ``?=``, ``+=``, ``!=``,
+    ``::=``) are recorded in print order — makefile values print after
+    environment values, so they win.  Automatic variables, ``define`` blocks,
+    and other constructs are ignored: they are not needed to resolve goal
+    text.  Values are stored raw; ``_expand_make_refs`` resolves references.
+    """
+    variables: dict[str, str] = {}
+    start = text.find(_MAKE_VARIABLES_HEADER)
+    if start < 0:
+        return variables
+    body = text[start + len(_MAKE_VARIABLES_HEADER) :]
+    files_idx = body.find("\n# Files")
+    if files_idx >= 0:
+        body = body[:files_idx]
+    for line in body.splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        match = _MAKE_VARIABLE_LINE_RE.match(line)
+        if match is None:
+            continue
+        name = match.group(1)
+        op = match.group(2)
+        value = match.group(3)
+        if op == "+=":
+            prior = variables.get(name)
+            variables[name] = f"{prior} {value}" if prior is not None else value
+        else:
+            variables[name] = value
+    return variables
+
+
+def _expand_make_refs(value: str, variables: dict[str, str]) -> str:
+    """
+    Expand ``$(NAME)`` / ``${NAME}`` references from the make database.
+
+    GNU make prints immediately-expanded (``:=``) values already expanded and
+    recursive (``=``) values raw; a bounded number of passes resolves both,
+    including chains (``A = $(B)``, ``B = gate``).  Escaped dollars (``$$``)
+    are left untouched — they are shell variables inside recipe lines.
+    Unresolved references stay literal and are later rejected by the
+    concrete-goal filter.
+    """
+    for _ in range(_MAKE_EXPANSION_PASSES):
+
+        def _sub(match: re.Match[str]) -> str:
+            name = match.group(1) or match.group(2) or ""
+            return variables.get(name, match.group(0))
+
+        expanded = _MAKE_VAR_REF_RE.sub(_sub, value)
+        if expanded == value:
+            return expanded
+        value = expanded
+    return value
+
+
+def _is_concrete_goal_token(token: str) -> bool:
+    """
+    Return True when *token* is a concrete goal name.
+
+    A goal token must be an observable target name with no unresolved make
+    reference — a remaining ``$`` means the recipe's variable composition
+    could not be resolved from the database (e.g. a shell ``$$var``).
+    """
+    return _is_observable_make_target(token) and "$" not in token
+
+
+def _recursive_make_goals(line: str, variables: dict[str, str]) -> Iterator[str]:
+    """
+    Yield concrete goal names invoked by a ``$(MAKE)`` recipe line.
+
+    The text after ``$(MAKE)`` is tokenized; the goal run ends at the first
+    token containing a shell metacharacter or variable assignment (``|``,
+    ``&&``, redirections, ``SECTIONS=...``, ...).  GNU make options
+    (``-j4``, ``-C dir``, ...) are skipped; argument-taking options consume
+    their argument.  Each goal token is expanded against the make database
+    before it is yielded, so ``$(MAKE) $(GATES)`` resolves ``$(GATES)`` to
+    its concrete goal list.
+    """
+    match = _MAKE_RECURSIVE_MAKE_RE.search(line)
+    if match is None:
+        return
+    skip_next = False
+    for token in line[match.end() :].split():
+        if _MAKE_GOAL_STOP_RE.search(token):
+            break
+        if token.startswith("-"):
+            skip_next = token in _MAKE_ARG_TAKING_OPTIONS
+            continue
+        if skip_next:
+            skip_next = False
+            continue
+        for piece in _expand_make_refs(token, variables).split():
+            if piece and _is_concrete_goal_token(piece):
+                yield piece
+
+
+def _check_reachable_targets(
+    records: dict[str, _MakeTargetRecord],
+    variables: dict[str, str],
+    root: str = "check",
+) -> set[str]:
+    """
+    Return observable target names reachable from the check aggregation root.
+
+    Effective check membership is derived through GNU make's own database
+    semantics — never by regex over Makefile source text:
+
+      * prerequisite names come from the resolved ``make -qp`` records, so
+        variable-composed and included-file prerequisites are already
+        concrete;
+      * ``$(MAKE)`` goals in database-attributed recipe lines follow make's
+        own recursive-make semantics, so aggregation by recipe delegation is
+        observed, including goals composed from make variables.
+
+    A standalone recipe-owning target that is not reachable from *root* is
+    deliberately absent: global target effectiveness is not check aggregation.
+    When the Makefile defines no *root* target the result is empty
+    (fail-closed — nothing is a check member).
+    """
+    if root not in records:
+        return set()
+    reached: set[str] = set()
+    stack = [root]
+    while stack:
+        name = stack.pop()
+        if name in reached:
+            continue
+        reached.add(name)
+        record = records.get(name)
+        if record is None:
+            continue
+        for prereq in record.prereqs.split():
+            if _is_observable_make_target(prereq):
+                stack.append(prereq)
+        for line in record.recipe_lines:
+            stack.extend(_recursive_make_goals(line, variables))
+    return {name for name in reached if _is_observable_make_target(name)}
+
+
+def _closure_has_recursive_make(name: str, records: dict[str, _MakeTargetRecord]) -> bool:
+    """
+    Return True when invoking *name* would execute a ``$(MAKE)`` recipe line.
+
+    GNU make executes recipe lines containing ``$(MAKE)`` even under
+    ``--dry-run``, so dependency graphs containing them must never be
+    dry-run.  The check walks the prerequisite closure and inspects raw
+    (unexpanded) recipe text from the database.
+    """
+    seen: set[str] = set()
+    stack = [name]
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        record = records.get(current)
+        if record is None:
+            continue
+        if any("$(MAKE)" in line or "${MAKE}" in line for line in record.recipe_lines):
+            return True
+        stack.extend(record.prereqs.split())
+    return False
+
+
+def _dry_run_runs_commands(path: Path, target: str) -> bool:
+    """
+    Return True when GNU make's ``--dry-run`` for *target* would run a command.
+
+    A command-less (pure delegation / aggregation) target is effective iff
+    ``make --dry-run <target>`` prints at least one recipe line; make chatter
+    such as "Nothing to be done" does not count.
+    """
+    result = _run_make(
+        ["-n", "-r", "-R", "--no-print-directory", "-f", str(path), target],
+        path.parent,
+        str(path),
+    )
+    for line in result.stdout.decode("utf-8", errors="replace").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("make:") or stripped.startswith("make["):
+            continue
+        return True
+    return False
+
+
+def _effective_makefile_targets(path: Path, records: dict[str, _MakeTargetRecord]) -> set[str]:
+    """
+    Return effective targets: recipe owners plus runnable delegation targets.
+
+    Recipe-owning targets are effective by definition (the database proves
+    they own commands).  Command-less targets are proven by GNU make's own
+    ``--dry-run``; those whose dependency closure contains a ``$(MAKE)`` line
+    are effective by construction (invoking them runs the recursive make) and
+    are never dry-run, preserving the deterministic-observation bound.
+    """
+    effective: set[str] = set()
+    for name, record in records.items():
+        if not _is_observable_make_target(name):
+            continue
+        if record.has_commands:
+            effective.add(name)
+    for name, record in records.items():
+        if name in effective or not _is_observable_make_target(name):
+            continue
+        # Remaining records are command-less (observable command owners were
+        # already added above): decide effectiveness by dry-run or by the
+        # recursive-make closure, never both.
+        if _closure_has_recursive_make(name, records):
+            effective.add(name)
+        elif _dry_run_runs_commands(path, name):
+            effective.add(name)
+    return effective
+
+
+def _observe_makefile(path: Path) -> tuple[dict[str, _MakeTargetRecord], dict[str, str]]:
+    """
+    Observe the Makefile once through GNU make and return its parsed database.
+
+    Runs ``make -qp`` in the Makefile's directory with a controlled
+    environment, a hard timeout, an output byte bound, and process-group
+    cleanup, then parses the printed database into target records and
+    variable definitions.  Raises ``SchemaValidationError`` when the Makefile
+    is malformed — GNU make exits 2 (which includes missing/malformed
+    ``include`` files) — or when make is unavailable, times out, or exceeds
+    the output bound.
+    """
+    if not path.exists():
+        raise SchemaValidationError(str(path), "", "Makefile not found")
+    if not path.is_file():
+        raise SchemaValidationError(str(path), "", "Makefile is not a regular file")
+    result = _run_make(
+        ["-qp", "-r", "-R", "--no-print-directory", "-f", str(path)],
+        path.parent,
+        str(path),
+    )
+    text = result.stdout.decode("utf-8", errors="replace")
+    records = _parse_make_database(text, str(path))
+    variables = _parse_make_variables(text)
+    return records, variables
 
 
 def _extract_makefile_targets(path: Path) -> set[str]:
     """
-    Extract all Makefile target names that have an actual definition+recipe.
+    Observe the Makefile through GNU make's own semantics (SA128a).
 
-    Parses the Makefile looking for lines that match ``<target>:`` (optionally
-    with prerequisites) on their own as a target definition line, where a
-    subsequent line (non-comment, non-empty) provides a recipe.  Both explicit
-    ``.PHONY`` targeting and bare target definitions count — a target is
-    considered present when it appears as a defined target name with an actual
-    recipe, regardless of ``.PHONY``.
+    Targets that own a recipe are present; command-less targets (pure
+    delegation / check aggregation) are present only when GNU make's
+    ``--dry-run`` shows they would run at least one command.
+    Variable-composed target names are resolved by GNU make itself, so
+    ``check-$(SUFFIX)`` is observed as its concrete name.
 
-    Raises ``SchemaValidationError`` when the Makefile cannot be parsed.
+    Raises ``SchemaValidationError`` when the Makefile is malformed — GNU
+    make exits 2 — or when make is unavailable, times out, or exceeds the
+    output bound.
     """
-    text = path.read_text(encoding="utf-8")
+    records, _ = _observe_makefile(path)
+    return _effective_makefile_targets(path, records)
 
-    # Find all target declaration lines and their recipe status.
-    # A target line matches ``^<target>:`` (an identifier at the start of a line).
-    # A target is considered to have a recipe when at least one subsequent line
-    # that is not a comment, not empty, and not a variable assignment, provides
-    # recipe content (starts with a tab or contains a shell command keyword).
-    targets: set[str] = set()
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
-        # Skip comments, empty, and variable assignments
-        if not stripped or stripped.startswith("#") or "=" in stripped.split("#")[0]:
-            i += 1
-            continue
-        # Check for target definition: line that starts with word-char and contains :
-        # Must start in column 0 (no leading whitespace for a target definition)
-        # But Make allows targets to start with non-whitespace only.
-        # Pattern: ``target[: ...]`` at start of line or after tab.
-        target_match = re.match(r"^([a-zA-Z_][a-zA-Z0-9_.\-]*)\s*:", stripped)
-        if not target_match:
-            # Could be a recipe line (starts with tab) — skip
-            i += 1
-            continue
 
-        target_name = target_match.group(1)
+def _extract_check_members(path: Path) -> set[str]:
+    """
+    Return the targets reachable from the real ``check`` target (F-001).
 
-        # Skip pattern rules (contain %)
-        if "%" in target_name:
-            i += 1
-            continue
+    The Makefile is observed once through GNU make (``_observe_makefile``) and
+    the database is walked from ``check`` through resolved prerequisites and
+    ``$(MAKE)`` recipe goals (``_check_reachable_targets``).  A standalone
+    recipe-owning gate that is removed from ``check`` is absent — global
+    target effectiveness is not check aggregation.
 
-        # Skip .PHONY, .ONESHELL, .SILENT, .DEFAULT, .POSIX etc.
-        if target_name.startswith("."):
-            i += 1
-            continue
+    Raises ``SchemaValidationError`` when the Makefile is malformed — GNU
+    make exits 2, which includes missing/malformed ``include`` files — or
+    when make is unavailable, times out, or exceeds the output bound.
+    """
+    records, variables = _observe_makefile(path)
+    return _check_reachable_targets(records, variables)
 
-        # Check if there is a recipe on a subsequent line (tab-indented)
-        has_recipe = False
-        j = i + 1
-        while j < len(lines):
-            next_line = lines[j]
-            # A recipe line starts with a tab
-            if next_line.startswith("\t") and next_line.strip():
-                has_recipe = True
-                break
-            # A comment or blank line is a break — but some recipes have
-            # blank-line / comment separators.  Check if the next line is
-            # a new target definition instead.
-            next_stripped = next_line.strip()
-            if not next_stripped or next_stripped.startswith("#"):
-                j += 1
-                continue
-            # If the next line is a new target at column 0, stop looking
-            if re.match(r"^[a-zA-Z_]", next_stripped) and ":" in next_stripped.split("#")[0]:
-                break
-            # If the line is a variable assignment or include directive, skip
-            if "=" in next_stripped.split("#")[0] or next_stripped.startswith("include"):
-                j += 1
-                continue
-            # Anything else that's not tab-indented means no recipe
-            if not next_line.startswith("\t"):
-                break
-            j += 1
 
-        if has_recipe:
-            targets.add(target_name)
+def _assert_canonical_makefile_input(path: Path) -> None:
+    """
+    Fail hard when the canonical Makefile input is not a plain in-repo file.
 
-        i += 1
-
-    # NOTE: .PHONY declarations are intentionally NOT used as evidence of
-    # target existence.  A gate's make_target must have an actual recipe
-    # (tab-indented command lines) to be considered present.  .PHONY-only
-    # targets without a recipe are treated as absent, which forces explicit
-    # recipe definitions for every declared binding.
-
-    return targets
+    The parity checker hands the Makefile to GNU make for semantic
+    observation, so the canonical input must be a regular, non-symlink file
+    inside the repository.  Anything else is a security-boundary violation —
+    a symlink could redirect observation (and make's ``$(shell)`` expansion)
+    outside the repository.
+    """
+    if path.is_symlink():
+        raise SchemaValidationError(str(path), "", "Makefile must not be a symlink")
+    try:
+        resolved = path.resolve(strict=True)
+    except FileNotFoundError:
+        raise FileNotFoundError(path) from None
+    if not resolved.is_file():
+        raise SchemaValidationError(str(path), "", "Makefile is not a regular file")
+    if not resolved.is_relative_to(_REPO_ROOT.resolve()):
+        raise SchemaValidationError(str(path), "", "Makefile must reside inside the repository")
 
 
 def _iter_significant_lines(text: str, start: int, end: int) -> Iterator[str]:
@@ -1047,6 +1546,9 @@ def _extract_e2e_trigger_paths(path: Path) -> list[str]:
                 continue
 
         if in_paths:
+            # ``in_paths`` is only ever set together with ``paths_indent``, so
+            # this assert is a pure type-narrowing no-op (SA128a mypy fix).
+            assert paths_indent is not None
             # Path items are indented deeper than paths:
             if stripped.startswith("- ") and col > paths_indent:
                 path_entry = stripped[2:].strip().strip("'\"")
@@ -1159,14 +1661,60 @@ def _compare(
     diagnostics: list[_Diagnostic] = []
 
     # --- Makefile target validation -----------------------------------------
-    # Every gate's make_target must exist as a defined Makefile target with
-    # an actual recipe (tab-indented commands) or be declared in .PHONY.
-    makefile_targets = _extract_makefile_targets(_MAKEFILE_PATH)
+    # Every gate's make_target must be an effective Makefile target.  For
+    # check gates (make_targets named ``check-*``) effectiveness means
+    # membership in the real ``check`` aggregation: the target must be
+    # reachable from ``check`` through GNU make's own database semantics —
+    # resolved prerequisites and ``$(MAKE)`` recipe goals — and must itself
+    # be effective (own a recipe or prove runnable under ``--dry-run``).  A
+    # standalone recipe-owning gate that was removed from ``check`` is
+    # deliberately absent: global target effectiveness is not check
+    # aggregation.  Non-check gates (``frontend-proof``, ``smoke-install``)
+    # are standalone gates gated by their own contexts, so their Makefile
+    # requirement is plain effectiveness.
+    # Observation executes the Makefile through GNU make, so the canonical
+    # input must first pass the plain in-repo file check (fail-hard).
+    _assert_canonical_makefile_input(_MAKEFILE_PATH)
+    records, variables = _observe_makefile(_MAKEFILE_PATH)
+    makefile_effective = _effective_makefile_targets(_MAKEFILE_PATH, records)
+    check_members = _check_reachable_targets(records, variables)
     for gate in registry_gates:
         gid = gate["id"]
         bindings = gate.get("bindings", {})
         mt = bindings.get("make_target")
-        if mt and isinstance(mt, str) and mt not in makefile_targets:
+        if not (mt and isinstance(mt, str)):
+            continue
+        if mt.startswith("check-"):
+            if mt not in check_members:
+                diagnostics.append(
+                    {
+                        "level": "missing",
+                        "context": "makefile",
+                        "gate_id": gid,
+                        "source": "Makefile",
+                        "detail": (
+                            f"Gate {gid!r} declares check make_target {mt!r} "
+                            f"but that target is not reachable from the check "
+                            f"target (not a member of the check aggregation)"
+                        ),
+                    }
+                )
+            elif mt not in makefile_effective:
+                diagnostics.append(
+                    {
+                        "level": "missing",
+                        "context": "makefile",
+                        "gate_id": gid,
+                        "source": "Makefile",
+                        "detail": (
+                            f"Gate {gid!r} declares check make_target {mt!r} "
+                            f"which is reachable from check but is not an "
+                            f"effective target (no recipe and no runnable "
+                            f"delegation)"
+                        ),
+                    }
+                )
+        elif mt not in makefile_effective:
             diagnostics.append(
                 {
                     "level": "missing",
@@ -1175,7 +1723,8 @@ def _compare(
                     "source": "Makefile",
                     "detail": (
                         f"Gate {gid!r} declares make_target {mt!r} "
-                        f"but that target is not defined with a recipe in the Makefile"
+                        f"but that target is not an effective Makefile target "
+                        f"(no recipe and no runnable delegation)"
                     ),
                 }
             )
