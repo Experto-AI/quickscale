@@ -548,11 +548,6 @@ def _load_registry(path: Path) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Source extraction helpers
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # YAML safe loading with duplicate-key rejection
 # ---------------------------------------------------------------------------
 
@@ -1489,6 +1484,7 @@ def _run_bash_observation(
     path: Path,
     function_name: str,
     recorder_fail_target: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> list[tuple[str, ...]]:
     """Execute a local CI function and return exact recorder argv frames."""
     if not path.exists():
@@ -1536,6 +1532,8 @@ def _run_bash_observation(
         (temp_dir / "wait.log").touch()
         if recorder_fail_target is not None:
             env["SA128_RECORDER_FAIL_TARGET"] = recorder_fail_target
+        if extra_env:
+            env.update(extra_env)
         harness = _shell_observation_harness(path, function_name)
         try:
             proc = subprocess.Popen(
@@ -1701,44 +1699,115 @@ def _extract_ci_job_names(path: Path) -> set[str]:
     Raises ``SchemaValidationError`` when the file is malformed, unreadable,
     or contains duplicate YAML keys (caller should treat this as exit 2).
     """
-    text = path.read_text(encoding="utf-8")
-    data = _parse_yaml_strict(text, str(path))
-
-    if not isinstance(data, dict):
-        raise SchemaValidationError(str(path), "", "workflow must be a YAML mapping")
-
-    if "jobs" not in data:
-        raise SchemaValidationError(str(path), "", "workflow has no jobs section")
-
-    jobs_raw = data["jobs"]
-    if not isinstance(jobs_raw, dict):
-        raise SchemaValidationError(str(path), "jobs", "jobs must be a mapping")
-
-    # Metadata keys that appear at the same indentation level as jobs in GHA
-    # workflows.  The GHA spec allows arbitrary job names, so we use a
-    # known-metadata set to filter non-job entries.
-    gha_meta = frozenset(
-        {
-            "on",
-            "name",
-            "env",
-            "defaults",
-            "concurrency",
-            "permissions",
-            "timeout-minutes",
-            "continue-on-error",
-        }
-    )
-
+    jobs_raw = _workflow_jobs(path)
     jobs: set[str] = set()
     for key, value in jobs_raw.items():
-        if isinstance(key, str) and key not in gha_meta:
-            # A job is a mapping with runs-on and/or steps
-            if isinstance(value, dict) and ("runs-on" in value or "steps" in value):
+        if isinstance(key, str) and isinstance(value, dict):
+            # A job is a mapping with runs-on and/or steps.  Reusable-workflow
+            # references and other YAML mappings are deliberately excluded.
+            if "runs-on" in value or "steps" in value:
                 jobs.add(key)
-            # A job can also be a template reference (uses/matrix/include)
-            # but those are not gate jobs — skip.
     return jobs
+
+
+def _workflow_jobs(path: Path) -> dict[Any, Any]:
+    """Load a workflow and return its structurally parsed ``jobs`` mapping."""
+    text = path.read_text(encoding="utf-8")
+    data = _parse_yaml_strict(text, str(path))
+    jobs_raw = data.get("jobs")
+    if not isinstance(jobs_raw, dict):
+        if "jobs" not in data:
+            raise SchemaValidationError(str(path), "", "workflow has no jobs section")
+        raise SchemaValidationError(str(path), "jobs", "jobs must be a mapping")
+    return jobs_raw
+
+
+def _workflow_job_steps(path: Path, job_name: str, job_value: Any) -> list[dict[Any, Any]]:
+    """Return a workflow job's steps after validating its structural shape."""
+    if not isinstance(job_value, dict):
+        raise SchemaValidationError(str(path), f"jobs.{job_name}", "job must be a mapping")
+    steps = job_value.get("steps", [])
+    if not isinstance(steps, list):
+        raise SchemaValidationError(str(path), f"jobs.{job_name}.steps", "steps must be a list")
+    validated: list[dict[Any, Any]] = []
+    for index, step in enumerate(steps):
+        if not isinstance(step, dict):
+            raise SchemaValidationError(
+                str(path), f"jobs.{job_name}.steps[{index}]", "step must be a mapping"
+            )
+        run_value = step.get("run")
+        if "run" in step and not isinstance(run_value, str):
+            raise SchemaValidationError(
+                str(path), f"jobs.{job_name}.steps[{index}].run", "run must be a string"
+            )
+        validated.append(step)
+    return validated
+
+
+def _extract_ci_needs(path: Path) -> dict[str, tuple[str, ...]]:
+    """Extract the complete hosted job dependency topology from YAML."""
+    jobs_raw = _workflow_jobs(path)
+    job_names = {
+        key
+        for key, value in jobs_raw.items()
+        if isinstance(key, str)
+        and isinstance(value, dict)
+        and ("runs-on" in value or "steps" in value)
+    }
+    topology: dict[str, tuple[str, ...]] = {}
+    for job_name in sorted(job_names):
+        job_value = jobs_raw[job_name]
+        assert isinstance(job_value, dict)
+        needs = job_value.get("needs", [])
+        if isinstance(needs, str):
+            needs_values = (needs,)
+        elif isinstance(needs, list) and all(isinstance(item, str) for item in needs):
+            needs_values = tuple(needs)
+        else:
+            raise SchemaValidationError(
+                str(path), f"jobs.{job_name}.needs", "needs must be a string or list of strings"
+            )
+        unknown = set(needs_values) - job_names
+        if unknown:
+            raise SchemaValidationError(
+                str(path),
+                f"jobs.{job_name}.needs",
+                f"needs unknown job(s): {', '.join(sorted(unknown))}",
+            )
+        topology[job_name] = needs_values
+    return topology
+
+
+def _extract_ci_run_values(
+    path: Path, bound_jobs: set[str] | None = None
+) -> dict[str, tuple[str, ...]]:
+    """
+    Extract ordered ``run:`` values by job from a workflow's YAML tree.
+
+    ``bound_jobs`` narrows the result to registry-bound hosted jobs.  Keeping
+    the values grouped by job preserves both the workflow's stage topology and
+    the command order inside each job without interpreting shell-looking text.
+    """
+    jobs_raw = _workflow_jobs(path)
+    available_jobs = _extract_ci_job_names(path)
+    selected_jobs = available_jobs if bound_jobs is None else bound_jobs
+    unknown = selected_jobs - available_jobs
+    if unknown:
+        raise SchemaValidationError(
+            str(path), "jobs", f"bound job(s) are not workflow jobs: {', '.join(sorted(unknown))}"
+        )
+    values: dict[str, tuple[str, ...]] = {}
+    for job_name in sorted(selected_jobs):
+        steps = _workflow_job_steps(path, job_name, jobs_raw[job_name])
+        values[job_name] = tuple(step["run"] for step in steps if isinstance(step.get("run"), str))
+    return values
+
+
+def _extract_hosted_run_values(
+    path: Path, bound_jobs: set[str] | None = None
+) -> dict[str, tuple[str, ...]]:
+    """Alias naming the hosted-CI command observation explicitly."""
+    return _extract_ci_run_values(path, bound_jobs)
 
 
 def _extract_publish_gates(path: Path) -> set[str]:
@@ -1755,124 +1824,143 @@ def _extract_publish_gates(path: Path) -> set[str]:
     contains duplicate YAML keys, or contains ambiguous control-flow make
     invocations.
     """
-    text = path.read_text(encoding="utf-8")
-    data = _parse_yaml_strict(text, str(path))
-
-    if not isinstance(data, dict):
-        raise SchemaValidationError(str(path), "", "workflow must be a YAML mapping")
-
-    if "jobs" not in data:
-        raise SchemaValidationError(str(path), "", "workflow has no jobs section")
-
-    jobs_raw = data["jobs"]
-    if not isinstance(jobs_raw, dict):
-        raise SchemaValidationError(str(path), "jobs", "jobs must be a mapping")
-
-    gha_meta = frozenset(
-        {
-            "on",
-            "name",
-            "env",
-            "defaults",
-            "concurrency",
-            "permissions",
-            "timeout-minutes",
-            "continue-on-error",
-        }
-    )
-
+    jobs_raw = _workflow_jobs(path)
     gates: set[str] = set()
 
     for job_name, job_value in jobs_raw.items():
-        if not isinstance(job_name, str) or job_name in gha_meta:
+        if not isinstance(job_name, str):
             continue
-        if not isinstance(job_value, dict):
+        if not isinstance(job_value, dict) or not ("runs-on" in job_value or "steps" in job_value):
             continue
 
         # Add top-level job name as a gate identifier
         gates.add(job_name)
 
-        # Extract make <target> from steps[].run values
-        steps = job_value.get("steps")
-        if not isinstance(steps, list):
-            continue
-
-        for step in steps:
-            if not isinstance(step, dict):
-                continue
+        # Execute every run block through the SA128b recorder.  The recorder,
+        # rather than a source-text search, supplies the make argv inventory.
+        for step in _workflow_job_steps(path, job_name, job_value):
             run_value = step.get("run")
-            if not isinstance(run_value, str):
-                continue
+            if isinstance(run_value, str):
+                _validate_publish_run_block(run_value, path, job_name)
 
-            run_lines = run_value.splitlines()
-            for line_idx, line in enumerate(run_lines):
-                stripped = line.strip()
-                # Skip empty, comments, and echo-only lines
-                if not stripped or stripped.startswith("#") or stripped.startswith("echo"):
-                    continue
-
-                # Check for make invocations
-                for m in re.finditer(r"\bmake\s+([a-z][a-z0-9_-]+)", stripped):
-                    target = m.group(1)
-
-                    # Deceptive/control/wrapper detection:
-                    # A canonical standalone make line is:
-                    #   @?make <target> [args...]
-                    # with no shell control operators or conditional
-                    # keywords on the line or immediately preceding line.
-                    before_make = stripped[: m.start()].strip()
-                    after_target = stripped[m.end() :].split("#")[0].strip()
-
-                    # 1) Per-line check: shell control operators after
-                    #    make target (not redirects like >& 2>&1).
-                    if re.search(
-                        r"\|\||&&|[^>];|;\s*$|\|\s+[a-z]|&(?!>)\s*$|`|\$\(|subshell",
-                        after_target,
-                    ):
-                        raise SchemaValidationError(
-                            str(path),
-                            f"jobs.{job_name}",
-                            f"Deceptive/control make invocation in publish.yml: {stripped!r}",
-                        )
-
-                    # 2) Per-line check: control/conditional keywords
-                    #    before make (if/then/else/for/while/case/do).
-                    if re.search(
-                        r"\b(if|then|else|elif|for|while|case|do|done|esac|fi)\b",
-                        before_make,
-                    ):
-                        raise SchemaValidationError(
-                            str(path),
-                            f"jobs.{job_name}",
-                            f"Conditional/loop-wrapped make invocation: {stripped!r}",
-                        )
-
-                    # 3) Cross-line check: preceding line is part of a
-                    #    control structure (ends with |, &&, ||, then, do,
-                    #    else, or begins with if/for/while/case).
-                    if line_idx > 0:
-                        prev_line = run_lines[line_idx - 1].strip()
-                        if re.search(
-                            r"\b(if|for|while|case)\s",
-                            prev_line.split("#")[0],
-                        ) or prev_line.rstrip().endswith(
-                            ("|", "&&", "||", "then", "do", "else", "elif")
-                        ):
-                            raise SchemaValidationError(
-                                str(path),
-                                f"jobs.{job_name}",
-                                f"Make invocation inside control flow: "
-                                f"{stripped!r} (preceded by {prev_line!r})",
-                            )
-
-                    # Only include if this looks like a gate target
-                    if target.startswith("check-") or target in (
-                        "frontend-proof",
-                        "smoke-install",
-                    ):
-                        gates.add(target)
+    run_values = _extract_publish_run_values(path)
+    for invocation in _observe_publish_run_blocks(run_values, path):
+        for argument in invocation:
+            if _is_observed_shell_gate(argument):
+                gates.add(argument)
 
     return gates
+
+
+def _extract_publish_run_values(path: Path) -> list[tuple[str, str]]:
+    """Extract every publish ``run:`` value in workflow order."""
+    jobs_raw = _workflow_jobs(path)
+    values: list[tuple[str, str]] = []
+    for job_name, job_value in jobs_raw.items():
+        if not isinstance(job_name, str) or not isinstance(job_value, dict):
+            continue
+        if not ("runs-on" in job_value or "steps" in job_value):
+            continue
+        for step in _workflow_job_steps(path, job_name, job_value):
+            run_value = step.get("run")
+            if isinstance(run_value, str):
+                values.append((job_name, run_value))
+    return values
+
+
+_GITHUB_EXPRESSION_RE = re.compile(r"\$\{\{.*?\}\}", re.DOTALL)
+
+
+def _publish_observation_source(run_value: str) -> str:
+    """Wrap a workflow run block as a Bash function for recorder execution."""
+    # GitHub expands expressions before invoking Bash.  Replace expressions
+    # with an empty shell word for the local observation; the YAML value itself
+    # remains the canonical oracle returned by _extract_publish_run_values.
+    normalized = _GITHUB_EXPRESSION_RE.sub("''", run_value)
+    # GitHub's runner enables errexit for each block.  The observer must let
+    # unrelated, unavailable release tooling continue so it can reach and
+    # record every make invocation; the recorder itself still fails closed.
+    normalized = normalized.replace("set -euo pipefail", "set +e")
+    return f"run_publish_block() {{\n{normalized}\nreturn 0\n}}\n"
+
+
+def _observe_publish_run_blocks(
+    run_values: list[tuple[str, str]], path: Path
+) -> list[tuple[str, ...]]:
+    """Observe each publish run block in its own bounded SA128b session."""
+    invocations: list[tuple[str, ...]] = []
+    with tempfile.TemporaryDirectory(prefix="sa128c-publish-") as temp_name:
+        temp_dir = Path(temp_name)
+        scripts_dir = temp_dir / "scripts"
+        scripts_dir.mkdir()
+        for command in ("version_tool.sh", "provision_test_roles.sh", "test_integration.sh"):
+            stub = scripts_dir / command
+            stub.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            stub.chmod(0o700)
+        for index, (_, run_value) in enumerate(run_values):
+            source = temp_dir / f"publish_run_{index}.sh"
+            source.write_text(_publish_observation_source(run_value), encoding="utf-8")
+            try:
+                # _run_bash_observation creates a fresh recorder, Bash process,
+                # environment, and cwd for every workflow step.  Do not combine
+                # these functions: GitHub Actions starts each run block in a
+                # separate shell, so shell state must not cross step boundaries.
+                step_invocations = _run_bash_observation(
+                    source,
+                    "run_publish_block",
+                    extra_env={
+                        "GITHUB_WORKSPACE": str(_REPO_ROOT),
+                        "GITHUB_REF": "refs/tags/v0.0.0",
+                    },
+                )
+            except SchemaValidationError as exc:
+                raise SchemaValidationError(
+                    str(path),
+                    f"publish.step[{index}]",
+                    f"publish run observation failed: {exc.message}",
+                ) from exc
+            invocations.extend(step_invocations)
+    return invocations
+
+
+def _validate_publish_run_block(run_value: str, path: Path, job_name: str) -> None:
+    """
+    Reject shell control forms that make a publish gate ambiguous.
+
+    Gate membership itself is never inferred here.  This guard only rejects
+    control-flow forms that would make a recorder result non-canonical; the
+    actual argv inventory comes from Bash execution below.
+    """
+    run_lines = run_value.splitlines()
+    for line_index, line in enumerate(run_lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "make" not in stripped:
+            continue
+        before_make, _, after_make = stripped.partition("make")
+        after_target = after_make.split("#", 1)[0].strip()
+        if re.search(r"\|\||&&|[^>];|;\s*$|\|\s+[a-z]|&(?!>)\s*$|`|\$\(|subshell", after_target):
+            raise SchemaValidationError(
+                str(path),
+                f"jobs.{job_name}",
+                f"Deceptive/control make invocation in publish.yml: {stripped!r}",
+            )
+        if re.search(r"\b(if|then|else|elif|for|while|case|do|done|esac|fi)\b", before_make):
+            raise SchemaValidationError(
+                str(path),
+                f"jobs.{job_name}",
+                f"Conditional/loop-wrapped make invocation: {stripped!r}",
+            )
+        if line_index:
+            previous = run_lines[line_index - 1].strip()
+            previous_is_control = re.search(r"\b(if|for|while|case)\s", previous.split("#", 1)[0])
+            if previous_is_control or previous.rstrip().endswith(
+                ("|", "&&", "||", "then", "do", "else", "elif")
+            ):
+                raise SchemaValidationError(
+                    str(path),
+                    f"jobs.{job_name}",
+                    f"Make invocation inside control flow: {stripped!r} (preceded by {previous!r})",
+                )
 
 
 def _extract_e2e_trigger_paths(path: Path) -> list[str]:
@@ -1884,53 +1972,23 @@ def _extract_e2e_trigger_paths(path: Path) -> list[str]:
     tracking to avoid false exits from child keys like ``branches:``.
     """
     text = path.read_text(encoding="utf-8")
-
-    # Column (indent) of the pull_request: key
-    pr_indent: int | None = None
-    # Column of the paths: key
-    paths_indent: int | None = None
-    in_paths = False
+    data = _parse_yaml_strict(text, str(path))
+    trigger = data.get("on")
+    if not isinstance(trigger, dict):
+        raise SchemaValidationError(str(path), "on", "workflow trigger section must be a mapping")
+    pull_request = trigger.get("pull_request")
+    if not isinstance(pull_request, dict):
+        raise SchemaValidationError(str(path), "on.pull_request", "pull_request must be a mapping")
+    raw_paths = pull_request.get("paths")
+    if not isinstance(raw_paths, list):
+        raise SchemaValidationError(str(path), "on.pull_request.paths", "paths must be a list")
     paths: list[str] = []
-
-    for line in text.splitlines():
-        # Compute the leading whitespace column
-        raw_stripped = line.lstrip()
-        col = len(line) - len(raw_stripped)
-        stripped = raw_stripped
-
-        if stripped.startswith("#"):
-            continue
-
-        if stripped == "pull_request:" and pr_indent is None:
-            pr_indent = col
-            in_paths = False
-            continue
-
-        if pr_indent is not None and paths_indent is None:
-            if stripped == "paths:" and col > pr_indent:
-                paths_indent = col
-                in_paths = True
-                continue
-            # If we hit a key at the same indent as pull_request, we left the block
-            if col <= pr_indent and ":" in stripped:
-                pr_indent = None
-                continue
-
-        if in_paths:
-            # ``in_paths`` is only ever set together with ``paths_indent``, so
-            # this assert is a pure type-narrowing no-op (SA128a mypy fix).
-            assert paths_indent is not None
-            # Path items are indented deeper than paths:
-            if stripped.startswith("- ") and col > paths_indent:
-                path_entry = stripped[2:].strip().strip("'\"")
-                if path_entry:
-                    paths.append(path_entry)
-            elif col <= paths_indent:
-                # Left the paths block (line at or above paths: indent)
-                in_paths = False
-                # Also leave pull_request if at or above pr_indent
-                if pr_indent is not None and col <= pr_indent:
-                    pr_indent = None
+    for index, value in enumerate(raw_paths):
+        if not isinstance(value, str) or not value:
+            raise SchemaValidationError(
+                str(path), f"on.pull_request.paths[{index}]", "path must be a non-empty string"
+            )
+        paths.append(value)
     return paths
 
 
@@ -1991,7 +2049,12 @@ def _extract_gates_for_context(
         return {target_to_gate[t] for t in make_targets if t in target_to_gate}
 
     if context == "hosted":
+        # Parse all dependency edges and every command in registry-bound jobs
+        # before deriving membership.  This keeps hosted stage topology and
+        # command values on the same structural YAML path as job membership.
+        _extract_ci_needs(source)
         job_names = _extract_ci_job_names(source)
+        _extract_hosted_run_values(source, set(job_to_gate) & job_names)
         return {job_to_gate[j] for j in job_names if j in job_to_gate}
 
     if context == "publish":

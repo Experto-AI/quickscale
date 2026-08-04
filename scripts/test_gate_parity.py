@@ -21,18 +21,21 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-from scripts.check_gate_parity import (
+from check_gate_parity import (
     SchemaValidationError,
     _assert_canonical_makefile_input,
     _extract_check_ci_parallel_gates,
     _extract_check_ci_serial_gates,
     _extract_check_members,
     _extract_ci_job_names,
+    _extract_ci_needs,
     _extract_e2e_trigger_paths,
+    _extract_hosted_run_values,
     _extract_makefile_targets,
     _extract_publish_gates,
+    _extract_publish_run_values,
     _is_subsequence,
+    _observe_publish_run_blocks,
     _run_bash_observation,
     _validate_registry,
 )
@@ -865,7 +868,7 @@ class TestParserPrecision:
 
     def test_publish_structural_parsing_rejects_duplicate_yaml_keys(self, tmp_path: Path) -> None:
         """Duplicate YAML keys in publish.yml structure raise exit 2."""
-        from scripts.check_gate_parity import SchemaValidationError, _parse_yaml_strict
+        from check_gate_parity import SchemaValidationError, _parse_yaml_strict
 
         bad_yaml = tmp_path / "bad_publish.yml"
         bad_yaml.write_text(
@@ -883,6 +886,231 @@ class TestParserPrecision:
         )
         with pytest.raises(SchemaValidationError, match="Duplicate YAML key"):
             _parse_yaml_strict(bad_yaml.read_text(encoding="utf-8"), str(bad_yaml))
+
+    def test_hosted_needs_and_stage_topology_match_current_source(self) -> None:
+        """Hosted dependency edges are observed structurally and in order."""
+        assert _extract_ci_needs(CI_YML) == {
+            "backups-validation": (),
+            "csrf-exempt-gate": (),
+            "isolation-conformance": (
+                "backups-validation",
+                "module-manifest-contract",
+                "manifest-sync-gate",
+                "org-context-primitives-gate",
+                "csrf-exempt-gate",
+            ),
+            "lint-cli": (
+                "backups-validation",
+                "module-manifest-contract",
+                "manifest-sync-gate",
+                "org-context-primitives-gate",
+                "csrf-exempt-gate",
+            ),
+            "lint-frontend": (),
+            "manifest-sync-gate": (),
+            "module-core-compat": (),
+            "module-core-import-linter": (),
+            "module-manifest-contract": (),
+            "org-context-primitives-gate": (),
+            "test": (
+                "backups-validation",
+                "module-manifest-contract",
+                "module-core-compat",
+                "module-core-import-linter",
+                "manifest-sync-gate",
+                "org-context-primitives-gate",
+                "csrf-exempt-gate",
+            ),
+        }
+
+    def test_all_ten_bound_hosted_run_values_match_current_source(self) -> None:
+        """The five bound hosted jobs expose their ten exact run values."""
+        bound_jobs = {
+            "module-core-compat",
+            "module-core-import-linter",
+            "manifest-sync-gate",
+            "org-context-primitives-gate",
+            "csrf-exempt-gate",
+        }
+        assert _extract_hosted_run_values(CI_YML, bound_jobs) == {
+            "module-core-compat": ("poetry install --with dev\n", "make check-core-compat\n"),
+            "module-core-import-linter": (
+                "poetry install --with dev\n",
+                "make check-module-core-imports\n",
+            ),
+            "manifest-sync-gate": ("poetry install --with dev\n", "make check-manifest-sync\n"),
+            "org-context-primitives-gate": (
+                "poetry install --with dev\n",
+                "make check-org-context-primitives\n",
+            ),
+            "csrf-exempt-gate": ("poetry install --with dev\n", "make check-csrf-exempt\n"),
+        }
+
+    def test_all_sixteen_publish_run_values_are_structural(self) -> None:
+        """Every current publish run block matches the literal ordered oracle."""
+        values = _extract_publish_run_values(PUBLISH_YML)
+        assert values == [
+            (
+                "verify",
+                "TAG_VERSION=${GITHUB_REF#refs/tags/}\n"
+                "TAG_VERSION=${TAG_VERSION#v}\n"
+                'echo "version=$TAG_VERSION" >> $GITHUB_OUTPUT\n'
+                'echo "Tag version: $TAG_VERSION"\n',
+            ),
+            (
+                "verify",
+                "TAG_VERSION=${{ steps.get_version.outputs.version }}\n"
+                "FILE_VERSION=$(cat VERSION | tr -d '\\r' | sed -e 's/^\\s*//' -e "
+                "'s/\\s*$//')\n"
+                'if [[ "$FILE_VERSION" != "$TAG_VERSION" ]]; then\n'
+                '  echo "❌ Version mismatch!"\n'
+                '  echo "   VERSION file: $FILE_VERSION"\n'
+                '  echo "   Git tag: $TAG_VERSION"\n'
+                "  exit 1\n"
+                "fi\n"
+                'echo "✅ VERSION verified: $FILE_VERSION"\n',
+            ),
+            ("verify", "./scripts/version_tool.sh check\n"),
+            ("test", 'echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV'),
+            ("test", "poetry install --with dev\n"),
+            ("test", "make frontend-proof\n"),
+            ("test", "make smoke-install\n"),
+            ("test", "make lint -- --core --cli --modules --devtools\n"),
+            ("test", "make test-integration-worker-pool\n"),
+            ("test", "make typecheck -- --core --cli --modules --devtools\n"),
+            (
+                "test",
+                "sudo apt-get update -qq\n"
+                "sudo apt-get install -y -qq --no-install-recommends postgresql-client\n"
+                "for db in \\\n"
+                "  test_quickscale_smoke \\\n"
+                "  test_quickscale_analytics \\\n"
+                "  test_quickscale_auth \\\n"
+                "  test_quickscale_backups \\\n"
+                "  test_quickscale_billing \\\n"
+                "  test_quickscale_blog \\\n"
+                "  test_quickscale_crm \\\n"
+                "  test_quickscale_forms \\\n"
+                "  test_quickscale_listings \\\n"
+                "  test_quickscale_notifications \\\n"
+                "  test_quickscale_orgs \\\n"
+                "  test_quickscale_social \\\n"
+                "  test_quickscale_storage; do\n"
+                '  createdb -h localhost -U postgres "$db" 2>/dev/null || echo '
+                '"Database $db already exists"\n'
+                "done\n",
+            ),
+            (
+                "test",
+                "./scripts/provision_test_roles.sh\n"
+                "\n"
+                'ROLE="quickscale_test_role"\n'
+                "\n"
+                "# Grant ownership of all test databases to the restricted role so\n"
+                "# Django's test runner can create test_* databases from these templates.\n"
+                "for db in \\\n"
+                "test_quickscale_analytics \\\n"
+                "test_quickscale_auth \\\n"
+                "test_quickscale_backups \\\n"
+                "test_quickscale_billing \\\n"
+                "test_quickscale_blog \\\n"
+                "test_quickscale_crm \\\n"
+                "test_quickscale_forms \\\n"
+                "test_quickscale_listings \\\n"
+                "test_quickscale_notifications \\\n"
+                "test_quickscale_orgs \\\n"
+                "test_quickscale_social \\\n"
+                "test_quickscale_storage; do\n"
+                'psql -h localhost -U postgres -c "ALTER DATABASE \\"$db\\" OWNER TO '
+                '${ROLE};"\n'
+                '  psql -h localhost -U postgres -d "$db" -c "GRANT ALL ON SCHEMA public TO '
+                '${ROLE};"\n'
+                "done\n"
+                'echo "✓ Database ownership and schema permissions granted to ${ROLE}"\n',
+            ),
+            ("test", 'make test-unit SECTION="core cli"\n'),
+            ("test", "./scripts/test_integration.sh\n"),
+            (
+                "build",
+                "set -euo pipefail\n"
+                "\n"
+                'ROOT="$GITHUB_WORKSPACE"\n'
+                'BUILD_DIR="$ROOT/dist"\n'
+                'PACKAGES=("quickscale_core" "quickscale_cli" "quickscale")\n'
+                "\n"
+                'mkdir -p "$BUILD_DIR"\n'
+                "\n"
+                'for pkg in "${PACKAGES[@]}"; do\n'
+                '  pkg_dir="$ROOT/$pkg"\n'
+                '  pyproject="$pkg_dir/pyproject.toml"\n'
+                '  backup="$pkg_dir/pyproject.toml.backup"\n'
+                "  readme_copied=0\n"
+                "\n"
+                '  echo "Building $pkg..."\n'
+                "\n"
+                '  if [[ ! -f "$pyproject" ]]; then\n'
+                '    echo "pyproject.toml not found for $pkg"\n'
+                "    exit 1\n"
+                "  fi\n"
+                "\n"
+                '  cp "$pyproject" "$backup"\n'
+                "\n"
+                '  if [[ -f "$ROOT/README.md" ]] && [[ ! -f "$pkg_dir/README.md" ]]; then\n'
+                '    cp "$ROOT/README.md" "$pkg_dir/README.md"\n'
+                "    readme_copied=1\n"
+                "  fi\n"
+                "\n"
+                '  sed -i \'s|readme = "\\.\\./README\\.md"|readme = "README.md"|\' '
+                '"$pyproject"\n'
+                "\n"
+                '  if [[ "$pkg" == "quickscale_cli" ]]; then\n'
+                '    sed -i "s|quickscale-core = {path = '
+                '\\"../quickscale_core\\"[^}]*}|quickscale-core = \\"^${VERSION}\\"|" '
+                '"$pyproject"\n'
+                "  fi\n"
+                "\n"
+                '  if [[ "$pkg" == "quickscale" ]]; then\n'
+                '    sed -i "s|quickscale-core = {path = '
+                '\\"../quickscale_core\\"[^}]*}|quickscale-core = \\"^${VERSION}\\"|" '
+                '"$pyproject"\n'
+                '    sed -i "s|quickscale-cli = {path = '
+                '\\"../quickscale_cli\\"[^}]*}|quickscale-cli = \\"^${VERSION}\\"|" '
+                '"$pyproject"\n'
+                "  fi\n"
+                "\n"
+                '  rm -rf "$pkg_dir/dist"\n'
+                '  (cd "$pkg_dir" && poetry build)\n'
+                "\n"
+                '  cp "$pkg_dir"/dist/* "$BUILD_DIR"/\n'
+                "\n"
+                '  mv "$backup" "$pyproject"\n'
+                '  if [[ "$readme_copied" -eq 1 ]]; then\n'
+                '    rm -f "$pkg_dir/README.md"\n'
+                "  fi\n"
+                "done\n"
+                "\n"
+                'ls -la "$BUILD_DIR"\n',
+            ),
+            (
+                "create-release",
+                "VERSION=${{ needs.verify.outputs.version }}\n"
+                'CHANGELOG_LINE=$(grep -m1 -E "^- v?${VERSION}\\\\b" CHANGELOG.md || true)\n'
+                "\n"
+                'if [[ -n "$CHANGELOG_LINE" ]]; then\n'
+                '  echo "Release v$VERSION" > release_notes.md\n'
+                '  echo "" >> release_notes.md\n'
+                '  echo "$CHANGELOG_LINE" >> release_notes.md\n'
+                "else\n"
+                '  echo "Release v$VERSION" > release_notes.md\n'
+                '  echo "" >> release_notes.md\n'
+                '  echo "See [CHANGELOG.md](https://github.com/Experto-AI/quickscale/'
+                "blob/main/CHANGELOG.md) "
+                'for details." >> release_notes.md\n'
+                "fi\n"
+                "\n"
+                "cat release_notes.md\n",
+            ),
+        ]
 
 
 # =========================================================================
@@ -1105,7 +1333,7 @@ class TestSA128bBashObservation:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """An executing shell that never completes is bounded and rejected."""
-        import scripts.check_gate_parity as parity
+        import check_gate_parity as parity
 
         monkeypatch.setattr(parity, "_BASH_TIMEOUT_SECONDS", 0.2)
         script = tmp_path / "sa128b_timeout.sh"
@@ -1154,7 +1382,7 @@ class TestPublishStructuralParsing:
 
     def test_make_with_or_true_rejected(self, tmp_path: Path) -> None:
         """Deceptive 'make TARGET || true' raises SchemaValidationError."""
-        from scripts.check_gate_parity import SchemaValidationError
+        from check_gate_parity import SchemaValidationError
 
         path = self._make_publish_yaml(tmp_path, "            make frontend-proof || true\n")
         with pytest.raises(SchemaValidationError, match="Deceptive|control"):
@@ -1162,7 +1390,7 @@ class TestPublishStructuralParsing:
 
     def test_make_with_and_other_rejected(self, tmp_path: Path) -> None:
         """Deceptive 'make TARGET && make OTHER' raises SchemaValidationError."""
-        from scripts.check_gate_parity import SchemaValidationError
+        from check_gate_parity import SchemaValidationError
 
         path = self._make_publish_yaml(
             tmp_path, "            make frontend-proof && make smoke-install\n"
@@ -1172,7 +1400,7 @@ class TestPublishStructuralParsing:
 
     def test_make_inside_conditional_rejected(self, tmp_path: Path) -> None:
         """Make inside if/then conditional raises SchemaValidationError."""
-        from scripts.check_gate_parity import SchemaValidationError
+        from check_gate_parity import SchemaValidationError
 
         path = self._make_publish_yaml(
             tmp_path,
@@ -1191,11 +1419,23 @@ class TestPublishStructuralParsing:
 
     def test_make_with_background_rejected(self, tmp_path: Path) -> None:
         """Deceptive 'make TARGET &' raises SchemaValidationError."""
-        from scripts.check_gate_parity import SchemaValidationError
+        from check_gate_parity import SchemaValidationError
 
         path = self._make_publish_yaml(tmp_path, "            make frontend-proof &\n")
         with pytest.raises(SchemaValidationError, match="Deceptive|control"):
             _extract_publish_gates(path)
+
+    def test_publish_steps_do_not_share_shell_state(self) -> None:
+        """A shell mutation in one step cannot affect the next step's recorder."""
+        run_values = [
+            ("test", "make check-first\nPATH=/no-such-directory\n"),
+            ("test", "make check-second\n"),
+        ]
+
+        assert _observe_publish_run_blocks(run_values, PUBLISH_YML) == [
+            ("check-first",),
+            ("check-second",),
+        ]
 
 
 # =========================================================================
@@ -2021,7 +2261,7 @@ class TestMakefileSemanticObservation:
 
     def test_timeout_fails_hard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A make observation that exceeds the timeout bound fails hard."""
-        import scripts.check_gate_parity as parity
+        import check_gate_parity as parity
 
         monkeypatch.setattr(parity, "_MAKE_TIMEOUT_SECONDS", 0.5)
         makefile = tmp_path / "Makefile"
@@ -2031,7 +2271,7 @@ class TestMakefileSemanticObservation:
 
     def test_output_overrun_fails_hard(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A make observation that exceeds the output bound fails hard."""
-        import scripts.check_gate_parity as parity
+        import check_gate_parity as parity
 
         # The real Makefile database is tens of KB; a tiny bound must trip.
         monkeypatch.setattr(parity, "_MAKE_MAX_OUTPUT_BYTES", 64)
