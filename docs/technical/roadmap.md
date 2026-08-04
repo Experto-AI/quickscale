@@ -279,9 +279,7 @@ Required release properties have no authoritative topology. The five repository 
 
   *(why →* a parity checker that can assert coverage a context does not have is worse than none, because SA122b's migration and every later gate would trust it*)*
 
-  **SA128a is closed and merged** (Make-context extractor rebuilt on Make's own `-qp`/`--dry-run` semantics; evidence in [CHANGELOG.md](../../CHANGELOG.md)). **SA128a/F-003** is a separate medium/advisory `_communicate_bounded` resilience item that remains open and is owned by **SA128d**; it is distinct from SA128b/F-003.
-
-  - [x] **SA128b — Observe shell inventories by executing them.** `Tier 2 · deps: SA128a ✓ closed` — completed at functional commit `7e35556c`; accepted evidence and full-scope review are recorded in [CHANGELOG.md](../../CHANGELOG.md). **SA128b/F-001** (errexit), **SA128b/F-002** (parallel lifecycle/order), and **SA128b/F-003** (argv transport) are resolved; **SA128a/F-003** remains the separate medium/advisory `_communicate_bounded` resilience item owned by SA128d. No active SA128b blocker or advisory remains; Linux `/proc` is a declared platform constraint, not a blocker. Track 1 advances to SA128c; SA128 remains open.
+  **SA128a and SA128b are closed and merged** (Make semantics via `-qp`/`--dry-run`; shell inventories observed by actual Bash — evidence in [CHANGELOG.md](../../CHANGELOG.md)). No SA128a or SA128b finding remains open except **SA128a/F-003**, a medium/advisory `_communicate_bounded` resilience item owned by **SA128d**.
 
   - [ ] **SA128c — Extend structural YAML to hosted, publish, and E2E.** `Tier 2 · deps: SA128b`
     Keep the duplicate-key-rejecting `yaml.BaseLoader` path and extend it to E2E path extraction, which is still non-uniform. Prove hosted commands, `needs`, and stage topology, and run publish's Bash `run:` blocks through the SA128b recorder so publish is observed with the same semantics as the local scripts.
@@ -293,18 +291,12 @@ Required release properties have no authoritative topology. The five repository 
     - Verify: the adversarial fixture set false-greens **none** of the six ratified inert forms; delegated and `$(VAR)`-composed targets report present; unparseable Makefile/shell/YAML input exits non-zero with a named error; adding a fake gate to the registry fails every context that has not adopted it; the five publish omissions still report exactly, with direct execution exiting **1** and the Make wrapper **2**; the matrix covers inert forms, Make delegation, Bash ordering/join/failure, hostile CWD, lifecycle, and caller parity. `make quality` and `make typecheck` exit 0. Full-scope review returns `STATUS: ok`, then close the umbrella.
     *(why →* the contracts are cross-cutting by nature and cannot be proved per-extractor*)*
 
-  **SA128d carries the remaining cross-cutting proof work:** arbitrary dependency cycles, path containment, controlled exit 2, bounded output/event handling, readers, residual processes, process-group cleanup, and the complete proof matrix, including the open **SA128a/F-003** `_communicate_bounded` resilience item. No SA128b finding remains open.
-
-  **Attempts and outcomes.** Both monolithic attempts were reverted before any commit, with nothing dangling in reflog or stash, so their designs are lost. Every SA128 child attempt appends a row here **before** its checkpoint, so a design rejected in one domain is visible to the others.
+  **Attempts and outcomes.** Both monolithic attempts were reverted before any commit, with nothing dangling in reflog or stash, so their designs are lost. Every SA128 child attempt appends a row here **before** its checkpoint, so a design rejected in one domain is visible to the others. The two closed children (SA128a, SA128b) both returned full-scope `STATUS: ok`; their evidence is in [CHANGELOG.md](../../CHANGELOG.md) and is not restated here.
 
   | # | Design taken | Findings targeted | Gates | Review outcome | Why it failed |
   |---|---|---|---|---|---|
   | 1 | *unrecorded* — pre-dated the ratified invariants above, which were themselves this attempt's output (Bubblewrap removed, regex fallback forbidden, Make/Bash delegation mandated) | all nine | two bounded fix/re-review rounds plus one authorized post-cap re-plan, whose plan review also returned `STATUS: partial` | cap reached; `STATUS: partial` | **UNRECORDED.** Only the ratified negative constraints survive as evidence of what was rejected. |
   | 2 | *unrecorded* — two-phase plan, independent plan review `STATUS: ok` before implementation | all nine | 132 focused tests, strict MyPy, Ruff, exact exit-1/exit-2 five-record parity, `make typecheck`, `make quality`, `git diff --check` — all green | two full-scope reviews, both `STATUS: partial`; severity high, count 9 → 9 | **UNRECORDED — needs maintainer recall from that session's review output.** The single highest-value gap on the ticket. |
-  | 3 | SA128a Make-semantics child | Make inventory and aggregation | 163 focused tests, strict MyPy, Ruff, quality/typecheck, diff checks | full-scope `STATUS: ok` | succeeded; closeout is recorded in [CHANGELOG.md](../../CHANGELOG.md) |
-  | 4 | SA128b Bash-observation child | Shell serial/parallel order, join, failure, and complete observation | 151 focused tests, static/output evidence, strict MyPy, Ruff, diff checks | full-scope `STATUS: ok` | succeeded; one user-authorized continuation consumed; closeout is recorded in [CHANGELOG.md](../../CHANGELOG.md) |
-
-  (Attempts 3–4 — the SA128a and SA128b children — succeeded at full scope; closeout evidence is recorded in [CHANGELOG.md](../../CHANGELOG.md).)
 
   **The pattern.** Attempt 2 satisfied every mechanical gate and was still rejected at full scope with **zero** ledger movement. That is not a capacity signal — it is the acceptance bar and the two-file allowlist disagreeing: nine high findings across five observation domains cannot be discharged as one reviewable unit, so any single review legitimately finds some domain unproved regardless of how good the candidate is elsewhere. Hence the split above. **Do not treat green mechanical gates as evidence of acceptance.**
 
