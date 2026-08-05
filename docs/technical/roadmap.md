@@ -58,7 +58,7 @@ Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../.
 ```
 Track 1 (governance)                  Track 2 (CLOSED to new work)  Track 3 → release (CRITICAL PATH)
 ─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
-SA122b-1 → -2 → -3 → -4 → -5          SA115 (e2e xdist; deps: none) SA117e-4 ▶ → -5
+SA122b-2 → -3 → -4 → -5                SA115 (e2e xdist; deps: none) SA117e-4 ▶ → -5
   │  Umbrella, split by consumer      │                             │
   │  Make · sh · ci · publish · e2e   │  validation AUTHORIZED      │  ORDER-001 resolved (b)
   │  checker authoritative (SA128 ✓)  │  cannot finish → SA112d     │  two decisions + human push gate
@@ -87,10 +87,10 @@ SA122b-1 → -2 → -3 → -4 → -5          SA115 (e2e xdist; deps: none) SA11
 | Track (head) | Can start | Can finish | Can merge | Truly green | On critical path |
 |---|---|---|---|---|---|
 | **Track 3** — SA117e-4 | **no** for implementation — maintainer decisions `SA117E1-REV-001` and `SA117E1-REV-002` must close first; the recommended sequencing's read-only Step 1 (lease research) *is* startable today | **no** — both blockers, fresh twelve-row push confirmation, and post-push acceptance remain | **yes** — no merge-order gate | no | ✅ **yes** — blocked head is on it |
-| **Track 1** — SA122b-1 | **yes** — recorded-partial continuation is startable; SA128 is closed | **yes** — `F-001` has a bounded two-file correction | **yes** — partial checkpoint has no merge-order gate | ✅ **yes** | no — Track 1 is off the critical path |
+| **Track 1** — SA122b-2 | **yes** — SA122b-1 is closed; SA128 is closed | **yes** — SA122b-2 has no hard upstream dependency or open decision | **yes** — SA122b-2 has no merge-order gate | ✅ **yes** | no — Track 1 is off the critical path |
 | **Track 2** — SA115 | yes (validation authorized; yields infra to Track 3) | **no** — **hard dep** on SA112d | **no** — **hard dep** on SA112e | no | no — filler |
 
-**Track 3 is decision-blocked at SA117e-4 on the critical path.** SA117e-4 cannot start until `SA117E1-REV-001` and `SA117E1-REV-002` are decided and implemented; its fresh twelve-row confirmation remains an execution-time gate, and it carries the relocated public-split harness gate. **Track 1 is truly green at SA122b-1** — the recorded-partial candidate is mergeable and the sole open `F-001` correction is bounded, with no design decision or infrastructure dependency — but it is off the critical path. Track 2's two "no"s are **hard upstream dependencies** that only SA112d/SA112e can clear.
+**Track 3 is decision-blocked at SA117e-4 on the critical path.** SA117e-4 cannot start until `SA117E1-REV-001` and `SA117E1-REV-002` are decided and implemented; its fresh twelve-row confirmation remains an execution-time gate, and it carries the relocated public-split harness gate. **Track 1 is truly green at SA122b-2** — SA122b-1's functional evidence and full-scope review are accepted, with no new blocker or decision — but it is off the critical path. Track 2's two "no"s are **hard upstream dependencies** that only SA112d/SA112e can clear.
 
 **Infra serialization (not a track constraint).** SA112's and SA115's e2e lanes, SA117e-4's `apply` verification, and any `make ci`/`make ci-e2e` rerun all need the same PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL` knobs namespace lanes *within* one invocation, not across worktrees — **only one track exercises PG/Docker at a time, and Track 3 has priority.** Abandon or restart an SA115 run rather than make a critical-path leg queue behind it.
 
@@ -241,7 +241,7 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** off the critical path, **head is SA122b-1**, and the parity checker is authoritative now that SA128 is closed and merged (evidence in [CHANGELOG.md](../../CHANGELOG.md)). The queue is **SA122b-1 → … → SA122b-5**; SA122b-1 has a recorded-partial candidate with one bounded blocking correction and remains the next/startable child. Only SA122b-5 is merge-gated behind SA112e.
+**Status:** off the critical path, **head is SA122b-2**, and the parity checker is authoritative now that SA128 is closed and merged (evidence in [CHANGELOG.md](../../CHANGELOG.md)). The queue is **SA122b-2 → … → SA122b-5**; SA122b-1 is closed and SA122b-2 is the next/startable child. Only SA122b-5 is merge-gated behind SA112e.
 
 ### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
 
@@ -253,7 +253,7 @@ Required release properties have no authoritative topology. The five repository 
 
 - [ ] **SA122b — Migrate the consumers onto the registry.** `Umbrella · deps: SA128 ✓ closed`
 
-  Make each context derive its inventory from the registry instead of restating it, then make the SA128 parity checker **blocking** in CI once every context derives. Every child inherits: the registry and its schema are an **input, not scope** — a child needing a schema change stops and escalates rather than editing it; the SA128 checker is the authoritative oracle, so no child may add tolerance or exception logic to make a context read green; and SA122b-1 is startable now that SA128 is closed.
+  Make each context derive its inventory from the registry instead of restating it, then make the SA128 parity checker **blocking** in CI once every context derives. Every child inherits: the registry and its schema are an **input, not scope** — a child needing a schema change stops and escalates rather than editing it; the SA128 checker is the authoritative oracle, so no child may add tolerance or exception logic to make a context read green; and SA122b-2 is startable now that SA122b-1 and SA128 are closed.
 
   | Child | Consumer context | Executable surface | Tier |
   |---|---|---|---|
@@ -265,12 +265,12 @@ Required release properties have no authoritative topology. The five repository 
 
   **Only SA122b-5 carries the `merge after SA112e` bound** — that is the point of the per-context split. SA122b-1 – SA122b-4 merge independently instead of the whole migration idling behind five Track 3 children.
 
-  - [ ] **SA122b-1 — Derive Make's `check` aggregation from the registry.** `Tier 2 · deps: SA128 ✓ closed` — **recorded partial; continuation startable**
+  - [x] **SA122b-1 — Derive Make's `check` aggregation from the registry.** `Tier 2 · deps: SA128 ✓ closed` — **complete; Track 1 advances to SA122b-2**
     Replace the hand-written gate list in the `check` target and its `Makefile:784-821` declarations so membership comes from `scripts/gate_registry.json`, keeping each gate's own recipe and target names intact. Leave the shell and all three workflows untouched.
     - Verify: `make check` and `make check QUIET=1` run exactly today's effective gate set, proven against the pre-change inventory; the SA128 checker reports the Make context in parity; adding a fake gate to the registry makes `check` pick it up with no `Makefile` edit.
-    - **State (recorded partial delivery, 2026-08-05; task remains unchecked).** **Done:** `Makefile` and `scripts/test_gate_parity.py` now derive and test the current five-gate Make aggregation from the registry; 187 focused tests passed, the direct checker produced its expected exit 1 with the five publish-only omissions and zero Make diagnostics, and both `make check` modes exited 0. **Pending-Blocking:** `F-001` (**medium**, correctness) — `CHECK_GATE_TARGETS` currently selects local-context bindings, but the authoritative checker defines membership as ordered non-empty `make_target` values beginning with `check-`; align that predicate and add boundary fixtures for a non-local `check-*` target and a local non-`check` target. The first full-scope review returned `STATUS: partial`; this checkpoint is preservation, not executable approval or completion. **Decisions needed:** none — at the spent QG budget, the maintainer selected recorded partial delivery and merge-back.
+    - **Complete (2026-08-05; functional commit `2db57e48`).** `Makefile` and `scripts/test_gate_parity.py` derive and test the current five-gate Make aggregation from the registry; 188 parity tests passed, the direct checker exited its expected 1 with exactly the five publish-only omissions and zero Make diagnostics, and both `make check` modes exited 0. Adaptive-change-review DC-68 returned `STATUS: ok` and resolved `F-001`; no new blockers or decisions were found. Pre-existing non-failing MyPy configuration notes remain advisory only.
 
-  - [ ] **SA122b-2 — Derive both `check_ci_locally.sh` inventories.** `Tier 2 · deps: SA122b-1`
+  - [ ] **SA122b-2 — Derive both `check_ci_locally.sh` inventories.** `Tier 2 · deps: SA122b-1 ✓ closed`
     Replace the serial list (`195-302`) and the parallel worker declaration (`401-428`) so both derive from the registry. The current tests pin worker count and order and therefore protect each copy rather than derive it — rewrite them to assert derivation, not the literal list.
     - Verify: serial and parallel effective inventories are byte-identical to today's; worker count/order behaviour is unchanged for the current registry; a registry addition appears in **both** lists with no script edit; both shell contexts report in parity.
 
@@ -312,11 +312,11 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 ## Track topology — settled
 
-**No track-sequencing or worktree-assignment question is open; the latest rebalancing review (2026-08-05, cleaning pass) applied no move — the eighth consecutive pass to reach that conclusion.** Every open v87 ticket carries a track, Track 2 is closed to new work by standing rule (homing anything there drags SA115 onto `v87`), and SA112a — the one node worth parallelizing onto Track 1 — has closed and merged. The remaining off-path work (SA122b-1…5) is a single serial chain; moving any of it onto Track 3 would push filler ahead of the critical path.
+**No track-sequencing or worktree-assignment question is open; the latest rebalancing review (2026-08-05, cleaning pass) applied no move — the eighth consecutive pass to reach that conclusion.** Every open v87 ticket carries a track, Track 2 is closed to new work by standing rule (homing anything there drags SA115 onto `v87`), and SA112a — the one node worth parallelizing onto Track 1 — has closed and merged. The remaining off-path work (SA122b-2…5) is a single serial chain; moving any of it onto Track 3 would push filler ahead of the critical path.
 
 **Standing placements.**
 
-- **Track 1's queue is SA122b-1 → … → SA122b-5**, head at SA122b-1 — a single serial chain whose recorded-partial first child remains startable for the bounded `F-001` correction.
+- **Track 1's queue is SA122b-2 → … → SA122b-5**, head at SA122b-2 — a single serial chain whose first child is startable after SA122b-1's reviewed completion.
 - **SA117e's Tier 3 split is a sizing correction, not a topology change.** No new track, no ticket moved, no new shared writer. Its one board-level effect is a shortening: SA112b's precondition is SA117e-**4**, so closeout child `-5` sits off the critical path.
 - **The *fourth-worktree* variant is permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 
