@@ -14,16 +14,23 @@ Test matrix
 from __future__ import annotations
 
 import json
+import os
+import select
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
 import pytest
 from check_gate_parity import (
+    _CONTEXT_SOURCES,
     SchemaValidationError,
     _assert_canonical_makefile_input,
+    _canonical_input_path,
+    _communicate_bounded,
     _extract_check_ci_parallel_gates,
     _extract_check_ci_serial_gates,
     _extract_check_members,
@@ -35,8 +42,11 @@ from check_gate_parity import (
     _extract_publish_gates,
     _extract_publish_run_values,
     _is_subsequence,
+    _kill_make_process_group,
+    _live_process_group_members,
     _observe_publish_run_blocks,
     _run_bash_observation,
+    _run_make,
     _validate_registry,
 )
 
@@ -95,6 +105,20 @@ _MINIMAL_REGISTRY: dict[str, Any] = {
     "gates": [_MINIMAL_VALID_GATE],
 }
 
+# CLI registry inputs intentionally have to be canonical files in the
+# repository.  Keep subprocess fixtures inside that boundary while arming
+# every fixture directory for removal when its test finishes.
+_REPO_FIXTURE_DIRS: set[Path] = set()
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_repo_contained_fixtures() -> Any:
+    """Remove repository-contained subprocess fixtures after each test."""
+    yield
+    for fixture_dir in tuple(_REPO_FIXTURE_DIRS):
+        shutil.rmtree(fixture_dir, ignore_errors=True)
+        _REPO_FIXTURE_DIRS.discard(fixture_dir)
+
 
 # =========================================================================
 # Helpers
@@ -115,6 +139,15 @@ def _run_checker(argv: list[str] | None = None) -> subprocess.CompletedProcess:
     )
 
 
+def _repo_fixture_file(tmp_path: Path, filename: str) -> Path:
+    """Return a cleanup-armed, canonical fixture path inside the repository."""
+    fixture_dir = Path(
+        tempfile.mkdtemp(prefix=f".pytest-gate-parity-{tmp_path.name}-", dir=REPO_ROOT)
+    )
+    _REPO_FIXTURE_DIRS.add(fixture_dir)
+    return fixture_dir / filename
+
+
 def _make_registry_json(gates: list[dict[str, Any]], tmp_path: Path) -> Path:
     """Write a registry JSON file and return its path (includes all 5 contexts)."""
     data: dict[str, Any] = {
@@ -123,7 +156,10 @@ def _make_registry_json(gates: list[dict[str, Any]], tmp_path: Path) -> Path:
         "contexts": dict(_ALL_CONTEXTS),
         "gates": gates,
     }
-    path = tmp_path / "test_registry.json"
+    # The checker CLI deliberately rejects external paths.  ``tmp_path`` still
+    # supplies pytest's unique test identity, while the actual input lives in
+    # a unique, canonical directory below the trusted repository root.
+    path = _repo_fixture_file(tmp_path, "test_registry.json")
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return path
 
@@ -560,7 +596,7 @@ class TestRegistrySchemaValidation:
     """Every schema constraint is enforced."""
 
     def _check_rejected(self, registry: dict[str, Any], tmp_path: Path) -> None:
-        path = tmp_path / "bad_registry.json"
+        path = _repo_fixture_file(tmp_path, "bad_registry.json")
         path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
         result = _run_checker(["--registry", str(path)])
         assert result.returncode == 2, (
@@ -569,7 +605,7 @@ class TestRegistrySchemaValidation:
         assert "ERROR:" in result.stderr
 
     def _check_accepted(self, registry: dict[str, Any], tmp_path: Path) -> None:
-        path = tmp_path / "good_registry.json"
+        path = _repo_fixture_file(tmp_path, "good_registry.json")
         path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
         result = _run_checker(["--registry", str(path)])
         assert result.returncode in (0, 1), (
@@ -631,7 +667,7 @@ class TestRegistrySchemaValidation:
             '"contexts": {"local-serial": "desc"}, '
             '"gates": []}'
         )
-        path = tmp_path / "dupe_keys.json"
+        path = _repo_fixture_file(tmp_path, "dupe_keys.json")
         path.write_text(content, encoding="utf-8")
         result = _run_checker(["--registry", str(path)])
         assert result.returncode == 2, (
@@ -646,7 +682,7 @@ class TestRegistrySchemaValidation:
             '"contexts": {"a": "x", "a": "y"}, '
             '"gates": []}'
         )
-        path = tmp_path / "nested_dupe.json"
+        path = _repo_fixture_file(tmp_path, "nested_dupe.json")
         path.write_text(content, encoding="utf-8")
         result = _run_checker(["--registry", str(path)])
         assert result.returncode == 2, (
@@ -706,7 +742,7 @@ class TestMalformedSources:
 
     def test_missing_registry_file(self, tmp_path: Path) -> None:
         """Non-existent registry path produces exit 2."""
-        missing = tmp_path / "nonexistent.json"
+        missing = REPO_ROOT / "scripts" / f".pytest-missing-{tmp_path.name}.json"
         result = _run_checker(["--registry", str(missing)])
         assert result.returncode == 2
         assert "ERROR:" in result.stderr
@@ -714,7 +750,7 @@ class TestMalformedSources:
 
     def test_invalid_registry_json(self, tmp_path: Path) -> None:
         """Malformed JSON in registry produces exit 2."""
-        path = tmp_path / "bad.json"
+        path = _repo_fixture_file(tmp_path, "bad.json")
         path.write_text("this is not json", encoding="utf-8")
         result = _run_checker(["--registry", str(path)])
         assert result.returncode == 2
@@ -722,7 +758,7 @@ class TestMalformedSources:
 
     def test_empty_registry(self, tmp_path: Path) -> None:
         """Empty file produces exit 2."""
-        path = tmp_path / "empty.json"
+        path = _repo_fixture_file(tmp_path, "empty.json")
         path.write_text("", encoding="utf-8")
         result = _run_checker(["--registry", str(path)])
         assert result.returncode == 2
@@ -1236,13 +1272,16 @@ class TestSA128bBashObservation:
     def test_parallel_join_with_residual_descendant_fails_and_cleans_up(
         self, tmp_path: Path
     ) -> None:
-        """A joined worker's delayed child cannot mutate logs after acceptance."""
+        """A joined worker's delayed child cannot mutate logs after cleanup."""
         script = tmp_path / "sa128b_parallel_residual_descendant.sh"
         residual_marker = tmp_path / "residual-marker"
+        residual_pid = tmp_path / "residual-pid"
+        residual_pid_path = shlex.quote(str(residual_pid))
         script.write_text(
             "run_static_gates_parallel() {\n"
             "    joined_worker() {\n"
-            f"        ( /bin/sleep 0.25; printf late > {residual_marker} ) &\n"
+            f"        ( printf '%s\\n' \"$BASHPID\" > {residual_pid_path}; "
+            f"/bin/sleep 0.25; printf late > {residual_marker} ) &\n"
             "    }\n"
             "    launch_static_gate joined 1 desc ok label joined_worker\n"
             '    wait "${WORKER_PIDS[0]}"\n'
@@ -1252,12 +1291,12 @@ class TestSA128bBashObservation:
         with pytest.raises(SchemaValidationError, match="live descendants|process group"):
             _run_bash_observation(script, "run_static_gates_parallel")
 
-        # The cleanup must happen before the observer accepts the inventory;
-        # waiting past the child delay proves that no delayed recorder work
-        # remains able to mutate the external marker.
-        import time
-
-        time.sleep(0.35)
+        # The READY-equivalent PID write happens before the delayed action;
+        # synchronous group cleanup is therefore asserted against an
+        # authoritative captured child PID, not a sleep-only timing guess.
+        assert residual_pid.exists()
+        child_pid = int(residual_pid.read_text(encoding="utf-8"))
+        assert not (Path("/proc") / str(child_pid)).exists()
         assert not residual_marker.exists(), "residual descendant survived cleanup"
 
     def test_parallel_omitted_wait_fails_closed(self, tmp_path: Path) -> None:
@@ -1340,6 +1379,314 @@ class TestSA128bBashObservation:
         script.write_text("run_static_gates_serial() { while :; do :; done; }\n", encoding="utf-8")
         with pytest.raises(SchemaValidationError, match="timeout"):
             _extract_check_ci_serial_gates(script)
+
+    def test_serial_recorder_file_overflow_fails_closed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Serial recorder argv data shares the bounded observation contract."""
+        import check_gate_parity as parity
+
+        script = tmp_path / "sa128b_serial_recorder_overflow.sh"
+        script.write_text(
+            "run_static_gates_serial() {\n"
+            "    payload=$(printf '%*s' 4096 '')\n"
+            '    make "$payload"\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(parity, "_BASH_MAX_OUTPUT_BYTES", 256)
+        with pytest.raises(SchemaValidationError, match=r"output bound.*cleanup"):
+            _run_bash_observation(script, "run_static_gates_serial")
+
+    def test_parallel_launch_log_overflow_fails_closed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Parallel launch event data is bounded before it is parsed."""
+        import check_gate_parity as parity
+
+        script = tmp_path / "sa128b_parallel_launch_overflow.sh"
+        script.write_text(
+            "run_static_gates_parallel() {\n"
+            "    stage=$(printf '%*s' 4096 '')\n"
+            '    launch_static_gate "$stage" 1 desc ok label make check-first\n'
+            '    wait "${WORKER_PIDS[0]}"\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(parity, "_BASH_MAX_OUTPUT_BYTES", 256)
+        with pytest.raises(SchemaValidationError, match=r"output bound.*cleanup"):
+            _run_bash_observation(script, "run_static_gates_parallel")
+
+    def test_parallel_wait_event_overflow_fails_closed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Repeated wait events cannot bypass the combined event limit."""
+        import check_gate_parity as parity
+
+        script = tmp_path / "sa128b_parallel_wait_overflow.sh"
+        script.write_text(
+            "run_static_gates_parallel() {\n"
+            "    launch_static_gate first 1 desc ok label make check-first\n"
+            "    launch_static_gate second 2 desc ok label make check-second\n"
+            "    launch_static_gate third 3 desc ok label make check-third\n"
+            "    launch_static_gate fourth 4 desc ok label make check-fourth\n"
+            "    launch_static_gate fifth 5 desc ok label make check-fifth\n"
+            '    for pid in "${WORKER_PIDS[@]}"; do wait "$pid"; done\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(parity, "_BASH_MAX_EVENTS", 4)
+        with pytest.raises(SchemaValidationError, match="event count"):
+            _run_bash_observation(script, "run_static_gates_parallel")
+
+    def test_parallel_worker_recorder_overflow_fails_closed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Per-worker recorder argv data is included in the bounded contract."""
+        import check_gate_parity as parity
+
+        script = tmp_path / "sa128b_parallel_worker_overflow.sh"
+        script.write_text(
+            "run_static_gates_parallel() {\n"
+            "    worker() {\n"
+            "        payload=$(printf '%*s' 4096 '')\n"
+            '        make "$payload"\n'
+            "    }\n"
+            "    launch_static_gate worker 1 desc ok label worker\n"
+            '    wait "${WORKER_PIDS[0]}"\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(parity, "_BASH_MAX_OUTPUT_BYTES", 256)
+        with pytest.raises(SchemaValidationError, match=r"output bound.*cleanup"):
+            _run_bash_observation(script, "run_static_gates_parallel")
+
+
+class TestBoundedObservationLifecycle:
+    """Deterministic bounds and cleanup for both observer implementations."""
+
+    @staticmethod
+    def _ready_pipe_process() -> tuple[subprocess.Popen[bytes], int, int]:
+        """Start a group whose child announces readiness while holding stdout."""
+        ready_read, ready_write = os.pipe()
+        proc = subprocess.Popen(
+            [
+                "/bin/bash",
+                "-c",
+                (
+                    f"( printf 'READY:%s\\n' \"$BASHPID\" >&{ready_write}; "
+                    "exec /bin/sleep 30 ) & exit 0"
+                ),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            pass_fds=(ready_write,),
+            start_new_session=True,
+        )
+        os.close(ready_write)
+        readable, _, _ = select.select([ready_read], [], [], 2.0)
+        assert readable, "child READY handshake did not arrive"
+        handshake = os.read(ready_read, 128).decode("ascii")
+        os.close(ready_read)
+        assert handshake.startswith("READY:")
+        child_pid = int(handshake.split(":", 1)[1])
+        return proc, proc.pid, child_pid
+
+    def test_ready_child_holding_observation_pipe_is_bounded_and_cleaned(self) -> None:
+        """A parent exit cannot make inherited observer pipes wait forever."""
+        import check_gate_parity as parity
+
+        proc, process_group_id, child_pid = self._ready_pipe_process()
+        try:
+            with pytest.raises(subprocess.TimeoutExpired):
+                _communicate_bounded(proc, 1024, 0.2)
+            residual = _kill_make_process_group(proc, process_group_id)
+            assert residual == {}, f"cleanup left process-group members: {residual}"
+            assert _live_process_group_members(process_group_id) == {}
+            assert not (Path("/proc") / str(child_pid)).exists()
+        finally:
+            # The assertion path above is authoritative; this is only a
+            # defensive cleanup if a test assertion interrupts it.
+            _kill_make_process_group(proc, process_group_id)
+        assert parity._live_process_group_members(process_group_id) == {}
+
+    def test_closed_observation_pipes_do_not_release_live_direct_process(self) -> None:
+        """EOF on both pipes still waits for the direct observer within the deadline."""
+        ready_read, ready_write = os.pipe()
+        hold_read, hold_write = os.pipe()
+        proc: subprocess.Popen[bytes] | None = None
+        try:
+            proc = subprocess.Popen(
+                [
+                    "/bin/bash",
+                    "-c",
+                    (
+                        f"printf 'READY:%s\\n' \"$BASHPID\" >&{ready_write}; "
+                        f"exec 1>&-; exec 2>&-; read -r _ <&{hold_read}"
+                    ),
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                pass_fds=(ready_write, hold_read),
+                start_new_session=True,
+            )
+            os.close(ready_write)
+            ready_write = -1
+            readable, _, _ = select.select([ready_read], [], [], 2.0)
+            assert readable, "live-process READY handshake did not arrive"
+            assert os.read(ready_read, 128).startswith(b"READY:")
+            assert proc.poll() is None
+
+            with pytest.raises(subprocess.TimeoutExpired):
+                _communicate_bounded(proc, 1024, 0.2)
+        finally:
+            if proc is not None:
+                residual = _kill_make_process_group(proc, proc.pid)
+                assert residual == {}, f"cleanup left process-group members: {residual}"
+            if ready_write >= 0:
+                os.close(ready_write)
+            os.close(ready_read)
+            os.close(hold_write)
+            os.close(hold_read)
+
+    def test_make_closed_pipes_live_process_translates_timeout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The Make wrapper preserves the deadline after both captured pipes close."""
+        import check_gate_parity as parity
+
+        fake_make = tmp_path / "make"
+        ready_file = tmp_path / "make-ready"
+        hold_fifo = tmp_path / "make-hold"
+        os.mkfifo(hold_fifo)
+        fake_make.write_text(
+            "#!/bin/bash\n"
+            'printf \'%s\\n\' "$$" > "$SA128_READY_FILE"\n'
+            "exec 1>&-\n"
+            "exec 2>&-\n"
+            'read -r _ < "$SA128_HOLD_FIFO"\n',
+            encoding="utf-8",
+        )
+        fake_make.chmod(0o700)
+        monkeypatch.setattr(
+            parity,
+            "_make_observation_env",
+            lambda: {
+                "PATH": str(tmp_path),
+                "SA128_READY_FILE": str(ready_file),
+                "SA128_HOLD_FIFO": str(hold_fifo),
+            },
+        )
+        monkeypatch.setattr(parity, "_MAKE_TIMEOUT_SECONDS", 0.2)
+
+        with pytest.raises(SchemaValidationError, match=r"timeout.*cleanup"):
+            _run_make(["-qp", "-f", str(tmp_path / "Makefile")], tmp_path, "fake make")
+
+        assert ready_file.exists()
+        make_pid = int(ready_file.read_text(encoding="utf-8"))
+        assert not (Path("/proc") / str(make_pid)).exists()
+
+    def test_bash_closed_pipes_live_process_translates_timeout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The Bash wrapper translates the same closed-pipe deadline failure."""
+        import check_gate_parity as parity
+
+        source = tmp_path / "closed-pipes.sh"
+        source.write_text("run_static_gates_serial() { :; }\n", encoding="utf-8")
+        ready_file = tmp_path / "bash-ready"
+        hold_fifo = tmp_path / "bash-hold"
+        os.mkfifo(hold_fifo)
+        monkeypatch.setattr(
+            parity,
+            "_shell_observation_harness",
+            lambda path, function_name: (
+                'printf \'%s\\n\' "$$" > "$SA128_READY_FILE"\n'
+                "exec 1>&-\n"
+                "exec 2>&-\n"
+                'read -r _ < "$SA128_HOLD_FIFO"\n'
+            ),
+        )
+        monkeypatch.setattr(parity, "_BASH_TIMEOUT_SECONDS", 0.2)
+
+        with pytest.raises(SchemaValidationError, match=r"timeout.*cleanup"):
+            _run_bash_observation(
+                source,
+                "run_static_gates_serial",
+                extra_env={
+                    "SA128_READY_FILE": str(ready_file),
+                    "SA128_HOLD_FIFO": str(hold_fifo),
+                },
+                repository_source=False,
+            )
+
+        assert ready_file.exists()
+        bash_pid = int(ready_file.read_text(encoding="utf-8"))
+        assert not (Path("/proc") / str(bash_pid)).exists()
+
+    def test_make_timeout_and_output_overrun_retain_cleanup_detail(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Make timeout and byte overrun both fail with the shared cleanup contract."""
+        import check_gate_parity as parity
+
+        slow_makefile = tmp_path / "slow.Makefile"
+        slow_makefile.write_text("VALUE := $(shell sleep 5)\ntarget:\n\techo ok\n")
+        monkeypatch.setattr(parity, "_MAKE_TIMEOUT_SECONDS", 0.2)
+        with pytest.raises(SchemaValidationError, match=r"timeout.*cleanup"):
+            _run_make(["-qp", "-f", str(slow_makefile)], tmp_path, str(slow_makefile))
+
+        monkeypatch.setattr(parity, "_MAKE_MAX_OUTPUT_BYTES", 64)
+        with pytest.raises(SchemaValidationError, match=r"output bound.*cleanup"):
+            _run_make(
+                ["-qp", "-r", "-R", "--no-print-directory", "-f", str(REPO_ROOT / "Makefile")],
+                REPO_ROOT,
+                str(REPO_ROOT / "Makefile"),
+            )
+
+    def test_bash_output_overrun_is_controlled_and_cleaned(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Bash output overrun is exit-2 material, not a partial inventory."""
+        import check_gate_parity as parity
+
+        script = tmp_path / "bash-output-overrun.sh"
+        script.write_text(
+            "run_static_gates_serial() {\n    /usr/bin/yes x | /usr/bin/head -c 4096\n}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(parity, "_BASH_MAX_OUTPUT_BYTES", 64)
+        with pytest.raises(SchemaValidationError, match=r"output bound.*cleanup"):
+            _run_bash_observation(script, "run_static_gates_serial")
+
+    def test_bash_deadline_is_controlled_and_cleaned(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A non-terminating Bash observer is bounded and leaves no group."""
+        import check_gate_parity as parity
+
+        script = tmp_path / "bash-deadline.sh"
+        script.write_text("run_static_gates_serial() { while :; do :; done; }\n", encoding="utf-8")
+        monkeypatch.setattr(parity, "_BASH_TIMEOUT_SECONDS", 0.2)
+        with pytest.raises(SchemaValidationError, match=r"timeout.*cleanup"):
+            _run_bash_observation(script, "run_static_gates_serial")
+
+    def test_cleanup_failure_does_not_replace_primary_observation_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The primary output error remains visible when cleanup leaves a residual."""
+        import check_gate_parity as parity
+
+        script = tmp_path / "bash-primary-error.sh"
+        script.write_text("run_static_gates_serial() { printf '%*s' 4096 x; }\n", encoding="utf-8")
+        monkeypatch.setattr(parity, "_BASH_MAX_OUTPUT_BYTES", 64)
+        monkeypatch.setattr(
+            parity, "_kill_make_process_group", lambda proc, group=None: {4242: "S"}
+        )
+        with pytest.raises(SchemaValidationError, match=r"output bound.*cleanup left"):
+            _run_bash_observation(script, "run_static_gates_serial")
 
 
 # =========================================================================
@@ -1818,6 +2165,116 @@ class TestSchemaValidationDirect:
             _validate_registry(data)
 
 
+class TestDependencyGraphValidation:
+    """Dependency validation accepts arbitrary DAGs and rejects every cycle."""
+
+    @staticmethod
+    def _registry_for_dependencies(
+        dependencies: dict[str, list[str]], order: list[str] | None = None
+    ) -> dict[str, Any]:
+        """Build a registry whose gate order and edges are fixture-owned."""
+        gate_ids = order if order is not None else list(dependencies)
+        gates: list[dict[str, Any]] = []
+        for gate_id in gate_ids:
+            gates.append(
+                {
+                    "id": gate_id,
+                    "description": f"Dependency graph gate {gate_id}",
+                    "required_contexts": ["local-serial"],
+                    "bindings": {
+                        "make_target": None,
+                        "ci_job": None,
+                        "local_ci_stage": None,
+                    },
+                    "depends_on": list(dependencies[gate_id]),
+                    "trigger_inputs": [],
+                }
+            )
+        registry = dict(_MINIMAL_REGISTRY)
+        registry["gates"] = gates
+        return registry
+
+    def test_empty_dependency_set_is_accepted(self) -> None:
+        """A graph with no dependency edges is a valid disconnected DAG."""
+        registry = self._registry_for_dependencies({"gate-a": [], "gate-b": []})
+        assert [gate["id"] for gate in _validate_registry(registry)] == ["gate-a", "gate-b"]
+
+    def test_long_chain_is_accepted_without_recursion(self) -> None:
+        """A chain longer than the usual recursion limit remains valid."""
+        gate_ids = [f"gate-{index:04d}" for index in range(1200)]
+        dependencies = {
+            gate_id: ([gate_ids[index - 1]] if index else [])
+            for index, gate_id in enumerate(gate_ids)
+        }
+        validated = _validate_registry(self._registry_for_dependencies(dependencies, gate_ids))
+        assert [gate["id"] for gate in validated] == gate_ids
+
+    def test_branching_diamond_is_accepted(self) -> None:
+        """A diamond with a shared dependency is an acyclic graph."""
+        dependencies = {
+            "gate-root": ["gate-left", "gate-right"],
+            "gate-left": ["gate-leaf"],
+            "gate-right": ["gate-leaf"],
+            "gate-leaf": [],
+        }
+        validated = _validate_registry(self._registry_for_dependencies(dependencies))
+        assert {gate["id"] for gate in validated} == set(dependencies)
+
+    def test_disconnected_acyclic_components_are_accepted(self) -> None:
+        """Independent chains are validated together as one DAG."""
+        dependencies = {
+            "component-a-root": ["component-a-leaf"],
+            "component-a-leaf": [],
+            "component-b-root": ["component-b-middle"],
+            "component-b-middle": ["component-b-leaf"],
+            "component-b-leaf": [],
+        }
+        validated = _validate_registry(self._registry_for_dependencies(dependencies))
+        assert len(validated) == len(dependencies)
+
+    def test_self_cycle_preserves_named_error(self) -> None:
+        """Self-dependencies retain the existing dedicated diagnostic."""
+        with pytest.raises(SchemaValidationError, match="gate-a.*depends on itself"):
+            _validate_registry(self._registry_for_dependencies({"gate-a": ["gate-a"]}))
+
+    def test_two_node_cycle_is_rejected_deterministically(self) -> None:
+        """A mutual dependency reports both members in stable order."""
+        dependencies = {"gate-b": ["gate-a"], "gate-a": ["gate-b"]}
+        with pytest.raises(
+            SchemaValidationError,
+            match=r"circular dependency between 'gate-a' and 'gate-b'",
+        ):
+            _validate_registry(self._registry_for_dependencies(dependencies))
+
+    def test_cycle_longer_than_two_is_rejected_with_all_members(self) -> None:
+        """A cycle of arbitrary length reports its complete named cycle."""
+        dependencies = {
+            "gate-c": ["gate-a"],
+            "gate-a": ["gate-b"],
+            "gate-b": ["gate-c"],
+        }
+        with pytest.raises(
+            SchemaValidationError,
+            match=r"circular dependency among gates: 'gate-a', 'gate-b', 'gate-c'",
+        ):
+            _validate_registry(self._registry_for_dependencies(dependencies))
+
+    def test_cycle_in_disconnected_component_is_rejected(self) -> None:
+        """A cycle is rejected even when another component is acyclic."""
+        dependencies = {
+            "acyclic-root": ["acyclic-leaf"],
+            "acyclic-leaf": [],
+            "cycle-a": ["cycle-b"],
+            "cycle-b": ["cycle-c"],
+            "cycle-c": ["cycle-a"],
+        }
+        with pytest.raises(
+            SchemaValidationError,
+            match=r"'cycle-a'.*'cycle-b'.*'cycle-c'",
+        ):
+            _validate_registry(self._registry_for_dependencies(dependencies))
+
+
 # =========================================================================
 # Fail-closed source parsing
 # =========================================================================
@@ -2039,7 +2496,7 @@ class TestStreamBehavior:
 
     def test_exit_two_has_error_on_stderr(self, tmp_path: Path) -> None:
         """Exit 2: ERROR on stderr, stdout empty."""
-        path = tmp_path / "bad.json"
+        path = _repo_fixture_file(tmp_path, "bad.json")
         path.write_text("not valid json", encoding="utf-8")
         result = _run_checker(["--registry", str(path)])
         assert result.returncode == 2
@@ -2048,7 +2505,7 @@ class TestStreamBehavior:
 
     def test_exit_two_empty_stdout_one_error_no_traceback(self, tmp_path: Path) -> None:
         """Exit 2: empty stdout, exactly one ERROR line on stderr, no traceback."""
-        path = tmp_path / "bad.json"
+        path = _repo_fixture_file(tmp_path, "bad.json")
         path.write_text("this is not json", encoding="utf-8")
         result = _run_checker(["--registry", str(path)])
         assert result.returncode == 2
@@ -2297,9 +2754,84 @@ class TestCanonicalMakefileInput:
 
     def test_missing_rejected(self, tmp_path: Path) -> None:
         """A missing canonical Makefile raises FileNotFoundError (FILE_NOT_FOUND)."""
-        missing = tmp_path / "Makefile"
+        missing = REPO_ROOT / "scripts" / f".pytest-missing-{tmp_path.name}-Makefile"
         with pytest.raises(FileNotFoundError):
             _assert_canonical_makefile_input(missing)
+
+
+class TestCanonicalPathBoundary:
+    """Every accepted source is a canonical regular file in the repository."""
+
+    def test_real_registry_and_all_context_sources_are_accepted(self) -> None:
+        registry = REPO_ROOT / "scripts" / "gate_registry.json"
+        assert _canonical_input_path(registry, "registry") == registry
+        for source in _CONTEXT_SOURCES.values():
+            assert _canonical_input_path(source, "context source") == source
+
+    def test_relative_and_absolute_registry_spellings_are_accepted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(REPO_ROOT)
+        relative = Path("scripts/gate_registry.json")
+        absolute = REPO_ROOT / relative
+        assert _canonical_input_path(relative, "registry") == absolute
+        assert _canonical_input_path(absolute, "registry") == absolute
+
+    def test_dot_dot_alias_is_rejected(self) -> None:
+        alias = REPO_ROOT / "scripts" / ".." / "scripts" / "gate_registry.json"
+        with pytest.raises(SchemaValidationError, match="canonical path"):
+            _canonical_input_path(alias, "registry")
+
+    def test_final_and_ancestor_symlinks_are_rejected(self, tmp_path: Path) -> None:
+        real = REPO_ROOT / "scripts" / "gate_registry.json"
+        final_link = tmp_path / "registry.json"
+        final_link.symlink_to(real)
+        with pytest.raises(SchemaValidationError, match="symlink"):
+            _canonical_input_path(final_link, "registry")
+
+        linked_parent = tmp_path / "scripts"
+        linked_parent.symlink_to(real.parent, target_is_directory=True)
+        with pytest.raises(SchemaValidationError, match="symlink"):
+            _canonical_input_path(linked_parent / real.name, "registry")
+
+    def test_outside_missing_and_non_file_inputs_fail_closed(self, tmp_path: Path) -> None:
+        with pytest.raises(SchemaValidationError, match="inside the repository"):
+            _canonical_input_path(tmp_path / "registry.json", "registry")
+        with pytest.raises(FileNotFoundError):
+            _canonical_input_path(REPO_ROOT / "scripts" / "does-not-exist.json", "registry")
+        with pytest.raises(SchemaValidationError, match="regular file"):
+            _canonical_input_path(REPO_ROOT / "scripts", "registry")
+
+    def test_make_reported_outside_include_is_rejected(self) -> None:
+        from check_gate_parity import _validate_make_consumed_sources
+
+        output = b"Reading makefile '/outside/gates.mk' (search path)...\n"
+        with pytest.raises(SchemaValidationError, match="inside the repository"):
+            _validate_make_consumed_sources(output, REPO_ROOT / "Makefile")
+
+    def test_outside_registry_cli_has_controlled_exit_two(self, tmp_path: Path) -> None:
+        outside = tmp_path / "registry.json"
+        outside.write_text("{}", encoding="utf-8")
+        result = _run_checker(["--registry", str(outside)])
+        assert result.returncode == 2
+        assert not result.stdout
+        assert [line for line in result.stderr.splitlines() if line.startswith("ERROR:")] == [
+            result.stderr.strip()
+        ]
+
+    def test_hostile_cwd_keeps_fixed_sources_and_stream_contract(self, tmp_path: Path) -> None:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT)],
+            cwd=str(tmp_path),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 1
+        records = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+        assert len(records) == 5
+        assert {record["gate_id"] for record in records} == PUBLISH_GAP_IDS
+        assert not result.stderr
 
 
 # =========================================================================
