@@ -58,9 +58,9 @@ Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../.
 ```
 Track 1 (governance)                  Track 2 (CLOSED to new work)  Track 3 → release (CRITICAL PATH)
 ─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
-SA128d ⛔ → SA122b-1 → … → -5           SA115 (e2e xdist; deps: none) SA117e-3 → -4 → -5
+SA128d ✓ → SA122b-1 → … → -5           SA115 (e2e xdist; deps: none) SA117e-3 → -4 → -5
   │  Umbrella, split by domain        │                             │
-  ▼  F-001 blocked; needs budget      │  validation AUTHORIZED      │  EXEC-001 GRANTED · executing
+  ▼  F-001 resolved; checker authoritative │ validation AUTHORIZED      │  EXEC-001 GRANTED · executing
                                       │  cannot finish → SA112d     │  fix → Phase 5a → Phase 6
                                       │  cannot merge  → SA112e     │  needs exclusive Docker/PG
 SA122b-1 → -2 → -3 → -4 → -5          │                             │
@@ -87,10 +87,10 @@ SA122b-1 → -2 → -3 → -4 → -5          │                             �
 | Track (head) | Can start | Can finish | Can merge | Truly green | On critical path |
 |---|---|---|---|---|---|
 | **Track 3** — SA117e-3 | **yes** — `SA117E3-EXEC-001` **granted**; approved plan reused verbatim | **yes** — correction, stage-11 oracle, and Phase 6 are all Track 3-owned; needs exclusive Docker/PG, which Track 3 has priority on | **yes** — the recorded-partial checkpoint has no order gate | ✅ **yes** | ✅ **yes** — on the critical path |
-| **Track 1** — SA128d | **no** — **maintainer decision** `SA128D-EXEC-001` | **no** — same decision; `F-001` event transport and live overflow proof stay unapproved | **yes** — the recorded-partial checkpoint has no order gate | no | no — Track 1's only critical-path node (SA112a) is closed |
+| **Track 1** — SA122b-1 | **yes** — SA128d full-scope review returned `STATUS: ok` | **yes** — SA122b-1 is next and startable | **yes** — no merge-order gate | ✅ **yes** | no — Track 1 is off the critical path |
 | **Track 2** — SA115 | yes (validation authorized; yields infra to Track 3) | **no** — **hard dep** on SA112d | **no** — **hard dep** on SA112e | no | no — filler |
 
-**Track 3 is truly green and on the critical path — it is the only track doing real progress today.** `SA117E3-EXEC-001` was granted on 2026-08-05, flipping its *can start* and *can finish* together as expected; execution and merge-back happen on the Track 3 worktree, which syncs `v87` first. **Track 1 remains blocked** on the equivalent ungranted decision `SA128D-EXEC-001`; it is off the critical path, so starting it now would only contend for the PG/Docker capacity Track 3 has priority on. Track 2's two "no"s are a different kind — **hard upstream dependencies** that only SA112d/SA112e can clear and that no decision reaches. Both non-executing heads sit on already-merged recorded-partial checkpoints, which is why *can merge* stays yes. SA117e-4 carries two further maintainer decisions, not needed until that child implements.
+**Track 3 is truly green and on the critical path.** `SA117E3-EXEC-001` was granted on 2026-08-05, flipping its *can start* and *can finish* together as expected; execution and merge-back happen on the Track 3 worktree, which syncs `v87` first. **Track 1 is now truly green at SA122b-1** after SA128d's accepted full-scope review; it is off the critical path and can proceed without competing for Track 3's PG/Docker capacity. Track 2's two "no"s are a different kind — **hard upstream dependencies** that only SA112d/SA112e can clear and that no decision reaches. SA117e-4 carries two further maintainer decisions, not needed until that child implements.
 
 **Infra serialization (not a track constraint).** SA112's and SA115's e2e lanes, SA117e-3's `make ci-e2e` and SA117e-4's `apply` verification, and any `make ci`/`make ci-e2e` rerun all need the same PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL` knobs namespace lanes *within* one invocation, not across worktrees — **only one track exercises PG/Docker at a time, and Track 3 has priority.** Abandon or restart an SA115 run rather than make a critical-path leg queue behind it.
 
@@ -256,7 +256,7 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** off the critical path, **head remains SA128d**, blocked at its recorded-partial candidate by high `F-001` — so the parity checker stays non-authoritative and **SA122b-1 may not start**. `F-001`'s root cause was diagnosed read-only on 2026-08-05 and its corrective plan is written into the ticket, so the open `SA128D-EXEC-001` round is now implementation-and-review, not diagnosis. The queue is **SA128d → SA122b-1 → … → SA122b-5**; only SA122b-5 is merge-gated behind SA112e.
+**Status:** off the critical path, **head is SA122b-1**, and the checker is authoritative after SA128d's accepted full-scope review. The queue is **SA122b-1 → … → SA122b-5**; SA122b-1 is next and startable, and only SA122b-5 is merge-gated behind SA112e.
 
 ### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
 
@@ -264,9 +264,9 @@ Required release properties have no authoritative topology. The five repository 
 
 **Approach — centralize *membership and metadata*, not execution.** Environment-specific jobs and hosted parallelism are worth keeping; what must stop is each context independently deciding what "green" means. SA122a is closed; it left `scripts/gate_registry.json` and `make check-gate-parity` merged, kept below as an **input, not scope**, while its regex-based checker is replaced wholesale by SA128.
 
-**Interim authority.** Until **SA128d** returns `STATUS: ok`, the parity checker's output is **not authoritative** — SA112e, SA115, and SA122b may register paths in the registry but may not rely on the checker to prove coverage. Partial authority after SA128a/b/c is explicitly not claimed.
+**Authority.** SA128d's full-scope review returned `STATUS: ok`, so the parity checker is authoritative for inventory and coverage reporting. It still reports the real five publish omissions: SA122b-4 remains responsible for closing them, and no publish parity is claimed before that child.
 
-- [ ] **SA128 — Rebuild the parity checker on structural parsing.** `Umbrella · deps: none`
+- [x] **SA128 — Rebuild the parity checker on structural parsing.** `Umbrella · deps: none`
 
   Replace `scripts/check_gate_parity.py`'s inventory extraction so each context's gate set is derived from the *semantics* of its source, not from text that resembles an invocation. The rejected regex extractors false-green in both directions, and each remediation cycle would close one deceptive form and leave the next — the compounding shape arch Finding 11 exists to remove. The workflow-YAML half is already structural (`yaml.BaseLoader` with duplicate-key rejection) and is **kept**.
 
@@ -280,55 +280,35 @@ Required release properties have no authoritative topology. The five repository 
   - **Start clean.** Each child starts from its predecessor's merged tip. Never preserve or patch a rejected candidate.
   - Every attempt appends its row to the Attempts table below **before** any checkpoint is written.
 
-  | Child (open) | Domain | Tier |
+  | Child | Domain | Tier |
   |---|---|---|
   | SA128d | Cross-cutting contracts + complete proof matrix; makes the checker authoritative | 2 |
 
-  Umbrella acceptance is that all four children (SA128a/b/c ✓ closed, plus d) are independently reviewed and merged in order and SA128d's full-scope review returns `STATUS: ok`. SA122a's findings close with SA128d; its two MyPy errors closed in SA128c and must remain **gone, not baselined**. The low-severity `.PHONY` wording finding is carried, non-blocking.
+  Umbrella acceptance is satisfied: all four children (SA128a/b/c/d) are independently reviewed and merged in order, and SA128d's full-scope review returned `STATUS: ok`. SA122a's findings close with SA128d; its two MyPy errors closed in SA128c and remain **gone, not baselined**. No blocking or advisory finding remains.
 
   *(why →* a parity checker that can assert coverage a context does not have is worse than none, because SA122b's migration and every later gate would trust it*)*
 
-  **SA128a, SA128b, and SA128c are closed and merged** (evidence in [CHANGELOG.md](../../CHANGELOG.md)). The inherited **SA128a/F-003** `_communicate_bounded` resilience item was addressed by the SA128d candidate and did not remain in its terminal review ledger; SA128d's separate high blocking `F-001` remains open below.
+  **SA128a, SA128b, SA128c, and SA128d are closed and merged** (evidence in [CHANGELOG.md](../../CHANGELOG.md)). The inherited **SA128a/F-003** `_communicate_bounded` resilience item was addressed by the SA128d candidate and did not remain in its terminal review ledger; SA128d's `F-001` was resolved by the accepted full-scope review.
 
-  - [ ] **SA128d — Cross-cutting contracts, full proof matrix, and umbrella closeout.** `Tier 2 · deps: SA128c ✓ closed` — **this is where the checker becomes authoritative**
+  - [x] **SA128d — Cross-cutting contracts, full proof matrix, and umbrella closeout.** `Tier 2 · deps: SA128c ✓ closed` — **checker authority established here**
     Land the contracts that must hold across all three extractors: arbitrary dependency DAGs including cycles; one no-bypass containment contract for every consumed source, `include`, and `--registry` path (canonical, non-symlink, inside the repository); uniform controlled **exit 2** for missing, malformed, or ambiguous observations, never a pass; and literal failure semantics for output/event bounds, readers, residual processes, and process-group cleanup. Then supply the complete proof matrix.
-    - Verify: the adversarial fixture set false-greens **none** of the six ratified inert forms; delegated and `$(VAR)`-composed targets report present; unparseable Makefile/shell/YAML input exits non-zero with a named error; adding a fake gate to the registry fails every context that has not adopted it; the five publish omissions still report exactly, with direct execution exiting **1** and the Make wrapper **2**; the matrix covers inert forms, Make delegation, Bash ordering/join/failure, hostile CWD, lifecycle, and caller parity. `make quality` and `make typecheck` exit 0. Full-scope review returns `STATUS: ok`, then close the umbrella.
+    - Accepted verification: the adversarial fixture set false-greens **none** of the six ratified inert forms; delegated and `$(VAR)`-composed targets report present; unparseable Makefile/shell/YAML input exits non-zero with a named error; adding a fake gate to the registry fails every context that has not adopted it; the five publish omissions still report exactly, with direct execution exiting **1** and the Make wrapper **2**; the matrix covers inert forms, Make delegation, Bash ordering/join/failure, hostile CWD, lifecycle, and caller parity. `make quality` and `make typecheck` exit 0. Full-scope review DC-58 returned `STATUS: ok`; the checker is authoritative, while publish parity remains open for SA122b-4.
     *(why →* the contracts are cross-cutting by nature and cannot be proved per-extractor*)*
 
-    **Current checkpoint (2026-08-05; recorded partial delivery; task unchecked; checker non-authoritative).** The functional two-file candidate is preserved at `d2b3ac24`, with Track 1's `v87` sync as merge `21f35506`. It implements canonical no-bypass containment, arbitrary dependency-cycle handling, uniform controlled failures, bounded observer lifecycle, and the complete adversarial/caller-parity matrix; **183** focused tests, `make typecheck`, `make quality`, formatter, and `git diff --check` pass, and the declared publish gap stays exact (direct **1** / Make wrapper **2**, same five records). Inherited **SA128a/F-003** did not survive the terminal review ledger. Full evidence is in [CHANGELOG.md](../../CHANGELOG.md).
-    - **Pending-Blocking:** `F-001` (**high**, completeness; `scripts/check_gate_parity.py` Bash observation/event transport and `scripts/test_gate_parity.py` overflow harnesses). The candidate is preservation only — not approval, waiver, completion, checker authority, or permission for SA122b to start.
-
-    **Root cause (diagnosed 2026-08-05, read-only; supersedes the previous symptom list).** **Every bound is evaluated *after* the step that can exceed it, never during.** The checker can therefore only detect overflow that has already been materialized — which is precisely why "prove overflow while producers are live" cannot be satisfied by the current shape, and why three attempts that each added or refined bounds still failed: **the measurements are correct; the cadence at which they are taken is not.** `_bash_observation_file_bytes` (`check_gate_parity.py:1704-1723`) is a sound sampler and should be kept as-is. Three instances of the one defect:
-
-    | # | Site | Why the bound arrives too late |
-    |---|---|---|
-    | 1 | `_communicate_bounded` selector loop, `check_gate_parity.py:886-899` | `check_total_bound()` runs only inside `drain()`, and `drain()` runs only when a **pipe** becomes readable. An observer that writes solely to the file channels leaves `selector.select(timeout=remaining)` blocked for the whole remaining deadline while recorder/launch/wait/worker files grow unsampled. |
-    | 2 | Combined launch+wait event budget, `check_gate_parity.py:2099-2105` | Both logs are read to completion — each bounded to `_BASH_MAX_EVENTS` *individually* — and only then is the sum tested, so up to **2×** the aggregate budget is materialized before the check fires. |
-    | 3 | Combined worker-frame budget, `check_gate_parity.py:2110-2120` | `invocations.extend(...)` consumes an entire worker file before `_BASH_MAX_FRAMES` is tested; N workers each just under the per-file bound overshoot the aggregate before detection. |
-
-    **Corrective plan (ordered; same two-file allowlist, no new dependency).**
-    1. **Make the sampling cadence time-based, not event-based.** Cap each `select()` wait at a short poll interval (`min(remaining, interval)`) and call `check_total_bound()` **once per loop iteration** regardless of pipe readiness. This alone converts the file channels from post-hoc to live under the existing `max_bytes`.
-    2. **Thread one shared budget object through the readers.** Give `_iter_bounded_file_lines`, `_read_bash_event_log`, and `_read_bash_recorder_log` a caller-supplied running counter so the aggregate event/frame budget trips **during** iteration; delete the two after-the-fact sum checks at `:2100` and `:2115`, which become unreachable by construction.
-    3. **Remove the harness pre-parsing.** `scripts/test_gate_parity.py` must not read launch/wait logs before the checker observes them — the overflow assertions have to run against the checker's own live path.
-    4. **Re-prove overflow with producers live.** Add a Bash observer that writes **only** to the file channels and never to stdout/stderr, and assert the checker trips while that producer is still running (not after it exits) — including the combined worker-frame case across multiple workers.
-    - **Verify additions:** an observer silent on both pipes but writing past the byte bound fails within roughly the poll interval, not at the deadline; two logs each under the per-file bound but jointly over the aggregate fail during the second read; N worker files jointly over `_BASH_MAX_FRAMES` fail before the last file is consumed. The declared publish gap must stay exact (direct **1** / Make wrapper **2**, same five records).
-    - **Decisions needed:** `SA128D-EXEC-001` — one execution/review round; the design question is now answered, so the round is spent on implementation and review rather than diagnosis. **Not infra-contending:** the two allowlisted files import only stdlib and pytest, so SA128d needs no PostgreSQL or Docker and does not compete with Track 3 for the [serialized infra](#dependency--parallelization-overview); sequence its repo-wide `make quality`/`make typecheck` outside an active e2e window to avoid CPU contention only.
-
-  **Attempts and outcomes.** Both monolithic attempts were reverted before any commit, with nothing dangling in reflog or stash, so their designs are lost. Every SA128 child attempt appends a row here **before** its checkpoint, so a design rejected in one domain is visible to the others. The three closed children (SA128a, SA128b, SA128c) returned full-scope `STATUS: ok`; their evidence is in [CHANGELOG.md](../../CHANGELOG.md) and is not restated here.
+  **Attempts and outcomes.** Both monolithic attempts were reverted before any commit, with nothing dangling in reflog or stash, so their designs are lost. Every SA128 child attempt appends a row here **before** its checkpoint, so a design rejected in one domain is visible to the others. The four SA128d attempts and the three closed children are retained as review history; accepted evidence is in [CHANGELOG.md](../../CHANGELOG.md).
 
   | # | Design taken | Findings targeted | Gates | Review outcome | Why it failed |
   |---|---|---|---|---|---|
   | 1 | *unrecorded* — pre-dated the ratified invariants above, which were themselves this attempt's output (Bubblewrap removed, regex fallback forbidden, Make/Bash delegation mandated) | all nine | two bounded fix/re-review rounds plus one authorized post-cap re-plan, whose plan review also returned `STATUS: partial` | cap reached; `STATUS: partial` | **UNRECORDED.** Only the ratified negative constraints survive as evidence of what was rejected. |
   | 2 | *unrecorded* — two-phase plan, independent plan review `STATUS: ok` before implementation | all nine | 132 focused tests, strict MyPy, Ruff, exact exit-1/exit-2 five-record parity, `make typecheck`, `make quality`, `git diff --check` — all green | two full-scope reviews, both `STATUS: partial`; severity high, count 9 → 9 | **UNRECORDED — needs maintainer recall from that session's review output.** The single highest-value gap on the ticket. |
   | 3 | SA128d seven-phase serial plan: mandatory Attempts-ledger bookkeeping; canonical-path boundary; arbitrary dependency-graph and cycle validation; bounded observer lifecycle; complete proof matrix; executable freeze/quality/full review; gated documentation closeout | Plan-review F-001/F-002; SA128a/F-003; SA128d remaining cross-cutting obligations (cycles, no-bypass containment, uniform exit 2, bounds/readers/residual processes/process-group cleanup, complete matrix) | Revised plan review `STATUS: ok`; Phase 0 row independently approved; **183** focused tests; typecheck, quality, formatter, diff and exact five-record parity checks green; two executable full reviews | `STATUS: partial`; one unresolved blocker, severity **medium → high**; `F-001` remains open at the review cap | File-backed recorder/launch/wait/worker channels and harness pre-parsing are not one live aggregate-bounded event stream; overflow proof can pass after unbounded growth, so checker authority is unproved |
+  | 4 | SA128d corrective plan: time-based live sampling; shared aggregate budgets; no harness pre-parsing; producer-live overflow proof across byte, event, and worker-frame channels | `F-001` and the remaining cross-cutting proof obligations | **186** focused tests; scoped Ruff check/format; `make typecheck`; `make quality`; exact five-record parity; `git diff --check` — all passed | Full-scope Adaptive-change-review DC-58 `STATUS: ok`, confidence 96 | Accepted; `F-001` resolved by full-scope review; no findings or blockers remain |
 
-  **The pattern.** Attempt 2 satisfied every mechanical gate and was still rejected at full scope with **zero** ledger movement. That is not a capacity signal — it is the acceptance bar and the two-file allowlist disagreeing: nine high findings across five observation domains cannot be discharged as one reviewable unit, so any single review legitimately finds some domain unproved regardless of how good the candidate is elsewhere. Hence the split above. **Do not treat green mechanical gates as evidence of acceptance.**
+  **Completion checkpoint (2026-08-05; accepted and merged).** Functional commit `6fcb8c35` implements the approved live aggregate-bound correction. The accepted evidence is **186** focused tests, scoped Ruff check/format, `make typecheck`, `make quality`, direct checker exit **1**, Make wrapper exit **2**, and `git diff --check` exit **0**; the direct checker and wrapper report the identical five publish omissions, which remain open for SA122b-4. Full-scope Adaptive-change-review DC-58 returned `STATUS: ok` with confidence 96 and resolved `F-001`; no remaining findings or blockers exist. SA128d and the SA128 umbrella are complete, and SA122b-1 is next/startable.
 
-  **Open child work.** SA128d is the sole remaining child; what it must prove is the corrective plan and verify additions in its block above, plus full-scope `STATUS: ok`.
+- [ ] **SA122b — Migrate the consumers onto the registry.** `Umbrella · deps: SA128d ✓ closed`
 
-- [ ] **SA122b — Migrate the consumers onto the registry.** `Umbrella · deps: SA128d`
-
-  Make each context derive its inventory from the registry instead of restating it, then make the SA128 parity checker **blocking** in CI once every context derives. Every child inherits: the registry and its schema are an **input, not scope** — a child needing a schema change stops and escalates rather than editing it; the SA128 checker is the oracle, so no child may add tolerance or exception logic to make a context read green; and no child starts before SA128d returns `STATUS: ok`.
+  Make each context derive its inventory from the registry instead of restating it, then make the SA128 parity checker **blocking** in CI once every context derives. Every child inherits: the registry and its schema are an **input, not scope** — a child needing a schema change stops and escalates rather than editing it; the SA128 checker is the authoritative oracle, so no child may add tolerance or exception logic to make a context read green; and SA122b-1 is now startable after SA128d returned `STATUS: ok`.
 
   | Child | Consumer context | Executable surface | Tier |
   |---|---|---|---|
@@ -338,9 +318,9 @@ Required release properties have no authoritative topology. The five repository 
   | SA122b-4 | Publish membership (**behaviour change**) | `.github/workflows/publish.yml` | 2 |
   | SA122b-5 | E2E paths, blocking checker, closeout | `.github/workflows/e2e.yml`, CI wiring | 2 |
 
-  **Only SA122b-5 carries the `merge after SA112e` bound** — that is the point of the per-context split. SA122b-1 – SA122b-4 merge as soon as SA128d closes instead of the whole migration idling behind five Track 3 children.
+  **Only SA122b-5 carries the `merge after SA112e` bound** — that is the point of the per-context split. SA122b-1 – SA122b-4 merge now that SA128d is closed instead of the whole migration idling behind five Track 3 children.
 
-  - [ ] **SA122b-1 — Derive Make's `check` aggregation from the registry.** `Tier 2 · deps: SA128d`
+  - [ ] **SA122b-1 — Derive Make's `check` aggregation from the registry.** `Tier 2 · deps: SA128d ✓ closed` — **next/startable**
     Replace the hand-written gate list in the `check` target and its `Makefile:784-821` declarations so membership comes from `scripts/gate_registry.json`, keeping each gate's own recipe and target names intact. Leave the shell and all three workflows untouched.
     - Verify: `make check` and `make check QUIET=1` run exactly today's effective gate set, proven against the pre-change inventory; the SA128 checker reports the Make context in parity; adding a fake gate to the registry makes `check` pick it up with no `Makefile` edit.
 
@@ -386,16 +366,16 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 
 ## Track topology — settled
 
-**No track-sequencing or worktree-assignment question is open, and the latest rebalancing review (2026-08-05) applied no move — the sixth consecutive pass to reach that conclusion, for unchanged structural reasons:** every open v87 ticket carries a track, Track 2 is closed to new work by standing rule (homing anything there drags SA115 onto `v87`), Track 3's children are one coherent serial umbrella in which every child is ordering-dependent on its predecessor, and SA112a — the one node that was worth parallelizing onto Track 1 — has closed and merged. The remaining off-path work (SA128d, SA122b-1…5) is a single serial chain whose head is dependency-blocked on its predecessor, so it cannot be spread further; moving any of it onto Track 3 would push filler ahead of the critical path.
+**No track-sequencing or worktree-assignment question is open, and the latest rebalancing review (2026-08-05) applied no move — the sixth consecutive pass to reach that conclusion, for unchanged structural reasons:** every open v87 ticket carries a track, Track 2 is closed to new work by standing rule (homing anything there drags SA115 onto `v87`), Track 3's children are one coherent serial umbrella in which every child is ordering-dependent on its predecessor, and SA112a — the one node that was worth parallelizing onto Track 1 — has closed and merged. The remaining off-path work (SA122b-1…5) is a single serial chain, now unblocked at its head; moving any of it onto Track 3 would push filler ahead of the critical path.
 
 **Standing placements.**
 
 - **The SA112a Track 1 placement (`SA112A-TRACK-003`) is discharged** — it merged to `v87` before SA112b starts, which was the whole point of the edge, and its scripts are now owned by no open ticket. Closure detail is in [CHANGELOG.md](../../CHANGELOG.md).
-- **Track 1's queue is SA128d → SA122b-1 → … → SA122b-5**, head at SA128d — a single serial chain, each link dependency-blocked on its predecessor.
+- **Track 1's queue is SA122b-1 → … → SA122b-5**, head at SA122b-1 — a single serial chain with its first child now startable.
 - **SA117e's Tier 3 split is a sizing correction, not a topology change.** No new track, no ticket moved, no new shared writer. Its one board-level effect is a shortening: SA112b's precondition is SA117e-**4**, so closeout child `-5` sits off the critical path.
 - **The *fourth-worktree* variant is permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 
-**Open decisions — three, all the maintainer's; none blocks the critical path.** `SA117E3-EXEC-001` was **granted on 2026-08-05**, so the critical path is live. `SA128D-EXEC-001` remains open and blocks off-path Track 1 only — one fresh execution/review budget round for a correction whose design is already approved; it needs a budget, not a design choice, and holding it while Track 3 executes matches the standing PG/Docker priority rule. The other two are owned by **SA117e-4** and are not needed until that child implements: the explicit-absence Git lease contract for `SA117E1-REV-001`, and the bind-and-consume versus approved de-advertise/defer disposition for `SA117E1-REV-002`. All other blockers are hard upstream dependencies. These standing decisions are distinct from the twelve-row push confirmation and SA96-PUBLISH, which are execution-time human gates obtained at the outward-facing action and never pre-granted.
+**Open decisions — two, both the maintainer's; neither blocks the critical path.** `SA117E3-EXEC-001` was **granted on 2026-08-05**, so the critical path is live. The remaining two are owned by **SA117e-4** and are not needed until that child implements: the explicit-absence Git lease contract for `SA117E1-REV-001`, and the bind-and-consume versus approved de-advertise/defer disposition for `SA117E1-REV-002`. All other blockers are hard upstream dependencies. These standing decisions are distinct from the twelve-row push confirmation and SA96-PUBLISH, which are execution-time human gates obtained at the outward-facing action and never pre-granted.
 
 Earlier resolved authorizations (`SA117E-VAL-001`, the `SA117E-VAL-002` replacement-baseline decision, `SA112A-AUTH-006`, `SA112A-HANDOFF-001`, `SA112A-HANDOFF-002`, `SA112A-HANDOFF-003`, `SA112A-HANDOFF-004`, `SA112A-RESET-001`, `SA112A-TRACK-003`, SA132's three remediation decisions) are recorded in [CHANGELOG.md](../../CHANGELOG.md) and are not restated here.
 
