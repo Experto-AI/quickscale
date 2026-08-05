@@ -892,24 +892,28 @@ def _communicate_bounded(
                     drain(key)
                 if not selector.get_map():
                     break
+            check_total_bound()
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise subprocess.TimeoutExpired(proc.args, timeout)
-            for key, _ in selector.select(timeout=remaining):
+            for key, _ in selector.select(
+                timeout=min(remaining, _BOUNDED_COMMUNICATION_POLL_SECONDS)
+            ):
                 drain(key)
 
         # EOF on both captured streams is not sufficient: the direct observer
         # may have closed both descriptors and still be alive.  Preserve the
         # original deadline while waiting for that process to exit rather than
         # returning to a caller that would need an unbounded wait.
-        if proc.poll() is None:
+        while proc.poll() is None:
+            check_total_bound()
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise subprocess.TimeoutExpired(proc.args, timeout)
             try:
-                proc.wait(timeout=remaining)
+                proc.wait(timeout=min(remaining, _BOUNDED_COMMUNICATION_POLL_SECONDS))
             except subprocess.TimeoutExpired:
-                raise subprocess.TimeoutExpired(proc.args, timeout) from None
+                continue
         check_total_bound()
     finally:
         selector.close()
@@ -1392,6 +1396,7 @@ _BASH_MAX_ARGV_ITEMS = 256
 _BASH_MAX_EVENT_BYTES = 64 * 1024
 _BASH_MAX_FRAME_BYTES = 1024 * 1024
 _BASH_FILE_READ_CHUNK_BYTES = 64 * 1024
+_BOUNDED_COMMUNICATION_POLL_SECONDS = 0.01
 _BASH_ERROR_DETAIL_BYTES = 400
 _BASH_RESULT_MARKER = "__SA128B_RESULT__"
 _BASH_PROCESS_GROUP_SETTLE_SECONDS = 0.05
@@ -1533,10 +1538,6 @@ declare -a WORKER_PIDS=()
 declare -a WORKER_ORDER=()
 declare -a STATIC_STAGE_NAMES=()
 declare -a STATIC_FAILURE_LABELS=()
-declare -a launch_pids=()
-declare -a launch_logs=()
-declare -a wait_pids=()
-declare -a wait_statuses=()
 
 if ! declare -F "${2:-run_static_gates}" >/dev/null; then
     printf '%s function %s() not found\\n' "$__SA128B_RESULT__" "${2:-run_static_gates}" >&2
@@ -1553,65 +1554,6 @@ if builtin wait "$observed_pid"; then
     observed_status=0
 else
     observed_status=$?
-fi
-
-if [ "$observed_status" -eq 0 ] && [ "${2:-run_static_gates}" = "run_static_gates_parallel" ]; then
-    validation_error=""
-    launch_count=0
-    expected_pid=""
-    actual_pid=""
-    worker_status=0
-    while IFS=$'\\t' read -r stage_id worker_pid worker_log; do
-        [ -n "${worker_pid:-}" ] || continue
-        launch_count=$((launch_count + 1))
-        launch_pids[$((launch_count - 1))]="$worker_pid"
-        launch_logs[$((launch_count - 1))]="$worker_log"
-    done < "$SA128_LAUNCH_LOG"
-
-    wait_count=0
-    special_wait=false
-    while IFS=$'\\t' read -r actual_pid worker_status; do
-        if [ "${actual_pid:-}" = "SPECIAL" ]; then
-            special_wait=true
-            continue
-        fi
-        [ -n "${actual_pid:-}" ] || continue
-        wait_pids[$wait_count]="$actual_pid"
-        wait_statuses[$wait_count]="${worker_status:-127}"
-        wait_count=$((wait_count + 1))
-    done < "$SA128_WAIT_LOG"
-
-    if [ "$special_wait" = true ] || [ "$wait_count" -ne "$launch_count" ]; then
-        validation_error="parallel observation did not explicitly join every launched worker"
-    else
-        for ((i = 0; i < launch_count; i++)); do
-            expected_pid="${launch_pids[$i]}"
-            actual_pid="${wait_pids[$i]}"
-            if [ "$expected_pid" != "$actual_pid" ]; then
-                validation_error="parallel workers were not joined in declaration order"
-                break
-            fi
-            worker_status="${wait_statuses[$i]}"
-            if [ "$worker_status" -ne 0 ]; then
-                validation_error="parallel worker $expected_pid failed with status $worker_status"
-                break
-            fi
-        done
-    fi
-
-    if [ -z "$validation_error" ]; then
-        for ((i = 0; i < launch_count; i++)); do
-            worker_pid="${launch_pids[$i]}"
-            if kill -0 "$worker_pid" 2>/dev/null; then
-                validation_error="parallel observation left worker $worker_pid running"
-                break
-            fi
-        done
-    fi
-    if [ -n "$validation_error" ]; then
-        printf '%s\\n' "$validation_error" >&2
-        observed_status=2
-    fi
 fi
 
 printf '%s%s\\n' "$__SA128B_RESULT__" "$observed_status"
@@ -1723,11 +1665,45 @@ def _bash_observation_file_bytes(
     return total
 
 
-def _iter_bounded_file_lines(path: Path, label: str) -> Iterator[bytes]:
+class _BashObservationReadBudget:
+    """Running limits shared by every parsed Bash observation channel."""
+
+    __slots__ = ("bytes_read", "event_count", "frame_count")
+
+    def __init__(self) -> None:
+        self.bytes_read = 0
+        self.event_count = 0
+        self.frame_count = 0
+
+    def account_bytes(self, path: Path, label: str, amount: int, detail: str) -> None:
+        """Account for bytes read from one channel against the aggregate bound."""
+        self.bytes_read += amount
+        if self.bytes_read > _bash_observation_byte_limit():
+            raise SchemaValidationError(str(path), label, detail)
+
+    def account_event(self, path: Path, label: str) -> None:
+        """Account for one event across all event channels."""
+        self.event_count += 1
+        if self.event_count > _BASH_MAX_EVENTS:
+            raise SchemaValidationError(
+                str(path), label, "combined Bash observation event count exceeded the bound"
+            )
+
+    def account_frame(self, path: Path, label: str) -> None:
+        """Account for one recorder frame across all recorder channels."""
+        self.frame_count += 1
+        if self.frame_count > _BASH_MAX_FRAMES:
+            raise SchemaValidationError(
+                str(path), label, "combined Bash recorder frame count exceeded the bound"
+            )
+
+
+def _iter_bounded_file_lines(
+    path: Path, label: str, budget: _BashObservationReadBudget | None = None
+) -> Iterator[bytes]:
     """Yield newline-delimited file events without an unbounded read."""
-    total = 0
+    read_budget = budget if budget is not None else _BashObservationReadBudget()
     event_bytes = bytearray()
-    event_count = 0
     try:
         stream = path.open("rb")
     except OSError as exc:
@@ -1740,11 +1716,9 @@ def _iter_bounded_file_lines(path: Path, label: str) -> Iterator[bytes]:
             chunk = stream.read(_BASH_FILE_READ_CHUNK_BYTES)
             if not chunk:
                 break
-            total += len(chunk)
-            if total > _bash_observation_byte_limit():
-                raise SchemaValidationError(
-                    str(path), label, "observation event file exceeded the byte bound"
-                )
+            read_budget.account_bytes(
+                path, label, len(chunk), "observation event file exceeded the byte bound"
+            )
             event_bytes.extend(chunk)
             while True:
                 try:
@@ -1757,11 +1731,7 @@ def _iter_bounded_file_lines(path: Path, label: str) -> Iterator[bytes]:
                     break
                 event = bytes(event_bytes[:newline])
                 del event_bytes[: newline + 1]
-                event_count += 1
-                if event_count > _BASH_MAX_EVENTS:
-                    raise SchemaValidationError(
-                        str(path), label, "observation event count exceeded the bound"
-                    )
+                read_budget.account_event(path, label)
                 if len(event) > _BASH_MAX_EVENT_BYTES:
                     raise SchemaValidationError(
                         str(path), label, "observation event exceeded the byte bound"
@@ -1769,11 +1739,7 @@ def _iter_bounded_file_lines(path: Path, label: str) -> Iterator[bytes]:
                 yield event
 
         if event_bytes:
-            event_count += 1
-            if event_count > _BASH_MAX_EVENTS:
-                raise SchemaValidationError(
-                    str(path), label, "observation event count exceeded the bound"
-                )
+            read_budget.account_event(path, label)
             if len(event_bytes) > _BASH_MAX_EVENT_BYTES:
                 raise SchemaValidationError(
                     str(path), label, "unterminated observation event exceeded the byte bound"
@@ -1781,10 +1747,16 @@ def _iter_bounded_file_lines(path: Path, label: str) -> Iterator[bytes]:
             yield bytes(event_bytes)
 
 
-def _read_bash_event_log(path: Path, expected_fields: int, label: str) -> list[tuple[str, ...]]:
+def _read_bash_event_log(
+    path: Path,
+    expected_fields: int,
+    label: str,
+    budget: _BashObservationReadBudget | None = None,
+) -> list[tuple[str, ...]]:
     """Read a bounded tab-delimited Bash event log and validate its shape."""
+    read_budget = budget if budget is not None else _BashObservationReadBudget()
     events: list[tuple[str, ...]] = []
-    for raw_event in _iter_bounded_file_lines(path, label):
+    for raw_event in _iter_bounded_file_lines(path, label, read_budget):
         try:
             event = raw_event.decode("utf-8")
         except UnicodeDecodeError:
@@ -1798,9 +1770,12 @@ def _read_bash_event_log(path: Path, expected_fields: int, label: str) -> list[t
     return events
 
 
-def _iter_bounded_nul_fields(path: Path, label: str) -> Iterator[bytes]:
+def _iter_bounded_nul_fields(
+    path: Path, label: str, budget: _BashObservationReadBudget | None = None
+) -> Iterator[bytes]:
     """Yield NUL-delimited recorder fields with bounded incremental buffering."""
-    total = 0
+    read_budget = budget if budget is not None else _BashObservationReadBudget()
+    file_bytes = 0
     pending = bytearray()
     terminated = False
     try:
@@ -1813,11 +1788,10 @@ def _iter_bounded_nul_fields(path: Path, label: str) -> Iterator[bytes]:
             chunk = stream.read(_BASH_FILE_READ_CHUNK_BYTES)
             if not chunk:
                 break
-            total += len(chunk)
-            if total > _bash_observation_byte_limit():
-                raise SchemaValidationError(
-                    str(path), label, "recorder file exceeded the byte bound"
-                )
+            file_bytes += len(chunk)
+            read_budget.account_bytes(
+                path, label, len(chunk), "recorder file exceeded the byte bound"
+            )
             pending.extend(chunk)
             while True:
                 try:
@@ -1839,13 +1813,16 @@ def _iter_bounded_nul_fields(path: Path, label: str) -> Iterator[bytes]:
 
         if pending:
             raise SchemaValidationError(str(path), label, "incomplete Bash recorder transport")
-        if not terminated and total:
+        if not terminated and file_bytes:
             raise SchemaValidationError(str(path), label, "incomplete Bash recorder transport")
 
 
-def _read_bash_recorder_log(path: Path, label: str) -> list[tuple[str, ...]]:
+def _read_bash_recorder_log(
+    path: Path, label: str, budget: _BashObservationReadBudget | None = None
+) -> list[tuple[str, ...]]:
     """Parse argc-prefixed recorder frames incrementally and within all bounds."""
-    fields = iter(_iter_bounded_nul_fields(path, label))
+    read_budget = budget if budget is not None else _BashObservationReadBudget()
+    fields = iter(_iter_bounded_nul_fields(path, label, read_budget))
     invocations: list[tuple[str, ...]] = []
     while True:
         try:
@@ -1888,9 +1865,8 @@ def _read_bash_recorder_log(path: Path, label: str) -> list[tuple[str, ...]]:
                 raise SchemaValidationError(
                     str(path), label, "Bash recorder argv is not UTF-8"
                 ) from None
+        read_budget.account_frame(path, label)
         invocations.append(tuple(args))
-        if len(invocations) > _BASH_MAX_FRAMES:
-            raise SchemaValidationError(str(path), label, "recorder frame count exceeded the bound")
     return invocations
 
 
@@ -2072,9 +2048,10 @@ def _run_bash_observation(
 
         _assert_observation_process_group_clean(proc)
 
+        read_budget = _BashObservationReadBudget()
         if function_name == "run_static_gates_parallel":
             launch_records: list[tuple[str, str, Path]] = []
-            launch_events = _read_bash_event_log(launch_log_path, 3, "launch.log")
+            launch_events = _read_bash_event_log(launch_log_path, 3, "launch.log", read_budget)
             for stage_id, worker_pid, worker_log in launch_events:
                 if not worker_pid.isdecimal():
                     raise SchemaValidationError(
@@ -2096,13 +2073,30 @@ def _run_bash_observation(
                         "launch event worker log is outside worker directory",
                     )
                 launch_records.append((stage_id, worker_pid, worker_log_path))
-            wait_events = _read_bash_event_log(wait_log_path, 2, "wait.log")
-            if len(launch_events) + len(wait_events) > _BASH_MAX_EVENTS:
+            wait_events = _read_bash_event_log(wait_log_path, 2, "wait.log", read_budget)
+            if any(actual_pid == "SPECIAL" for actual_pid, _ in wait_events) or len(
+                wait_events
+            ) != len(launch_events):
                 raise SchemaValidationError(
                     str(path),
                     function_name,
-                    "combined Bash observation event count exceeded the bound",
+                    "parallel observation did not explicitly join every launched worker",
                 )
+            for (_, expected_pid, _), (actual_pid, worker_status) in zip(
+                launch_records, wait_events, strict=True
+            ):
+                if actual_pid != expected_pid:
+                    raise SchemaValidationError(
+                        str(path),
+                        function_name,
+                        "parallel workers were not joined in declaration order",
+                    )
+                if not worker_status.isdecimal() or int(worker_status) != 0:
+                    raise SchemaValidationError(
+                        str(path),
+                        function_name,
+                        f"parallel worker {expected_pid} failed with status {worker_status}",
+                    )
             log_paths = [worker_log for _, _, worker_log in launch_records]
         else:
             log_paths = [log_path]
@@ -2111,13 +2105,9 @@ def _run_bash_observation(
         for argv_log in log_paths:
             if not argv_log.exists():
                 continue
-            invocations.extend(_read_bash_recorder_log(argv_log, f"{function_name} recorder"))
-            if len(invocations) > _BASH_MAX_FRAMES:
-                raise SchemaValidationError(
-                    str(path),
-                    function_name,
-                    "combined Bash recorder frame count exceeded the bound",
-                )
+            invocations.extend(
+                _read_bash_recorder_log(argv_log, f"{function_name} recorder", read_budget)
+            )
         return invocations
 
 
