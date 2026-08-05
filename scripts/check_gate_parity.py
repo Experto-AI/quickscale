@@ -1930,6 +1930,11 @@ def _run_bash_observation(
         wait_log_path = temp_dir / "wait.log"
         env = {
             "PATH": str(bin_dir),
+            # The production script resolves Python from PATH/Poetry.  The
+            # observer intentionally has a recorder-only PATH, so provide the
+            # checker interpreter explicitly to keep this isolated observation
+            # deterministic without weakening contributor-side resolution.
+            "PYTHON3": sys.executable,
             "HOME": str(temp_dir),
             "TMPDIR": str(temp_dir),
             "LANG": "C",
