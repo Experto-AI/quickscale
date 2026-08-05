@@ -29,6 +29,7 @@ from check_gate_parity import (
     _CONTEXT_SOURCES,
     SchemaValidationError,
     _assert_canonical_makefile_input,
+    _BashObservationReadBudget,
     _canonical_input_path,
     _communicate_bounded,
     _extract_check_ci_parallel_gates,
@@ -44,7 +45,10 @@ from check_gate_parity import (
     _is_subsequence,
     _kill_make_process_group,
     _live_process_group_members,
+    _MakeOutputError,
     _observe_publish_run_blocks,
+    _read_bash_event_log,
+    _read_bash_recorder_log,
     _run_bash_observation,
     _run_make,
     _validate_registry,
@@ -1460,6 +1464,68 @@ class TestSA128bBashObservation:
         monkeypatch.setattr(parity, "_BASH_MAX_OUTPUT_BYTES", 256)
         with pytest.raises(SchemaValidationError, match=r"output bound.*cleanup"):
             _run_bash_observation(script, "run_static_gates_parallel")
+
+    def test_pipe_silent_file_growth_is_sampled_while_producer_is_live(
+        self, tmp_path: Path
+    ) -> None:
+        """A silent producer cannot grow a watched file past the live byte bound."""
+        watched = tmp_path / "silent-observation.log"
+        command = f"while :; do printf '%*s' 1024 '' >> {shlex.quote(str(watched))}; done"
+        proc = subprocess.Popen(
+            ["/bin/bash", "-c", command],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+        try:
+            with pytest.raises(_MakeOutputError, match="output bound"):
+                _communicate_bounded(
+                    proc,
+                    256,
+                    2.0,
+                    watched_file_bytes=lambda: watched.stat().st_size if watched.exists() else 0,
+                )
+        finally:
+            _kill_make_process_group(proc, proc.pid)
+
+    def test_shared_event_budget_fails_during_second_under_limit_log(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two individually valid event logs share one running aggregate budget."""
+        import check_gate_parity as parity
+
+        first = tmp_path / "first.events"
+        second = tmp_path / "second.events"
+        first.write_text("a\t1\tx\nb\t2\ty\n", encoding="utf-8")
+        second.write_text("c\t3\tz\nd\t4\tw\n", encoding="utf-8")
+        monkeypatch.setattr(parity, "_BASH_MAX_EVENTS", 3)
+        budget = _BashObservationReadBudget()
+        assert _read_bash_event_log(first, 3, "first.events", budget) == [
+            ("a", "1", "x"),
+            ("b", "2", "y"),
+        ]
+        with pytest.raises(SchemaValidationError, match="event count"):
+            _read_bash_event_log(second, 3, "second.events", budget)
+        assert budget.event_count == 4
+
+    def test_shared_frame_budget_fails_before_last_worker_file_is_consumed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Aggregate frame overflow stops worker replay before a later file."""
+        import check_gate_parity as parity
+
+        worker_logs = [tmp_path / f"worker_{index}.argv" for index in range(3)]
+        for path in worker_logs:
+            path.write_bytes(b"ARGV:0\0ARGV:0\0")
+        monkeypatch.setattr(parity, "_BASH_MAX_FRAMES", 3)
+        budget = _BashObservationReadBudget()
+        consumed: list[Path] = []
+        with pytest.raises(SchemaValidationError, match="frame count"):
+            for path in worker_logs:
+                consumed.append(path)
+                _read_bash_recorder_log(path, "worker recorder", budget)
+        assert consumed == worker_logs[:2]
 
 
 class TestBoundedObservationLifecycle:
