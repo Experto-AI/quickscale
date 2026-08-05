@@ -256,7 +256,7 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** off the critical path, **head remains SA128d**, blocked at its recorded-partial candidate by high `F-001` — so the parity checker stays non-authoritative and **SA122b-1 may not start**. Continuation is the `SA128D-EXEC-001` decision. The queue is **SA128d → SA122b-1 → … → SA122b-5**; only SA122b-5 is merge-gated behind SA112e.
+**Status:** off the critical path, **head remains SA128d**, blocked at its recorded-partial candidate by high `F-001` — so the parity checker stays non-authoritative and **SA122b-1 may not start**. `F-001`'s root cause was diagnosed read-only on 2026-08-05 and its corrective plan is written into the ticket, so the open `SA128D-EXEC-001` round is now implementation-and-review, not diagnosis. The queue is **SA128d → SA122b-1 → … → SA122b-5**; only SA122b-5 is merge-gated behind SA112e.
 
 ### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
 
@@ -296,8 +296,23 @@ Required release properties have no authoritative topology. The five repository 
     *(why →* the contracts are cross-cutting by nature and cannot be proved per-extractor*)*
 
     **Current checkpoint (2026-08-05; recorded partial delivery; task unchecked; checker non-authoritative).** The functional two-file candidate is preserved at `d2b3ac24`, with Track 1's `v87` sync as merge `21f35506`. It implements canonical no-bypass containment, arbitrary dependency-cycle handling, uniform controlled failures, bounded observer lifecycle, and the complete adversarial/caller-parity matrix; **183** focused tests, `make typecheck`, `make quality`, formatter, and `git diff --check` pass, and the declared publish gap stays exact (direct **1** / Make wrapper **2**, same five records). Inherited **SA128a/F-003** did not survive the terminal review ledger. Full evidence is in [CHANGELOG.md](../../CHANGELOG.md).
-    - **Pending-Blocking:** `F-001` (**high**, completeness; `scripts/check_gate_parity.py` Bash observation/event transport and `scripts/test_gate_parity.py` overflow harnesses). File-backed recorder, launch, wait, and worker channels can grow while the selector waits silently, and the harness pre-reads launch/wait logs before the checker enforces one combined budget. A clean correction must make every channel live and bounded under **one aggregate budget**, remove unbounded harness pre-parsing, and prove overflow while producers are live, including combined worker-frame overflow. The candidate is preservation only — not approval, waiver, completion, checker authority, or permission for SA122b to start.
-    - **Decisions needed:** `SA128D-EXEC-001` — a later attempt requires fresh explicit continuation (one execution/review round) and must obtain full-scope `STATUS: ok`. The engineering correction itself is concrete and needs no design decision.
+    - **Pending-Blocking:** `F-001` (**high**, completeness; `scripts/check_gate_parity.py` Bash observation/event transport and `scripts/test_gate_parity.py` overflow harnesses). The candidate is preservation only — not approval, waiver, completion, checker authority, or permission for SA122b to start.
+
+    **Root cause (diagnosed 2026-08-05, read-only; supersedes the previous symptom list).** **Every bound is evaluated *after* the step that can exceed it, never during.** The checker can therefore only detect overflow that has already been materialized — which is precisely why "prove overflow while producers are live" cannot be satisfied by the current shape, and why three attempts that each added or refined bounds still failed: **the measurements are correct; the cadence at which they are taken is not.** `_bash_observation_file_bytes` (`check_gate_parity.py:1704-1723`) is a sound sampler and should be kept as-is. Three instances of the one defect:
+
+    | # | Site | Why the bound arrives too late |
+    |---|---|---|
+    | 1 | `_communicate_bounded` selector loop, `check_gate_parity.py:886-899` | `check_total_bound()` runs only inside `drain()`, and `drain()` runs only when a **pipe** becomes readable. An observer that writes solely to the file channels leaves `selector.select(timeout=remaining)` blocked for the whole remaining deadline while recorder/launch/wait/worker files grow unsampled. |
+    | 2 | Combined launch+wait event budget, `check_gate_parity.py:2099-2105` | Both logs are read to completion — each bounded to `_BASH_MAX_EVENTS` *individually* — and only then is the sum tested, so up to **2×** the aggregate budget is materialized before the check fires. |
+    | 3 | Combined worker-frame budget, `check_gate_parity.py:2110-2120` | `invocations.extend(...)` consumes an entire worker file before `_BASH_MAX_FRAMES` is tested; N workers each just under the per-file bound overshoot the aggregate before detection. |
+
+    **Corrective plan (ordered; same two-file allowlist, no new dependency).**
+    1. **Make the sampling cadence time-based, not event-based.** Cap each `select()` wait at a short poll interval (`min(remaining, interval)`) and call `check_total_bound()` **once per loop iteration** regardless of pipe readiness. This alone converts the file channels from post-hoc to live under the existing `max_bytes`.
+    2. **Thread one shared budget object through the readers.** Give `_iter_bounded_file_lines`, `_read_bash_event_log`, and `_read_bash_recorder_log` a caller-supplied running counter so the aggregate event/frame budget trips **during** iteration; delete the two after-the-fact sum checks at `:2100` and `:2115`, which become unreachable by construction.
+    3. **Remove the harness pre-parsing.** `scripts/test_gate_parity.py` must not read launch/wait logs before the checker observes them — the overflow assertions have to run against the checker's own live path.
+    4. **Re-prove overflow with producers live.** Add a Bash observer that writes **only** to the file channels and never to stdout/stderr, and assert the checker trips while that producer is still running (not after it exits) — including the combined worker-frame case across multiple workers.
+    - **Verify additions:** an observer silent on both pipes but writing past the byte bound fails within roughly the poll interval, not at the deadline; two logs each under the per-file bound but jointly over the aggregate fail during the second read; N worker files jointly over `_BASH_MAX_FRAMES` fail before the last file is consumed. The declared publish gap must stay exact (direct **1** / Make wrapper **2**, same five records).
+    - **Decisions needed:** `SA128D-EXEC-001` — one execution/review round; the design question is now answered, so the round is spent on implementation and review rather than diagnosis. **Not infra-contending:** the two allowlisted files import only stdlib and pytest, so SA128d needs no PostgreSQL or Docker and does not compete with Track 3 for the [serialized infra](#dependency--parallelization-overview); sequence its repo-wide `make quality`/`make typecheck` outside an active e2e window to avoid CPU contention only.
 
   **Attempts and outcomes.** Both monolithic attempts were reverted before any commit, with nothing dangling in reflog or stash, so their designs are lost. Every SA128 child attempt appends a row here **before** its checkpoint, so a design rejected in one domain is visible to the others. The three closed children (SA128a, SA128b, SA128c) returned full-scope `STATUS: ok`; their evidence is in [CHANGELOG.md](../../CHANGELOG.md) and is not restated here.
 
@@ -309,11 +324,7 @@ Required release properties have no authoritative topology. The five repository 
 
   **The pattern.** Attempt 2 satisfied every mechanical gate and was still rejected at full scope with **zero** ledger movement. That is not a capacity signal — it is the acceptance bar and the two-file allowlist disagreeing: nine high findings across five observation domains cannot be discharged as one reviewable unit, so any single review legitimately finds some domain unproved regardless of how good the candidate is elsewhere. Hence the split above. **Do not treat green mechanical gates as evidence of acceptance.**
 
-  **Open child work, partitioned across the remaining children** — each remains unproved until its owner merges:
-
-  | Owner | Remaining to prove |
-  |---|---|
-  | SA128d | `F-001` high/blocking: one live aggregate-bounded Bash event stream across recorder, launch, wait, and worker channels; no unbounded harness pre-parsing; producer-live and combined-frame overflow proof; full-scope `STATUS: ok` |
+  **Open child work.** SA128d is the sole remaining child; what it must prove is the corrective plan and verify additions in its block above, plus full-scope `STATUS: ok`.
 
 - [ ] **SA122b — Migrate the consumers onto the registry.** `Umbrella · deps: SA128d`
 
