@@ -53,7 +53,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -121,6 +121,73 @@ class SchemaValidationError(ValueError):
         self.path = path
         self.message = message
         super().__init__(message)
+
+
+def _canonical_input_path(path: Path, source_kind: str) -> Path:
+    """
+    Accept one trusted, canonical, regular file inside the repository.
+
+    The checker treats repository inputs as trusted and assumes no concurrent
+    writer replaces a validated path.  This boundary deliberately does not
+    claim atomic inode identity, descriptor identity, race freedom, or
+    sandboxing of repository content.
+
+    Relative paths are interpreted from the current working directory.  They
+    are accepted when that spelling is already the canonical spelling of an
+    in-repository path; lexical ``..`` aliases and every symlink component are
+    rejected before the source can be observed.
+    """
+    candidate = path if path.is_absolute() else Path.cwd() / path
+    if any(part == ".." for part in candidate.parts):
+        raise SchemaValidationError(
+            str(path), "", f"{source_kind} must use a canonical path (.. aliases are not allowed)"
+        )
+
+    current = Path(candidate.anchor)
+    for component in candidate.parts[1:]:
+        current /= component
+        if current.is_symlink():
+            raise SchemaValidationError(
+                str(path), "", f"{source_kind} must not contain symlink components"
+            )
+
+    if not candidate.is_relative_to(_REPO_ROOT):
+        raise SchemaValidationError(
+            str(path), "", f"{source_kind} must reside inside the repository"
+        )
+
+    try:
+        canonical = candidate.resolve(strict=True)
+    except FileNotFoundError:
+        raise FileNotFoundError(path) from None
+
+    if candidate != canonical:
+        raise SchemaValidationError(
+            str(path), "", f"{source_kind} must use its canonical path spelling"
+        )
+    if not canonical.is_file():
+        raise SchemaValidationError(str(path), "", f"{source_kind} is not a regular file")
+    return canonical
+
+
+def _observation_input_path(path: Path, source_kind: str) -> Path:
+    """
+    Resolve a direct fixture input without weakening the CLI boundary.
+
+    Public checker inputs are validated by ``_canonical_input_path`` before
+    they reach observation.  The low-level observation functions are also
+    intentionally usable with temporary fixture files in focused tests, so
+    they only require a real, non-symlink file here.
+    """
+    if path.is_symlink():
+        raise SchemaValidationError(str(path), "", f"{source_kind} must not be a symlink")
+    try:
+        resolved = path.resolve(strict=True)
+    except FileNotFoundError:
+        raise SchemaValidationError(str(path), "", f"{source_kind} not found") from None
+    if not resolved.is_file():
+        raise SchemaValidationError(str(path), "", f"{source_kind} is not a regular file")
+    return resolved
 
 
 def _is_strict_int(value: object) -> bool:
@@ -475,21 +542,69 @@ def _validate_registry(data: dict[str, Any]) -> list[dict[str, Any]]:
                     f"gate {gid!r} depends on unknown gate {dep!r}",
                 )
 
-    # --- Direct-cycle detection ---
-    for gate in gates:
-        gid = gate["id"]
-        for dep in gate.get("depends_on", []):
-            # Find the dependency gate
-            dep_gate = next((g for g in gates if g["id"] == dep), None)
-            if dep_gate:
-                for dep2 in dep_gate.get("depends_on", []):
-                    if dep2 == gid and gid < dep:
-                        # Mutual dependency between gid and dep
-                        raise SchemaValidationError(
-                            "registry",
-                            f"gates.{gid}.depends_on",
-                            f"circular dependency between {gid!r} and {dep!r}",
-                        )
+    # --- Dependency-cycle detection ----------------------------------------
+    # Use an explicit DFS stack rather than recursion so the registry can
+    # contain arbitrarily long dependency chains without depending on Python's
+    # recursion limit.  The traversal order and reported cycle are canonical:
+    # gate IDs and adjacency entries are visited lexicographically, and the
+    # cycle is rotated to begin at its lexicographically smallest member.
+    dependencies = {gate["id"]: tuple(sorted(gate.get("depends_on", []))) for gate in gates}
+    gate_ids = tuple(sorted(seen_ids))
+    state: dict[str, int] = {gid: 0 for gid in gate_ids}  # 0=unseen, 1=active, 2=done
+    cycle: tuple[str, ...] | None = None
+
+    for start in gate_ids:
+        if state[start] != 0:
+            continue
+
+        state[start] = 1
+        path: list[str] = [start]
+        path_positions: dict[str, int] = {start: 0}
+        stack: list[tuple[str, Iterator[str]]] = [(start, iter(dependencies[start]))]
+
+        while stack and cycle is None:
+            current, successors = stack[-1]
+            try:
+                successor = next(successors)
+            except StopIteration:
+                state[current] = 2
+                stack.pop()
+                path_positions.pop(current)
+                path.pop()
+                continue
+
+            if state[successor] == 0:
+                state[successor] = 1
+                path_positions[successor] = len(path)
+                path.append(successor)
+                stack.append((successor, iter(dependencies[successor])))
+            elif state[successor] == 1:
+                cycle = tuple(path[path_positions[successor] :])
+                break
+
+        if cycle is not None:
+            break
+
+    if cycle is not None:
+        cycle_start = min(cycle)
+        start_index = cycle.index(cycle_start)
+        ordered_cycle = cycle[start_index:] + cycle[:start_index]
+        cycle_members = ", ".join(repr(gid) for gid in sorted(cycle))
+        cycle_path = " -> ".join((*ordered_cycle, cycle_start))
+        if len(cycle) == 2:
+            # Keep the Phase 1 diagnostic wording for the existing two-node
+            # case while making its member order deterministic.
+            ordered_members = sorted(cycle)
+            detail = (
+                f"circular dependency between {ordered_members[0]!r} and {ordered_members[1]!r}"
+            )
+        else:
+            detail = f"circular dependency among gates: {cycle_members} ({cycle_path})"
+        raise SchemaValidationError(
+            "registry",
+            f"gates.{cycle_start}.depends_on",
+            detail,
+        )
 
     return gates
 
@@ -542,8 +657,9 @@ def _load_registry(path: Path) -> list[dict[str, Any]]:
     valid JSON v1 is accepted — no YAML constructs, no trailing commas,
     no unquoted keys.
     """
-    raw = path.read_text(encoding="utf-8")
-    data = _parse_json_strict(raw, str(path))
+    canonical = _canonical_input_path(path, "registry")
+    raw = canonical.read_text(encoding="utf-8")
+    data = _parse_json_strict(raw, str(canonical))
     return _validate_registry(data)
 
 
@@ -615,6 +731,7 @@ _MAKE_VARIABLES_HEADER = "\n# Variables"
 _MAKE_VARIABLE_LINE_RE = re.compile(r"^([A-Za-z0-9_.-]+)\s*(:=|=|\?=|\+=|!=|::=)\s*(.*)$")
 _MAKE_VAR_REF_RE = re.compile(r"(?<!\$)\$\(([^()]+)\)|(?<!\$)\$\{([^{}]+)\}")
 _MAKE_RECURSIVE_MAKE_RE = re.compile(r"(?<!\$)\$\(MAKE\)|(?<!\$)\$\{MAKE\}")
+_MAKE_REPORTED_FILE_RE = re.compile(r"^Reading makefile '([^']+)'")
 # Shell metacharacters that end a goal run on a ``$(MAKE)`` recipe line.
 # ``$`` and ``(``/``)`` are deliberately absent: make variable references
 # such as ``$(GATES)`` legitimately contain them and resolve to goal text.
@@ -681,25 +798,35 @@ def _make_observation_env() -> dict[str, str]:
     }
 
 
-def _kill_make_process_group(proc: subprocess.Popen[bytes]) -> None:
-    """Kill the observed make and its whole process group (``$(shell)`` children)."""
-    try:
-        os.killpg(proc.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+def _kill_make_process_group(
+    proc: subprocess.Popen[bytes], process_group_id: int | None = None
+) -> dict[int, str]:
+    """
+    Kill an observed process group and return any members left behind.
+
+    ``start_new_session=True`` binds the process group at spawn time.  Keep
+    that ID rather than looking it up after the process has been cleaned up:
+    the latter is both racy and can accidentally observe a reused group ID.
+    The helper is retained under its historical name because Make and Bash
+    share this cleanup contract.
+    """
+    return _terminate_process_group(proc, process_group_id or proc.pid)
 
 
 def _communicate_bounded(
     proc: subprocess.Popen[bytes],
     max_bytes: int,
     timeout: float,
+    watched_file_bytes: Callable[[], int] | None = None,
 ) -> tuple[bytes, bytes]:
     """
     Read both pipes with a combined byte bound and a hard deadline.
+
+    ``watched_file_bytes`` supplies the current size of file-backed observation
+    channels.  When present, pipe bytes and those file bytes share *max_bytes*;
+    the callback is sampled while the process runs and once more before the
+    function returns.  Sampling sizes rather than reading files keeps a fast
+    producer from turning a later parser into an unbounded read.
 
     Raises ``subprocess.TimeoutExpired`` when the process outlives *timeout*
     and ``_MakeOutputError`` when combined output exceeds *max_bytes*.
@@ -713,15 +840,33 @@ def _communicate_bounded(
     selector.register(proc.stderr, selectors.EVENT_READ, err_sink)
     total = 0
 
+    def check_total_bound() -> int:
+        file_total = watched_file_bytes() if watched_file_bytes is not None else 0
+        if total + file_total > max_bytes:
+            raise _MakeOutputError(
+                f"GNU make exceeded the {max_bytes} byte observation output bound"
+            )
+        return file_total
+
     def drain(key: selectors.SelectorKey) -> None:
         nonlocal total
         sink: bytearray = key.data
         fileobj = key.fileobj
         while True:
-            if isinstance(fileobj, int):
-                chunk = os.read(fileobj, 65536)
-            else:
-                chunk = os.read(fileobj.fileno(), 65536)
+            file_total = check_total_bound()
+            available = max_bytes - total - file_total
+            if available <= 0:
+                raise _MakeOutputError(
+                    f"GNU make exceeded the {max_bytes} byte observation output bound"
+                )
+            fd = fileobj if isinstance(fileobj, int) else fileobj.fileno()
+            try:
+                chunk = os.read(fd, min(65536, available))
+            except BlockingIOError:
+                # A ready pipe is not necessarily readable for a second
+                # immediate read.  Non-blocking descriptors prevent a child
+                # that inherited the pipe from defeating the deadline.
+                return
             if not chunk:
                 selector.unregister(fileobj)
                 return
@@ -731,22 +876,60 @@ def _communicate_bounded(
                 raise _MakeOutputError(
                     f"GNU make exceeded the {max_bytes} byte observation output bound"
                 )
+            check_total_bound()
+
+    for stream in (proc.stdout, proc.stderr):
+        os.set_blocking(stream.fileno(), False)
 
     try:
+        check_total_bound()
         while selector.get_map():
             if proc.poll() is not None:
-                # Process finished: drain remaining pipe data without a deadline.
+                # The direct process may have exited while a descendant still
+                # owns a pipe.  Continue draining only within the same hard
+                # deadline; EOF is required for successful completion.
                 for key in tuple(selector.get_map().values()):
                     drain(key)
-                continue
+                if not selector.get_map():
+                    break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise subprocess.TimeoutExpired(proc.args, timeout)
             for key, _ in selector.select(timeout=remaining):
                 drain(key)
+
+        # EOF on both captured streams is not sufficient: the direct observer
+        # may have closed both descriptors and still be alive.  Preserve the
+        # original deadline while waiting for that process to exit rather than
+        # returning to a caller that would need an unbounded wait.
+        if proc.poll() is None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(proc.args, timeout)
+            try:
+                proc.wait(timeout=remaining)
+            except subprocess.TimeoutExpired:
+                raise subprocess.TimeoutExpired(proc.args, timeout) from None
+        check_total_bound()
     finally:
         selector.close()
     return bytes(out_sink), bytes(err_sink)
+
+
+def _observation_returncode(
+    proc: subprocess.Popen[bytes], process_group_id: int, label: str
+) -> int:
+    """Return an already-reaped observer status or fail closed."""
+    returncode = proc.poll()
+    if returncode is not None:
+        return returncode
+    cleanup = _kill_make_process_group(proc, process_group_id)
+    raise SchemaValidationError(
+        label,
+        "",
+        f"observation process remained alive after bounded communication; "
+        f"{_cleanup_detail(cleanup)}",
+    )
 
 
 def _run_make(args: list[str], cwd: Path, label: str) -> _MakeResult:
@@ -759,6 +942,7 @@ def _run_make(args: list[str], cwd: Path, label: str) -> _MakeResult:
     Exit codes 0 and 1 are valid database output (``-q`` returns 1 when the
     default goal would need updating).
     """
+    process_group_id: int
     try:
         proc = subprocess.Popen(
             ["make", *args],
@@ -769,6 +953,9 @@ def _run_make(args: list[str], cwd: Path, label: str) -> _MakeResult:
             stderr=subprocess.PIPE,
             start_new_session=True,
         )
+        # start_new_session makes the child PID its process-group ID.  Capture
+        # it immediately, before any failure-path cleanup can reap the child.
+        process_group_id = proc.pid
     except FileNotFoundError:
         raise SchemaValidationError(label, "", "GNU make executable not found on PATH") from None
     except OSError as exc:
@@ -777,15 +964,19 @@ def _run_make(args: list[str], cwd: Path, label: str) -> _MakeResult:
     try:
         stdout, stderr = _communicate_bounded(proc, _MAKE_MAX_OUTPUT_BYTES, _MAKE_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
-        _kill_make_process_group(proc)
+        cleanup = _kill_make_process_group(proc, process_group_id)
+        detail = _cleanup_detail(cleanup)
         raise SchemaValidationError(
-            label, "", f"GNU make exceeded the {_MAKE_TIMEOUT_SECONDS:g}s observation timeout"
+            label,
+            "",
+            f"GNU make exceeded the {_MAKE_TIMEOUT_SECONDS:g}s observation timeout; {detail}",
         ) from None
     except _MakeOutputError as exc:
-        _kill_make_process_group(proc)
-        raise SchemaValidationError(label, "", str(exc)) from None
+        cleanup = _kill_make_process_group(proc, process_group_id)
+        detail = _cleanup_detail(cleanup)
+        raise SchemaValidationError(label, "", f"{exc}; {detail}") from None
 
-    returncode = proc.wait()
+    returncode = _observation_returncode(proc, process_group_id, label)
     if returncode not in (0, 1):
         detail = (stderr or stdout).decode("utf-8", errors="replace").strip()
         if detail:
@@ -793,8 +984,48 @@ def _run_make(args: list[str], cwd: Path, label: str) -> _MakeResult:
             message = f"GNU make exited with status {returncode}: {detail}"
         else:
             message = f"GNU make exited with status {returncode}"
-        raise SchemaValidationError(label, "", message)
+        cleanup = _kill_make_process_group(proc, process_group_id)
+        raise SchemaValidationError(label, "", f"{message}; {_cleanup_detail(cleanup)}")
+    cleanup = _kill_make_process_group(proc, process_group_id)
+    if cleanup:
+        residual_ids = ", ".join(str(pid) for pid in sorted(cleanup))
+        raise SchemaValidationError(
+            label,
+            "",
+            f"GNU make observation left live process-group members {residual_ids}; "
+            f"{_cleanup_detail(cleanup)}",
+        )
     return _MakeResult(returncode, stdout, stderr)
+
+
+def _validate_make_consumed_sources(output: bytes, makefile: Path) -> None:
+    """Validate every source GNU Make reports as consumed during observation."""
+    reported: set[Path] = set()
+    text = output.decode("utf-8", errors="replace")
+    for line in text.splitlines():
+        match = _MAKE_REPORTED_FILE_RE.match(line)
+        if match is None:
+            continue
+        source = Path(match.group(1))
+        if not source.is_absolute():
+            source = makefile.parent / source
+        # Repository observations retain the strict in-repository boundary;
+        # direct temporary Makefile fixtures may consume only sibling files in
+        # their own fixture directory.
+        if makefile.is_relative_to(_REPO_ROOT):
+            reported.add(_canonical_input_path(source, "Makefile input"))
+        elif not source.resolve(strict=True).is_relative_to(makefile.parent.resolve()):
+            raise SchemaValidationError(
+                str(source), "", "Makefile input must reside beside the fixture Makefile"
+            )
+        else:
+            reported.add(_observation_input_path(source, "Makefile input"))
+
+    # The -f input is trusted independently of GNU Make's diagnostic format.
+    if makefile.is_relative_to(_REPO_ROOT):
+        _canonical_input_path(makefile, "Makefile")
+    else:
+        _observation_input_path(makefile, "Makefile")
 
 
 _MAKE_DATABASE_HEADER_RE = re.compile(r"^([^\t#].*?):\s*(.*)$")
@@ -1030,9 +1261,10 @@ def _dry_run_runs_commands(path: Path, target: str) -> bool:
     ``make --dry-run <target>`` prints at least one recipe line; make chatter
     such as "Nothing to be done" does not count.
     """
+    canonical = _observation_input_path(path, "Makefile")
     result = _run_make(
-        ["-n", "-r", "-R", "--no-print-directory", "-f", str(path), target],
-        path.parent,
+        ["-n", "-r", "-R", "--no-print-directory", "-f", str(canonical), target],
+        canonical.parent,
         str(path),
     )
     for line in result.stdout.decode("utf-8", errors="replace").splitlines():
@@ -1053,6 +1285,7 @@ def _effective_makefile_targets(path: Path, records: dict[str, _MakeTargetRecord
     are effective by construction (invoking them runs the recursive make) and
     are never dry-run, preserving the deterministic-observation bound.
     """
+    canonical = _observation_input_path(path, "Makefile")
     effective: set[str] = set()
     for name, record in records.items():
         if not _is_observable_make_target(name):
@@ -1067,7 +1300,7 @@ def _effective_makefile_targets(path: Path, records: dict[str, _MakeTargetRecord
         # recursive-make closure, never both.
         if _closure_has_recursive_make(name, records):
             effective.add(name)
-        elif _dry_run_runs_commands(path, name):
+        elif _dry_run_runs_commands(canonical, name):
             effective.add(name)
     return effective
 
@@ -1084,17 +1317,15 @@ def _observe_makefile(path: Path) -> tuple[dict[str, _MakeTargetRecord], dict[st
     ``include`` files) — or when make is unavailable, times out, or exceeds
     the output bound.
     """
-    if not path.exists():
-        raise SchemaValidationError(str(path), "", "Makefile not found")
-    if not path.is_file():
-        raise SchemaValidationError(str(path), "", "Makefile is not a regular file")
+    canonical = _observation_input_path(path, "Makefile")
     result = _run_make(
-        ["-qp", "-r", "-R", "--no-print-directory", "-f", str(path)],
-        path.parent,
-        str(path),
+        ["-qp", "-r", "-R", "--no-print-directory", "--debug=a", "-f", str(canonical)],
+        canonical.parent,
+        str(canonical),
     )
+    _validate_make_consumed_sources(result.stdout, canonical)
     text = result.stdout.decode("utf-8", errors="replace")
-    records = _parse_make_database(text, str(path))
+    records = _parse_make_database(text, str(canonical))
     variables = _parse_make_variables(text)
     return records, variables
 
@@ -1145,16 +1376,7 @@ def _assert_canonical_makefile_input(path: Path) -> None:
     a symlink could redirect observation (and make's ``$(shell)`` expansion)
     outside the repository.
     """
-    if path.is_symlink():
-        raise SchemaValidationError(str(path), "", "Makefile must not be a symlink")
-    try:
-        resolved = path.resolve(strict=True)
-    except FileNotFoundError:
-        raise FileNotFoundError(path) from None
-    if not resolved.is_file():
-        raise SchemaValidationError(str(path), "", "Makefile is not a regular file")
-    if not resolved.is_relative_to(_REPO_ROOT.resolve()):
-        raise SchemaValidationError(str(path), "", "Makefile must reside inside the repository")
+    _canonical_input_path(path, "Makefile")
 
 
 # ---------------------------------------------------------------------------
@@ -1163,6 +1385,13 @@ def _assert_canonical_makefile_input(path: Path) -> None:
 
 _BASH_TIMEOUT_SECONDS = 30.0
 _BASH_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+_BASH_MAX_FILE_BYTES = 8 * 1024 * 1024
+_BASH_MAX_EVENTS = 4096
+_BASH_MAX_FRAMES = 4096
+_BASH_MAX_ARGV_ITEMS = 256
+_BASH_MAX_EVENT_BYTES = 64 * 1024
+_BASH_MAX_FRAME_BYTES = 1024 * 1024
+_BASH_FILE_READ_CHUNK_BYTES = 64 * 1024
 _BASH_ERROR_DETAIL_BYTES = 400
 _BASH_RESULT_MARKER = "__SA128B_RESULT__"
 _BASH_PROCESS_GROUP_SETTLE_SECONDS = 0.05
@@ -1170,6 +1399,11 @@ _BASH_PROCESS_GROUP_CLEANUP_SECONDS = 5.0
 _SHELL_GATE_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 _OBSERVED_GATE_NAMES: frozenset[str] = frozenset({"frontend-proof", "smoke-install"})
 _BASH_ARGV_HEADER_RE = re.compile(r"^ARGV:([0-9]+)$")
+
+
+def _bash_observation_byte_limit() -> int:
+    """Return the combined pipe and file-backed observation byte limit."""
+    return min(_BASH_MAX_OUTPUT_BYTES, _BASH_MAX_FILE_BYTES)
 
 
 def _is_observed_shell_gate(value: str) -> bool:
@@ -1190,10 +1424,8 @@ def _canonical_shell_harness(path: Path, function_name: str) -> str | None:
     the selected function are still parsed and executed by Bash; this helper
     never inspects their command text to infer gates.
     """
-    try:
-        canonical = path.resolve() == (_REPO_ROOT / "scripts" / "check_ci_locally.sh").resolve()
-    except OSError:
-        canonical = False
+    path = path.resolve(strict=True)
+    canonical = path == _REPO_ROOT / "scripts" / "check_ci_locally.sh"
     if not canonical:
         return None
 
@@ -1434,49 +1666,249 @@ def _wait_for_process_group_cleanup(process_group_id: int) -> dict[int, str]:
         time.sleep(min(_BASH_PROCESS_GROUP_SETTLE_SECONDS, remaining))
 
 
-def _terminate_process_group(proc: subprocess.Popen[bytes]) -> dict[int, str]:
+def _terminate_process_group(
+    proc: subprocess.Popen[bytes], process_group_id: int | None = None
+) -> dict[int, str]:
     """Terminate and wait for every live member of an observed process group."""
+    group_id = process_group_id or proc.pid
     try:
-        os.killpg(proc.pid, signal.SIGTERM)
+        os.killpg(group_id, signal.SIGTERM)
     except ProcessLookupError:
         pass
     try:
-        proc.wait(timeout=1)
+        proc.wait(timeout=min(1.0, _BASH_PROCESS_GROUP_CLEANUP_SECONDS))
     except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait(timeout=5)
-
-    residual = _live_process_group_members(proc.pid)
-    if residual:
         try:
-            os.killpg(proc.pid, signal.SIGKILL)
+            proc.kill()
         except ProcessLookupError:
             pass
-    return _wait_for_process_group_cleanup(proc.pid)
+        proc.wait(timeout=min(5.0, _BASH_PROCESS_GROUP_CLEANUP_SECONDS))
+
+    residual = _live_process_group_members(group_id)
+    if residual:
+        try:
+            os.killpg(group_id, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    return _wait_for_process_group_cleanup(group_id)
+
+
+def _cleanup_detail(residual: dict[int, str]) -> str:
+    """Describe the result of the shared bounded process-group cleanup."""
+    if residual:
+        ids = ", ".join(str(pid) for pid in sorted(residual))
+        return f"cleanup left live process-group members {ids}"
+    return "cleanup verified the process group is empty"
+
+
+def _bash_observation_file_bytes(
+    recorder_log: Path, launch_log: Path, wait_log: Path, worker_dir: Path
+) -> int:
+    """Return the combined size of every Bash observation file channel."""
+    total = 0
+    paths = (recorder_log, launch_log, wait_log, *worker_dir.glob("worker_*.argv"))
+    for path in paths:
+        try:
+            size = path.stat().st_size
+        except FileNotFoundError:
+            continue
+        except OSError:
+            # A disappearing worker log is handled by the final structural
+            # parser.  It must not turn a bounded observation into an
+            # unstructured exception while the process is still running.
+            continue
+        total += size
+        if total > _bash_observation_byte_limit():
+            return total
+    return total
+
+
+def _iter_bounded_file_lines(path: Path, label: str) -> Iterator[bytes]:
+    """Yield newline-delimited file events without an unbounded read."""
+    total = 0
+    event_bytes = bytearray()
+    event_count = 0
+    try:
+        stream = path.open("rb")
+    except OSError as exc:
+        raise SchemaValidationError(
+            str(path), label, f"cannot open observation log: {exc}"
+        ) from None
+
+    with stream:
+        while True:
+            chunk = stream.read(_BASH_FILE_READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _bash_observation_byte_limit():
+                raise SchemaValidationError(
+                    str(path), label, "observation event file exceeded the byte bound"
+                )
+            event_bytes.extend(chunk)
+            while True:
+                try:
+                    newline = event_bytes.index(10)
+                except ValueError:
+                    if len(event_bytes) > _BASH_MAX_EVENT_BYTES:
+                        raise SchemaValidationError(
+                            str(path), label, "observation event exceeded the byte bound"
+                        ) from None
+                    break
+                event = bytes(event_bytes[:newline])
+                del event_bytes[: newline + 1]
+                event_count += 1
+                if event_count > _BASH_MAX_EVENTS:
+                    raise SchemaValidationError(
+                        str(path), label, "observation event count exceeded the bound"
+                    )
+                if len(event) > _BASH_MAX_EVENT_BYTES:
+                    raise SchemaValidationError(
+                        str(path), label, "observation event exceeded the byte bound"
+                    )
+                yield event
+
+        if event_bytes:
+            event_count += 1
+            if event_count > _BASH_MAX_EVENTS:
+                raise SchemaValidationError(
+                    str(path), label, "observation event count exceeded the bound"
+                )
+            if len(event_bytes) > _BASH_MAX_EVENT_BYTES:
+                raise SchemaValidationError(
+                    str(path), label, "unterminated observation event exceeded the byte bound"
+                )
+            yield bytes(event_bytes)
+
+
+def _read_bash_event_log(path: Path, expected_fields: int, label: str) -> list[tuple[str, ...]]:
+    """Read a bounded tab-delimited Bash event log and validate its shape."""
+    events: list[tuple[str, ...]] = []
+    for raw_event in _iter_bounded_file_lines(path, label):
+        try:
+            event = raw_event.decode("utf-8")
+        except UnicodeDecodeError:
+            raise SchemaValidationError(
+                str(path), label, "observation event is not UTF-8"
+            ) from None
+        fields = tuple(event.split("\t"))
+        if len(fields) != expected_fields or any(not field for field in fields):
+            raise SchemaValidationError(str(path), label, "malformed observation event")
+        events.append(fields)
+    return events
+
+
+def _iter_bounded_nul_fields(path: Path, label: str) -> Iterator[bytes]:
+    """Yield NUL-delimited recorder fields with bounded incremental buffering."""
+    total = 0
+    pending = bytearray()
+    terminated = False
+    try:
+        stream = path.open("rb")
+    except OSError as exc:
+        raise SchemaValidationError(str(path), label, f"cannot open recorder log: {exc}") from None
+
+    with stream:
+        while True:
+            chunk = stream.read(_BASH_FILE_READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _bash_observation_byte_limit():
+                raise SchemaValidationError(
+                    str(path), label, "recorder file exceeded the byte bound"
+                )
+            pending.extend(chunk)
+            while True:
+                try:
+                    nul = pending.index(0)
+                except ValueError:
+                    if len(pending) > _BASH_MAX_FRAME_BYTES:
+                        raise SchemaValidationError(
+                            str(path), label, "recorder frame exceeded the byte bound"
+                        ) from None
+                    break
+                if nul > _BASH_MAX_FRAME_BYTES:
+                    raise SchemaValidationError(
+                        str(path), label, "recorder frame field exceeded the byte bound"
+                    )
+                field = bytes(pending[:nul])
+                del pending[: nul + 1]
+                terminated = True
+                yield field
+
+        if pending:
+            raise SchemaValidationError(str(path), label, "incomplete Bash recorder transport")
+        if not terminated and total:
+            raise SchemaValidationError(str(path), label, "incomplete Bash recorder transport")
+
+
+def _read_bash_recorder_log(path: Path, label: str) -> list[tuple[str, ...]]:
+    """Parse argc-prefixed recorder frames incrementally and within all bounds."""
+    fields = iter(_iter_bounded_nul_fields(path, label))
+    invocations: list[tuple[str, ...]] = []
+    while True:
+        try:
+            header_field = next(fields)
+        except StopIteration:
+            break
+        try:
+            header = header_field.decode("ascii")
+        except UnicodeDecodeError:
+            raise SchemaValidationError(
+                str(path), label, "invalid Bash recorder frame header"
+            ) from None
+        match = _BASH_ARGV_HEADER_RE.fullmatch(header)
+        if match is None:
+            raise SchemaValidationError(str(path), label, "invalid Bash recorder frame header")
+        argc = int(match.group(1))
+        if argc > _BASH_MAX_ARGV_ITEMS:
+            raise SchemaValidationError(
+                str(path), label, "recorder argv item count exceeded the bound"
+            )
+        frame_bytes = len(header_field) + 1
+        if frame_bytes > _BASH_MAX_FRAME_BYTES:
+            raise SchemaValidationError(str(path), label, "recorder frame exceeded the byte bound")
+        args: list[str] = []
+        for _ in range(argc):
+            try:
+                field = next(fields)
+            except StopIteration:
+                raise SchemaValidationError(
+                    str(path), label, "truncated Bash recorder frame"
+                ) from None
+            frame_bytes += len(field) + 1
+            if frame_bytes > _BASH_MAX_FRAME_BYTES:
+                raise SchemaValidationError(
+                    str(path), label, "recorder frame exceeded the byte bound"
+                )
+            try:
+                args.append(field.decode("utf-8"))
+            except UnicodeDecodeError:
+                raise SchemaValidationError(
+                    str(path), label, "Bash recorder argv is not UTF-8"
+                ) from None
+        invocations.append(tuple(args))
+        if len(invocations) > _BASH_MAX_FRAMES:
+            raise SchemaValidationError(str(path), label, "recorder frame count exceeded the bound")
+    return invocations
 
 
 def _assert_observation_process_group_clean(proc: subprocess.Popen[bytes]) -> None:
     """Reject successful observation when its process group leaves live work."""
-    residual = _live_process_group_members(proc.pid)
-    if not residual:
-        # Require a second empty observation to close the fork-after-check race.
-        time.sleep(_BASH_PROCESS_GROUP_SETTLE_SECONDS)
-        residual = _live_process_group_members(proc.pid)
+    process_group_id = proc.pid
+    residual = _live_process_group_members(process_group_id)
     if not residual:
         return
 
     residual_ids = ", ".join(str(process_id) for process_id in sorted(residual))
-    cleanup_residual = _terminate_process_group(proc)
-    if cleanup_residual:
-        remaining_ids = ", ".join(str(process_id) for process_id in sorted(cleanup_residual))
-        cleanup_detail = f"; cleanup left live members {remaining_ids}"
-    else:
-        cleanup_detail = "; residual process group terminated and reaped"
+    cleanup_residual = _terminate_process_group(proc, process_group_id)
+    cleanup_detail = _cleanup_detail(cleanup_residual)
     raise SchemaValidationError(
         "Bash observation",
         "process-group",
         f"observation left live descendants in process group {proc.pid}: "
-        f"{residual_ids}; failing closed{cleanup_detail}",
+        f"{residual_ids}; failing closed; {cleanup_detail}",
     )
 
 
@@ -1485,12 +1917,15 @@ def _run_bash_observation(
     function_name: str,
     recorder_fail_target: str | None = None,
     extra_env: dict[str, str] | None = None,
+    repository_source: bool = True,
 ) -> list[tuple[str, ...]]:
     """Execute a local CI function and return exact recorder argv frames."""
-    if not path.exists():
-        raise SchemaValidationError(str(path), function_name, "script not found")
-    if not path.is_file():
-        raise SchemaValidationError(str(path), function_name, "script is not a regular file")
+    if repository_source:
+        path = _observation_input_path(path, "shell source")
+    else:
+        path = path.resolve(strict=True)
+        if not path.is_file():
+            raise SchemaValidationError(str(path), function_name, "script is not a regular file")
 
     with tempfile.TemporaryDirectory(prefix="sa128b-") as temp_name:
         temp_dir = Path(temp_name)
@@ -1515,6 +1950,8 @@ def _run_bash_observation(
         log_path.touch()
         worker_dir = temp_dir / "workers"
         worker_dir.mkdir()
+        launch_log_path = temp_dir / "launch.log"
+        wait_log_path = temp_dir / "wait.log"
         env = {
             "PATH": str(bin_dir),
             "HOME": str(temp_dir),
@@ -1523,18 +1960,19 @@ def _run_bash_observation(
             "LC_ALL": "C",
             "SA128_RECORDER_LOG": str(log_path),
             "SA128_WORKER_DIR": str(worker_dir),
-            "SA128_LAUNCH_LOG": str(temp_dir / "launch.log"),
-            "SA128_WAIT_LOG": str(temp_dir / "wait.log"),
+            "SA128_LAUNCH_LOG": str(launch_log_path),
+            "SA128_WAIT_LOG": str(wait_log_path),
             "SA128_LAUNCH_COUNT": "0",
             "__SA128B_RESULT__": _BASH_RESULT_MARKER,
         }
-        (temp_dir / "launch.log").touch()
-        (temp_dir / "wait.log").touch()
+        launch_log_path.touch()
+        wait_log_path.touch()
         if recorder_fail_target is not None:
             env["SA128_RECORDER_FAIL_TARGET"] = recorder_fail_target
         if extra_env:
             env.update(extra_env)
         harness = _shell_observation_harness(path, function_name)
+        process_group_id: int
         try:
             proc = subprocess.Popen(
                 [
@@ -1554,6 +1992,9 @@ def _run_bash_observation(
                 stderr=subprocess.PIPE,
                 start_new_session=True,
             )
+            # Bind the isolated observation group at spawn, not during a
+            # later failure path when the direct child may already be gone.
+            process_group_id = proc.pid
         except OSError as exc:
             raise SchemaValidationError(
                 str(path), function_name, f"failed to start Bash: {exc}"
@@ -1561,22 +2002,30 @@ def _run_bash_observation(
 
         try:
             stdout, stderr = _communicate_bounded(
-                proc, _BASH_MAX_OUTPUT_BYTES, _BASH_TIMEOUT_SECONDS
+                proc,
+                _bash_observation_byte_limit(),
+                _BASH_TIMEOUT_SECONDS,
+                watched_file_bytes=lambda: _bash_observation_file_bytes(
+                    log_path, launch_log_path, wait_log_path, worker_dir
+                ),
             )
         except subprocess.TimeoutExpired:
-            _kill_make_process_group(proc)
+            cleanup = _kill_make_process_group(proc, process_group_id)
             raise SchemaValidationError(
                 str(path),
                 function_name,
-                f"Bash exceeded the {_BASH_TIMEOUT_SECONDS:g}s observation timeout",
+                f"Bash exceeded the {_BASH_TIMEOUT_SECONDS:g}s observation timeout; "
+                f"{_cleanup_detail(cleanup)}",
             ) from None
         except _MakeOutputError as exc:
-            _kill_make_process_group(proc)
+            cleanup = _kill_make_process_group(proc, process_group_id)
             raise SchemaValidationError(
-                str(path), function_name, str(exc).replace("GNU make", "Bash")
+                str(path),
+                function_name,
+                f"{str(exc).replace('GNU make', 'Bash')}; {_cleanup_detail(cleanup)}",
             ) from None
 
-        returncode = proc.wait()
+        returncode = _observation_returncode(proc, process_group_id, str(path))
         output = stdout.decode("utf-8", errors="replace")
         error = stderr.decode("utf-8", errors="replace").strip()
         marker_lines = [
@@ -1586,38 +2035,74 @@ def _run_bash_observation(
             detail = (
                 error or output.strip() or f"Bash exited with status {returncode} before completion"
             )
+            cleanup = _kill_make_process_group(proc, process_group_id)
             raise SchemaValidationError(
                 str(path),
                 function_name,
-                f"incomplete Bash observation: {detail[:_BASH_ERROR_DETAIL_BYTES]}",
+                f"incomplete Bash observation: {detail[:_BASH_ERROR_DETAIL_BYTES]}; "
+                f"{_cleanup_detail(cleanup)}",
             )
         if returncode != 0:
-            _kill_make_process_group(proc)
+            cleanup = _kill_make_process_group(proc, process_group_id)
             detail = error or f"Bash exited with status {returncode}"
             raise SchemaValidationError(
                 str(path),
                 function_name,
-                f"Bash gate execution failed: {detail[:_BASH_ERROR_DETAIL_BYTES]}",
+                f"Bash gate execution failed: {detail[:_BASH_ERROR_DETAIL_BYTES]}; "
+                f"{_cleanup_detail(cleanup)}",
             )
         marker_value = marker_lines[-1][len(_BASH_RESULT_MARKER) :]
         try:
             observed_status = int(marker_value)
         except ValueError:
+            cleanup = _kill_make_process_group(proc, process_group_id)
             raise SchemaValidationError(
-                str(path), function_name, "invalid Bash completion marker"
+                str(path),
+                function_name,
+                f"invalid Bash completion marker; {_cleanup_detail(cleanup)}",
             ) from None
         if observed_status != 0:
+            cleanup = _kill_make_process_group(proc, process_group_id)
             raise SchemaValidationError(
-                str(path), function_name, f"Bash gate execution returned status {observed_status}"
+                str(path),
+                function_name,
+                f"Bash gate execution returned status {observed_status}; "
+                f"{_cleanup_detail(cleanup)}",
             )
 
         _assert_observation_process_group_clean(proc)
 
         if function_name == "run_static_gates_parallel":
             launch_records: list[tuple[str, str, Path]] = []
-            for line in (temp_dir / "launch.log").read_text(encoding="utf-8").splitlines():
-                stage_id, worker_pid, worker_log = line.split("\t", 2)
-                launch_records.append((stage_id, worker_pid, Path(worker_log)))
+            launch_events = _read_bash_event_log(launch_log_path, 3, "launch.log")
+            for stage_id, worker_pid, worker_log in launch_events:
+                if not worker_pid.isdecimal():
+                    raise SchemaValidationError(
+                        str(path), function_name, "malformed launch event worker PID"
+                    )
+                worker_log_path = Path(worker_log)
+                try:
+                    worker_log_path = worker_log_path.resolve(strict=False)
+                except OSError:
+                    raise SchemaValidationError(
+                        str(path), function_name, "invalid launch event worker log path"
+                    ) from None
+                if not worker_log_path.is_relative_to(worker_dir.resolve()) or not re.fullmatch(
+                    r"worker_[0-9]+\.argv", worker_log_path.name
+                ):
+                    raise SchemaValidationError(
+                        str(path),
+                        function_name,
+                        "launch event worker log is outside worker directory",
+                    )
+                launch_records.append((stage_id, worker_pid, worker_log_path))
+            wait_events = _read_bash_event_log(wait_log_path, 2, "wait.log")
+            if len(launch_events) + len(wait_events) > _BASH_MAX_EVENTS:
+                raise SchemaValidationError(
+                    str(path),
+                    function_name,
+                    "combined Bash observation event count exceeded the bound",
+                )
             log_paths = [worker_log for _, _, worker_log in launch_records]
         else:
             log_paths = [log_path]
@@ -1626,44 +2111,13 @@ def _run_bash_observation(
         for argv_log in log_paths:
             if not argv_log.exists():
                 continue
-            raw = argv_log.read_bytes()
-            if not raw:
-                continue
-            if not raw.endswith(b"\0"):
+            invocations.extend(_read_bash_recorder_log(argv_log, f"{function_name} recorder"))
+            if len(invocations) > _BASH_MAX_FRAMES:
                 raise SchemaValidationError(
-                    str(path), function_name, "incomplete Bash recorder transport"
+                    str(path),
+                    function_name,
+                    "combined Bash recorder frame count exceeded the bound",
                 )
-            fields = raw[:-1].split(b"\0")
-            field_index = 0
-            while field_index < len(fields):
-                try:
-                    header = fields[field_index].decode("ascii")
-                except UnicodeDecodeError:
-                    raise SchemaValidationError(
-                        str(path), function_name, "invalid Bash recorder frame header"
-                    ) from None
-                match = _BASH_ARGV_HEADER_RE.fullmatch(header)
-                if match is None:
-                    raise SchemaValidationError(
-                        str(path), function_name, "invalid Bash recorder frame header"
-                    )
-                argc = int(match.group(1))
-                first_arg = field_index + 1
-                last_arg = first_arg + argc
-                if last_arg > len(fields):
-                    raise SchemaValidationError(
-                        str(path), function_name, "truncated Bash recorder frame"
-                    )
-                try:
-                    invocation = tuple(
-                        field.decode("utf-8") for field in fields[first_arg:last_arg]
-                    )
-                except UnicodeDecodeError:
-                    raise SchemaValidationError(
-                        str(path), function_name, "Bash recorder argv is not UTF-8"
-                    ) from None
-                invocations.append(invocation)
-                field_index = last_arg
         return invocations
 
 
@@ -1712,8 +2166,9 @@ def _extract_ci_job_names(path: Path) -> set[str]:
 
 def _workflow_jobs(path: Path) -> dict[Any, Any]:
     """Load a workflow and return its structurally parsed ``jobs`` mapping."""
-    text = path.read_text(encoding="utf-8")
-    data = _parse_yaml_strict(text, str(path))
+    canonical = _observation_input_path(path, "workflow source")
+    text = canonical.read_text(encoding="utf-8")
+    data = _parse_yaml_strict(text, str(canonical))
     jobs_raw = data.get("jobs")
     if not isinstance(jobs_raw, dict):
         if "jobs" not in data:
@@ -1912,6 +2367,7 @@ def _observe_publish_run_blocks(
                         "GITHUB_WORKSPACE": str(_REPO_ROOT),
                         "GITHUB_REF": "refs/tags/v0.0.0",
                     },
+                    repository_source=False,
                 )
             except SchemaValidationError as exc:
                 raise SchemaValidationError(
@@ -1971,8 +2427,9 @@ def _extract_e2e_trigger_paths(path: Path) -> list[str]:
     comments and non-path list entries.  Uses column-based indentation
     tracking to avoid false exits from child keys like ``branches:``.
     """
-    text = path.read_text(encoding="utf-8")
-    data = _parse_yaml_strict(text, str(path))
+    canonical = _observation_input_path(path, "workflow source")
+    text = canonical.read_text(encoding="utf-8")
+    data = _parse_yaml_strict(text, str(canonical))
     trigger = data.get("on")
     if not isinstance(trigger, dict):
         raise SchemaValidationError(str(path), "on", "workflow trigger section must be a mapping")
@@ -2037,8 +2494,9 @@ def _extract_gates_for_context(
             job_to_gate[cj] = gid
 
     source = _CONTEXT_SOURCES.get(context)
-    if not source or not source.exists():
+    if source is None:
         return set()
+    source = _canonical_input_path(source, f"{context} source")
 
     if context in ("local-serial",):
         make_targets = _extract_check_ci_serial_gates(source)
@@ -2193,7 +2651,8 @@ def _compare(
     has_e2e_requirement = any(
         "e2e-trigger" in gate.get("required_contexts", []) for gate in registry_gates
     )
-    if e2e_source and e2e_source.exists() and has_e2e_requirement:
+    if e2e_source and has_e2e_requirement:
+        e2e_source = _canonical_input_path(e2e_source, "e2e-trigger source")
         e2e_paths_actual = _extract_e2e_trigger_paths(e2e_source)
         # Collect all trigger_inputs from all gates in registration order
         registry_paths: list[str] = []
