@@ -1704,6 +1704,9 @@ class TestBoundedObservationLifecycle:
         with pytest.raises(SchemaValidationError, match=r"timeout.*cleanup"):
             _run_make(["-qp", "-f", str(slow_makefile)], tmp_path, str(slow_makefile))
 
+        # Keep the output-bound assertion independent from the shorter timeout
+        # used by the preceding observation.
+        monkeypatch.setattr(parity, "_MAKE_TIMEOUT_SECONDS", 30.0)
         monkeypatch.setattr(parity, "_MAKE_MAX_OUTPUT_BYTES", 64)
         with pytest.raises(SchemaValidationError, match=r"output bound.*cleanup"):
             _run_make(
@@ -3021,3 +3024,52 @@ class TestRealCheckMembership:
         assert "frontend-proof" not in members
         assert "smoke-install" not in members
         assert "check-gate-parity" not in members
+
+
+class TestMakeRegistryDerivation:
+    """The Make check aggregation is sourced from a registry fixture."""
+
+    def test_local_gate_added_to_registry_is_picked_up_without_makefile_edit(
+        self, tmp_path: Path
+    ) -> None:
+        """A registry-only local gate extends Make's existing check target list."""
+        registry_path = tmp_path / "gate_registry.json"
+        registry = json.loads(
+            (REPO_ROOT / "scripts" / "gate_registry.json").read_text(encoding="utf-8")
+        )
+        registry["gates"].append(
+            {
+                "id": "fake-local-check",
+                "description": "Temporary local check gate",
+                "required_contexts": ["local-serial", "local-parallel"],
+                "bindings": {
+                    "make_target": "check-gate-parity",
+                    "ci_job": None,
+                    "local_ci_stage": None,
+                },
+                "depends_on": [],
+                "trigger_inputs": [],
+            }
+        )
+        registry_path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
+
+        result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "-n",
+                "check",
+                f"GATE_REGISTRY={registry_path}",
+            ],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+        output = result.stdout + result.stderr
+        assert (
+            "make check-core-compat check-module-core-imports check-manifest-sync "
+            "check-org-context-primitives check-csrf-exempt check-gate-parity"
+        ) in output
