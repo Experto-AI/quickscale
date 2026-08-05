@@ -83,6 +83,22 @@ CONFORMANCE_MAKE_TARGETS: frozenset[str] = frozenset(
     }
 )
 
+
+def _registry_local_gate_targets() -> list[str]:
+    """Return local registry targets in their declared stage order."""
+    registry = json.loads(
+        (REPO_ROOT / "scripts" / "gate_registry.json").read_text(encoding="utf-8")
+    )
+    gates = [
+        (gate["bindings"]["local_ci_stage"], index, gate["bindings"]["make_target"])
+        for index, gate in enumerate(registry["gates"])
+        if gate["bindings"].get("make_target")
+        and gate["bindings"].get("local_ci_stage") is not None
+        and 3 <= gate["bindings"]["local_ci_stage"] <= 7
+    ]
+    return [target for _, _, target in sorted(gates)]
+
+
 # All five known execution contexts
 _ALL_CONTEXTS: dict[str, str] = {
     "local-serial": "serial mode",
@@ -780,16 +796,14 @@ class TestParserPrecision:
     def test_serial_extracts_all_five_conformance_gates(self) -> None:
         """The serial path in check_ci_locally.sh has all 5 check gates."""
         targets = _extract_check_ci_serial_gates(CHECK_CI)
-        assert targets == CONFORMANCE_MAKE_TARGETS, (
-            f"Serial extraction returned {targets}, expected {CONFORMANCE_MAKE_TARGETS}"
-        )
+        expected = set(_registry_local_gate_targets())
+        assert targets == expected, f"Serial extraction returned {targets}, expected {expected}"
 
     def test_parallel_extracts_all_five_conformance_gates(self) -> None:
         """The parallel path in check_ci_locally.sh has all 5 check gates."""
         targets = _extract_check_ci_parallel_gates(CHECK_CI)
-        assert targets == CONFORMANCE_MAKE_TARGETS, (
-            f"Parallel extraction returned {targets}, expected {CONFORMANCE_MAKE_TARGETS}"
-        )
+        expected = set(_registry_local_gate_targets())
+        assert targets == expected, f"Parallel extraction returned {targets}, expected {expected}"
 
     def test_hosted_has_all_five_conformance_jobs(self) -> None:
         """ci.yml job names include all 5 conformance gate jobs."""
@@ -821,6 +835,55 @@ class TestParserPrecision:
         assert serial == parallel, (
             f"Serial and parallel extraction disagree: serial={serial}, parallel={parallel}"
         )
+
+    def test_registry_stage_order_is_used_by_both_local_contexts(self) -> None:
+        """Both local functions execute registry targets in stage order."""
+        expected = _registry_local_gate_targets()
+        for function_name in ("run_static_gates_serial", "run_static_gates_parallel"):
+            invocations = _run_bash_observation(CHECK_CI, function_name)
+            observed = [
+                argument
+                for invocation in invocations
+                for argument in invocation
+                if argument in expected
+            ]
+            assert observed == expected, (function_name, observed, expected)
+
+    def test_registry_addition_appears_in_both_local_contexts(self, tmp_path: Path) -> None:
+        """A temporary local registry gate is visible to serial and parallel observation."""
+        registry = json.loads(
+            (REPO_ROOT / "scripts" / "gate_registry.json").read_text(encoding="utf-8")
+        )
+        registry["gates"].append(
+            {
+                "id": "temporary-local-gate",
+                "description": "Temporary local derivation gate",
+                "required_contexts": ["local-serial", "local-parallel"],
+                "bindings": {
+                    "make_target": "check-temporary-local-gate",
+                    "ci_job": None,
+                    "local_ci_stage": 7,
+                },
+                "depends_on": [],
+                "trigger_inputs": [],
+            }
+        )
+        registry_path = _repo_fixture_file(tmp_path, "temporary_registry.json")
+        registry_path.write_text(json.dumps(registry), encoding="utf-8")
+
+        for function_name in ("run_static_gates_serial", "run_static_gates_parallel"):
+            invocations = _run_bash_observation(
+                CHECK_CI,
+                function_name,
+                extra_env={"GATE_REGISTRY": str(registry_path)},
+            )
+            observed = [
+                argument
+                for invocation in invocations
+                for argument in invocation
+                if argument == "check-temporary-local-gate"
+            ]
+            assert observed == ["check-temporary-local-gate"]
 
     def test_serial_isolation_from_parallel_content(self, tmp_path: Path) -> None:
         """Serial parser does not pick up gates only in the parallel function."""
