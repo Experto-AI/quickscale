@@ -68,6 +68,16 @@
 
 # Default Python command (uses root Poetry environment)
 PYTHON ?= poetry run python
+GATE_REGISTRY ?= scripts/gate_registry.json
+# Keep the fast check aggregation aligned with the registry.  The registry's
+# list order is intentional: it is the effective execution order for local
+# gates, and the same target list is used in both normal and QUIET=1 modes.
+CHECK_GATE_TARGETS := $(shell \
+	$(PYTHON) -c 'import json, sys; registry = json.load(open(sys.argv[1], encoding="utf-8")); contexts = {"local-serial", "local-parallel"}; print(" ".join(gate["bindings"]["make_target"] for gate in registry["gates"] if gate["bindings"].get("make_target") and contexts.intersection(gate["required_contexts"])))' \
+	"$(GATE_REGISTRY)")
+ifeq ($(strip $(CHECK_GATE_TARGETS)),)
+$(error Unable to derive local check gate targets from $(GATE_REGISTRY))
+endif
 RUFF_CACHE_DIR ?= .ruff_cache/make
 # Unit-test worker count. Use ``0`` for a true serial run, ``auto`` for pytest's
 # own CPU-count default, or an explicit integer (e.g. CI pins a fixed count).
@@ -1078,7 +1088,7 @@ check:
 			$(MAKE) test-unit SECTIONS="$$sections_for_test_unit" MODULE="$(MODULE)"; \
 		fi; \
 	fi; \
-	$(MAKE) check-core-compat check-module-core-imports check-manifest-sync check-org-context-primitives check-csrf-exempt
+	$(MAKE) $(CHECK_GATE_TARGETS)
 	@if [ -n "$(QUIET)" ]; then \
 		if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then \
 			frontend_lint_log=$$(mktemp /tmp/frontend_lint_log.XXXXXX); \
