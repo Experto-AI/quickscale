@@ -3029,19 +3029,17 @@ class TestRealCheckMembership:
 class TestMakeRegistryDerivation:
     """The Make check aggregation is sourced from a registry fixture."""
 
-    def test_local_gate_added_to_registry_is_picked_up_without_makefile_edit(
-        self, tmp_path: Path
-    ) -> None:
-        """A registry-only local gate extends Make's existing check target list."""
+    def test_non_local_check_gate_is_picked_up_without_makefile_edit(self, tmp_path: Path) -> None:
+        """A registry-only check-* gate is included regardless of its context."""
         registry_path = tmp_path / "gate_registry.json"
         registry = json.loads(
             (REPO_ROOT / "scripts" / "gate_registry.json").read_text(encoding="utf-8")
         )
         registry["gates"].append(
             {
-                "id": "fake-local-check",
-                "description": "Temporary local check gate",
-                "required_contexts": ["local-serial", "local-parallel"],
+                "id": "fake-non-local-check",
+                "description": "Temporary non-local check gate",
+                "required_contexts": ["publish"],
                 "bindings": {
                     "make_target": "check-gate-parity",
                     "ci_job": None,
@@ -3073,3 +3071,47 @@ class TestMakeRegistryDerivation:
             "make check-core-compat check-module-core-imports check-manifest-sync "
             "check-org-context-primitives check-csrf-exempt check-gate-parity"
         ) in output
+
+    def test_local_non_check_gate_is_excluded_without_makefile_edit(self, tmp_path: Path) -> None:
+        """A local gate without a check-* target is excluded from Make check."""
+        registry_path = tmp_path / "gate_registry.json"
+        registry = json.loads(
+            (REPO_ROOT / "scripts" / "gate_registry.json").read_text(encoding="utf-8")
+        )
+        registry["gates"].append(
+            {
+                "id": "fake-local-non-check",
+                "description": "Temporary local non-check gate",
+                "required_contexts": ["local-serial", "local-parallel"],
+                "bindings": {
+                    "make_target": "frontend-proof",
+                    "ci_job": None,
+                    "local_ci_stage": None,
+                },
+                "depends_on": [],
+                "trigger_inputs": [],
+            }
+        )
+        registry_path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
+
+        result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "-n",
+                "check",
+                f"GATE_REGISTRY={registry_path}",
+            ],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+        output = result.stdout + result.stderr
+        assert (
+            "make check-core-compat check-module-core-imports check-manifest-sync "
+            "check-org-context-primitives check-csrf-exempt"
+        ) in output
+        assert "make frontend-proof" not in output

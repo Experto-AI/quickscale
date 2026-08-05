@@ -73,7 +73,7 @@ GATE_REGISTRY ?= scripts/gate_registry.json
 # list order is intentional: it is the effective execution order for local
 # gates, and the same target list is used in both normal and QUIET=1 modes.
 CHECK_GATE_TARGETS := $(shell \
-	$(PYTHON) -c 'import json, sys; registry = json.load(open(sys.argv[1], encoding="utf-8")); contexts = {"local-serial", "local-parallel"}; print(" ".join(gate["bindings"]["make_target"] for gate in registry["gates"] if gate["bindings"].get("make_target") and contexts.intersection(gate["required_contexts"])))' \
+	$(PYTHON) -c 'import json, sys; registry = json.load(open(sys.argv[1], encoding="utf-8")); print(" ".join(gate["bindings"]["make_target"] for gate in registry["gates"] if gate["bindings"].get("make_target") and gate["bindings"]["make_target"].startswith("check-")))' \
 	"$(GATE_REGISTRY)")
 ifeq ($(strip $(CHECK_GATE_TARGETS)),)
 $(error Unable to derive local check gate targets from $(GATE_REGISTRY))
