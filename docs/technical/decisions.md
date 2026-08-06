@@ -1162,9 +1162,12 @@ fails for every user selecting any module. This ordering is not advisory.
 **Known limitation (tracked, not accepted as final):** the embed ref is a *branch*, so a
 matched version is not by itself a guaranteed-matched artifact — the branch can move after
 a release. Rules 1 and 2 make skew visible and diagnosable; making it structurally
-impossible requires pinning the embed to an immutable ref, tracked as roadmap **SA119**.
-Until SA119 lands, Rule 3 is the only thing preventing skew, which is why it is mandatory
-rather than advisory.
+impossible requires pinning the embed to an immutable ref, tracked as roadmap **SA136**
+(retitled from SA119 on 2026-08-06, when the maintainer ratified the loop/seal contract and
+moved the work into the v87 release path). Until SA136 lands, Rule 3 is the only thing
+preventing skew, which is why it is mandatory rather than advisory. **SA136f replaces this
+section's Rule 3 and this paragraph** with the ratified loop/seal ordering; until that child
+closes, the rules below remain normative as written.
 
 ---
 
