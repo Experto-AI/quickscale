@@ -52,6 +52,7 @@ Preferred maintainer-facing command map:
 | `poetry run python scripts/verify_public_module_apply.py check-containers --target T` | `make sa117-check-containers TARGET=T` |
 | `poetry run python scripts/check_gate_parity.py` | `make check-gate-parity` |
 | `poetry run python scripts/test_gate_parity.py` | `poetry run pytest scripts/test_gate_parity.py -q --tb=short` |
+| `poetry run python scripts/sync_ci_gate_jobs.py --check` | `make check-ci-gate-generation` |
 
 If a script is part of a larger repo workflow, assume the Makefile is the preferred maintainer-facing entrypoint.
 
@@ -109,6 +110,12 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
   - `e2e-trigger`: extracts the ordered path allowlist from the `pull_request.paths:` block in `e2e.yml` only.
   - `makefile`: validates every gate's `make_target` exists as a defined Makefile target with an actual recipe (tab-indented commands) or as a `.PHONY` declaration in the root `Makefile`.
 - [test_gate_parity.py](./test_gate_parity.py) — focused pytest suite covering current reproduction (the five known publish gaps: check-core-compat, check-module-core-imports, check-manifest-sync, check-org-context-primitives, check-csrf-exempt), fake-gate fan-out, complete schema validation (including strict JSON v1 duplicate-key rejection, unknown/missing keys, unsafe IDs/paths, dependency validation, binding collisions, string "null" rejection), fail-closed source parsing (missing/duplicate/unclosed function detection), YAML structural parsing with duplicate-key rejection, e2e ownership collision detection, stream behavior (exit 0/1/2), Make wrapper exit translation, Makefile target+recipe validation, and e2e exact sequence mutation (reorder, interior swap, missing, extra, duplicate paths).
+
+### SA122b hosted CI gate generation
+
+- [sync_ci_gate_jobs.py](./sync_ci_gate_jobs.py) — deterministic hybrid generator for the five registry-bound hosted jobs and the three consumer `needs` lists. The registry supplies hosted job IDs and Make targets; the script's static catalog preserves display names, action versions, steps, and check-step labels. `--check` is read-only and reports a deterministic unified diff (exit 1 on drift); `--write` updates only the structurally owned marked regions atomically (exit 0 on success); `--print-check-targets` is the strict registry projection used by Make during parse-time target derivation. Malformed YAML/JSON, duplicate keys, unsupported hosted sets, misplaced or incomplete markers, and semantic invariant failures emit one `ERROR:` line and exit 2.
+
+Use `make check-ci-gate-generation` in normal validation. To intentionally refresh the generated regions, run `poetry run python scripts/sync_ci_gate_jobs.py --write` from the repository root, then rerun the Make check.
 
 **Expected-gap semantics**: SA122-DEC-001 established that publish.yml has full coverage of the release pipeline but currently omits the five standalone repo conformance gates. The checker reports these as `level: "missing"` diagnostics in the `publish` context. These five omissions are the sole expected gap in Phase 1; any additional missing gate is a regression.
 

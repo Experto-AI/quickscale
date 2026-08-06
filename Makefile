@@ -60,7 +60,7 @@
         version-check version-update bump-version \
         check-core-compat check-module-core-imports check-manifest-sync \
         check-org-context-primitives \
-        check-csrf-exempt check-gate-parity \
+         check-csrf-exempt check-gate-parity check-ci-gate-generation \
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
         sa117-capture sa117-verify sa117-authorize sa117-rollback \
         sa117-apply sa117-check-origin sa117-check-containers \
@@ -69,12 +69,18 @@
 # Default Python command (uses root Poetry environment)
 PYTHON ?= poetry run python
 GATE_REGISTRY ?= scripts/gate_registry.json
-# Keep the fast check aggregation aligned with the registry.  The registry's
-# list order is intentional: it is the effective execution order for local
-# gates, and the same target list is used in both normal and QUIET=1 modes.
-CHECK_GATE_TARGETS := $(shell \
-	$(PYTHON) -c 'import json, sys; registry = json.load(open(sys.argv[1], encoding="utf-8")); print(" ".join(gate["bindings"]["make_target"] for gate in registry["gates"] if gate["bindings"].get("make_target") and gate["bindings"]["make_target"].startswith("check-")))' \
-	"$(GATE_REGISTRY)")
+# Keep the fast check aggregation aligned with the registry.  The helper uses
+# the parity checker's strict JSON/schema validator (including duplicate-key
+# and dependency-cycle checks).  Capture its status explicitly because GNU
+# Make's $(shell ...) otherwise discards command failures and can continue with
+# a partial target list.
+CHECK_GATE_TARGETS_RAW := $(shell \
+	$(PYTHON) scripts/sync_ci_gate_jobs.py --print-check-targets --registry "$(GATE_REGISTRY)" 2>&1 \
+	|| printf '__CHECK_GATE_TARGETS_ERROR__')
+ifneq ($(findstring __CHECK_GATE_TARGETS_ERROR__,$(CHECK_GATE_TARGETS_RAW)),)
+$(error Unable to derive local check gate targets from $(GATE_REGISTRY): $(CHECK_GATE_TARGETS_RAW))
+endif
+CHECK_GATE_TARGETS := $(strip $(CHECK_GATE_TARGETS_RAW))
 ifeq ($(strip $(CHECK_GATE_TARGETS)),)
 $(error Unable to derive local check gate targets from $(GATE_REGISTRY))
 endif
@@ -200,6 +206,7 @@ help:
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
 	@echo "  make check-gate-parity            - SA122a: verify declared gates match every execution context (exit 0 = parity, 1 = JSONL diffs)"
+	@echo "  make check-ci-gate-generation     - SA122b: verify registry-bound hosted CI jobs are generated and current"
 	@echo ""
 	@echo "SA117 scope / publication / apply gates:"
 	@echo "  make sa117-check PATHS='...'      - Scope-guard: compare candidate changed paths against baseline (SCRIPTS_ONLY=1)"
@@ -866,6 +873,13 @@ check-gate-parity:
 		exit 2; \
 	fi; \
 	echo "$$output"
+
+# --- Hosted CI Gate Generation (SA122b) ---
+
+# Verify that registry-bound hosted jobs and their consumer needs lists match
+# deterministic generator output.  Use --write only for intentional refreshes.
+check-ci-gate-generation:
+	@$(PYTHON) scripts/sync_ci_gate_jobs.py --check
 
 # --- SA117 Scope / Publication / Apply Gates ---
 

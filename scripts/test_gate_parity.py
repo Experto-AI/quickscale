@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import sync_ci_gate_jobs as sync_ci_gate_jobs_module
 from check_gate_parity import (
     _CONTEXT_SOURCES,
     SchemaValidationError,
@@ -52,6 +53,19 @@ from check_gate_parity import (
     _run_bash_observation,
     _run_make,
     _validate_registry,
+)
+from sync_ci_gate_jobs import (
+    DEFAULT_REGISTRY,
+    DEFAULT_WORKFLOW,
+    JOB_BEGIN,
+    JOB_END,
+    NEEDS_BEGIN,
+    NEEDS_END,
+    GeneratorError,
+    _atomic_write,
+    _parse_registry,
+    _parse_workflow,
+    expected_workflow_text,
 )
 
 SCRIPT = Path(__file__).with_name("check_gate_parity.py")
@@ -3147,7 +3161,7 @@ class TestMakeRegistryDerivation:
                 "description": "Temporary local non-check gate",
                 "required_contexts": ["local-serial", "local-parallel"],
                 "bindings": {
-                    "make_target": "frontend-proof",
+                    "make_target": "temporary-local-non-check",
                     "ci_job": None,
                     "local_ci_stage": None,
                 },
@@ -3177,4 +3191,316 @@ class TestMakeRegistryDerivation:
             "make check-core-compat check-module-core-imports check-manifest-sync "
             "check-org-context-primitives check-csrf-exempt"
         ) in output
-        assert "make frontend-proof" not in output
+        assert "make temporary-local-non-check" not in output
+
+
+# =========================================================================
+# SA122b — hybrid hosted CI gate generation
+# =========================================================================
+
+
+class TestHostedCiGateGeneration:
+    """The generated regions preserve hosted workflow semantics exactly."""
+
+    @staticmethod
+    def _projection(
+        text: str,
+    ) -> tuple[
+        frozenset[str],
+        dict[str, tuple[str, ...]],
+        dict[str, tuple[str, ...]],
+    ]:
+        workflow = _parse_workflow(text, "fixture ci.yml")
+        jobs = workflow["jobs"]
+        assert isinstance(jobs, dict)
+        needs: dict[str, tuple[str, ...]] = {}
+        run_values: dict[str, tuple[str, ...]] = {}
+        for job_id, job in jobs.items():
+            assert isinstance(job, dict)
+            raw_needs = job.get("needs", [])
+            needs[job_id] = (raw_needs,) if isinstance(raw_needs, str) else tuple(raw_needs)
+            run_values[job_id] = tuple(
+                step["run"]
+                for step in job.get("steps", [])
+                if isinstance(step, dict) and "run" in step
+            )
+        return frozenset(jobs), needs, run_values
+
+    def test_base_loader_projection_has_all_jobs_and_three_generated_needs(self) -> None:
+        """BaseLoader observes the exact static job and dependency projection."""
+        workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        jobs, needs, run_values = self._projection(workflow_text)
+        assert len(jobs) == 11
+        assert needs["test"] == (
+            "backups-validation",
+            "module-manifest-contract",
+            "module-core-compat",
+            "module-core-import-linter",
+            "manifest-sync-gate",
+            "org-context-primitives-gate",
+            "csrf-exempt-gate",
+        )
+        for consumer in ("isolation-conformance", "lint-cli"):
+            assert needs[consumer] == (
+                "backups-validation",
+                "module-manifest-contract",
+                "manifest-sync-gate",
+                "org-context-primitives-gate",
+                "csrf-exempt-gate",
+            )
+        assert run_values["module-core-compat"][-1] == "make check-core-compat\n"
+        assert expected_workflow_text(workflow_text, registry) == workflow_text
+
+    def test_generation_is_idempotent(self) -> None:
+        """A generated workflow is stable under a second generation pass."""
+        workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        generated = expected_workflow_text(workflow_text, registry)
+        assert expected_workflow_text(generated, registry) == generated
+        assert self._projection(generated) == self._projection(workflow_text)
+
+    def test_malformed_marker_fails_closed(self) -> None:
+        """An incomplete generated pair is an invalid input, not drift."""
+        workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        malformed = workflow_text.replace(f"{JOB_END}\n", "", 1)
+        with pytest.raises(GeneratorError, match="marker"):
+            expected_workflow_text(malformed, registry)
+
+    def test_duplicate_yaml_key_fails_closed(self) -> None:
+        """BaseLoader parsing rejects duplicate workflow mapping keys."""
+        workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        malformed = workflow_text.replace("name: CI\n", "name: CI\nname: Duplicate\n", 1)
+        with pytest.raises(GeneratorError, match="Duplicate YAML key"):
+            expected_workflow_text(malformed, registry)
+
+    def test_unsupported_hosted_registry_fails_closed(self, tmp_path: Path) -> None:
+        """A registry hosted set outside the supported static catalog is rejected."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        registry_data["gates"] = registry_data["gates"][:4] + registry_data["gates"][5:]
+        registry_path = tmp_path / "registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        with pytest.raises(GeneratorError, match="unsupported hosted gate set"):
+            expected_workflow_text(
+                DEFAULT_WORKFLOW.read_text(encoding="utf-8"), _parse_registry(registry_path)
+            )
+
+    def test_registry_make_target_propagates_to_hosted_job(self, tmp_path: Path) -> None:
+        """A registry target edit propagates only to its owned hosted run value."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        registry_data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
+        registry_path = tmp_path / "registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        gates = _parse_registry(registry_path)
+        current = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        generated = expected_workflow_text(current, gates)
+
+        assert "make check-core-compat-renamed\n" in generated
+        assert "make check-core-compat\n" not in generated
+        assert "needs-test" in generated
+        assert (
+            "needs: [backups-validation, module-manifest-contract, module-core-compat" in generated
+        )
+
+    def test_unowned_workflow_bytes_are_preserved_exactly(self, tmp_path: Path) -> None:
+        """Generation preserves every byte outside the owned marker regions."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        registry_data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
+        registry_path = tmp_path / "registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        gates = _parse_registry(registry_path)
+        current = DEFAULT_WORKFLOW.read_text(encoding="utf-8").replace(
+            "name: CI\n", "name: CI\n# unowned sentinel\n", 1
+        )
+        generated = expected_workflow_text(current, gates)
+
+        def without_owned_regions(text: str) -> str:
+            lines = text.splitlines(keepends=True)
+            ranges = [(lines.index(JOB_BEGIN + "\n"), lines.index(JOB_END + "\n"))]
+            for consumer in NEEDS_BEGIN:
+                ranges.append(
+                    (
+                        lines.index(NEEDS_BEGIN[consumer] + "\n"),
+                        lines.index(NEEDS_END[consumer] + "\n"),
+                    )
+                )
+            owned = {index for start, end in ranges for index in range(start, end + 1)}
+            return "".join(line for index, line in enumerate(lines) if index not in owned)
+
+        assert without_owned_regions(generated) == without_owned_regions(current)
+
+    def test_hosted_markers_must_own_exact_top_level_jobs(self) -> None:
+        """A hosted marker pair moved around another job fails closed."""
+        current = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        relocated = current.replace(JOB_BEGIN + "\n", "", 1).replace(JOB_END + "\n", "", 1)
+        relocated = relocated.replace("  test:\n", JOB_BEGIN + "\n  test:\n", 1)
+        relocated = relocated.replace(
+            "  isolation-conformance:\n", JOB_END + "\n  isolation-conformance:\n", 1
+        )
+        with pytest.raises(GeneratorError, match="exactly the named top-level jobs"):
+            expected_workflow_text(relocated, _parse_registry(DEFAULT_REGISTRY))
+
+    def test_needs_markers_must_own_named_consumer_job(self) -> None:
+        """A needs marker pair in a sibling job cannot authorize rewriting it."""
+        current = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        begin = NEEDS_BEGIN["test"] + "\n"
+        end = NEEDS_END["test"] + "\n"
+        relocated = current.replace(begin, "", 1).replace(end, "", 1)
+        needs_line = (
+            "    needs: [backups-validation, module-manifest-contract, "
+            "manifest-sync-gate, org-context-primitives-gate, csrf-exempt-gate]\n"
+        )
+        relocated = relocated.replace(needs_line, begin + needs_line + end, 1)
+        with pytest.raises(GeneratorError, match="not owned by its top-level job"):
+            expected_workflow_text(relocated, _parse_registry(DEFAULT_REGISTRY))
+
+    def test_cli_check_write_and_clean_exit_contract(self, tmp_path: Path) -> None:
+        """CLI check/read-write modes report drift, atomically write, then cleanly check."""
+        workflow_path = tmp_path / "ci.yml"
+        workflow_path.write_text(
+            DEFAULT_WORKFLOW.read_text(encoding="utf-8").replace(
+                "make check-core-compat\n", "make check-core-compat-renamed\n", 1
+            ),
+            encoding="utf-8",
+        )
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        registry_data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
+        registry_path = tmp_path / "registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+
+        command = [sys.executable, str(Path(sync_ci_gate_jobs_module.__file__))]
+        check = subprocess.run(
+            [
+                *command,
+                "--check",
+                "--workflow",
+                str(workflow_path),
+                "--registry",
+                str(registry_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert check.returncode == 0, check.stderr
+
+        workflow_path.write_text(
+            workflow_path.read_text(encoding="utf-8").replace(
+                "make check-core-compat-renamed\n", "make check-core-compat-stale\n", 1
+            ),
+            encoding="utf-8",
+        )
+        drift = subprocess.run(
+            [
+                *command,
+                "--check",
+                "--workflow",
+                str(workflow_path),
+                "--registry",
+                str(registry_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert drift.returncode == 1
+        assert "check-core-compat-stale" in drift.stdout
+        write = subprocess.run(
+            [
+                *command,
+                "--write",
+                "--workflow",
+                str(workflow_path),
+                "--registry",
+                str(registry_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert write.returncode == 0, write.stderr
+        assert "make check-core-compat-renamed\n" in workflow_path.read_text(encoding="utf-8")
+
+    def test_atomic_write_cleans_temporary_file_on_replace_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Atomic replacement failure leaves the original and no temporary file."""
+        target = tmp_path / "ci.yml"
+        target.write_text("original\n", encoding="utf-8")
+
+        def fail_replace(
+            source: str | bytes | os.PathLike[str], destination: str | bytes | os.PathLike[str]
+        ) -> None:
+            raise OSError("replace failed")
+
+        monkeypatch.setattr(sync_ci_gate_jobs_module.os, "replace", fail_replace)
+        with pytest.raises(OSError, match="replace failed"):
+            _atomic_write(target, "replacement\n")
+        assert target.read_text(encoding="utf-8") == "original\n"
+        assert not tuple(tmp_path.glob(".ci.yml.*"))
+
+    def test_helper_accepts_checker_valid_long_dag(self, tmp_path: Path) -> None:
+        """The generator accepts the same long acyclic dependency class as the checker."""
+        gate_ids = [f"gate-{index:04d}" for index in range(1200)]
+        registry = {
+            "schema_version": 1,
+            "description": "Long DAG",
+            "contexts": dict(_ALL_CONTEXTS),
+            "gates": [
+                {
+                    "id": gate_id,
+                    "description": gate_id,
+                    "required_contexts": ["local-serial"],
+                    "bindings": {
+                        "make_target": None,
+                        "ci_job": None,
+                        "local_ci_stage": None,
+                    },
+                    "depends_on": [gate_ids[index - 1]] if index else [],
+                    "trigger_inputs": [],
+                }
+                for index, gate_id in enumerate(gate_ids)
+            ],
+        }
+        path = tmp_path / "long-dag.json"
+        path.write_text(json.dumps(registry), encoding="utf-8")
+        assert [gate["id"] for gate in _parse_registry(path)] == gate_ids
+
+    def test_helper_rejects_duplicate_registry_key(self, tmp_path: Path) -> None:
+        """Duplicate registry keys are rejected before generation."""
+        path = tmp_path / "duplicate.json"
+        path.write_text(
+            '{"schema_version": 1, "schema_version": 1, "description": "x", '
+            '"contexts": {}, "gates": []}',
+            encoding="utf-8",
+        )
+        with pytest.raises(GeneratorError, match="Duplicate JSON key"):
+            _parse_registry(path)
+
+
+class TestMakeRegistryDerivationFailure:
+    """Make derives targets strictly and aborts during parsing on bad input."""
+
+    def test_malformed_registry_stops_make_before_recipe(self, tmp_path: Path) -> None:
+        """A malformed registry cannot fall through to a Make recipe."""
+        registry_path = tmp_path / "bad-registry.json"
+        registry_path.write_text("{not valid json", encoding="utf-8")
+        marker = tmp_path / "recipe-ran"
+        result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "check-gate-parity",
+                f"GATE_REGISTRY={registry_path}",
+                f"CHECK_GATE_TARGETS_SENTINEL={marker}",
+            ],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode != 0
+        assert "Unable to derive local check gate targets" in result.stderr
+        assert not marker.exists()
