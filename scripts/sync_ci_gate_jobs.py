@@ -235,14 +235,51 @@ def _job_steps(job: dict[str, Any], job_id: str) -> list[dict[str, Any]]:
     return steps
 
 
-def _validate_workflow_projection(text: str, gates: list[dict[str, Any]]) -> dict[str, Any]:
-    """Validate the pre-edit workflow shape and all registry-bound static metadata."""
+def _locate_hosted_jobs(jobs: dict[str, Any], label: str) -> dict[str, str]:
+    """
+    Locate the five hosted jobs by their static catalog display names.
+
+    Display metadata is helper-owned and static, so the generated job IDs may
+    be stale before an edit: a registry ``ci_job`` (F-005) or Make-target
+    change must be projectable by ``--write`` without treating the previously
+    generated job IDs as drift.
+    """
+    located: dict[str, str] = {}
+    for gate_id in HOSTED_GATE_ORDER:
+        spec = HOSTED_JOB_CATALOG[gate_id]
+        matches = [
+            job_id
+            for job_id, job in jobs.items()
+            if isinstance(job, dict) and job.get("name") == spec.display_name
+        ]
+        if len(matches) != 1:
+            raise GeneratorError(f"{label}: expected exactly one job named {spec.display_name!r}")
+        located[gate_id] = matches[0]
+    return located
+
+
+def _validate_workflow_projection(
+    text: str, gates: list[dict[str, Any]], *, strict: bool = True
+) -> dict[str, Any]:
+    """
+    Validate the workflow shape and all registry-bound static metadata.
+
+    ``strict=True`` (post-generation) requires the registry's exact hosted job
+    IDs, ``needs`` lists, and check commands.  ``strict=False`` (pre-edit)
+    locates the hosted jobs by their static catalog display names so a registry
+    ``ci_job`` (F-005) or Make-target edit can be projected by ``--write``;
+    static display and step metadata is validated identically in both modes.
+    """
     workflow = _parse_workflow(text, "ci.yml")
     jobs = workflow.get("jobs")
     if not isinstance(jobs, dict):
         raise GeneratorError("ci.yml: jobs must be a mapping")
     bindings = _registry_bindings(gates)
-    expected_job_ids = UNOWNED_JOB_IDS | {job_id for job_id, _ in bindings.values()}
+    if strict:
+        hosted_locations = {gate_id: bindings[gate_id][0] for gate_id in HOSTED_GATE_ORDER}
+    else:
+        hosted_locations = _locate_hosted_jobs(jobs, "ci.yml")
+    expected_job_ids = UNOWNED_JOB_IDS | set(hosted_locations.values())
     actual_job_ids = frozenset(jobs)
     if actual_job_ids != expected_job_ids:
         raise GeneratorError(
@@ -250,11 +287,13 @@ def _validate_workflow_projection(text: str, gates: list[dict[str, Any]]) -> dic
             f"expected {sorted(expected_job_ids)!r}, got {sorted(actual_job_ids)!r}"
         )
 
-    for gate_id, (job_id, make_target) in bindings.items():
+    for gate_id in HOSTED_GATE_ORDER:
+        job_id = hosted_locations[gate_id]
         job = jobs.get(job_id)
         if not isinstance(job, dict):
             raise GeneratorError(f"ci.yml: jobs.{job_id} must be a mapping")
         spec = HOSTED_JOB_CATALOG[gate_id]
+        make_target = bindings[gate_id][1]
         if job.get("name") != spec.display_name or job.get("runs-on") != "ubuntu-24.04":
             raise GeneratorError(f"ci.yml: jobs.{job_id} static display metadata drifted")
         steps = _job_steps(job, job_id)
@@ -290,11 +329,13 @@ def _validate_workflow_projection(text: str, gates: list[dict[str, Any]]) -> dic
             raise GeneratorError(f"ci.yml: jobs.{job_id} dependency step drifted")
         if steps[4].get("name") != spec.check_step_name or "run" not in steps[4]:
             raise GeneratorError(f"ci.yml: jobs.{job_id} check step metadata drifted")
-        if steps[4].get("run") != f"make {make_target}\n":
-            # This is the owned field.  It is allowed to be stale so --write
-            # can project a registry change into the workflow.
-            if not isinstance(steps[4].get("run"), str):
-                raise GeneratorError(f"ci.yml: jobs.{job_id} check command is not a string")
+        if strict:
+            # Owned field: post-generation it must equal the registry binding
+            # exactly; pre-edit it may be stale so --write can project it.
+            if steps[4].get("run") != f"make {make_target}\n":
+                raise GeneratorError(f"ci.yml: jobs.{job_id} check command drifted")
+        elif not isinstance(steps[4].get("run"), str):
+            raise GeneratorError(f"ci.yml: jobs.{job_id} check command is not a string")
 
     expected_needs = _expected_needs(gates)
     for consumer, expected in expected_needs.items():
@@ -310,7 +351,17 @@ def _validate_workflow_projection(text: str, gates: list[dict[str, Any]]) -> dic
             raise GeneratorError(f"ci.yml: jobs.{consumer}.needs must be a string/list of strings")
         if len(set(actual_tuple)) != len(actual_tuple):
             raise GeneratorError(f"ci.yml: jobs.{consumer}.needs contains a duplicate predecessor")
-        if set(actual_tuple) - set(expected):
+        if strict:
+            # Owned field: post-generation the needs must match the registry
+            # bindings exactly, in order.
+            if actual_tuple != expected:
+                raise GeneratorError(
+                    f"ci.yml: jobs.{consumer}.needs drifted: expected {list(expected)!r}, "
+                    f"got {list(actual_tuple)!r}"
+                )
+        elif set(actual_tuple) - (set(FIXED_NEEDS) | set(hosted_locations.values())):
+            # Pre-edit the generated predecessors may be stale (registry ci_job
+            # rename) but must still name real workflow jobs or fixed needs.
             raise GeneratorError(
                 f"ci.yml: jobs.{consumer}.needs contains an unsupported predecessor"
             )
@@ -402,19 +453,30 @@ def _top_level_job_headers(lines: list[str]) -> list[tuple[int, str]]:
     return headers
 
 
-def _bootstrap_job_markers(lines: list[str], gates: list[dict[str, Any]]) -> list[str]:
+def _locate_hosted_job_headers(lines: list[str]) -> list[int]:
+    """
+    Locate the five hosted job header lines by their display names.
+
+    Use static display metadata to find the (possibly stale) hosted job IDs;
+    this permits a registry ``ci_job`` (F-005) or Make-target edit while
+    keeping the bootstrap independent of generated job text.
+    """
     headers = _top_level_job_headers(lines)
-    expected_names = [HOSTED_JOB_CATALOG[gate_id].display_name for gate_id in HOSTED_GATE_ORDER]
-    # Use static display metadata to find the old IDs; this permits a registry
-    # Make-target edit while keeping the bootstrap independent of job text.
     starts: list[int] = []
-    for expected_name in expected_names:
-        found = []
-        for index, job_id in headers:
-            end = next((position for position, _ in headers if position > index), len(lines))
-            block = "".join(lines[index:end])
-            if f"    name: {expected_name}\n" in block:
-                found.append(index)
+    for gate_id in HOSTED_GATE_ORDER:
+        expected_name = HOSTED_JOB_CATALOG[gate_id].display_name
+        found = [
+            index
+            for index, _job_id in headers
+            if f"    name: {expected_name}\n"
+            in "".join(
+                lines[
+                    index : next(
+                        (position for position, _ in headers if position > index), len(lines)
+                    )
+                ]
+            )
+        ]
         if len(found) != 1:
             raise GeneratorError(f"hosted job bootstrap: expected one job named {expected_name!r}")
         starts.append(found[0])
@@ -423,9 +485,16 @@ def _bootstrap_job_markers(lines: list[str], gates: list[dict[str, Any]]) -> lis
         raise GeneratorError(
             "hosted job bootstrap: registry-bound jobs are not one contiguous region"
         )
+    return starts
+
+
+def _bootstrap_job_markers(lines: list[str], gates: list[dict[str, Any]]) -> list[str]:
+    starts = _locate_hosted_job_headers(lines)
     first = starts[0]
     last = starts[-1]
-    next_header = next((position for position, _ in headers if position > last), len(lines))
+    next_header = next(
+        (position for position, _ in _top_level_job_headers(lines) if position > last), len(lines)
+    )
     end = next_header
     while end > last and not lines[end - 1].strip():
         end -= 1
@@ -477,17 +546,21 @@ def _validate_marked_regions(lines: list[str], gates: list[dict[str, Any]]) -> N
     job_end = _line_index(lines, JOB_END)[0]
     if not jobs_lines[0] < job_begin < job_end:
         raise GeneratorError("ci.yml: hosted job markers are not owned by the jobs section")
-    bindings = _registry_bindings(gates)
-    expected_job_ids = tuple(bindings[gate_id][0] for gate_id in HOSTED_GATE_ORDER)
+    # The region's job IDs may be stale (registry ci_job rename, F-005);
+    # display-name ownership keeps the marked-region checks independent of
+    # generated job text while still requiring exactly the hosted jobs.
+    located_starts = _locate_hosted_job_headers(lines)
+    located_by_index = {index: job_id for index, job_id in headers}
+    located_ids = tuple(located_by_index[position] for position in located_starts)
     enclosed_jobs = tuple(job_id for index, job_id in headers if job_begin < index < job_end)
-    if enclosed_jobs != expected_job_ids:
+    if enclosed_jobs != located_ids:
         raise GeneratorError(
             "ci.yml: hosted job marker region must contain exactly the named top-level jobs "
             f"in order; got {list(enclosed_jobs)!r}"
         )
-    if job_begin + 1 != header_locations[expected_job_ids[0]]:
+    if job_begin + 1 != header_locations[located_ids[0]]:
         raise GeneratorError("ci.yml: hosted job begin marker is not adjacent to its first job")
-    last_job_start = header_locations[expected_job_ids[-1]]
+    last_job_start = header_locations[located_ids[-1]]
     if job_end <= last_job_start:
         raise GeneratorError("ci.yml: hosted job end marker is inside the last generated job")
     next_job_header = next((index for index, _ in headers if index > last_job_start), len(lines))
@@ -514,7 +587,7 @@ def _validate_marked_regions(lines: list[str], gates: list[dict[str, Any]]) -> N
 
 def expected_workflow_text(text: str, gates: list[dict[str, Any]]) -> str:
     """Return the deterministic generated workflow text for a registry."""
-    _validate_workflow_projection(text, gates)
+    _validate_workflow_projection(text, gates, strict=False)
     lines = text.splitlines(keepends=True)
     if _any_marker_present(lines):
         _validate_marked_regions(lines, gates)
@@ -537,7 +610,7 @@ def expected_workflow_text(text: str, gates: list[dict[str, Any]]) -> str:
             f"needs region for {consumer}",
         )
     result = "".join(lines)
-    _validate_workflow_projection(result, gates)
+    _validate_workflow_projection(result, gates, strict=True)
     return result
 
 
