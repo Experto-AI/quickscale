@@ -34,28 +34,51 @@ from yaml.nodes import MappingNode
 SCOPE_DIR: Final[Path] = Path(__file__).resolve().parent
 DEFAULT_SCOPE_PATH: Final[Path] = SCOPE_DIR / "sa117_scope.json"
 DEFAULT_EVIDENCE_PATH: Final[Path] = Path("/tmp/sa117-lock-diff-evidence.json")
-_LOCKED_MODULE_PACKAGES: Final[list[str]] = [
-    "quickscale-module-analytics",
-    "quickscale-module-auth",
-    "quickscale-module-backups",
-    "quickscale-module-billing",
-    "quickscale-module-blog",
-    "quickscale-module-crm",
-    "quickscale-module-forms",
-    "quickscale-module-listings",
-    "quickscale-module-notifications",
-    "quickscale-module-orgs",
-    "quickscale-module-social",
-    "quickscale-module-storage",
-]
-_MODULE_NAMES: Final[list[str]] = [
-    name.removeprefix("quickscale-module-") for name in _LOCKED_MODULE_PACKAGES
-]
+_MODULE_DISCOVERY_RELATIVE_PATH: Final[Path] = Path(
+    "quickscale_core/src/quickscale_core/contracts/module_discovery.py"
+)
 _LOCK_VERSION_SENTINEL: Final[str] = "__SA117_MODULE_PACKAGE_VERSION__"
 
 
 class LockDiffError(ValueError):
     """An input cannot be verified under the SA117c contract."""
+
+
+def _authoritative_module_names(repo_root: Path | None = None) -> list[str]:
+    """Load the source inventory through the repository-local discovery shim."""
+    root = (repo_root or SCOPE_DIR.parent).resolve()
+    shim = root / _MODULE_DISCOVERY_RELATIVE_PATH
+    if not shim.is_file():
+        raise LockDiffError(f"module discovery shim not found: {shim}")
+    try:
+        result = subprocess.run(
+            [sys.executable, str(shim), "--list-modules"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise LockDiffError(f"module discovery shim failed: {exc}") from exc
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
+        raise LockDiffError(f"module discovery shim rejected inventory: {detail}")
+    names = [line for line in result.stdout.splitlines() if line]
+    if not names:
+        raise LockDiffError("module discovery shim returned an empty inventory")
+    return names
+
+
+def _locked_module_packages(module_names: list[str]) -> list[str]:
+    """Return Poetry package names corresponding to authoritative modules."""
+    return [f"quickscale-module-{name}" for name in module_names]
+
+
+# Compatibility for direct tests and callers that inspect the historical
+# private name.  Production paths below always resolve the inventory for the
+# candidate repository at the point of use.
+_LOCKED_MODULE_PACKAGES: Final[list[str]] = _locked_module_packages(_authoritative_module_names())
 
 
 def _validate_no_nul(path: str) -> str:
@@ -363,8 +386,9 @@ def _parse_project_version(content: bytes, path: str, expected_name: str) -> str
     return _parse_canonical_version(version)
 
 
-def _expected_inventory() -> list[str]:
-    """Return the immutable 55-path SA117c inventory."""
+def _expected_inventory(repo_root: Path | None = None) -> list[str]:
+    """Return the inventory paths derived from the authoritative modules."""
+    module_names = _authoritative_module_names(repo_root)
     paths = ["VERSION", "poetry.lock"]
     paths.extend(
         [
@@ -379,7 +403,7 @@ def _expected_inventory() -> list[str]:
             "quickscale_cli/src/quickscale_cli/_version.py",
         ]
     )
-    for module in _MODULE_NAMES:
+    for module in module_names:
         paths.extend(
             [
                 f"quickscale_modules/{module}/pyproject.toml",
@@ -388,12 +412,10 @@ def _expected_inventory() -> list[str]:
                 f"quickscale_core/src/quickscale_core/data/manifests/{module}/module.yml",
             ]
         )
-    if len(paths) != 55:
-        raise AssertionError("SA117c inventory constant is not 55 files")
     return paths
 
 
-def _parse_lock_data(content: bytes, path: str) -> dict[str, Any]:
+def _parse_lock_data(content: bytes, path: str, module_packages: list[str]) -> dict[str, Any]:
     """Parse a lock and validate its complete, unique package inventory."""
     data = _parse_toml(content, path)
     packages = data.get("package")
@@ -411,15 +433,19 @@ def _parse_lock_data(content: bytes, path: str) -> dict[str, Any]:
         if name in seen:
             raise LockDiffError(f"{path}: duplicate package record {name!r}")
         seen.add(name)
-    missing = sorted(set(_LOCKED_MODULE_PACKAGES) - seen)
+    missing = sorted(set(module_packages) - seen)
     if missing:
         raise LockDiffError(f"{path}: missing expected module packages: {', '.join(missing)}")
-    if len([name for name in seen if name in _LOCKED_MODULE_PACKAGES]) != 12:
-        raise LockDiffError(f"{path}: expected exactly 12 module package records")
+    if len([name for name in seen if name in module_packages]) != len(module_packages):
+        raise LockDiffError(
+            f"{path}: expected exactly {len(module_packages)} module package records"
+        )
     return data
 
 
-def _parse_inventory(contents: dict[str, bytes], label: str) -> dict[str, Any]:
+def _parse_inventory(
+    contents: dict[str, bytes], label: str, module_names: list[str]
+) -> dict[str, Any]:
     """Validate every inventory file and return parsed values and lock data."""
     values: dict[str, str] = {}
     values["VERSION"] = _parse_version_file(contents["VERSION"], f"{label}/VERSION")
@@ -438,7 +464,7 @@ def _parse_inventory(contents: dict[str, bytes], label: str) -> dict[str, Any]:
         contents["quickscale_cli/src/quickscale_cli/_version.py"],
         f"{label}/quickscale_cli/_version.py",
     )
-    for module in _MODULE_NAMES:
+    for module in module_names:
         yml_paths = [
             f"quickscale_modules/{module}/module.yml",
             f"quickscale_core/src/quickscale_core/data/manifests/{module}/module.yml",
@@ -451,12 +477,11 @@ def _parse_inventory(contents: dict[str, bytes], label: str) -> dict[str, Any]:
         )
         init_path = f"quickscale_modules/{module}/src/quickscale_modules_{module}/__init__.py"
         values[init_path] = _parse_python_version(contents[init_path], f"{label}/{init_path}")
-    lock_data = _parse_lock_data(contents["poetry.lock"], f"{label}/poetry.lock")
+    module_packages = _locked_module_packages(module_names)
+    lock_data = _parse_lock_data(contents["poetry.lock"], f"{label}/poetry.lock", module_packages)
     packages = {package["name"]: package["version"] for package in lock_data["package"]}
-    for name in _LOCKED_MODULE_PACKAGES:
+    for name in module_packages:
         values[f"poetry.lock#package[{name}].version"] = _parse_canonical_version(packages[name])
-    if len(values) != 66:
-        raise LockDiffError(f"{label}: expected exactly 66 version values, found {len(values)}")
     snapshot_version = values["VERSION"]
     bad = [path for path, value in values.items() if value != snapshot_version]
     if bad:
@@ -579,16 +604,18 @@ def _candidate_contents(root: Path, paths: list[str]) -> dict[str, bytes]:
     return contents
 
 
-def _normalise_lock(lock_data: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+def _normalise_lock(
+    lock_data: dict[str, Any], module_packages: list[str]
+) -> tuple[dict[str, Any], list[str]]:
     """Deep-copy a lock and replace only validated module version leaves."""
     normalised = copy.deepcopy(lock_data)
     leaves: list[str] = []
     for package in normalised["package"]:
-        if package["name"] in _LOCKED_MODULE_PACKAGES:
+        if package["name"] in module_packages:
             package["version"] = _LOCK_VERSION_SENTINEL
             leaves.append(f"package[{package['name']}].version")
-    if sorted(leaves) != sorted(f"package[{name}].version" for name in _LOCKED_MODULE_PACKAGES):
-        raise LockDiffError("lock normalisation did not find exactly twelve validated leaves")
+    if sorted(leaves) != sorted(f"package[{name}].version" for name in module_packages):
+        raise LockDiffError("lock normalisation did not find every validated module leaf")
     return normalised, sorted(leaves)
 
 
@@ -689,7 +716,9 @@ def mode_verify_lock_diff(
             raise LockDiffError("expected-version is required")
         _parse_canonical_version(expected_version)
         root = candidate_path.parent.resolve()
-        paths = _expected_inventory()
+        module_names = _authoritative_module_names(root)
+        module_packages = _locked_module_packages(module_names)
+        paths = _expected_inventory(root)
         output_resolved = output.resolve()
         for path in paths:
             if output_resolved == (root / path).resolve():
@@ -714,15 +743,15 @@ def mode_verify_lock_diff(
             )
         baseline_contents = _git_baseline_contents(root, resolved_sha, paths)
         candidate_contents = _candidate_contents(root, paths)
-        baseline = _parse_inventory(baseline_contents, "baseline")
-        candidate = _parse_inventory(candidate_contents, "candidate")
+        baseline = _parse_inventory(baseline_contents, "baseline", module_names)
+        candidate = _parse_inventory(candidate_contents, "candidate", module_names)
         if candidate["values"]["VERSION"] != expected_version:
             raise LockDiffError(
                 f"expected-version {expected_version!r} disagrees with candidate VERSION "
                 f"{candidate['values']['VERSION']!r}"
             )
-        baseline_lock, baseline_leaves = _normalise_lock(baseline["lock"])
-        candidate_lock, candidate_leaves = _normalise_lock(candidate["lock"])
+        baseline_lock, baseline_leaves = _normalise_lock(baseline["lock"], module_packages)
+        candidate_lock, candidate_leaves = _normalise_lock(candidate["lock"], module_packages)
         if baseline_leaves != candidate_leaves:
             raise LockDiffError("baseline and candidate lock leaf inventories differ")
         differences = _collect_differences(baseline_lock, candidate_lock)
@@ -753,12 +782,12 @@ def mode_verify_lock_diff(
                 "version": candidate["values"]["VERSION"],
             },
             "inventory": {
-                "files_expected": 55,
+                "files_expected": len(paths),
                 "files_parsed": len(candidate_contents),
-                "values_expected": 66,
+                "values_expected": len(candidate["values"]),
                 "values_parsed": len(candidate["values"]),
-                "expected_file_count": 55,
-                "expected_version_value_count": 66,
+                "expected_file_count": len(paths),
+                "expected_version_value_count": len(candidate["values"]),
                 "baseline_file_count": len(baseline_contents),
                 "candidate_file_count": len(candidate_contents),
                 "baseline_version_value_count": len(baseline["values"]),

@@ -51,6 +51,52 @@ from quickscale_core.utils.git_utils import (  # noqa: E402
 )
 
 
+_AUTHORITATIVE_FIXTURE_MODULES = (
+    "analytics",
+    "auth",
+    "backups",
+    "billing",
+    "blog",
+    "crm",
+    "forms",
+    "listings",
+    "notifications",
+    "orgs",
+    "social",
+    "storage",
+)
+
+
+def _add_authoritative_module_contract(repo_dir: Path) -> None:
+    """Add the module-discovery contract and its manifest-backed inventory."""
+    contracts_dir = (
+        repo_dir / "quickscale_core" / "src" / "quickscale_core" / "contracts"
+    )
+    contracts_dir.mkdir(parents=True)
+    (contracts_dir / "__init__.py").write_text("")
+    real_repo_root = Path(__file__).resolve().parent.parent.parent
+    real_module_discovery = (
+        real_repo_root
+        / "quickscale_core"
+        / "src"
+        / "quickscale_core"
+        / "contracts"
+        / "module_discovery.py"
+    )
+    # Copy rather than symlink so module discovery resolves the hermetic repo's
+    # quickscale_modules/ tree instead of the checkout containing this test.
+    (contracts_dir / "module_discovery.py").write_text(
+        real_module_discovery.read_text()
+    )
+
+    modules_dir = repo_dir / "quickscale_modules"
+    for module_name in _AUTHORITATIVE_FIXTURE_MODULES:
+        module_dir = modules_dir / module_name
+        module_dir.mkdir(parents=True, exist_ok=True)
+        (module_dir / "__init__.py").write_text("# fake module\n")
+        (module_dir / "module.yml").write_text(f"name: {module_name}\n")
+
+
 def _git_available() -> bool:
     """Return True if git is available on PATH."""
     return shutil.which("git") is not None
@@ -2239,10 +2285,8 @@ class TestPublishModuleReleaseAuthoritativeGate:
         # Create VERSION file
         (repo_dir / "VERSION").write_text(f"{version}\n")
 
-        # Create minimal quickscale_modules/ structure with a fake module
-        modules_dir = repo_dir / "quickscale_modules" / "auth"
-        modules_dir.mkdir(parents=True)
-        (modules_dir / "__init__.py").write_text("# fake module\n")
+        # Create the authoritative module-discovery seam and its fake inventory.
+        _add_authoritative_module_contract(repo_dir)
 
         # Create scripts/ directory and copy the wrapper script
         scripts_dir = repo_dir / "scripts"
@@ -2532,10 +2576,8 @@ class TestPublishModuleExpectedRemoteSha:
         # VERSION file
         (repo_dir / "VERSION").write_text(f"{version}\n")
 
-        # quickscale_modules/ with a fake module
-        modules_dir = repo_dir / "quickscale_modules" / "auth"
-        modules_dir.mkdir(parents=True)
-        (modules_dir / "__init__.py").write_text("# fake\n")
+        # Create the authoritative module-discovery seam and its fake inventory.
+        _add_authoritative_module_contract(repo_dir)
 
         # Copy publish_module.py
         scripts_dir = repo_dir / "scripts"
