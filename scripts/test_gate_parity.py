@@ -3304,6 +3304,119 @@ class TestHostedCiGateGeneration:
             "needs: [backups-validation, module-manifest-contract, module-core-compat" in generated
         )
 
+    def test_registry_ci_job_rename_generates_new_hosted_job_ids(self, tmp_path: Path) -> None:
+        """A supported ci_job rename is not rejected before generation (F-005)."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        registry_data["gates"][0]["bindings"]["ci_job"] = "module-core-compat-renamed"
+        registry_path = tmp_path / "registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        gates = _parse_registry(registry_path)
+        current = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        generated = expected_workflow_text(current, gates)
+
+        assert "  module-core-compat-renamed:\n" in generated
+        assert "  module-core-compat:\n" not in generated
+        assert (
+            "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
+            "module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, "
+            "csrf-exempt-gate]" in generated
+        )
+        assert expected_workflow_text(generated, gates) == generated
+
+    def test_ci_job_rename_preserves_unowned_workflow_bytes(self, tmp_path: Path) -> None:
+        """A ci_job rename preserves every byte outside the owned marker regions."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        registry_data["gates"][0]["bindings"]["ci_job"] = "module-core-compat-renamed"
+        registry_path = tmp_path / "registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        gates = _parse_registry(registry_path)
+        current = DEFAULT_WORKFLOW.read_text(encoding="utf-8").replace(
+            "name: CI\n", "name: CI\n# unowned sentinel\n", 1
+        )
+        generated = expected_workflow_text(current, gates)
+
+        def without_owned_regions(text: str) -> str:
+            lines = text.splitlines(keepends=True)
+            ranges = [(lines.index(JOB_BEGIN + "\n"), lines.index(JOB_END + "\n"))]
+            for consumer in NEEDS_BEGIN:
+                ranges.append(
+                    (
+                        lines.index(NEEDS_BEGIN[consumer] + "\n"),
+                        lines.index(NEEDS_END[consumer] + "\n"),
+                    )
+                )
+            owned = {index for start, end in ranges for index in range(start, end + 1)}
+            return "".join(line for index, line in enumerate(lines) if index not in owned)
+
+        assert without_owned_regions(generated) == without_owned_regions(current)
+
+    def test_ci_job_rename_bootstraps_markers_from_marker_less_workflow(
+        self, tmp_path: Path
+    ) -> None:
+        """A marker-less workflow is bootstrapped around a renamed hosted job set."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        registry_data["gates"][0]["bindings"]["ci_job"] = "module-core-compat-renamed"
+        registry_path = tmp_path / "registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        gates = _parse_registry(registry_path)
+        current = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        for marker in (JOB_BEGIN, JOB_END, *NEEDS_BEGIN.values(), *NEEDS_END.values()):
+            current = current.replace(marker + "\n", "", 1)
+        generated = expected_workflow_text(current, gates)
+
+        assert "  module-core-compat-renamed:\n" in generated
+        assert "  module-core-compat:\n" not in generated
+        assert (
+            "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
+            "module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, "
+            "csrf-exempt-gate]" in generated
+        )
+        assert expected_workflow_text(generated, gates) == generated
+
+    def test_cli_ci_job_rename_check_write_and_clean_exit_contract(self, tmp_path: Path) -> None:
+        """A registry ci_job rename is reported as drift, written, then checks clean."""
+        workflow_path = tmp_path / "ci.yml"
+        workflow_path.write_text(DEFAULT_WORKFLOW.read_text(encoding="utf-8"), encoding="utf-8")
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        registry_data["gates"][0]["bindings"]["ci_job"] = "module-core-compat-renamed"
+        registry_path = tmp_path / "registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        command = [sys.executable, str(Path(sync_ci_gate_jobs_module.__file__))]
+        args = ["--workflow", str(workflow_path), "--registry", str(registry_path)]
+
+        check = subprocess.run(
+            [*command, "--check", *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert check.returncode == 1, check.stderr
+        assert "module-core-compat-renamed" in check.stdout
+
+        write = subprocess.run(
+            [*command, "--write", *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert write.returncode == 0, write.stderr
+        written = workflow_path.read_text(encoding="utf-8")
+        assert "  module-core-compat-renamed:\n" in written
+        assert "  module-core-compat:\n" not in written
+        assert (
+            "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
+            "module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, "
+            "csrf-exempt-gate]" in written
+        )
+
+        clean = subprocess.run(
+            [*command, "--check", *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert clean.returncode == 0, clean.stderr
+
     def test_unowned_workflow_bytes_are_preserved_exactly(self, tmp_path: Path) -> None:
         """Generation preserves every byte outside the owned marker regions."""
         registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
@@ -3478,6 +3591,170 @@ class TestHostedCiGateGeneration:
         )
         with pytest.raises(GeneratorError, match="Duplicate JSON key"):
             _parse_registry(path)
+
+
+# =========================================================================
+# F-006 — mandatory generation drift gate
+# =========================================================================
+
+
+class TestMandatoryGenerationGate:
+    """CI workflow generation drift fails mandatory ``make check`` (F-006)."""
+
+    def test_mandatory_check_plans_generation_drift_gate(self) -> None:
+        """The real Makefile's check recipe plans the direct generation check."""
+        result = subprocess.run(
+            ["make", "-n", "check", "QUIET=1"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "scripts/sync_ci_gate_jobs.py --check" in result.stdout, (
+            "make check must plan the direct generation drift gate (F-006)"
+        )
+
+    def test_generation_drift_fails_mandatory_gate_command(self, tmp_path: Path) -> None:
+        """Stale generated content fails the check-recipe generation command."""
+        workflow_path = tmp_path / "ci.yml"
+        workflow_path.write_text(
+            DEFAULT_WORKFLOW.read_text(encoding="utf-8").replace(
+                "make check-core-compat\n", "make check-core-compat-stale\n", 1
+            ),
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(sync_ci_gate_jobs_module.__file__)),
+                "--check",
+                "--workflow",
+                str(workflow_path),
+                "--registry",
+                str(DEFAULT_REGISTRY),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 1, result.stderr
+        assert "check-core-compat-stale" in result.stdout
+
+    def test_generation_clean_passes_mandatory_gate_command(self, tmp_path: Path) -> None:
+        """Clean generated content passes the check-recipe generation command."""
+        workflow_path = tmp_path / "ci.yml"
+        workflow_path.write_text(DEFAULT_WORKFLOW.read_text(encoding="utf-8"), encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(sync_ci_gate_jobs_module.__file__)),
+                "--check",
+                "--workflow",
+                str(workflow_path),
+                "--registry",
+                str(DEFAULT_REGISTRY),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, result.stderr
+
+        # The real standalone target must also pass on the clean tree.
+        target = subprocess.run(
+            ["make", "check-ci-gate-generation"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert target.returncode == 0, target.stderr
+
+
+# =========================================================================
+# F-006 caller parity — Make generator checks use the selected registry
+# =========================================================================
+
+
+class TestGenerationGateRegistryParity:
+    """Every Make-driven generation check consumes the invocation's GATE_REGISTRY."""
+
+    @staticmethod
+    def _custom_registry(tmp_path: Path, *, renamed: bool) -> Path:
+        """Write a repo-contained registry fixture, optionally with a run drift."""
+        data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        if renamed:
+            data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
+        path = _repo_fixture_file(tmp_path, "custom_registry.json")
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return path
+
+    def test_custom_registry_drift_fails_standalone_target(self, tmp_path: Path) -> None:
+        """A GATE_REGISTRY override whose hosted run drifted fails the target."""
+        registry_path = self._custom_registry(tmp_path, renamed=True)
+        result = subprocess.run(
+            ["make", "check-ci-gate-generation", f"GATE_REGISTRY={registry_path}"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        # GNU Make maps the script's drift exit (1) to its own recipe-failure
+        # exit (2); the meaningful assertion is that the gate failed and the
+        # drift diff names the selected registry's target.
+        assert result.returncode != 0, result.stderr
+        assert "check-core-compat-renamed" in result.stdout
+
+    def test_custom_registry_clean_passes_standalone_target(self, tmp_path: Path) -> None:
+        """A GATE_REGISTRY override identical to the default passes the target."""
+        registry_path = self._custom_registry(tmp_path, renamed=False)
+        result = subprocess.run(
+            ["make", "check-ci-gate-generation", f"GATE_REGISTRY={registry_path}"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_mandatory_check_plans_selected_registry(self, tmp_path: Path) -> None:
+        """Make check plans the generation gate with the selected GATE_REGISTRY."""
+        # A registry-identical fixture keeps the -n recursive derivation on
+        # targets that exist, so the planned generation line is what is proven.
+        registry_path = self._custom_registry(tmp_path, renamed=False)
+        result = subprocess.run(
+            ["make", "-n", "check", "QUIET=1", f"GATE_REGISTRY={registry_path}"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert f'sync_ci_gate_jobs.py --check --registry "{registry_path}"' in result.stdout
+
+    def test_selected_registry_drift_fails_mandatory_gate_command(self, tmp_path: Path) -> None:
+        """The mandatory-recipe command fails/cleans against the selected registry."""
+        command = [sys.executable, str(Path(sync_ci_gate_jobs_module.__file__)), "--check"]
+        drifted = self._custom_registry(tmp_path, renamed=True)
+        clean = self._custom_registry(tmp_path, renamed=False)
+
+        fail = subprocess.run(
+            [*command, "--registry", str(drifted)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert fail.returncode == 1, fail.stderr
+        assert "check-core-compat-renamed" in fail.stdout
+
+        ok = subprocess.run(
+            [*command, "--registry", str(clean)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert ok.returncode == 0, ok.stderr
 
 
 class TestMakeRegistryDerivationFailure:

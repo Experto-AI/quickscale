@@ -877,9 +877,13 @@ check-gate-parity:
 # --- Hosted CI Gate Generation (SA122b) ---
 
 # Verify that registry-bound hosted jobs and their consumer needs lists match
-# deterministic generator output.  Use --write only for intentional refreshes.
+# deterministic generator output against the Make-selected registry.  Use
+# --write only for intentional refreshes.  This target is wired into `make
+# check` directly (non-recursive, F-006); run it solo only to debug generation
+# drift.  Both invocations pass --registry "$(GATE_REGISTRY)" so Make's target
+# derivation and every generator validation consume the identical registry.
 check-ci-gate-generation:
-	@$(PYTHON) scripts/sync_ci_gate_jobs.py --check
+	@$(PYTHON) scripts/sync_ci_gate_jobs.py --check --registry "$(GATE_REGISTRY)"
 
 # --- SA117 Scope / Publication / Apply Gates ---
 
@@ -1103,6 +1107,12 @@ check:
 		fi; \
 	fi; \
 	$(MAKE) $(CHECK_GATE_TARGETS)
+	@# F-006: registry-bound hosted CI generation drift must fail the mandatory gate.
+	@# Non-recursive by design: the direct Python --check (same command as the
+	@# standalone check-ci-gate-generation target) cannot recurse through make.
+	@# --registry "$(GATE_REGISTRY)" keeps generation validation on the same
+	@# registry Make used to derive the check targets (no false green override).
+	$(PYTHON) scripts/sync_ci_gate_jobs.py --check --registry "$(GATE_REGISTRY)"
 	@if [ -n "$(QUIET)" ]; then \
 		if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then \
 			frontend_lint_log=$$(mktemp /tmp/frontend_lint_log.XXXXXX); \
