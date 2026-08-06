@@ -108,6 +108,43 @@ def _list_modules() -> list[str]:
     return authoritative_module_names()
 
 
+def _require_authoritative_module(module_name: str) -> None:
+    """
+    Fail closed unless *module_name* is in the authoritative shipped-module inventory.
+
+    This is the direct single-module selector guard (F-002): it consults
+    :func:`_list_modules` (backed by ``authoritative_module_names()``)
+    before any release-authority check, origin prompt, subtree split, or
+    push.  A placeholder name (``teams``) and an unapproved inventory
+    addition (count drift) therefore fail before any outward or mutating
+    path, instead of relying on on-disk directory existence alone.
+    """
+    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        ImproperlyConfigured,
+        get_placeholder_rejection_reason,
+    )
+
+    try:
+        authoritative_names = _list_modules()
+    except ImproperlyConfigured as exc:
+        _print_error(f"Authoritative module inventory unavailable: {exc}")
+        sys.exit(1)
+
+    if module_name not in authoritative_names:
+        placeholder_reason = get_placeholder_rejection_reason(module_name)
+        if placeholder_reason is not None:
+            _print_error(placeholder_reason)
+        else:
+            _print_error(
+                f"Module '{module_name}' is not in the authoritative shipped-module inventory."
+            )
+        print()
+        _print_info("Available modules:")
+        for name in authoritative_names:
+            print(f"  - {name}")
+        sys.exit(1)
+
+
 def _has_uncommitted_changes(runner: GitRunner) -> bool:
     """Return True if the working directory has uncommitted changes."""
     try:
@@ -566,15 +603,15 @@ def main() -> None:
             _print_error(str(e))
             sys.exit(1)
 
-        # Validate module exists
-        module_dir = _REPO_ROOT / resolve_module_path(module_name)
-        if not module_dir.is_dir():
-            _print_error(f"Module '{module_name}' not found in quickscale_modules/")
-            print()
-            _print_info("Available modules:")
-            for name in _list_modules():
-                print(f"  - {name}")
-            sys.exit(1)
+        # F-002: reject any direct selection absent from the authoritative
+        # shipped-module inventory before the release-authority gate, origin
+        # validation, prompts, subtree split, or push.  A placeholder name
+        # (teams) and an unapproved inventory addition (count drift) both
+        # fail closed here, before any outward or mutating path.  This
+        # supersedes the previous on-disk directory-existence check: the
+        # authoritative inventory is the single source of truth for what a
+        # direct selector may publish.
+        _require_authoritative_module(module_name)
 
         # First enforce the existing release-authoritative gate so callers get
         # the established diagnostic for an untagged/mismatched source.  The
