@@ -452,6 +452,14 @@ class TestUpdateWithTempRepo:
         scripts_dir.mkdir()
         shutil.copy2(str(real_script), str(scripts_dir / "version_tool.sh"))
 
+        real_shim = (
+            Path(__file__).resolve().parents[1]
+            / "quickscale_core/src/quickscale_core/contracts/module_discovery.py"
+        )
+        shim = root / "quickscale_core/src/quickscale_core/contracts/module_discovery.py"
+        shim.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(real_shim), str(shim))
+
         # Core pyproject.toml (no internal dependencies)
         self._write_pyproject(
             root / "quickscale_core" / "pyproject.toml",
@@ -745,6 +753,54 @@ class TestUpdateWithTempRepo:
     # ------------------------------------------------------------------
     # Tests
     # ------------------------------------------------------------------
+
+    def test_thirteenth_real_module_is_picked_up_by_update(self, repo: Path) -> None:
+        """The consumer follows the shim when the authoritative count advances."""
+        module_name = "reports"
+        module_dir = repo / "quickscale_modules" / module_name
+        module_dir.mkdir(parents=True)
+        module_dir.joinpath("module.yml").write_text(
+            f'name: {module_name}\nversion: "{self.VERSION_BEFORE}"\ndescription: "test"\n'
+        )
+        self._write_pyproject(
+            module_dir / "pyproject.toml",
+            f"quickscale-module-{module_name}",
+            self.VERSION_BEFORE,
+            deps={},
+        )
+        init_dir = module_dir / "src" / f"quickscale_modules_{module_name}"
+        init_dir.mkdir(parents=True)
+        init_dir.joinpath("__init__.py").write_text(
+            f'"""Test module."""\n__version__ = "{self.VERSION_BEFORE}"\n'
+        )
+        snapshot_dir = repo / "quickscale_core/src/quickscale_core/data/manifests" / module_name
+        snapshot_dir.mkdir(parents=True)
+        snapshot_dir.joinpath("module.yml").write_text(
+            f'name: {module_name}\nversion: "{self.VERSION_BEFORE}"\n'
+        )
+
+        shim = repo / "quickscale_core/src/quickscale_core/contracts/module_discovery.py"
+        shim.write_text(
+            shim.read_text().replace(
+                "AUTHORITATIVE_MODULE_COUNT: Final[int] = 12",
+                "AUTHORITATIVE_MODULE_COUNT: Final[int] = 13",
+            )
+        )
+        repo.joinpath("VERSION").write_text(f"{self.VERSION_AFTER}\n")
+        result = subprocess.run(
+            ["bash", "scripts/version_tool.sh", "update"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        for path in (
+            module_dir / "module.yml",
+            module_dir / "pyproject.toml",
+            init_dir / "__init__.py",
+            snapshot_dir / "module.yml",
+        ):
+            assert self.VERSION_AFTER in path.read_text()
 
     def test_direct_update(self, repo: Path) -> None:
         """Direct ``version_tool.sh update`` mutates the expected file set."""

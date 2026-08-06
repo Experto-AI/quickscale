@@ -17,9 +17,11 @@ from pathlib import Path
 import pytest
 
 from quickscale_core.contracts.module_discovery import (
+    AUTHORITATIVE_MODULE_COUNT,
     ImproperlyConfigured,
     ModuleResolutionSource,
     PLACEHOLDER_MODULE_NAMES,
+    authoritative_module_names,
     discover_bundled_module_names,
     discover_shipped_module_names,
     discover_shipped_module_paths,
@@ -412,6 +414,40 @@ class TestDiscoverShippedModuleNames:
         names = discover_shipped_module_names()
         assert "README.md" not in names
         assert "adaptive.rules.md" not in names
+
+
+class TestAuthoritativeModuleNames:
+    """Tests for the fail-hard shipped-module inventory contract."""
+
+    def test_exactly_twelve_modules_are_authoritative(self) -> None:
+        names = authoritative_module_names()
+        assert len(names) == AUTHORITATIVE_MODULE_COUNT == 12
+        assert names == sorted(names)
+
+    def test_teams_is_excluded(self) -> None:
+        assert "teams" not in authoritative_module_names()
+
+    def test_placeholder_manifest_is_rejected(self, tmp_path: Path) -> None:
+        from quickscale_core.contracts import module_discovery as _md
+
+        original = _md._modules_base_path
+        try:
+            (tmp_path / "teams").mkdir()
+            (tmp_path / "teams" / "module.yml").write_text("name: teams\n")
+            _md.set_modules_base_path(tmp_path)
+            _md.AUTHORITATIVE_MODULE_COUNT = 1  # type: ignore[misc]
+            with pytest.raises(ImproperlyConfigured, match="placeholder"):
+                authoritative_module_names()
+        finally:
+            _md.AUTHORITATIVE_MODULE_COUNT = AUTHORITATIVE_MODULE_COUNT  # type: ignore[misc]
+            _md.set_modules_base_path(original)
+
+    def test_count_drift_is_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from quickscale_core.contracts import module_discovery as _md
+
+        monkeypatch.setattr(_md, "AUTHORITATIVE_MODULE_COUNT", 13)
+        with pytest.raises(ImproperlyConfigured, match="count drift"):
+            authoritative_module_names()
 
 
 class TestDiscoverShippedModulePaths:
