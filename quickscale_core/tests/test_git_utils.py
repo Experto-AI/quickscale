@@ -8,32 +8,46 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scripts.publish_module import _has_uncommitted_changes
+# ``quickscale_core/pyproject.toml`` is the pytest config root when this file
+# is selected directly, so the monorepo root is not otherwise importable.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-from quickscale_core.utils.git_utils import (
+from scripts.publish_module import _has_uncommitted_changes  # noqa: E402
+
+from quickscale_core.utils.git_utils import (  # noqa: E402
     GitError,
     GitRunner,
     assert_staged_index_empty,
     build_publication_git_runner,
     check_remote_branch_exists,
+    check_remote_tag_exists,
     get_all_tags_at_head,
     get_remote_url,
+    get_local_tag_commit,
+    get_tree_sha,
     get_tag_at_head,
     is_git_repo,
     is_release_authoritative,
     is_working_directory_clean,
     push_split_branch,
+    push_tag,
     read_version_file,
     resolve_module_path,
     resolve_remote_ref,
+    resolve_remote_tag,
     resolve_split_branch,
+    resolve_split_tag,
     run_git_subtree_add,
     run_git_subtree_pull,
     run_git_subtree_push,
     run_git_subtree_split,
+    create_annotated_tag,
     validate_publication_origin,
     validate_expected_sha,
     validate_module_name,
+    validate_tag_name,
 )
 
 
@@ -1119,6 +1133,407 @@ class TestResolveSplitBranch:
         """resolve_split_branch rejects names with spaces (CR-M5-P1-001)."""
         with pytest.raises(GitError, match="Invalid module name"):
             resolve_split_branch("my module")
+
+
+class TestSplitTagHelpers:
+    """Focused tests for immutable split-tag and tree helper contracts."""
+
+    def test_resolve_split_tag_uses_canonical_branch_and_version(self) -> None:
+        """Split tags are namespaced and use canonical X.Y.Z versions."""
+        assert resolve_split_tag("auth", "0.87.0") == "splits/auth-module/0.87.0"
+
+    @pytest.mark.parametrize("version", ["0.87", "0.87.00", " 0.87.0 ", "v0.87.0"])
+    def test_resolve_split_tag_rejects_noncanonical_versions(
+        self, version: str
+    ) -> None:
+        """Tag identity must not accept alternate version spellings."""
+        with pytest.raises(GitError, match="Invalid canonical version"):
+            resolve_split_tag("auth", version)
+
+    @patch("subprocess.run")
+    def test_annotated_remote_tag_prefers_peeled_commit(
+        self, mock_run: MagicMock
+    ) -> None:
+        """Annotated tags resolve to the peeled commit, not the tag object."""
+        direct_sha = "a" * 40
+        peeled_sha = "b" * 40
+        mock_run.return_value = MagicMock(
+            stdout=(
+                f"{direct_sha}\trefs/tags/splits/auth-module/0.87.0\n"
+                f"{peeled_sha}\trefs/tags/splits/auth-module/0.87.0^{{}}\n"
+            ),
+            returncode=0,
+        )
+
+        assert resolve_remote_tag("origin", "splits/auth-module/0.87.0") == peeled_sha
+        assert mock_run.call_args.args[0] == [
+            "git",
+            "ls-remote",
+            "--tags",
+            "--",
+            "origin",
+            "refs/tags/splits/auth-module/0.87.0",
+            "refs/tags/splits/auth-module/0.87.0^{}",
+        ]
+
+    @patch("subprocess.run")
+    def test_lightweight_remote_tag_uses_direct_commit(
+        self, mock_run: MagicMock
+    ) -> None:
+        """Lightweight tags resolve from their direct ls-remote entry."""
+        commit_sha = "c" * 40
+        mock_run.return_value = MagicMock(
+            stdout=f"{commit_sha}\trefs/tags/splits/auth-module/0.87.0\n",
+            returncode=0,
+        )
+
+        assert resolve_remote_tag("origin", "splits/auth-module/0.87.0") == commit_sha
+        assert check_remote_tag_exists("origin", "splits/auth-module/0.87.0") is True
+        assert mock_run.call_count == 2
+
+    @patch("subprocess.run")
+    def test_absent_remote_tag_is_false_or_error(self, mock_run: MagicMock) -> None:
+        """Absence is observable as false and is an error for resolution."""
+        mock_run.return_value = MagicMock(stdout="", returncode=0)
+
+        assert check_remote_tag_exists("origin", "splits/missing/0.87.0") is False
+        with pytest.raises(GitError, match="not found"):
+            resolve_remote_tag("origin", "splits/missing/0.87.0")
+
+    @patch("quickscale_core.utils.git_utils.resolve_remote_ref")
+    @patch("subprocess.run")
+    def test_tag_resolution_does_not_use_remote_ref(
+        self, mock_run: MagicMock, mock_remote_ref: MagicMock
+    ) -> None:
+        """Tag resolution stays separate from branch-only resolve_remote_ref."""
+        commit_sha = "d" * 40
+        mock_run.return_value = MagicMock(
+            stdout=f"{commit_sha}\trefs/tags/splits/auth-module/0.87.0\n",
+            returncode=0,
+        )
+
+        assert resolve_remote_tag("origin", "splits/auth-module/0.87.0") == commit_sha
+        mock_remote_ref.assert_not_called()
+
+    @patch("subprocess.run")
+    def test_get_tree_sha_uses_verified_tree_expression(
+        self, mock_run: MagicMock
+    ) -> None:
+        """Tree lookup uses the explicit rev-parse commit peel."""
+        tree_sha = "e" * 40
+        mock_run.return_value = MagicMock(stdout=f"{tree_sha}\n", returncode=0)
+
+        assert get_tree_sha("f" * 40) == tree_sha
+        assert mock_run.call_args.args[0] == [
+            "git",
+            "rev-parse",
+            "--verify",
+            f"{'f' * 40}^{{tree}}",
+        ]
+
+    @patch("subprocess.run")
+    def test_push_tag_uses_one_explicit_non_force_refspec(
+        self, mock_run: MagicMock
+    ) -> None:
+        """Tag pushes cannot sweep tags or force-move an existing tag."""
+        mock_run.return_value = MagicMock(returncode=0)
+
+        push_tag("splits/auth-module/0.87.0", remote="upstream")
+
+        assert mock_run.call_args.args[0] == [
+            "git",
+            "push",
+            "--",
+            "upstream",
+            "refs/tags/splits/auth-module/0.87.0:refs/tags/splits/auth-module/0.87.0",
+        ]
+        assert all("force" not in arg for arg in mock_run.call_args.args[0])
+
+    @pytest.mark.parametrize(
+        "bad_tag",
+        [
+            "--all",
+            "tag*",
+            "tag?",
+            "tag[",
+            "tag:name",
+            "tag\nname",
+            "refs/tags/tag",
+            "tag..other",
+            "tag^{}",
+            "tag//other",
+        ],
+    )
+    @pytest.mark.parametrize("operation", ["remote", "local", "create", "push"])
+    @patch("subprocess.run")
+    def test_invalid_tag_values_are_rejected_before_git(
+        self, mock_run: MagicMock, operation: str, bad_tag: str
+    ) -> None:
+        """Tag validation rejects ref syntax and options without spawning Git."""
+        with pytest.raises(GitError, match="Invalid tag name"):
+            if operation == "remote":
+                resolve_remote_tag("origin", bad_tag)
+            elif operation == "local":
+                get_local_tag_commit(bad_tag)
+            elif operation == "create":
+                create_annotated_tag(bad_tag, "a" * 40)
+            else:
+                push_tag(bad_tag)
+        mock_run.assert_not_called()
+
+    def test_validate_tag_name_accepts_split_tag(self) -> None:
+        """The canonical split-tag namespace remains a valid literal tag."""
+        validate_tag_name("splits/auth-module/0.87.0")
+
+    @pytest.mark.parametrize(
+        "output, message",
+        [
+            (
+                "b" * 40 + "\trefs/tags/splits/auth-module/0.87.0^{}\n",
+                "peeled record without direct",
+            ),
+            (
+                "a" * 40 + "\trefs/tags/splits/auth-module/0.87.0\n"
+                "b" * 40 + "\trefs/tags/splits/auth-module/0.87.0\n",
+                "duplicate direct",
+            ),
+            (
+                "a" * 40 + "\trefs/tags/splits/auth-module/0.87.0^{}\n"
+                "b" * 40 + "\trefs/tags/splits/auth-module/0.87.0^{}\n",
+                "duplicate peeled",
+            ),
+            (
+                "a" * 40 + "\trefs/tags/other\n",
+                "unknown ref",
+            ),
+            ("\n", "blank record"),
+            ("not-a-record", "Malformed ls-remote"),
+        ],
+    )
+    @patch("subprocess.run")
+    def test_remote_tag_parser_rejects_malformed_record_sets(
+        self, mock_run: MagicMock, output: str, message: str
+    ) -> None:
+        """Only one direct plus an optional peeled record is accepted."""
+        mock_run.return_value = MagicMock(stdout=output, returncode=0)
+        with pytest.raises(GitError, match=message):
+            resolve_remote_tag("origin", "splits/auth-module/0.87.0")
+
+    @patch("subprocess.run")
+    def test_local_tag_absence_is_confirmed_before_returning_none(
+        self, mock_run: MagicMock
+    ) -> None:
+        """None is returned only for show-ref's explicit absence status."""
+        mock_run.return_value = MagicMock(returncode=1, stderr="")
+
+        assert get_local_tag_commit("splits/missing/0.87.0") is None
+        assert mock_run.call_args.args[0] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "--quiet",
+            "refs/tags/splits/missing/0.87.0",
+        ]
+
+    @pytest.mark.parametrize(
+        "presence, resolution, message",
+        [
+            (128, None, "Failed to inspect local tag"),
+            (
+                0,
+                MagicMock(returncode=128, stderr="malformed object"),
+                "Failed to resolve local tag",
+            ),
+            (0, MagicMock(returncode=0, stdout="short\n"), "Unexpected tag"),
+        ],
+    )
+    @patch("subprocess.run")
+    def test_local_tag_operational_and_malformed_failures_raise(
+        self,
+        mock_run: MagicMock,
+        presence: int,
+        resolution: MagicMock | None,
+        message: str,
+    ) -> None:
+        """Operational and malformed-object failures are not treated as absent."""
+        presence_result = MagicMock(returncode=presence, stderr="git unavailable")
+        if resolution is None:
+            mock_run.return_value = presence_result
+        else:
+            mock_run.side_effect = [presence_result, resolution]
+
+        with pytest.raises(GitError, match=message):
+            get_local_tag_commit("splits/auth-module/0.87.0")
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestLocalAnnotatedTagHelpers:
+    """Hermetic local-repository tests for annotated-tag idempotence."""
+
+    def _create_repo(self, tmp_path: Path) -> tuple[Path, str]:
+        repo = tmp_path / "repo"
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        (repo / "module.txt").write_text("initial\n")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "initial"],
+            check=True,
+            capture_output=True,
+        )
+        result = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return repo, result.stdout.strip()
+
+    def test_create_annotated_tag_is_idempotent_and_rejects_conflict(
+        self, tmp_path: Path
+    ) -> None:
+        """Repeated same-commit tagging is a no-op; a different commit fails."""
+        repo, first_sha = self._create_repo(tmp_path)
+        tag = "splits/auth-module/0.87.0"
+
+        create_annotated_tag(tag, first_sha, path=repo)
+        assert get_local_tag_commit(tag, path=repo) == first_sha
+        create_annotated_tag(tag, first_sha, path=repo)
+
+        tag_type = subprocess.run(
+            ["git", "-C", str(repo), "cat-file", "-t", f"refs/tags/{tag}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert tag_type.stdout.strip() == "tag"
+
+        (repo / "module.txt").write_text("changed\n")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "changed"],
+            check=True,
+            capture_output=True,
+        )
+        second_result = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        second_sha = second_result.stdout.strip()
+
+        with pytest.raises(GitError, match=f"{first_sha}.*{second_sha}"):
+            create_annotated_tag(tag, second_sha, path=repo)
+
+    def test_push_tag_rejects_conflicting_existing_bare_remote_tag(
+        self, tmp_path: Path
+    ) -> None:
+        """A bare remote tag conflict is rejected without force or mutation."""
+        repo, first_sha = self._create_repo(tmp_path)
+        remote = tmp_path / "remote.git"
+        tag = "splits/auth-module/0.87.0"
+        subprocess.run(
+            ["git", "init", "--bare", str(remote)], check=True, capture_output=True
+        )
+
+        create_annotated_tag(tag, first_sha, path=repo)
+        push_tag(tag, remote=str(remote), path=repo)
+
+        (repo / "module.txt").write_text("changed\n")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "changed"],
+            check=True,
+            capture_output=True,
+        )
+        second_sha = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(repo), "tag", "--force", tag, second_sha],
+            check=True,
+            capture_output=True,
+        )
+
+        with pytest.raises(GitError, match="Failed to push tag"):
+            push_tag(tag, remote=str(remote), path=repo)
+        assert resolve_remote_tag(str(remote), tag, path=repo) == first_sha
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestSubtreeSplitTreeIdentity:
+    """Prove unchanged rejoined subtree splits retain the same tree."""
+
+    def test_unchanged_rejoin_splits_have_equal_trees(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        module_dir = repo / "quickscale_modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.txt").write_text("unchanged\n")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "quickscale_modules/auth/module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "initial"],
+            check=True,
+            capture_output=True,
+        )
+
+        first_split = run_git_subtree_split(
+            "quickscale_modules/auth",
+            "splits/auth-module-first",
+            rejoin=True,
+            ignore_joins=True,
+            path=repo,
+        )
+        second_split = run_git_subtree_split(
+            "quickscale_modules/auth",
+            "splits/auth-module-second",
+            rejoin=True,
+            ignore_joins=True,
+            path=repo,
+        )
+
+        assert get_tree_sha(first_split, path=repo) == get_tree_sha(
+            second_split, path=repo
+        )
 
 
 class TestRunGitSubtreeSplit:

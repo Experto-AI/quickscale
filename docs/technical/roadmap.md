@@ -58,7 +58,7 @@ Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../.
 ```
 Track 1 (governance)                  Track 2 (CLOSED to new work)  Track 3 → release (CRITICAL PATH)
 ─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
-SA122b-3 → -4 → -5                     SA115 (e2e xdist; deps: none) SA136a ▶   SA136b ▶   SA136e ▶
+SA122b-3 → -4 → -5                     SA115 (e2e xdist; deps: none) SA136a ✓   SA136b ▶   SA136e ▶
   │  Umbrella, split by consumer      │                              │  (independent, any order)
   │  Make · sh · ci · publish · e2e   │  validation AUTHORIZED       │      │        │
   │  checker authoritative (SA128 ✓)  │  cannot finish → SA112d      │      ▼        ▼
@@ -86,11 +86,11 @@ SA122b-3 → -4 → -5                     SA115 (e2e xdist; deps: none) SA136a 
 
 | Track (head) | Can start | Can finish | Can merge | Truly green | On critical path |
 |---|---|---|---|---|---|
-| **Track 3** — SA136a | **yes** — the two 2026-08-06 ratifications supply the authorization the capped SA117e-4 round lacked; SA136a is a pure addition with no upstream gate | **yes** — self-contained helpers plus their tests | **yes** — no merge-order gate | ✅ **yes** | ✅ **yes** |
+| **Track 3** — SA136b | **yes** — SA136a's reviewed completion advances the one-child-at-a-time queue to SA136b, which has no dependency | **yes** — the authoritative inventory and its tests are self-contained | **yes** — no merge-order gate | ✅ **yes** | ✅ **yes** |
 | **Track 1** — SA122b-3 | **yes** — SA122b-2 is closed; SA128 is closed | **yes** — SA122b-3 has no hard upstream dependency or open decision | **yes** — SA122b-3 has no merge-order gate | ✅ **yes** | no — Track 1 is off the critical path |
 | **Track 2** — SA115 | yes (validation authorized; yields infra to Track 3) | **no** — **hard dep** on SA112d | **no** — **hard dep** on SA112e | no | no — filler |
 
-**Track 3 is truly green and on the critical path for the first time on this board.** The 2026-08-06 loop/seal ratifications dissolved the SA117e-4 plan cap: `F-001` and `F-006` no longer describe a real hazard (an interrupted republish is rerun, not recovered), `F-005` becomes SA136b's deliverable, and `F-004` is re-derived from a much smaller allowlist. Track 3's head is now SA136a, which has no upstream dependency and no open decision. **Track 1 remains truly green at SA122b-3** but is off the critical path, so it is filler relative to the release. Track 2's two "no"s are **hard upstream dependencies** that only SA112d/SA112e can clear.
+**Track 3 is truly green and on the critical path for the first time on this board.** The 2026-08-06 loop/seal ratifications dissolved the SA117e-4 plan cap: `F-001` and `F-006` no longer describe a real hazard (an interrupted republish is rerun, not recovered), and `F-004` is re-derived from a much smaller allowlist. SA136a's implementation, validation, and DC-80 full-scope review are complete; its remaining `F-005` is a low advisory about intermediate `.lock` component prevalidation parity, with Git still failing closed and no injection/tag-sweep path. Track 3's head is now SA136b, which has no upstream dependency and no open decision. **Track 1 remains truly green at SA122b-3** but is off the critical path, so it is filler relative to the release. Track 2's two "no"s are **hard upstream dependencies** that only SA112d/SA112e can clear.
 
 **Infra serialization (not a track constraint).** SA112's and SA115's e2e lanes, SA117e-4's `apply` verification, and any `make ci`/`make ci-e2e` rerun all need the same PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL` knobs namespace lanes *within* one invocation, not across worktrees — **only one track exercises PG/Docker at a time, and Track 3 has priority.** Abandon or restart an SA115 run rather than make a critical-path leg queue behind it.
 
@@ -107,11 +107,11 @@ SA136 adds two surfaces worth naming, neither of which creates a shared writer:
 
 ## Track 3 — Core/CLI plumbing, release path
 
-**Status:** on the critical path and **unblocked**. The head is **SA136a**, the first child of the new SA136 umbrella. SA112b's provisioning precondition is satisfied by SA112a's merge; its split-publication precondition now waits on SA117e-4, which in turn waits on SA136.
+**Status:** on the critical path and **unblocked**. The head is **SA136b**, the next child of the new SA136 umbrella after SA136a's reviewed completion. SA112b's provisioning precondition is satisfied by SA112a's merge; its split-publication precondition now waits on SA117e-4, which in turn waits on SA136.
 
 **Standing order constraints.** Do not seal or push splits before SA136 closes and SA117e-4's human gate is satisfied, do not start SA112b until SA117e-4 has merged, and do not treat anything as release-ready until SA117e closes at `-5`.
 
-**Handoff entry point.** Start at **SA136a** — a pure addition to `git_utils.py` with no upstream dependency. The loop/seal contract SA136 implements is recorded in [CHANGELOG.md](../../CHANGELOG.md) (ratified 2026-08-06) and becomes normative in `decisions.md` at SA136f.
+**Handoff entry point.** Start at **SA136b** — the authoritative twelve-module inventory child, with no upstream dependency after SA136a's reviewed completion. The loop/seal contract SA136 implements is recorded in [CHANGELOG.md](../../CHANGELOG.md) (ratified 2026-08-06) and becomes normative in `decisions.md` at SA136f.
 
 ### SA136 — Tag-sealed split publication
 
@@ -141,12 +141,13 @@ Published splits are consumed from a **moving branch** (`module_commands.py:657`
   - Verify (umbrella): all six children closed and independently reviewed; `embed` resolves `splits/<m>-module/<core version>` and fails hard when it is absent; `scripts/publish_module.py` enumerates exactly twelve modules; `split-modules.yml` is gone and a conformance test proves `publish.yml`'s triggers cannot match a split tag; `decisions.md` carries the loop/seal ordering and SA119 is recorded closed.
   *(why →* embed consumes a moving branch, so a matched version was never a matched artifact; this is the prevention half SA117 deliberately deferred*)*
 
-  - [ ] **SA136a — Add tag and tree helpers to `git_utils.py`.** `Tier 2 · deps: none`
+  - [x] **SA136a — Add tag and tree helpers to `git_utils.py`.** `Tier 2 · deps: none`
     Pure addition — no existing caller changes, so it merges independently and de-risks every later child. Add `resolve_split_tag(module, version)` (reusing `resolve_split_branch` at `:551-561` and the loader's canonicalizer at `manifest/loader.py:55` — do **not** add a second version regex); `resolve_remote_tag(remote, tag)` running `git ls-remote --tags <remote> refs/tags/<tag> refs/tags/<tag>^{}`, parsed **per line**, preferring the peeled `^{}` entry, returning a 40-hex **commit** SHA; `check_remote_tag_exists`; `get_tree_sha` (`rev-parse --verify <c>^{tree}`); `get_local_tag_commit`; `create_annotated_tag` with **no force parameter** (idempotent at the same commit, `GitError` naming both SHAs otherwise); and `push_tag` running `git push <remote> refs/tags/<t>:refs/tags/<t>` with **no** force flags, so Git's own refusal to move a remote tag is the enforcement.
     **Do not retarget `resolve_remote_ref` (`:309`) at tags.** Its whole-blob `output.split()[0]` (`:348`) would silently return the *unpeeled tag-object* SHA whenever the annotated entry sorts first — exactly the silent-wrong-value class [§fail-hard-principle](./decisions.md#fail-hard-principle) forbids.
     - Allowlist: `quickscale_core/src/quickscale_core/utils/git_utils.py`, `quickscale_core/tests/test_git_utils.py`.
     - Verify: an annotated tag resolves to the peeled commit and a lightweight tag to its direct SHA, absence raises; `push_tag` fails when the remote tag exists at a different commit; `create_annotated_tag` is idempotent at the same commit and raises at a different one; `get_tree_sha` is equal across two `subtree split --rejoin` runs on an unchanged tree; a named regression test asserts `resolve_remote_ref` is not used for tags.
     - Rollback: revert the allowlisted files; no caller depends on this child.
+    **Complete (2026-08-06):** Implementation and the exact validation chain are recorded in [CHANGELOG.md](../../CHANGELOG.md); final full-scope Adaptive-change-review DC-80 returned `STATUS: ok`. `F-001`–`F-004` are resolved. `F-005` remains a low advisory for intermediate `.lock` component prevalidation parity; Git still fails closed and there is no injection/tag-sweep path. SA136 remains open, with SA136b next.
     *(why →* every later child needs peeled-tag resolution, and getting it wrong is silent rather than loud*)*
 
   - [ ] **SA136b — Derive the authoritative twelve-module inventory.** `Tier 2 · deps: none`
