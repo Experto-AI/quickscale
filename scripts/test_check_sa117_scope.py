@@ -38,6 +38,14 @@ def _lock(version: str, *, content_hash: str = "stable", duplicate: bool = False
 
 
 def _write_inventory(root: pathlib.Path, version: str, *, lock_hash: str = "stable") -> None:
+    shim = root / "quickscale_core/src/quickscale_core/contracts/module_discovery.py"
+    shim.parent.mkdir(parents=True, exist_ok=True)
+    shim.write_bytes(
+        (
+            pathlib.Path(__file__).resolve().parents[1]
+            / "quickscale_core/src/quickscale_core/contracts/module_discovery.py"
+        ).read_bytes()
+    )
     (root / "VERSION").write_text(f"{version}\n", encoding="utf-8")
     projects = {
         "quickscale": root / "quickscale/pyproject.toml",
@@ -116,6 +124,28 @@ class TestInventoryContract:
     def test_inventory_is_exactly_55_files_and_66_values(self) -> None:
         assert len(_expected_inventory()) == 55
         assert len(_LOCKED_MODULE_PACKAGES) == 12
+
+    def test_inventory_picks_up_thirteenth_real_module_from_shim(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        root = tmp_path / "thirteenth"
+        root.mkdir()
+        _write_inventory(root, "1.2.3")
+        module = root / "quickscale_modules/reports"
+        module.mkdir(parents=True)
+        (module / "module.yml").write_text('name: reports\nversion: "1.2.3"\n')
+        shim = root / "quickscale_core/src/quickscale_core/contracts/module_discovery.py"
+        shim.write_text(
+            shim.read_text().replace(
+                "AUTHORITATIVE_MODULE_COUNT: Final[int] = 12",
+                "AUTHORITATIVE_MODULE_COUNT: Final[int] = 13",
+            )
+        )
+        paths = _expected_inventory(root)
+        assert "quickscale_modules/reports/module.yml" in paths
+        assert "quickscale_core/src/quickscale_core/data/manifests/reports/module.yml" in paths
+        assert "quickscale_modules/teams/module.yml" not in paths
+        assert len(paths) == 59
 
     def test_complete_a_to_b_fixture_is_clean_and_non_tautological(
         self, version_fixture: dict[str, pathlib.Path | str], tmp_path: pathlib.Path

@@ -8,25 +8,53 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION_FILE="$ROOT/VERSION"
+PYTHON="${PYTHON:-python3}"
+MODULE_DISCOVERY_SHIM="$ROOT/quickscale_core/src/quickscale_core/contracts/module_discovery.py"
 
 PYPROJECTS=("$ROOT/quickscale_core/pyproject.toml" "$ROOT/quickscale_cli/pyproject.toml" "$ROOT/quickscale/pyproject.toml")
 PACKAGES=("$ROOT/quickscale_core/src/quickscale_core" "$ROOT/quickscale_cli/src/quickscale_cli")
 
-# SA117 Phase 2 — twelve module packages
-MODULE_NAMES=(
-  analytics auth backups billing blog crm
-  forms listings notifications orgs social storage
-)
-EXPECTED_MODULE_COUNT=12
-
+MODULE_NAMES=()
 MODULE_DIRS=()
 MODULE_PYPROJECTS=()
 MODULE_INITS=()
-for m in "${MODULE_NAMES[@]}"; do
-  MODULE_DIRS+=("$ROOT/quickscale_modules/$m")
-  MODULE_PYPROJECTS+=("$ROOT/quickscale_modules/$m/pyproject.toml")
-  MODULE_INITS+=("$ROOT/quickscale_modules/$m/src/quickscale_modules_${m}/__init__.py")
-done
+
+_load_module_inventory() {
+  local output
+  if [[ ! -f "$MODULE_DISCOVERY_SHIM" ]]; then
+    echo "ERROR: module discovery shim not found at $MODULE_DISCOVERY_SHIM" >&2
+    return 1
+  fi
+  if ! output=$("$PYTHON" "$MODULE_DISCOVERY_SHIM" --list-modules); then
+    echo "ERROR: authoritative module inventory could not be loaded" >&2
+    return 1
+  fi
+  if [[ -z "$output" ]]; then
+    echo "ERROR: authoritative module inventory is empty" >&2
+    return 1
+  fi
+
+  MODULE_NAMES=()
+  while IFS= read -r module_name; do
+    [[ -n "$module_name" ]] || continue
+    MODULE_NAMES+=("$module_name")
+  done <<< "$output"
+  if [[ "${#MODULE_NAMES[@]}" -eq 0 ]]; then
+    echo "ERROR: authoritative module inventory is empty" >&2
+    return 1
+  fi
+
+  MODULE_DIRS=()
+  MODULE_PYPROJECTS=()
+  MODULE_INITS=()
+  for module_name in "${MODULE_NAMES[@]}"; do
+    MODULE_DIRS+=("$ROOT/quickscale_modules/$module_name")
+    MODULE_PYPROJECTS+=("$ROOT/quickscale_modules/$module_name/pyproject.toml")
+    MODULE_INITS+=(
+      "$ROOT/quickscale_modules/$module_name/src/quickscale_modules_${module_name}/__init__.py"
+    )
+  done
+}
 
 read_version() {
   if [[ -f "$VERSION_FILE" ]]; then
@@ -177,21 +205,13 @@ embed_version_into_packages() {
 }
 
 # -------------------------------------------------------------------------
-# Module-level helpers — SA117 Phase 2
+# Module-level helpers — authoritative manifest inventory
 # -------------------------------------------------------------------------
 
-# Count source module.yml files (must be exactly 12)
 _count_modules() {
-  local count=0
-  for d in "${MODULE_DIRS[@]}"; do
-    if [[ -f "$d/module.yml" ]]; then
-      count=$((count + 1))
-    fi
-  done
-  echo "$count"
+  echo "${#MODULE_NAMES[@]}"
 }
 
-# Discover actual module directories present on disk
 _find_present_modules() {
   local out=()
   for d in "${MODULE_DIRS[@]}"; do
@@ -223,14 +243,10 @@ _sync_module_snapshot() {
 }
 
 cmd_check_modules() {
+  _load_module_inventory || return 1
   local version; version=$(read_version)
   local count; count=$(_count_modules)
-  echo "Found $count module(s) (expected $EXPECTED_MODULE_COUNT)"
-
-  if [[ "$count" -ne "$EXPECTED_MODULE_COUNT" ]]; then
-    echo "  INVENTORY MISMATCH: expected $EXPECTED_MODULE_COUNT modules, found $count"
-    return 1
-  fi
+  echo "Found $count module(s) from authoritative inventory"
 
   local mismatch=0
   for m in "${MODULE_NAMES[@]}"; do
@@ -270,15 +286,11 @@ cmd_check_modules() {
 }
 
 cmd_update_modules() {
+  _load_module_inventory || return 1
   local version; version=$(read_version)
   local count; count=$(_count_modules)
 
-  if [[ "$count" -ne "$EXPECTED_MODULE_COUNT" ]]; then
-    echo "ERROR: expected $EXPECTED_MODULE_COUNT modules, found $count — pre-update validation failed"
-    return 1
-  fi
-
-  echo "Updating $EXPECTED_MODULE_COUNT modules to version ${version}..."
+  echo "Updating $count modules to version ${version}..."
 
   for m in "${MODULE_NAMES[@]}"; do
     local yml="$ROOT/quickscale_modules/$m/module.yml"
@@ -341,7 +353,7 @@ cmd_update() {
   # Embed into _version.py files
   embed_version_into_packages "$version"
 
-  # SA117 Phase 2 — update twelve module packages and sync snapshots
+  # Update authoritative module packages and sync snapshots.
   echo ""
   cmd_update_modules
 
@@ -356,7 +368,7 @@ Usage: $0 <command>
 
 Commands:
   check    Verify VERSION matches all pyproject.toml + module versions
-  update   Update all files including 12 module packages and snapshots
+  update   Update all files including authoritative module packages and snapshots
 
 Examples:
   # After editing VERSION file, update everything:
@@ -371,9 +383,9 @@ Workflow:
   3. Build/publish your packages
 
 Module check exit codes:
-  0 — exactly 12 modules present, all versions match VERSION
-  1 — module count != 12 (inventory mismatch)
-  2 — all 12 present but one or more version mismatch
+  0 — authoritative modules present, all versions match VERSION
+  1 — authoritative inventory could not be loaded
+  2 — module version mismatch
 EOF
 }
 

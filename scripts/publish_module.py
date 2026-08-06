@@ -100,15 +100,12 @@ def _print_error(msg: str) -> None:
 
 
 def _list_modules() -> list[str]:
-    """Return sorted module names from quickscale_modules/."""
-    modules_dir = _REPO_ROOT / "quickscale_modules"
-    if not modules_dir.is_dir():
-        return []
-    return sorted(
-        entry.name
-        for entry in modules_dir.iterdir()
-        if entry.is_dir() and not entry.name.startswith(".")
+    """Return the fail-hard authoritative shipped-module inventory."""
+    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        authoritative_module_names,
     )
+
+    return authoritative_module_names()
 
 
 def _has_uncommitted_changes(runner: GitRunner) -> bool:
