@@ -58,12 +58,12 @@ Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../.
 ```
 Track 1 (governance)                  Track 2 (CLOSED to new work)  Track 3 → release (CRITICAL PATH)
 ─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
-SA122b-4 ▶ (publish membership)      SA115a ▶ (guard clamp, local)  SA136d ▶ (seal phase; re-scoped)
+SA122b-4 ✓ (publish membership)      SA115a ▶ (guard clamp, local)  SA136d ▶ (seal phase; re-scoped)
   │                                   │  no shared file, no gate     │
   │                                   ▼                              ▼
   │                                  SA115b (e2e trigger paths)     SA136f
   ▼                                   │  deps: SA112e                │
-SA122b-5                              │                              ▼
+SA122b-5 ▶                            │                              ▼
   │  registry consumers: e2e paths    │                          SA117e-4 → -5
   │  + make checker blocking          │                       loop · seal · PUSH(human)
         ▲ (-5 only)                   │                              │
@@ -79,25 +79,25 @@ SA122b-5                              │                              ▼
 
 **Critical path:** `SA136d → SA136f → SA117e-4 → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH` — nine remaining legs, live at **SA136d**, which the 2026-08-07 re-scope of the seal-atomicity requirement unblocked. SA136a–c and SA136e are closed, so **SA136d is the only unsatisfied member** of SA136f's `deps: SA136a–SA136e` set — the whole umbrella now hinges on that one child. **SA117e-5 is closeout and sits *off* the critical path**: SA112b's precondition is the *sealed* splits delivered by SA117e-4, not the umbrella's closure. Track 2 and `SA122b-4…5` are entirely off-path filler. The green-gate milestone is governed by the four-command join below and is not claimed here.
 
-**Cross-track edges — two merge-order edges, no unserialized co-writes.** SA122b-5 and SA115b each merge after SA112e; all three share `.github/workflows/e2e.yml`'s `pull_request.paths` list. **SA115a carries no cross-track edge at all** — that is what the split bought. No other cross-track edge exists. The former `publish.yml` co-write is historical: the closed SA136e trigger comment is merged on `v87`, so SA122b-4 is now that file's sole open writer.
+**Cross-track edges — two merge-order edges, no unserialized co-writes.** SA122b-5 and SA115b each merge after SA112e; all three share `.github/workflows/e2e.yml`'s `pull_request.paths` list. **SA115a carries no cross-track edge at all** — that is what the split bought. No other cross-track edge exists. The former `publish.yml` co-write is historical: the closed SA136e trigger comment is merged on `v87`, and SA122b-4 is closed with no remaining open writer.
 
 **Track readiness — three independent states.** A track is *truly green* only when all three are yes.
 
 | Track (head) | Can start | Can finish | Can merge | Truly green | On critical path |
 |---|---|---|---|---|---|
 | **Track 3** — SA136d | **yes** — the re-scoped predicate is implementable on stock Git; next action is a scoped plan + review | **yes** — acceptance is local `publish_module.py`/`Makefile` behaviour; no other track's output is required | **yes** — no merge-order gate | ✅ **yes** | ✅ **yes** |
-| **Track 1** — SA122b-4 | **yes** — its prerequisites (SA122b-3, SA128) are closed and no serial-handoff gate remains | **yes** — no hard upstream dependency or open decision | **yes** — no merge-order gate; it is `publish.yml`'s sole open writer | ✅ **yes** | no — off the critical path (filler) |
+| **Track 1** — SA122b-5 | **yes** — SA122b-4 is closed; the E2E/checker slice is scoped and ready | **yes** — its only bound is the merge gate below | **no** — **merge after SA112e** | no — merge-gated filler | no — off the critical path |
 | **Track 2** — SA115a | **yes** — validation authorized; yields infra to Track 3 on demand | **yes** — acceptance is local timing/teardown proof | **yes** — writes no shared file, no merge-order gate | ✅ **yes** | no — filler, but now *mergeable* filler |
 | **Track 2** — SA115b (after SA115a) | yes | yes | **no** — **hard dep** on SA112e | no | no — filler |
 
-**Truly green today: SA136d (Track 3), SA122b-4 (Track 1), and SA115a (Track 2) — all three tracks.** Only **SA136d is on the critical path**; SA122b-4 and SA115a are off-path filler that no longer block anything. Both 2026-08-07 maintainer decisions landed: the seal requirement was re-scoped ([decision 2](#track-topology--settled)), unblocking Track 3, and SA115 was split ([decision 1](#track-topology--settled)), unblocking Track 2's local half. SA115b's remaining "no" is a **hard upstream dependency** only SA112e can clear.
+**Truly green today: SA136d (Track 3) and SA115a (Track 2).** Track 1's completed SA122b-4 is off-path, while the new head **SA122b-5** remains merge-gated behind SA112e. Only **SA136d is on the critical path**. Both 2026-08-07 maintainer decisions landed: the seal requirement was re-scoped ([decision 2](#track-topology--settled)), unblocking Track 3, and SA115 was split ([decision 1](#track-topology--settled)), unblocking Track 2's local half. SA115b's remaining "no" and SA122b-5's merge bound are **hard upstream dependencies** only SA112e can clear.
 
 **Infra serialization (not a track constraint).** SA112's and SA115a's e2e lanes, SA117e-4's `apply` verification, and any `make ci`/`make ci-e2e` rerun all need the same PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL` knobs namespace lanes *within* one invocation, not across worktrees — **only one track exercises PG/Docker at a time, and Track 3 has priority.** Abandon or restart an SA115a run rather than make a critical-path leg queue behind it. **This now binds in practice** — SA136d and SA115a are both green and both want the same daemon; Track 3 wins.
 
 **Shared executable surfaces.** Only two files have more than one open-ticket writer, and both are serialized:
 
 - **`.github/workflows/e2e.yml`** (path list) — SA112e, SA115b, SA122b-5; serialized by the merge bounds above. SA112e only *names* the merged provisioning scripts in the trigger list; it never edits them.
-- **`.github/workflows/publish.yml`** — SA122b-4 is the only open writer; the SA136e trigger comment it builds on is already merged.
+- **`.github/workflows/publish.yml`** — SA122b-4 is closed; the SA136e trigger comment it built on is already merged, and no open Track 1 ticket writes this file.
 
 Single-writer or unowned: `scripts/publish_module.py` (SA136d alone), `docs/technical/decisions.md` (SA136f then SA117e-5, in-track). `module_commands.py`, `module_output.py`, `apply_command.py`, `git_utils.py`, `scripts/check_sa117_scope.py`, `scripts/version_tool.sh`, `scripts/quality_waivers.json`, `scripts/quality_baseline.json`, and `test_e2e_full_workflow.py` have no open v87 writer. No additional procedure is required.
 
@@ -292,34 +292,32 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** queue is **[SA122b-4](#sa122--release-assurance-is-four-hand-synchronized-gate-inventories-arch-finding-11) → SA122b-5**, with SA122b-4 as head and **truly green**. The SA122b chain is off-path filler, and only SA122b-5 is merge-gated behind SA112e. The SA128 parity checker is authoritative.
+**Status:** queue is **[SA122b-4](#sa122--release-assurance-is-four-hand-synchronized-gate-inventories-arch-finding-11) ✓ → [SA122b-5](#sa122--release-assurance-is-four-hand-synchronized-gate-inventories-arch-finding-11)**, with SA122b-5 as head and **merge after SA112e**. The SA122b chain is off-path filler. The SA128 parity checker is authoritative.
 
 ### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
 
-Required release properties have no authoritative topology. The five repository conformance gates are declared in `Makefile:784-821` and aggregated at `829-927`, repeated serially at `scripts/check_ci_locally.sh:195-302` and again in the parallel worker declaration at `401-428`, re-declared as five hosted jobs at `.github/workflows/ci.yml:168-306` with a hand-written `test.needs` at `308-310`, while `.github/workflows/publish.yml:120-207` contains **zero** occurrences of them, and e2e eligibility is a 26-path manual allowlist at `.github/workflows/e2e.yml:13-41`. Adding one gate costs up to ten stations, and the drift is recurring, not hypothetical.
+Required release properties have no authoritative topology. The five repository conformance gates are declared in `Makefile:784-821` and aggregated at `829-927`, repeated serially at `scripts/check_ci_locally.sh:195-302` and again in the parallel worker declaration at `401-428`, re-declared as five hosted jobs at `.github/workflows/ci.yml:168-306` with a hand-written `test.needs` at `308-310`, and are now present in `.github/workflows/publish.yml` after SA122b-4. E2E eligibility remains a 26-path manual allowlist at `.github/workflows/e2e.yml:13-41`. Adding one gate costs up to ten stations, and the drift is recurring, not hypothetical.
 
-**Approach — centralize *membership and metadata*, not execution.** Environment-specific jobs and hosted parallelism are worth keeping; what must stop is each context independently deciding what "green" means. `scripts/gate_registry.json` and `make check-gate-parity` are merged and are an **input, not scope**. The SA128 checker is authoritative for inventory and coverage reporting; it still reports the five real publish omissions, which **SA122b-4** owns. No publish parity is claimed before that child.
+**Approach — centralize *membership and metadata*, not execution.** Environment-specific jobs and hosted parallelism are worth keeping; what must stop is each context independently deciding what "green" means. `scripts/gate_registry.json` and `make check-gate-parity` are merged and are an **input, not scope**. The SA128 checker is authoritative for inventory and coverage reporting; publish membership now has zero omissions after SA122b-4, while E2E path migration and blocking-checker wiring remain with SA122b-5.
 
 - [ ] **SA122b — Migrate the consumers onto the registry.** `Umbrella · deps: SA128 ✓ closed`
 
-  Make each context derive its inventory from the registry instead of restating it, then make the SA128 parity checker **blocking** in CI once every context derives. Every child inherits: the registry and its schema are an **input, not scope** — a child needing a schema change stops and escalates rather than editing it; the SA128 checker is the authoritative oracle, so no child may add tolerance or exception logic to make a context read green. SA122b-4's SA122b-3 and SA128 prerequisites are satisfied and no serial-handoff start gate remains, so it is executable today.
+  Make each context derive its inventory from the registry instead of restating it, then make the SA128 parity checker **blocking** in CI once every context derives. Every child inherits: the registry and its schema are an **input, not scope** — a child needing a schema change stops and escalates rather than editing it; the SA128 checker is the authoritative oracle, so no child may add tolerance or exception logic to make a context read green. SA122b-4's SA122b-3 and SA128 prerequisites are satisfied and its reviewed executable result is recorded below; SA122b-5 is the remaining child.
 
-  | Open child | Consumer context | Executable surface | Tier |
+  | Child | Consumer context | Executable surface | Tier |
   |---|---|---|---|
-  | SA122b-4 | Publish membership (**behaviour change**) | `.github/workflows/publish.yml` | 2 |
+  | SA122b-4 ✓ | Publish membership (**behaviour change**) | `.github/workflows/publish.yml` | 2 |
   | SA122b-5 | E2E paths, blocking checker, closeout | `.github/workflows/e2e.yml`, CI wiring | 2 |
 
   **Only SA122b-5 carries the `merge after SA112e` bound** — that is the point of the per-context split; SA122b-4 merges independently instead of idling behind five Track 3 children.
 
-  Already deriving from the registry (`-1`/`-2`/`-3`, closed): Make aggregation, both `check_ci_locally.sh` inventories, and hosted CI job/`needs` generation. Publish and the e2e path list are what remain.
+  Already deriving from the registry (`-1`/`-2`/`-3`, closed): Make aggregation, both `check_ci_locally.sh` inventories, hosted CI job/`needs` generation, and publish membership (`-4`, closed). The e2e path list and blocking-checker wiring are what remain.
 
-  - [ ] **SA122b-4 — Add the five conformance gates to `publish.yml`.** `Tier 2 · deps: SA122b-3 ✓ closed` — **the one child that changes release behaviour**
-    `publish.yml:120-207` contains **zero** occurrences of the five gates. Publish is a full-coverage context ([decisions.md §publish-path-gate-coverage](./decisions.md#publish-path-gate-coverage)), so this child adds them, derived from the registry like the others, closing the five omissions SA128 was barred from dispositioning away.
-    - Verify: all five gates run in `publish.yml`; the checker reports **zero** publish omissions and direct execution now exits **0** with the Make wrapper exiting **0** — the first point at which the parity gate is legitimately green; a dry publish run reaches the gates and they execute.
-    - Rollback: revert `.github/workflows/publish.yml`; no other context depends on this child.
-    *(why →* the checker's exit-1/exit-2 state exists precisely because this gap is real*)*
+  - [x] **SA122b-4 — Add the five conformance gates to `publish.yml`.** `Tier 2 · deps: SA122b-3 ✓ closed` — **reviewed executable result recorded; no publication performed**
+    Phase 1 commit `b42ddd20` added the five standalone publish conformance gates and coupled parity assertions. All five task-owned Make targets passed; the direct checker and Make wrapper both passed with zero publish omissions; the complete parity test file passed 214 tests, and the functional publish-trigger diagnostic passed 4/4 with repository-wide `addopts` disabled. Full-scope review DC-124 returned `STATUS: ok` at confidence 97 with no findings. The narrow trigger selection remains deferred because its only failure was global coverage fail-under at 0 percent; no additional publish parity-blocking, release, tag, registry, checker, generator, or E2E change was made in this closeout.
+    *(why →* the reviewed executable result closes the publish-membership child while the E2E/checker child remains open*)*
 
-  - [ ] **SA122b-5 — Derive the E2E path allowlist, make the checker blocking, and close SA122b.** `Tier 2 · deps: SA122b-4` · **merge after SA112e**
+  - [ ] **SA122b-5 — Derive the E2E path allowlist, make the checker blocking, and close SA122b.** `Tier 2 · deps: SA122b-4 ✓ closed` · **merge after SA112e**
     Migrate `.github/workflows/e2e.yml:13-41`'s 26-path manual allowlist onto the registry, then make the parity checker **blocking** in CI now that every context derives. SA112e and SA115b each append their own ordered path tuple to that list; migrating before those land would force all three edits to be redone.
     - Verify: the ordered e2e path tuples from SA112e and SA115b are both preserved byte-exact; adding one new gate requires editing only the registry and its implementation, proven by a test that adds a gate and asserts **all five** contexts pick it up; the checker is blocking in CI and green; `make check`, `make ci`, and hosted CI stay green with unchanged effective inventories. Full-scope review returns `STATUS: ok`, then close the umbrella — retiring arch **Finding 11**.
 
@@ -339,7 +337,7 @@ Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unsche
 - `make ci` covers unit + integration when PostgreSQL is available; `make ci-e2e` covers e2e.
 - The join runs entirely **inside the monorepo**. `make smoke-install` separately builds wheels from per-run staged copies, installs into a throwaway venv outside the source tree, and runs every non-mutating CLI command from a sanitized external workdir under the full `>=3.13,<3.15` Python constraint.
 
-**Current state.** `make quality` exits **0** with zero baseline regressions, `monotonicity_verdict: pass`, and zero waivers (cleared by SA138, closed 2026-08-07). `scripts/quality_baseline.json` carries zero `large_files` entries and `scripts/quality_waivers.json` is an empty ledger. The four-command join remains unclaimed because its single clean rerun is owned by SA112f.
+**Current state.** The previously recorded SA138 baseline remains documented as clean, but this closeout does not claim a passing `make quality`: the current run exits **2** on unchanged `quickscale_cli/src/quickscale_cli/commands/apply_command.py` complexity **56** versus allowed **55**, outside this delta. `scripts/quality_baseline.json` carries zero `large_files` entries and `scripts/quality_waivers.json` is an empty ledger. The four-command join remains unclaimed because its single clean rerun is owned by SA112f.
 
 **The milestone is unclaimed.** `make ci-e2e` most recently exited 0 with empty quarantine at `v87` `c4b6e354` (SA117e-3), and `make check QUIET=1`/`make quality` were green on an earlier ordered chain — but no single clean rerun has covered all four commands, and `make ci` in particular has not been rerun. **SA112f owns the clean closeout rerun**, and SA96-PUBLISH requires that evidence before release.
 
@@ -351,14 +349,14 @@ Every open v87 ticket carries a track. Track 2 stays closed to new work by stand
 
 **Standing placements.**
 
-- **Track 1's queue is SA122b-4 → SA122b-5**, head at SA122b-4. Only SA122b-5 carries a merge bound. **Conflict surface:** SA122b-4 is `.github/workflows/publish.yml`'s sole open writer (the closed SA136e comment is already on `v87`). Beyond that, only the shared closeout files (`CHANGELOG.md`, this roadmap, `decisions.md` at SA136f) are touched, and the mandatory `git merge v87`-before-merge-back step in [Parallel execution tracks](#parallel-execution-tracks) covers them — keep both tracks' entries when resolving.
+- **Track 1's queue is SA122b-4 ✓ → SA122b-5**, head at SA122b-5. Only SA122b-5 carries a merge bound. **Conflict surface:** SA122b-4's `.github/workflows/publish.yml` work is closed (the closed SA136e comment is already on `v87`). Beyond that, only the shared closeout files (`CHANGELOG.md`, this roadmap, `decisions.md` at SA136f) are touched, and the mandatory `git merge v87`-before-merge-back step in [Parallel execution tracks](#parallel-execution-tracks) covers them — keep both tracks' entries when resolving.
 - **SA136 is homed on Track 3 as a sibling umbrella, not folded into SA117e-4.** The machinery is production CLI/publish code, a different risk class from the push ceremony; folding it in would make `-4` Tier 3 — the sizing violation that forced the SA117e split.
 - **SA136f stays on Track 3** despite being documentation-only and on the critical path: its `deps: SA136a–SA136e` set still includes the open SA136d, so moving it to Track 1 would buy no parallelism and would split the umbrella's closeout away from the seal machinery it must describe.
 - **SA112b–f stay serial on Track 3.** Each child consumes the previous child's evidence (`-c` may act only on `-b`'s traceback), so they are one coherent review unit, not parallelizable work.
 - **SA117e-5 sits off the critical path** — SA112b's precondition is SA117e-**4**, not the umbrella's closure.
 - **The *fourth-worktree* variant is permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 
-**Rebalancing verdict (2026-08-07, post-decision pass): no move applied — all three tracks now have a green head.** Both decisions cleared blockers in place rather than by relocation, so there is no idle capacity to fill: Track 3 runs SA136d, Track 1 runs SA122b-4, Track 2 runs SA115a. Nothing is movable anyway — SA136f/SA117e-4 are dependency-bound to SA136d, SA112b–f are one serial evidence chain, SA122b-4→5 and SA115a→b are in-track ordered, and Track 2 stays closed to unrelated work. The binding constraint is now **infra, not tickets**: SA136d and SA115a both want the same Docker/PostgreSQL daemon, and Track 3 has priority.
+**Rebalancing verdict (2026-08-07, post-decision pass): no move applied — Track 1's completed child advances its head to the merge-gated SA122b-5.** Both decisions cleared blockers in place rather than by relocation. Track 3 runs SA136d, Track 1 runs SA122b-5, and Track 2 runs SA115a. Nothing is movable anyway — SA136f/SA117e-4 are dependency-bound to SA136d, SA112b–f are one serial evidence chain, SA122b-5 and SA115a→b are in-track ordered, and Track 2 stays closed to unrelated work. The binding constraint is now **infra, not tickets**: SA136d and SA115a both want the same Docker/PostgreSQL daemon, and Track 3 has priority.
 
 **Open maintainer decisions: none.** Both 2026-08-07 decisions are resolved and applied below; the loop/seal artifact contract, the `splits/<m>-module/<version>` tag scheme, the deletion of `split-modules.yml` (done, SA136e) and of the stale remote `splits/teams-module` branch, and the restructure of SA117e-4 in place remain ratified and recorded in [CHANGELOG.md](../../CHANGELOG.md).
 

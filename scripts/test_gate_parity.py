@@ -3,7 +3,7 @@ Focused tests for SA122a gate parity checker.
 
 Test matrix
 -----------
-- Current reproduction (exact publish gap + no spurious diagnostics)
+- Current repository state (green publish parity + no spurious diagnostics)
 - Fake-gate fan-out (add a gate, verify it propagates)
 - Complete schema validation (every field constraint)
 - Malformed sources (bad JSON, missing files)
@@ -74,17 +74,6 @@ CHECK_CI = REPO_ROOT / "scripts" / "check_ci_locally.sh"
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PUBLISH_YML = REPO_ROOT / ".github" / "workflows" / "publish.yml"
 E2E_YML = REPO_ROOT / ".github" / "workflows" / "e2e.yml"
-
-# The 5 known publish conformance-gate gaps (SA122-DEC-001)
-PUBLISH_GAP_IDS: frozenset[str] = frozenset(
-    {
-        "check-core-compat",
-        "check-module-core-imports",
-        "check-manifest-sync",
-        "check-org-context-primitives",
-        "check-csrf-exempt",
-    }
-)
 
 # The 5 conformance gate make targets
 CONFORMANCE_MAKE_TARGETS: frozenset[str] = frozenset(
@@ -199,53 +188,31 @@ def _make_registry_json(gates: list[dict[str, Any]], tmp_path: Path) -> Path:
 
 
 # =========================================================================
-# Current reproduction
+# Current repository state
 # =========================================================================
 
 
-class TestCurrentReproduction:
+class TestCurrentRepositoryState:
     """Tests that run against the real repository state."""
 
-    def test_reports_exactly_five_publish_gaps(self) -> None:
-        """Exit 1 with exactly 5 missing publish conformance gates."""
+    def test_real_checker_exits_zero(self) -> None:
+        """The real registry and all required execution contexts are green."""
         result = _run_checker()
-        assert result.returncode == 1
-        lines = [line for line in result.stdout.splitlines() if line.strip()]
-        assert len(lines) == 5, f"Expected 5 diagnostics, got {len(lines)}"
+        assert result.returncode == 0, f"Expected exit 0, got {result.returncode}: {result.stderr}"
 
-    def test_each_publish_gap_is_a_conformance_gate(self) -> None:
-        """Every missing gate ID is one of the five known conformance gates."""
+    def test_real_checker_stdout_is_empty(self) -> None:
+        """A green checker emits no JSONL diagnostics on stdout."""
         result = _run_checker()
-        lines = [line for line in result.stdout.splitlines() if line.strip()]
-        found_ids = {json.loads(line)["gate_id"] for line in lines}
-        assert found_ids == PUBLISH_GAP_IDS, f"Expected {PUBLISH_GAP_IDS}, got {found_ids}"
+        assert not result.stdout.strip(), f"Expected empty stdout, got: {result.stdout}"
 
-    def test_all_diagnostics_are_publish_context(self) -> None:
-        """Every diagnostic is a context='publish' missing gate."""
+    def test_real_checker_stderr_reports_success(self) -> None:
+        """A green checker reports its success contract on stderr."""
         result = _run_checker()
-        lines = [line for line in result.stdout.splitlines() if line.strip()]
-        for line in lines:
-            record = json.loads(line)
-            assert record["level"] == "missing"
-            assert record["context"] == "publish"
-            assert record["gate_id"] in PUBLISH_GAP_IDS
+        assert "All gates present in all required contexts." in result.stderr
 
-    def test_stdout_is_valid_jsonl(self) -> None:
-        """Every stdout line is parseable JSON."""
+    def test_real_checker_stderr_contains_no_error(self) -> None:
+        """A green checker does not emit an ERROR diagnostic."""
         result = _run_checker()
-        lines = [line for line in result.stdout.splitlines() if line.strip()]
-        for line in lines:
-            record = json.loads(line)
-            assert "level" in record
-            assert "context" in record
-            assert "gate_id" in record
-            assert "source" in record
-            assert "detail" in record
-
-    def test_stderr_contains_no_error_when_exit_1(self) -> None:
-        """Exit 1 should have no ERROR: on stderr."""
-        result = _run_checker()
-        assert result.returncode == 1
         assert "ERROR:" not in result.stderr
 
 
@@ -255,10 +222,10 @@ class TestCurrentReproduction:
 
 
 class TestFakeGateFanOut:
-    """Adding a gate to the registry propagates to diagnostics."""
+    """Adding a gate to the registry propagates to execution contexts."""
 
-    def test_fake_gate_in_publish_appears_as_diagnostic(self, tmp_path: Path) -> None:
-        """A gate requiring publish context that is not in publish.yml shows as missing."""
+    def test_fake_gate_with_existing_publish_target_is_not_missing(self, tmp_path: Path) -> None:
+        """A publish gate bound to an existing target is present in publish.yml."""
         gates = [
             {
                 "id": "fake-gate",
@@ -275,16 +242,8 @@ class TestFakeGateFanOut:
         ]
         reg_path = _make_registry_json(gates, tmp_path)
         result = _run_checker(["--registry", str(reg_path)])
-        assert result.returncode == 1
-        lines = [line for line in result.stdout.splitlines() if line.strip()]
-        # One for publish missing, none for makefile because check-core-compat IS in Makefile
-        publish_diags = [
-            json.loads(ln) for ln in lines if json.loads(ln).get("context") == "publish"
-        ]
-        assert len(publish_diags) == 1
-        record = publish_diags[0]
-        assert record["gate_id"] == "fake-gate"
-        assert record["level"] == "missing"
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        assert not result.stdout.strip()
 
     def test_fake_gate_in_local_serial_is_not_missing(self, tmp_path: Path) -> None:
         """A gate that IS a make target in check_ci_locally.sh serial path is not reported."""
@@ -510,7 +469,7 @@ class TestE2eTriggerAggregate:
             and json.loads(ln).get("context") == "e2e-trigger"
         ]
         assert not order_diags, f"Expected no order diagnostics for exact match, got: {order_diags}"
-        # Should still report the five publish gaps (exit 1), not exit 0
+        # The custom registry still has an e2e-trigger diagnostic (exit 1), not exit 0.
         assert result.returncode == 1
 
     def test_aggregate_interior_swap_detected(self, tmp_path: Path) -> None:
@@ -835,11 +794,11 @@ class TestParserPrecision:
             f"ci.yml jobs {ci_jobs} missing some conformance jobs"
         )
 
-    def test_publish_has_none_of_the_five_check_gates(self) -> None:
-        """publish.yml has none of the 5 check-* make targets."""
+    def test_publish_has_all_five_check_gates(self) -> None:
+        """publish.yml contains every conformance gate make target."""
         targets = _extract_publish_gates(PUBLISH_YML)
-        overlap = CONFORMANCE_MAKE_TARGETS & targets
-        assert not overlap, f"publish.yml unexpectedly contains make targets: {overlap}"
+        missing = CONFORMANCE_MAKE_TARGETS - targets
+        assert not missing, f"publish.yml is missing make targets: {missing}"
 
     def test_serial_does_not_pick_up_parallel_gates(self) -> None:
         """Serial extraction should not pick gates that only exist in parallel."""
@@ -977,11 +936,11 @@ class TestParserPrecision:
         for job in expected_jobs:
             assert job in jobs, f"Expected {job} in publish.yml jobs, got: {jobs}"
 
-    def test_publish_has_none_of_five_check_targets(self) -> None:
-        """publish.yml must NOT contain any of the 5 conformance gate make targets."""
+    def test_publish_has_all_five_check_targets(self) -> None:
+        """publish.yml must contain all 5 conformance gate make targets."""
         targets = _extract_publish_gates(PUBLISH_YML)
-        overlap = CONFORMANCE_MAKE_TARGETS & targets
-        assert not overlap, f"publish.yml unexpectedly contains make targets: {overlap}"
+        missing = CONFORMANCE_MAKE_TARGETS - targets
+        assert not missing, f"publish.yml is missing make targets: {missing}"
 
     def test_publish_structural_parsing_rejects_duplicate_yaml_keys(self, tmp_path: Path) -> None:
         """Duplicate YAML keys in publish.yml structure raise exit 2."""
@@ -1063,7 +1022,7 @@ class TestParserPrecision:
             "csrf-exempt-gate": ("poetry install --with dev\n", "make check-csrf-exempt\n"),
         }
 
-    def test_all_sixteen_publish_run_values_are_structural(self) -> None:
+    def test_all_twenty_one_publish_run_values_are_structural(self) -> None:
         """Every current publish run block matches the literal ordered oracle."""
         values = _extract_publish_run_values(PUBLISH_YML)
         assert values == [
@@ -1090,6 +1049,11 @@ class TestParserPrecision:
             ("verify", "./scripts/version_tool.sh check\n"),
             ("test", 'echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV'),
             ("test", "poetry install --with dev\n"),
+            ("test", "make check-core-compat\n"),
+            ("test", "make check-module-core-imports\n"),
+            ("test", "make check-manifest-sync\n"),
+            ("test", "make check-org-context-primitives\n"),
+            ("test", "make check-csrf-exempt\n"),
             ("test", "make frontend-proof\n"),
             ("test", "make smoke-install\n"),
             ("test", "make lint -- --core --cli --modules --devtools\n"),
@@ -2662,8 +2626,8 @@ class TestStreamBehavior:
         )
         assert "Traceback" not in result.stderr
 
-    def test_make_wrapper_translates_exit_1_to_exit_2(self) -> None:
-        """Make check-gate-parity translates exit 1 to exit 2 (tested via subprocess)."""
+    def test_make_wrapper_passes_real_registry(self) -> None:
+        """Make check-gate-parity reports the green real-registry result."""
         result = subprocess.run(
             ["make", "check-gate-parity"],
             cwd=str(REPO_ROOT),
@@ -2671,11 +2635,12 @@ class TestStreamBehavior:
             text=True,
             timeout=60,
         )
-        # With real registry, should exit 2 because of publish gap
-        assert result.returncode == 2, (
-            f"Expected exit 2 from make, got {result.returncode}: stderr={result.stderr}"
+        assert result.returncode == 0, (
+            f"Expected exit 0 from make, got {result.returncode}: stderr={result.stderr}"
         )
-        assert "ERROR:" in result.stderr
+        assert "All gates present in all required contexts." in result.stdout
+        assert "ERROR:" not in result.stdout
+        assert "ERROR:" not in result.stderr
 
 
 # =========================================================================
@@ -2973,11 +2938,10 @@ class TestCanonicalPathBoundary:
             text=True,
             timeout=60,
         )
-        assert result.returncode == 1
-        records = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
-        assert len(records) == 5
-        assert {record["gate_id"] for record in records} == PUBLISH_GAP_IDS
-        assert not result.stderr
+        assert result.returncode == 0
+        assert not result.stdout.strip()
+        assert "All gates present in all required contexts." in result.stderr
+        assert "ERROR:" not in result.stderr
 
 
 # =========================================================================
