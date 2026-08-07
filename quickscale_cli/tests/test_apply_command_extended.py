@@ -28,6 +28,7 @@ import quickscale_cli.commands.apply_command as _apply_command_mod
 
 _apply_command_mod._AF5_DESTRUCTIVE_CONFIRM_BYPASS = True
 
+
 from quickscale_cli.commands.apply_command import (
     ApplyContext,
     EmbedModulesResult,
@@ -80,7 +81,13 @@ from quickscale_cli.commands.apply_command import (
     _sync_analytics_env_example,
     _sync_notifications_env_example,
     _update_module_config_in_state,
+    _module_names_to_embed,
+    _parse_split_ref_overrides,
+    _validate_split_ref_override_coverage,
+    apply,
 )
+
+
 from quickscale_cli.commands.module_commands import _update_single_module
 from quickscale_core.schema.state_schema import (
     ModuleState,
@@ -92,6 +99,161 @@ from quickscale_core.schema.state_schema import (
 from quickscale_core.config import ConfigError
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest.loader import ManifestError
+
+
+@pytest.fixture(autouse=True)
+def _stub_default_split_tag_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep apply embed regressions hermetic; focused tag tests override these."""
+    monkeypatch.setattr(
+        "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+        lambda remote, tag: True,
+    )
+    monkeypatch.setattr(
+        "quickscale_cli.commands.module_commands.resolve_remote_tag",
+        lambda remote, tag: "a" * 40,
+    )
+
+
+class TestSA136cSplitRefApplyContract:
+    """Focused coverage for repeatable split-ref parsing and target coverage."""
+
+    @pytest.mark.parametrize(
+        "raw_value",
+        ["auth", "=feature/auth", "auth=", " auth=feature/auth", "auth= feature/auth"],
+    )
+    def test_parser_rejects_malformed_split_ref(self, raw_value: str) -> None:
+        with pytest.raises(click.BadParameter, match="--split-ref"):
+            _parse_split_ref_overrides((raw_value,))
+
+    def test_parser_preserves_ordered_repeatable_pairs(self) -> None:
+        assert _parse_split_ref_overrides(
+            ("auth=feature/auth", "blog=release/blog")
+        ) == {"auth": "feature/auth", "blog": "release/blog"}
+
+    def test_parser_rejects_duplicate_module_even_when_ref_matches(self) -> None:
+        with pytest.raises(click.BadParameter, match="duplicate module 'auth'"):
+            _parse_split_ref_overrides(("auth=feature/auth", "auth=feature/auth"))
+
+    def test_click_binds_repeatable_split_refs_before_apply_adapter(self, tmp_path):
+        from click.testing import CliRunner
+
+        config_path = tmp_path / "quickscale.yml"
+        config_path.write_text("placeholder\n")
+        ctx = Mock(existing_state=None)
+        ctx.qs_config.modules = {"auth": Mock(), "blog": Mock()}
+
+        with (
+            patch("quickscale_cli.commands.apply_command._resolve_apply_preflight"),
+            patch(
+                "quickscale_cli.commands.apply_command._prepare_apply_context",
+                return_value=ctx,
+            ),
+            patch("quickscale_cli.commands.apply_command._display_config_summary"),
+            patch(
+                "quickscale_cli.commands.apply_command._provenance_repair_might_be_needed",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._handle_delta_and_existing_state"
+            ),
+            patch("quickscale_cli.commands.apply_command._check_output_directory"),
+            patch(
+                "quickscale_cli.commands.apply_command._confirm_apply",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._execute_apply_steps"
+            ) as mock_execute,
+        ):
+            result = CliRunner().invoke(
+                apply,
+                [
+                    str(config_path),
+                    "--split-ref",
+                    "auth=feature/auth",
+                    "--split-ref",
+                    "blog=feature/blog",
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_execute.call_args.args[-1] == {
+            "auth": "feature/auth",
+            "blog": "feature/blog",
+        }
+
+    def test_target_coverage_uses_fresh_and_existing_apply_sets(self) -> None:
+        fresh = Mock(existing_state=None)
+        fresh.qs_config.modules = {"auth": Mock(), "blog": Mock()}
+        assert _module_names_to_embed(fresh) == {"auth", "blog"}
+
+        existing = Mock(existing_state=Mock())
+        existing.delta.modules_to_add = ["blog"]
+        assert _module_names_to_embed(existing) == {"blog"}
+
+    def test_target_coverage_rejects_missing_and_unknown_modules(self) -> None:
+        ctx = Mock(existing_state=None)
+        ctx.qs_config.modules = {"auth": Mock(), "blog": Mock()}
+        with pytest.raises(click.UsageError, match="unknown modules: listings"):
+            _validate_split_ref_override_coverage(
+                ctx,
+                {"auth": "feature/auth", "listings": "feature/listings"},
+                no_modules=False,
+            )
+
+    def test_target_coverage_rejects_no_modules_combination(self) -> None:
+        ctx = Mock(existing_state=None)
+        ctx.qs_config.modules = {"auth": Mock()}
+        with pytest.raises(click.UsageError, match="--no-modules"):
+            _validate_split_ref_override_coverage(
+                ctx,
+                {"auth": "feature/auth"},
+                no_modules=True,
+            )
+
+    def test_post_lock_target_drift_aborts_before_locked_embed(self, tmp_path) -> None:
+        """Ref coverage must be rechecked against the post-lock target set."""
+        ctx = Mock()
+        ctx.output_path = tmp_path
+        ctx.existing_state = Mock()
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"auth": Mock(), "blog": Mock()}
+        ctx.delta = Mock(modules_to_add=["auth"])
+        ctx.has_pending_post_embed_recovery = False
+        ctx.had_existing_state = True
+
+        def _refresh_to_different_target_set(refreshed_ctx):
+            refreshed_ctx.delta = Mock(modules_to_add=["blog"])
+
+        mock_lock = Mock()
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._warn_version_drift_for_apply"
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._refresh_context_after_lock",
+                side_effect=_refresh_to_different_target_set,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command.AdvisoryLock",
+                return_value=mock_lock,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._execute_apply_steps_locked"
+            ) as mock_locked,
+        ):
+            with pytest.raises(click.UsageError, match="unknown modules: auth"):
+                _execute_apply_steps(
+                    ctx,
+                    force=False,
+                    no_docker=False,
+                    no_modules=False,
+                    split_ref_overrides={"auth": "feature/auth"},
+                )
+
+        mock_lock.acquire.assert_called_once()
+        mock_lock.release.assert_called_once()
+        mock_locked.assert_not_called()
 
 
 def _run_git(project_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -2185,6 +2347,28 @@ class TestEmbedModulesStep:
         assert (
             result.provenance_payloads["blog"].tracking_branch == "splits/blog-module"
         )
+
+    @patch("quickscale_cli.commands.apply_command._git_commit", return_value=True)
+    @patch("quickscale_cli.commands.apply_command._embed_module", return_value=True)
+    def test_split_ref_overrides_route_to_matching_modules(
+        self, mock_embed, mock_commit
+    ):
+        """Each explicit split ref must be passed to its matching module only."""
+        result = _embed_modules_step(
+            Path("/tmp"),
+            ["auth", "blog"],
+            False,
+            None,
+            {"auth": "feature/auth", "blog": "feature/blog"},
+        )
+
+        assert result.success is True
+        assert [call.args[1] for call in mock_embed.call_args_list] == ["auth", "blog"]
+        assert [call.kwargs["split_ref"] for call in mock_embed.call_args_list] == [
+            "feature/auth",
+            "feature/blog",
+        ]
+        assert mock_commit.call_count == 2
 
 
 # ============================================================================
@@ -6654,7 +6838,8 @@ class TestCallerParityAcrossProvenancePaths:
        backfills authoritative state but performs no git operation.
     3. All convergent paths persist the full provenance triple
        (version, commit_sha, embedded_at).
-    4. Standalone embed intentionally diverges (no source_ref resolution).
+    4. Standalone and apply both resolve their selected refs to SHAs before
+       subtree execution; their execution modes differ only in later handling.
     """
 
     def test_apply_path_resolves_source_ref_once_and_persists_triple(self, tmp_path):
@@ -6987,31 +7172,20 @@ class TestCallerParityAcrossProvenancePaths:
             )
             assert module_state.embedded_at != "", f"{path_name}: embedded_at is empty"
 
-    def test_standalone_embed_intentionally_diverges_from_provenance_resolution(
-        self,
-    ):
-        """Standalone embed does NOT resolve source_ref.
+    def test_standalone_and_apply_resolve_selected_refs_to_shas(self):
+        """Standalone and apply both resolve selected refs to SHAs.
 
-        This is intentional divergence: standalone embeds use the tracking
-        branch name directly for the subtree add and do not produce a
-        ModuleEmbedProvenance payload.  Caller parity applies to the three
-        convergent paths (apply, update, no-op repair); standalone embed
-        is documented as intentionally divergent.
+        The selected ref is resolved before subtree execution in both modes.
+        Apply additionally carries the resolved SHA through its provenance
+        handoff; standalone keeps its own tracking and wiring behavior.
         """
-        # This test documents the intentional divergence.  The actual
-        # behavior is tested by test_standalone_embed_does_not_resolve_source_ref
-        # in test_module_commands.py.  Here we assert the design contract:
-        # standalone embeds do not participate in the provenance resolution
-        # pattern that apply/update/no-op repair follow.
         from quickscale_cli.commands.module_config import (
             STANDALONE_MODULE_EXECUTION_MODE,
         )
 
-        # Standalone mode is the default for embed_module.
+        # Standalone mode is the default for embed_module, but both modes use
+        # the same selected-ref-to-SHA resolution contract.
         assert STANDALONE_MODULE_EXECUTION_MODE != "apply"
-        # The ModuleEmbedProvenance is only produced when source_ref is
-        # resolved, which only happens in APPLY_MODULE_EXECUTION_MODE.
-        # Standalone embeds leave provenance_sink empty.
 
 
 # ============================================================================

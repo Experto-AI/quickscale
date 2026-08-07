@@ -12,7 +12,7 @@ from quickscale_core.utils.theme_validation import (
     validate_theme_preflight,
 )
 
-from .module_config import APPLY_MODULE_EXECUTION_MODE, ModuleExecutionMode
+from .module_config import ModuleExecutionMode
 
 
 def _print_installation_error(
@@ -79,17 +79,15 @@ def _validate_embed_theme(project_path: Path) -> bool:
 
 def _resolve_embed_source_ref(
     remote: str,
-    branch: str,
+    selected_ref: str,
     module: str,
     execution_mode: ModuleExecutionMode,
     resolver: Callable[[str, str], str],
 ) -> tuple[bool, str | None]:
-    """Resolve the apply source ref once, preserving standalone behavior."""
-    if execution_mode != APPLY_MODULE_EXECUTION_MODE:
-        return True, None
-
+    """Resolve the selected embed ref for both standalone and apply modes."""
+    del execution_mode
     try:
-        return True, resolver(remote, branch)
+        return True, resolver(remote, selected_ref)
     except GitError as ref_error:
         click.secho(
             f"❌ Failed to resolve source ref for {module}: {ref_error}",
@@ -98,7 +96,42 @@ def _resolve_embed_source_ref(
             bold=True,
         )
         click.echo(
-            "💡 Check network connectivity and remote branch availability.",
+            "💡 Check network connectivity and the selected remote ref availability.",
             err=True,
         )
         return False, None
+
+
+def _report_missing_split_tag(
+    module: str,
+    core_version: str,
+    selected_tag: str,
+    remote: str,
+) -> None:
+    """Report that the immutable split for the running core is unpublished."""
+    click.secho(
+        f"❌ Module '{module}' split for core version {core_version} was not published.",
+        fg="red",
+        err=True,
+        bold=True,
+    )
+    click.echo(
+        f"   Expected immutable tag: {selected_tag}\n   Remote: {remote}",
+        err=True,
+    )
+    click.echo(
+        "\n💡 Publish the split for this core version before embedding the module; "
+        "QuickScale will not fall back to a moving branch.",
+        err=True,
+    )
+
+
+def _report_split_ref_override(module: str, split_ref: str) -> None:
+    """Display the maintainer-only warning for an explicit split ref."""
+    click.secho(
+        f"⚠️  Using explicit split ref override for {module}: {split_ref}\n"
+        "   Maintainer/pre-seal use only; this bypasses the sealed core-version "
+        "tag and must not be treated as a published immutable release.",
+        fg="yellow",
+        bold=True,
+    )

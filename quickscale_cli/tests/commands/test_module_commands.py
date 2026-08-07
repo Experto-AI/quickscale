@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import click
 import pytest
 import yaml
+from contextlib import ExitStack
 
 from quickscale_cli.commands.module_config import (
     APPLY_MODULE_EXECUTION_MODE,
@@ -13,6 +14,7 @@ from quickscale_cli.commands.module_config import (
 )
 from quickscale_core.manifest.loader import ManifestError
 from quickscale_core.utils.git_utils import GitError
+
 
 from quickscale_cli.commands.module_commands import (
     _check_auth_module_migrations,
@@ -32,6 +34,19 @@ from quickscale_cli.commands.module_commands import (
     push,
     update,
 )
+
+
+@pytest.fixture(autouse=True)
+def _stub_default_split_tag_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep legacy embed tests hermetic; focused tag tests opt in explicitly."""
+    monkeypatch.setattr(
+        "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+        lambda remote, tag: True,
+    )
+    monkeypatch.setattr(
+        "quickscale_cli.commands.module_commands.resolve_remote_tag",
+        lambda remote, tag: "a" * 40,
+    )
 
 
 class TestValidateGitEnvironment:
@@ -276,9 +291,11 @@ class TestPerformModuleEmbed:
             "https://example.com/repo.git",
             "splits/auth-module",
             {},
+            source_ref="a" * 40,
         )
 
-        assert result == (True, None)
+        assert result[0] is True
+        assert result[1] is not None
         mock_subtree.assert_called_once()
         mock_add_module.assert_called_once_with(
             module_name="auth",
@@ -327,9 +344,11 @@ class TestPerformModuleEmbed:
                 "https://example.com/repo.git",
                 "splits/blog-module",
                 {"some": "config"},
+                source_ref="a" * 40,
             )
 
-        assert result == (True, None)
+        assert result[0] is True
+        assert result[1] is not None
         applier.assert_called_once_with(tmp_path, {"some": "config"})
         mock_sync_dependencies.assert_called_once_with(
             tmp_path,
@@ -363,6 +382,7 @@ class TestPerformModuleEmbed:
             "https://example.com/repo.git",
             "splits/listings-module",
             {},
+            source_ref="a" * 40,
         )
 
         assert result == (False, None)
@@ -385,6 +405,7 @@ class TestPerformModuleEmbed:
             "https://example.com/repo.git",
             "splits/auth-module",
             {},
+            source_ref="a" * 40,
         )
 
         assert result == (False, None)
@@ -434,6 +455,7 @@ class TestPerformModuleEmbed:
                 "https://example.com/repo.git",
                 "splits/blog-module",
                 {"enabled": True},
+                source_ref="a" * 40,
                 sync_dependencies=False,
                 install_dependencies=False,
                 execution_mode=APPLY_MODULE_EXECUTION_MODE,
@@ -527,6 +549,7 @@ class TestModuleVersionMismatchEnforcement:
                 "https://example.com/repo.git",
                 "splits/auth-module",
                 {},
+                source_ref="a" * 40,
                 sync_dependencies=True,
                 install_dependencies=True,
             )
@@ -572,6 +595,7 @@ class TestModuleVersionMismatchEnforcement:
                 "https://example.com/repo.git",
                 "splits/auth-module",
                 {},
+                source_ref="a" * 40,
                 sync_dependencies=True,
                 install_dependencies=True,
                 execution_mode=APPLY_MODULE_EXECUTION_MODE,
@@ -619,6 +643,7 @@ class TestModuleVersionMismatchEnforcement:
                 "https://example.com/repo.git",
                 "splits/auth-module",
                 {},
+                source_ref="a" * 40,
             )
 
         assert success is True
@@ -662,6 +687,7 @@ class TestModuleVersionMismatchEnforcement:
                 "https://example.com/repo.git",
                 "splits/auth-module",
                 {},
+                source_ref="a" * 40,
                 sync_dependencies=True,
                 install_dependencies=True,
             )
@@ -710,6 +736,7 @@ class TestModuleVersionMismatchEnforcement:
                 "https://example.com/repo.git",
                 "splits/auth-module",
                 {},
+                source_ref="a" * 40,
                 sync_dependencies=True,
                 install_dependencies=True,
                 execution_mode=APPLY_MODULE_EXECUTION_MODE,
@@ -949,6 +976,14 @@ class TestEmbedModule:
                 "quickscale_cli.commands.module_commands._validate_remote_branch",
                 return_value=True,
             ),
+            patch(
+                "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_tag",
+                return_value="a" * 40,
+            ),
             patch("quickscale_cli.commands.module_commands.run_git_subtree_add"),
             patch("quickscale_cli.commands.module_commands.add_module"),
             patch(
@@ -994,7 +1029,17 @@ class TestEmbedModule:
         mock_remote.return_value = True
         mock_perform.return_value = (True, None)
 
-        result = embed_module("billing", tmp_path)
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.resolve_remote_tag",
+                return_value="a" * 40,
+            ),
+        ):
+            result = embed_module("billing", tmp_path)
         captured = capsys.readouterr()
 
         assert result is True
@@ -1002,7 +1047,7 @@ class TestEmbedModule:
         assert (
             "Billing remains excluded from public quickscale embed" not in captured.err
         )
-        mock_remote.assert_called_once()
+        mock_remote.assert_not_called()
         mock_perform.assert_called_once()
 
     @patch("quickscale_cli.commands.module_commands._perform_module_embed")
@@ -1214,7 +1259,7 @@ class TestEmbedModule:
         assert result is True
         configurator.assert_called_once_with(non_interactive=True)
 
-    @patch("quickscale_cli.commands.module_commands.resolve_remote_ref")
+    @patch("quickscale_cli.commands.module_commands.resolve_remote_tag")
     @patch("quickscale_cli.commands.module_commands._perform_module_embed")
     @patch("quickscale_cli.commands.module_commands._check_auth_module_migrations")
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
@@ -1245,6 +1290,7 @@ class TestEmbedModule:
             tracking_branch="splits/auth-module",
             source_ref=resolved_sha,
             installed_version="0.87.0",
+            selected_ref="splits/auth-module/0.87.0",
         )
         mock_perform.return_value = (True, expected_provenance)
 
@@ -1258,10 +1304,10 @@ class TestEmbedModule:
         )
 
         assert result is True
-        # source_ref resolved exactly once after branch validation
+        # source_ref resolved exactly once after immutable tag validation
         mock_resolve.assert_called_once_with(
             "https://github.com/Experto-AI/quickscale.git",
-            "splits/auth-module",
+            "splits/auth-module/0.87.0",
         )
         # resolved SHA forwarded to _perform_module_embed for subtree add
         mock_perform.assert_called_once()
@@ -1271,13 +1317,13 @@ class TestEmbedModule:
         assert sink[0].source_ref == resolved_sha
         assert sink[0].tracking_branch == "splits/auth-module"
 
-    @patch("quickscale_cli.commands.module_commands.resolve_remote_ref")
+    @patch("quickscale_cli.commands.module_commands.resolve_remote_tag")
     @patch("quickscale_cli.commands.module_commands._perform_module_embed")
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
     @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
     @patch("quickscale_cli.commands.module_commands._validate_git_environment")
     @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
-    def test_standalone_embed_does_not_resolve_source_ref(
+    def test_standalone_embed_resolves_selected_tag_to_sha(
         self,
         mock_git_env,
         mock_not_exists,
@@ -1286,11 +1332,13 @@ class TestEmbedModule:
         mock_resolve,
         tmp_path,
     ):
-        """Standalone embeds must not resolve source_ref (Phase 1 scope)."""
+        """Standalone embeds resolve the immutable tag just like apply."""
         mock_git_env.return_value = True
         mock_not_exists.return_value = True
         mock_remote.return_value = True
         mock_perform.return_value = (True, None)
+        resolved_sha = "b" * 40
+        mock_resolve.return_value = resolved_sha
 
         result = embed_module(
             "auth",
@@ -1300,9 +1348,197 @@ class TestEmbedModule:
         )
 
         assert result is True
+        mock_resolve.assert_called_once_with(
+            "https://github.com/Experto-AI/quickscale.git",
+            "splits/auth-module/0.87.0",
+        )
+        assert mock_perform.call_args.kwargs["source_ref"] == resolved_sha
+
+
+class TestSA136cEmbedRefSelection:
+    """Default immutable-tag and explicit override embed regressions."""
+
+    def _patch_validations(self) -> tuple[object, ...]:
+        return (
+            patch(
+                "quickscale_cli.commands.module_commands._validate_embed_theme",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._validate_git_environment",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands._validate_module_not_exists",
+                return_value=True,
+            ),
+        )
+
+    def test_default_tag_is_checked_and_peeled_sha_is_forwarded(self, tmp_path):
+        with ExitStack() as stack:
+            for validation in self._patch_validations():
+                stack.enter_context(validation)
+            stack.enter_context(
+                patch(
+                    "quickscale_cli.commands.module_commands.quickscale_version",
+                    "0.91.2",
+                )
+            )
+            mock_tag = stack.enter_context(
+                patch(
+                    "quickscale_cli.commands.module_commands.resolve_split_tag",
+                    return_value="splits/auth-module/0.91.2",
+                )
+            )
+            mock_exists = stack.enter_context(
+                patch(
+                    "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+                    return_value=True,
+                )
+            )
+            mock_resolve = stack.enter_context(
+                patch(
+                    "quickscale_cli.commands.module_commands.resolve_remote_tag",
+                    return_value="b" * 40,
+                )
+            )
+            mock_perform = stack.enter_context(
+                patch(
+                    "quickscale_cli.commands.module_commands._perform_module_embed",
+                    return_value=(True, None),
+                )
+            )
+            assert (
+                embed_module(
+                    "auth",
+                    tmp_path,
+                    sync_dependencies=False,
+                    install_dependencies=False,
+                    skip_auth_migration_check=True,
+                )
+                is True
+            )
+
+        mock_tag.assert_called_once_with("auth", "0.91.2")
+        mock_exists.assert_called_once_with(
+            "https://github.com/Experto-AI/quickscale.git",
+            "splits/auth-module/0.91.2",
+        )
+        mock_resolve.assert_called_once_with(
+            "https://github.com/Experto-AI/quickscale.git",
+            "splits/auth-module/0.91.2",
+        )
+        assert mock_perform.call_args.kwargs["source_ref"] == "b" * 40
+
+    def test_missing_default_tag_stops_before_resolve_or_embed(self, tmp_path):
+        with ExitStack() as stack:
+            for validation in self._patch_validations():
+                stack.enter_context(validation)
+            stack.enter_context(
+                patch(
+                    "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+                    return_value=False,
+                )
+            )
+            mock_resolve = stack.enter_context(
+                patch("quickscale_cli.commands.module_commands.resolve_remote_tag")
+            )
+            mock_perform = stack.enter_context(
+                patch("quickscale_cli.commands.module_commands._perform_module_embed")
+            )
+            assert (
+                embed_module("auth", tmp_path, skip_auth_migration_check=True) is False
+            )
+
         mock_resolve.assert_not_called()
-        # No source_ref forwarded in standalone mode
-        assert mock_perform.call_args.kwargs.get("source_ref") is None
+        mock_perform.assert_not_called()
+
+    def test_explicit_override_bypasses_default_tag_and_tracks_override(
+        self, tmp_path, capsys
+    ):
+        with ExitStack() as stack:
+            for validation in self._patch_validations():
+                stack.enter_context(validation)
+            mock_exists = stack.enter_context(
+                patch("quickscale_cli.commands.module_commands.check_remote_tag_exists")
+            )
+            mock_tag = stack.enter_context(
+                patch("quickscale_cli.commands.module_commands.resolve_remote_tag")
+            )
+            mock_resolve = stack.enter_context(
+                patch(
+                    "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                    return_value="c" * 40,
+                )
+            )
+            mock_perform = stack.enter_context(
+                patch(
+                    "quickscale_cli.commands.module_commands._perform_module_embed",
+                    return_value=(True, None),
+                )
+            )
+            assert (
+                embed_module(
+                    "auth",
+                    tmp_path,
+                    split_ref="feature/preseal-auth",
+                    sync_dependencies=False,
+                    install_dependencies=False,
+                    skip_auth_migration_check=True,
+                )
+                is True
+            )
+
+        mock_exists.assert_not_called()
+        mock_tag.assert_not_called()
+        mock_resolve.assert_called_once_with(
+            "https://github.com/Experto-AI/quickscale.git",
+            "feature/preseal-auth",
+        )
+        assert mock_perform.call_args.args[3] == "feature/preseal-auth"
+        assert mock_perform.call_args.kwargs["selected_ref"] == "feature/preseal-auth"
+        assert "Maintainer/pre-seal" in capsys.readouterr().out
+
+    def test_explicit_override_resolution_failure_does_not_fallback_or_embed(
+        self, tmp_path
+    ):
+        """Override resolution failure must not fall back to the sealed tag."""
+        with ExitStack() as stack:
+            for validation in self._patch_validations():
+                stack.enter_context(validation)
+            mock_exists = stack.enter_context(
+                patch("quickscale_cli.commands.module_commands.check_remote_tag_exists")
+            )
+            mock_default_resolve = stack.enter_context(
+                patch("quickscale_cli.commands.module_commands.resolve_remote_tag")
+            )
+            mock_override_resolve = stack.enter_context(
+                patch(
+                    "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                    side_effect=GitError("override ref unavailable"),
+                )
+            )
+            mock_perform = stack.enter_context(
+                patch("quickscale_cli.commands.module_commands._perform_module_embed")
+            )
+
+            result = embed_module(
+                "auth",
+                tmp_path,
+                split_ref="feature/preseal-auth",
+                sync_dependencies=False,
+                install_dependencies=False,
+                skip_auth_migration_check=True,
+            )
+
+        assert result is False
+        mock_override_resolve.assert_called_once_with(
+            "https://github.com/Experto-AI/quickscale.git",
+            "feature/preseal-auth",
+        )
+        mock_exists.assert_not_called()
+        mock_default_resolve.assert_not_called()
+        mock_perform.assert_not_called()
 
 
 class TestValidateUpdateEnvironment:

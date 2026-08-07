@@ -128,8 +128,11 @@ from quickscale_core.utils.theme_validation import (
     validate_theme_preflight,
 )
 from quickscale_core.utils.git_utils import (
+    GitError,
     is_working_directory_clean,
     resolve_remote_ref,
+    validate_module_name,
+    validate_tag_name,
 )
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest import ModuleManifest
@@ -473,26 +476,102 @@ def _git_commit(project_path: Path, message: str) -> bool:
     )
 
 
+def _parse_split_ref_overrides(split_refs: tuple[str, ...]) -> dict[str, str]:
+    """Parse repeatable ``MODULE=REF`` values without lossy normalization."""
+    parsed: dict[str, str] = {}
+    seen_modules: set[str] = set()
+    for raw_value in split_refs:
+        module_name, separator, split_ref = raw_value.partition("=")
+        if not separator:
+            raise click.BadParameter(
+                f"invalid --split-ref value {raw_value!r}: expected MODULE=REF",
+                param_hint="--split-ref",
+            )
+        try:
+            validate_module_name(module_name)
+            validate_tag_name(split_ref)
+        except GitError as error:
+            raise click.BadParameter(
+                f"invalid --split-ref value {raw_value!r}: {error}",
+                param_hint="--split-ref",
+            ) from error
+        if module_name in seen_modules:
+            raise click.BadParameter(
+                f"duplicate module {module_name!r} in --split-ref value {raw_value!r}",
+                param_hint="--split-ref",
+            )
+        seen_modules.add(module_name)
+        parsed[module_name] = split_ref
+    return parsed
+
+
+def _module_names_to_embed(ctx: ApplyContext) -> set[str]:
+    """Return the exact module target set for this apply pass."""
+    if ctx.existing_state is None:
+        return set(ctx.qs_config.modules.keys())
+    return set(ctx.delta.modules_to_add)
+
+
+def _validate_split_ref_override_coverage(
+    ctx: ApplyContext,
+    split_ref_overrides: Mapping[str, str] | None,
+    *,
+    no_modules: bool,
+) -> None:
+    """Require explicit overrides to cover exactly the modules being added."""
+    overrides = split_ref_overrides or {}
+    if not overrides:
+        return
+    if no_modules:
+        raise click.UsageError("--split-ref cannot be combined with --no-modules")
+
+    target_modules = _module_names_to_embed(ctx)
+    if not target_modules:
+        raise click.UsageError(
+            "--split-ref cannot be used when this apply has no modules to embed"
+        )
+
+    unknown = sorted(set(overrides) - target_modules)
+    missing = sorted(target_modules - set(overrides))
+    if unknown or missing:
+        details: list[str] = []
+        if unknown:
+            details.append("unknown modules: " + ", ".join(unknown))
+        if missing:
+            details.append("missing modules: " + ", ".join(missing))
+        raise click.UsageError(
+            "--split-ref mappings must cover exactly the modules being embedded ("
+            + "; ".join(details)
+            + ")"
+        )
+
+
 def _embed_module(
     project_path: Path,
     module_name: str,
     skip_auth_migration_check: bool = False,
     provenance_sink: list[ModuleEmbedProvenance] | None = None,
+    split_ref: str | None = None,
 ) -> bool:
     """Embed a module using the embed_module function with non-interactive mode"""
     click.echo(f"⏳ Embedding module: {module_name}...")
 
     try:
+        embed_kwargs: dict[str, Any] = {
+            "module": module_name,
+            "project_path": project_path,
+            "non_interactive": True,
+            "allow_unverifiable_auth_state": True,
+            "skip_auth_migration_check": skip_auth_migration_check,
+            "sync_dependencies": False,
+            "install_dependencies": False,
+            "execution_mode": APPLY_MODULE_EXECUTION_MODE,
+            "provenance_sink": provenance_sink,
+        }
+        if split_ref is not None:
+            embed_kwargs["split_ref"] = split_ref
         success = embed_module(
-            module=module_name,
-            project_path=project_path,
-            non_interactive=True,
-            allow_unverifiable_auth_state=True,
-            skip_auth_migration_check=skip_auth_migration_check,
-            sync_dependencies=False,
-            install_dependencies=False,
-            execution_mode=APPLY_MODULE_EXECUTION_MODE,
-            provenance_sink=provenance_sink,
+            **embed_kwargs,
         )
 
         if success:
@@ -2093,6 +2172,7 @@ def _embed_modules_step(
     modules_to_embed: list[str],
     no_modules: bool,
     existing_state: QuickScaleState | None,
+    split_ref_overrides: Mapping[str, str] | None = None,
 ) -> EmbedModulesResult:
     """Thin wrapper delegating to core step body (AF6 Phase 2)."""
     if no_modules or not modules_to_embed:
@@ -2105,11 +2185,32 @@ def _embed_modules_step(
         existing_state=existing_state,
     )
 
+    overrides = split_ref_overrides or {}
+
+    def _embed_one_module(
+        path: Path,
+        module_name: str,
+        *,
+        skip_auth_migration_check: bool,
+        provenance_sink: list[ModuleEmbedProvenance] | None,
+    ) -> bool:
+        embed_kwargs: dict[str, Any] = {
+            "skip_auth_migration_check": skip_auth_migration_check,
+            "provenance_sink": provenance_sink,
+        }
+        if module_name in overrides:
+            embed_kwargs["split_ref"] = overrides[module_name]
+        return _embed_module(
+            path,
+            module_name,
+            **embed_kwargs,
+        )
+
     outcome = step_embed_modules(
         step_ctx,
         modules_to_embed=modules_to_embed,
         no_modules=no_modules,
-        embed_one_module=_embed_module,
+        embed_one_module=_embed_one_module,
         commit_changes=_git_commit,
         is_working_directory_clean_fn=is_working_directory_clean,
     )
@@ -3161,6 +3262,7 @@ def _execute_apply_steps(
     no_docker: bool,
     no_modules: bool,
     verbose_docker: bool = False,
+    split_ref_overrides: Mapping[str, str] | None = None,
 ) -> None:
     """Execute the apply steps after confirmation."""
     click.echo("\n" + "=" * 50)
@@ -3200,6 +3302,11 @@ def _execute_apply_steps(
         # the lock so that planning uses fresh state, not a stale snapshot
         # taken before the lock was held.
         _refresh_context_after_lock(ctx)
+        _validate_split_ref_override_coverage(
+            ctx,
+            split_ref_overrides,
+            no_modules=no_modules,
+        )
 
         # Phase 3: Attempt bounded provenance repair before no-op detection
         _attempt_provenance_repair_if_needed(ctx)
@@ -3222,6 +3329,7 @@ def _execute_apply_steps(
             verbose_docker,
             project_generated=project_generated,
             has_pending_post_embed_recovery=has_pending_post_embed_recovery,
+            split_ref_overrides=split_ref_overrides,
         )
     finally:
         lock.release()
@@ -3236,6 +3344,7 @@ def _execute_apply_steps_locked(
     *,
     project_generated: bool = False,
     has_pending_post_embed_recovery: bool = False,
+    split_ref_overrides: Mapping[str, str] | None = None,
 ) -> None:
     """Execute the apply steps while holding the advisory lock.
 
@@ -3315,9 +3424,21 @@ def _execute_apply_steps_locked(
     if ctx.existing_state is not None and modules_to_embed:
         _commit_pending_config_changes(ctx.output_path)
 
-    embed_result = _embed_modules_step(
-        ctx.output_path, modules_to_embed, no_modules, ctx.existing_state
-    )
+    if split_ref_overrides:
+        embed_result = _embed_modules_step(
+            ctx.output_path,
+            modules_to_embed,
+            no_modules,
+            ctx.existing_state,
+            split_ref_overrides,
+        )
+    else:
+        embed_result = _embed_modules_step(
+            ctx.output_path,
+            modules_to_embed,
+            no_modules,
+            ctx.existing_state,
+        )
     embedded_modules = embed_result.embedded_modules
     provenance_payloads = embed_result.provenance_payloads
 
@@ -3745,12 +3866,24 @@ def _resolve_apply_preflight(config_path: Path) -> Path:
     help="Skip module embedding",
 )
 @click.option(
+    "--split-ref",
+    "split_refs",
+    metavar="MODULE=REF",
+    multiple=True,
+    help="Use an explicit split ref for each module being embedded (repeatable).",
+)
+@click.option(
     "--verbose-docker",
     is_flag=True,
     help="Show Docker build output (useful for debugging build issues)",
 )
 def apply(
-    config: str, force: bool, no_docker: bool, no_modules: bool, verbose_docker: bool
+    config: str,
+    force: bool,
+    no_docker: bool,
+    no_modules: bool,
+    split_refs: tuple[str, ...],
+    verbose_docker: bool,
 ) -> None:
     """
     Execute project configuration from quickscale.yml.
@@ -3792,11 +3925,17 @@ def apply(
       15. Finalize authoritative state
       16. Display next steps
     """
+    split_ref_overrides = _parse_split_ref_overrides(split_refs)
     config_path = Path(config)
     _resolve_apply_preflight(config_path)
 
     # Prepare context
     ctx = _prepare_apply_context(config_path)
+    _validate_split_ref_override_coverage(
+        ctx,
+        split_ref_overrides,
+        no_modules=no_modules,
+    )
 
     # Display configuration summary
     _display_config_summary(ctx.qs_config)
@@ -3824,4 +3963,11 @@ def apply(
     )
 
     # Execute apply steps
-    _execute_apply_steps(ctx, force, no_docker, no_modules, show_docker_output)
+    _execute_apply_steps(
+        ctx,
+        force,
+        no_docker,
+        no_modules,
+        show_docker_output,
+        split_ref_overrides,
+    )
