@@ -58,10 +58,10 @@ Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../.
 ```
 Track 1 (governance)                  Track 2 (CLOSED to new work)  Track 3 → release (CRITICAL PATH)
 ─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
-SA136e ▶ code landed, review open   SA115 (e2e xdist; deps: none)  SA136d ▶ (head)
-  │  feeds SA136f (critical path)     │  validation AUTHORIZED       │
-  ▼                                   │  cannot finish → SA112d      ▼
-SA122b-4 ▶ (publish membership)       │  cannot merge  → SA112e     SA136f ◄── needs SA136e
+SA122b-4 ▶ (publish membership)      SA115 (e2e xdist; deps: none)  SA136d ▶ (head)
+  ▲ SA136e ✓ (closed; feeds SA136f)   │  validation AUTHORIZED       │
+  │                                   │  cannot finish → SA112d      ▼
+  │                                   │  cannot merge  → SA112e     SA136f ◄── SA136e ✓
   ▼                                   │                              │
 SA122b-5                              │                              ▼
   │  registry consumers: e2e paths    │                          SA117e-4 → -5
@@ -77,28 +77,27 @@ SA122b-5                              │                              ▼
                                                                    (human-only; hold until SA112f)
 ```
 
-**Critical path:** `SA136d → SA136f → SA117e-4 → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH` — nine remaining legs. SA136e is **not** on the longest chain but it *feeds* it: SA136f declares `deps: SA136a–SA136e`, so the umbrella cannot reach `-f` until `-e` closes. Hosting SA136e on Track 1 keeps it off the chain — left on Track 3 it could only run before or after SA136d under the one-child-at-a-time rule, adding a whole child to the longest chain. **SA117e-5 is closeout and sits *off* the critical path**: SA112b's precondition is the *sealed* splits delivered by SA117e-4, not the umbrella's closure. Track 2 and `SA122b-4…5` are entirely off-path filler. The green-gate milestone is governed by the four-command join below and is not claimed here.
+**Critical path:** `SA136d → SA136f → SA117e-4 → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH` — nine remaining legs. SA136e is **closed** and was never on the longest chain, but it fed the umbrella: SA136f declares `deps: SA136a–SA136e`, so that dependency is now satisfied while SA136f still waits on the remaining SA136 children. Hosting SA136e on Track 1 kept it off the chain — left on Track 3 it could only run before or after SA136d under the one-child-at-a-time rule, adding a whole child to the longest chain. **SA117e-5 is closeout and sits *off* the critical path**: SA112b's precondition is the *sealed* splits delivered by SA117e-4, not the umbrella's closure. Track 2 and `SA122b-4…5` are entirely off-path filler. The green-gate milestone is governed by the four-command join below and is not claimed here.
 
-**Cross-track edges — two merge-order edges plus one in-track serialization.** SA122b-5 merges after SA112e, and SA115 merges after SA112; both share `.github/workflows/e2e.yml`'s `pull_request.paths` list. SA136e and SA122b-4 both write `.github/workflows/publish.yml`; homing both on Track 1 makes that co-write ordinary in-track serialization (SA136e first) rather than a cross-track merge hazard. No other cross-track edge exists.
+**Cross-track edges — two merge-order edges plus one in-track serialization.** SA122b-5 merges after SA112e, and SA115 merges after SA112; both share `.github/workflows/e2e.yml`'s `pull_request.paths` list. SA136e and SA122b-4 both wrote `.github/workflows/publish.yml`; homing both on Track 1 made that co-write ordinary in-track serialization (SA136e first) rather than a cross-track merge hazard. No other cross-track edge exists.
 
 **Track readiness — three independent states.** A track is *truly green* only when all three are yes.
 
 | Track (head) | Can start | Can finish | Can merge | Truly green | On critical path |
 |---|---|---|---|---|---|
 | **Track 3** — SA136d | **yes** — every dependency is closed; no open decision | **yes** — the seal machinery is locally implementable and reversible before publication | **yes** — no merge-order gate | ✅ **yes** | ✅ **yes** |
-| **Track 1** — SA136e | **yes** — the executable delta is already merged; what remains is one review round | **yes** — `F-001`'s evidence is now collectible locally (the test lives in the mandatory Core unit tree); no upstream dependency | **yes** — no merge-order gate; the `publish.yml` co-write with SA122b-4 is serialized in-track | ✅ **yes** | **feeds it** — SA136f cannot start until SA136e closes |
-| **Track 1** — SA122b-4 (after SA136e) | **no** — **hard dep** on SA136e, by the serial-handoff rule only; its own prerequisites (SA122b-3, SA128) are closed | **yes** — no hard upstream dependency or open decision | **yes** — no merge-order gate | no (start-gated only) | no — off the critical path (filler) |
+| **Track 1** — SA122b-4 (head after SA136e) | **yes** — SA136e is closed and its own prerequisites (SA122b-3, SA128) are closed; the former serial-handoff gate is discharged | **yes** — no hard upstream dependency or open decision | **yes** — no merge-order gate; the `publish.yml` co-write with the closed SA136e delta is now historical | ✅ **yes** | no — off the critical path (filler) |
 | **Track 2** — SA115 | yes (validation authorized; yields infra to Track 3) | **no** — **hard dep** on SA112d | **no** — **hard dep** on SA112e | no | no — filler |
 | **Track 2** — *if SA115 is split* (proposal, [see Track 2](#track-2--e2e-parallelization)) | yes | **yes** for SA115a | **yes** for SA115a | ✅ yes for SA115a | no — still filler, but mergeable filler |
 
-**Truly green today: SA136d (Track 3) and SA136e (Track 1) — both on or feeding the critical path, so neither is filler.** Track 3 is unblocked at **SA136d**; Track 1's **SA136e** has its code merged and needs only a fresh full-scope review to clear `F-001`/`F-002`. SA122b-4 is off-path filler start-gated behind SA136e by the serial-handoff rule — a soft, self-clearing gate, not an upstream dependency. Track 2's two "no"s are **hard upstream dependencies** that only SA112d/SA112e can clear, unless the maintainer splits SA115 ([decision 1](#track-topology--settled)).
+**Truly green today: SA136d (Track 3) and SA122b-4 (Track 1) — the former is on the critical path and the latter is off-path filler.** SA136e is closed; its former Track 1 serial-handoff gate is discharged, and its completion evidence and review outcome are recorded below and in [CHANGELOG.md](../../CHANGELOG.md). Track 3 is unblocked at **SA136d**. Track 2's two "no"s are **hard upstream dependencies** that only SA112d/SA112e can clear, unless the maintainer splits SA115 ([decision 1](#track-topology--settled)).
 
 **Infra serialization (not a track constraint).** SA112's and SA115's e2e lanes, SA117e-4's `apply` verification, and any `make ci`/`make ci-e2e` rerun all need the same PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL` knobs namespace lanes *within* one invocation, not across worktrees — **only one track exercises PG/Docker at a time, and Track 3 has priority.** Abandon or restart an SA115 run rather than make a critical-path leg queue behind it.
 
 **Shared executable surfaces.** Only two files have more than one open-ticket writer, and both are serialized:
 
 - **`.github/workflows/e2e.yml`** (path list) — SA112e, SA115, SA122b-5; serialized by the merge bounds above. SA112e only *names* the merged provisioning scripts in the trigger list; it never edits them.
-- **`.github/workflows/publish.yml`** — SA136e (trigger comment, already merged) then SA122b-4 (the five gates), both on Track 1, serialized by the one-child-at-a-time rule.
+- **`.github/workflows/publish.yml`** — the closed SA136e trigger comment preceded SA122b-4's five gates; both were on Track 1 and serialized by the one-child-at-a-time rule.
 
 Single-writer or unowned: `scripts/publish_module.py` (SA136d alone), `docs/technical/decisions.md` (SA136f then SA117e-5, in-track). `module_commands.py`, `module_output.py`, `apply_command.py`, `git_utils.py`, `scripts/check_sa117_scope.py`, `scripts/version_tool.sh`, `scripts/quality_waivers.json`, `scripts/quality_baseline.json`, and `test_e2e_full_workflow.py` have no open v87 writer. No additional procedure is required.
 
@@ -106,7 +105,7 @@ Single-writer or unowned: `scripts/publish_module.py` (SA136d alone), `docs/tech
 
 ## Track 3 — Core/CLI plumbing, release path
 
-**Status:** on the critical path and **unblocked**. **Head: SA136d** (add the seal phase and Make targets) — all its dependencies are closed and no decision blocks it. The sibling SA136e executes on **Track 1** so it does not consume Track 3's serial slot; SA136f needs both. SA112b's provisioning precondition is already satisfied; its split-publication precondition waits on SA117e-4, which waits on SA136.
+**Status:** on the critical path and **unblocked**. **Head: SA136d** (add the seal phase and Make targets) — all its dependencies are closed and no decision blocks it. SA136e executed and closed on **Track 1**, so it did not consume Track 3's serial slot; SA136f still needs the complete SA136a–e set. SA112b's provisioning precondition is already satisfied; its split-publication precondition waits on SA117e-4, which waits on SA136.
 
 **Standing order constraints.** Do not seal or push splits before SA136 closes and SA117e-4's human gate is satisfied, do not start SA112b until SA117e-4 has merged, and do not treat anything as release-ready until SA117e closes at `-5`. The loop/seal contract is ratified (recorded in [CHANGELOG.md](../../CHANGELOG.md)) and becomes normative in `decisions.md` at SA136f.
 
@@ -129,7 +128,7 @@ Published splits are consumed from a **moving branch** (`module_commands.py:657`
 **Two landmines every child inherits.**
 
 - `.github/workflows/publish.yml` triggers on pushed tags matching `[0-9]*` or `v[0-9]*` and runs OIDC PyPI publishing. **Pushing a tag named `0.87.0` auto-publishes.** Split tags are namespaced under `splits/` precisely so they cannot match, and **`git push --tags` must never be run** — it would sweep the local core tag and publish. Every tag push is an explicit single refspec.
-- `.github/workflows/split-modules.yml` triggers on `v*` and force-pushes only 3 of 12 modules with bare `git push --force`, bypassing the `--force-with-lease` invariant established at `git_utils.py:663-668`. It is the sole origin of the stale `splits/teams-module` branch. SA136e retires it.
+- `.github/workflows/split-modules.yml` triggers on `v*` and force-pushes only 3 of 12 modules with bare `git push --force`, bypassing the `--force-with-lease` invariant established at `git_utils.py:663-668`. It was the sole origin of the stale `splits/teams-module` branch; SA136e retired it.
 
 `is_release_authoritative` (`git_utils.py:760+`) checks only for a tag at **local HEAD** and never contacts the remote, so the core tag is created locally, gates the whole loop+seal cycle green, and is pushed last. `_check_release_authoritative` (`scripts/publish_module.py:160-187`) needs no change.
 
@@ -146,16 +145,14 @@ Published splits are consumed from a **moving branch** (`module_commands.py:657`
     - Verify: sealing an unchanged tree reuses the prior version's commit so one commit carries both tags; sealing twice is a no-op; sealing over a tag that points elsewhere fails closed; `make seal-status VERSION=…` reports per-module sealed state.
     *(why →* the seal is what converts a mutable branch into the immutable artifact a release consumes*)*
 
-  - [ ] **SA136e — Retire `split-modules.yml` and gate the publish trigger.** `Tier 1 · deps: none` — **executes on Track 1**; **code merged at `805e604c`, awaiting one review round**
+  - [x] **SA136e — Retire `split-modules.yml` and gate the publish trigger.** `Tier 1 · deps: none` — **closed on Track 1 after DC-114 `STATUS: ok`**
     Delete `.github/workflows/split-modules.yml`. Add a conformance test that parses `publish.yml`'s trigger globs and `fnmatch`es a representative split tag against each, requiring no match, so a future glob widening fails CI instead of silently cutting twelve spurious PyPI releases. Add a comment at the `publish.yml` trigger recording why split tags are namespaced under `splits/`.
     - Allowlist: `.github/workflows/split-modules.yml` (deletion), `.github/workflows/publish.yml` (comment only), one new test file.
-    - **Ordering with SA122b-4.** Both children write `.github/workflows/publish.yml` (SA136e a trigger comment, SA122b-4 the five gates). Homing both on Track 1 serializes them under the one-child-at-a-time rule. SA136e runs **first** because it is Tier 1 and feeds the critical path; SA122b-4 then syncs and re-derives.
+    - **Ordering with SA122b-4.** Both children wrote `.github/workflows/publish.yml` (SA136e a trigger comment, SA122b-4 the five gates). Homing both on Track 1 serialized them under the one-child-at-a-time rule. SA136e ran **first** because it was Tier 1 and fed the critical path; SA122b-4 then synced and re-derived.
     - Verify: the workflow file is gone; the new test fails when the trigger glob is widened to `*`; `publish.yml`'s job graph is otherwise byte-unchanged.
 
-    **Remaining work (the delta is merged; the box is unchecked because two findings are unapproved, not because code is missing).**
-    - `F-001` (**medium**, test-gap) — a *mandatory* entrypoint must collect `quickscale_core/tests/test_publish_trigger.py`, with a `*`-widened trigger as negative control making that entrypoint exit nonzero. The file now sits in the Core unit tree that `make test-unit` collects (`Makefile:354-358`), so the evidence is producible locally in one run; what is missing is captured output and an independent `STATUS: ok`.
-    - `F-002` (**medium**, consistency) — the SA122b prerequisite prose was corrected mechanically after the capped review; it needs confirming in the same round, not re-fixing.
-    - Nothing here is a decision or an upstream dependency: one full-scope review round closes the child.
+    **Completion evidence (2026-08-07).** `make test-unit` passed with Core **2,693 passed / 1 skipped** and CLI **2,060 passed**; mandatory collection included `quickscale_core/tests/test_publish_trigger.py` (four tests). The widened-`*` trigger negative control exited **2** with two expected failures. Core lint/typecheck and `git diff --check` passed, and DC-114's full-scope review returned **`STATUS: ok`** at `b937dbc2979ef59b1b33fac394b049bd607d0a4d`, resolving `F-001` and `F-002`.
+    **Advisory findings retained for closeout.** `F-003` (**medium**, consistency) remains advisory debt owned by SA136f/documentation reconciliation. `F-004` (**low**, consistency) remains pending confirmation by the closeout review; the affected prose now describes a serial-handoff start gate, not an upstream dependency. Neither finding is a release claim or a waiver, and the SA136 umbrella remains open.
     *(why →* a `v*`-triggered bare-force push of 3 of 12 modules is a live hazard during exactly the release this umbrella enables*)*
 
   - [ ] **SA136f — Ratify the loop/seal contract in `decisions.md` and close SA119.** `Tier 1 · deps: SA136a–SA136e` — documentation only
@@ -299,7 +296,7 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** queue is **[SA136e](#sa136--tag-sealed-split-publication) → SA122b-4 → SA122b-5**. SA136e is hosted here so it runs in parallel with Track 3's SA136d; it is the only Track 1 item that feeds the critical path, and its code is merged pending one review round. The SA122b chain is off-path filler, and only SA122b-5 is merge-gated behind SA112e. The SA128 parity checker is authoritative.
+**Status:** queue is **[SA122b-4](#sa122--release-assurance-is-four-hand-synchronized-gate-inventories-arch-finding-11) → SA122b-5**, with SA122b-4 as head. SA136e is closed; it was hosted here so it could run in parallel with Track 3's SA136d, and its completion now feeds the still-open SA136f dependency set. The SA122b chain is off-path filler, and only SA122b-5 is merge-gated behind SA112e. The SA128 parity checker is authoritative.
 
 ### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
 
@@ -309,7 +306,7 @@ Required release properties have no authoritative topology. The five repository 
 
 - [ ] **SA122b — Migrate the consumers onto the registry.** `Umbrella · deps: SA128 ✓ closed`
 
-  Make each context derive its inventory from the registry instead of restating it, then make the SA128 parity checker **blocking** in CI once every context derives. Every child inherits: the registry and its schema are an **input, not scope** — a child needing a schema change stops and escalates rather than editing it; the SA128 checker is the authoritative oracle, so no child may add tolerance or exception logic to make a context read green. SA122b-4's SA122b-3 and SA128 prerequisites are satisfied, but Track 1's serial handoff still blocks it until SA136e closes.
+  Make each context derive its inventory from the registry instead of restating it, then make the SA128 parity checker **blocking** in CI once every context derives. Every child inherits: the registry and its schema are an **input, not scope** — a child needing a schema change stops and escalates rather than editing it; the SA128 checker is the authoritative oracle, so no child may add tolerance or exception logic to make a context read green. SA122b-4's SA122b-3 and SA128 prerequisites are satisfied, and SA136e is closed, so the former Track 1 serial-handoff start gate is discharged; it was not an upstream dependency.
 
   | Open child | Consumer context | Executable surface | Tier |
   |---|---|---|---|
@@ -358,8 +355,8 @@ Every open v87 ticket carries a track. Track 2 stays closed to new work by stand
 
 **Standing placements.**
 
-- **Track 1's queue is SA136e → SA122b-4 → SA122b-5**, head at SA136e. Only SA122b-5 carries a merge bound. **Conflict surface:** SA136e and SA122b-4 both write `.github/workflows/publish.yml`; co-hosting them on one track serializes that write under the serial-handoff rule. Beyond that, only the shared closeout files (`CHANGELOG.md`, this roadmap, `decisions.md` at SA136f) are touched, and the mandatory `git merge v87`-before-merge-back step in [Parallel execution tracks](#parallel-execution-tracks) covers them — keep both tracks' entries when resolving.
-- **SA136 is homed on Track 3 as a sibling umbrella, not folded into SA117e-4.** The machinery is production CLI/publish code, a different risk class from the push ceremony; folding it in would make `-4` Tier 3 — the sizing violation that forced the SA117e split. SA136e stays a child of this umbrella for acceptance purposes while **executing on Track 1**; an umbrella's children are not required to share one worktree.
+- **Track 1's queue is SA122b-4 → SA122b-5**, head at SA122b-4. Only SA122b-5 carries a merge bound. **Conflict surface:** SA136e and SA122b-4 both wrote `.github/workflows/publish.yml`; that co-write was serialized under the serial-handoff rule and is now closed. Beyond that, only the shared closeout files (`CHANGELOG.md`, this roadmap, `decisions.md` at SA136f) are touched, and the mandatory `git merge v87`-before-merge-back step in [Parallel execution tracks](#parallel-execution-tracks) covers them — keep both tracks' entries when resolving.
+- **SA136 is homed on Track 3 as a sibling umbrella, not folded into SA117e-4.** The machinery is production CLI/publish code, a different risk class from the push ceremony; folding it in would make `-4` Tier 3 — the sizing violation that forced the SA117e split. SA136e was a child of this umbrella for acceptance purposes and executed on Track 1; it is now closed, while the umbrella's remaining children continue on Track 3.
 - **SA136f stays on Track 3** despite being documentation-only and on the critical path: it declares `deps: SA136a–SA136e`, which includes SA136d, so moving it to Track 1 would buy no parallelism and would split the umbrella's closeout away from the seal machinery it must describe.
 - **SA112b–f stay serial on Track 3.** Each child consumes the previous child's evidence (`-c` may act only on `-b`'s traceback), so they are one coherent review unit, not parallelizable work.
 - **SA117e-5 sits off the critical path** — SA112b's precondition is SA117e-**4**, not the umbrella's closure.
