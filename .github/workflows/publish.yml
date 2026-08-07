@@ -118,6 +118,26 @@ jobs:
         run: |
           poetry install --with dev
 
+      - name: Run core compatibility gate
+        run: |
+          make check-core-compat
+
+      - name: Run module core imports gate
+        run: |
+          make check-module-core-imports
+
+      - name: Run manifest sync gate
+        run: |
+          make check-manifest-sync
+
+      - name: Run org context primitives gate
+        run: |
+          make check-org-context-primitives
+
+      - name: Run CSRF exempt gate
+        run: |
+          make check-csrf-exempt
+
       - name: Run rendered frontend proof
         run: |
           make frontend-proof
