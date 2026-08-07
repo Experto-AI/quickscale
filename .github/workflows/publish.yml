@@ -9,6 +9,7 @@ on:
     tags:
       - "[0-9]*"
       - "v[0-9]*"
+# Only release version tags publish; namespaced split tags must stay excluded.
 
 jobs:
   verify:
