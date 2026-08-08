@@ -313,6 +313,7 @@ class _SealLedger:
         runner: object,
     ) -> str:
         assert runner is self.runner
+        self.runner.run(["ls-remote", "--heads", remote, ref])
         self.events.append(("remote-ref", remote, ref))
         if ref == BRANCH:
             return self.branch_reads.pop(0)
@@ -330,6 +331,7 @@ class _SealLedger:
         runner: object,
     ) -> str:
         assert runner is self.runner
+        self.runner.run(["rev-parse", f"{commit}^{{tree}}"])
         self.events.append(("tree", commit))
         if commit == f"refs/tags/{PREVIOUS_TAG}":
             return self.previous_tree
@@ -346,6 +348,7 @@ class _SealLedger:
         runner: object,
     ) -> None:
         assert runner is self.runner
+        self.runner.run(["tag", "--annotate", tag, commit])
         self.events.append(("create-tag", tag, commit))
 
     def push_tag(
@@ -358,6 +361,7 @@ class _SealLedger:
         runner: object,
     ) -> None:
         assert runner is self.runner
+        self.runner.run(["push", remote, refspec or f"{tag}:refs/tags/{tag}"])
         self.events.append(("push-tag", remote, tag, refspec))
         if self.push_error is not None:
             raise publish_module.GitError(self.push_error)
@@ -370,6 +374,7 @@ class _SealLedger:
         runner: object,
     ) -> None:
         assert runner is self.runner
+        self.runner.run(["tag", "--delete", tag])
         self.events.append(("delete-tag", tag))
 
 
@@ -428,6 +433,8 @@ class TestSealMechanics:
             ("remote-ref", "origin", f"{TAG}^{{}}"),
             ("remote-ref", "origin", BRANCH),
         ]
+        assert ledger.runner.calls
+        assert all(call[1].get("shell") is None for call in ledger.runner.calls)
 
     def test_absent_target_tag_seals_selected_branch_commit(
         self, monkeypatch: pytest.MonkeyPatch
