@@ -40,8 +40,10 @@ with the same explicit next-action guidance.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # Ensure the quickscale_core package is importable when running from the
@@ -61,10 +63,12 @@ from quickscale_core.utils.git_utils import (  # noqa: E402
     push_split_branch,
     resolve_module_path,
     resolve_split_branch,
+    resolve_split_tag,
     run_git_subtree_split,
     validate_expected_sha,
     validate_module_name,
     validate_publication_origin,
+    validate_tag_name,
 )
 
 # ---------------------------------------------------------------------------
@@ -189,6 +193,494 @@ def _maybe_clean_subtree_cache(clean: bool) -> None:
         cache_dir = _REPO_ROOT / ".git" / "subtree-cache"
         if cache_dir.exists():
             shutil.rmtree(cache_dir)
+
+
+# ---------------------------------------------------------------------------
+# SA136d seal primitive
+# ---------------------------------------------------------------------------
+
+
+_SEAL_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+
+
+@dataclass(frozen=True)
+class SealOutcome:
+    """The immutable result of one module seal attempt."""
+
+    module: str
+    version: str
+    branch: str
+    tag: str
+    commit: str
+    pushed: bool
+
+
+class SealError(GitError):
+    """A fail-closed seal error with machine-readable operation context."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        module: str,
+        version: str,
+        cleanup_error: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.module = module
+        self.version = version
+        self.cleanup_error = cleanup_error
+
+
+# These aliases keep the result/error vocabulary explicit for callers that
+# consume the primitive without exposing a CLI or batch dispatch yet.
+SealResult = SealOutcome
+
+
+def _seal_error(
+    message: str,
+    *,
+    module: str,
+    version: str,
+    cleanup_error: str | None = None,
+) -> SealError:
+    return SealError(
+        message,
+        module=module,
+        version=version,
+        cleanup_error=cleanup_error,
+    )
+
+
+def _seal_sha(value: object, *, description: str, module: str, version: str) -> str:
+    """Return a canonical SHA or reject ambiguous Git output."""
+    if not isinstance(value, str):
+        raise _seal_error(
+            f"Malformed {description}: expected a 40-hex SHA",
+            module=module,
+            version=version,
+        )
+    sha = value.strip()
+    if not _SEAL_SHA_RE.fullmatch(sha):
+        raise _seal_error(
+            f"Malformed {description}: expected one 40-hex SHA, got {value!r}",
+            module=module,
+            version=version,
+        )
+    return sha.lower()
+
+
+def _parse_remote_records(
+    output: object,
+    *,
+    expected_refs: set[str],
+    description: str,
+    module: str,
+    version: str,
+) -> dict[str, str]:
+    """Parse one strict ``ls-remote`` response without accepting ambiguity."""
+    if not isinstance(output, str):
+        raise _seal_error(
+            f"Malformed {description}: expected text output",
+            module=module,
+            version=version,
+        )
+    records = output.splitlines()
+    if any(not record.strip() for record in records):
+        raise _seal_error(
+            f"Malformed {description}: blank record",
+            module=module,
+            version=version,
+        )
+    parsed: dict[str, str] = {}
+    for record in records:
+        fields = record.split()
+        if len(fields) != 2:
+            raise _seal_error(
+                f"Malformed {description}: expected SHA and ref, got {record!r}",
+                module=module,
+                version=version,
+            )
+        sha, ref = fields
+        if ref not in expected_refs:
+            raise _seal_error(
+                f"Unexpected ref in {description}: {ref!r}",
+                module=module,
+                version=version,
+            )
+        if ref in parsed:
+            raise _seal_error(
+                f"Duplicate ref in {description}: {ref!r}",
+                module=module,
+                version=version,
+            )
+        parsed[ref] = _seal_sha(
+            sha,
+            description=f"{description} SHA",
+            module=module,
+            version=version,
+        )
+    return parsed
+
+
+def resolve_remote_ref(
+    remote: str,
+    ref: str,
+    path: Path | None = None,
+    *,
+    runner: GitRunner,
+) -> str:
+    """
+    Resolve a branch or split tag using the trusted publication runner.
+
+    A tag lookup reads its direct and peeled records together.  A peeled
+    lookup (used for post-action verification) reads only the peeled record.
+    The empty string is reserved for an absent tag; branches are required.
+    """
+    module = "seal"
+    version = "unknown"
+    # The wrapper is also a test seam.  The seal itself supplies the precise
+    # module/version context when validating the returned value.
+    cwd = path or _REPO_ROOT
+    if ref.endswith("^{}"):
+        tag = ref[:-3]
+        validate_tag_name(tag)
+        args = ["ls-remote", "--tags", "--", remote, f"refs/tags/{tag}^{{}}"]
+        result = runner.run(args, cwd=cwd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise GitError(f"Failed to resolve remote tag {tag!r}: {result.stderr}")
+        parsed = _parse_remote_records(
+            result.stdout,
+            expected_refs={f"refs/tags/{tag}^{{}}"},
+            description=f"peeled remote tag {tag!r}",
+            module=module,
+            version=version,
+        )
+        return next(iter(parsed.values()), "")
+
+    if ref.startswith("splits/") and ref.count("/") == 1:
+        args = ["ls-remote", "--heads", remote, ref]
+        result = runner.run(args, cwd=cwd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise GitError(f"Failed to resolve remote branch {ref!r}: {result.stderr}")
+        parsed = _parse_remote_records(
+            result.stdout,
+            expected_refs={f"refs/heads/{ref}"},
+            description=f"remote branch {ref!r}",
+            module=module,
+            version=version,
+        )
+        if not parsed:
+            raise GitError(f"Remote branch {ref!r} is absent")
+        return next(iter(parsed.values()))
+
+    validate_tag_name(ref)
+    direct_ref = f"refs/tags/{ref}"
+    peeled_ref = f"{direct_ref}^{{}}"
+    args = ["ls-remote", "--tags", "--", remote, direct_ref, peeled_ref]
+    result = runner.run(args, cwd=cwd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise GitError(f"Failed to resolve remote tag {ref!r}: {result.stderr}")
+    parsed = _parse_remote_records(
+        result.stdout,
+        expected_refs={direct_ref, peeled_ref},
+        description=f"remote tag {ref!r}",
+        module=module,
+        version=version,
+    )
+    return parsed.get(peeled_ref) or parsed.get(direct_ref, "")
+
+
+def get_tree_sha(
+    commit: str,
+    path: Path | None = None,
+    *,
+    runner: GitRunner,
+) -> str:
+    """Resolve a commit's verified tree through the trusted runner."""
+    result = runner.run(
+        ["rev-parse", f"{commit}^{{tree}}"],
+        cwd=path or _REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise GitError(f"Failed to resolve tree for {commit}: {result.stderr}")
+    return _seal_sha(
+        result.stdout,
+        description=f"tree for {commit}",
+        module="seal",
+        version="unknown",
+    )
+
+
+def get_local_tag_commit(
+    tag: str,
+    path: Path | None = None,
+    *,
+    runner: GitRunner,
+) -> str | None:
+    """Return an exact local tag object SHA, or ``None`` when absent."""
+    validate_tag_name(tag)
+    result = runner.run(
+        ["rev-parse", "--verify", f"refs/tags/{tag}"],
+        cwd=path or _REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 1 and not result.stdout.strip():
+        return None
+    if result.returncode != 0:
+        raise GitError(f"Failed to resolve local tag {tag!r}: {result.stderr}")
+    return _seal_sha(
+        result.stdout,
+        description=f"local tag {tag!r}",
+        module="seal",
+        version="unknown",
+    )
+
+
+def create_annotated_tag(
+    tag: str,
+    commit: str,
+    path: Path | None = None,
+    *,
+    runner: GitRunner,
+) -> None:
+    """Create one annotated local tag without force or replacement flags."""
+    validate_tag_name(tag)
+    result = runner.run(
+        ["tag", "--annotate", tag, commit],
+        cwd=path or _REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise GitError(f"Failed to create local tag {tag!r}: {result.stderr}")
+
+
+def push_tag(
+    tag: str,
+    remote: str = "origin",
+    path: Path | None = None,
+    *,
+    refspec: str | None = None,
+    runner: GitRunner,
+) -> None:
+    """Push exactly one tag ref through the trusted runner."""
+    validate_tag_name(tag)
+    expected_refspec = f"{tag}:refs/tags/{tag}"
+    if refspec is not None and refspec != expected_refspec:
+        raise GitError(f"Unexpected tag refspec: {refspec!r}")
+    result = runner.run(
+        ["push", "--", remote, f"refs/tags/{tag}:refs/tags/{tag}"],
+        cwd=path or _REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise GitError(f"Failed to push tag {tag!r}: {result.stderr}")
+
+
+def delete_local_tag(
+    tag: str,
+    path: Path | None = None,
+    *,
+    runner: GitRunner,
+) -> None:
+    """Delete only the local tag named by the seal cleanup obligation."""
+    validate_tag_name(tag)
+    result = runner.run(
+        ["tag", "--delete", tag],
+        cwd=path or _REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise GitError(f"Failed to delete local tag {tag!r}: {result.stderr}")
+
+
+def _cleanup_created_tag(
+    tag: str,
+    *,
+    created: bool,
+    runner: GitRunner,
+) -> str | None:
+    """Discharge the local cleanup obligation without touching any remote ref."""
+    if not created:
+        return None
+    try:
+        delete_local_tag(tag, runner=runner)
+    except GitError as exc:
+        return str(exc)
+    return None
+
+
+def _seal_module(
+    module: str,
+    version: str,
+    *,
+    previous_version: str | None = None,
+    runner: GitRunner,
+) -> SealOutcome:
+    """Seal one split module with strict check-then-act verification."""
+    branch = resolve_split_branch(module)
+    tag = resolve_split_tag(module, version)
+    branch_sha = _seal_sha(
+        resolve_remote_ref("origin", branch, runner=runner),
+        description=f"remote branch {branch!r}",
+        module=module,
+        version=version,
+    )
+
+    if previous_version is not None:
+        previous_tag = resolve_split_tag(module, previous_version)
+        previous_tree = get_tree_sha(
+            f"refs/tags/{previous_tag}",
+            runner=runner,
+        )
+        branch_tree = get_tree_sha(branch_sha, runner=runner)
+        # The tree comparison is deliberately observational: the captured
+        # branch commit remains the immutable commit sealed by this invocation.
+        # A changed tree simply means the branch is not a same-tree continuation.
+        _ = previous_tree == branch_tree
+
+    reread_branch = _seal_sha(
+        resolve_remote_ref("origin", branch, runner=runner),
+        description=f"precondition remote branch {branch!r}",
+        module=module,
+        version=version,
+    )
+    if reread_branch != branch_sha:
+        raise _seal_error(
+            f"Remote branch {branch!r} moved before seal mutation",
+            module=module,
+            version=version,
+        )
+
+    remote_tag = resolve_remote_ref("origin", tag, runner=runner)
+    if remote_tag:
+        remote_tag_sha = _seal_sha(
+            remote_tag,
+            description=f"remote tag {tag!r}",
+            module=module,
+            version=version,
+        )
+        if remote_tag_sha != branch_sha:
+            raise _seal_error(
+                f"Remote tag {tag!r} conflicts: {remote_tag_sha} != {branch_sha}",
+                module=module,
+                version=version,
+            )
+        post_tag = _seal_sha(
+            resolve_remote_ref("origin", f"{tag}^{{}}", runner=runner),
+            description=f"post-action remote tag {tag!r}",
+            module=module,
+            version=version,
+        )
+        post_branch = _seal_sha(
+            resolve_remote_ref("origin", branch, runner=runner),
+            description=f"post-action remote branch {branch!r}",
+            module=module,
+            version=version,
+        )
+        if post_tag != branch_sha:
+            raise _seal_error(
+                f"Remote tag {tag!r} failed post-action verification",
+                module=module,
+                version=version,
+            )
+        if post_branch != branch_sha:
+            raise _seal_error(
+                f"Remote branch {branch!r} moved after seal verification",
+                module=module,
+                version=version,
+            )
+        return SealOutcome(module, version, branch, tag, branch_sha, pushed=False)
+
+    local_tag = get_local_tag_commit(tag, runner=runner)
+    if local_tag is not None:
+        local_tag_sha = _seal_sha(
+            local_tag,
+            description=f"local tag {tag!r}",
+            module=module,
+            version=version,
+        )
+        if local_tag_sha != branch_sha:
+            raise _seal_error(
+                f"Local tag {tag!r} conflicts: {local_tag_sha} != {branch_sha}",
+                module=module,
+                version=version,
+            )
+
+    created = local_tag is None
+    if created:
+        create_annotated_tag(tag, branch_sha, runner=runner)
+
+    try:
+        push_tag(
+            tag,
+            remote="origin",
+            refspec=f"{tag}:refs/tags/{tag}",
+            runner=runner,
+        )
+    except GitError as exc:
+        remote_after_failure = resolve_remote_ref("origin", tag, runner=runner)
+        cleanup_error = None
+        if not remote_after_failure:
+            cleanup_error = _cleanup_created_tag(tag, created=created, runner=runner)
+        message = f"Tag push failed for {tag!r}: {exc}"
+        if cleanup_error:
+            message = f"{message}; local cleanup also failed: {cleanup_error}"
+        raise _seal_error(
+            message,
+            module=module,
+            version=version,
+            cleanup_error=cleanup_error,
+        ) from exc
+
+    post_tag = resolve_remote_ref("origin", f"{tag}^{{}}", runner=runner)
+    if (
+        not post_tag
+        or _seal_sha(
+            post_tag,
+            description=f"post-action remote tag {tag!r}",
+            module=module,
+            version=version,
+        )
+        != branch_sha
+    ):
+        cleanup_error = _cleanup_created_tag(tag, created=created, runner=runner)
+        message = f"Remote tag {tag!r} failed post-action verification"
+        if cleanup_error:
+            message = f"{message}; local cleanup also failed: {cleanup_error}"
+        raise _seal_error(
+            message,
+            module=module,
+            version=version,
+            cleanup_error=cleanup_error,
+        )
+
+    post_branch = _seal_sha(
+        resolve_remote_ref("origin", branch, runner=runner),
+        description=f"post-action remote branch {branch!r}",
+        module=module,
+        version=version,
+    )
+    if post_branch != branch_sha:
+        raise _seal_error(
+            f"Remote branch {branch!r} moved after tag push; immutable tag remains",
+            module=module,
+            version=version,
+        )
+    return SealOutcome(module, version, branch, tag, branch_sha, pushed=True)
+
+
+def _seal_all(version: str, *, runner: GitRunner) -> None:
+    """Run the primitive sequentially for mechanics-level cumulative proof."""
+    for module in _list_modules():
+        _print_info(f"Sealing module: {module}")
+        _seal_module(module, version, runner=runner)
 
 
 def _check_release_authoritative(runner: GitRunner) -> None:

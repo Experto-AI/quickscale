@@ -409,6 +409,21 @@ def _install_seal_ledger(monkeypatch: pytest.MonkeyPatch, ledger: _SealLedger) -
 
 
 class TestSealMechanics:
+    def test_success_returns_structured_seal_outcome(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ledger = _SealLedger()
+        _install_seal_ledger(monkeypatch, ledger)
+
+        outcome = publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert outcome == publish_module.SealOutcome(
+            module=MODULE,
+            version=VERSION,
+            branch=BRANCH,
+            tag=TAG,
+            commit=HEAD_SHA,
+            pushed=True,
+        )
+
     def test_trusted_runner_propagates_and_reuses_previous_tree_commit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
