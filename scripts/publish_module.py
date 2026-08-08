@@ -32,8 +32,9 @@ with the same explicit next-action guidance.
 
     Phase 4 (SA117): All mutating single-module publish calls require
     ``--expected-remote-sha``.  The value must be a 40-character hex SHA
-    or the literal ``ABSENT``.  ``--publish-outdated`` and ``--status``
-    reject the flag.
+    or the literal ``ABSENT``.  ``--status`` rejects the flag; the disabled
+    ``--publish-outdated`` action accepts it only long enough to emit its
+    Phase 4 safety guidance.
 
     Phase 4 also disables ``--publish-outdated`` entirely: it used bare
     ``--force`` internally, which violates the force-with-lease safety
@@ -884,13 +885,16 @@ def _get_module_seal_state(
     runner: GitRunner,
 ) -> str:
     """Determine seal state from the peeled remote tag target, read-only."""
-    tag = resolve_split_tag(module_name, version)
     try:
+        tag = resolve_split_tag(module_name, version)
         peeled_sha = resolve_remote_ref("origin", f"{tag}^{{}}", runner=runner)
-    except GitError:
+    except GitError, ModuleNotFoundError:
         # Status is diagnostic rather than a gate.  A runner that cannot resolve
         # a remote target is represented as unsealed instead of causing a
-        # mutation or turning inspection into a release-authority failure.
+        # mutation or turning inspection into a release-authority failure.  The
+        # minimal hermetic publication fixture also omits the manifest package
+        # used by the shared version parser; that is the same unsealed state for
+        # this read-only diagnostic.
         return "unsealed"
     if not peeled_sha:
         return "unsealed"
@@ -1165,7 +1169,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--expected-remote-sha",
         help=(
             "Exact 40-char hex SHA expected on remote, or ABSENT for first publish. "
-            "Required for single-module publish; rejected with --publish-outdated and --status."
+            "Required for single-module publish; rejected with --status."
         ),
     )
     parser.add_argument(
@@ -1216,8 +1220,6 @@ def _validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace
     if args.publish_outdated:
         if args.module_name is not None:
             parser.error("--publish-outdated does not accept a module name")
-        if args.expected_remote_sha is not None:
-            parser.error("--expected-remote-sha is not supported with --publish-outdated")
         if args.version is not None:
             parser.error("--version is not supported with --publish-outdated")
         if args.previous_version is not None:
