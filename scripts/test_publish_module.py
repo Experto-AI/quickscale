@@ -242,6 +242,7 @@ VERSION = "0.88.0"
 PREVIOUS_VERSION = "0.87.0"
 HEAD_SHA = "a" * 40
 OTHER_SHA = "b" * 40
+PREVIOUS_COMMIT = "c" * 40
 TAG = f"{BRANCH}/{VERSION}"
 PREVIOUS_TAG = f"{BRANCH}/{PREVIOUS_VERSION}"
 
@@ -296,18 +297,30 @@ class _SealLedger:
         branch_reads: tuple[str, str, str] = (HEAD_SHA, HEAD_SHA, HEAD_SHA),
         target_tag: str | None = None,
         post_push_tag: str = HEAD_SHA,
+        previous_commit: str = PREVIOUS_COMMIT,
         previous_tree: str = "tree-stable",
         head_tree: str = "tree-stable",
+        create_error: str | None = None,
         push_error: str | None = None,
+        probe_error: str | None = None,
+        probe_value: str | None = None,
+        cleanup_error: str | None = None,
         local_tag: str | None = None,
     ) -> None:
         self.runner = _ScriptedGitRunner([], local_tag=local_tag)
         self.branch_reads = list(branch_reads)
         self.target_tag = target_tag
+        self.local_tag = local_tag
         self.post_push_tag = post_push_tag
+        self.previous_commit = previous_commit
         self.previous_tree = previous_tree
         self.head_tree = head_tree
+        self.create_error = create_error
         self.push_error = push_error
+        self.probe_error = probe_error
+        self.probe_value = probe_value
+        self.cleanup_error = cleanup_error
+        self.push_attempted = False
         self.events: list[tuple[object, ...]] = []
 
     def resolve_remote_ref(
@@ -324,10 +337,30 @@ class _SealLedger:
         if ref == BRANCH:
             return self.branch_reads.pop(0)
         if ref == TAG:
+            if self.push_attempted:
+                if self.probe_error is not None:
+                    raise publish_module.GitError(self.probe_error)
+                if self.probe_value is not None:
+                    return self.probe_value
             return self.target_tag if self.target_tag is not None else ""
         if ref == f"{TAG}^{{}}":
             return self.post_push_tag
         raise AssertionError(f"unexpected remote ref: {ref}")
+
+    def get_local_tag_commit(
+        self,
+        tag: str,
+        path: Path | None = None,
+        *,
+        runner: object,
+    ) -> str | None:
+        assert runner is self.runner
+        self.events.append(("local-tag", tag))
+        if tag == PREVIOUS_TAG:
+            return self.previous_commit
+        if tag == TAG:
+            return self.local_tag
+        raise AssertionError(f"unexpected local tag: {tag}")
 
     def get_tree_sha(
         self,
@@ -339,7 +372,7 @@ class _SealLedger:
         assert runner is self.runner
         self.runner.run(["rev-parse", f"{commit}^{{tree}}"])
         self.events.append(("tree", commit))
-        if commit == f"refs/tags/{PREVIOUS_TAG}":
+        if commit == PREVIOUS_COMMIT:
             return self.previous_tree
         if commit == HEAD_SHA:
             return self.head_tree
@@ -356,6 +389,8 @@ class _SealLedger:
         assert runner is self.runner
         self.runner.run(["tag", "--annotate", tag, commit, "--message", tag])
         self.events.append(("create-tag", tag, commit))
+        if self.create_error is not None:
+            raise publish_module.GitError(self.create_error)
 
     def push_tag(
         self,
@@ -369,6 +404,7 @@ class _SealLedger:
         assert runner is self.runner
         self.runner.run(["push", remote, refspec or f"{tag}:refs/tags/{tag}"])
         self.events.append(("push-tag", remote, tag, refspec))
+        self.push_attempted = True
         if self.push_error is not None:
             raise publish_module.GitError(self.push_error)
 
@@ -382,6 +418,8 @@ class _SealLedger:
         assert runner is self.runner
         self.runner.run(["tag", "--delete", tag])
         self.events.append(("delete-tag", tag))
+        if self.cleanup_error is not None:
+            raise publish_module.GitError(self.cleanup_error)
 
 
 def _install_seal_ledger(monkeypatch: pytest.MonkeyPatch, ledger: _SealLedger) -> None:
@@ -393,6 +431,12 @@ def _install_seal_ledger(monkeypatch: pytest.MonkeyPatch, ledger: _SealLedger) -
         raising=False,
     )
     monkeypatch.setattr(publish_module, "get_tree_sha", ledger.get_tree_sha, raising=False)
+    monkeypatch.setattr(
+        publish_module,
+        "get_local_tag_commit",
+        ledger.get_local_tag_commit,
+        raising=False,
+    )
     monkeypatch.setattr(
         publish_module,
         "create_annotated_tag",
@@ -531,23 +575,26 @@ class TestSealMechanics:
     def test_trusted_runner_propagates_and_reuses_previous_tree_commit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        ledger = _SealLedger()
+        ledger = _SealLedger(post_push_tag=PREVIOUS_COMMIT)
         _install_seal_ledger(monkeypatch, ledger)
 
-        publish_module._seal_module(
+        outcome = publish_module._seal_module(
             MODULE,
             VERSION,
             previous_version=PREVIOUS_VERSION,
             runner=ledger.runner,
         )
 
+        assert outcome.commit == PREVIOUS_COMMIT
         assert ledger.events == [
             ("remote-ref", "origin", BRANCH),
-            ("tree", f"refs/tags/{PREVIOUS_TAG}"),
+            ("local-tag", PREVIOUS_TAG),
+            ("tree", PREVIOUS_COMMIT),
             ("tree", HEAD_SHA),
             ("remote-ref", "origin", BRANCH),
             ("remote-ref", "origin", TAG),
-            ("create-tag", TAG, HEAD_SHA),
+            ("local-tag", TAG),
+            ("create-tag", TAG, PREVIOUS_COMMIT),
             ("push-tag", "origin", TAG, f"{TAG}:refs/tags/{TAG}"),
             ("remote-ref", "origin", f"{TAG}^{{}}"),
             ("remote-ref", "origin", BRANCH),
@@ -608,6 +655,7 @@ class TestSealMechanics:
             assert result is False
         assert ("create-tag", TAG, HEAD_SHA) in ledger.events
         assert ("push-tag", "origin", TAG, f"{TAG}:refs/tags/{TAG}") in ledger.events
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
 
     def test_branch_move_at_immediate_precondition_stops_before_mutation(
         self, monkeypatch: pytest.MonkeyPatch
@@ -660,6 +708,99 @@ class TestSealMechanics:
             publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
         assert ("create-tag", TAG, HEAD_SHA) in ledger.events
         assert ("delete-tag", TAG) in ledger.events
+
+    def test_create_failure_is_primary_and_cleanup_is_attempted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(create_error="local tag creation failed")
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert "local tag creation failed" in str(excinfo.value)
+        assert not any(event[0] == "push-tag" for event in ledger.events)
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    def test_create_failure_keeps_primary_when_cleanup_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(
+            create_error="local tag creation failed",
+            cleanup_error="local tag deletion failed",
+        )
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert str(excinfo.value).startswith("local tag creation failed")
+        assert "local tag creation failed" in str(excinfo.value)
+        assert "local cleanup also failed: local tag deletion failed" in str(excinfo.value)
+        assert excinfo.value.cleanup_error == "local tag deletion failed"
+        assert not any(event[0] == "push-tag" for event in ledger.events)
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    def test_push_failure_keeps_primary_when_remote_probe_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(push_error="remote rejected tag", probe_error="probe unavailable")
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert "Tag push failed" in str(excinfo.value)
+        assert "remote rejected tag" in str(excinfo.value)
+        assert "remote tag probe failed: probe unavailable" in str(excinfo.value)
+        assert excinfo.value.cleanup_error is None
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    def test_malformed_remote_probe_keeps_primary_and_cleans_up(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(push_error="remote rejected tag", probe_value="ambiguous")
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert "Tag push failed" in str(excinfo.value)
+        assert "remote rejected tag" in str(excinfo.value)
+        assert "Malformed remote tag probe" in str(excinfo.value)
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    def test_remote_conflict_after_push_failure_is_secondary_to_primary(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(push_error="remote rejected tag", probe_value=OTHER_SHA)
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert str(excinfo.value).startswith("Tag push failed")
+        assert "remote rejected tag" in str(excinfo.value)
+        assert "remote tag probe found conflicting commit" in str(excinfo.value)
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    def test_cleanup_failure_is_secondary_to_push_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(
+            push_error="remote rejected tag",
+            cleanup_error="local tag deletion failed",
+        )
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert str(excinfo.value).startswith("Tag push failed")
+        assert "remote rejected tag" in str(excinfo.value)
+        assert "local cleanup also failed: local tag deletion failed" in str(excinfo.value)
+        assert excinfo.value.cleanup_error == "local tag deletion failed"
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
 
     def test_batch_stops_on_first_failure_and_reports_cumulative_proof(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
