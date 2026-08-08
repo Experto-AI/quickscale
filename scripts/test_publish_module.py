@@ -944,43 +944,219 @@ class TestSealCliAndStatus:
         assert calls == ["module_00", "module_01"]
 
 
-class TestSealMakeInterfaces:
-    def test_makefile_has_guarded_seal_targets_and_explicit_single_dispatch(
+def _run_cli_with_bootstrap_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+) -> tuple[int, list[str], list[str]]:
+    """Run ``main`` while making runner and inventory bootstrap observable."""
+    bootstrap_calls: list[str] = []
+    inventory_calls: list[str] = []
+
+    def bootstrap_sentinel(git_executable: str | None) -> object:
+        del git_executable
+        bootstrap_calls.append("build_publication_git_runner")
+        return object()
+
+    def inventory_sentinel() -> list[str]:
+        inventory_calls.append("_list_modules")
+        return []
+
+    monkeypatch.setattr(publish_module, "build_publication_git_runner", bootstrap_sentinel)
+    monkeypatch.setattr(publish_module, "_list_modules", inventory_sentinel)
+    monkeypatch.setattr(sys, "argv", ["publish_module.py", *argv])
+
+    with pytest.raises(SystemExit) as excinfo:
+        publish_module.main()
+    code = excinfo.value.code
+    assert isinstance(code, int)
+    return code, bootstrap_calls, inventory_calls
+
+
+class TestCliArgumentMatrix:
+    @pytest.mark.parametrize(
+        ("argv", "expected_message"),
+        [
+            (["--status", "--seal"], "not allowed with argument"),
+            (["--status", "--seal-all"], "not allowed with argument"),
+            (["--seal", "--seal-all"], "not allowed with argument"),
+            (["--publish-outdated", "--status"], "--publish-outdated is disabled in SA117 Phase 4"),
+            (
+                ["--publish-outdated", "--seal", MODULE, "--version", VERSION],
+                "--publish-outdated is disabled in SA117 Phase 4",
+            ),
+            (
+                ["--publish-outdated", "--seal-all", "--version", VERSION],
+                "--publish-outdated is disabled in SA117 Phase 4",
+            ),
+            (["--publish-outdated", MODULE], "--publish-outdated is disabled in SA117 Phase 4"),
+            (["--publish-outdated", "--clean"], "--publish-outdated is disabled in SA117 Phase 4"),
+            (
+                ["--publish-outdated", "--version", VERSION],
+                "--publish-outdated is disabled in SA117 Phase 4",
+            ),
+            (
+                ["--publish-outdated", "--previous-version", PREVIOUS_VERSION],
+                "--publish-outdated is disabled in SA117 Phase 4",
+            ),
+            (
+                ["--publish-outdated", "--expected-remote-sha", "ABSENT"],
+                "--publish-outdated is disabled in SA117 Phase 4",
+            ),
+            (["--status", MODULE], "--status does not accept a module name"),
+            (["--status", "--clean"], "--clean is only supported with publish actions"),
+            (
+                ["--status", "--expected-remote-sha", "ABSENT"],
+                "--expected-remote-sha is not supported with --status",
+            ),
+            (
+                ["--status", "--previous-version", PREVIOUS_VERSION],
+                "--previous-version is only supported with --seal or --seal-all",
+            ),
+            (["--seal", "--version", VERSION], "--seal requires a module name"),
+            (
+                [MODULE, "--seal", "--clean", "--version", VERSION],
+                "--clean is only supported with publish actions",
+            ),
+            (
+                [MODULE, "--seal", "--version", VERSION, "--expected-remote-sha", "ABSENT"],
+                "--expected-remote-sha is not supported with --seal",
+            ),
+            ([MODULE, "--seal"], "--seal requires --version VERSION"),
+            (
+                ["--seal-all", "--version", VERSION, MODULE],
+                "--seal-all does not accept a module name",
+            ),
+            (["--seal-all"], "--seal-all requires --version VERSION"),
+            (
+                ["--seal-all", "--version", VERSION, "--clean"],
+                "--clean is only supported with publish actions",
+            ),
+            (
+                ["--seal-all", "--version", VERSION, "--expected-remote-sha", "ABSENT"],
+                "--expected-remote-sha is not supported with --seal-all",
+            ),
+            (["--clean"], "publish options require a module name"),
+            (["--expected-remote-sha", "ABSENT"], "publish options require a module name"),
+            (
+                ["--version", VERSION],
+                "--version is only supported with --seal, --seal-all, or --status",
+            ),
+            (
+                ["--previous-version", PREVIOUS_VERSION],
+                "--previous-version is only supported with --seal or --seal-all",
+            ),
+            ([MODULE], "--expected-remote-sha is required for single-module publish"),
+            ([MODULE, "--expected-remote-sha", "not-a-sha"], "Invalid --expected-remote-sha"),
+        ],
+    )
+    def test_invalid_action_option_matrix_fails_before_bootstrap(
         self,
+        argv: list[str],
+        expected_message: str,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
+        """Every invalid action/option row is rejected before Git or inventory work."""
+        code, bootstrap_calls, inventory_calls = _run_cli_with_bootstrap_sentinel(monkeypatch, argv)
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+
+        assert code != 0
+        assert expected_message in output
+        assert bootstrap_calls == []
+        assert inventory_calls == []
+
+        if "--publish-outdated" in argv:
+            assert "force-with-lease safety contract" in output
+            assert "Traceback" not in output
+
+    def test_publish_outdated_rejected_with_phase4_message(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The retained regression proves disabled-action precedence and no bootstrap."""
+        code, bootstrap_calls, inventory_calls = _run_cli_with_bootstrap_sentinel(
+            monkeypatch,
+            ["--publish-outdated", "--expected-remote-sha", "a" * 40],
+        )
+        output = capsys.readouterr().out
+
+        assert code == 1
+        assert "--publish-outdated is disabled in SA117 Phase 4" in output
+        assert "force-with-lease safety contract" in output
+        assert "Traceback" not in output
+        assert bootstrap_calls == []
+        assert inventory_calls == []
+
+
+class TestSealMakeInterfaces:
+    @staticmethod
+    def _make(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["make", "--no-print-directory", *args],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    @pytest.mark.parametrize(
+        ("make_args", "expected_dispatch"),
+        [
+            (
+                ["-n", "seal-module", "MODULE=auth", "VERSION=0.88.0", "PREVIOUS_VERSION=0.87.0"],
+                "scripts/publish_module.sh auth --seal --version 0.88.0 --previous-version 0.87.0",
+            ),
+            (
+                ["-n", "seal-modules", "VERSION=0.88.0", "PREVIOUS_VERSION=0.87.0"],
+                "scripts/publish_module.sh --seal-all --version 0.88.0 --previous-version 0.87.0",
+            ),
+            (
+                ["-n", "seal-status", "VERSION=0.88.0"],
+                "scripts/publish_module.sh --status --version 0.88.0",
+            ),
+        ],
+    )
+    def test_make_seal_interfaces_use_actual_dry_run_dispatch(
+        self,
+        make_args: list[str],
+        expected_dispatch: str,
+    ) -> None:
+        """GNU Make's expanded recipe is the caller-path oracle."""
+        result = self._make(*make_args)
+        assert result.returncode == 0, result.stderr
+        assert expected_dispatch in result.stdout.splitlines()
+        assert "git push --tags" not in result.stdout
+
+    @pytest.mark.parametrize(
+        ("make_args", "expected_message"),
+        [
+            (["seal-module"], "Error: MODULE is required"),
+            (["seal-module", "MODULE=auth"], "Error: VERSION is required explicitly"),
+            (["seal-modules"], "Error: VERSION is required explicitly"),
+            (["seal-status"], "Error: VERSION is required explicitly"),
+        ],
+    )
+    def test_make_seal_guards_fail_before_dispatch(
+        self,
+        make_args: list[str],
+        expected_message: str,
+    ) -> None:
+        """Missing-variable calls run only their target guard, never the wrapper."""
+        result = self._make(*make_args)
+        output = result.stdout + result.stderr
+        assert result.returncode != 0
+        assert expected_message in output
+        assert "scripts/publish_module.sh" not in output
+
+    def test_make_seal_safety_warning_remains_and_no_unsafe_push_is_dispatched(self) -> None:
+        """The source warning remains while GNU Make emits no broad tag push."""
         makefile = Path(__file__).resolve().parents[1] / "Makefile"
         text = makefile.read_text()
-        for target in ("seal-module:", "seal-modules:", "seal-status:"):
-            assert target in text
-        assert "EXPECTED_REMOTE_SHA" in text
-        assert "scripts/publish_module.sh" in text
-        assert "--seal" in text
-        assert "--seal-all" in text
-        assert "--status" in text
-        assert "git push --tags" in text
-        assert "PyPI" in text
+        assert "Seal tags are deliberately narrower" in text
+        assert "unsafe command could push the local core tag" in text
 
-    def test_make_seal_module_requires_module_and_version(self) -> None:
-        text = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
-        assert "seal-module:" in text, "planned seal-module target is absent"
-        assert "seal-modules:" in text, "planned seal-modules target is absent"
-        block = text[text.index("seal-module:") : text.index("seal-modules:")]
-        assert 'if [ -z "$(MODULE)" ]' in block
-        assert "$(origin VERSION)" in block
-        assert '[ -z "$(VERSION)" ]' in block
-        assert "--seal" in block
-        assert "--version $(VERSION)" in block
-        assert "--previous-version $(PREVIOUS_VERSION)" in block
-
-    def test_make_seal_all_and_status_require_version(self) -> None:
-        text = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
-        assert "seal-modules:" in text, "planned seal-modules target is absent"
-        assert "seal-status:" in text, "planned seal-status target is absent"
-        all_block = text[text.index("seal-modules:") : text.index("seal-status:")]
-        status_block = text[text.index("seal-status:") :]
-        assert "$(origin VERSION)" in all_block
-        assert "$(origin VERSION)" in status_block
-        assert "--seal-all" in all_block
-        assert "--status" in status_block
-        assert "$(VERSION)" in all_block
-        assert "$(VERSION)" in status_block
+        result = self._make("-n", "seal-status", "VERSION=0.88.0")
+        assert result.returncode == 0, result.stderr
+        assert "git push --tags" not in result.stdout

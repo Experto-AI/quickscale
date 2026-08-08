@@ -1169,6 +1169,17 @@ def _publish_outdated(clean: bool, runner: GitRunner) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _report_publish_outdated_disabled() -> None:
+    """Emit the stable Phase 4 diagnostic without bootstrapping Git."""
+    _print_error("--publish-outdated is disabled in SA117 Phase 4")
+    _print_info(
+        "Batch --publish-outdated used bare --force, which violates the "
+        "force-with-lease safety contract."
+    )
+    _print_info("Publish each module individually with --expected-remote-sha:")
+    sys.exit(1)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Publish module changes to split branches (F2.8 provenance-aware wrapper)."
@@ -1237,6 +1248,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     """Reject action/argument combinations before Git bootstrap or mutation."""
+    # Keep this precedence ahead of every other action/option check.  The
+    # disabled action is intentionally parseable with otherwise conflicting
+    # options so operators always receive the Phase 4 safety contract before
+    # repository, inventory, or Git-runner bootstrap work begins.
+    if args.publish_outdated:
+        return
+
     if args.status:
         if args.module_name is not None:
             parser.error("--status does not accept a module name")
@@ -1286,6 +1304,19 @@ def _validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace
     if args.version is not None:
         parser.error("--version is only supported with --seal, --seal-all, or --status")
 
+    if args.module_name is not None:
+        if args.expected_remote_sha is None:
+            _print_error(
+                "--expected-remote-sha is required for single-module publish "
+                "(use: --expected-remote-sha <40hex|ABSENT>)"
+            )
+            sys.exit(1)
+        try:
+            validate_expected_sha(args.expected_remote_sha)
+        except GitError as exc:
+            _print_error(f"Invalid --expected-remote-sha: {exc}")
+            sys.exit(1)
+
 
 def _run_release_gates(runner: GitRunner) -> None:
     """Apply the existing release and origin gates with one trusted runner."""
@@ -1301,6 +1332,13 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
     _validate_cli_args(parser, args)
+
+    # This branch is deliberately before repository-root checks, inventory
+    # enumeration, and publication-runner bootstrap.  _validate_cli_args()
+    # gives it precedence over every option that can be paired with the
+    # disabled action.
+    if args.publish_outdated:
+        _report_publish_outdated_disabled()
 
     # Validate repo root
     if not (_REPO_ROOT / "quickscale_modules").is_dir():
@@ -1371,34 +1409,12 @@ def main() -> None:
         if not _show_status(runner, version=args.version, modules=frozen_modules):
             _print_error("Seal-all verification did not produce a sealed status for every module")
             sys.exit(1)
-    elif args.publish_outdated:
-        _print_error("--publish-outdated is disabled in SA117 Phase 4")
-        _print_info(
-            "Batch --publish-outdated used bare --force, which violates the "
-            "force-with-lease safety contract."
-        )
-        _print_info("Publish each module individually with --expected-remote-sha:")
-        for name in _list_modules():
-            _print_info(f"  make publish-module MODULE={name} EXPECTED_REMOTE_SHA=<40hex|ABSENT>")
-        sys.exit(1)
     elif args.module_name:
         module_name = args.module_name
 
-        # Phase 4: --expected-remote-sha is required for single-module publish
+        # Phase 4: --expected-remote-sha was validated before runner bootstrap.
         expected_sha = args.expected_remote_sha
-        if not expected_sha:
-            _print_error(
-                "--expected-remote-sha is required for single-module publish "
-                "(use: --expected-remote-sha <40hex|ABSENT>)"
-            )
-            sys.exit(1)
-
-        # Validate expected SHA format before any git operations
-        try:
-            validate_expected_sha(expected_sha)
-        except GitError as e:
-            _print_error(f"Invalid --expected-remote-sha: {e}")
-            sys.exit(1)
+        assert expected_sha is not None
 
         # Validate module name shape BEFORE any path resolution or subtree
         # operations so invalid input fails closed with a clean error instead
