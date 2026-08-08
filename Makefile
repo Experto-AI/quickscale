@@ -72,14 +72,15 @@
 
 # Default Python command (uses root Poetry environment)
 PYTHON ?= poetry run python
-GATE_REGISTRY ?= scripts/gate_registry.json
+MAKEFILE_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+GATE_REGISTRY ?= $(MAKEFILE_ROOT)scripts/gate_registry.json
 # Keep the fast check aggregation aligned with the registry.  The helper uses
 # the parity checker's strict JSON/schema validator (including duplicate-key
 # and dependency-cycle checks).  Capture its status explicitly because GNU
 # Make's $(shell ...) otherwise discards command failures and can continue with
 # a partial target list.
 CHECK_GATE_TARGETS_RAW := $(shell \
-	$(PYTHON) scripts/sync_ci_gate_jobs.py --print-check-targets --registry "$(GATE_REGISTRY)" 2>&1 \
+	$(PYTHON) "$(MAKEFILE_ROOT)scripts/sync_ci_gate_jobs.py" --print-check-targets --registry "$(GATE_REGISTRY)" 2>&1 \
 	|| printf '__CHECK_GATE_TARGETS_ERROR__')
 ifneq ($(findstring __CHECK_GATE_TARGETS_ERROR__,$(CHECK_GATE_TARGETS_RAW)),)
 $(error Unable to derive local check gate targets from $(GATE_REGISTRY): $(CHECK_GATE_TARGETS_RAW))
