@@ -435,21 +435,42 @@ def get_local_tag_commit(
     *,
     runner: GitRunner,
 ) -> str | None:
-    """Return an exact local tag object SHA, or ``None`` when absent."""
+    """Return a local tag's peeled commit SHA, or ``None`` when absent."""
     validate_tag_name(tag)
-    result = runner.run(
-        ["rev-parse", "--verify", f"refs/tags/{tag}"],
-        cwd=path or _REPO_ROOT,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 1 and not result.stdout.strip():
+
+    cwd = path or _REPO_ROOT
+    presence_ref = f"refs/tags/{tag}"
+    try:
+        presence = runner.run(
+            ["show-ref", "--verify", "--quiet", presence_ref],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        raise GitError(f"Failed to inspect local tag {tag!r}: {exc}") from exc
+
+    if presence.returncode == 1:
         return None
+
+    if presence.returncode != 0:
+        raise GitError(f"Failed to inspect local tag {tag!r}: {presence.stderr}")
+
+    peeled_ref = f"{presence_ref}^{{commit}}"
+    try:
+        result = runner.run(
+            ["rev-parse", "--verify", peeled_ref],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        raise GitError(f"Failed to resolve local tag {tag!r}: {exc}") from exc
     if result.returncode != 0:
         raise GitError(f"Failed to resolve local tag {tag!r}: {result.stderr}")
     return _seal_sha(
         result.stdout,
-        description=f"local tag {tag!r}",
+        description=f"local tag commit {tag!r}",
         module="seal",
         version="unknown",
     )
@@ -465,7 +486,7 @@ def create_annotated_tag(
     """Create one annotated local tag without force or replacement flags."""
     validate_tag_name(tag)
     result = runner.run(
-        ["tag", "--annotate", tag, commit],
+        ["tag", "--annotate", tag, commit, "--message", tag],
         cwd=path or _REPO_ROOT,
         capture_output=True,
         text=True,

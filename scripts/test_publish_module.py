@@ -267,7 +267,13 @@ class _ScriptedGitRunner:
             response = next(self._responses)
         except StopIteration:
             local_ref = f"refs/tags/{TAG}"
-            if tuple(args[:3]) == ("rev-parse", "--verify", local_ref):
+            if tuple(args[:4]) == ("show-ref", "--verify", "--quiet", local_ref):
+                response = _GitResponse(returncode=0 if self.local_tag else 1)
+            elif tuple(args[:3]) == (
+                "rev-parse",
+                "--verify",
+                f"{local_ref}^{{commit}}",
+            ):
                 response = _GitResponse(
                     stdout=self.local_tag or "", returncode=0 if self.local_tag else 1
                 )
@@ -348,7 +354,7 @@ class _SealLedger:
         runner: object,
     ) -> None:
         assert runner is self.runner
-        self.runner.run(["tag", "--annotate", tag, commit])
+        self.runner.run(["tag", "--annotate", tag, commit, "--message", tag])
         self.events.append(("create-tag", tag, commit))
 
     def push_tag(
@@ -406,6 +412,104 @@ def _install_seal_ledger(monkeypatch: pytest.MonkeyPatch, ledger: _SealLedger) -
         "resolve_module_path",
         lambda name: f"quickscale_modules/{name}",
     )
+
+
+class TestSealLocalTagPrimitives:
+    def _assert_call_ledger(
+        self,
+        runner: _ScriptedGitRunner,
+        expected_args: list[tuple[str, ...]],
+    ) -> None:
+        assert [call[0] for call in runner.calls] == expected_args
+        assert all(
+            call[1]
+            == {
+                "cwd": publish_module._REPO_ROOT,
+                "capture_output": True,
+                "text": True,
+            }
+            for call in runner.calls
+        )
+
+    def test_absent_tag_is_only_returned_for_show_ref_status_one(self) -> None:
+        runner = _ScriptedGitRunner([_GitResponse(returncode=1, stdout="unexpected")])
+
+        assert publish_module.get_local_tag_commit(TAG, runner=runner) is None
+
+        self._assert_call_ledger(
+            runner,
+            [("show-ref", "--verify", "--quiet", f"refs/tags/{TAG}")],
+        )
+
+    @pytest.mark.parametrize(
+        ("description", "ref_object", "commit"),
+        [
+            ("lightweight", HEAD_SHA, HEAD_SHA),
+            ("annotated", "c" * 40, OTHER_SHA),
+        ],
+    )
+    def test_present_tag_is_peeled_to_commit(
+        self,
+        description: str,
+        ref_object: str,
+        commit: str,
+    ) -> None:
+        del description
+        runner = _ScriptedGitRunner(
+            [
+                _GitResponse(stdout=ref_object),
+                _GitResponse(stdout=f"{commit}\n"),
+            ]
+        )
+
+        assert publish_module.get_local_tag_commit(TAG, runner=runner) == commit
+
+        self._assert_call_ledger(
+            runner,
+            [
+                ("show-ref", "--verify", "--quiet", f"refs/tags/{TAG}"),
+                ("rev-parse", "--verify", f"refs/tags/{TAG}^{{commit}}"),
+            ],
+        )
+
+    @pytest.mark.parametrize(
+        "responses",
+        [
+            [_GitResponse(returncode=2, stderr="show-ref failed")],
+            [_GitResponse(), _GitResponse(returncode=1, stderr="rev-parse failed")],
+            [_GitResponse(), _GitResponse(returncode=128, stderr="rev-parse failed")],
+        ],
+    )
+    def test_operational_lookup_failures_raise(self, responses: list[_GitResponse]) -> None:
+        runner = _ScriptedGitRunner(responses)
+
+        with pytest.raises(publish_module.GitError):
+            publish_module.get_local_tag_commit(TAG, runner=runner)
+
+    def test_malformed_peeled_commit_raises(self) -> None:
+        runner = _ScriptedGitRunner([_GitResponse(), _GitResponse(stdout="not-a-sha\n")])
+
+        with pytest.raises(publish_module.GitError):
+            publish_module.get_local_tag_commit(TAG, runner=runner)
+
+    def test_runner_oserror_fails_closed(self) -> None:
+        class _FailingRunner:
+            def run(self, args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+                raise OSError("git executable unavailable")
+
+        with pytest.raises(publish_module.GitError):
+            publish_module.get_local_tag_commit(TAG, runner=_FailingRunner())
+
+    def test_annotated_creation_is_non_interactive_and_not_forced(self) -> None:
+        runner = _ScriptedGitRunner([])
+
+        publish_module.create_annotated_tag(TAG, HEAD_SHA, runner=runner)
+
+        self._assert_call_ledger(
+            runner,
+            [("tag", "--annotate", TAG, HEAD_SHA, "--message", TAG)],
+        )
+        assert "--force" not in runner.calls[0][0]
 
 
 class TestSealMechanics:
