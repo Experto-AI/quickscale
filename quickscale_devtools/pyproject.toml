@@ -33,7 +33,7 @@
 name = "quickscale-devtools"
 version = "0.86.0"
 description = "Maintainer-only development tools for QuickScale"
-requires-python = ">=3.13,<3.15"
+requires-python = ">=3.14,<3.15"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "Experto AI", email = "victor@experto.ai"}]
@@ -42,7 +42,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Framework :: Django",
 ]
@@ -69,7 +68,7 @@ include = ["src/quickscale_devtools/**/*"]
 # Keep the path dep on quickscale-core in sync with the corresponding
 # entry in quickscale_core/pyproject.toml.
 [tool.poetry.dependencies]
-python = ">=3.13,<3.15"
+python = ">=3.14,<3.15"
 quickscale-core = {path = "../quickscale_core"}
 
 [tool.poetry.group.dev.dependencies]
@@ -81,6 +80,20 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 # Ruff and mypy configurations centralized in root ruff.toml and mypy.ini
+# See the note in quickscale_core/pyproject.toml: this file is Ruff's config
+# root for the package, so target-version and the rule set have to be
+# restated here rather than inherited from the root ruff.toml.
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+# NOTE: `I` (isort) is not in the select above, so the [tool.ruff.lint.isort]
+# override below is currently inert — it configures a rule that is not
+# enabled. It is kept because it becomes correct the moment this package
+# adopts the shared select (which does enable `I`); see implementation_contract.md.
+
 # Package-specific isort override
 [tool.ruff.lint.isort]
 known-first-party = ["quickscale_devtools", "quickscale_core"]

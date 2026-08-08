@@ -1,5 +1,5 @@
 name: analytics
-version: "0.80.0"
+version: "0.87.0"
 description: "Service-style PostHog analytics foundation with flat settings, capture helpers, and manual template-tag support"
 
 config:
@@ -53,7 +53,7 @@ config:
       description: "Use session-based anonymous distinct IDs unless operators explicitly opt into authenticated identity linkage."
 
 dependencies:
-  - posthog>=3.7.4,<4.0.0
+  - posthog>=7.33.0,<8.0.0
 
 django_apps:
   - quickscale_modules_analytics

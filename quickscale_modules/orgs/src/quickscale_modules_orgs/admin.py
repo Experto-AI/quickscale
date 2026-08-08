@@ -187,7 +187,7 @@ def _explicit_org_from_request(request: Any) -> uuid.UUID | None:
             continue
         try:
             return uuid.UUID(str(raw))
-        except (ValueError, AttributeError, TypeError):
+        except ValueError, AttributeError, TypeError:
             continue
     return None
 
@@ -198,7 +198,7 @@ def _persist_org_to_session(request: Any, org_id: uuid.UUID) -> None:
         request.session[ACTIVE_ORG_SESSION_KEY] = str(org_id)
         if callable(getattr(request.session, "save", None)):
             request.session.save()
-    except (AttributeError, TypeError, RuntimeError):
+    except AttributeError, TypeError, RuntimeError:
         pass
 
 
@@ -234,7 +234,7 @@ def _resolve_active_org_id(request: Any) -> uuid.UUID | None:
         return None
     try:
         return uuid.UUID(str(raw))
-    except (ValueError, AttributeError, TypeError):
+    except ValueError, AttributeError, TypeError:
         return None
 
 

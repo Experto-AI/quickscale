@@ -30,7 +30,7 @@ class TestCheckPythonVersion:
     def test_python_version_meets_requirement(self):
         """Test Python version check when requirement is met."""
         version_info = namedtuple("version_info", ["major", "minor", "micro"])
-        with patch.object(sys, "version_info", version_info(3, 13, 2)):
+        with patch.object(sys, "version_info", version_info(3, 14, 2)):
             status = check_python_version()
 
         assert status.name == "Python"
@@ -42,7 +42,7 @@ class TestCheckPythonVersion:
     def test_python_version_below_requirement(self):
         """Test Python version check when the interpreter is too old."""
         version_info = namedtuple("version_info", ["major", "minor", "micro"])
-        with patch.object(sys, "version_info", version_info(3, 12, 9)):
+        with patch.object(sys, "version_info", version_info(3, 13, 9)):
             status = check_python_version()
 
         assert status.name == "Python"
@@ -53,12 +53,12 @@ class TestCheckPythonVersion:
     def test_python_version_format(self):
         """Test Python version format is correct."""
         version_info = namedtuple("version_info", ["major", "minor", "micro"])
-        with patch.object(sys, "version_info", version_info(3, 13, 7)):
+        with patch.object(sys, "version_info", version_info(3, 14, 7)):
             status = check_python_version()
 
         # Version should be in format "X.Y.Z"
         assert status.version is not None
-        assert status.version == "3.13.7"
+        assert status.version == "3.14.7"
         parts = status.version.split(".")
         assert len(parts) == 3
         assert all(part.isdigit() for part in parts)
@@ -249,7 +249,7 @@ class TestVerifyRequiredDependencies:
             "quickscale_cli.utils.dependency_utils.check_all_dependencies"
         ) as mock_check:
             mock_check.return_value = [
-                DependencyStatus("Python", True, "3.13.0", True, "Runtime"),
+                DependencyStatus("Python", True, "3.14.0", True, "Runtime"),
                 DependencyStatus("Poetry", True, "1.7.0", True, "Dependency mgmt"),
                 DependencyStatus("Git", False, None, False, "Version control"),
             ]
@@ -268,7 +268,7 @@ class TestVerifyRequiredDependencies:
                 "Poetry", False, None, True, "Dependency mgmt"
             )
             mock_check.return_value = [
-                DependencyStatus("Python", True, "3.13.0", True, "Runtime"),
+                DependencyStatus("Python", True, "3.14.0", True, "Runtime"),
                 poetry_missing,
                 DependencyStatus("Git", False, None, False, "Version control"),
             ]

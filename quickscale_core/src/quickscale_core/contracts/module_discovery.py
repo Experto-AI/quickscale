@@ -18,8 +18,10 @@ without altering the core discovery contract.
 
 from __future__ import annotations
 
+import argparse
 from enum import Enum
 from pathlib import Path
+import sys
 from typing import Final
 
 import importlib.resources as _resources
@@ -44,6 +46,11 @@ class ImproperlyConfigured(Exception):
 #: must stay fail-closed even though they are not discovered via the manifest
 #: scan.
 PLACEHOLDER_MODULE_NAMES: Final[frozenset[str]] = frozenset({"teams"})
+
+#: The number of source modules in the shipped contract.  The inventory is
+#: discovered from manifests at runtime, while this count keeps additions and
+#: removals fail-hard until the shipped contract is deliberately updated.
+AUTHORITATIVE_MODULE_COUNT: Final[int] = 12
 
 #: Human-readable reason template for placeholder rejection.
 _PLACEHOLDER_REASON_TEMPLATE: Final[str] = (
@@ -186,6 +193,34 @@ def discover_shipped_module_names() -> list[str]:
             discovered.append(entry.name)
 
     return discovered
+
+
+def authoritative_module_names() -> list[str]:
+    """Return the fail-hard inventory of shipped module names.
+
+    The source manifest scan is the single inventory input for release and
+    validation tooling.  Placeholder names are never public modules, even if
+    a malformed or future repository state gives one a manifest.  A count
+    mismatch is also rejected so consumers cannot silently operate on a
+    partial or accidentally expanded release inventory.
+
+    Raises:
+        ImproperlyConfigured: If a placeholder is discovered or the number of
+            discovered modules differs from :data:`AUTHORITATIVE_MODULE_COUNT`.
+    """
+    names = discover_shipped_module_names()
+    placeholders = sorted(set(names) & PLACEHOLDER_MODULE_NAMES)
+    if placeholders:
+        raise ImproperlyConfigured(
+            "Authoritative module inventory contains placeholder module(s): "
+            + ", ".join(placeholders)
+        )
+    if len(names) != AUTHORITATIVE_MODULE_COUNT:
+        raise ImproperlyConfigured(
+            "Authoritative module inventory count drift: expected "
+            f"{AUTHORITATIVE_MODULE_COUNT}, found {len(names)}"
+        )
+    return names
 
 
 def discover_shipped_module_paths() -> dict[str, Path]:
@@ -358,6 +393,34 @@ def get_bundled_manifests_path() -> Path:
     return Path(str(ref))
 
 
+def resolve_manifest_base_path() -> Path:
+    """Return the base directory to read shipped module manifests from.
+
+    Prefers the maintainer monorepo's ``quickscale_modules/`` workspace and
+    falls back to the manifest snapshots bundled inside the ``quickscale_core``
+    wheel when that workspace is absent (installed-wheel context).  This is the
+    AF7 discovery contract established by SA109/SA113/SA111a, single-homed here
+    so every manifest-reading call site resolves identically.
+
+    Fail-hard is preserved: when neither source resolves, ``ImproperlyConfigured``
+    propagates from :func:`get_bundled_manifests_path` rather than yielding a
+    silently empty or defaulted manifest.
+
+    Note this resolves *manifest* reads only.  Source-required operations
+    (:func:`get_modules_base_path`, :func:`discover_shipped_module_paths`,
+    ``load_module_manifest``, ``refresh_managed_adapters``) intentionally remain
+    fail-hard against the source tree and must not call this.
+
+    Raises:
+        ImproperlyConfigured: If neither the source workspace nor the bundled
+            manifests directory is available.
+    """
+    try:
+        return get_modules_base_path()
+    except ImproperlyConfigured:
+        return get_bundled_manifests_path()
+
+
 def discover_bundled_module_names() -> list[str]:
     """Return alphabetically sorted names of modules from the bundled
     manifests within the installed ``quickscale_core`` package.
@@ -399,8 +462,10 @@ def discover_bundled_module_names() -> list[str]:
 
 
 __all__ = [
+    "AUTHORITATIVE_MODULE_COUNT",
     "ModuleResolutionSource",
     "PLACEHOLDER_MODULE_NAMES",
+    "authoritative_module_names",
     "discover_bundled_module_names",
     "discover_shipped_module_names",
     "discover_shipped_module_paths",
@@ -411,3 +476,26 @@ __all__ = [
     "is_placeholder_module",
     "set_modules_base_path",
 ]
+
+
+def _main(argv: list[str] | None = None) -> int:
+    """Expose a hermetic command-line shim for repository tooling."""
+    parser = argparse.ArgumentParser(prog="module_discovery.py")
+    parser.add_argument(
+        "--list-modules",
+        action="store_true",
+        help="print the authoritative source module inventory, one per line",
+    )
+    args = parser.parse_args(argv)
+    if not args.list_modules:
+        parser.error("the --list-modules option is required")
+    try:
+        print("\n".join(authoritative_module_names()))
+    except ImproperlyConfigured as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

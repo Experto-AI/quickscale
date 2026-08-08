@@ -229,7 +229,7 @@ class ContactPagination(_PlainListPagination):
             raise ImproperlyConfigured("CRM_CONTACTS_PER_PAGE setting is required.")
         try:
             return int(page_size)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise ImproperlyConfigured(
                 f"CRM_CONTACTS_PER_PAGE must be a valid integer, got {page_size!r}"
             )
@@ -246,7 +246,7 @@ class DealPagination(_PlainListPagination):
             raise ImproperlyConfigured("CRM_DEALS_PER_PAGE setting is required.")
         try:
             return int(page_size)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise ImproperlyConfigured(
                 f"CRM_DEALS_PER_PAGE must be a valid integer, got {page_size!r}"
             )

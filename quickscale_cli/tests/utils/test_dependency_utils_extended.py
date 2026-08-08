@@ -310,7 +310,7 @@ class TestCheckAllDependencies:
     def test_verify_missing_required(self, mock_all):
         """Test verify_required_dependencies with missing required dep"""
         mock_all.return_value = [
-            DependencyStatus("Python", True, "3.13", True, "test"),
+            DependencyStatus("Python", True, "3.14", True, "test"),
             DependencyStatus("Poetry", False, None, True, "test"),
             DependencyStatus("Git", True, "2.0", False, "test"),
             DependencyStatus("Docker", True, "24.0", False, "test"),

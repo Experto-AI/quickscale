@@ -2880,7 +2880,7 @@ class TestBackupLifecycle:
                     "--host",
                     "localhost",
                     "--port",
-                    "5432",
+                    connections["default"].settings_dict["PORT"],
                     "--username",
                     connections["default"].settings_dict["USER"],
                     "--dbname",

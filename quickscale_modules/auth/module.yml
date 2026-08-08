@@ -3,7 +3,7 @@
 # See decisions.md §Module Manifest Architecture for schema specification
 
 name: auth
-version: "0.72.0"
+version: "0.87.0"
 description: "Production-ready authentication module using django-allauth"
 
 config:
@@ -41,7 +41,7 @@ config:
 
 # Dependencies required by this module
 dependencies:
-  - django-allauth>=0.63.0
+  - django-allauth>=65.18.0,<66.0.0
 
 # Django apps that must be in INSTALLED_APPS
 django_apps:

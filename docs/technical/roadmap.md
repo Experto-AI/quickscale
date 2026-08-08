@@ -5,278 +5,421 @@
 
 ## Purpose
 
-Tracks pending roadmap work. Detailed completed implementation history is in [CHANGELOG.md](../../CHANGELOG.md). Each phase is sized as [Adaptive](../others/adaptive.md) Tier 1–2; split before implementing if a checklist item is Tier 3.
+Tracks open work only. Completed implementation history, closeout evidence, and the rationale behind resolved decisions live in [CHANGELOG.md](../../CHANGELOG.md).
 
-**Rules:**
-- Keep open todo items here.
-- Move detailed completed implementation history to CHANGELOG.md.
-- Each open phase links back (`why →`) to the finding that justifies it.
+- Each phase is sized as [Adaptive](../others/adaptive.md) Tier 1–2. Split before implementing if a checklist item is Tier 3.
+- Each open ticket links back (`why →`) to the finding that justifies it.
+- When a ticket closes, move its detail to CHANGELOG.md and delete it here.
 
 ---
 
-## Parallel Execution Tracks
+## Parallel execution tracks
 
-Work is split across 3 git worktrees that develop in parallel and merge back to `v87` after each phase. `v87` is the clean integration branch — never commit directly to it.
+Work is split across 3 git worktrees that develop in parallel and merge back to `v87`. `v87` is the clean integration branch — never commit directly to it.
 
-### Start procedure
-
-Run at the beginning of every new phase, before touching any files:
+**Start a phase:**
 
 ```bash
 cd /home/victor/code/quickscale-wt-track{N}
-git status             # must be clean — commit or stash any in-progress work first
-git merge v87          # pull in everything other tracks have merged since last sync
-# resolve any conflicts, then continue with the phase
+git status             # must be clean — commit or stash in-progress work first
+git merge v87          # pull in everything other tracks have merged
 ```
 
-### Merge procedure
-
-Run when a phase (or a full milestone) is complete and ready to integrate:
+**Merge a phase back:**
 
 ```bash
 cd /home/victor/code/quickscale-wt-track{N}
-git merge v87          # sync latest before merge-back; resolve conflicts here
-# run phase verification tests
+git merge v87          # sync before merge-back; resolve conflicts HERE, not on v87
+# run phase verification
 cd /home/victor/code/quickscale
 git merge --no-ff wt-track{N}
 ```
 
-> **Shared closeout files (`CHANGELOG.md` and `docs/technical/roadmap.md`):** Because every track touches these files, they are the most likely source of merge conflicts. The procedure above already handles this — the `git merge v87` before merge-back ensures you resolve any conflicting entries on your track branch rather than on `v87`. Do not skip or reorder that step. When resolving, keep both tracks' entries (don't overwrite another track's completed work).
->
-> **Conditionally shared — `docs/technical/decisions.md`:** Added to the shared-closeout set when repository-wide policy or acceptance evidence changes (e.g., recording that a previously open ticket is closed). The existing `git merge v87` synchronization and preserve-both-sides resolution procedure above covers this surface — decisions.md entries must be reconciled with the same discipline as CHANGELOG.md and roadmap.md entries, not overwritten across tracks.
+**Shared closeout files** — `CHANGELOG.md`, `docs/technical/roadmap.md`, and `docs/technical/decisions.md` when policy or acceptance evidence changes — are touched by every track and are the main conflict source. The `git merge v87`-before-merge-back step above handles this; do not skip or reorder it. When resolving, keep both tracks' entries. Check the unmerged set before staging and confirm it is empty after.
+
+### Rules every ticket inherits
+
+- **Serial handoff contract.** One child at a time per track. Each child names its complete file allowlist, commands, expected exits/artifacts, rollback, and focused validation *before* implementation; compares staged names against that allowlist after `git add -A`; obtains independent change review over its own slice; merges back to `v87`; then the next starts from a fresh sync. A child may stop with evidence and no source delta. Never carry an unreviewed implementation across a child boundary.
+- **Umbrella tickets are acceptance-only.** A ticket tagged `Umbrella` is never executed as a monolithic handoff — its children own all implementation, and it closes when they all close.
+- **Proportionality.** A delta confined to test assertions or documentation, with no production-behaviour change, goes straight to implementation and one change review. Scoped plan review is reserved for production behaviour, security boundaries, and external/public surfaces.
+- **Quality.** Leave `make quality` no worse than you found it. Raising a complexity ceiling is never an acceptable remedy — reduce the branching or record a structured waiver in the shipped waiver ledger. Per-file line ceilings no longer exist ([decisions.md §file-size-metric-policy](./decisions.md#file-size-metric-policy)); do not reintroduce a line-count or CC criterion into any verify list.
+- **Reviewed-tip identity.** The tip reviewed at full scope is the tip merge-back consumes: sync, then review, then merge that exact commit.
+- **Rollback** is "revert the ticket's allowlisted files" unless the ticket says otherwise.
+- **No scope widening.** A finding outside a ticket's stated scope is recorded and ticketed, not fixed in place.
+- **Reviewed handoffs must record their retrospective.** An attempt that ends without a checked box states what it tried and why it was rejected, so the next attempt does not re-derive a rejected design.
+- **Three worktrees, no fourth.** Track 2 accepts no new tickets while SA115b sits merge-gated on it — a track merges as a branch, not as a ticket, so anything homed there drags SA115b onto `v87`. Splitting an existing Track 2 ticket in place is not "new work"; adding an unrelated ticket is.
 
 ---
 
-## Open work
-
-> Completed work lives in [CHANGELOG.md](../../CHANGELOG.md). This section holds only active work.
-
-The green-gate join (SA96-GATE), the installed-wheel discovery/resolver chain (SA109 ✓, SA110 ✓, SA113 ✓, SA111a ✓, SA111b ✓), and the Track 2 frontend de-specialization chain (SA104 → SA108 ✓) are closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md). Five items remain open.
-
-1. **SA112** (installed-wheel full-lifecycle e2e `plan → apply → up`, Track 3) — heavy e2e lane covering `apply`'s own resolver call site and the Docker path from a real install. **Critical path.** Pre-diagnostic: gated on one focused plan review of the maintainer-supplied continuation artifact (sections A–E below). Deps: SA110 ✓ + SA111a ✓ + SA113 ✓.
-2. **SA96-PUBLISH** (staged PyPI publish, Track 3) — **HUMAN-ONLY**. Baseline prerequisites met (SA96-GATE ✓ + SA109 ✓ + SA110 ✓ + SA111a ✓ + SA113 ✓); awaits a human maintainer to execute the irreversible publish. Hold: must not publish while SA112 remains open.
-3. **SA114** (v87 gate re-verification & fix sweep, Track 1, `deps: none`) — ordered gates are green and no source fix was required; SA114-CR-001's documentation half is reconciled. Remaining work is one full-scope re-review, **authorized under `SA114-DEC-002`** — clean to continue.
-4. **SA116** (policy-compliant `resolvers.py` line reduction, Track 1, `deps: none`) — implementation and source review complete; remains unchecked because it closes with SA114.
-5. **SA115** (E2E in-lane parallelization, Track 2, `deps: none` · **merge after SA112**) — `pytest-xdist` in-lane fan-out for the e2e suite. Implementation reached a parked checkpoint; merge-order-blocked on SA112.
-
-Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unscheduled** — gated on a third consumer or a public "update my generated project" command. Arch Findings **2/4** remain **not ticketed**, deferred with the (unscheduled) teams module. Both audits ([arch-audit.md](../others/arch-audit.md), [tech-audit.md](../others/tech-audit.md)) otherwise stand at zero open findings.
-
-### Green-gate milestone — all quality make commands pass
-
-**Exit criteria (single definition of done).** On a clean rerun at current `v87` HEAD (last proven green by SA114 on 2026-07-25), `make check`, `make quality`, `make ci`, and `make ci-e2e` all exit 0, with `QUARANTINE_TICKETS` **empty** in `scripts/test_integration.sh` (no masked failures). The four-command join covers everything end to end — unit **and** integration **and** e2e. `make check` is the **fast** repo gate — `lint` + `typecheck` + `test-unit` (unit only) + `check-core-compat` + `check-module-core-imports` + `check-manifest-sync` + `check-org-context-primitives` + `check-csrf-exempt` (see the `check` target in `Makefile`; `make check QUIET=1` is the quiet LLM/agent variant). **Integration coverage lives in `make ci`** (unit + integration when PostgreSQL is available), and e2e in `make ci-e2e` (`.github/workflows/e2e.yml`). So `make check` alone does not prove integration — the `ci`/`ci-e2e` legs of the join do.
-
-The join runs entirely **inside the monorepo** and does **not** exercise the pip-installed wheel — that gap was closed by SA109/SA110 (both complete; see [CHANGELOG.md](../../CHANGELOG.md)). `make smoke-install` builds wheels from per-run staged copies (no source mutation), installs into a throwaway venv outside the source tree, and runs every non-mutating CLI command from a sanitized external workdir under the full `>=3.13,<3.15` Python constraint.
-
-### SA96-PUBLISH — Staged release ladder
-
-- [ ] **SA96-PUBLISH — Staged release ladder.** `Tier 1 · v87 · deps: SA96-GATE ✓ + SA109 ✓ + SA110 ✓ + SA111a ✓ + SA113 ✓` · **HUMAN-ONLY — do not delegate to an assistant**
-  Version bump if needed (`make bump-version`), then `make build` → `make publish-test` (TestPyPI + verify) → `make publish-prod` (or `make publish-full` for test→verify→prod in one shot). **PyPI publish is irreversible/outward-facing — a human maintainer must confirm version + green-gate status before `publish-prod`. This step is explicitly excluded from any SA93/SA96-GATE assistant handoff.**
-
-  *(Acceptance:* all 12 modules green in isolation; SA96-GATE four-command run exits 0 with empty quarantine; SA109 ✓ and SA110 ✓ closed (installed wheel runs non-mutating commands clean); SA113 ✓ closed (resolver fix landed); SA111a ✓ and SA112 closed (optional SA111b is non-gating); release published and verified on PyPI.*)*
-  *(why →* pre-publish assurance; green-gate is the definition of "publishable"*)*
-
-### Track 1 — Tenant-context surface — AWAITING RE-REVIEW
-
-**All Track 1 source work is complete.** SA114's ordered validation chain is green and SA116's compaction landed. Both tasks remain open only because SA114-CR-001 closes on a full-scope independent review; its documentation-consistency half was reconciled on 2026-07-25. See [CHANGELOG.md](../../CHANGELOG.md).
-
-#### SA114 — v87 gate re-verification & fix sweep
-
-SA96-GATE proved the four-command join green **at the post-SA92 synced baseline**. Commits have landed since (SA108/roadmap docs, the `d5d25c08` generator `poetry lock` timeout fix, merges), so the gates have not been re-run against current `v87` HEAD. This ticket re-verifies them and fixes any drift. It was introduced while SA113 was still active (alongside the installed-context resolver fix) and now runs alongside the remaining SA112 work on Track 3.
-
-- [ ] **SA114 — Re-run the make gates on current `v87` HEAD and fix drift.** `Tier 2 · Track 1 · deps: none`
-  **Recorded partial delivery (2026-07-25; review cap reached; task remains open).**
-  - **Done:** The exact ordered chain `make check && make quality && make ci && make ci-e2e` exited 0 from a clean wt-track1 synced to latest `v87`: QUARANTINE_TICKETS empty, core+CLI equal-weight coverage 92.88%, integration module mean 94.41%, Core E2E 35 passed, CLI E2E 29 passed. SA114-ORDER-001 is satisfied and no source fix was required. Non-gating Django/pytest warnings were observed without assigned ticket IDs.
-  - **Pending / blocking:** `SA114-CR-001` (medium, blocking, consistency). The two same-fact scheduling sites the final review named — the open-only dependency diagram still carrying completed Track 1/Track 2 rows, and SA115 scheduling/infra prose treating SA114's heavy legs as future work — were **reconciled in the 2026-07-25 roadmap cleanup pass** (diagram, SA115 concurrency bound, parallelism bullets, track-readiness bullets). What remains is the review half: CR-001 closes only on a full-scope independent review returning `STATUS: ok`. This checkpoint is not a waiver.
-  - **Decisions needed:** none — resolved. **The maintainer authorized a scoped re-review on 2026-07-25** (`SA114-DEC-002`). See the handoff block below; a continuation may act on this authorization without re-asking.
-
-  **Authorized continuation — SA114/SA116 scoped re-review (`SA114-DEC-002`, 2026-07-25).**
-
-  This is a standing authorization for the next Track 1 executor. Scope is **review only — no source work is authorized.** If the review surfaces a defect requiring a source change, stop and report rather than fixing under this authorization.
-
-  1. Start from a clean Track 1 worktree synced to latest `v87` (Start procedure above).
-  2. Submit **one** independent full-scope change review covering both tickets:
-     - **SA116 source:** `git show a58f07e0 -- quickscale_core/src/quickscale_core/contracts/resolvers.py` — confirm the 1761→1749 reduction is comment/docstring-only and behavior-preserving (no executable statement, public symbol, signature, default, or branch altered; no load-bearing comment lost). Confirm `scripts/quality_baseline.json`'s resolvers.py entries were **not** loosened (shrink-only policy, decisions.md §5).
-     - **SA114 evidence:** no source fix was required, so the review assesses whether the recorded 2026-07-25 ordered-chain evidence is sufficient to close (chain exited 0; QUARANTINE_TICKETS empty; coverage 92.88% / 94.41%; Core E2E 35, CLI E2E 29).
-     - **`SA114-CR-001` closure:** confirm `docs/technical/roadmap.md` is internally self-consistent — the dependency diagram shows only open work as its caption claims; no prose describes completed work as pending; the "Open work" list, ticket blocks, diagram, track-readiness bullets, and parallelism bullets agree; and `CHANGELOG.md` claims nothing complete that the roadmap calls pending, or vice versa.
-  3. **Do not re-run the gates.** The 2026-07-25 chain is the accepted evidence; re-running `make ci-e2e` would contend for the Docker/PostgreSQL the critical path needs. If the reviewer judges a rerun genuinely necessary, surface that as a finding rather than running it.
-  4. On `STATUS: ok`: mark SA114 and SA116 `[x]`, move both to [CHANGELOG.md](../../CHANGELOG.md), delete their blocks from this file, and drop Track 1 from the diagram and track-readiness list.
-  5. On anything less than `STATUS: ok`: record the findings here and stop. Track 1 is off the critical path, so it must never be closed on a waiver.
-
-#### SA116 — Policy-compliant `resolvers.py` line reduction (unblocks SA114 four-gate reclose)
-
-Cross-track growth left `quickscale_core/src/quickscale_core/contracts/resolvers.py` at 1761 lines against its checked-in 1749-line maximum in `scripts/quality_baseline.json`, so `make quality` exits 2 (this is `SA114-QUALITY-001`). Under the shrink-only quality-maxima policy (decisions.md §5) the only compliant fix is a behavior-preserving reduction; raising the baseline is not authorized. Assigned here by `SA114-DEC-001` (2026-07-23).
-
-- [ ] **SA116 — Reduce `contracts/resolvers.py` to ≤1749 lines, behavior-preserving.** `Tier 1 · Track 1 · deps: none`
-  Compaction landed and is recorded in [CHANGELOG.md](../../CHANGELOG.md): 1761→1749 lines, comment/docstring-only, public API and resolver behavior preserved, `scripts/quality_baseline.json` unchanged at `max_lines` 1749, `make quality` exit 0, independent source review `STATUS: ok` with no findings. No further SA116 source work exists; it remains unchecked because it closes with SA114 after SA114-CR-001 is resolved and full-scope review returns `STATUS: ok`.
-  *(why →* shrink-only policy-compliant reduction; dedicated idle-Track-1 ticket resolved `SA114-QUALITY-001` and kept Track 3 on the critical path*)*
-
-### Track 2 — Module contracts & settings — frontend-theme de-specialization (arch Finding 10)
-
-**Feature chain COMPLETE** (SA104 → SA108; arch-audit Finding 10 retired). Detail in [CHANGELOG.md](../../CHANGELOG.md). One independent test-infra ticket (**SA115**) is parked on this otherwise-idle track.
-
-#### SA115 — E2E in-lane parallelization (pytest-xdist)
-
-`make ci-e2e` is the longest quality check in the SDLC. It runs the full 12-stage local CI (`scripts/check_ci_locally.sh --e2e`), whose final stage is `scripts/test_e2e.sh`. That script already runs the **Core** and **CLI** e2e lanes concurrently (`QS_E2E_PARALLEL=1`), each in its own Docker Compose project / container prefix / dynamic host port — **but within each lane the ~40–60 `@pytest.mark.e2e` tests run serially** (the pytest invocation has no `-n`). Because each test generates a full Django project, runs `poetry install`, builds, and drives Playwright/Chromium, that serial in-lane run is the dominant cost, and the total is gated by whichever single lane is slowest. Adding in-lane `pytest-xdist` fan-out is the highest-leverage remaining speedup.
-
-Most groundwork already exists and is xdist-aware: `pytest-xdist ^3.8.0` is already a dependency (used for unit tests); `quickscale_core/tests/conftest.py` already isolates per worker via `_isolate_poetry_cache_per_worker()` (per-`PYTEST_XDIST_WORKER` Poetry cache) and the `per_test_db`/`unique_db_name` fixtures (unique DB per test, collision-free across workers); project generation uses per-test `tmp_path`. The **only** real blocker is that the `pytest-docker` **session-scoped** fixtures (`docker_compose_file`, `postgres_service`, conftest lines 122–157) are not xdist-safe — under `-n` each worker is its own session and would bring up the *same* Compose project (same default name, same named volume `postgres_test_data`), colliding.
-
-**Design (ratified with maintainer):** *container-per-worker* Postgres; *scope limited to the E2E stage* (no lane rebalancing).
-
-- [ ] **SA115 — Add in-lane pytest-xdist fan-out to the e2e suite.** `Tier 2 · Track 2 · deps: none · merge after SA112`
-  1. **xdist-safe pytest-docker fixtures (container per worker).** In `quickscale_core/tests/conftest.py`, add a session-scoped override of pytest-docker's `docker_compose_project_name` that derives a **unique per-worker** Compose project name from the lane's `QS_E2E_COMPOSE_PROJECT_NAME` (exported per lane at `scripts/test_e2e.sh:225`) plus `PYTEST_XDIST_WORKER` (falls back to a single name when not under xdist). Keep the lane prefix intact so the shell's `cleanup_scoped_containers` (test_e2e.sh:163–176) still matches by `name=<prefix>` substring. Docker Compose auto-prefixes the named volume with the project name, so `docker-compose.test.yml` needs **no change** (port already dynamic). Confirm whether `quickscale_cli/tests/` defines its own docker fixtures and mirror the override there.
-  2. **Configurable worker count.** In `scripts/test_e2e.sh`, extend the `pytest_cmd` builder (~line 265) to append `-n <workers> --dist loadscope`, driven by a new `QS_E2E_XDIST_WORKERS` env var. Default to a small `nproc`/RAM-derived cap (mirror the Makefile's existing `PYTEST_XDIST_WORKERS` heuristic — **not** `auto`, since each worker now runs a full Postgres container + Chromium and is memory-heavy). `QS_E2E_XDIST_WORKERS=1` (or `0`) must degrade to today's serial no-`-n` path (debugging escape hatch, mirroring `QS_E2E_PARALLEL=0`). Document the var in the script `--help` and `# Environment:` header. Surface the chosen worker count in the lane banner (near test_e2e.sh:251–253). Keep the two lanes concurrent → total load is `2 lanes × N workers`; pick the default with combined RAM/container budget in mind.
-  - **Concurrency bound (infra):** shares the live PostgreSQL/Docker + ports with SA112's installed-wheel e2e — **serialize** heavy runs across worktrees (per-lane knobs namespace lanes *within* one invocation, not across worktrees). SA114's heavy legs already ran to completion on 2026-07-25 and no longer contend for this infra.
-  - **Merge-order bound (hazard — re-examined 2026-07-25, weaker than originally assumed):** the bound was set assuming SA112 also edits `scripts/test_e2e.sh` / `.github/workflows/e2e.yml`. In fact `scripts/test_e2e.sh:439` already points the CLI lane at `$CLI_DIR/tests/`, so SA112's lifecycle module is collected with no runner edit (its artifact §E: "confirm, add nothing if so"), and SA112's `e2e.yml` change is an append to `pull_request.paths`, which SA115 does not touch — expected executable overlap is **empty**. The bound is **retained** only because SA112's §C root fix is still unknown pending the traceback, and any rebase burden must not land on the critical path. **Land SA115 after SA112**; shared-closeout overlap (`CHANGELOG.md`/`roadmap.md`) is covered by the Merge procedure. See `SA115-DEC-001`.
-  - Verify: baseline `time QS_E2E_XDIST_WORKERS=1 ./scripts/test_e2e.sh` vs. parallel default is faster with all e2e tests green; `docker ps` mid-run shows one Postgres container per active worker with distinct project names/ports; back-to-back runs leave no leftover containers/volumes (`docker volume ls | grep postgres_test_data`); `QS_E2E_XDIST_WORKERS=1` reproduces the old serial path; `make ci-e2e` stays green; `.github/workflows/e2e.yml` passes on the CI runner (tune default worker count to runner cores/RAM).
-  *(why →* `ci-e2e` is the longest gate in the SDLC; lanes are already concurrent but each runs serially inside, and the xdist groundwork (per-worker cache + per-test DB) already exists — the sole blocker is xdist-safe pytest-docker fixtures*)*
-
-  **Parked checkpoint — SA115 remains open:**
-
-  **Done (2026-07-23; detail in [CHANGELOG.md](../../CHANGELOG.md)).** Phases 1 and 2 are implemented and focus-validated on `wt-track2`: a worker-unique `docker_compose_project_name` fixture and the `QS_E2E_XDIST_WORKERS` runner knob, with 16 fixture tests, 13 harness tests, Bash syntax, and scoped Ruff all green. **The four changed files are parked uncommitted on `wt-track2`** — `quickscale_core/tests/conftest.py`, `quickscale_core/tests/test_e2e_xdist_fixtures.py`, `scripts/test_e2e.sh`, `scripts/test_e2e_parallel.py`. No container lifecycle or back-to-back teardown has been exercised yet.
-
-  **Pending / blocking**
-  - **SA112 is still open.** SA115 cannot merge until SA112 lands — both edit `scripts/test_e2e.sh` and the shared CI surface, and the merge-order bound (`merge after SA112`) is documented in the SA115 task block above. After SA112 closes:
-    1. Merge `v87` into `wt-track2`.
-    2. Refresh/reconcile shared runner/workflow edges (`scripts/test_e2e.sh`, `.github/workflows/e2e.yml`). **Note:** `scripts/test_e2e.sh` moved on `v87` on 2026-07-23 (memory preflight guard + `QS_E2E_HEARTBEAT_INTERVAL` heartbeat; see CHANGELOG) — the parked SA115 edits to that file must be reconciled against those changes, not just SA112's lane wiring.
-    3. Rerun focused checks: fixture tests, harness tests, Bash syntax, Ruff.
-    4. Run serial baseline (`QS_E2E_XDIST_WORKERS=1`) vs. default parallel E2E, proving distinct container names/ports per worker and clean teardown.
-    5. Run `make ci-e2e`.
-    6. Run local `./scripts/check_ci_locally.sh --e2e`, and separately run the hosted CI runner (`.github/workflows/e2e.yml`) if available, listing results for each.
-    7. Obtain independent change review (`STATUS: ok`).
-    8. Mark SA115 `[x]` and add completion entry to CHANGELOG.md.
-  - **No completion language or CHANGELOG entry until validation and independent review are green.**
-
-  **Decisions needed:** one — `SA115-DEC-001` (how far to unblock Track 2; see the decision block at the end of this document). Steps 1–2 there (commit the parked work, reconcile against current `v87`) are owed regardless of the outcome and carry no downside. Only the *merge* is mechanically gated by SA112; the earlier "wait for SA112, do nothing" posture was too strong.
-
-### Track 3 — Core/CLI plumbing — release path
-
-> The installed-context resolver crash (`ImproperlyConfigured: Modules base path not found`) is closed: **SA113 ✓** added the bundled-manifest fallback to `resolve_module_implications` for both the `plan` and `apply` call sites (with a fail-hard inventory boundary), and **SA111a ✓** proved the fixed `plan` path in `smoke-install` (all 12 modules from an installed wheel). Both are recorded in [CHANGELOG.md](../../CHANGELOG.md). `apply`'s own installed-context lifecycle coverage remains open as **SA112**. (The optional in-monorepo fallback regression test **SA111b ✓** is complete and recorded in [CHANGELOG.md](../../CHANGELOG.md).)
-
-#### SA112 — Installed-wheel full-lifecycle e2e (`plan → apply → up`)
-
-**Pre-SA113 gap analysis — the resolver crash that blocked installed-context `plan`/`apply` is now resolved by SA113.**
-Before the fix, a broken `plan`/`apply` could reach a user because **no gate ever runs
-`apply`/`up` from an installed wheel**. `test_e2e_development_workflow.py` already
-drives `plan → apply → up → ps/manage/logs → down` with real Docker + PostgreSQL —
-but from **monorepo source**, so it never exercises bundled-manifest discovery and
-never hits the crash. The missing axis is *installed artifact*, not the lifecycle
-itself. This does **not** belong in `smoke-install`: `apply` runs `poetry lock` +
-`poetry install` (minutes) and `manage migrate` needs a live PostgreSQL, and `up`
-needs the Docker daemon + image builds — all antithetical to the fast, service-free
-smoke gate. It belongs in a heavy lane gated like `ci-e2e`.
-
-- [ ] **SA112 — Installed-wheel lifecycle e2e lane.** `Tier 2 · Track 3 · deps: SA110 ✓ · SA111a ✓ · SA113 ✓`
-  Add an installed-wheel e2e that builds+installs the wheels (reuse the
-  `smoke_install.sh` staging/build/venv machinery), then from an external workdir
-  runs `plan` (all 12 modules) → `apply` → `up` → `ps`/`manage migrate` → `down`
-  against real Docker + PostgreSQL, mirroring `quickscale_cli/tests/test_e2e_development_workflow.py`
-  but using the installed `quickscale` entrypoint instead of monorepo source. Wire it
-  into the e2e lane (`scripts/test_e2e.sh` / `.github/workflows/e2e.yml`), not
-  `make check`/`smoke-install`. Confirms `apply`'s own resolver call site
-  (`apply_command.py:973`) and the Docker path work from a real install.
-  - Verify: once implemented, this lane confirms the full installed-wheel `plan → apply → up` lifecycle works end to end (SA113's resolver fix already covers both call sites). Full `up` lifecycle boots and serves.
-  *(why →* `apply`/`up` have zero installed-artifact coverage; the existing lifecycle e2e runs only from source, which cannot reproduce install-context discovery bugs*)*
-
-  **Open state — pre-diagnostic; SA112 remains open.**
-
-  No SA112 implementation exists on any branch: an early disposable prototype was rejected by independent review and fully reverted, and every subsequent continuation was plan-only. The prototype's one durable result is the observation the root-fix phase must chase — installed `plan` succeeded for all 12 modules, then installed `apply` failed with `NameError: name 'QUICKSCALE_BILLING_ENABLED' is not defined` during managed-wiring regeneration. Static discovery has twice found no bare-name evaluation of that symbol in the traced path (the billing adapter uses a dict access, which would raise `KeyError`), so the raising frame genuinely requires a runtime traceback. That obstacle is now removed — the `apply` wrapper prints the full traceback under `QUICKSCALE_DEBUG` (landed on `v87`; see CHANGELOG). The plan-review history is recorded in [CHANGELOG.md](../../CHANGELOG.md); all findings except the two below were resolved at plan level.
-
-  **Pending / blocking**
-  - `SA112-PR-002` (**high, blocking, completeness**) — the plan must supply a literally executable registry rather than narrative operations: exact full argv arrays, cwd and environment, stdin bytes, captures and exit handling, named helper APIs and outputs, conditional root-fix tests, cleanup behavior, and staged-file allowlist/commit sequencing (allowlist compared against post-`git add -A` cached names, or explicitly against working-tree names before staging).
-  - `SA112-CR-005` (**medium, blocking, completeness**) — every workflow-trigger path entry must be expanded to its exact repository-relative GitHub Actions path string, order preserved, including `scripts/_python_requirement.sh`, with deterministic `yaml.BaseLoader` regression coverage.
-  - Both are addressed at plan-detail level by the maintainer artifact below. Diagnostics and implementation remain unauthorized until one focused independent plan review of that artifact returns `STATUS: ok`. After the gate: capture the traceback, select the root fix only from the actual raising frame, implement the lane, validate, obtain independent change review, then mark SA112 complete.
-
-  **Maintainer-supplied continuation artifact (2026-07-24) — resolves `SA112-PR-002` and `SA112-CR-005` at plan-detail level.**
-
-  This is the authoritative literal registry the plan reviews kept asking for. It is a **specification for the next continuation**, not an implementation authorization: the next executor starts from a clean Track 3 worktree synced to latest `v87`, submits this artifact (transcribed into the plan) to **one** focused independent plan review, and proceeds to diagnostics/implementation only on `STATUS: ok`. No fourth autonomous plan rewrite.
-
-  *A. Wheel-provision helper (reuses `smoke_install.sh` machinery — `SA112-PR-002`, named helper + outputs).*
-  - **New file `scripts/_installed_wheel_venv.sh`** (sourceable library): extract, verbatim, these functions from `scripts/smoke_install.sh` — `read_version`, `python_within_spec`, `smoke_select_python`, `ensure_compatible_python_available`, `ensure_compatible_python_venv_available`, `ensure_poetry_uses_compatible_python`, `build_with_poetry`, `pip_install_isolated`, `stage_package`, `build_staged_package`. Add one public entrypoint:
-    `iw_provision_installed_venv OUT_VENV_DIR` — creates its own `STAGE_DIR`/`BUILD_VENVS_DIR`/`WHEEL_COLLECT_DIR` via `mktemp -d /tmp/quickscale-iw-*-XXXXXX` (trap-cleaned on RETURN/EXIT of the helper only); stages+builds in the exact order `quickscale_core` (`"no"`) → `quickscale_cli` (`"yes"`) → `quickscale` (`"no"`); runs `"$PYTHON_BIN" -m venv "$OUT_VENV_DIR"`; installs with `pip_install_isolated "$OUT_VENV_DIR" "$WHEEL_COLLECT_DIR"/quickscale_core-*.whl "$WHEEL_COLLECT_DIR"/quickscale_cli-*.whl "$WHEEL_COLLECT_DIR"/quickscale-*.whl`; prints exactly `"$OUT_VENV_DIR/bin/quickscale"` to stdout and returns 0. **Caller owns `OUT_VENV_DIR` cleanup.** `smoke_install.sh` is refactored to `source` this library (its 20-probe behavior must be unchanged — see validation).
-  - **New thin wrapper `scripts/provision_installed_venv.sh`**: `set -euo pipefail`; `source "$(dirname "$0")/_installed_wheel_venv.sh"`; `iw_provision_installed_venv "$1"`. This is the single seam the pytest fixture shells out to.
-
-  *B. Lifecycle lane (`SA112-PR-002` — exact argv/cwd/stdin/captures/cleanup).* **New file `quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py`**, one `@pytest.mark.e2e` test, mirroring `quickscale_cli/tests/test_e2e_development_workflow.py::test_full_development_workflow` but driving the **installed** entrypoint via `subprocess.run`, never `CliRunner`/monorepo import.
-  - `session`-scoped fixture `installed_quickscale`: `venv_dir = tempfile.mkdtemp(prefix="qs-iw-venv-")`; `out = subprocess.run(["bash", str(REPO_ROOT/"scripts"/"provision_installed_venv.sh"), venv_dir], check=True, text=True, capture_output=True)`; `qs = out.stdout.strip()`; `yield qs`; `shutil.rmtree(venv_dir, ignore_errors=True)`. Skip the module when Docker/compose is unavailable (reuse `ensure_docker_running` shape).
-  - Per-step registry — each is `subprocess.run(argv, cwd=…, input=…, text=True, capture_output=True, env={**os.environ, "PORT": port, "QS_E2E_CONTAINER_PREFIX": prefix}, timeout=…)`; assert `returncode` as noted and `"Traceback (most recent call last)" not in (stdout+stderr)`:
-    1. `plan`: `argv=[qs, "plan", "sa112proj"]`, `cwd=workdir`, `input="\n\n1,2,3,4,5,6,7,8,9,10,11,12\ny\ny\ny\ny\n"` (all 12 modules — identical stdin to `scripts/smoke_install.sh:540`), expect `returncode==0`.
-    2. `apply`: `argv=[qs, "apply", "quickscale.yml"]`, `cwd=workdir/"sa112proj"`, `input="n\ny\n"` (show-docker-output=N → proceed=Y, per `test_e2e_development_workflow.py:291-292`), `env[PORT]` set, expect `returncode==0`, assert `"Running migrations (Docker)" in stdout`, `'localhost" (127.0.0.1), port 5432' not in stdout`, `"Migrations failed" not in stdout`.
-    3. `ps`: `argv=[qs, "ps"]`, `cwd=proj`, expect `0`.
-    4. `manage migrate`: `argv=[qs, "manage", "migrate", "--noinput"]`, `cwd=proj`, expect `0`.
-    5. `down`: `argv=[qs, "down", "--volumes"]`, `cwd=proj`, expect `0` — always run in a `finally:` so a mid-test failure still tears down containers/volumes.
-  - Container-prefix isolation: derive `prefix` from `QS_E2E_CONTAINER_PREFIX` exactly as `test_e2e_development_workflow.py:68-70`, so the lane's `cleanup_scoped_containers` (`scripts/test_e2e.sh:258-271`) matches it.
-
-  *C. Runtime root-fix (`SA112` Phase 1 — pending traceback, not pre-selected).* The prior prototype's installed `apply` raised `NameError: name 'QUICKSCALE_BILLING_ENABLED' is not defined` during managed-wiring regeneration. Confirmed static finding (2026-07-24): the billing adapter (`quickscale_modules/billing/src/quickscale_modules_billing/adapter.py:35`) uses `settings["QUICKSCALE_BILLING_ENABLED"]` (dict access → `KeyError`, not `NameError`), so the bare-name evaluation is **not** in the traced managed-wiring path — matching the earlier pass that also found no bare-name site. The raising frame therefore genuinely requires a runtime traceback, which the `apply` wrapper previously discarded by collapsing to `str(exc)`. **Obstacle removed (2026-07-24, landed on `v87`):** the wrapper now prints the full traceback to stderr when `QUICKSCALE_DEBUG` is set (`apply_command.py`, `_regenerate_managed_wiring_for_apply._wiring_fn`; default behavior unchanged; see CHANGELOG). Phase-1 capture procedure is now simply: run step B.2 with `QUICKSCALE_DEBUG=1`, save the printed traceback, select the root fix **only** from the actual raising frame. Surface a decision to the maintainer only if the frame admits multiple contract-valid fixes with materially different compatibility consequences; otherwise apply the traceback-selected technical fix (expected to follow the SA109/SA113/AF7 bundled-fallback precedent).
-
-  *D. CI trigger tuple (`SA112-CR-005` — fully expanded, ordered, exact repository-relative paths).* Append these to the `pull_request.paths` list in `.github/workflows/e2e.yml`, in this order, immediately after the existing `scripts/test_e2e_parallel.py` entry (`e2e.yml:39`):
-    1. `quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py`
-    2. `scripts/smoke_install.sh`
-    3. `scripts/_installed_wheel_venv.sh`
-    4. `scripts/provision_installed_venv.sh`
-    5. `scripts/_python_requirement.sh`
-  (`scripts/test_e2e.sh` at `e2e.yml:38` and `.github/workflows/e2e.yml` at `:41` already cover the runner and the workflow itself — do not duplicate.) Add a deterministic `yaml.BaseLoader` regression test (in `quickscale_core/tests/` alongside the existing workflow-contract tests) that loads `.github/workflows/e2e.yml`, reads `on.pull_request.paths`, and asserts all five strings above are present **and** that `scripts/_python_requirement.sh` appears (the CR-005-named omission), preserving relative order.
-
-  *E. Wiring + validation order.* Wire the new lane into `scripts/test_e2e.sh`'s CLI lane (it already runs `quickscale_cli/tests/` under `-m e2e`, so the new module is collected automatically — confirm, add nothing if so). Validation sequence, in order: (1) `bash -n` on the three shell files; (2) focused `poetry run pytest` of the new lifecycle module + the yaml.BaseLoader test; (3) **`make smoke-install` exit 0** to prove the `smoke_install.sh` refactor preserved SA110's 20-probe behavior; (4) `make ci-e2e` exit 0 with quarantine empty; (5) independent full-scope change review `STATUS: ok`. Only then mark SA112 `[x]` and add the CHANGELOG entry.
-
-  **Decisions needed:** none. Sections A–E are the maintainer-authorized specification; the next action is a fresh clean Track 3 continuation that submits the artifact to **one** focused plan review. No fourth autonomous plan rewrite; implementation and diagnostic instrumentation stay unauthorized until that review returns `STATUS: ok`.
-
-#### Standing references
-
-The AF7 installed-wheel discovery decision is recorded in [`decisions.md`](../technical/decisions.md#af7-installed-wheel-module-discovery): discovery falls back to bundled manifest snapshots (`quickscale_core/data/manifests/*/module.yml`) when the source workspace is absent, while source-required operations (`get_modules_base_path`, `discover_shipped_module_paths`, `load_module_manifest`, `refresh_managed_adapters`) remain fail-hard. All prior Track 3 work (arch Finding 1, the four GATEs, SA91/SA93/SA100/SA101/SA96-GATE/SA109/SA110/SA113/SA111a/SA111b) is closed in [CHANGELOG.md](../../CHANGELOG.md).
-
-### Dependency & parallelization overview
+## Dependency & parallelization overview
 
 Only open work is shown; all prior tickets are complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 ```
-Track 1 (review authorized) Track 2 (merge-order queued)     Track 3 → release (CRITICAL PATH)
-─────────────────────────   ───────────────────────────────   ─────────────────────────────────
-SA114 / SA116               SA115 (e2e xdist; deps: none)     SA112 ── installed-wheel
-  (source+gates done;         │                                 │        plan→apply→up e2e
-   re-review authorized)      └── merge after SA112 ◄───────────┤
-                                                               ▼
-                                                           SA96-PUBLISH ── build → publish
-                                                             (human-only; hold until SA112)
+Track 1 (governance)                  Track 2 (CLOSED to new work)  Track 3 → release (CRITICAL PATH)
+─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
+SA122b-4 ✓ (publish membership)      SA115a ▶ (guard clamp, local)  SA136d ▶ (seal phase; re-scoped)
+  │                                   │  no shared file, no gate     │
+  │                                   ▼                              ▼
+  │                                  SA115b (e2e trigger paths)     SA136f
+  ▼                                   │  deps: SA112e                │
+SA122b-5 ▶                            │                              ▼
+  │  registry consumers: e2e paths    │                          SA117e-4 → -5
+  │  + make checker blocking          │                       loop · seal · PUSH(human)
+        ▲ (-5 only)                   │                              │
+        └──── merge after SA112e ─────┼──────────────────────────────┤
+                                      │                              ▼
+                                      └─ SA115b: merge after SA112e ► SA112b → c → d → e → f
+                                                                    │  serial reviewed handoffs
+                                                                    │  SA117e-4 required from b on
+                                                                    ▼
+                                                                   SA96-PUBLISH ── build → publish
+                                                                   (human-only; hold until SA112f)
 ```
 
-**Critical path:** `SA112 → SA96-PUBLISH`. That is the longest remaining dependency chain to release, and the only chain worth optimizing — SA112 is also the gate SA115 waits behind, so it is the single scheduling bottleneck in the repo.
+**Critical path:** `SA136d → SA136f → SA117e-4 → SA112b → SA112c → SA112d → SA112e → SA112f → SA96-PUBLISH` — nine remaining legs, live at **SA136d**, which the 2026-08-07 re-scope of the seal-atomicity requirement unblocked. SA136a–c and SA136e are closed, so **SA136d is the only unsatisfied member** of SA136f's `deps: SA136a–SA136e` set — the whole umbrella now hinges on that one child. **SA117e-5 is closeout and sits *off* the critical path**: SA112b's precondition is the *sealed* splits delivered by SA117e-4, not the umbrella's closure. Track 2 and `SA122b-4…5` are entirely off-path filler. The green-gate milestone is governed by the four-command join below and is not claimed here.
 
-**Parallelism.** Every open ticket already sits on a distinct track, and no rebalancing move is available that would speed the critical path:
+**Cross-track edges — two merge-order edges, no unserialized co-writes.** SA122b-5 and SA115b each merge after SA112e; all three share `.github/workflows/e2e.yml`'s `pull_request.paths` list. **SA115a carries no cross-track edge at all** — that is what the split bought. No other cross-track edge exists. The former `publish.yml` co-write is historical: the closed SA136e trigger comment is merged on `v87`, and SA122b-4 is closed with no remaining open writer.
 
-- **SA112 cannot be split or moved.** Its remaining work is one coherent unit — plan review → traceback capture → root fix → lifecycle lane → validation — over `scripts/smoke_install.sh`, `scripts/test_e2e.sh`, and `.github/workflows/e2e.yml`. Splitting it across tracks would put the same three files on two branches, which is exactly the merge hazard the parallel-track model exists to avoid.
-- **SA115 must stay on Track 2.** It edits `scripts/test_e2e.sh` (shared with SA112, hence `merge after SA112`). Moving it to Track 3 would collide with SA112 on that file; moving it to Track 1 would fold an independent test-infra change into SA114/SA116's review unit. Track 2 sitting idle is the correct outcome, not waste. (Its infra contention is now with SA112 only — SA114's heavy legs are done.)
-- **SA114 and SA116 remain one review unit** on the same `contracts/resolvers.py` / gate-drift surface, and their remaining work is a single full-scope re-review — indivisible, so there is nothing to move.
-- **Neither Track 1 nor Track 2 feeds the critical path.** SA114/SA116 re-proved current `v87` HEAD and now await re-review only; SA115 shortens a gate. Neither is a dependency of SA112 or SA96-PUBLISH, so moving work onto Track 3 could only slow it.
+**Track readiness — three independent states.** A track is *truly green* only when all three are yes.
 
-**Infra serialization (not a track constraint).** SA112's and SA115's e2e lanes (and any future `make ci`/`make ci-e2e` rerun) all need the same live PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL`/per-lane-scope knobs namespace lanes *within* one invocation, not across worktrees — only one track may exercise PG/Docker at a time regardless of track assignment.
+| Track (head) | Can start | Can finish | Can merge | Truly green | On critical path |
+|---|---|---|---|---|---|
+| **Track 3** — SA136d | **yes** — the re-scoped predicate is implementable on stock Git; next action is a scoped plan + review | **yes** — acceptance is local `publish_module.py`/`Makefile` behaviour; no other track's output is required | **yes** — no merge-order gate | ✅ **yes** | ✅ **yes** |
+| **Track 1** — SA122b-5 | **yes** — SA122b-4 is closed; the E2E/checker slice is scoped and ready | **yes** — its only bound is the merge gate below | **no** — **merge after SA112e** | no — merge-gated filler | no — off the critical path |
+| **Track 2** — SA115a | **yes** — validation authorized; yields infra to Track 3 on demand | **yes** — acceptance is local timing/teardown proof | **yes** — writes no shared file, no merge-order gate | ✅ **yes** | no — filler, but now *mergeable* filler |
+| **Track 2** — SA115b (after SA115a) | yes | yes | **no** — **hard dep** on SA112e | no | no — filler |
 
-**Conflict surface.** The shared closeout files are `CHANGELOG.md` and `docs/technical/roadmap.md` (plus `docs/technical/decisions.md` when policy or acceptance evidence changes). All three are covered by the Merge procedure above: the `git merge v87` before every merge-back forces conflicts to resolve on the track branch, preserving both sides. No open ticket shares any *executable* file with a ticket on another track except SA112/SA115 on `scripts/test_e2e.sh`, which the `merge after SA112` ordering bound already serializes.
+**Truly green today: SA136d (Track 3) and SA115a (Track 2).** Track 1's completed SA122b-4 is off-path, while the new head **SA122b-5** remains merge-gated behind SA112e. Only **SA136d is on the critical path**. Both 2026-08-07 maintainer decisions landed: the seal requirement was re-scoped ([decision 2](#track-topology--settled)), unblocking Track 3, and SA115 was split ([decision 1](#track-topology--settled)), unblocking Track 2's local half. SA115b's remaining "no" and SA122b-5's merge bound are **hard upstream dependencies** only SA112e can clear.
 
-### Track readiness (2026-07-25)
+**Infra serialization (not a track constraint).** SA112's and SA115a's e2e lanes, SA117e-4's `apply` verification, and any `make ci`/`make ci-e2e` rerun all need the same PostgreSQL server, Docker daemon, and ports. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL` knobs namespace lanes *within* one invocation, not across worktrees — **only one track exercises PG/Docker at a time, and Track 3 has priority.** Abandon or restart an SA115a run rather than make a critical-path leg queue behind it. **This now binds in practice** — SA136d and SA115a are both green and both want the same daemon; Track 3 wins.
 
-- **Track 1 — CLEAN TO CONTINUE (re-review authorized; not on the critical path).** SA114's ordered chain exited 0 on 2026-07-25 (QUARANTINE_TICKETS empty, coverage 92.88%/94.41%, Core 35/CLI 29 E2E) and no source fix was required; SA116 source work is complete. `SA114-CR-001`'s documentation half is reconciled, and the remaining review half is **authorized under `SA114-DEC-002`** — a continuation can start now and needs no further decision. Handoff steps are in the `SA114-DEC-002` block under SA114.
-- **Track 2 — BLOCKED by merge order, but PARTIALLY UNBLOCKABLE (off the critical path).** SA115's implementation is done and focus-validated but parked **uncommitted** on `wt-track2` (HEAD `eb619dc2`, behind `v87`). It still cannot *merge* until SA112 lands, but the standing "wait for SA112, do nothing" posture is wrong: committing the parked work and reconciling against current `v87` are owed regardless of merge order and carry no downside, and SA112's current plan-review gate leaves the shared Docker/PostgreSQL idle for SA115's validation. See `SA115-DEC-001` below. Also note `scripts/test_e2e.sh` has moved on `v87` since the parked edits (memory guard, heartbeat, provenance, swap-veto correction) — reconcile against those as well as SA112's lane wiring. Legacy compatibility finding stands: the SA105 dormant-file guarantee covers only fresh current-theme recipients; legacy pre-SA105 recipients get no retroactive dormant guarantee, and the shipped continuation adopts only missing forms/social surfaces (no blog/crm/listings backfill).
-- **Track 3 — BLOCKED (process gate, on the critical path).** SA112 is pre-diagnostic behind `SA112-PR-002` (high) and `SA112-CR-005` (medium). The maintainer-supplied artifact (sections A–E) addresses both at plan-detail level. **Clean to continue:** start a fresh Track 3 worktree synced to latest `v87`, transcribe the artifact into the plan, and submit it to **one** focused plan review; on `STATUS: ok`, proceed to traceback capture and implementation. SA96-PUBLISH (human-only) holds until SA112 closes. Non-gating advisories remain deferred (SA91 CR-SA91-REV-006; SA89B-CR-004; SA93-REV-005; SA93-ADV-001..004; SA104-ADV-001; SA105-ADV-001; CR-SA106-002; SA110-ADV-001).
+**Shared executable surfaces.** Only two files have more than one open-ticket writer, and both are serialized:
 
-**Net.** One critical path — **SA112 → SA96-PUBLISH (human)** — with Track 3 clean to continue behind a single plan-review gate. All three tracks now have a next action that needs no further decision: Track 1's re-review is authorized (`SA114-DEC-002`), Track 3's plan review is specified (artifact A–E), and Track 2 has owed no-downside work (commit + reconcile) it can do immediately even though its *merge* stays queued behind SA112 (`SA115-DEC-001`).
+- **`.github/workflows/e2e.yml`** (path list) — SA112e, SA115b, SA122b-5; serialized by the merge bounds above. SA112e only *names* the merged provisioning scripts in the trigger list; it never edits them.
+- **`.github/workflows/publish.yml`** — SA122b-4 is closed; the SA136e trigger comment it built on is already merged, and no open Track 1 ticket writes this file.
 
-**Resolved decision — `SA114-DEC-002` (2026-07-25): scoped re-review authorized.** SA114-CR-001 was a *consistency* finding, not a source defect — the gates were green and the ticket was blocked purely because the roadmap described completed work as pending. That half is reconciled; the maintainer authorized the remaining review half. The alternatives considered and rejected: deferring the re-review until SA112 lands (saves one cycle but carries two open tickets across the release gate) and leaving Track 1 parked (no closure path). The authorization fits the project's established discipline — every ticket in this cycle closed on an explicit independent `STATUS: ok`, and the recorded checkpoints repeatedly state they are "not a waiver" — and is off the critical path, so it cannot delay SA112. **Executable handoff: see the `SA114-DEC-002` block under SA114.**
+Single-writer or unowned: `scripts/publish_module.py` (SA136d alone), `docs/technical/decisions.md` (SA136f then SA117e-5, in-track). `module_commands.py`, `module_output.py`, `apply_command.py`, `git_utils.py`, `scripts/check_sa117_scope.py`, `scripts/version_tool.sh`, `scripts/quality_waivers.json`, `scripts/quality_baseline.json`, and `test_e2e_full_workflow.py` have no open v87 writer. No additional procedure is required.
 
-**Open decision — `SA115-DEC-001`: how far to unblock Track 2.** The `merge after SA112` bound was set when SA112's runner footprint was unknown. Re-examined on 2026-07-25, the premise is largely falsified: `scripts/test_e2e.sh:439` already points the CLI lane at `$CLI_DIR/tests/`, so SA112's new lifecycle module is collected with **no runner edit** (its own artifact §E says "confirm, add nothing if so"), and SA112's `.github/workflows/e2e.yml` change is an append to `pull_request.paths` — a file SA115 does not touch. The expected executable overlap is therefore **empty**, not the shared-surface collision originally assumed. Four graduated steps, the first two carrying no downside:
+---
 
-1. **Commit the parked work on `wt-track2` (no downside — recommended immediately).** The four SA115 files are still **uncommitted** on a worktree whose HEAD (`eb619dc2`) trails `v87`. Uncommitted work is one `git checkout` from gone, and the Start procedure requires a clean tree anyway. Committing merges nothing and changes no ordering.
-2. **Reconcile against current `v87` now (no downside).** `scripts/test_e2e.sh` has moved four times since the parked edits (memory guard, heartbeat, provenance banner, swap-veto correction). That reconciliation is owed regardless of merge order, and it only gets harder as `v87` moves. Doing it now shrinks the eventual merge to near-nothing.
-3. **Run SA115's heavy validation in the current idle infra window (decision).** SA112 is sitting in a *plan-review* gate, which consumes zero Docker/PostgreSQL — so the infra the two tickets contend for is idle right now. Running the serial-vs-parallel baseline, container-isolation checks, and `make ci-e2e` now is free parallelism. Cost: if SA112's plan review returns `STATUS: ok` mid-run, Track 3 waits for the infra — bounded, since SA112's next step is a fast traceback capture.
-4. **Relax the merge-order bound and let SA115 merge first (decision — not recommended).** Justified by the empty-overlap finding, and it would close Track 2 outright. But SA112's §C root fix is still unknown pending the traceback; if it does touch the runner, the rebase burden lands on **the critical path**, which is the one place this project has consistently refused to put it. Keeping the bound costs Track 2 nothing once steps 1–3 are done — the work would be complete, validated, and merely queued.
+## Track 3 — Core/CLI plumbing, release path
 
-**Recommendation:** do 1–3, keep the bound (skip 4). That converts Track 2 from "blocked and rotting" to "done, validated, queued behind SA112" without touching the critical path. Steps 1 and 2 need no decision; they are owed work being deferred for no reason. See [decisions.md §Migration-Squash Decision (SA92)](./decisions.md#migration-squash-decision) for the squash/guardrail/shrink-only-quality policies and §Bundled Module Inventory (AF7) for the fallback precedent SA113 follows; detailed history is in [CHANGELOG.md](../../CHANGELOG.md).
+**Status:** on the critical path and **executable**. **Head: SA136d** (add the seal phase and Make targets) — its task prerequisites are closed and the seal-atomicity requirement was re-scoped on 2026-08-07 to a client-side check-then-act with fail-closed post-push verification, which removes the platform blocker. The next action is a fresh scoped plan and an independent `STATUS: ok` plan review; the carried `F-001`/`F-002`/`F-004`/`F-005`/`F-006` drafts must be closed by that review. SA136d is the umbrella's last open non-closeout child and the only unsatisfied member of SA136f's dependency set. SA112b's provisioning precondition is already satisfied; its split-publication precondition waits on SA117e-4, which waits on SA136.
+
+**Standing order constraints.** Do not seal or push splits before SA136 closes and SA117e-4's human gate is satisfied, do not start SA112b until SA117e-4 has merged, and do not treat anything as release-ready until SA117e closes at `-5`. The loop/seal contract is ratified (recorded in [CHANGELOG.md](../../CHANGELOG.md)) and becomes normative in `decisions.md` at SA136f.
+
+### SA136 — Tag-sealed split publication
+
+Published splits are consumed from a **moving branch** (`module_commands.py:657` builds `splits/<module>-module` inline), so a given core release embeds whatever that branch holds at embed time. Today the branches serve manifest version `0.80.0` while core and all twelve source manifests require `0.87.0`, and the SA117 assert converts that into a hard failure for every module-bearing `apply`.
+
+**Two ratified decisions (2026-08-06) define the fix.**
+
+1. **Publication is an idempotent republish; the only irreversible gate is PyPI.** Split *branches* are mutable working artifacts and may be republished as many times as verification requires. This is what breaks the circular dependency that capped two SA117e-4 plan rounds — you cannot verify published state without publishing, so the plan must stop modelling the push as a one-shot mutation.
+2. **Splits are version-tagged in lockstep with core.** At core `X.Y.Z` every split carries the immutable tag `splits/<module>-module/X.Y.Z`, and embed resolves that tag by identity from the running core version. No version→ref mapping table is needed, which is why this **closes SA119** rather than deferring it to v88. Where a re-split produces an unchanged tree, the same commit carries both versions' tags.
+
+| Artifact | Mutability | Role |
+|---|---|---|
+| `splits/<m>-module` branch | mutable, republished freely | working artifact of the test/fix loop |
+| `splits/<m>-module/X.Y.Z` tag | immutable | the seal; what a released core consumes |
+| core tag `X.Y.Z` | created **locally**, pushed last | pushing it **is** the PyPI trigger |
+| PyPI release | irreversible | the only human-gated outward step |
+
+**Two landmines every child inherits.**
+
+- `.github/workflows/publish.yml` triggers on pushed tags matching `[0-9]*` or `v[0-9]*` and runs OIDC PyPI publishing. **Pushing a tag named `0.87.0` auto-publishes.** Split tags are namespaced under `splits/` precisely so they cannot match, and **`git push --tags` must never be run** — it would sweep the local core tag and publish. Every tag push is an explicit single refspec.
+- `.github/workflows/split-modules.yml` triggers on `v*` and force-pushes only 3 of 12 modules with bare `git push --force`, bypassing the `--force-with-lease` invariant established at `git_utils.py:663-668`. It was the sole origin of the stale `splits/teams-module` branch; the closed SA136e deleted it and added the conformance test proving `publish.yml`'s globs cannot match a split tag.
+
+`is_release_authoritative` (`git_utils.py:760+`) checks only for a tag at **local HEAD** and never contacts the remote, so the core tag is created locally, gates the whole loop+seal cycle green, and is pushed last. `_check_release_authoritative` (`scripts/publish_module.py:160-187`) needs no change.
+
+- [ ] **SA136 — Seal module splits behind immutable version tags.** `Umbrella · deps: none` — critical path; **blocks SA117e-4**
+
+  - Verify (umbrella): all six children closed and independently reviewed; `embed` resolves `splits/<m>-module/<core version>` and fails hard when it is absent; `scripts/publish_module.py` enumerates exactly twelve modules; `split-modules.yml` is gone and a conformance test proves `publish.yml`'s triggers cannot match a split tag; `decisions.md` carries the loop/seal ordering and SA119 is recorded closed.
+  *(why →* embed consumes a moving branch, so a matched version was never a matched artifact; this is the prevention half SA117 deliberately deferred*)*
+
+  **Available to later children** (shipped by the closed `-a`/`-b`/`-c`): `git_utils.py`'s `resolve_split_tag`, peeled `resolve_remote_tag`, `check_remote_tag_exists`, `get_tree_sha`, `get_local_tag_commit`, force-free `create_annotated_tag`, refspec-explicit `push_tag`, and `authoritative_module_names()` / `AUTHORITATIVE_MODULE_COUNT = 12` as the single fail-hard module inventory.
+
+  - [ ] **SA136d — Add the seal phase and its Make targets.** `Tier 2 · deps: SA136a ✓ closed, SA136b ✓ closed`
+    The loop phase needs no change — `_publish_module` (`scripts/publish_module.py:268`) already splits and pushes under `--force-with-lease` and is rerunnable, which is precisely what decision 1 ratifies. Add `_seal_module(module, version, *, previous_version)`: resolve the branch head, and when `previous_version` is supplied and `get_tree_sha(prev_tag) == get_tree_sha(head)`, tag **that same commit**; then `create_annotated_tag` + `push_tag`. The comparison is on **trees, not SHAs**, because `git subtree split --rejoin` mints a fresh commit on every run even for unchanged content. Expose `--seal`, `--seal-all`, and a `sealed@<version>` column on `--status`, gating `--seal` with `_check_release_authoritative` exactly as `--publish` is gated. Add `seal-module`, `seal-modules`, and `seal-status` to the `Makefile` after `:1170`, mirroring the required-variable guards at `:1160-1163`, using explicit single refspecs only and carrying an inline warning that `git push --tags` publishes to PyPI.
+    - Allowlist: `scripts/publish_module.py`, `Makefile`, and their tests.
+    - Verify: sealing an unchanged tree reuses the prior version's commit so one commit carries both tags; sealing twice is a no-op; sealing over a tag that points elsewhere fails closed and moves nothing; a branch that moved between the precondition reread and the push is caught by the post-push verification and reported unsealed; `make seal-status VERSION=…` reports per-module sealed state.
+    **Seal-atomicity requirement re-scoped (2026-08-07 maintainer decision; see [decision 2](#track-topology--settled)).** Server-transactional atomicity is **withdrawn as a requirement**. The seal is enforced client-side as check-then-act with a fail-closed compensating verification, and the residual window is documented rather than engineered away. This unblocks the ticket on stock Git against GitHub.com; no platform migration is required.
+    - **Seal predicate, as now specified.** Before tagging: reread the remote split branch and require it to equal the SHA captured for this module; reread the target tag and require it to be **absent, or already pointing at the intended commit** (that second case is the idempotent no-op). Then `create_annotated_tag` + `push_tag` under an explicit single refspec. After tagging: **reread the pushed tag and require it to peel to the intended commit**, failing closed and reporting the module as unsealed otherwise. A tag that already exists pointing elsewhere fails closed and is never moved.
+    - **Documented residual.** Between the precondition reread and the tag push, a concurrent force-privileged writer could move the split branch, leaving the tag sealed to a superseded commit. This is accepted: the post-push verification detects the divergence and fails the run, and tag immutability already rests on convention plus transport — a force-privileged maintainer can move a tag regardless, which SA136f records as the standing residual. The compensating check narrows the window to detection rather than closing it. Releases are single-maintainer and serialized by the `is_release_authoritative` local-tag gate, so no concurrent publisher is expected.
+    - **Carried plan findings, all still requiring a fresh `STATUS: ok` plan review before implementation:** `F-001` (**high**, trusted Git runner), and `F-002`/`F-004`/`F-005`/`F-006` (**medium** — idempotence, cumulative commit proof, rollback, command-document parity) have revised-draft treatments that were never independently approved. `F-003` (**high**, security boundary) is **retired by this re-scope**, not waived: the requirement it proved unimplementable no longer stands.
+    - Prior attempt produced planning and official Git/GitHub receive-contract research only; no executable, tag, branch, package, or publication changed. Do not re-derive the rejected full-atomicity design.
+    *(why →* the seal is what converts a mutable branch into the immutable artifact a release consumes*)*
+
+  - [ ] **SA136f — Ratify the loop/seal contract in `decisions.md` and close SA119.** `Tier 1 · deps: SA136a–SA136e` (all closed **except SA136d**) — documentation only
+    **Carries SA136e's two advisory findings** (`F-003` medium and `F-004` low, both consistency): reconcile the documentation they name as part of this rewrite. Neither is a waiver or a release claim; evidence is in [CHANGELOG.md](../../CHANGELOG.md).
+    Rewrite [§module-version-lockstep](./decisions.md#module-version-lockstep) Rule 3 as the six-step ordering: bump/stamp/commit → create the core tag **locally only** → loop `publish-module` and test installed `apply` with `--split-ref` → `seal-modules` → verify twelve of twelve sealed and a clean no-override `apply` → `git push origin X.Y.Z`, the only irreversible gate. Add Rule 4 (publication is idempotent up to the seal; name the circular dependency it breaks), Rule 5 (embed consumes an immutable tag resolved by identity; no mapping table exists because none is needed; absence is a hard error; `--split-ref` is an explicit override), and Rule 6 (tags follow content identity). Replace the "Known limitation" paragraph — SA119 is resolved, not deferred — recording the residual: immutability rests on convention plus transport, so a force-privileged maintainer can still move a tag. Add Rule 7 (the seal is enforced client-side as check-then-act with a fail-closed post-push verification; the narrow reread-to-push window is accepted and detected, not eliminated — the 2026-08-07 re-scope, whose rationale is that this window is strictly smaller than the already-accepted force-privilege residual).
+    - Allowlist: `docs/technical/decisions.md`, this roadmap, `CHANGELOG.md`.
+    - Verify: no roadmap or decisions text still defers immutable-ref pinning to v88; the recorded ordering matches what SA136d's targets actually do.
+    *(why →* the ordering is the load-bearing safety property and must be normative, not folklore*)*
+
+### SA117 — Embedded-manifest / split-branch version skew
+
+- [ ] **SA117 — Tie embedded module manifests to the core release.** `Umbrella · deps: none · blocks SA96-PUBLISH + SA112b`
+
+  **The problem.** `apply` embeds modules by git subtree from `splits/<module>-module` on the public remote (`module_commands.py:624`), so embedded `module.yml` files are whatever was last published, not the working tree. The published manifests are truncated relative to source — missing `wiring_projections` and `option_derivations` entirely — so `QUICKSCALE_BILLING_ENABLED` is never projected and billing's post-hook raises `KeyError` at `adapter.py:36`. The **source** manifest produces the setting correctly from an empty options dict, so no resolver, assembler, or caller defect is involved. `apply` fails for every module set.
+
+  **Approach — stamp + assert, then seal (all in v87).** Rules are in [decisions.md §module-version-lockstep](./decisions.md#module-version-lockstep), which is the SSOT; this ticket only tracks the work.
+  1. **Stamp** — every `module.yml` `version:` is set to the repository `VERSION` at release, retiring the independent-versioning model the project does not support.
+  2. **Assert** — embedding and managed-wiring regeneration fail hard with an explicit version-mismatch error naming both versions, converting today's downstream `KeyError` into a diagnosable failure.
+  3. **Seal** — owned by [SA136](#sa136--tag-sealed-split-publication) (2026-08-06). Stamping gives observability, not prevention: the embed ref was a moving branch, so a matched version was not a guaranteed-matched artifact. SA136 makes embed consume an immutable `splits/<m>-module/<version>` tag resolved by identity, which is the prevention half formerly deferred to SA119.
+
+  **Release ordering (mandatory):** tag HEAD to match `VERSION` → push refreshed `splits/*` → publish to PyPI. `publish_module.py` already gates mutating publish flows on release-authoritative state, but nothing yet proves the splits currently serving `apply` match the core about to be published. Publishing core before the splits carry matching manifests ships a `quickscale apply` that fails for every user.
+
+  **State.** SA117a/b/c are closed; the local stamp/assert and the comparison gate SA117e-4's acceptance consumes are merged. **SA117e is the sole open child**, and its head `-4` is gated on the sibling umbrella [SA136](#sa136--tag-sealed-split-publication). The original executable candidate at `43d9b8fc` is on `v87` as recorded partial delivery, **unapproved at umbrella scope** — SA117e is a correction-and-review effort over merged-but-unapproved code, not a greenfield build. The former SA117d (scope meta-tooling) is deferred to v88 as **SA124**.
+
+  - Verify (umbrella): all twelve `module.yml` versions equal `VERSION`; an `apply` selecting all 12 modules reaches managed-wiring regeneration with no `KeyError`; a deliberately skewed embedded manifest is rejected with an explicit version-mismatch error, not a downstream crash.
+  *(why →* `apply` with any module has zero end-to-end coverage — `test_e2e_development_workflow.py:276` plans with modules skipped — so this skew class has never been exercised*)*
+
+  - [ ] **SA117e — Push refreshed splits, full-scope review, and close SA117.** `Umbrella · deps: none` — critical path; contains a human-only step
+
+    **Acceptance-only umbrella**, split into five children because each cut line is a change in *what could go wrong*: `-1` produces evidence only, `-2`/`-3` are local and reversible, `-4` is the one outward-facing mutation and the only child carrying a human gate, `-5` is documentation.
+
+    - Verify (SA117e umbrella): all five children closed and independently reviewed; published `splits/*` manifests byte-identical to the working-tree manifests for all twelve modules; an all-module installed `apply` reaches managed-wiring regeneration with no `KeyError`; SA112b's precondition affirmatively satisfied.
+    *(why →* SA117 is only actually resolved once the *published* splits match the core; everything before SA117e-4 is local*)*
+
+    `-1`, `-2`, and `-3` are closed; `-4` is the head, gated on the SA136 umbrella. One review finding stays binding: **`SA117E1-REV-001`** (high, security boundary — `git_utils.py:636-680`, an `ABSENT` expectation emits bare `--force-with-lease` instead of proving explicit remote absence) constrains SA117e-4's loop phase. `SA117E1-REV-002` is discharged by design (see `-4`); `SA117E1-REV-004` is owned by v88's SA124; all others are resolved.
+
+    - [ ] **SA117e-4 — Loop, seal, and human-confirmed publication.** `Tier 2 · deps: SA136` · **HUMAN-GATED — outward-facing** — satisfies SA112b's precondition
+      Executes the ordering SA136f makes normative, using the machinery SA136a–e ship. The push is **not** one irreversible unit: the loop is idempotent and only the seal is immutable.
+      1. **Local tag.** Create the core release tag matching `VERSION` **locally only**. Never push it here — pushing it triggers PyPI. Deleting it is free.
+      2. **Loop.** Republish the twelve `splits/*` branches with `make publish-module` under explicit `--force-with-lease` leases, testing installed all-module `apply` with `--split-ref` between iterations. Republishing is idempotent and may run as many times as verification requires; an interrupted run is rerun, not recovered.
+      3. **Human gate.** Before the seal, **stop and obtain fresh human maintainer confirmation** of one complete twelve-row pre-state matrix. This is an execution-time gate obtained at the seal, never pre-granted and never inherited from an earlier approval. Each immediate remote reread must equal the exact SHA/`ABSENT` frozen in that authorized matrix; only the frozen value may be passed as `EXPECTED_REMOTE_SHA`; any mismatch stops before mutation and requires a complete rebrief plus fresh authorization.
+      4. **Seal.** `make seal-modules VERSION=…` creates and pushes the twelve immutable `splits/<m>-module/<VERSION>` tags. `--previous-version` is omitted for 0.87.0 (see below).
+      5. **Clean up.** Delete the stale remote `splits/teams-module` branch, which SA136b's now-closed inventory fix makes unreachable through the tooling.
+      6. **Accept.** Re-run the approved installed-wheel harness — re-reviewed if its hash no longer matches the approved SHA-256, never trusted by provenance — including installed all-module `apply` with **no** `--split-ref`.
+
+      PyPI publish is **not** in scope and stays with SA96-PUBLISH.
+
+      **Carried finding — `SA117E3-PUBLIC-ANALYTICS-001`** (**high**, external contract): public `splits/analytics-module` reports manifest version `0.80.0` while core and the source manifest require `0.87.0`, so installed `apply` stops before all-module acceptance. The refreshed loop and seal are what fix it, so the assertion is made at step 6 where its input exists.
+
+      **`SA117E1-REV-001` remains binding** on the loop phase: use `--force-with-lease=refs/heads/<branch>:` for an `ABSENT` expectation; never accept a bare `--force-with-lease`. Bare lease derives its expectation from local tracking state — a fresh tracking ref can silently authorize overwriting an existing branch, and a stale one can spuriously reject creating a genuinely absent branch. The explicit empty expectation is tracking-independent and checked by the server under the ref lock, so a concurrent writer is rejected without clobbering its ref.
+
+      **`SA117E1-REV-002` is discharged by design.** Its digest-bound one-time authorization guarded a one-shot irreversible mutation; under the loop/seal contract the loop is idempotent and the seal is protected by Git's refusal to move an existing remote tag plus the fresh twelve-row confirmation at step 3. The machinery in `scripts/verify_sa117_publication.py` is not required on this path; SA136f records the reasoning.
+
+      **For 0.87.0 specifically:** all twelve `module.yml` and all twelve bundled snapshots already read `0.87.0` while every published branch reads `0.80.0`, so every module is genuinely outdated, no `0.86.0` split tags exist, and SA136d's content-identity reuse cannot trigger. Seal with `--previous-version` omitted; content identity starts paying off at 0.88.0.
+
+      - Verify: local core tag matches `VERSION` and is **not** pushed; human confirmation recorded before the seal; twelve `splits/<m>-module/0.87.0` tags exist on the remote and zero unexpected refs were created; no PyPI release was triggered; published manifests byte-identical to working-tree manifests for all twelve modules and carrying the derivation sections; the approved harness passes, closing `SA117E3-PUBLIC-ANALYTICS-001`; installed all-module `apply` with no `--split-ref` reaches managed-wiring regeneration with no `KeyError`.
+      - Rollback: the local core tag is deleted freely; a branch republish is corrected by republishing. **A pushed seal tag is not moved** — it is superseded by the next version, which is why the confirmation gate precedes step 4.
+      *(why →* the one outward-facing step, now carrying exactly one human gate over a reversible loop and a single immutable seal*)*
+
+      **Plan-review status: no blocking finding.** The two capped rounds are retired by the loop/seal ratification (history in [CHANGELOG.md](../../CHANGELOG.md)). A fresh plan round starts from the ordering above, not from the retired ledger.
+
+    - [ ] **SA117e-5 — Closeout review and close SA117, SA136, and SA119.** `Tier 1 · deps: SA117e-4` — documentation only
+      Update this roadmap and `CHANGELOG.md`, then obtain the final full-scope review covering those closeout files before commit/merge. Record every command, exit, review finding, and evidence artifact from `-1` through `-4` and across SA136a–f. Close SA117e, then SA117 and SA136, and record **SA119 closed by design** (embed now consumes an immutable tag; no immutable-ref work remains for v88).
+      - Verify: closeout review returns `STATUS: ok`; SA117e, SA117, and SA136 all checked; SA119 recorded closed with its rationale; no completion language predates this child.
+      *(why →* completion claims require reviewed evidence, including the closeout docs themselves*)*
+
+### SA112 — Installed-wheel full-lifecycle e2e (`plan → apply → up`)
+
+No gate ever runs `apply`/`up` from an installed wheel: `test_e2e_development_workflow.py` drives the full lifecycle with real Docker + PostgreSQL, but from **monorepo source**, so it never exercises bundled-manifest discovery. The missing axis is *installed artifact*, not the lifecycle. It does not belong in `smoke-install` — `apply` runs `poetry lock`/`install`, `manage migrate` needs live PostgreSQL, and `up` needs image builds, all antithetical to that fast service-free gate.
+
+- [ ] **SA112 — Installed-wheel lifecycle e2e lane.** `Umbrella · deps: SA117e-4 (from SA112b on)`
+
+  The children must prove that an installed wheel can provision an external project, run `plan` with all 12 modules, run `apply`, invoke the installed `up` explicitly, boot and serve through Docker/PostgreSQL, run `ps` and `manage migrate`, and tear down cleanly — while preserving the 20-probe smoke gate and adding exact CI trigger coverage.
+
+  **Standing constraints.** No SA112 implementation exists in the mergeable tree; the superseded monolithic artifact must not be reconstructed. Each child's own literal plan must carry copyable phase commands with expected exits/artifacts, NUL-safe staged-file checks, diagnostic/negative-control capture with scoped cleanup, explicit cleanup-failure precedence plus tests, rollback mechanics, exact focused validation commands, quarantine proof, and a final review including closeout documentation. Each child starts from a clean worktree synced to `v87` and may mutate only after its scoped plan review returns `STATUS: ok`.
+
+  **SA117e-4 is a hard prerequisite from SA112b on** — specifically the *sealed* splits, not the local stamp/assert, and not the umbrella's closeout child `-5`. The dependency is evidence validity, not file overlap: SA112b captures a traceback that SA112c is contractually restricted to acting on, and today that traceback is SA117's already-diagnosed billing `KeyError`, which would send SA112c at the wrong seam and propagate bad evidence through four reviewed children. SA112d's lifecycle E2E asserts the same path and cannot pass either. Since SA117's scope intersects no SA112 child allowlist, running them concurrently is tempting — don't.
+
+  *(why →* `apply`/`up` have zero installed-artifact coverage; the existing lifecycle e2e runs only from source, which cannot reproduce install-context discovery bugs*)*
+
+  - [ ] **SA112b — Capture the installed `apply` traceback with a literal diagnostic.** `Tier 2 · deps: SA117e-4` (SA112a's provisioning seam is merged)
+    Before capturing, confirm SA117e-4's refreshed `splits/*` are pushed; **if `apply` still fails at the billing post-hook, stop and re-open SA117** rather than proceeding. From an external workdir and the installed entrypoint, run the exact all-module `plan` and current three-confirmation `apply` under `QUICKSCALE_DEBUG=1`. Record argv, cwd, sanitized environment, stdin bytes, timeouts, return handling, traceback path, final raising frame/call chain, and exact-prefix Docker/volume cleanup. Evidence-first — may complete with no source delta. If the state unexpectedly passes, require a disposable negative control reproducing the original failure; stop rather than infer a fix.
+    - Open: ask a question only if the actual frame admits multiple contract-valid fixes with materially different compatibility effects.
+    *(why →* static searches cannot identify the bare-name raising frame*)*
+
+  - [ ] **SA112c — Apply the traceback-selected root fix.** `Tier 2 · deps: SA112b`
+    Change only the production site(s) justified by SA112b's final raising frame. Add the nearest regression for the previously raising branch and enumerate callers whenever an exported/shared contract changes; an out-of-allowlist caller requires explicit scope expansion. Re-run the diagnostic to prove the original frame is gone without weakening fail-hard inventory behaviour.
+    *(why →* prevents speculative broad fallbacks and preserves caller compatibility*)*
+
+  - [ ] **SA112d — Add the permanent installed-wheel lifecycle E2E.** `Tier 2 · deps: SA112c`
+    Add `quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py` using the installed binary, external cwd, all 12 modules, apply stdin `"n\ny\ny\n"`, bounded subprocesses, and exact lane/container scoping. After `apply` completes its own start/migration path, run installed `down` without volumes to remove double-start ambiguity, then invoke installed `up` explicitly, poll the allocated application URL to a bounded deadline requiring a successful HTTP response, then `ps`, `manage migrate`, and final `down --volumes`. Cover provisioning failure before fixture yield and cleanup precedence for timeout, exception, and nonzero `down`: a primary lifecycle failure stays primary; cleanup failure is primary only when no earlier failure exists. Confirm `scripts/test_e2e.sh` already collects the CLI test directory; do not edit the runner if it does.
+    *(why →* supplies the permanent installed-artifact coverage after the root fix is known*)*
+
+  - [ ] **SA112e — Add the exact E2E workflow-trigger contract.** `Tier 1 · deps: SA112d`
+    Immediately after `scripts/test_e2e_parallel.py` in `.github/workflows/e2e.yml`, add exactly once and in order: `quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py`, `scripts/smoke_install.sh`, `scripts/_installed_wheel_venv.sh`, `scripts/provision_installed_venv.sh`, `scripts/_python_requirement.sh`. Add a named `yaml.BaseLoader` regression asserting the exact slice and uniqueness. Do not duplicate `scripts/test_e2e.sh` or the workflow self-path. Register the same paths in `scripts/gate_registry.json` as you go — the registry is already merged.
+    *(why →* a PR changing any installed-wheel dependency must trigger E2E*)*
+
+  - [ ] **SA112f — Run ordered acceptance, review the complete delta, and close SA112.** `Tier 2 · deps: SA112e`
+    In exclusive Docker/PostgreSQL capacity, run the declared shell syntax and focused tests, `make smoke-install` with all 20 probes, then `make ci-e2e` with `QUARANTINE_TICKETS` empty. Obtain a full-scope independent review of the executable delta. Only after `STATUS: ok`, update this roadmap and `CHANGELOG.md`, then obtain the final full-scope review covering those closeout files before commit/merge. Record every command, exit, skip/warning, review finding, and evidence artifact.
+    *(why →* completion claims and release-path integration require reviewed evidence, including closeout docs*)*
+
+### SA96-PUBLISH — Staged release ladder
+
+- [ ] **SA96-PUBLISH — Publish to PyPI.** `Tier 1 · deps: SA112f` · **HUMAN-ONLY — do not delegate to an assistant**
+  Version bump if needed (`make bump-version`), then `make build` → `make publish-test` (TestPyPI + verify) → `make publish-prod` (or `make publish-full`). **PyPI publish is irreversible and outward-facing — a human maintainer confirms version and green-gate status before `publish-prod`.**
+  - Verify: all 12 modules green in isolation; the four-command green-gate run exits 0 with empty quarantine; SA112 closed; release published and verified on PyPI.
+  *(why →* pre-publish assurance; green-gate is the definition of "publishable"*)*
+
+### Standing reference
+
+The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module Inventory (AF7)](./decisions.md#bundled-module-inventory-and-source-required-paths-af7): discovery falls back to bundled manifest snapshots (`quickscale_core/data/manifests/*/module.yml`) when the source workspace is absent, while source-required operations (`get_modules_base_path`, `discover_shipped_module_paths`, `load_module_manifest`, `refresh_managed_adapters`) stay fail-hard.
+
+---
+
+## Track 2 — E2E parallelization
+
+**Status:** off the critical path, **closed to new work**, but **head SA115a is truly green** after the 2026-08-07 split. The former blockage lived entirely in the `e2e.yml` path-list edit, which is now the separate SA115b; SA115a writes no shared file and accepts locally, so it can start, finish, and merge on its own. The standing "no new tickets on Track 2" rule is not violated: SA115 was **split in place**, not joined by new work, and SA115a+SA115b together are exactly SA115's original scope.
+
+### SA115 — E2E in-lane parallelization (pytest-xdist)
+
+`make ci-e2e` is the longest quality check in the SDLC. `scripts/test_e2e.sh` already runs the Core and CLI lanes concurrently, but within each lane the ~40–60 `@pytest.mark.e2e` tests run serially, each generating a full Django project, running `poetry install`, building, and driving Playwright/Chromium. The xdist groundwork (per-worker Poetry cache, per-test DB, per-test `tmp_path`) already exists; the sole blocker was that session-scoped `pytest-docker` fixtures are not xdist-safe. **Ratified design:** container-per-worker Postgres, scoped to the E2E stage only (no lane rebalancing).
+
+**Split applied 2026-08-07** ([decision 1](#track-topology--settled)) along SA115's own dependency seam: items 1–3 are local and unblocked, item 4 is the shared-file edit that carried both blockers.
+
+- [ ] **SA115a — Guard clamp and local xdist validation.** `Tier 2 · deps: none` — items 1–3; **no `e2e.yml` edit**, no merge-order gate
+
+  1. **xdist-safe fixtures (implemented).** A session-scoped `docker_compose_project_name` override deriving a unique per-worker Compose project name from the lane's `QS_E2E_COMPOSE_PROJECT_NAME` plus `PYTEST_XDIST_WORKER`, falling back to a single name outside xdist. The lane prefix stays intact so `cleanup_scoped_containers` still matches by substring; Compose auto-prefixes the named volume, so `docker-compose.test.yml` needs no change.
+  2. **Configurable worker count (implemented).** `QS_E2E_XDIST_WORKERS` drives `-n <workers> --dist loadscope`, defaulting to an `nproc`/RAM-derived cap — **not** `auto`, since each worker runs a full Postgres container plus Chromium. `QS_E2E_XDIST_WORKERS=1` (or `0`) degrades to today's serial path. Total load is `2 lanes × N workers`.
+  3. **Guard clamp (ratified, still to implement).** The memory preflight counts only lanes, so a demoted run would still fan out N workers per lane. **When the guard fires it also clamps workers to serial**, including over an explicit user-supplied `QS_E2E_XDIST_WORKERS` — and says so on the existing warning path, because a silent clamp makes a slow run look inexplicable. `QS_E2E_NO_MEMORY_GUARD=1` remains the single escape hatch; do not add a second. Extend the harness tests so a fired guard is asserted to produce both serial lanes *and* serial workers, and a bypassed guard preserves an explicit count. *(why →* fits the house fail-closed style; the failure it prevents is an OOM kill that presents as a confusing random crash*)*
+  - Allowlist: `quickscale_core/tests/conftest.py`, `scripts/test_e2e.sh`, the harness tests. **`.github/workflows/e2e.yml` is explicitly out of scope** — that is SA115b.
+  - Verify: the guard clamp behaves as above; baseline `time QS_E2E_XDIST_WORKERS=1 ./scripts/test_e2e.sh` versus the parallel default is faster with all e2e tests green; `docker ps` mid-run shows one Postgres container per active worker with distinct project names/ports; back-to-back runs leave no leftover containers or volumes (`docker volume ls | grep postgres_test_data`); `QS_E2E_XDIST_WORKERS=1` reproduces the serial path; `make ci-e2e` and local `./scripts/check_ci_locally.sh --e2e` stay green.
+  - Open: heavy Docker/PostgreSQL validation is **authorized but not yet run**, and must yield to Track 3 on demand. Phases 1–2 are committed on `wt-track2` (`5193f198`, reconciled at `5b5de830`) with post-merge focus checks green; no container lifecycle or teardown has been exercised. **Provisional timing.** The speedup is measured against an e2e suite SA112d will later add a test to, so the figure gets one confirmation **re-measure** at SA112f — a re-measure, not a re-review, and not a merge gate.
+  *(why →* `ci-e2e` is the longest gate in the SDLC; lanes are already concurrent but each runs serially inside*)*
+
+- [ ] **SA115b — Register the xdist e2e trigger paths.** `Tier 1 · deps: SA112e` · **merge after SA112e**
+  `quickscale_core/tests/test_e2e_xdist_fixtures.py` and `quickscale_core/tests/conftest.py` appear in **neither** `on.pull_request.paths` list in `.github/workflows/e2e.yml`, so a PR touching only them would not trigger the e2e workflow. Fix to the SA112e standard: exact repository-relative path strings, order preserved, `yaml.BaseLoader` regression coverage, registered in `scripts/gate_registry.json`. Coordinate with SA112e's append to avoid duplicates.
+  - **Consolidation option, not applied:** SA122b-5 is already migrating this same 26-path allowlist onto the registry. Folding SA115b's two paths into it would make one ticket own the list end-to-end with one edit instead of three. Decide at SA122b-5 start; either way the paths must survive byte-exact.
+  - Verify: both paths present exactly once in the correct list and order; the `BaseLoader` regression asserts the exact slice; no duplicate with SA112e's tuple; registry updated.
+  *(why →* a PR changing only the xdist harness must still trigger the gate that harness runs in*)*
+
+---
+
+## Track 1 — Release governance and product defects
+
+**Status:** queue is **[SA122b-4](#sa122--release-assurance-is-four-hand-synchronized-gate-inventories-arch-finding-11) ✓ → [SA122b-5](#sa122--release-assurance-is-four-hand-synchronized-gate-inventories-arch-finding-11)**, with SA122b-5 as head and **merge after SA112e**. The SA122b chain is off-path filler. The SA128 parity checker is authoritative.
+
+### SA122 — Release assurance is four hand-synchronized gate inventories (arch Finding 11)
+
+Required release properties have no authoritative topology. The five repository conformance gates are declared in `Makefile:784-821` and aggregated at `829-927`, repeated serially at `scripts/check_ci_locally.sh:195-302` and again in the parallel worker declaration at `401-428`, re-declared as five hosted jobs at `.github/workflows/ci.yml:168-306` with a hand-written `test.needs` at `308-310`, and are now present in `.github/workflows/publish.yml` after SA122b-4. E2E eligibility remains a 26-path manual allowlist at `.github/workflows/e2e.yml:13-41`. Adding one gate costs up to ten stations, and the drift is recurring, not hypothetical.
+
+**Approach — centralize *membership and metadata*, not execution.** Environment-specific jobs and hosted parallelism are worth keeping; what must stop is each context independently deciding what "green" means. `scripts/gate_registry.json` and `make check-gate-parity` are merged and are an **input, not scope**. The SA128 checker is authoritative for inventory and coverage reporting; publish membership now has zero omissions after SA122b-4, while E2E path migration and blocking-checker wiring remain with SA122b-5.
+
+- [ ] **SA122b — Migrate the consumers onto the registry.** `Umbrella · deps: SA128 ✓ closed`
+
+  Make each context derive its inventory from the registry instead of restating it, then make the SA128 parity checker **blocking** in CI once every context derives. Every child inherits: the registry and its schema are an **input, not scope** — a child needing a schema change stops and escalates rather than editing it; the SA128 checker is the authoritative oracle, so no child may add tolerance or exception logic to make a context read green. SA122b-4's SA122b-3 and SA128 prerequisites are satisfied and its reviewed executable result is recorded below; SA122b-5 is the remaining child.
+
+  | Child | Consumer context | Executable surface | Tier |
+  |---|---|---|---|
+  | SA122b-4 ✓ | Publish membership (**behaviour change**) | `.github/workflows/publish.yml` | 2 |
+  | SA122b-5 | E2E paths, blocking checker, closeout | `.github/workflows/e2e.yml`, CI wiring | 2 |
+
+  **Only SA122b-5 carries the `merge after SA112e` bound** — that is the point of the per-context split; SA122b-4 merges independently instead of idling behind five Track 3 children.
+
+  Already deriving from the registry (`-1`/`-2`/`-3`, closed): Make aggregation, both `check_ci_locally.sh` inventories, hosted CI job/`needs` generation, and publish membership (`-4`, closed). The e2e path list and blocking-checker wiring are what remain.
+
+  - [x] **SA122b-4 — Add the five conformance gates to `publish.yml`.** `Tier 2 · deps: SA122b-3 ✓ closed` — **reviewed executable result recorded; no publication performed**
+    Phase 1 commit `b42ddd20` added the five standalone publish conformance gates and coupled parity assertions. All five task-owned Make targets passed; the direct checker and Make wrapper both passed with zero publish omissions; the complete parity test file passed 214 tests, and the functional publish-trigger diagnostic passed 4/4 with repository-wide `addopts` disabled. Full-scope review DC-124 returned `STATUS: ok` at confidence 97 with no findings. The narrow trigger selection remains deferred because its only failure was global coverage fail-under at 0 percent; no additional publish parity-blocking, release, tag, registry, checker, generator, or E2E change was made in this closeout.
+    *(why →* the reviewed executable result closes the publish-membership child while the E2E/checker child remains open*)*
+
+  - [ ] **SA122b-5 — Derive the E2E path allowlist, make the checker blocking, and close SA122b.** `Tier 2 · deps: SA122b-4 ✓ closed` · **merge after SA112e**
+    Migrate `.github/workflows/e2e.yml:13-41`'s 26-path manual allowlist onto the registry, then make the parity checker **blocking** in CI now that every context derives. SA112e and SA115b each append their own ordered path tuple to that list; migrating before those land would force all three edits to be redone.
+    - Verify: the ordered e2e path tuples from SA112e and SA115b are both preserved byte-exact; adding one new gate requires editing only the registry and its implementation, proven by a test that adds a gate and asserts **all five** contexts pick it up; the checker is blocking in CI and green; `make check`, `make ci`, and hosted CI stay green with unchanged effective inventories. Full-scope review returns `STATUS: ok`, then close the umbrella — retiring arch **Finding 11**.
+
+  *(why →* arch Finding 11 — removes the 7–10 coordination stations per cross-cutting property while preserving environment-specific execution*)*
+
+### Audit findings not ticketed
+
+Arch **Finding 7** (generated-file-ownership taxonomy derivation) stays **unscheduled**, gated on a third consumer or a public "update my generated project" command. Arch Findings **2/4** are deferred with the (unscheduled) teams module. Tech-audit tooling gaps other than the closed `TA62` are parked in v88 as **SA123**. **Arch Finding 11 is the only remaining ticketed audit finding**, and both audits stand at zero unscheduled `now`-horizon findings.
+
+---
+
+## Green-gate milestone — all quality make commands pass
+
+**Exit criteria (single definition of done).** On one clean rerun at current `v87` HEAD, `make check`, `make quality`, `make ci`, and `make ci-e2e` all exit 0, with `QUARANTINE_TICKETS` **empty** in `scripts/test_integration.sh`. The four-command join covers unit **and** integration **and** e2e:
+
+- `make check` is the fast repo gate — `lint` + `typecheck` + `test-unit` + `check-core-compat` + `check-module-core-imports` + `check-manifest-sync` + `check-org-context-primitives` + `check-csrf-exempt` (`make check QUIET=1` is the quiet LLM/agent variant). It alone does **not** prove integration.
+- `make ci` covers unit + integration when PostgreSQL is available; `make ci-e2e` covers e2e.
+- The join runs entirely **inside the monorepo**. `make smoke-install` separately builds wheels from per-run staged copies, installs into a throwaway venv outside the source tree, and runs every non-mutating CLI command from a sanitized external workdir under the full `>=3.13,<3.15` Python constraint.
+
+**Current state.** The previously recorded SA138 baseline remains documented as clean, but this closeout does not claim a passing `make quality`: the current run exits **2** on unchanged `quickscale_cli/src/quickscale_cli/commands/apply_command.py` complexity **56** versus allowed **55**, outside this delta. `scripts/quality_baseline.json` carries zero `large_files` entries and `scripts/quality_waivers.json` is an empty ledger. The four-command join remains unclaimed because its single clean rerun is owned by SA112f.
+
+**The milestone is unclaimed.** `make ci-e2e` most recently exited 0 with empty quarantine at `v87` `c4b6e354` (SA117e-3), and `make check QUIET=1`/`make quality` were green on an earlier ordered chain — but no single clean rerun has covered all four commands, and `make ci` in particular has not been rerun. **SA112f owns the clean closeout rerun**, and SA96-PUBLISH requires that evidence before release.
+
+---
+
+## Track topology — settled
+
+Every open v87 ticket carries a track. Track 2 stays closed to new work by standing rule (homing unrelated work there drags SA115b onto `v87`).
+
+**Standing placements.**
+
+- **Track 1's queue is SA122b-4 ✓ → SA122b-5**, head at SA122b-5. Only SA122b-5 carries a merge bound. **Conflict surface:** SA122b-4's `.github/workflows/publish.yml` work is closed (the closed SA136e comment is already on `v87`). Beyond that, only the shared closeout files (`CHANGELOG.md`, this roadmap, `decisions.md` at SA136f) are touched, and the mandatory `git merge v87`-before-merge-back step in [Parallel execution tracks](#parallel-execution-tracks) covers them — keep both tracks' entries when resolving.
+- **SA136 is homed on Track 3 as a sibling umbrella, not folded into SA117e-4.** The machinery is production CLI/publish code, a different risk class from the push ceremony; folding it in would make `-4` Tier 3 — the sizing violation that forced the SA117e split.
+- **SA136f stays on Track 3** despite being documentation-only and on the critical path: its `deps: SA136a–SA136e` set still includes the open SA136d, so moving it to Track 1 would buy no parallelism and would split the umbrella's closeout away from the seal machinery it must describe.
+- **SA112b–f stay serial on Track 3.** Each child consumes the previous child's evidence (`-c` may act only on `-b`'s traceback), so they are one coherent review unit, not parallelizable work.
+- **SA117e-5 sits off the critical path** — SA112b's precondition is SA117e-**4**, not the umbrella's closure.
+- **The *fourth-worktree* variant is permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
+
+**Rebalancing verdict (2026-08-07, post-decision pass): no move applied — Track 1's completed child advances its head to the merge-gated SA122b-5.** Both decisions cleared blockers in place rather than by relocation. Track 3 runs SA136d, Track 1 runs SA122b-5, and Track 2 runs SA115a. Nothing is movable anyway — SA136f/SA117e-4 are dependency-bound to SA136d, SA112b–f are one serial evidence chain, SA122b-5 and SA115a→b are in-track ordered, and Track 2 stays closed to unrelated work. The binding constraint is now **infra, not tickets**: SA136d and SA115a both want the same Docker/PostgreSQL daemon, and Track 3 has priority.
+
+**Open maintainer decisions: none.** Both 2026-08-07 decisions are resolved and applied below; the loop/seal artifact contract, the `splits/<m>-module/<version>` tag scheme, the deletion of `split-modules.yml` (done, SA136e) and of the stale remote `splits/teams-module` branch, and the restructure of SA117e-4 in place remain ratified and recorded in [CHANGELOG.md](../../CHANGELOG.md).
+
+> **1. Split SA115 into SA115a/SA115b — RESOLVED: yes, applied 2026-08-07.** SA115 is split along its own dependency seam: SA115a takes items 1–3 (local, no shared file, no merge gate) and is truly green; SA115b takes item 4 alone and keeps `merge after SA112e`. Track 2 stops being a parked branch. The consolidation option — folding SA115b's two paths into SA122b-5, which already owns that allowlist migration — is recorded on SA115b and decided at SA122b-5 start, not now.
+
+> **2. Seal-atomicity enforcement — RESOLVED: requirement re-scoped 2026-08-07.** Server-transactional atomicity is **withdrawn**, not deferred. Rationale: tag immutability already rests on convention plus transport — a force-privileged maintainer can move a tag on any platform, which SA136f records as the standing residual — so a receive-hook platform would have closed a window strictly smaller than one already accepted, at the cost of new release infrastructure for a single-maintainer repo. SA136d instead enforces the seal client-side as check-then-act with a **fail-closed post-push verification**, documenting rather than engineering away the narrow window between precondition reread and push. Releases are serialized by the local `is_release_authoritative` gate, so no concurrent publisher is expected. This retires plan finding `F-003`; it does **not** waive `F-001`/`F-002`/`F-004`/`F-005`/`F-006`, which a fresh `STATUS: ok` plan review must still close. Track 3 becomes truly green.
+
+The fresh twelve-row confirmation before the seal and SA96-PUBLISH remain execution-time human gates, obtained at the outward-facing action and never pre-granted. Resolved authorizations and superseded ledgers are in [CHANGELOG.md](../../CHANGELOG.md) and are not restated here.
+
+## v88 backlog (not v87 scope)
+
+Deferred deliberately. Nothing here blocks the v87 release. Backlog items carry the `v88` scope tag instead of a track by design — the three-worktree split is a v87 integration structure, and homing a v88 ticket on a track would put non-release work on a branch that must merge into the v87 release train. Tracks are assigned at v88 kickoff.
+
+- [ ] **SA123 — Add dependency-vulnerability and security static analysis to the gate set.** `Tier 2 · deps: SA128 ✓ closed`
+
+  The tech-audit cannot resolve lockfile CVEs because `pip-audit`/Safety are absent from local and CI tooling, and cannot run implementation-security rules because Bandit/Semgrep are absent. Add both as read-only blocking scanners: a dependency audit with an explicit reviewed allowlist, and a focused rule set covering subprocess shell use, unsafe deserialization, TLS disabling, Django raw/`mark_safe` sinks, and committed credential signatures. **Depends on SA128** so the two new gates are registered in a topology whose parity checker can be trusted, from birth rather than adding two more hand-synchronized inventories. The audit's fourth gap (a production-change testimony gate) is **not ticketed** — it governs maintainer process rather than artifact correctness.
+  - Verify: both scanners run in the registered contexts and fail on a deliberately introduced fixture; the allowlist requires an explicit reviewed entry per suppression; HEAD is green or its findings are dispositioned.
+  *(why →* two whole defect categories are currently unswept*)*
+
+- [ ] **SA124 — Make the scope tooling's CLI, `--help`, and Make target agree.** `Tier 1 · deps: none`
+
+  `scripts/check_sa117_scope.py`, `scripts/sa117_scope.json`, the `Makefile` target, and `scripts/README.md` disagree about which candidate paths are required, so each caller contract can be satisfied while the set as a whole is inconsistent. Pick one authoritative path list and make all three derive from it. This is ~2,586 lines of meta-tooling that ships no product behaviour and gates no release property, so its inconsistency cannot produce a bad release — only mislead a maintainer. It stays merged and unadvertised rather than reverted, because a future large-candidate review may want it.
+  **Carries `SA117E1-REV-004` (low/advisory) from SA117e-1:** classify the excluded devtools/meta-package version surfaces consistently; the absent `quickscale/src/quickscale/_version.py` received no whole-file certification in the historical review.
+  - Verify: CLI, `--help`, and the Make target report the identical required-path set from one source; a missing required path fails all three identically.
+  *(why →* a supervision tool whose three callers disagree cannot be trusted to supervise*)*
+
+- [ ] **SA134 — Derive generated-project test assertions from the authoritative pins.** `Tier 2 · deps: none`
+
+  `quickscale_core/tests/test_e2e_full_workflow.py` restates runtime and dependency versions as string literals (DRF `^3.16.1` against a `^3.17.1` module pin; a `"3.14" not in ci_content` negative control that the 3.14 upgrade rewrote into a self-contradiction). Every dependency bump therefore drifts these assertions, and SA133 (closed) was the third recorded instance of the class. Derive them instead: Python from `runtime_pins.PYTHON_VERSION`, dependency floors from the module manifests/pins, keeping negative controls meaningful by naming the *retired* value explicitly.
+  - **Deliberately deferred out of SA133.** Widening a remediation ticket into a test-architecture change is the pattern that capped two full-scope reviews on this board; SA133 fixed the literals, SA134 removes the class.
+  - Verify: no generated-project version assertion restates a literal that an authoritative pin already owns; a deliberate pin bump makes the derived assertions follow with no test edit; a negative control still fails when a retired version reappears.
+  *(why →* hand-synced version literals are the same restate-instead-of-derive shape as arch Finding 11, at test scope*)*
+
+- [ ] **SA137 — Bring `quickscale_devtools` into the version-propagation set.** `Tier 1 · deps: none`
+
+  `quickscale_devtools/pyproject.toml:34` reads `0.86.0` while every other workspace package reads `0.87.0`, because `scripts/version_tool.sh:12`'s `PYPROJECTS` list omits devtools. `make version-check` therefore can never flag it and `make bump-version` can never fix it — the package drifts one release further behind on every bump.
+  - Verify: `version-check` fails on a deliberately skewed devtools version; `bump-version` updates it with the rest; the propagation set is derived rather than restated where practical.
+  *(why →* a version gate that structurally cannot see one of its packages is the restate-instead-of-derive shape again*)*
+
+- [ ] **SA118 — Guarantee every declared `module.yml` default reaches the wiring spec.** `Tier 2 · deps: none`
+
+  Billing's post-hook (`quickscale_modules/billing/src/quickscale_modules_billing/adapter.py:34-36`) reads `settings["QUICKSCALE_BILLING_ENABLED"]` and assumes presence. When a manifest declares an option with a default but the projection does not run, the key is absent and the hook raises `KeyError` — a confusing crash instead of a clear contract error. Make the manifest layer authoritative: an option declared with a `default` must always project its `django_setting`, whether or not the caller supplied a value.
+  - **Scope discipline — narrow-B, not full-B.** Do **not** attempt to complete the imperative→declarative migration here. [decisions.md §module-derivation-schema](./decisions.md#module-derivation-schema) records that runtime derivation execution is active for **analytics and listings** only; finishing that across twelve modules is a separate program.
+  - **Not a fail-hard violation.** [§fail-hard-principle](./decisions.md#fail-hard-principle) prohibits *inventing* values when configuration is absent or invalid. A default declared in `module.yml` is versioned, authoritative configuration — materializing it is reading config. Inventing the value locally inside a consumer is the prohibited shape.
+  - **Not the fix for SA117**, which is embedded-manifest version skew: the source manifest projects the setting correctly from an empty options dict. SA118 stands on its own merits.
+  - **Expect emission-parity churn.** Materializing previously-absent settings moves `sa90_emission_manifests.json` hashes for multiple modules. Rebaseline deliberately with a per-file rationale — the tech-audit has flagged silent parity rebaselining as a recurring anomaly.
+  - Verify: an option declared with a default always yields its `django_setting` in the built spec; consumers reading such a key unconditionally cannot raise `KeyError`; parity fixtures rebaselined with a per-file rationale.
+  *(why →* manifest-authoritative projection is the documented direction; the current gap lets a declared default silently fail to exist*)*
+
+- [ ] **SA135 — Give the test suites an owned PostgreSQL lifecycle.** `Tier 2 · deps: SA117e-4`
+
+  No repository script starts a PostgreSQL: `make test-cov`, `make test-integration`, and `scripts/test_integration.sh` only *probe*, and `provision_test_roles.sh:52` errors with "No PostgreSQL container found … start one." The host `localhost:5432` instance is an out-of-band assumption that every integration and e2e gate silently depends on. The machinery already exists but is orphaned — `pytest-docker` is a declared dependency (`pyproject.toml:39`) and `quickscale_core/tests/conftest.py:121-155` defines `postgres_service`/`per_test_db` fixtures with healthcheck readiness and dynamic ports, requested by no test.
+  - **Hard sequencing constraint — after SA117e-4.** Auto-provisioning makes `check_ci_locally.sh`'s stage-11 `PostgreSQL Not Available` banner branch unreachable, so the negative control must be redesigned in the same change. That must not land on a run that gates an irreversible publish.
+  - Verify: a documented command provisions and tears down the server the gates use; the stage-11 unavailability oracle still has an equivalent, asserted negative control; no gate depends on an out-of-band host instance.
+  *(why →* recorded out of SA117e-3, whose whole Phase 5 cost was working around this assumption*)*
 
 ---
 
 ## References
 
 - **Completed and archived work:** [CHANGELOG.md](../../CHANGELOG.md)
-- **Structural autopsy:** [arch-audit.md](../others/arch-audit.md)
-- **Fail-hard violations audit:** [tech-audit.md](../others/tech-audit.md)
+- **Structural autopsy:** [arch-audit.md](../../arch-audit.md)
+- **Codebase-wide defect sweep:** [tech-audit.md](../../tech-audit.md)
 - **Release notes:** `docs/releases/`
 - **Technical SSOT:** [decisions.md](./decisions.md)
 - **Scaffolding SSOT:** [scaffolding.md](./scaffolding.md)

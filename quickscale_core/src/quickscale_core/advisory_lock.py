@@ -219,13 +219,13 @@ class AdvisoryLock:
         try:
             with open(self.lock_path) as handle:
                 data = yaml.safe_load(handle) or {}
-        except (yaml.YAMLError, OSError):
+        except yaml.YAMLError, OSError:
             return None
         if not isinstance(data, dict) or "pid" not in data:
             return None
         try:
             return AdvisoryLockMetadata.from_dict(data)
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             return None
 
     def is_stale(self, max_age_seconds: float = 3600.0) -> bool:
@@ -263,7 +263,7 @@ class AdvisoryLock:
             age = (datetime.now(timezone.utc) - acquired).total_seconds()
             if age > max_age_seconds:
                 return True
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             # Unparseable timestamp — treat as stale.
             return True
 

@@ -165,6 +165,7 @@ jobs:
       run: |
         poetry run pytest quickscale_cli/tests/test_module_manifest_contract.py -q
 
+  # BEGIN GENERATED: hosted-gate-jobs
   module-core-compat:
     name: Module-vs-Oldest-Core Compatibility
     runs-on: ubuntu-24.04
@@ -304,10 +305,13 @@ jobs:
     - name: Verify every csrf_exempt callsite pairs with _enforce_csrf or signature verification
       run: |
         make check-csrf-exempt
+  # END GENERATED: hosted-gate-jobs
 
   test:
     name: Run Tests (Unit + Integration)
+    # BEGIN GENERATED: needs-test
     needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, csrf-exempt-gate]
+    # END GENERATED: needs-test
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -482,7 +486,9 @@ jobs:
 
   isolation-conformance:
     name: Isolation Conformance (AF10)
+    # BEGIN GENERATED: needs-isolation-conformance
     needs: [backups-validation, module-manifest-contract, manifest-sync-gate, org-context-primitives-gate, csrf-exempt-gate]
+    # END GENERATED: needs-isolation-conformance
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -563,7 +569,9 @@ jobs:
 
   lint-cli:
     name: Lint CLI Package
+    # BEGIN GENERATED: needs-lint-cli
     needs: [backups-validation, module-manifest-contract, manifest-sync-gate, org-context-primitives-gate, csrf-exempt-gate]
+    # END GENERATED: needs-lint-cli
     runs-on: ubuntu-latest
 
     steps:

@@ -25,7 +25,7 @@ def prod_test_context() -> dict[str, str]:
         "python_docker_tag": PYTHON_DOCKER_TAG,
         "postgres_version": POSTGRES_VERSION,
         "postgres_docker_tag": POSTGRES_DOCKER_TAG,
-        "django_constraint": ">=6.0.3,<6.1.0",
+        "django_constraint": ">=6.0.7,<6.1.0",
         "django_ci_version": "6.0",
         "runtime_db_role": "testproject_app",
         "runtime_db_password": "testproject_app_password",

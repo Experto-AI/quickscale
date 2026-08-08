@@ -13,6 +13,110 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
 
+show_help() {
+    echo "Usage: ./scripts/check_ci_locally.sh [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --e2e     Include E2E tests (slow, requires Docker)"
+    echo "  --help    Show this help message"
+    echo ""
+    echo "Environment:"
+    echo "  QS_CI_PARALLEL=0  Run static stages serially (default: concurrent fan-out)"
+    echo ""
+    echo "This script runs the primary local development checks:"
+    echo "  1. Install dependencies"
+    echo "  2. Lint (ruff check + format)"
+    echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
+    echo "  4. Module-core import linter (check_module_core_imports)"
+    echo "  5. Manifest sync gate (sync_module_manifests)"
+    echo "  6. Org-context primitives gate (check_org_context_primitives)"
+    echo "  7. CSRF-exempt gate (check_csrf_exempt_gate)"
+    echo "  8. Type check (mypy)"
+    echo "  9. Coverage policy helper tests"
+    echo "     Rendered frontend lint (when Node.js and pnpm are available)"
+    echo " 10. Combined coverage checks (core + CLI + backups module with dual-threshold policy)"
+    echo " 11. Integration tests (requires PostgreSQL)"
+    echo " 12. E2E tests (optional, with --e2e flag)"
+    exit 0
+}
+
+# Parse help before registry or interpreter bootstrap so documentation remains
+# available even when contributor tooling is not installed yet.
+RUN_E2E=false
+for arg in "$@"; do
+    case $arg in
+        --e2e)
+            RUN_E2E=true
+            shift
+            ;;
+        --help|-h)
+            show_help
+            ;;
+    esac
+done
+
+# The registry is an input to local-CI execution. Keep this derivation in the
+# declaration prefix so the parity observer executes the same inventory that
+# the production entrypoint uses, without reaching the command-oriented tail.
+GATE_REGISTRY="${GATE_REGISTRY:-$ROOT/scripts/gate_registry.json}"
+if [ -n "${PYTHON3:-}" ]; then
+    REGISTRY_PYTHON=("$PYTHON3")
+elif command -v python3 >/dev/null 2>&1; then
+    REGISTRY_PYTHON=("$(command -v python3)")
+elif command -v poetry >/dev/null 2>&1; then
+    REGISTRY_PYTHON=(poetry run python)
+else
+    echo "ERROR: unable to locate a supported Python interpreter for $GATE_REGISTRY" >&2
+    exit 1
+fi
+declare -a LOCAL_CONFORMANCE_GATE_IDS=()
+declare -a LOCAL_CONFORMANCE_GATE_TARGETS=()
+declare -a LOCAL_CONFORMANCE_GATE_STAGES=()
+
+load_local_conformance_gates() {
+    local registry_rows
+    if ! registry_rows=$("${REGISTRY_PYTHON[@]}" - "$GATE_REGISTRY" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as registry_file:
+    registry = json.load(registry_file)
+
+rows = []
+for registry_index, gate in enumerate(registry["gates"]):
+    bindings = gate["bindings"]
+    target = bindings.get("make_target")
+    stage = bindings.get("local_ci_stage")
+    if (
+        isinstance(target, str)
+        and target
+        and isinstance(stage, int)
+        and not isinstance(stage, bool)
+        and 3 <= stage <= 7
+    ):
+        rows.append((stage, registry_index, gate["id"], target))
+
+for stage, _, gate_id, target in sorted(rows):
+    print(f"{gate_id}\t{target}\t{stage}")
+PY
+    ); then
+        echo "ERROR: unable to derive local conformance gates from $GATE_REGISTRY" >&2
+        return 1
+    fi
+
+    while IFS=$'\t' read -r gate_id target stage; do
+        if [ -z "$gate_id" ] || [ -z "$target" ] || [ -z "$stage" ]; then
+            echo "ERROR: invalid local conformance gate row from $GATE_REGISTRY" >&2
+            return 1
+        fi
+        LOCAL_CONFORMANCE_GATE_IDS+=("$gate_id")
+        LOCAL_CONFORMANCE_GATE_TARGETS+=("$target")
+        LOCAL_CONFORMANCE_GATE_STAGES+=("$stage")
+    done <<< "$registry_rows"
+}
+
+load_local_conformance_gates
+
 # Reuse the worker-pool process-tree and deterministic replay helpers used by
 # the integration runner. Signal traps below are installed only while the
 # static fan-out owns background workers; serial and post-static commands stay
@@ -132,43 +236,6 @@ _handle_static_gate_signal() {
     exit "$exit_code"
 }
 
-# Parse arguments
-RUN_E2E=false
-for arg in "$@"; do
-    case $arg in
-        --e2e)
-            RUN_E2E=true
-            shift
-            ;;
-        --help|-h)
-            echo "Usage: ./scripts/check_ci_locally.sh [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  --e2e     Include E2E tests (slow, requires Docker)"
-            echo "  --help    Show this help message"
-            echo ""
-            echo "Environment:"
-            echo "  QS_CI_PARALLEL=0  Run static stages serially (default: concurrent fan-out)"
-            echo ""
-            echo "This script runs the primary local development checks:"
-            echo "  1. Install dependencies"
-            echo "  2. Lint (ruff check + format)"
-            echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
-            echo "  4. Module-core import linter (check_module_core_imports)"
-            echo "  5. Manifest sync gate (sync_module_manifests)"
-            echo "  6. Org-context primitives gate (check_org_context_primitives)"
-            echo "  7. CSRF-exempt gate (check_csrf_exempt_gate)"
-            echo "  8. Type check (mypy)"
-            echo "  9. Coverage policy helper tests"
-            echo "     Rendered frontend lint (when Node.js and pnpm are available)"
-            echo " 10. Combined coverage checks (core + CLI + backups module with dual-threshold policy)"
-            echo " 11. Integration tests (requires PostgreSQL)"
-            echo " 12. E2E tests (optional, with --e2e flag)"
-            exit 0
-            ;;
-    esac
-done
-
 echo "╔════════════════════════════════════════╗"
 echo "║   QuickScale Local CI Check            ║"
 echo "╚════════════════════════════════════════╝"
@@ -192,6 +259,81 @@ run_frontend_lint() {
     make lint-frontend
 }
 
+describe_local_conformance_gate() {
+    local target="$1"
+
+    case "$target" in
+        check-core-compat)
+            LOCAL_GATE_DESCRIPTION="Running module-vs-core compatibility check..."
+            LOCAL_GATE_SUCCESS="✓ Module-to-core compatibility passed"
+            LOCAL_GATE_FAILURE_LABEL="Module-Core Compatibility"
+            ;;
+        check-module-core-imports)
+            LOCAL_GATE_DESCRIPTION="Running module-core import linter..."
+            LOCAL_GATE_SUCCESS="✓ Module-core import linter passed"
+            LOCAL_GATE_FAILURE_LABEL="Module-Core Import Linter"
+            ;;
+        check-manifest-sync)
+            LOCAL_GATE_DESCRIPTION="Running manifest sync gate..."
+            LOCAL_GATE_SUCCESS="✓ Manifest snapshots in sync"
+            LOCAL_GATE_FAILURE_LABEL="Manifest Sync Gate"
+            ;;
+        check-org-context-primitives)
+            LOCAL_GATE_DESCRIPTION="Running org-context primitives gate..."
+            LOCAL_GATE_SUCCESS="✓ No direct external use of privatized org-context primitives"
+            LOCAL_GATE_FAILURE_LABEL="Org-Context Primitives Gate"
+            ;;
+        check-csrf-exempt)
+            LOCAL_GATE_DESCRIPTION="Running CSRF-exempt gate..."
+            LOCAL_GATE_SUCCESS="✓ All csrf_exempt callsites are protected"
+            LOCAL_GATE_FAILURE_LABEL="CSRF-Exempt Gate"
+            ;;
+        *)
+            LOCAL_GATE_DESCRIPTION="Running $target..."
+            LOCAL_GATE_SUCCESS="✓ $target passed"
+            LOCAL_GATE_FAILURE_LABEL="$target"
+            ;;
+    esac
+}
+
+run_serial_conformance_gate() {
+    local gate_id="$1"
+    local stage_number="$2"
+    local target="$3"
+    : "$gate_id"
+
+    describe_local_conformance_gate "$target"
+    echo ""
+    echo "[$stage_number/${TOTAL_STAGES}] $LOCAL_GATE_DESCRIPTION"
+    if ! make "$target"; then
+        echo ""
+        echo "╔════════════════════════════════════════╗"
+        case "$target" in
+            check-core-compat)
+                echo "║   ✗ Module-Core Compatibility Failed   ║"
+                ;;
+            check-module-core-imports)
+                echo "║   ✗ Module-Core Import Linter Failed   ║"
+                ;;
+            check-manifest-sync)
+                echo "║   ✗ Manifest Sync Gate Failed          ║"
+                ;;
+            check-org-context-primitives)
+                echo "║   ✗ Org-Context Primitives Gate Failed  ║"
+                ;;
+            check-csrf-exempt)
+                echo "║   ✗ CSRF-Exempt Gate Failed            ║"
+                ;;
+            *)
+                printf '║   ✗ %-36s║\n' "$target Failed"
+                ;;
+        esac
+        echo "╚════════════════════════════════════════╝"
+        exit 1
+    fi
+    echo "$LOCAL_GATE_SUCCESS"
+}
+
 run_static_gates_serial() {
     # This is intentionally the pre-TP1 order and failure behaviour. It is
     # the debugging escape hatch selected by QS_CI_PARALLEL=0.
@@ -201,65 +343,13 @@ run_static_gates_serial() {
     make lint -- --core --cli --modules --devtools
     echo "✓ Linting passed"
 
-    echo ""
-    echo "[3/${TOTAL_STAGES}] Running module-vs-core compatibility check..."
-    make check-core-compat || FAILED=true
-    if [ "$FAILED" = true ]; then
-        echo ""
-        echo "╔════════════════════════════════════════╗"
-        echo "║   ✗ Module-Core Compatibility Failed   ║"
-        echo "╚════════════════════════════════════════╝"
-        exit 1
-    fi
-    echo "✓ Module-to-core compatibility passed"
-
-    echo ""
-    echo "[4/${TOTAL_STAGES}] Running module-core import linter..."
-    make check-module-core-imports || FAILED=true
-    if [ "$FAILED" = true ]; then
-        echo ""
-        echo "╔════════════════════════════════════════╗"
-        echo "║   ✗ Module-Core Import Linter Failed   ║"
-        echo "╚════════════════════════════════════════╝"
-        exit 1
-    fi
-    echo "✓ Module-core import linter passed"
-
-    echo ""
-    echo "[5/${TOTAL_STAGES}] Running manifest sync gate..."
-    make check-manifest-sync || FAILED=true
-    if [ "$FAILED" = true ]; then
-        echo ""
-        echo "╔════════════════════════════════════════╗"
-        echo "║   ✗ Manifest Sync Gate Failed          ║"
-        echo "╚════════════════════════════════════════╝"
-        exit 1
-    fi
-    echo "✓ Manifest snapshots in sync"
-
-    echo ""
-    echo "[6/${TOTAL_STAGES}] Running org-context primitives gate..."
-    make check-org-context-primitives || FAILED=true
-    if [ "$FAILED" = true ]; then
-        echo ""
-        echo "╔════════════════════════════════════════╗"
-        echo "║   ✗ Org-Context Primitives Gate Failed  ║"
-        echo "╚════════════════════════════════════════╝"
-        exit 1
-    fi
-    echo "✓ No direct external use of privatized org-context primitives"
-
-    echo ""
-    echo "[7/${TOTAL_STAGES}] Running CSRF-exempt gate..."
-    make check-csrf-exempt || FAILED=true
-    if [ "$FAILED" = true ]; then
-        echo ""
-        echo "╔════════════════════════════════════════╗"
-        echo "║   ✗ CSRF-Exempt Gate Failed            ║"
-        echo "╚════════════════════════════════════════╝"
-        exit 1
-    fi
-    echo "✓ All csrf_exempt callsites are protected"
+    local i
+    for i in "${!LOCAL_CONFORMANCE_GATE_TARGETS[@]}"; do
+        run_serial_conformance_gate \
+            "${LOCAL_CONFORMANCE_GATE_IDS[$i]}" \
+            "${LOCAL_CONFORMANCE_GATE_STAGES[$i]}" \
+            "${LOCAL_CONFORMANCE_GATE_TARGETS[$i]}"
+    done
 
     echo ""
     echo "[8/${TOTAL_STAGES}] Running type checks (mypy)..."
@@ -337,27 +427,27 @@ report_static_failure_banner() {
             echo "║   ✗ Linting Failed                     ║"
             echo "╚════════════════════════════════════════╝"
             ;;
-        core-compat)
+        core-compat|check-core-compat)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ Module-Core Compatibility Failed   ║"
             echo "╚════════════════════════════════════════╝"
             ;;
-        module-core-imports)
+        module-core-imports|check-module-core-imports)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ Module-Core Import Linter Failed   ║"
             echo "╚════════════════════════════════════════╝"
             ;;
-        manifest-sync)
+        manifest-sync|check-manifest-sync)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ Manifest Sync Gate Failed          ║"
             echo "╚════════════════════════════════════════╝"
             ;;
-        org-context)
+        org-context|check-org-context-primitives)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ Org-Context Primitives Gate Failed  ║"
             echo "╚════════════════════════════════════════╝"
             ;;
-        csrf-exempt)
+        csrf-exempt|check-csrf-exempt)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ CSRF-Exempt Gate Failed            ║"
             echo "╚════════════════════════════════════════╝"
@@ -387,6 +477,7 @@ report_static_failure_banner() {
 
 run_static_gates_parallel() {
     local i
+    local target
     local worker_exit
     local failed_count=0
 
@@ -403,19 +494,13 @@ run_static_gates_parallel() {
     # stage number and declaration order in replay/failure attribution.
     launch_static_gate lint 2 "Running linters (ruff)..." "✓ Linting passed" "Linting" \
         make lint -- --core --cli --modules --devtools
-    launch_static_gate core-compat 3 "Running module-vs-core compatibility check..." \
-        "✓ Module-to-core compatibility passed" "Module-Core Compatibility" \
-        make check-core-compat
-    launch_static_gate module-core-imports 4 "Running module-core import linter..." \
-        "✓ Module-core import linter passed" "Module-Core Import Linter" \
-        make check-module-core-imports
-    launch_static_gate manifest-sync 5 "Running manifest sync gate..." \
-        "✓ Manifest snapshots in sync" "Manifest Sync Gate" make check-manifest-sync
-    launch_static_gate org-context 6 "Running org-context primitives gate..." \
-        "✓ No direct external use of privatized org-context primitives" \
-        "Org-Context Primitives Gate" make check-org-context-primitives
-    launch_static_gate csrf-exempt 7 "Running CSRF-exempt gate..." \
-        "✓ All csrf_exempt callsites are protected" "CSRF-Exempt Gate" make check-csrf-exempt
+    for i in "${!LOCAL_CONFORMANCE_GATE_TARGETS[@]}"; do
+        target="${LOCAL_CONFORMANCE_GATE_TARGETS[$i]}"
+        describe_local_conformance_gate "$target"
+        launch_static_gate "$target" "${LOCAL_CONFORMANCE_GATE_STAGES[$i]}" \
+            "$LOCAL_GATE_DESCRIPTION" "$LOCAL_GATE_SUCCESS" "$LOCAL_GATE_FAILURE_LABEL" \
+            make "$target"
+    done
     launch_static_gate typecheck 8 "Running type checks (mypy)..." "✓ Type checks passed" \
         "Type Checks" make typecheck -- --core --cli --modules --devtools
     launch_static_gate coverage-policy 9 "Running coverage policy helper tests..." \

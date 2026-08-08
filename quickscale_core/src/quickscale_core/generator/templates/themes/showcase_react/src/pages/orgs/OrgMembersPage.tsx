@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ShieldAlert, UserPlus, UserX } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -45,16 +45,15 @@ export function OrgMembersPage() {
   const removeMemberMutation = useRemoveOrgMember(currentOrgSlug ?? '')
   const revokeInvitationMutation = useRevokeOrgInvitation(currentOrgSlug ?? '')
   const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState<OrgRole>('member')
+  // `null` means "no explicit pick yet", so the server's first role choice
+  // is used until the admin actually chooses one. Deriving this during
+  // render avoids an effect that would clobber a pick made while the
+  // members query was still in flight.
+  const [selectedInviteRole, setSelectedInviteRole] = useState<OrgRole | null>(null)
   const [pageError, setPageError] = useState<string | null>(null)
   const canManageMembers = isOrgAdminLike(actor)
-
-  useEffect(() => {
-    const firstRoleChoice = membersQuery.data?.role_choices?.[0]?.value
-    if (firstRoleChoice) {
-      setInviteRole(firstRoleChoice)
-    }
-  }, [membersQuery.data?.role_choices])
+  const inviteRole: OrgRole =
+    selectedInviteRole ?? membersQuery.data?.role_choices?.[0]?.value ?? 'member'
 
   if (!canManageMembers) {
     return (
@@ -194,7 +193,7 @@ export function OrgMembersPage() {
 
             <div className="space-y-2">
               <Label htmlFor="invite-role">Role</Label>
-              <Select value={inviteRole} onValueChange={(value: OrgRole) => setInviteRole(value)}>
+              <Select value={inviteRole} onValueChange={(value: OrgRole) => setSelectedInviteRole(value)}>
                 <SelectTrigger id="invite-role">
                   <SelectValue placeholder="Choose a role" />
                 </SelectTrigger>

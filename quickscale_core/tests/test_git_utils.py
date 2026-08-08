@@ -2,31 +2,99 @@
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quickscale_core.utils.git_utils import (
+# ``quickscale_core/pyproject.toml`` is the pytest config root when this file
+# is selected directly, so the monorepo root is not otherwise importable.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts.publish_module import _has_uncommitted_changes  # noqa: E402
+
+from quickscale_core.utils.git_utils import (  # noqa: E402
     GitError,
+    GitRunner,
+    assert_staged_index_empty,
+    build_publication_git_runner,
     check_remote_branch_exists,
+    check_remote_tag_exists,
     get_all_tags_at_head,
     get_remote_url,
+    get_local_tag_commit,
+    get_tree_sha,
     get_tag_at_head,
     is_git_repo,
     is_release_authoritative,
     is_working_directory_clean,
     push_split_branch,
+    push_tag,
     read_version_file,
     resolve_module_path,
     resolve_remote_ref,
+    resolve_remote_tag,
     resolve_split_branch,
+    resolve_split_tag,
     run_git_subtree_add,
     run_git_subtree_pull,
     run_git_subtree_push,
     run_git_subtree_split,
+    create_annotated_tag,
+    validate_publication_origin,
+    validate_expected_sha,
     validate_module_name,
+    validate_tag_name,
 )
+
+
+_AUTHORITATIVE_FIXTURE_MODULES = (
+    "analytics",
+    "auth",
+    "backups",
+    "billing",
+    "blog",
+    "crm",
+    "forms",
+    "listings",
+    "notifications",
+    "orgs",
+    "social",
+    "storage",
+)
+
+
+def _add_authoritative_module_contract(repo_dir: Path) -> None:
+    """Add the module-discovery contract and its manifest-backed inventory."""
+    contracts_dir = (
+        repo_dir / "quickscale_core" / "src" / "quickscale_core" / "contracts"
+    )
+    contracts_dir.mkdir(parents=True)
+    (contracts_dir / "__init__.py").write_text("")
+    real_repo_root = Path(__file__).resolve().parent.parent.parent
+    real_module_discovery = (
+        real_repo_root
+        / "quickscale_core"
+        / "src"
+        / "quickscale_core"
+        / "contracts"
+        / "module_discovery.py"
+    )
+    # Copy rather than symlink so module discovery resolves the hermetic repo's
+    # quickscale_modules/ tree instead of the checkout containing this test.
+    (contracts_dir / "module_discovery.py").write_text(
+        real_module_discovery.read_text()
+    )
+
+    modules_dir = repo_dir / "quickscale_modules"
+    for module_name in _AUTHORITATIVE_FIXTURE_MODULES:
+        module_dir = modules_dir / module_name
+        module_dir.mkdir(parents=True, exist_ok=True)
+        (module_dir / "__init__.py").write_text("# fake module\n")
+        (module_dir / "module.yml").write_text(f"name: {module_name}\n")
 
 
 def _git_available() -> bool:
@@ -72,8 +140,15 @@ class TestIsWorkingDirectoryClean:
     @patch("subprocess.run")
     def test_dirty_working_directory(self, mock_run: MagicMock) -> None:
         """Test detecting dirty working directory"""
-        mock_run.return_value = MagicMock(stdout="M  file.py\n", returncode=0)
+        mock_run.return_value = MagicMock(stdout=b"M  file.py\0", returncode=0)
         assert is_working_directory_clean() is False
+
+    @patch("subprocess.run")
+    def test_malformed_status_stream_fails_closed(self, mock_run: MagicMock) -> None:
+        """A non-empty status stream without its final NUL is rejected."""
+        mock_run.return_value = MagicMock(stdout=b"M  file.py", returncode=0)
+        with pytest.raises(GitError, match="Malformed git status"):
+            is_working_directory_clean()
 
     @patch("subprocess.run")
     def test_git_status_failure(self, mock_run: MagicMock) -> None:
@@ -207,6 +282,237 @@ class TestGetRemoteUrl:
         mock_run.side_effect = subprocess.CalledProcessError(1, "git", stderr="error")
         with pytest.raises(GitError, match="Failed to get remote URL"):
             get_remote_url()
+
+
+class TestPublicationGitControls:
+    """Tests for publication-only executable, environment, and origin gates."""
+
+    @patch("scripts.publish_module.is_working_directory_clean", return_value=True)
+    def test_publisher_cleanliness_accepts_clean_worktree(
+        self, mock_clean: MagicMock
+    ) -> None:
+        """Publisher cleanliness checks preserve the clean-worktree route."""
+        runner = GitRunner(executable="git", env={}, publication=True)
+
+        assert _has_uncommitted_changes(runner) is False
+        mock_clean.assert_called_once_with(
+            Path(__file__).resolve().parent.parent.parent,
+            runner=runner,
+        )
+
+    @patch("scripts.publish_module.is_working_directory_clean", return_value=False)
+    def test_publisher_cleanliness_detects_dirty_worktree(
+        self, mock_clean: MagicMock
+    ) -> None:
+        """Publisher cleanliness checks preserve the dirty-worktree route."""
+        runner = GitRunner(executable="git", env={}, publication=True)
+
+        assert _has_uncommitted_changes(runner) is True
+        mock_clean.assert_called_once()
+
+    @patch(
+        "scripts.publish_module.is_working_directory_clean",
+        side_effect=GitError("status unavailable"),
+    )
+    def test_publisher_cleanliness_fails_closed_on_status_error(
+        self, mock_clean: MagicMock
+    ) -> None:
+        """Publisher status errors are treated as dirty/fail-closed."""
+        runner = GitRunner(executable="git", env={}, publication=True)
+
+        assert _has_uncommitted_changes(runner) is True
+        mock_clean.assert_called_once()
+
+    def test_bootstrap_sanitizes_repository_and_indexed_config_controls(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GIT_DIR", "/hostile/repository")
+        monkeypatch.setenv("GIT_WORK_TREE", "/hostile/worktree")
+        monkeypatch.setenv("GIT_EXEC_PATH", "/hostile/git")
+        monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
+        monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.gitdir")
+        monkeypatch.setenv("GIT_CONFIG_VALUE_0", "/hostile/repository")
+        monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
+
+        runner = build_publication_git_runner(shutil.which("git"))
+
+        assert runner.publication is True
+        assert runner.env is not None
+        assert "GIT_DIR" not in runner.env
+        assert "GIT_WORK_TREE" not in runner.env
+        assert "GIT_EXEC_PATH" not in runner.env
+        assert "GIT_CONFIG_COUNT" not in runner.env
+        assert "GIT_CONFIG_KEY_0" not in runner.env
+        assert runner.env["GIT_CONFIG_NOSYSTEM"] == "1"
+        assert runner.env["GIT_CONFIG_GLOBAL"] == "/dev/null"
+        assert runner.env["GIT_TERMINAL_PROMPT"] == "0"
+        assert runner.env["GIT_LITERAL_PATHSPECS"] == "1"
+        assert runner.env["SSH_AUTH_SOCK"] == "/tmp/agent.sock"
+
+    def test_bootstrap_rejects_relative_or_missing_explicit_executable(self) -> None:
+        with pytest.raises(GitError, match="absolute"):
+            build_publication_git_runner("git")
+        with pytest.raises(GitError, match="not executable"):
+            build_publication_git_runner("/definitely/missing/git")
+
+    def test_bootstrap_accepts_non_default_valid_git_executable(self) -> None:
+        git_path = shutil.which("git")
+        assert git_path is not None
+        runner = build_publication_git_runner(git_path)
+        assert runner.executable == git_path
+
+    @staticmethod
+    def _remote_result(mock_run: MagicMock, *, fetch: str, push: str) -> None:
+        def result(args: list[str], **_: object) -> MagicMock:
+            output = push if "--push" in args else fetch
+            return MagicMock(stdout=output, returncode=0)
+
+        mock_run.side_effect = result
+
+    @patch("subprocess.run")
+    def test_origin_accepts_effective_https_fetch_and_ssh_push(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        self._remote_result(
+            mock_run,
+            fetch="https://github.com/Experto-AI/quickscale.git\n",
+            push="git@github.com:Experto-AI/quickscale.git\n",
+        )
+        assert validate_publication_origin(tmp_path) == (
+            "https://github.com/Experto-AI/quickscale.git",
+            "git@github.com:Experto-AI/quickscale.git",
+        )
+
+    @pytest.mark.parametrize("blank", ["", "   \n"])
+    @patch("subprocess.run")
+    def test_origin_rejects_blank_fetch_or_push(
+        self, mock_run: MagicMock, tmp_path: Path, blank: str
+    ) -> None:
+        self._remote_result(
+            mock_run,
+            fetch=blank,
+            push="https://github.com/Experto-AI/quickscale.git\n",
+        )
+        with pytest.raises(GitError, match="fetch URL is blank"):
+            validate_publication_origin(tmp_path)
+
+    @pytest.mark.parametrize("push", [False, True], ids=["fetch", "push"])
+    @pytest.mark.parametrize("padding", [" leading", "trailing "])
+    @patch("subprocess.run")
+    def test_origin_rejects_surrounding_whitespace_before_allowlist(
+        self,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        push: bool,
+        padding: str,
+    ) -> None:
+        """Whitespace-padded effective URLs are not normalized into trust."""
+        trusted_url = "https://github.com/Experto-AI/quickscale.git"
+        fetch = trusted_url
+        push_url = trusted_url
+        if push:
+            push_url = (
+                f"{padding}{trusted_url}"
+                if padding.startswith(" ")
+                else f"{trusted_url}{padding}"
+            )
+        else:
+            fetch = (
+                f"{padding}{trusted_url}"
+                if padding.startswith(" ")
+                else f"{trusted_url}{padding}"
+            )
+        self._remote_result(mock_run, fetch=f"{fetch}\n", push=f"{push_url}\n")
+
+        with pytest.raises(
+            GitError,
+            match=f"Origin {'push' if push else 'fetch'} URL contains surrounding whitespace",
+        ):
+            validate_publication_origin(tmp_path)
+
+    @patch("subprocess.run")
+    def test_origin_rejects_mixed_push_identity(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        self._remote_result(
+            mock_run,
+            fetch="https://github.com/Experto-AI/quickscale.git\n",
+            push="https://github.com/other/project.git\n",
+        )
+        with pytest.raises(GitError, match="push URL is not"):
+            validate_publication_origin(tmp_path)
+
+    @patch("subprocess.run")
+    def test_origin_rejects_unset_remote_as_blank(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.side_effect = subprocess.CalledProcessError(
+            128, "git", stderr="error: No such remote 'origin'"
+        )
+        with pytest.raises(GitError, match="fetch URL is blank or unset"):
+            validate_publication_origin(tmp_path)
+
+    @patch("subprocess.run")
+    def test_staged_index_nul_parser_handles_special_filenames(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = MagicMock(
+            stdout=b'path with spaces\nquotes"\x00', returncode=0
+        )
+        with pytest.raises(GitError, match="Staged index is not empty"):
+            assert_staged_index_empty(tmp_path)
+
+    @patch("subprocess.run")
+    def test_staged_index_rejects_malformed_nonempty_stream(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        mock_run.return_value = MagicMock(stdout=b"path-without-nul", returncode=0)
+        with pytest.raises(GitError, match="Malformed cached Git path"):
+            assert_staged_index_empty(tmp_path)
+
+    @patch("subprocess.run")
+    def test_publication_push_asserts_index_before_and_after_success(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        runner = GitRunner(executable="git", env={}, publication=True)
+        mock_run.side_effect = [
+            MagicMock(stdout=b"", returncode=0),
+            MagicMock(stdout=b"", returncode=0),
+            MagicMock(stdout=b"", returncode=0),
+        ]
+        push_split_branch(
+            "splits/auth-module",
+            expected_remote_sha="a" * 40,
+            path=tmp_path,
+            runner=runner,
+        )
+        commands = [call.args[0][1:] for call in mock_run.call_args_list]
+        assert commands[0][:4] == ["diff", "--cached", "--name-only", "-z"]
+        assert commands[1][0:2] == [
+            "push",
+            "--force-with-lease=refs/heads/splits/auth-module:" + "a" * 40,
+        ]
+        assert commands[2][:4] == ["diff", "--cached", "--name-only", "-z"]
+
+    @patch("subprocess.run")
+    def test_publication_push_rejects_index_dirtied_after_success(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        """The post-push assertion is active and remains NUL/path-safe."""
+        runner = GitRunner(executable="git", env={}, publication=True)
+        mock_run.side_effect = [
+            MagicMock(stdout=b"", returncode=0),
+            MagicMock(stdout=b"", returncode=0),
+            MagicMock(stdout=b"generated\nartifact\0", returncode=0),
+        ]
+        with pytest.raises(GitError, match="Staged index is not empty"):
+            push_split_branch(
+                "splits/auth-module",
+                expected_remote_sha="a" * 40,
+                path=tmp_path,
+                runner=runner,
+            )
+        assert mock_run.call_count == 3
 
 
 class TestResolveRemoteRef:
@@ -875,6 +1181,407 @@ class TestResolveSplitBranch:
             resolve_split_branch("my module")
 
 
+class TestSplitTagHelpers:
+    """Focused tests for immutable split-tag and tree helper contracts."""
+
+    def test_resolve_split_tag_uses_canonical_branch_and_version(self) -> None:
+        """Split tags are namespaced and use canonical X.Y.Z versions."""
+        assert resolve_split_tag("auth", "0.87.0") == "splits/auth-module/0.87.0"
+
+    @pytest.mark.parametrize("version", ["0.87", "0.87.00", " 0.87.0 ", "v0.87.0"])
+    def test_resolve_split_tag_rejects_noncanonical_versions(
+        self, version: str
+    ) -> None:
+        """Tag identity must not accept alternate version spellings."""
+        with pytest.raises(GitError, match="Invalid canonical version"):
+            resolve_split_tag("auth", version)
+
+    @patch("subprocess.run")
+    def test_annotated_remote_tag_prefers_peeled_commit(
+        self, mock_run: MagicMock
+    ) -> None:
+        """Annotated tags resolve to the peeled commit, not the tag object."""
+        direct_sha = "a" * 40
+        peeled_sha = "b" * 40
+        mock_run.return_value = MagicMock(
+            stdout=(
+                f"{direct_sha}\trefs/tags/splits/auth-module/0.87.0\n"
+                f"{peeled_sha}\trefs/tags/splits/auth-module/0.87.0^{{}}\n"
+            ),
+            returncode=0,
+        )
+
+        assert resolve_remote_tag("origin", "splits/auth-module/0.87.0") == peeled_sha
+        assert mock_run.call_args.args[0] == [
+            "git",
+            "ls-remote",
+            "--tags",
+            "--",
+            "origin",
+            "refs/tags/splits/auth-module/0.87.0",
+            "refs/tags/splits/auth-module/0.87.0^{}",
+        ]
+
+    @patch("subprocess.run")
+    def test_lightweight_remote_tag_uses_direct_commit(
+        self, mock_run: MagicMock
+    ) -> None:
+        """Lightweight tags resolve from their direct ls-remote entry."""
+        commit_sha = "c" * 40
+        mock_run.return_value = MagicMock(
+            stdout=f"{commit_sha}\trefs/tags/splits/auth-module/0.87.0\n",
+            returncode=0,
+        )
+
+        assert resolve_remote_tag("origin", "splits/auth-module/0.87.0") == commit_sha
+        assert check_remote_tag_exists("origin", "splits/auth-module/0.87.0") is True
+        assert mock_run.call_count == 2
+
+    @patch("subprocess.run")
+    def test_absent_remote_tag_is_false_or_error(self, mock_run: MagicMock) -> None:
+        """Absence is observable as false and is an error for resolution."""
+        mock_run.return_value = MagicMock(stdout="", returncode=0)
+
+        assert check_remote_tag_exists("origin", "splits/missing/0.87.0") is False
+        with pytest.raises(GitError, match="not found"):
+            resolve_remote_tag("origin", "splits/missing/0.87.0")
+
+    @patch("quickscale_core.utils.git_utils.resolve_remote_ref")
+    @patch("subprocess.run")
+    def test_tag_resolution_does_not_use_remote_ref(
+        self, mock_run: MagicMock, mock_remote_ref: MagicMock
+    ) -> None:
+        """Tag resolution stays separate from branch-only resolve_remote_ref."""
+        commit_sha = "d" * 40
+        mock_run.return_value = MagicMock(
+            stdout=f"{commit_sha}\trefs/tags/splits/auth-module/0.87.0\n",
+            returncode=0,
+        )
+
+        assert resolve_remote_tag("origin", "splits/auth-module/0.87.0") == commit_sha
+        mock_remote_ref.assert_not_called()
+
+    @patch("subprocess.run")
+    def test_get_tree_sha_uses_verified_tree_expression(
+        self, mock_run: MagicMock
+    ) -> None:
+        """Tree lookup uses the explicit rev-parse commit peel."""
+        tree_sha = "e" * 40
+        mock_run.return_value = MagicMock(stdout=f"{tree_sha}\n", returncode=0)
+
+        assert get_tree_sha("f" * 40) == tree_sha
+        assert mock_run.call_args.args[0] == [
+            "git",
+            "rev-parse",
+            "--verify",
+            f"{'f' * 40}^{{tree}}",
+        ]
+
+    @patch("subprocess.run")
+    def test_push_tag_uses_one_explicit_non_force_refspec(
+        self, mock_run: MagicMock
+    ) -> None:
+        """Tag pushes cannot sweep tags or force-move an existing tag."""
+        mock_run.return_value = MagicMock(returncode=0)
+
+        push_tag("splits/auth-module/0.87.0", remote="upstream")
+
+        assert mock_run.call_args.args[0] == [
+            "git",
+            "push",
+            "--",
+            "upstream",
+            "refs/tags/splits/auth-module/0.87.0:refs/tags/splits/auth-module/0.87.0",
+        ]
+        assert all("force" not in arg for arg in mock_run.call_args.args[0])
+
+    @pytest.mark.parametrize(
+        "bad_tag",
+        [
+            "--all",
+            "tag*",
+            "tag?",
+            "tag[",
+            "tag:name",
+            "tag\nname",
+            "refs/tags/tag",
+            "tag..other",
+            "tag^{}",
+            "tag//other",
+        ],
+    )
+    @pytest.mark.parametrize("operation", ["remote", "local", "create", "push"])
+    @patch("subprocess.run")
+    def test_invalid_tag_values_are_rejected_before_git(
+        self, mock_run: MagicMock, operation: str, bad_tag: str
+    ) -> None:
+        """Tag validation rejects ref syntax and options without spawning Git."""
+        with pytest.raises(GitError, match="Invalid tag name"):
+            if operation == "remote":
+                resolve_remote_tag("origin", bad_tag)
+            elif operation == "local":
+                get_local_tag_commit(bad_tag)
+            elif operation == "create":
+                create_annotated_tag(bad_tag, "a" * 40)
+            else:
+                push_tag(bad_tag)
+        mock_run.assert_not_called()
+
+    def test_validate_tag_name_accepts_split_tag(self) -> None:
+        """The canonical split-tag namespace remains a valid literal tag."""
+        validate_tag_name("splits/auth-module/0.87.0")
+
+    @pytest.mark.parametrize(
+        "output, message",
+        [
+            (
+                "b" * 40 + "\trefs/tags/splits/auth-module/0.87.0^{}\n",
+                "peeled record without direct",
+            ),
+            (
+                "a" * 40 + "\trefs/tags/splits/auth-module/0.87.0\n"
+                "b" * 40 + "\trefs/tags/splits/auth-module/0.87.0\n",
+                "duplicate direct",
+            ),
+            (
+                "a" * 40 + "\trefs/tags/splits/auth-module/0.87.0^{}\n"
+                "b" * 40 + "\trefs/tags/splits/auth-module/0.87.0^{}\n",
+                "duplicate peeled",
+            ),
+            (
+                "a" * 40 + "\trefs/tags/other\n",
+                "unknown ref",
+            ),
+            ("\n", "blank record"),
+            ("not-a-record", "Malformed ls-remote"),
+        ],
+    )
+    @patch("subprocess.run")
+    def test_remote_tag_parser_rejects_malformed_record_sets(
+        self, mock_run: MagicMock, output: str, message: str
+    ) -> None:
+        """Only one direct plus an optional peeled record is accepted."""
+        mock_run.return_value = MagicMock(stdout=output, returncode=0)
+        with pytest.raises(GitError, match=message):
+            resolve_remote_tag("origin", "splits/auth-module/0.87.0")
+
+    @patch("subprocess.run")
+    def test_local_tag_absence_is_confirmed_before_returning_none(
+        self, mock_run: MagicMock
+    ) -> None:
+        """None is returned only for show-ref's explicit absence status."""
+        mock_run.return_value = MagicMock(returncode=1, stderr="")
+
+        assert get_local_tag_commit("splits/missing/0.87.0") is None
+        assert mock_run.call_args.args[0] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "--quiet",
+            "refs/tags/splits/missing/0.87.0",
+        ]
+
+    @pytest.mark.parametrize(
+        "presence, resolution, message",
+        [
+            (128, None, "Failed to inspect local tag"),
+            (
+                0,
+                MagicMock(returncode=128, stderr="malformed object"),
+                "Failed to resolve local tag",
+            ),
+            (0, MagicMock(returncode=0, stdout="short\n"), "Unexpected tag"),
+        ],
+    )
+    @patch("subprocess.run")
+    def test_local_tag_operational_and_malformed_failures_raise(
+        self,
+        mock_run: MagicMock,
+        presence: int,
+        resolution: MagicMock | None,
+        message: str,
+    ) -> None:
+        """Operational and malformed-object failures are not treated as absent."""
+        presence_result = MagicMock(returncode=presence, stderr="git unavailable")
+        if resolution is None:
+            mock_run.return_value = presence_result
+        else:
+            mock_run.side_effect = [presence_result, resolution]
+
+        with pytest.raises(GitError, match=message):
+            get_local_tag_commit("splits/auth-module/0.87.0")
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestLocalAnnotatedTagHelpers:
+    """Hermetic local-repository tests for annotated-tag idempotence."""
+
+    def _create_repo(self, tmp_path: Path) -> tuple[Path, str]:
+        repo = tmp_path / "repo"
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        (repo / "module.txt").write_text("initial\n")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "initial"],
+            check=True,
+            capture_output=True,
+        )
+        result = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return repo, result.stdout.strip()
+
+    def test_create_annotated_tag_is_idempotent_and_rejects_conflict(
+        self, tmp_path: Path
+    ) -> None:
+        """Repeated same-commit tagging is a no-op; a different commit fails."""
+        repo, first_sha = self._create_repo(tmp_path)
+        tag = "splits/auth-module/0.87.0"
+
+        create_annotated_tag(tag, first_sha, path=repo)
+        assert get_local_tag_commit(tag, path=repo) == first_sha
+        create_annotated_tag(tag, first_sha, path=repo)
+
+        tag_type = subprocess.run(
+            ["git", "-C", str(repo), "cat-file", "-t", f"refs/tags/{tag}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert tag_type.stdout.strip() == "tag"
+
+        (repo / "module.txt").write_text("changed\n")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "changed"],
+            check=True,
+            capture_output=True,
+        )
+        second_result = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        second_sha = second_result.stdout.strip()
+
+        with pytest.raises(GitError, match=f"{first_sha}.*{second_sha}"):
+            create_annotated_tag(tag, second_sha, path=repo)
+
+    def test_push_tag_rejects_conflicting_existing_bare_remote_tag(
+        self, tmp_path: Path
+    ) -> None:
+        """A bare remote tag conflict is rejected without force or mutation."""
+        repo, first_sha = self._create_repo(tmp_path)
+        remote = tmp_path / "remote.git"
+        tag = "splits/auth-module/0.87.0"
+        subprocess.run(
+            ["git", "init", "--bare", str(remote)], check=True, capture_output=True
+        )
+
+        create_annotated_tag(tag, first_sha, path=repo)
+        push_tag(tag, remote=str(remote), path=repo)
+
+        (repo / "module.txt").write_text("changed\n")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "changed"],
+            check=True,
+            capture_output=True,
+        )
+        second_sha = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(repo), "tag", "--force", tag, second_sha],
+            check=True,
+            capture_output=True,
+        )
+
+        with pytest.raises(GitError, match="Failed to push tag"):
+            push_tag(tag, remote=str(remote), path=repo)
+        assert resolve_remote_tag(str(remote), tag, path=repo) == first_sha
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestSubtreeSplitTreeIdentity:
+    """Prove unchanged rejoined subtree splits retain the same tree."""
+
+    def test_unchanged_rejoin_splits_have_equal_trees(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        module_dir = repo / "quickscale_modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.txt").write_text("unchanged\n")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "quickscale_modules/auth/module.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "initial"],
+            check=True,
+            capture_output=True,
+        )
+
+        first_split = run_git_subtree_split(
+            "quickscale_modules/auth",
+            "splits/auth-module-first",
+            rejoin=True,
+            ignore_joins=True,
+            path=repo,
+        )
+        second_split = run_git_subtree_split(
+            "quickscale_modules/auth",
+            "splits/auth-module-second",
+            rejoin=True,
+            ignore_joins=True,
+            path=repo,
+        )
+
+        assert get_tree_sha(first_split, path=repo) == get_tree_sha(
+            second_split, path=repo
+        )
+
+
 class TestRunGitSubtreeSplit:
     """Tests for run_git_subtree_split (F2.8)."""
 
@@ -943,26 +1650,29 @@ class TestRunGitSubtreeSplit:
 
 
 class TestPushSplitBranch:
-    """Tests for push_split_branch (F2.8)."""
+    """Tests for push_split_branch (F2.8 / SA117 Phase 4)."""
 
     @patch("subprocess.run")
-    def test_force_push_by_default(self, mock_run: MagicMock) -> None:
-        """push_split_branch force-pushes by default."""
+    def test_push_without_force_by_default(self, mock_run: MagicMock) -> None:
+        """push_split_branch does NOT force-push by default (SA117 Phase 4)."""
         mock_run.return_value = MagicMock(returncode=0)
         push_split_branch("splits/auth-module")
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
         assert "push" in args
-        assert "--force" in args
+        assert "--force" not in args
+        assert "--force-with-lease" not in args
         assert "origin" in args
         assert "splits/auth-module" in args
 
     @patch("subprocess.run")
-    def test_non_force_push(self, mock_run: MagicMock) -> None:
-        """push_split_branch omits --force when force=False."""
+    def test_push_with_expected_sha(self, mock_run: MagicMock) -> None:
+        """push_split_branch uses --force-with-lease when expected_remote_sha given."""
         mock_run.return_value = MagicMock(returncode=0)
-        push_split_branch("splits/auth-module", force=False)
+        push_split_branch("splits/auth-module", expected_remote_sha="a" * 40)
         args = mock_run.call_args[0][0]
+        # --force-with-lease may appear bare or as --force-with-lease=refs/heads/...
+        assert any(a.startswith("--force-with-lease") for a in args)
         assert "--force" not in args
 
     @patch("subprocess.run")
@@ -981,6 +1691,130 @@ class TestPushSplitBranch:
         )
         with pytest.raises(GitError, match="Failed to push split branch"):
             push_split_branch("splits/auth-module")
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 (SA117): validate_expected_sha
+# ---------------------------------------------------------------------------
+
+
+class TestValidateExpectedSha:
+    """Tests for validate_expected_sha (SA117 Phase 4)."""
+
+    def test_accepts_40_hex(self) -> None:
+        """validate_expected_sha accepts a valid 40-char hex SHA."""
+        validate_expected_sha("a" * 40)  # must not raise
+        validate_expected_sha("abcdef0123456789" + "0" * 24)  # must not raise
+        validate_expected_sha("A" * 40)  # uppercase hex is valid
+
+    def test_accepts_absent(self) -> None:
+        """validate_expected_sha accepts 'ABSENT'."""
+        validate_expected_sha("ABSENT")  # must not raise
+
+    def test_rejects_empty(self) -> None:
+        """validate_expected_sha rejects empty string."""
+        with pytest.raises(GitError, match="must not be empty"):
+            validate_expected_sha("")
+
+    def test_rejects_short_string(self) -> None:
+        """validate_expected_sha rejects non-40-char strings."""
+        with pytest.raises(GitError, match="must be exactly 40"):
+            validate_expected_sha("short")
+        with pytest.raises(GitError, match="must be exactly 40"):
+            validate_expected_sha("a" * 39)
+        with pytest.raises(GitError, match="must be exactly 40"):
+            validate_expected_sha("a" * 41)
+
+    def test_rejects_non_hex(self) -> None:
+        """validate_expected_sha rejects non-hex characters."""
+        with pytest.raises(GitError, match="non-hex"):
+            validate_expected_sha("z" + "a" * 39)
+        with pytest.raises(GitError, match="non-hex"):
+            validate_expected_sha("gggg" + "a" * 36)
+        with pytest.raises(GitError, match="non-hex"):
+            # Valid hex except for trailing 'x'
+            validate_expected_sha("a" * 39 + "x")
+
+    def test_rejects_all_zero(self) -> None:
+        """validate_expected_sha rejects all-zero hash."""
+        with pytest.raises(GitError, match="all-zero"):
+            validate_expected_sha("0" * 40)
+
+    def test_rejects_whitespace_padded(self) -> None:
+        """validate_expected_sha rejects whitespace-padded strings."""
+        # Space is non-hex, so the 40-char string " aaa...a" fails the hex check
+        with pytest.raises(GitError, match="non-hex"):
+            validate_expected_sha(" " + "a" * 39)
+        # Trailing newline in a 40-char string fails the hex check
+        with pytest.raises(GitError, match="non-hex"):
+            validate_expected_sha("a" * 39 + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 (SA117): push_split_branch with expected_remote_sha
+# ---------------------------------------------------------------------------
+
+
+class TestPushSplitBranchExpectedSha:
+    """Tests for push_split_branch with expected_remote_sha (SA117 Phase 4)."""
+
+    @patch("subprocess.run")
+    def test_expected_sha_uses_force_with_lease_refspec(
+        self, mock_run: MagicMock
+    ) -> None:
+        """expected_remote_sha generates --force-with-lease=refs/heads/<branch>:<sha>."""
+        mock_run.return_value = MagicMock(returncode=0)
+        push_split_branch(
+            "splits/auth-module",
+            expected_remote_sha="a" * 40,
+        )
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert "--force" not in args
+        expected_refspec = (
+            f"--force-with-lease=refs/heads/splits/auth-module:{'a' * 40}"
+        )
+        assert expected_refspec in args
+
+    @patch("subprocess.run")
+    def test_absent_uses_force_with_lease_plain(self, mock_run: MagicMock) -> None:
+        """ABSENT uses --force-with-lease without refspec."""
+        mock_run.return_value = MagicMock(returncode=0)
+        push_split_branch(
+            "splits/auth-module",
+            expected_remote_sha="ABSENT",
+        )
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert "--force" not in args
+        assert "--force-with-lease" in args
+        # Must not have an =refspec suffix
+        assert not any(a.startswith("--force-with-lease=") for a in args)
+
+    @patch("subprocess.run")
+    def test_bare_force_removed(self, mock_run: MagicMock) -> None:
+        """Bare --force is no longer supported (SA117 Phase 4)."""
+        mock_run.return_value = MagicMock(returncode=0)
+        # push without expected_remote_sha must NOT add --force
+        push_split_branch("splits/auth-module")
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert "--force" not in args
+        assert "--force-with-lease" not in args
+
+    @patch("subprocess.run")
+    def test_empty_expected_sha_raises(self, mock_run: MagicMock) -> None:
+        """Empty expected_remote_sha raises GitError."""
+        with pytest.raises(GitError, match="must not be empty"):
+            push_split_branch("splits/auth-module", expected_remote_sha="")
+
+    @patch("subprocess.run")
+    def test_all_zero_expected_sha_raises(self, mock_run: MagicMock) -> None:
+        """All-zero expected_remote_sha raises GitError before any push."""
+        with pytest.raises(GitError, match="all-zero"):
+            push_split_branch("splits/auth-module", expected_remote_sha="0" * 40)
+        # subprocess.run should NOT be called — validation must fire first
+        mock_run.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1006,7 +1840,10 @@ class TestPublishModuleWrapperSmoke:
         repo_root = self._repo_root()
         script = repo_root / "scripts" / "publish_module.py"
         return subprocess.run(
-            ["python", str(script), *args],
+            # sys.executable, not a bare "python": the latter resolves to
+            # whatever interpreter is first on PATH, which may be older than
+            # the project floor and fail to parse repo sources at import time.
+            [sys.executable, str(script), *args],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -1015,7 +1852,8 @@ class TestPublishModuleWrapperSmoke:
 
     def test_invalid_module_name_exits_cleanly(self) -> None:
         """Invalid module name exits non-zero with no traceback."""
-        result = self._run_wrapper("../etc/passwd")
+        # Phase 4 requires --expected-remote-sha even for invalid names
+        result = self._run_wrapper("../etc/passwd", "--expected-remote-sha", "a" * 40)
         assert result.returncode != 0
         # Must NOT contain a Python traceback
         assert "Traceback" not in result.stderr
@@ -1447,10 +2285,8 @@ class TestPublishModuleReleaseAuthoritativeGate:
         # Create VERSION file
         (repo_dir / "VERSION").write_text(f"{version}\n")
 
-        # Create minimal quickscale_modules/ structure with a fake module
-        modules_dir = repo_dir / "quickscale_modules" / "auth"
-        modules_dir.mkdir(parents=True)
-        (modules_dir / "__init__.py").write_text("# fake module\n")
+        # Create the authoritative module-discovery seam and its fake inventory.
+        _add_authoritative_module_contract(repo_dir)
 
         # Create scripts/ directory and copy the wrapper script
         scripts_dir = repo_dir / "scripts"
@@ -1517,7 +2353,10 @@ class TestPublishModuleReleaseAuthoritativeGate:
         """Run the publish wrapper as a subprocess in the hermetic repo."""
         script = repo_root / "scripts" / "publish_module.py"
         return subprocess.run(
-            ["python", str(script), *args],
+            # sys.executable, not a bare "python": the latter resolves to
+            # whatever interpreter is first on PATH, which may be older than
+            # the project floor and fail to parse repo sources at import time.
+            [sys.executable, str(script), *args],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -1537,16 +2376,17 @@ class TestPublishModuleReleaseAuthoritativeGate:
         # Should NOT contain the F2.9a gate rejection message
         assert "not release-authoritative" not in combined
 
-    def test_publish_outdated_rejects_untagged_head(self, tmp_path: Path) -> None:
-        """--publish-outdated refuses to run when HEAD is untagged.
+    def test_publish_outdated_blocked_in_phase4(self, tmp_path: Path) -> None:
+        """--publish-outdated is blocked in SA117 Phase 4 regardless of tag state.
 
-        Hermetic: creates a temp repo with untagged HEAD.
+        Hermetic: creates a temp repo with tagged HEAD, but --publish-outdated
+        is still rejected before any split/push.
         """
-        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="0.86.0")
         result = self._run_wrapper(repo_dir, "--publish-outdated")
         assert result.returncode != 0
         combined = result.stdout + result.stderr
-        assert "not release-authoritative" in combined
+        assert "disabled in SA117 Phase 4" in combined
         assert "Traceback" not in result.stderr
         assert "Traceback" not in result.stdout
 
@@ -1556,7 +2396,9 @@ class TestPublishModuleReleaseAuthoritativeGate:
         Hermetic: creates a temp repo with untagged HEAD.
         """
         repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
-        result = self._run_wrapper(repo_dir, "auth")
+        result = self._run_wrapper(
+            repo_dir, "auth", "--expected-remote-sha", "a" * 40, timeout=120
+        )
         assert result.returncode != 0
         combined = result.stdout + result.stderr
         assert "not release-authoritative" in combined
@@ -1571,23 +2413,55 @@ class TestPublishModuleReleaseAuthoritativeGate:
         Hermetic: creates a temp repo with VERSION=0.86.0 but tag=0.85.0.
         """
         repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="0.85.0")
-        result = self._run_wrapper(repo_dir, "auth")
+        result = self._run_wrapper(
+            repo_dir, "auth", "--expected-remote-sha", "a" * 40, timeout=120
+        )
         assert result.returncode != 0
         combined = result.stdout + result.stderr
         assert "not release-authoritative" in combined
         assert "Traceback" not in result.stderr
         assert "Traceback" not in result.stdout
 
-    def test_publish_outdated_rejects_version_mismatch(self, tmp_path: Path) -> None:
-        """--publish-outdated refuses to run when VERSION does not match tag.
+    def test_single_module_publish_rejects_untrusted_origin_before_split(
+        self, tmp_path: Path
+    ) -> None:
+        """The origin gate fails before the first mutating subtree process."""
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="0.86.0")
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "remote",
+                "add",
+                "origin",
+                "https://evil.invalid/repo.git",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        result = self._run_wrapper(
+            repo_dir, "auth", "--expected-remote-sha", "a" * 40, timeout=120
+        )
+        combined = result.stdout + result.stderr
+        assert result.returncode != 0
+        assert "Publication origin validation failed" in combined
+        assert "Running git subtree split" not in combined
+        assert "Traceback" not in combined
+
+    def test_publish_outdated_blocked_regardless_of_version_tag_mismatch(
+        self, tmp_path: Path
+    ) -> None:
+        """--publish-outdated is blocked in SA117 Phase 4 even with version mismatch.
 
         Hermetic: creates a temp repo with VERSION=0.86.0 but tag=v0.85.0.
+        The Phase 4 block fires before any release-authoritative gate check.
         """
         repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="v0.85.0")
         result = self._run_wrapper(repo_dir, "--publish-outdated")
         assert result.returncode != 0
         combined = result.stdout + result.stderr
-        assert "not release-authoritative" in combined
+        assert "disabled in SA117 Phase 4" in combined
         assert "Traceback" not in result.stderr
         assert "Traceback" not in result.stdout
 
@@ -1642,3 +2516,277 @@ class TestPublishModuleReleaseAuthoritativeGate:
         # Explicit next-action guidance points at tagging first.
         assert "Next action" in combined
         assert "Tag HEAD to match VERSION" in combined
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 (SA117): publish_module.py --expected-remote-sha integration
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestPublishModuleExpectedRemoteSha:
+    """Hermetic integration tests for --expected-remote-sha in publish_module.py.
+
+    These tests prove:
+    1. --expected-remote-sha is required for single-module publish
+    2. Valid --expected-remote-sha passes validation (push itself fails because
+       no real remote, but the gate validation succeeds)
+    3. Invalid SHA values are rejected before any git operations
+    4. --status rejects --expected-remote-sha
+    5. --publish-outdated rejects --expected-remote-sha
+
+    All tests are hermetic: they create temporary git repos so they do not
+    depend on ambient repo state.
+    """
+
+    _hermetic_repo: Path
+
+    def _setup_hermetic_repo(
+        self, tmp_path: Path, version: str, tag: str | None = None
+    ) -> Path:
+        """Create a hermetic repo structure for wrapper testing.
+
+        Args:
+            tmp_path: pytest tmp_path fixture
+            version: Version string to write to VERSION file
+            tag: Optional tag to create at HEAD (None = untagged)
+
+        Returns:
+            Path to the hermetic repo root
+        """
+        repo_dir = tmp_path / "hermetic_repo"
+        repo_dir.mkdir()
+
+        subprocess.run(
+            ["git", "init", str(repo_dir)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+
+        # VERSION file
+        (repo_dir / "VERSION").write_text(f"{version}\n")
+
+        # Create the authoritative module-discovery seam and its fake inventory.
+        _add_authoritative_module_contract(repo_dir)
+
+        # Copy publish_module.py
+        scripts_dir = repo_dir / "scripts"
+        scripts_dir.mkdir()
+        real_repo_root = Path(__file__).resolve().parent.parent.parent
+        real_script = real_repo_root / "scripts" / "publish_module.py"
+        (scripts_dir / "publish_module.py").write_text(real_script.read_text())
+
+        # Copy git_utils.py (need to include our new functions)
+        core_src = repo_dir / "quickscale_core" / "src" / "quickscale_core" / "utils"
+        core_src.mkdir(parents=True)
+        real_git_utils = (
+            real_repo_root
+            / "quickscale_core"
+            / "src"
+            / "quickscale_core"
+            / "utils"
+            / "git_utils.py"
+        )
+        (core_src / "git_utils.py").symlink_to(real_git_utils)
+
+        # Package __init__.py files
+        (repo_dir / "quickscale_core" / "__init__.py").write_text("")
+        (repo_dir / "quickscale_core" / "src" / "__init__.py").write_text("")
+        (
+            repo_dir / "quickscale_core" / "src" / "quickscale_core" / "__init__.py"
+        ).write_text("")
+        (
+            repo_dir
+            / "quickscale_core"
+            / "src"
+            / "quickscale_core"
+            / "utils"
+            / "__init__.py"
+        ).write_text("")
+
+        # Commit
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "add", "."],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_dir), "commit", "-m", "initial"],
+            check=True,
+            capture_output=True,
+        )
+
+        if tag is not None:
+            subprocess.run(
+                ["git", "-C", str(repo_dir), "tag", tag],
+                check=True,
+                capture_output=True,
+            )
+
+        return repo_dir
+
+    def _run_wrapper(
+        self, repo_root: Path, *args: str, timeout: int = 30
+    ) -> subprocess.CompletedProcess[str]:
+        """Run the publish wrapper as a subprocess in the hermetic repo."""
+        script = repo_root / "scripts" / "publish_module.py"
+        return subprocess.run(
+            # sys.executable, not a bare "python": the latter resolves to
+            # whatever interpreter is first on PATH, which may be older than
+            # the project floor and fail to parse repo sources at import time.
+            [sys.executable, str(script), *args],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+    # ------------------------------------------------------------------
+    # --expected-remote-sha is required
+    # ------------------------------------------------------------------
+
+    def test_single_publish_requires_expected_sha(self, tmp_path: Path) -> None:
+        """Single-module publish fails when --expected-remote-sha is omitted."""
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="0.86.0")
+        result = self._run_wrapper(repo_dir, "auth", timeout=120)
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "expected-remote-sha is required" in combined
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+
+    # ------------------------------------------------------------------
+    # Invalid --expected-remote-sha rejection
+    # ------------------------------------------------------------------
+
+    def test_rejects_empty_sha(self, tmp_path: Path) -> None:
+        """Single-module publish rejects empty --expected-remote-sha."""
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="0.86.0")
+        result = self._run_wrapper(
+            repo_dir, "auth", "--expected-remote-sha", "", timeout=120
+        )
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "expected-remote-sha is required" in combined
+        assert "Traceback" not in result.stderr
+
+    def test_rejects_short_sha(self, tmp_path: Path) -> None:
+        """Single-module publish rejects short --expected-remote-sha."""
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="0.86.0")
+        result = self._run_wrapper(
+            repo_dir, "auth", "--expected-remote-sha", "short", timeout=120
+        )
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "Invalid --expected-remote-sha" in combined
+        assert "must be exactly 40" in combined
+        assert "Traceback" not in result.stderr
+
+    def test_rejects_all_zero_sha(self, tmp_path: Path) -> None:
+        """Single-module publish rejects all-zero --expected-remote-sha."""
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="0.86.0")
+        result = self._run_wrapper(
+            repo_dir, "auth", "--expected-remote-sha", "0" * 40, timeout=120
+        )
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "Invalid --expected-remote-sha" in combined
+        assert "all-zero" in combined
+        assert "Traceback" not in result.stderr
+
+    def test_rejects_non_hex_sha(self, tmp_path: Path) -> None:
+        """Single-module publish rejects non-hex --expected-remote-sha."""
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="0.86.0")
+        result = self._run_wrapper(
+            repo_dir, "auth", "--expected-remote-sha", "x" + "a" * 39, timeout=120
+        )
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "Invalid --expected-remote-sha" in combined
+        assert "non-hex" in combined
+        assert "Traceback" not in result.stderr
+
+    # ------------------------------------------------------------------
+    # Valid --expected-remote-sha proceeds to gate (untagged = blocked)
+    # ------------------------------------------------------------------
+
+    def test_valid_sha_untagged_still_blocked(self, tmp_path: Path) -> None:
+        """Valid --expected-remote-sha proceeds past SHA validation but hits gate.
+
+        Hermetic: untagged HEAD with valid --expected-remote-sha.  The SHA
+        validation should pass, then the release-authoritative gate should
+        block the publish.
+        """
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
+        result = self._run_wrapper(
+            repo_dir, "auth", "--expected-remote-sha", "a" * 40, timeout=120
+        )
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        # Should NOT mention SHA validation failure
+        assert "Invalid --expected-remote-sha" not in combined
+        # Should mention release-authoritative gate
+        assert "not release-authoritative" in combined
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+
+    def test_valid_absent_untagged_still_blocked(self, tmp_path: Path) -> None:
+        """Valid ABSENT --expected-remote-sha passes SHA validation, hits gate."""
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
+        result = self._run_wrapper(
+            repo_dir, "auth", "--expected-remote-sha", "ABSENT", timeout=120
+        )
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "Invalid --expected-remote-sha" not in combined
+        assert "not release-authoritative" in combined
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+
+    # ------------------------------------------------------------------
+    # --status rejects --expected-remote-sha
+    # ------------------------------------------------------------------
+
+    def test_status_rejects_expected_sha(self, tmp_path: Path) -> None:
+        """--status rejects --expected-remote-sha."""
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
+        result = self._run_wrapper(
+            repo_dir, "--status", "--expected-remote-sha", "a" * 40, timeout=120
+        )
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "not supported with --status" in combined
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout
+
+    # ------------------------------------------------------------------
+    # --publish-outdated rejects --expected-remote-sha
+    # ------------------------------------------------------------------
+
+    def test_publish_outdated_rejected_with_phase4_message(
+        self, tmp_path: Path
+    ) -> None:
+        """--publish-outdated is blocked in SA117 Phase 4 (even with --expected-remote-sha)."""
+        repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag="0.86.0")
+        result = self._run_wrapper(
+            repo_dir,
+            "--publish-outdated",
+            "--expected-remote-sha",
+            "a" * 40,
+            timeout=120,
+        )
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "disabled in SA117 Phase 4" in combined
+        assert "Traceback" not in result.stderr
+        assert "Traceback" not in result.stdout

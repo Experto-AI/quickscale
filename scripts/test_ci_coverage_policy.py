@@ -1111,31 +1111,123 @@ class TestCheckQuietSectionDispatch:
         fake_python.chmod(0o755)
         return fake_python, event_log
 
+    @staticmethod
+    def _write_fake_node_pnpm(bin_dir: Path) -> None:
+        """
+        Create fake ``node`` and ``pnpm`` executables that exit 0.
+
+        Callers create a temporary directory, pass it here, then prepend it
+        to ``PATH`` so the Makefile's ``command -v`` guard finds them.
+        """
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        for tool in ("node", "pnpm"):
+            tool_path = bin_dir / tool
+            tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            tool_path.chmod(0o755)
+
+    @staticmethod
+    def _write_fake_node_only(bin_dir: Path) -> None:
+        """Create a fake ``node`` executable that exits 0."""
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        tool_path = bin_dir / "node"
+        tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool_path.chmod(0o755)
+
+    @staticmethod
+    def _write_fake_pnpm_only(bin_dir: Path) -> None:
+        """Create a fake ``pnpm`` executable that exits 0."""
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        tool_path = bin_dir / "pnpm"
+        tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool_path.chmod(0o755)
+
+    def _write_fake_make(self, tmp_path: Path) -> tuple[Path, Path, Path]:
+        """
+        Create a deterministic fake make that logs targets to a JSONL file.
+
+        The fake make exits 1 when ``FAKE_MAKE_FAIL_TARGET`` is set and the
+        requested target matches; otherwise exits 0.  Returns the path to the
+        script, the event-log path, and a shell-wrapper path that sets the
+        required environment variable before invoking the real script.
+        """
+        script = tmp_path / "fake_make.py"
+        event_log = tmp_path / "make_events.jsonl"
+        script.write_text(
+            textwrap.dedent("""\
+                #!/usr/bin/env python3
+                import json, os, sys
+                from pathlib import Path
+
+                log_path = Path(os.environ["FAKE_MAKE_LOG"])
+                target = sys.argv[1] if len(sys.argv) > 1 else ""
+                with log_path.open("a", encoding="utf-8") as stream:
+                    json.dump({"kind": "make", "target": target}, stream)
+                    stream.write("\\n")
+                fail_target = os.environ.get("FAKE_MAKE_FAIL_TARGET", "")
+                if fail_target and target == fail_target:
+                    print(
+                        f"FAKE_MAKE: target '{target}' failed "
+                        f"(FAKE_MAKE_FAIL_TARGET={fail_target})",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
+                sys.exit(0)
+            """).lstrip(),
+            encoding="utf-8",
+        )
+        script.chmod(0o755)
+
+        # Shell wrapper ensures FAKE_MAKE_LOG is always set
+        wrapper = tmp_path / "fake_make.sh"
+        wrapper.write_text(
+            textwrap.dedent(f"""\
+                #!/bin/sh
+                export FAKE_MAKE_LOG="{event_log}"
+                exec "{script}" "$@"
+            """).lstrip(),
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+
+        return script, event_log, wrapper
+
     def _run_quiet_check(
         self,
         tmp_path: Path,
         *,
         sections: str = "",
         module: str = "",
+        make_override: str | None = None,
+        shell_override: str | None = None,
         extra_env: dict[str, str] | None = None,
     ) -> tuple[subprocess.CompletedProcess[str], list[dict]]:
-        """Run ``make check QUIET=1`` with fake Python and no-op sub-make."""
+        """
+        Run ``make check QUIET=1`` with fake Python and no-op sub-make.
+
+        When *shell_override* is set, it is passed as ``SHELL`` to make so
+        ``command -v`` behaviour can be controlled for absent-tool tests.
+        """
         fake_python, event_log = self._write_fake_python(tmp_path)
 
         env = os.environ.copy()
         for key in ("SECTIONS", "SECTION", "MODULE", "PYTEST_XDIST_WORKERS"):
             env.pop(key, None)
         env["FAKE_LOG"] = str(event_log)
+        if extra_env:
+            env.update(extra_env)
 
+        make_value = make_override if make_override is not None else "true"
         cmd = [
             "make",
             "--no-print-directory",
             "-f",
             self.MAKEFILE_PATH,
             f"PYTHON={fake_python}",
-            "MAKE=true",
+            f"MAKE={make_value}",
             "QUIET=1",
         ]
+        if shell_override:
+            cmd.append(f"SHELL={shell_override}")
         if sections:
             cmd.append(f"SECTIONS={sections}")
         if module:
@@ -1484,4 +1576,1012 @@ class TestCheckQuietSectionDispatch:
         assert "quickscale_cli/tests" in pytest_str
         assert "quickscale_modules/testmod/tests" not in pytest_str, (
             "QUIET=1 pytest must NOT include module test dirs"
+        )
+
+    def test_quiet_pytest_excludes_integration_and_e2e_markers(self, tmp_path: Path) -> None:
+        """
+        QUIET=1 pytest excludes integration and e2e tests via marker.
+
+        Behavioural contract test: the ``make check QUIET=1`` pytest command
+        must include ``-m "not integration and not e2e"`` so that the quiet
+        check gate runs only unit/static tests while integration and E2E
+        tests remain in the CI E2E lane.
+        """
+        result, events = self._run_quiet_check(tmp_path)
+        assert result.returncode == 0, (
+            f"make check QUIET=1 failed: {result.stdout}\n{result.stderr}"
+        )
+
+        pytest_calls = self._pytest_invocations(events)
+        assert len(pytest_calls) >= 1, "Expected at least one pytest invocation"
+        for args in pytest_calls:
+            # Skip the ``python -m pytest`` prefix to find pytest's own ``-m``.
+            pytest_args = args[args.index("pytest") + 1 :]
+            marker_idx = pytest_args.index("-m") if "-m" in pytest_args else -1
+            assert marker_idx >= 0, f"QUIET pytest invocation missing pytest -m flag: {args}"
+            marker_value = pytest_args[marker_idx + 1]
+            assert "not integration" in marker_value and "not e2e" in marker_value, (
+                f"QUIET pytest must exclude integration and e2e markers; got -m {marker_value!r}"
+            )
+
+    def test_quiet_pytest_forwards_xdist_args(self, tmp_path: Path) -> None:
+        """
+        QUIET=1 pytest forwards configured xdist arguments.
+
+        The parallel case with an explicit worker count proves the
+        forwarding end-to-end.  Serial disable is covered by the
+        structural Makefile assertion in
+        ``test_quiet_pytest_xdist_serial_filter``.
+        """
+        parallel_result, parallel_events = self._run_quiet_check(
+            tmp_path,
+            extra_env={"PYTEST_XDIST_WORKERS": "3"},
+        )
+        assert parallel_result.returncode == 0
+
+        parallel_calls = self._pytest_invocations(parallel_events)
+        for args in parallel_calls:
+            pytest_args = args[args.index("pytest") + 1 :]
+            worker_idx = pytest_args.index("-n")
+            assert pytest_args[worker_idx : worker_idx + 4] == [
+                "-n",
+                "3",
+                "--dist",
+                "loadfile",
+            ]
+
+    def test_quiet_pytest_xdist_serial_filter(self) -> None:
+        """
+        Makefile QUIET=1 pytest uses ``$(PYTEST_XDIST_ARGS)`` for serial worker filtering.
+
+        Structural assertion: the Makefile recipe includes
+        ``$(PYTEST_XDIST_ARGS)`` which, per the ``$(filter ...)``
+        definition, produces empty args for serial worker counts.
+        """
+        with open(self.MAKEFILE_PATH, encoding="utf-8") as fh:
+            content = fh.read()
+
+        check_start = content.find("\ncheck:")
+        assert check_start >= 0
+        section = content[check_start:]
+
+        # Find the QUIET pytest line specifically
+        quiet_start = section.find("$(QUIET)")
+        assert quiet_start >= 0
+        quiet_section = section[quiet_start:]
+        else_start = quiet_section.find("\n\telse")
+        quiet_then = quiet_section[:else_start] if else_start >= 0 else quiet_section
+
+        assert "$(PYTEST_XDIST_ARGS)" in quiet_then, (
+            "QUIET=1 pytest must reference $(PYTEST_XDIST_ARGS) for xdist forwarding"
+        )
+
+    def test_quiet_pytest_forwards_timeout_args(self, tmp_path: Path) -> None:
+        """QUIET=1 pytest forwards configured timeout arguments."""
+        result, events = self._run_quiet_check(
+            tmp_path,
+            extra_env={"PYTEST_TIMEOUT": "60"},
+        )
+        assert result.returncode == 0, (
+            f"make check QUIET=1 with PYTEST_TIMEOUT=60 failed: {result.stdout}\n{result.stderr}"
+        )
+
+        pytest_calls = self._pytest_invocations(events)
+        assert len(pytest_calls) >= 1
+        for args in pytest_calls:
+            pytest_args = args[args.index("pytest") + 1 :]
+            timeout_flag = next((a for a in pytest_args if a.startswith("--timeout=")), None)
+            assert timeout_flag is not None, (
+                f"QUIET pytest invocation missing --timeout flag: {args}"
+            )
+            assert timeout_flag == "--timeout=60", f"Expected --timeout=60, got {timeout_flag!r}"
+            assert "--timeout-method=thread" in pytest_args, (
+                f"QUIET pytest invocation missing --timeout-method=thread: {args}"
+            )
+
+    def test_quiet_pytest_timeout_disabled_when_zero(self, tmp_path: Path) -> None:
+        """QUIET=1 pytest omits timeout args when PYTEST_TIMEOUT=0."""
+        result, events = self._run_quiet_check(
+            tmp_path,
+            extra_env={"PYTEST_TIMEOUT": "0"},
+        )
+        assert result.returncode == 0
+
+        pytest_calls = self._pytest_invocations(events)
+        assert len(pytest_calls) >= 1
+        for args in pytest_calls:
+            pytest_args = args[args.index("pytest") + 1 :]
+            assert not any(a.startswith("--timeout=") for a in pytest_args), (
+                f"QUIET pytest must not include --timeout when PYTEST_TIMEOUT=0: {args}"
+            )
+
+    # ------------------------------------------------------------------
+    # SA120 — QUIET=1 frontend lint dispatch parity
+    # ------------------------------------------------------------------
+
+    def test_quiet_lint_frontend_dispatched(self, tmp_path: Path) -> None:
+        """
+        QUIET=1 dispatches ``lint-frontend`` through ``$(MAKE)``.
+
+        Exact command::
+
+            make check QUIET=1 MAKE=<fake-make-wrapper>
+        """
+        _, make_log, fake_make_wrapper = self._write_fake_make(tmp_path)
+        fake_node_bin = tmp_path / "fake-node-pnpm-bin"
+        self._write_fake_node_pnpm(fake_node_bin)
+        result, events = self._run_quiet_check(
+            tmp_path,
+            make_override=str(fake_make_wrapper),
+            extra_env={"PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}"},
+        )
+        assert result.returncode == 0, (
+            f"make check QUIET=1 with fake make failed: {result.stdout}\n{result.stderr}"
+        )
+        make_events: list[dict] = []
+        if make_log.exists() and make_log.stat().st_size > 0:
+            with make_log.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        make_events.append(json.loads(line))
+        targets = [e["target"] for e in make_events]
+        assert "lint-frontend" in targets, (
+            f"QUIET=1 must dispatch lint-frontend; got targets: {targets}"
+        )
+
+    def test_quiet_lint_frontend_same_guard_as_normal(self) -> None:
+        """
+        Both quiet and normal check paths gate frontend lint on the same
+
+        node/pnpm availability check.
+        """
+        with open(self.MAKEFILE_PATH, encoding="utf-8") as fh:
+            content = fh.read()
+
+        check_start = content.find("\ncheck:")
+        assert check_start >= 0
+        section = content[check_start:]
+
+        guard = "command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1"
+        count = section.count(guard)
+        assert count >= 2, (
+            f"Both quiet and normal paths must contain the node/pnpm guard; "
+            f"found {count} occurrence(s)"
+        )
+
+    def test_quiet_lint_frontend_failure_propagates(self, tmp_path: Path) -> None:
+        """
+        Lint-frontend failure in QUIET=1 mode exits nonzero.
+
+        Exact command::
+
+            make check QUIET=1 MAKE=<fake-make-failing-on-lint-frontend>
+        """
+        _, make_log, fake_make_wrapper = self._write_fake_make(tmp_path)
+        fake_node_bin = tmp_path / "fake-node-pnpm-bin"
+        self._write_fake_node_pnpm(fake_node_bin)
+        result, events = self._run_quiet_check(
+            tmp_path,
+            make_override=str(fake_make_wrapper),
+            extra_env={
+                "FAKE_MAKE_FAIL_TARGET": "lint-frontend",
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode != 0, (
+            "QUIET=1 must propagate lint-frontend failure as nonzero exit; "
+            f"got rc={result.returncode}\n"
+            f"stdout={result.stdout}\nstderr={result.stderr}"
+        )
+        # Verify lint-frontend was attempted
+        make_events: list[dict] = []
+        if make_log.exists() and make_log.stat().st_size > 0:
+            with make_log.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        make_events.append(json.loads(line))
+        targets = [e["target"] for e in make_events]
+        assert "lint-frontend" in targets, (
+            f"lint-frontend must be attempted in QUIET=1; got targets: {targets}"
+        )
+
+    # ------------------------------------------------------------------
+    # SA120-REV-002: absent-tool behavior (no host node/pnpm dep)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _write_shell_wrapper_disabling_node_only(path: Path) -> Path:
+        """
+        Write a Python-based shell wrapper that disables ``command -v``
+
+        for ``node`` only, used by node-absent tests.
+
+        Delegates everything else to the real ``/bin/sh``.
+        """
+        path.write_text(
+            textwrap.dedent("""\
+                #!/usr/bin/env python3
+                import os, sys
+                if len(sys.argv) >= 3 and sys.argv[1] == '-c':
+                    recipe = sys.argv[2]
+                    recipe = recipe.replace(
+                        'command -v node >/dev/null 2>&1',
+                        'false'
+                    )
+                    os.execvp('/bin/sh', ['/bin/sh', '-c', recipe])
+                os.execvp('/bin/sh', sys.argv[1:])
+            """).lstrip(),
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
+
+    @staticmethod
+    def _write_shell_wrapper_disabling_pnpm_only(path: Path) -> Path:
+        """
+        Write a Python-based shell wrapper that disables ``command -v``
+
+        for ``pnpm`` only, used by pnpm-absent tests.
+
+        Delegates everything else to the real ``/bin/sh``.
+        """
+        path.write_text(
+            textwrap.dedent("""\
+                #!/usr/bin/env python3
+                import os, sys
+                if len(sys.argv) >= 3 and sys.argv[1] == '-c':
+                    recipe = sys.argv[2]
+                    recipe = recipe.replace(
+                        'command -v pnpm >/dev/null 2>&1',
+                        'false'
+                    )
+                    os.execvp('/bin/sh', ['/bin/sh', '-c', recipe])
+                os.execvp('/bin/sh', sys.argv[1:])
+            """).lstrip(),
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
+
+    def test_quiet_frontend_lint_skipped_when_node_absent(self, tmp_path: Path) -> None:
+        """
+        QUIET=1 silently skips frontend lint when node is absent
+
+        (pnpm may be present independently).
+
+        Exact command::
+
+            make check QUIET=1 SHELL=<wrapper-disabling-node-only>
+        """
+        fake_pnpm_bin = tmp_path / "fake-pnpm-bin"
+        self._write_fake_pnpm_only(fake_pnpm_bin)
+        shell_wrapper = tmp_path / "shell_wrapper.py"
+        self._write_shell_wrapper_disabling_node_only(shell_wrapper)
+        _, make_log, fake_make_wrapper = self._write_fake_make(tmp_path)
+
+        result, events = self._run_quiet_check(
+            tmp_path,
+            make_override=str(fake_make_wrapper),
+            shell_override=str(shell_wrapper),
+            extra_env={
+                "PATH": f"{fake_pnpm_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode == 0, (
+            f"QUIET=1 must succeed when node is absent; "
+            f"got rc={result.returncode}, stdout={result.stdout}, stderr={result.stderr}"
+        )
+        # Verify lint-frontend was NOT dispatched (guard blocked it)
+        make_events: list[dict] = []
+        if make_log.exists() and make_log.stat().st_size > 0:
+            with make_log.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        make_events.append(json.loads(line))
+        targets = [e["target"] for e in make_events]
+        assert "lint-frontend" not in targets, (
+            f"QUIET=1 must not dispatch lint-frontend when node is absent; got targets: {targets}"
+        )
+
+    def test_quiet_frontend_lint_skipped_when_pnpm_absent(self, tmp_path: Path) -> None:
+        """
+        QUIET=1 silently skips frontend lint when pnpm is absent
+
+        (node may be present independently).
+
+        Exact command::
+
+            make check QUIET=1 SHELL=<wrapper-disabling-pnpm-only>
+        """
+        fake_node_bin = tmp_path / "fake-node-bin"
+        self._write_fake_node_only(fake_node_bin)
+        shell_wrapper = tmp_path / "shell_wrapper.py"
+        self._write_shell_wrapper_disabling_pnpm_only(shell_wrapper)
+        _, make_log, fake_make_wrapper = self._write_fake_make(tmp_path)
+
+        result, events = self._run_quiet_check(
+            tmp_path,
+            make_override=str(fake_make_wrapper),
+            shell_override=str(shell_wrapper),
+            extra_env={
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode == 0, (
+            f"QUIET=1 must succeed when pnpm is absent; "
+            f"got rc={result.returncode}, stdout={result.stdout}, stderr={result.stderr}"
+        )
+        make_events: list[dict] = []
+        if make_log.exists() and make_log.stat().st_size > 0:
+            with make_log.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        make_events.append(json.loads(line))
+        targets = [e["target"] for e in make_events]
+        assert "lint-frontend" not in targets, (
+            f"QUIET=1 must not dispatch lint-frontend when pnpm is absent; got targets: {targets}"
+        )
+
+    # ------------------------------------------------------------------
+    # SA120-REV-003: quiet-mode output / failure semantics
+    # ------------------------------------------------------------------
+
+    def test_quiet_frontend_lint_success_suppresses_banner(self, tmp_path: Path) -> None:
+        """
+        QUIET=1 frontend-lint success produces no banner output.
+
+        Exact command::
+
+            make check QUIET=1 MAKE=true
+        """
+        fake_node_bin = tmp_path / "fake-node-pnpm-bin"
+        self._write_fake_node_pnpm(fake_node_bin)
+
+        result, events = self._run_quiet_check(
+            tmp_path,
+            extra_env={
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode == 0, f"QUIET=1 must succeed; got rc={result.returncode}"
+        output = result.stdout + result.stderr
+
+        # Quiet mode must produce no output at all on success (exact silence)
+        assert output.strip() == "", (
+            f"QUIET=1 must produce no output on success; got output: {output!r}"
+        )
+
+    def test_quiet_frontend_lint_failure_replays_captured_log(self, tmp_path: Path) -> None:
+        """
+        QUIET=1 frontend-lint failure replays captured log and exits nonzero.
+
+        The diagnostic from the failing sub-make must appear in the output
+        (not just a bare exit code), confirming the captured-log replay path.
+
+        Exact command::
+
+            make check QUIET=1 MAKE=<fake-make-failing-on-lint-frontend>
+        """
+        _, make_log, fake_make_wrapper = self._write_fake_make(tmp_path)
+        fake_node_bin = tmp_path / "fake-node-pnpm-bin"
+        self._write_fake_node_pnpm(fake_node_bin)
+
+        result, events = self._run_quiet_check(
+            tmp_path,
+            make_override=str(fake_make_wrapper),
+            extra_env={
+                "FAKE_MAKE_FAIL_TARGET": "lint-frontend",
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode != 0, (
+            "QUIET=1 must propagate lint-frontend failure as nonzero exit; "
+            f"got rc={result.returncode}"
+        )
+        # Verify the unique diagnostic marker is replayed from the captured log
+        output = result.stdout + result.stderr
+        diagnostic = "FAKE_MAKE: target 'lint-frontend' failed"
+        assert diagnostic in output, (
+            f"QUIET=1 must replay the captured log diagnostic on failure; got output: {output}"
+        )
+        assert output.count(diagnostic) == 1, (
+            f"QUIET=1 must replay the diagnostic exactly once; "
+            f"count={output.count(diagnostic)}, output={output}"
+        )
+        # Verify lint-frontend was attempted
+        make_events: list[dict] = []
+        if make_log.exists() and make_log.stat().st_size > 0:
+            with make_log.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        make_events.append(json.loads(line))
+        targets = [e["target"] for e in make_events]
+        assert "lint-frontend" in targets, (
+            f"lint-frontend must be attempted in QUIET=1; got targets: {targets}"
+        )
+
+    # ------------------------------------------------------------------
+    # SA120-REV-004: common-gate failure prevents frontend dispatch
+    # ------------------------------------------------------------------
+
+    def test_quiet_frontend_lint_not_dispatched_when_gate_fails(self, tmp_path: Path) -> None:
+        """
+        QUIET=1 does not dispatch frontend lint when a repo gate
+
+        (check-core-compat) fails before the frontend section.
+
+        The recipe's ``set -e`` stops at the gate failure, so the
+        frontend-lint guard is never reached and no success banner
+        is printed.
+
+        Exact command::
+
+            make check QUIET=1 MAKE=<fake-make-failing-on-check-core-compat>
+        """
+        _, make_log, fake_make_wrapper = self._write_fake_make(tmp_path)
+        fake_node_bin = tmp_path / "fake-node-pnpm-bin"
+        self._write_fake_node_pnpm(fake_node_bin)
+
+        result, events = self._run_quiet_check(
+            tmp_path,
+            make_override=str(fake_make_wrapper),
+            extra_env={
+                "FAKE_MAKE_FAIL_TARGET": "check-core-compat",
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode != 0, (
+            f"QUIET=1 must exit nonzero when a repo gate fails; got rc={result.returncode}"
+        )
+        # Verify lint-frontend was NOT dispatched (recipe stopped before frontend section)
+        make_events: list[dict] = []
+        if make_log.exists() and make_log.stat().st_size > 0:
+            with make_log.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        make_events.append(json.loads(line))
+        targets = [e["target"] for e in make_events]
+        assert "lint-frontend" not in targets, (
+            f"QUIET=1 must not dispatch lint-frontend when a gate fails; got targets: {targets}"
+        )
+        # Verify the gate failure diagnostic appears in output
+        output = result.stdout + result.stderr
+        assert "FAKE_MAKE: target 'check-core-compat' failed" in output, (
+            f"QUIET=1 must show the gate failure diagnostic; got output: {output}"
+        )
+        # Verify no success banner
+        assert "🎉" not in output, "QUIET=1 must not print success banner when a gate fails"
+
+
+class TestCheckNormalFrontendLint:
+    """Normal mode ``make check`` frontend lint behavior (no QUIET)."""
+
+    MAKEFILE_PATH = os.path.join(os.path.dirname(__file__), "..", "Makefile")
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _write_shell_wrapper_disabling_node_only(path: Path) -> Path:
+        """
+        Write a Python-based shell wrapper that disables ``command -v``
+
+        for ``node`` only, used by node-absent tests.
+
+        GNU Make uses ``SHELL`` to run recipe lines.  By setting ``SHELL`` to
+        this wrapper, ``command -v node`` is replaced with ``false``, making
+        the guard fail regardless of host PATH.  The wrapper delegates
+        everything else to the real ``/bin/sh``.
+        """
+        path.write_text(
+            textwrap.dedent("""\
+                #!/usr/bin/env python3
+                import os, sys
+                if len(sys.argv) >= 3 and sys.argv[1] == '-c':
+                    recipe = sys.argv[2]
+                    recipe = recipe.replace(
+                        'command -v node >/dev/null 2>&1',
+                        'false'
+                    )
+                    os.execvp('/bin/sh', ['/bin/sh', '-c', recipe])
+                os.execvp('/bin/sh', sys.argv[1:])
+            """).lstrip(),
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
+
+    @staticmethod
+    def _write_shell_wrapper_disabling_pnpm_only(path: Path) -> Path:
+        """
+        Write a Python-based shell wrapper that disables ``command -v``
+
+        for ``pnpm`` only, used by pnpm-absent tests.
+
+        GNU Make uses ``SHELL`` to run recipe lines.  By setting ``SHELL`` to
+        this wrapper, ``command -v pnpm`` is replaced with ``false``, making
+        the guard fail regardless of host PATH.  The wrapper delegates
+        everything else to the real ``/bin/sh``.
+        """
+        path.write_text(
+            textwrap.dedent("""\
+                #!/usr/bin/env python3
+                import os, sys
+                if len(sys.argv) >= 3 and sys.argv[1] == '-c':
+                    recipe = sys.argv[2]
+                    recipe = recipe.replace(
+                        'command -v pnpm >/dev/null 2>&1',
+                        'false'
+                    )
+                    os.execvp('/bin/sh', ['/bin/sh', '-c', recipe])
+                os.execvp('/bin/sh', sys.argv[1:])
+            """).lstrip(),
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
+
+    def _write_fake_python(self, tmp_path: Path) -> tuple[Path, Path]:
+        """Create a deterministic fake Python that logs invocations and exits 0."""
+        fake_python = tmp_path / "fake_python.py"
+        event_log = tmp_path / "events.jsonl"
+        fake_python.write_text(
+            textwrap.dedent("""\
+                #!/usr/bin/env python3
+                import json, os, sys
+                from pathlib import Path
+
+                log_path = Path(os.environ["FAKE_LOG"])
+                args = sys.argv[1:]
+                with log_path.open("a", encoding="utf-8") as stream:
+                    json.dump({"kind": "invoke", "args": args}, stream)
+                    stream.write("\\n")
+                raise SystemExit(0)
+            """).lstrip(),
+            encoding="utf-8",
+        )
+        fake_python.chmod(0o755)
+        return fake_python, event_log
+
+    @staticmethod
+    def _write_fake_node_pnpm(bin_dir: Path) -> None:
+        """Create fake node and pnpm executables that exit 0."""
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        for tool in ("node", "pnpm"):
+            tool_path = bin_dir / tool
+            tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            tool_path.chmod(0o755)
+
+    @staticmethod
+    def _write_fake_node_only(bin_dir: Path) -> None:
+        """Create a fake node executable that exits 0."""
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        tool_path = bin_dir / "node"
+        tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool_path.chmod(0o755)
+
+    @staticmethod
+    def _write_fake_pnpm_only(bin_dir: Path) -> None:
+        """Create a fake pnpm executable that exits 0."""
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        tool_path = bin_dir / "pnpm"
+        tool_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool_path.chmod(0o755)
+
+    @staticmethod
+    def _write_fake_make(tmp_path: Path) -> tuple[Path, Path, Path]:
+        """
+        Create a deterministic fake make that logs targets to a JSONL file.
+
+        The fake make exits 1 when ``FAKE_MAKE_FAIL_TARGET`` is set and the
+        requested target matches; otherwise exits 0.  Returns the path to the
+        script, the event-log path, and a shell-wrapper path that sets the
+        required environment variable before invoking the real script.
+        """
+        script = tmp_path / "fake_make.py"
+        event_log = tmp_path / "make_events.jsonl"
+        script.write_text(
+            textwrap.dedent("""\
+                #!/usr/bin/env python3
+                import json, os, sys
+                from pathlib import Path
+
+                log_path = Path(os.environ["FAKE_MAKE_LOG"])
+                target = sys.argv[1] if len(sys.argv) > 1 else ""
+                with log_path.open("a", encoding="utf-8") as stream:
+                    json.dump({"kind": "make", "target": target}, stream)
+                    stream.write("\\n")
+                fail_target = os.environ.get("FAKE_MAKE_FAIL_TARGET", "")
+                if fail_target and target == fail_target:
+                    print(
+                        f"FAKE_MAKE: target '{target}' failed "
+                        f"(FAKE_MAKE_FAIL_TARGET={fail_target})",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
+                sys.exit(0)
+            """).lstrip(),
+            encoding="utf-8",
+        )
+        script.chmod(0o755)
+
+        # Shell wrapper ensures FAKE_MAKE_LOG is always set
+        wrapper = tmp_path / "fake_make.sh"
+        wrapper.write_text(
+            textwrap.dedent(f"""\
+                #!/bin/sh
+                export FAKE_MAKE_LOG="{event_log}"
+                exec "{script}" "$@"
+            """).lstrip(),
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+
+        return script, event_log, wrapper
+
+    def _run_normal_check(
+        self,
+        tmp_path: Path,
+        *,
+        sections: str = "",
+        module: str = "",
+        make_override: str | None = None,
+        shell_override: str | None = None,
+        extra_env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        """
+        Run ``make check`` (no QUIET) with fake Python.
+
+        Returns only the completed-process result.  For make-event inspection
+        callers use ``make_override`` and read the event log themselves.
+
+        When *shell_override* is set, it is passed as ``SHELL`` to make so
+        ``command -v`` behaviour can be controlled for absent-tool tests.
+        """
+        fake_python, event_log = self._write_fake_python(tmp_path)
+
+        env = os.environ.copy()
+        for key in ("SECTIONS", "SECTION", "MODULE", "PYTEST_XDIST_WORKERS"):
+            env.pop(key, None)
+        env["FAKE_LOG"] = str(event_log)
+        if extra_env:
+            env.update(extra_env)
+
+        make_value = make_override if make_override is not None else "true"
+        cmd = [
+            "make",
+            "--no-print-directory",
+            "-f",
+            self.MAKEFILE_PATH,
+            f"PYTHON={fake_python}",
+            f"MAKE={make_value}",
+        ]
+        if shell_override:
+            cmd.append(f"SHELL={shell_override}")
+        if sections:
+            cmd.append(f"SECTIONS={sections}")
+        if module:
+            cmd.append(f"MODULE={module}")
+        cmd.append("check")
+
+        result = subprocess.run(
+            cmd,
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        return result
+
+    # ------------------------------------------------------------------
+    # Frontend lint dispatch
+    # ------------------------------------------------------------------
+
+    def test_normal_frontend_lint_dispatched_with_node_pnpm(self, tmp_path: Path) -> None:
+        """
+        Normal mode dispatches lint-frontend when node/pnpm are available.
+
+        Exact command::
+
+            make check MAKE=<fake-make-wrapper>
+        """
+        _, make_log, fake_make_wrapper = self._write_fake_make(tmp_path)
+        fake_node_bin = tmp_path / "fake-node-pnpm-bin"
+        self._write_fake_node_pnpm(fake_node_bin)
+
+        result = self._run_normal_check(
+            tmp_path,
+            make_override=str(fake_make_wrapper),
+            extra_env={
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode == 0, (
+            f"normal check with fake make failed: {result.stdout}\n{result.stderr}"
+        )
+        make_events: list[dict] = []
+        if make_log.exists() and make_log.stat().st_size > 0:
+            with make_log.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        make_events.append(json.loads(line))
+        targets = [e["target"] for e in make_events]
+        assert "lint-frontend" in targets, (
+            f"normal mode must dispatch lint-frontend; got targets: {targets}"
+        )
+
+    def test_normal_frontend_lint_skipped_when_node_absent(self, tmp_path: Path) -> None:
+        """
+        Normal mode skips lint-frontend when node is absent
+
+        (pnpm may be present independently; shell wrapper disables only node).
+
+        Exact command::
+
+            make check SHELL=<wrapper-disabling-node-only>
+        """
+        fake_pnpm_bin = tmp_path / "fake-pnpm-bin"
+        self._write_fake_pnpm_only(fake_pnpm_bin)
+        shell_wrapper = tmp_path / "shell_wrapper.py"
+        self._write_shell_wrapper_disabling_node_only(shell_wrapper)
+
+        result = self._run_normal_check(
+            tmp_path,
+            shell_override=str(shell_wrapper),
+            extra_env={
+                "PATH": f"{fake_pnpm_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode == 0, (
+            f"normal check must succeed when node is absent; "
+            f"got rc={result.returncode}\n"
+            f"stdout={result.stdout}\nstderr={result.stderr}"
+        )
+        output = result.stdout + result.stderr
+        assert "Skipping rendered frontend lint" in output, (
+            f"Normal mode must print skip message when node is absent; got output: {output}"
+        )
+        assert "🎉" in output, (
+            "Normal mode must still show success banner when frontend is skipped; "
+            f"got output: {output}"
+        )
+        assert "📦 Linting rendered frontend" not in output, (
+            "Normal mode must not print frontend lint banner when node is absent; "
+            f"got output: {output}"
+        )
+
+    def test_normal_frontend_lint_skipped_when_pnpm_absent(self, tmp_path: Path) -> None:
+        """
+        Normal mode skips lint-frontend when pnpm is absent
+
+        (node may be present independently; shell wrapper disables only pnpm).
+
+        Exact command::
+
+            make check SHELL=<wrapper-disabling-pnpm-only>
+        """
+        fake_node_bin = tmp_path / "fake-node-bin"
+        self._write_fake_node_only(fake_node_bin)
+        shell_wrapper = tmp_path / "shell_wrapper.py"
+        self._write_shell_wrapper_disabling_pnpm_only(shell_wrapper)
+
+        result = self._run_normal_check(
+            tmp_path,
+            shell_override=str(shell_wrapper),
+            extra_env={
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode == 0, (
+            f"normal check must succeed when pnpm is absent; "
+            f"got rc={result.returncode}\n"
+            f"stdout={result.stdout}\nstderr={result.stderr}"
+        )
+        output = result.stdout + result.stderr
+        assert "Skipping rendered frontend lint" in output, (
+            f"Normal mode must print skip message when pnpm is absent; got output: {output}"
+        )
+        assert "🎉" in output, (
+            "Normal mode must still show success banner when frontend is skipped; "
+            f"got output: {output}"
+        )
+
+    # ------------------------------------------------------------------
+    # Output / failure semantics
+    # ------------------------------------------------------------------
+
+    def test_normal_frontend_lint_failure_propagates(self, tmp_path: Path) -> None:
+        """
+        Normal mode lint-frontend failure exits nonzero with no banner.
+
+        Exact command::
+
+            make check MAKE=<fake-make-failing-on-lint-frontend>
+        """
+        _, make_log, fake_make_wrapper = self._write_fake_make(tmp_path)
+        fake_node_bin = tmp_path / "fake-node-pnpm-bin"
+        self._write_fake_node_pnpm(fake_node_bin)
+
+        result = self._run_normal_check(
+            tmp_path,
+            make_override=str(fake_make_wrapper),
+            extra_env={
+                "FAKE_MAKE_FAIL_TARGET": "lint-frontend",
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode != 0, (
+            "Normal mode must propagate lint-frontend failure as nonzero exit; "
+            f"got rc={result.returncode}"
+        )
+        # Verify lint-frontend was attempted
+        make_events: list[dict] = []
+        if make_log.exists() and make_log.stat().st_size > 0:
+            with make_log.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        make_events.append(json.loads(line))
+        targets = [e["target"] for e in make_events]
+        assert "lint-frontend" in targets, (
+            f"lint-frontend must be attempted in normal mode; got targets: {targets}"
+        )
+        # No success banner on failure
+        output = result.stdout + result.stderr
+        assert "🎉" not in output, (
+            "Normal mode must not show success banner when lint-frontend fails; "
+            f"got output: {output}"
+        )
+
+    def test_normal_frontend_lint_success_shows_banner(self, tmp_path: Path) -> None:
+        """
+        Normal mode lint-frontend success shows the check-passed banner.
+
+        Exact command::
+
+            make check MAKE=true
+        """
+        fake_node_bin = tmp_path / "fake-node-pnpm-bin"
+        self._write_fake_node_pnpm(fake_node_bin)
+
+        result = self._run_normal_check(
+            tmp_path,
+            extra_env={
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode == 0, f"normal check must succeed; got rc={result.returncode}"
+        output = result.stdout + result.stderr
+        assert "🎉 All checks passed!" in output, (
+            "Normal mode must show success banner on successful frontend lint; "
+            f"got output: {output}"
+        )
+        assert "📦 Linting rendered frontend" in output, (
+            f"Normal mode must show the frontend lint banner; got output: {output}"
+        )
+        # No skip message when node/pnpm are present
+        assert "Skipping rendered frontend lint" not in output, (
+            "Normal mode must not show skip message when node/pnpm are available; "
+            f"got output: {output}"
+        )
+
+    # ------------------------------------------------------------------
+    # SA120-REV-004: common-gate failure prevents frontend dispatch
+    # ------------------------------------------------------------------
+
+    def test_normal_frontend_lint_not_dispatched_when_gate_fails(self, tmp_path: Path) -> None:
+        """
+        Normal mode does not dispatch frontend lint when a repo gate
+
+        (check-core-compat) fails before the frontend section.
+
+        The recipe's ``set -e`` stops at the gate failure, so the
+        frontend-lint guard is never reached and no success banner
+        is printed.
+
+        Exact command::
+
+            make check MAKE=<fake-make-failing-on-check-core-compat>
+        """
+        _, make_log, fake_make_wrapper = self._write_fake_make(tmp_path)
+        fake_node_bin = tmp_path / "fake-node-pnpm-bin"
+        self._write_fake_node_pnpm(fake_node_bin)
+
+        result = self._run_normal_check(
+            tmp_path,
+            make_override=str(fake_make_wrapper),
+            extra_env={
+                "FAKE_MAKE_FAIL_TARGET": "check-core-compat",
+                "PATH": f"{fake_node_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            },
+        )
+        assert result.returncode != 0, (
+            f"Normal mode must exit nonzero when a repo gate fails; got rc={result.returncode}"
+        )
+        # Verify lint-frontend was NOT dispatched (recipe stopped before frontend section)
+        make_events: list[dict] = []
+        if make_log.exists() and make_log.stat().st_size > 0:
+            with make_log.open(encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        make_events.append(json.loads(line))
+        targets = [e["target"] for e in make_events]
+        assert "lint-frontend" not in targets, (
+            f"Normal mode must not dispatch lint-frontend when a gate fails; got targets: {targets}"
+        )
+        # Verify the gate failure diagnostic appears in output
+        output = result.stdout + result.stderr
+        assert "FAKE_MAKE: target 'check-core-compat' failed" in output, (
+            f"Normal mode must show the gate failure diagnostic; got output: {output}"
+        )
+        # Verify no success banner
+        assert "🎉" not in output, "Normal mode must not print success banner when a gate fails"
+
+
+class TestE2EScriptPythonpath:
+    """Structural assertions for ``scripts/test_e2e.sh`` lane PYTHONPATH setup."""
+
+    SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "test_e2e.sh")
+
+    def _read_script(self) -> str:
+        with open(self.SCRIPT_PATH, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_core_lane_pythonpath_includes_project_root(self) -> None:
+        """
+        Core E2E lane PYTHONPATH prepends ``$PROJECT_ROOT`` for repo-root imports.
+
+        The Core E2E tests need to resolve ``scripts.*`` imports (e.g.
+        ``scripts.publish_module``) via the repository root, so the
+        ``lane_pythonpath`` for the ``core`` lane must include
+        ``$PROJECT_ROOT`` before the package-specific ``$CORE_DIR`` entries.
+        """
+        content = self._read_script()
+
+        # Find the core lane assignment block
+        core_block_start = content.find('if [ "$lane" = "core" ]; then')
+        assert core_block_start >= 0, "run_e2e_lane must have a core lane branch"
+
+        # Find the closing else/fi for the core lane
+        else_pos = content.find("\n    else", core_block_start)
+        core_block = content[core_block_start:else_pos]
+
+        assert 'lane_pythonpath="$PROJECT_ROOT:$CORE_DIR:$CORE_DIR/src"' in core_block, (
+            "Core lane PYTHONPATH must include $PROJECT_ROOT for repo-root import visibility; "
+            f"got block: {core_block}"
+        )
+
+    def test_cli_lane_pythonpath_does_not_include_project_root(self) -> None:
+        """
+        CLI E2E lane PYTHONPATH does NOT include ``$PROJECT_ROOT``.
+
+        The CLI package does not need repo-root import visibility, so its
+        ``lane_pythonpath`` must remain at ``$CLI_DIR:$CLI_DIR/src`` to
+        avoid polluting the import namespace.
+        """
+        content = self._read_script()
+
+        else_pos = content.find('\n    else\n        lane_label="CLI"')
+        assert else_pos >= 0, "run_e2e_lane must have a CLI lane branch"
+
+        # Find the fi that closes the if/else block
+        fi_pos = content.find("\n    fi", else_pos)
+        cli_block = content[else_pos:fi_pos]
+
+        assert 'lane_pythonpath="$CLI_DIR:$CLI_DIR/src"' in cli_block, (
+            f"CLI lane PYTHONPATH must not include $PROJECT_ROOT; got block: {cli_block}"
+        )
+        assert "PROJECT_ROOT" not in cli_block, (
+            "CLI lane PYTHONPATH must not reference $PROJECT_ROOT"
         )

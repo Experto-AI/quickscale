@@ -22,7 +22,7 @@ def make_field_validator(field: "FormField") -> Any:
     if min_length is not None:
         try:
             min_length = int(min_length)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise serializers.ValidationError(
                 "Validation rule `min_length` must be a whole number."
             )
@@ -30,7 +30,7 @@ def make_field_validator(field: "FormField") -> Any:
     if max_length is not None:
         try:
             max_length = int(max_length)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise serializers.ValidationError(
                 "Validation rule `max_length` must be a whole number."
             )

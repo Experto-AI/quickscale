@@ -4,12 +4,14 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
+from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
 import click
 
+from quickscale_core import __version__ as quickscale_version
 from quickscale_core.contracts.module_catalog import (
     get_module_readiness_reason,
 )
@@ -37,16 +39,26 @@ from quickscale_core.project_state import (
     ProjectStateManager,
     check_version_drift,
 )
-from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
+from quickscale_core.manifest.loader import (
+    ManifestError,
+    ModuleVersionMismatchError,
+    assert_manifest_version_matches_core,
+    get_manifest_for_module,
+)
 from quickscale_core.utils.git_utils import (
     GitError,
     check_remote_branch_exists,
+    check_remote_tag_exists,
     is_git_repo,
     is_working_directory_clean,
     resolve_remote_ref,
+    resolve_remote_tag,
+    resolve_split_branch,
+    resolve_split_tag,
     run_git_subtree_add,
     run_git_subtree_pull,
     run_git_subtree_push,
+    validate_tag_name,
 )
 from .module_config import (
     APPLY_MODULE_EXECUTION_MODE,
@@ -59,6 +71,8 @@ from .module_config import (
 from .module_output import (
     _print_installation_error,
     _report_local_pre_pull_guard_block,
+    _report_missing_split_tag,
+    _report_split_ref_override,
     _resolve_embed_source_ref,
     _validate_embed_theme,
 )
@@ -134,6 +148,7 @@ class ModuleEmbedProvenance:
     tracking_branch: str
     source_ref: str
     installed_version: str
+    selected_ref: str | None = None
 
 
 def _validate_git_environment() -> bool:
@@ -181,13 +196,13 @@ def _validate_module_not_exists(project_path: Path, module: str) -> bool:
 
 
 def _validate_remote_branch(remote: str, branch: str, module: str) -> bool:
-    """Check if branch exists on remote.
+    """Legacy branch probe retained for source compatibility.
 
-    Returns:
-        True if branch exists, False otherwise
+    Embed selection no longer calls this helper; immutable tag selection owns
+    the embed remote contract. Existing integrations may still import the
+    private helper, so keep its historical diagnostic behavior isolated here.
     """
     click.echo(f"🔍 Checking if {branch} exists on remote...")
-
     if not check_remote_branch_exists(remote, branch):
         click.secho(
             f"❌ Error: Module '{module}' is not yet implemented",
@@ -195,12 +210,8 @@ def _validate_remote_branch(remote: str, branch: str, module: str) -> bool:
             err=True,
         )
         click.echo(
-            f"\n💡 The '{module}' module infrastructure is ready but contains "
-            "only placeholder files.",
+            f"\n📖 Branch '{branch}' does not exist on remote: {remote}",
             err=True,
-        )
-        click.echo(
-            f"\n📖 Branch '{branch}' does not exist on remote: {remote}", err=True
         )
         return False
     return True
@@ -280,9 +291,16 @@ def _resolve_embedded_module_install_path(
 
 
 def _read_embedded_module_version(project_path: Path, module: str) -> str:
-    """Read the canonical installed version from the embedded module manifest."""
+    """Read the canonical installed version from the embedded module manifest.
+
+    Raises:
+        ManifestError: If the manifest cannot be loaded or is invalid.
+        ModuleVersionMismatchError: If the manifest version is older than the
+            current core version.
+    """
     manifest = get_manifest_for_module(project_path, module, strict=True)
     assert manifest is not None
+    assert_manifest_version_matches_core(manifest.version, module)
     normalized = normalize_installed_version(manifest.version)
     return normalized or manifest.version
 
@@ -409,6 +427,16 @@ def _record_embed_provenance(
         provenance_sink.append(provenance)
 
 
+def _cleanup_failed_apply_embed_if_needed(
+    project_path: Path,
+    module: str,
+    execution_mode: ModuleExecutionMode,
+) -> None:
+    """Clean up a failed embed only for apply-side execution."""
+    if execution_mode == APPLY_MODULE_EXECUTION_MODE:
+        _cleanup_failed_apply_embed(project_path, module)
+
+
 def _perform_module_embed(
     project_path: Path,
     module: str,
@@ -416,17 +444,17 @@ def _perform_module_embed(
     branch: str,
     config: dict[str, Any],
     *,
-    source_ref: str | None = None,
+    source_ref: str,
+    selected_ref: str | None = None,
     sync_dependencies: bool = True,
     install_dependencies: bool = True,
     execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
 ) -> tuple[bool, ModuleEmbedProvenance | None]:
     """Execute the actual module embedding.
 
-    When *source_ref* is provided it is forwarded to
-    :func:`run_git_subtree_add` instead of the tracking *branch* name so
-    that the subtree content is bound to the exact resolved commit SHA.
-    The same value is carried forward in the returned
+    The resolver-owned *source_ref* is forwarded directly to
+    :func:`run_git_subtree_add` so that the subtree content is bound to the
+    exact resolved commit SHA.  The same value is carried forward in the returned
     :class:`ModuleEmbedProvenance` payload for later phases.
 
     Returns:
@@ -436,10 +464,9 @@ def _perform_module_embed(
     prefix = f"modules/{module}"
     click.echo(f"\n📦 Embedding {module} module from {branch}...")
 
-    # Bind the subtree add to the exact resolved commit SHA when the
-    # caller has already resolved the source ref (apply-side seam).
-    subtree_ref = source_ref if source_ref is not None else branch
-    run_git_subtree_add(prefix=prefix, remote=remote, branch=subtree_ref, squash=True)
+    # This seam is deliberately SHA-only: ref selection and peeling happen
+    # before this function, so a tag or moving branch can never reach subtree.
+    run_git_subtree_add(prefix=prefix, remote=remote, branch=source_ref, squash=True)
 
     try:
         installed_version = _read_embedded_module_version(project_path, module)
@@ -455,8 +482,21 @@ def _perform_module_embed(
             "before continuing.",
             err=True,
         )
-        if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-            _cleanup_failed_apply_embed(project_path, module)
+        _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
+        return False, None
+    except ModuleVersionMismatchError as error:
+        click.secho(
+            f"\n❌ {error}",
+            fg="red",
+            err=True,
+            bold=True,
+        )
+        click.echo(
+            "\n💡 Update QuickScale to the latest version before embedding "
+            "this module.",
+            err=True,
+        )
+        _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
         return False, None
 
     if execution_mode != APPLY_MODULE_EXECUTION_MODE:
@@ -492,8 +532,7 @@ def _perform_module_embed(
 
     if sync_dependencies:
         if not _sync_module_dependencies(project_path, {module: config}):
-            if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-                _cleanup_failed_apply_embed(project_path, module)
+            _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
             return False, None
 
     if (
@@ -501,8 +540,7 @@ def _perform_module_embed(
         and _resolve_embedded_module_install_path(project_path, module) is not None
     ):
         if not _install_module_dependencies(project_path, module):
-            if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-                _cleanup_failed_apply_embed(project_path, module)
+            _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
             return False, None
 
     if execution_mode == APPLY_MODULE_EXECUTION_MODE:
@@ -530,16 +568,13 @@ def _perform_module_embed(
     click.echo(f"   Location: {module_dir}")
     click.echo(f"   Branch: {branch}")
 
-    provenance = (
-        ModuleEmbedProvenance(
-            module_name=module,
-            prefix=prefix,
-            tracking_branch=branch,
-            source_ref=source_ref,
-            installed_version=installed_version,
-        )
-        if source_ref is not None
-        else None
+    provenance = ModuleEmbedProvenance(
+        module_name=module,
+        prefix=prefix,
+        tracking_branch=branch,
+        source_ref=source_ref,
+        installed_version=installed_version,
+        selected_ref=selected_ref or source_ref,
     )
     return True, provenance
 
@@ -556,6 +591,7 @@ def embed_module(
     *,
     execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
     provenance_sink: list[ModuleEmbedProvenance] | None = None,
+    split_ref: str | None = None,
 ) -> bool:
     """
     Embed a QuickScale module into a project via git subtree.
@@ -578,9 +614,9 @@ def embed_module(
         execution_mode: Internal embedding mode used to control when managed
             wiring regeneration happens
         provenance_sink: Optional mutable list that receives the per-module
-            :class:`ModuleEmbedProvenance` payload on successful apply-side
-            embeds.  The sink is only populated when the source ref has been
-            resolved (apply execution mode); standalone embeds leave it empty.
+            :class:`ModuleEmbedProvenance` payload on successful embeds.
+        split_ref: Optional explicit maintainer override. When absent, the
+            immutable tag for the running core version is required.
 
     Returns:
         True if embedding succeeded, False otherwise
@@ -621,10 +657,6 @@ def embed_module(
         ):
             return False
 
-        branch = f"splits/{module}-module"
-        if not _validate_remote_branch(remote, branch, module):
-            return False
-
         # Auth module special check
         if module == "auth" and not skip_auth_migration_check:
             if not _check_auth_module_migrations(
@@ -634,19 +666,36 @@ def embed_module(
             ):
                 return False
 
-        # Phase 1 provenance seam: resolve the source ref exactly once
-        # after branch validation so the same SHA drives both the subtree
-        # add and the in-memory handoff to later phases.  Standalone
-        # (non-apply) embeds skip resolution and continue to use the
-        # tracking branch name directly.
+        branch = resolve_split_branch(module)
+        resolver: Callable[[str, str], str]
+        if split_ref is None:
+            selected_ref = resolve_split_tag(module, quickscale_version)
+            if not check_remote_tag_exists(remote, selected_ref):
+                _report_missing_split_tag(
+                    module,
+                    quickscale_version,
+                    selected_ref,
+                    remote,
+                )
+                return False
+            resolver = resolve_remote_tag
+        else:
+            validate_tag_name(split_ref)
+            selected_ref = split_ref
+            branch = split_ref
+            _report_split_ref_override(module, selected_ref)
+            resolver = resolve_remote_ref
+
+        # Resolve the selected textual ref exactly once. Both standalone and
+        # apply paths use the returned peeled SHA for subtree and provenance.
         ref_resolved, source_ref = _resolve_embed_source_ref(
             remote,
-            branch,
+            selected_ref,
             module,
             execution_mode,
-            resolve_remote_ref,
+            resolver,
         )
-        if not ref_resolved:
+        if not ref_resolved or source_ref is None:
             return False
 
         # Interactive module configuration
@@ -663,6 +712,7 @@ def embed_module(
             branch,
             config,
             source_ref=source_ref,
+            selected_ref=selected_ref,
             sync_dependencies=sync_dependencies,
             install_dependencies=install_dependencies,
             execution_mode=execution_mode,
@@ -1147,6 +1197,36 @@ def _rollback_failed_module_update(
     return None
 
 
+def _report_module_update_error(name: str, error: Exception) -> None:
+    """Preserve the update command's type-specific failure reports."""
+    if isinstance(error, StateError):
+        click.secho(
+            f"❌ Failed to load .quickscale/state.yml: {error}",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "💡 Fix .quickscale/state.yml or regenerate it with 'quickscale apply' "
+            "before updating modules.",
+            err=True,
+        )
+        return
+
+    click.secho(f"❌ Failed to update {name}: {error}", fg="red", err=True)
+    if isinstance(error, ManifestError):
+        click.echo(
+            f"💡 Fix modules/{name}/module.yml or remove and re-embed the module.",
+            err=True,
+        )
+    elif isinstance(error, GitError):
+        click.echo(f"💡 Tip: Check for conflicts in modules/{name}/", err=True)
+    elif isinstance(error, ModuleVersionMismatchError):
+        click.echo(
+            "\n💡 Update QuickScale to the latest version before updating modules.",
+            err=True,
+        )
+
+
 def _update_single_module(
     name: str, info: Any, default_remote: str, no_preview: bool
 ) -> bool:
@@ -1277,34 +1357,8 @@ def _update_single_module(
 
         return True
 
-    except StateError as error:
-        click.secho(
-            f"❌ Failed to load .quickscale/state.yml: {error}",
-            fg="red",
-            err=True,
-        )
-        click.echo(
-            "💡 Fix .quickscale/state.yml or regenerate it with 'quickscale apply' "
-            "before updating modules.",
-            err=True,
-        )
-        return False
-    except ManifestError as e:
-        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
-        click.echo(
-            f"💡 Fix modules/{name}/module.yml or remove and re-embed the module.",
-            err=True,
-        )
-        return False
-    except GitError as e:
-        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
-        click.echo(f"💡 Tip: Check for conflicts in modules/{name}/", err=True)
-        return False
-    except RuntimeError as e:
-        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
-        return False
-    except Exception as e:
-        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
+    except Exception as error:
+        _report_module_update_error(name, error)
         return False
 
 

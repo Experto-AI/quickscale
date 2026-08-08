@@ -1,6 +1,6 @@
 {
   "_provenance": {
-    "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded — it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
+    "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "variants": {
       "react_default": {
         "theme": "showcase_react",
@@ -23,19 +23,19 @@
       }
     },
     "baseline_evidence": {
-      "sa105": "Regenerated 2026-07-20 — all frontend/src module files are now unconditionally emitted as dormant files (SA105). All three variants carry identical frontend/src trees. Recorded deltas: App.tsx,j2→static, main.tsx.j2→static, App.test.tsx.j2→static, PublicSocialPages.test.tsx.j2→static, useModules.ts.j2 all-modules-unconditional, Sidebar.tsx.j2 all-nav-unconditional, Dashboard.tsx.j2 all-cards-unconditional, templates/index.html.j2 all-module-flags-unconditional.",
-      "sa106": "Regenerated 2026-07-20 — three identity-bearing frontend source templates converted from .j2 to static verbatim-copy files (SA106). projectName reads from window.__QUICKSCALE__.projectName at runtime via useProjectConfig. defaultConfig.projectName set to empty string. Deltas: useModules.ts.j2→static, Dashboard.tsx.j2→static, Sidebar.tsx.j2→static. 3 fixture hashes updated: useModules.ts, Dashboard.tsx, Sidebar.tsx.",
-      "sa107": "Regenerated 2026-07-20 — added validateQuickScaleSeam.ts and validateQuickScaleSeam.test.ts; updated useModules.ts, main.tsx, renderQuickScaleRoot.tsx hashes for fail-hard seam validation (SA107). defaultConfig removed from useModules.ts.",
-      "sa107-fix-pass": "Regenerated 2026-07-20 — owner/modulePaths validation added to validateQuickScaleSeam.ts; templates/social/{embeds,link_tree}.html.j2 inject owner and full modulePaths; RootDispatch.test.tsx and validateQuickScaleSeam.test.ts expanded for production-shaped public-social boot coverage and wrong-type/enum validation. 5 fixture hashes updated: validateQuickScaleSeam.ts, RootDispatch.test.tsx, validateQuickScaleSeam.test.ts, templates/social/embeds.html, templates/social/link_tree.html (all 3 variants).",
-      "sa107-cr-002-pass": "Regenerated 2026-07-20 — all 11 required module keys now enforced in validateQuickScaleSeam.ts (SA107-CR-002); renderQuickScaleRoot.tsx `?? false` fallback removed; parameterized and partial-module rejection tests added to validateQuickScaleSeam.test.ts; RootDispatch.test.tsx callsites updated for strict modules shape. 4 fixture hashes updated: validateQuickScaleSeam.ts, renderQuickScaleRoot.tsx, validateQuickScaleSeam.test.ts, RootDispatch.test.tsx (all 3 variants).",
-      "sa107-cr-002-final-fix": "Regenerated 2026-07-20 — inherited/non-enumerable required-flag regression fix (SA107-CR-002): key in seam.modules replaced with Object.prototype.hasOwnProperty.call; typeof boolean check collapsed into same required-key loop. 4 inherited/non-enumerable regression tests added to validateQuickScaleSeam.test.ts. 2 fixture hashes updated: validateQuickScaleSeam.ts, validateQuickScaleSeam.test.ts (all 3 variants).",
-      "sa107-cr-002-inherited-boolean": "Regenerated 2026-07-20 — added inherited-boolean regression test for SA107-CR-002: validates that an inherited boolean auth:true/auth:false with own booleans for other 10 keys is rejected. 1 fixture hash updated: validateQuickScaleSeam.test.ts (all 3 variants)."
+      "sa105": "Regenerated 2026-07-20 \u2014 all frontend/src module files are now unconditionally emitted as dormant files (SA105). All three variants carry identical frontend/src trees. Recorded deltas: App.tsx,j2\u2192static, main.tsx.j2\u2192static, App.test.tsx.j2\u2192static, PublicSocialPages.test.tsx.j2\u2192static, useModules.ts.j2 all-modules-unconditional, Sidebar.tsx.j2 all-nav-unconditional, Dashboard.tsx.j2 all-cards-unconditional, templates/index.html.j2 all-module-flags-unconditional.",
+      "sa106": "Regenerated 2026-07-20 \u2014 three identity-bearing frontend source templates converted from .j2 to static verbatim-copy files (SA106). projectName reads from window.__QUICKSCALE__.projectName at runtime via useProjectConfig. defaultConfig.projectName set to empty string. Deltas: useModules.ts.j2\u2192static, Dashboard.tsx.j2\u2192static, Sidebar.tsx.j2\u2192static. 3 fixture hashes updated: useModules.ts, Dashboard.tsx, Sidebar.tsx.",
+      "sa107": "Regenerated 2026-07-20 \u2014 added validateQuickScaleSeam.ts and validateQuickScaleSeam.test.ts; updated useModules.ts, main.tsx, renderQuickScaleRoot.tsx hashes for fail-hard seam validation (SA107). defaultConfig removed from useModules.ts.",
+      "sa107-fix-pass": "Regenerated 2026-07-20 \u2014 owner/modulePaths validation added to validateQuickScaleSeam.ts; templates/social/{embeds,link_tree}.html.j2 inject owner and full modulePaths; RootDispatch.test.tsx and validateQuickScaleSeam.test.ts expanded for production-shaped public-social boot coverage and wrong-type/enum validation. 5 fixture hashes updated: validateQuickScaleSeam.ts, RootDispatch.test.tsx, validateQuickScaleSeam.test.ts, templates/social/embeds.html, templates/social/link_tree.html (all 3 variants).",
+      "sa107-cr-002-pass": "Regenerated 2026-07-20 \u2014 all 11 required module keys now enforced in validateQuickScaleSeam.ts (SA107-CR-002); renderQuickScaleRoot.tsx `?? false` fallback removed; parameterized and partial-module rejection tests added to validateQuickScaleSeam.test.ts; RootDispatch.test.tsx callsites updated for strict modules shape. 4 fixture hashes updated: validateQuickScaleSeam.ts, renderQuickScaleRoot.tsx, validateQuickScaleSeam.test.ts, RootDispatch.test.tsx (all 3 variants).",
+      "sa107-cr-002-final-fix": "Regenerated 2026-07-20 \u2014 inherited/non-enumerable required-flag regression fix (SA107-CR-002): key in seam.modules replaced with Object.prototype.hasOwnProperty.call; typeof boolean check collapsed into same required-key loop. 4 inherited/non-enumerable regression tests added to validateQuickScaleSeam.test.ts. 2 fixture hashes updated: validateQuickScaleSeam.ts, validateQuickScaleSeam.test.ts (all 3 variants).",
+      "sa107-cr-002-inherited-boolean": "Regenerated 2026-07-20 \u2014 added inherited-boolean regression test for SA107-CR-002: validates that an inherited boolean auth:true/auth:false with own booleans for other 10 keys is rejected. 1 fixture hash updated: validateQuickScaleSeam.test.ts (all 3 variants)."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
       "poetry.lock is absent from every variant (dynamic artifact, not checked in).",
       "Executable modes (mode: \"775\") reflect actual os.stat after generation: manage.py and scripts/lint.sh are executable.",
-      "start.sh is intentionally non-executable (mode: \"664\") — see _EXECUTABLE_EMITTED exclusion in test_generator.py.",
+      "start.sh is intentionally non-executable (mode: \"664\") \u2014 see _EXECUTABLE_EMITTED exclusion in test_generator.py.",
       "html_default (showcase_html) variant removed in SA94 Phase 4.",
       "SA105: selected_modules no longer filters frontend/src output. All module files are always emitted as dormant. Runtime gating uses window.__QUICKSCALE__ flags."
     ]
@@ -59,11 +59,11 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
-      "sha256": "35903890d1afccb9447fd2e647f416209ab319e22abf1e38831df8e8630a25b7"
+      "sha256": "fde08a8100f17565a3c7befa73ec23f34857e2ce9f717e6319f13c30dde01236"
     },
     ".gitignore": {
       "mode": "664",
-      "sha256": "be8506e56e6898e60c96639cc7bb22f121e188fd2e87820e1589537e629b518d"
+      "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
     },
     ".pre-commit-config.yaml": {
       "mode": "664",
@@ -2019,7 +2019,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "e1eb1616ac72ec89434280bf58f8f43dce80b51b733d111c42ac043937c344bb"
+      "sha256": "beda7d0b1a3902772f2c01eb692facd67c7f62ad33da9ceec1f231241f16e272"
     },
     "Makefile": {
       "mode": "664",
@@ -2031,7 +2031,7 @@
     },
     "README.md": {
       "mode": "664",
-      "sha256": "34e6e1cd487623cd27656bb446b085fbfe47bf7f5ec193aa31a1a226388fcf89"
+      "sha256": "392bd6ed94789ab1603f0b3ac81a338c3f8624e59e2e6c0de065562f0e6fec06"
     },
     "db/init.sql": {
       "mode": "664",
@@ -2059,7 +2059,7 @@
     },
     "frontend/eslint.config.js": {
       "mode": "664",
-      "sha256": "4aa298436d48ee4d5301e30400c22568d91ac0510fb8510a2ea448de76072022"
+      "sha256": "438187eb155b03b2f21d716bb620bdba95ab1f47455726969ddb6b4bea1c8e9d"
     },
     "frontend/index.html": {
       "mode": "664",
@@ -2067,7 +2067,7 @@
     },
     "frontend/package.json": {
       "mode": "664",
-      "sha256": "2fec56212134ea16cf7cdb2d39da608e4b37367a4beab5353cd5127ec3102c27"
+      "sha256": "1be9dd3ba2171f9b9d6fada349c2378024dcaf47a165d15a195394009a34426b"
     },
     "frontend/playwright.config.ts": {
       "mode": "664",
@@ -2095,7 +2095,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "d33a50e5a15e09d26f6ba1bee0ae45d777c6494a85a6eae01117717b846edfd9"
+      "sha256": "c18159a28e046109a297f47c4b13ef1f4bd4f69c3526c47fd24f52446fbc0b09"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -2275,11 +2275,11 @@
     },
     "frontend/src/pages/orgs/OrgMembersPage.tsx": {
       "mode": "664",
-      "sha256": "71328c5d5a07f7ad38f4fa34049b0eb4db5ca32449f762e1a7df5d9573a52aad"
+      "sha256": "5dd2c55323e4a564258bc8b04319e4387fd7149541f785afcdad4826a5eb2926"
     },
     "frontend/src/pages/orgs/OrgSettingsPage.tsx": {
       "mode": "664",
-      "sha256": "b306393647fa6f6599e3a0d12304f25492ad5cc2e2006e81777a1a314166da84"
+      "sha256": "82c2ceebd286a0483b6a3d64d9dd2f340ce110d292144a33983ff247b218d870"
     },
     "frontend/src/posthog-js.d.ts": {
       "mode": "664",
@@ -2339,7 +2339,7 @@
     },
     "pyproject.toml": {
       "mode": "664",
-      "sha256": "b6d5e04f20e5fe89d2546b7741790700dda911c4b02190bd7379a2cfc3592f65"
+      "sha256": "7d6e492652207dda743b2d6f2a099cc2590d1300005da19959ebff7ada391b4a"
     },
     "railway.json": {
       "mode": "664",
@@ -2465,11 +2465,11 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
-      "sha256": "2c9bad7b0f40b427d06874153be17f47bea65f971056667d6451a7094d4d264c"
+      "sha256": "6cb1cb8835e3ed5b23943ff796bc93a24b435f7546b0290c79de3c5ef8deb189"
     },
     ".gitignore": {
       "mode": "664",
-      "sha256": "be8506e56e6898e60c96639cc7bb22f121e188fd2e87820e1589537e629b518d"
+      "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
     },
     ".pre-commit-config.yaml": {
       "mode": "664",
@@ -4425,7 +4425,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "e1eb1616ac72ec89434280bf58f8f43dce80b51b733d111c42ac043937c344bb"
+      "sha256": "beda7d0b1a3902772f2c01eb692facd67c7f62ad33da9ceec1f231241f16e272"
     },
     "Makefile": {
       "mode": "664",
@@ -4437,7 +4437,7 @@
     },
     "README.md": {
       "mode": "664",
-      "sha256": "34e6e1cd487623cd27656bb446b085fbfe47bf7f5ec193aa31a1a226388fcf89"
+      "sha256": "392bd6ed94789ab1603f0b3ac81a338c3f8624e59e2e6c0de065562f0e6fec06"
     },
     "db/init.sql": {
       "mode": "664",
@@ -4465,7 +4465,7 @@
     },
     "frontend/eslint.config.js": {
       "mode": "664",
-      "sha256": "4aa298436d48ee4d5301e30400c22568d91ac0510fb8510a2ea448de76072022"
+      "sha256": "438187eb155b03b2f21d716bb620bdba95ab1f47455726969ddb6b4bea1c8e9d"
     },
     "frontend/index.html": {
       "mode": "664",
@@ -4473,7 +4473,7 @@
     },
     "frontend/package.json": {
       "mode": "664",
-      "sha256": "2fec56212134ea16cf7cdb2d39da608e4b37367a4beab5353cd5127ec3102c27"
+      "sha256": "1be9dd3ba2171f9b9d6fada349c2378024dcaf47a165d15a195394009a34426b"
     },
     "frontend/playwright.config.ts": {
       "mode": "664",
@@ -4501,7 +4501,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "d33a50e5a15e09d26f6ba1bee0ae45d777c6494a85a6eae01117717b846edfd9"
+      "sha256": "c18159a28e046109a297f47c4b13ef1f4bd4f69c3526c47fd24f52446fbc0b09"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -4681,11 +4681,11 @@
     },
     "frontend/src/pages/orgs/OrgMembersPage.tsx": {
       "mode": "664",
-      "sha256": "71328c5d5a07f7ad38f4fa34049b0eb4db5ca32449f762e1a7df5d9573a52aad"
+      "sha256": "5dd2c55323e4a564258bc8b04319e4387fd7149541f785afcdad4826a5eb2926"
     },
     "frontend/src/pages/orgs/OrgSettingsPage.tsx": {
       "mode": "664",
-      "sha256": "b306393647fa6f6599e3a0d12304f25492ad5cc2e2006e81777a1a314166da84"
+      "sha256": "82c2ceebd286a0483b6a3d64d9dd2f340ce110d292144a33983ff247b218d870"
     },
     "frontend/src/posthog-js.d.ts": {
       "mode": "664",
@@ -4745,7 +4745,7 @@
     },
     "pyproject.toml": {
       "mode": "664",
-      "sha256": "b6d5e04f20e5fe89d2546b7741790700dda911c4b02190bd7379a2cfc3592f65"
+      "sha256": "7d6e492652207dda743b2d6f2a099cc2590d1300005da19959ebff7ada391b4a"
     },
     "railway.json": {
       "mode": "664",
@@ -4871,11 +4871,11 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "664",
-      "sha256": "2c9bad7b0f40b427d06874153be17f47bea65f971056667d6451a7094d4d264c"
+      "sha256": "6cb1cb8835e3ed5b23943ff796bc93a24b435f7546b0290c79de3c5ef8deb189"
     },
     ".gitignore": {
       "mode": "664",
-      "sha256": "be8506e56e6898e60c96639cc7bb22f121e188fd2e87820e1589537e629b518d"
+      "sha256": "5797d376f79cf3c54b23b3b82f3a286f69b3a8b77bae945c9d64c075693283e1"
     },
     ".pre-commit-config.yaml": {
       "mode": "664",
@@ -6831,7 +6831,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "e1eb1616ac72ec89434280bf58f8f43dce80b51b733d111c42ac043937c344bb"
+      "sha256": "beda7d0b1a3902772f2c01eb692facd67c7f62ad33da9ceec1f231241f16e272"
     },
     "Makefile": {
       "mode": "664",
@@ -6843,7 +6843,7 @@
     },
     "README.md": {
       "mode": "664",
-      "sha256": "34e6e1cd487623cd27656bb446b085fbfe47bf7f5ec193aa31a1a226388fcf89"
+      "sha256": "392bd6ed94789ab1603f0b3ac81a338c3f8624e59e2e6c0de065562f0e6fec06"
     },
     "db/init.sql": {
       "mode": "664",
@@ -6871,7 +6871,7 @@
     },
     "frontend/eslint.config.js": {
       "mode": "664",
-      "sha256": "4aa298436d48ee4d5301e30400c22568d91ac0510fb8510a2ea448de76072022"
+      "sha256": "438187eb155b03b2f21d716bb620bdba95ab1f47455726969ddb6b4bea1c8e9d"
     },
     "frontend/index.html": {
       "mode": "664",
@@ -6879,7 +6879,7 @@
     },
     "frontend/package.json": {
       "mode": "664",
-      "sha256": "2fec56212134ea16cf7cdb2d39da608e4b37367a4beab5353cd5127ec3102c27"
+      "sha256": "1be9dd3ba2171f9b9d6fada349c2378024dcaf47a165d15a195394009a34426b"
     },
     "frontend/playwright.config.ts": {
       "mode": "664",
@@ -6907,7 +6907,7 @@
     },
     "frontend/src/components/forms/FormRenderer.tsx": {
       "mode": "664",
-      "sha256": "d33a50e5a15e09d26f6ba1bee0ae45d777c6494a85a6eae01117717b846edfd9"
+      "sha256": "c18159a28e046109a297f47c4b13ef1f4bd4f69c3526c47fd24f52446fbc0b09"
     },
     "frontend/src/components/forms/FormSuccess.tsx": {
       "mode": "664",
@@ -7087,11 +7087,11 @@
     },
     "frontend/src/pages/orgs/OrgMembersPage.tsx": {
       "mode": "664",
-      "sha256": "71328c5d5a07f7ad38f4fa34049b0eb4db5ca32449f762e1a7df5d9573a52aad"
+      "sha256": "5dd2c55323e4a564258bc8b04319e4387fd7149541f785afcdad4826a5eb2926"
     },
     "frontend/src/pages/orgs/OrgSettingsPage.tsx": {
       "mode": "664",
-      "sha256": "b306393647fa6f6599e3a0d12304f25492ad5cc2e2006e81777a1a314166da84"
+      "sha256": "82c2ceebd286a0483b6a3d64d9dd2f340ce110d292144a33983ff247b218d870"
     },
     "frontend/src/posthog-js.d.ts": {
       "mode": "664",
@@ -7151,7 +7151,7 @@
     },
     "pyproject.toml": {
       "mode": "664",
-      "sha256": "b6d5e04f20e5fe89d2546b7741790700dda911c4b02190bd7379a2cfc3592f65"
+      "sha256": "7d6e492652207dda743b2d6f2a099cc2590d1300005da19959ebff7ada391b4a"
     },
     "railway.json": {
       "mode": "664",

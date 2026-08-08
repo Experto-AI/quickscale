@@ -66,22 +66,26 @@ Set both variables explicitly before running any snippet in this section. The to
 ```python
 import tomllib, yaml, os
 
-DONOR     = os.environ["DONOR"]
+DONOR = os.environ["DONOR"]
 RECIPIENT = os.environ["RECIPIENT"]
 
-with open(f"{DONOR}/pyproject.toml",     "rb") as f: d_toml = tomllib.load(f)
-with open(f"{RECIPIENT}/pyproject.toml", "rb") as f: r_toml = tomllib.load(f)
+with open(f"{DONOR}/pyproject.toml", "rb") as f:
+    d_toml = tomllib.load(f)
+with open(f"{RECIPIENT}/pyproject.toml", "rb") as f:
+    r_toml = tomllib.load(f)
 
-DONOR_PKG     = d_toml["tool"]["poetry"]["packages"][0]["include"]  # e.g. "experto_ai_web"
+DONOR_PKG = d_toml["tool"]["poetry"]["packages"][0]["include"]  # e.g. "experto_ai_web"
 RECIPIENT_PKG = r_toml["tool"]["poetry"]["packages"][0]["include"]  # e.g. "test80"
 
-with open(f"{DONOR}/quickscale.yml")     as f: d_qs = yaml.safe_load(f)
-with open(f"{RECIPIENT}/quickscale.yml") as f: r_qs = yaml.safe_load(f)
+with open(f"{DONOR}/quickscale.yml") as f:
+    d_qs = yaml.safe_load(f)
+with open(f"{RECIPIENT}/quickscale.yml") as f:
+    r_qs = yaml.safe_load(f)
 
-DONOR_SLUG     = d_qs["project"]["slug"]   # e.g. "experto-ai-web"
-RECIPIENT_SLUG = r_qs["project"]["slug"]   # e.g. "test80"
+DONOR_SLUG = d_qs["project"]["slug"]  # e.g. "experto-ai-web"
+RECIPIENT_SLUG = r_qs["project"]["slug"]  # e.g. "test80"
 
-SAME_SLUG = (DONOR_PKG == RECIPIENT_PKG)   # True if same slug was used → no pkg fixes needed
+SAME_SLUG = DONOR_PKG == RECIPIENT_PKG  # True if same slug was used → no pkg fixes needed
 ```
 
 ---
@@ -150,13 +154,13 @@ kept as-is — they are newer and should not be overwritten.
 ```python
 import shutil, os
 
-DONOR     = os.environ["DONOR"]
+DONOR = os.environ["DONOR"]
 RECIPIENT = os.environ["RECIPIENT"]
 
-donor_pages     = set(os.listdir(f"{DONOR}/frontend/src/pages"))
+donor_pages = set(os.listdir(f"{DONOR}/frontend/src/pages"))
 recipient_pages = set(os.listdir(f"{RECIPIENT}/frontend/src/pages"))
 
-custom_only = donor_pages - recipient_pages   # pages only in the existing project
+custom_only = donor_pages - recipient_pages  # pages only in the existing project
 
 for page in sorted(custom_only):
     src = f"{DONOR}/frontend/src/pages/{page}"
@@ -177,11 +181,11 @@ New module component dirs in RECIPIENT that don't exist in DONOR (`social/`, `fo
 ```python
 import shutil, os
 
-DONOR     = os.environ["DONOR"]
+DONOR = os.environ["DONOR"]
 RECIPIENT = os.environ["RECIPIENT"]
 
-donor_dirs     = set(os.listdir(f"{DONOR}/frontend/src/components"))
-SKIP = {"ui"}   # always keep recipient's fresh shadcn ui components
+donor_dirs = set(os.listdir(f"{DONOR}/frontend/src/components"))
+SKIP = {"ui"}  # always keep recipient's fresh shadcn ui components
 
 for d in sorted(donor_dirs - SKIP):
     src = f"{DONOR}/frontend/src/components/{d}"
@@ -220,17 +224,17 @@ If slugs differ they were already fixed in Step 1, so `DONOR_PKG == RECIPIENT_PK
 ```python
 import shutil, os
 
-DONOR       = os.environ["DONOR"]
-RECIPIENT   = os.environ["RECIPIENT"]
-DONOR_PKG   = os.environ["DONOR_PKG"]      # already set equal to RECIPIENT_PKG
+DONOR = os.environ["DONOR"]
+RECIPIENT = os.environ["RECIPIENT"]
+DONOR_PKG = os.environ["DONOR_PKG"]  # already set equal to RECIPIENT_PKG
 
 FILES = [
-    "urls.py",                    # custom URL routing (healthcheck, sitemap, SPA catch-all)
-    "views.py",                   # custom views (404, robots.txt)
-    "middleware.py",              # custom middleware (experto-ai-web only)
-    "sitemaps.py",                # sitemap definitions (experto-ai-web only)
-    "context_processors.py",      # custom context processors
-    "settings/production.py",     # production overrides
+    "urls.py",  # custom URL routing (healthcheck, sitemap, SPA catch-all)
+    "views.py",  # custom views (404, robots.txt)
+    "middleware.py",  # custom middleware (experto-ai-web only)
+    "sitemaps.py",  # sitemap definitions (experto-ai-web only)
+    "context_processors.py",  # custom context processors
+    "settings/production.py",  # production overrides
 ]
 
 for f in FILES:
@@ -264,15 +268,20 @@ is a no-op. Run it anyway as a safety check.
 ```python
 import tomllib, tomli_w, os
 
-DONOR     = os.environ["DONOR"]
+DONOR = os.environ["DONOR"]
 RECIPIENT = os.environ["RECIPIENT"]
 
-with open(f"{DONOR}/pyproject.toml",     "rb") as f: d = tomllib.load(f)
-with open(f"{RECIPIENT}/pyproject.toml", "rb") as f: r = tomllib.load(f)
+with open(f"{DONOR}/pyproject.toml", "rb") as f:
+    d = tomllib.load(f)
+with open(f"{RECIPIENT}/pyproject.toml", "rb") as f:
+    r = tomllib.load(f)
 
 # Find path deps in donor that are missing from recipient
-donor_paths = {k: v for k, v in d["tool"]["poetry"]["dependencies"].items()
-               if isinstance(v, dict) and "path" in v}
+donor_paths = {
+    k: v
+    for k, v in d["tool"]["poetry"]["dependencies"].items()
+    if isinstance(v, dict) and "path" in v
+}
 recipient_deps = r["tool"]["poetry"]["dependencies"]
 
 added = []
@@ -388,19 +397,23 @@ Set both variables explicitly before running any snippet in this section. The sc
 ```python
 import tomllib, yaml, os
 
-DONOR     = os.environ["DONOR"]
+DONOR = os.environ["DONOR"]
 RECIPIENT = os.environ["RECIPIENT"]
 
-with open(f"{DONOR}/pyproject.toml",     "rb") as f: d_toml = tomllib.load(f)
-with open(f"{RECIPIENT}/pyproject.toml", "rb") as f: r_toml = tomllib.load(f)
+with open(f"{DONOR}/pyproject.toml", "rb") as f:
+    d_toml = tomllib.load(f)
+with open(f"{RECIPIENT}/pyproject.toml", "rb") as f:
+    r_toml = tomllib.load(f)
 
-DONOR_PKG     = d_toml["tool"]["poetry"]["packages"][0]["include"]   # e.g. "test80"
-RECIPIENT_PKG = r_toml["tool"]["poetry"]["packages"][0]["include"]   # e.g. "experto_ai_web"
+DONOR_PKG = d_toml["tool"]["poetry"]["packages"][0]["include"]  # e.g. "test80"
+RECIPIENT_PKG = r_toml["tool"]["poetry"]["packages"][0]["include"]  # e.g. "experto_ai_web"
 
-with open(f"{DONOR}/quickscale.yml")     as f: d_qs = yaml.safe_load(f)
-with open(f"{RECIPIENT}/quickscale.yml") as f: r_qs = yaml.safe_load(f)
+with open(f"{DONOR}/quickscale.yml") as f:
+    d_qs = yaml.safe_load(f)
+with open(f"{RECIPIENT}/quickscale.yml") as f:
+    r_qs = yaml.safe_load(f)
 
-DONOR_SLUG     = d_qs["project"]["slug"]
+DONOR_SLUG = d_qs["project"]["slug"]
 RECIPIENT_SLUG = r_qs["project"]["slug"]
 
 NEW_MODULES = set(d_qs["modules"].keys()) - set(r_qs["modules"].keys())
@@ -457,16 +470,24 @@ Keep the recipient's module path dependencies and pytest settings; merge in the 
 ```python
 import tomllib, tomli_w, os
 
-DONOR     = os.environ["DONOR"]
+DONOR = os.environ["DONOR"]
 RECIPIENT = os.environ["RECIPIENT"]
 
-with open(f"{DONOR}/pyproject.toml",     "rb") as f: d = tomllib.load(f)
-with open(f"{RECIPIENT}/pyproject.toml", "rb") as f: r = tomllib.load(f)
+with open(f"{DONOR}/pyproject.toml", "rb") as f:
+    d = tomllib.load(f)
+with open(f"{RECIPIENT}/pyproject.toml", "rb") as f:
+    r = tomllib.load(f)
 
-module_paths = {k: v for k, v in r["tool"]["poetry"]["dependencies"].items()
-                if isinstance(v, dict) and "path" in v}
-non_paths    = {k: v for k, v in d["tool"]["poetry"]["dependencies"].items()
-                if not (isinstance(v, dict) and "path" in v)}
+module_paths = {
+    k: v
+    for k, v in r["tool"]["poetry"]["dependencies"].items()
+    if isinstance(v, dict) and "path" in v
+}
+non_paths = {
+    k: v
+    for k, v in d["tool"]["poetry"]["dependencies"].items()
+    if not (isinstance(v, dict) and "path" in v)
+}
 r["tool"]["poetry"]["dependencies"] = {**non_paths, **module_paths}
 
 # Keep the recipient's [tool.pytest.ini_options] block exactly as-is.
@@ -482,11 +503,13 @@ with open(f"{RECIPIENT}/pyproject.toml", "wb") as f:
 ```python
 import json, os
 
-DONOR     = os.environ["DONOR"]
+DONOR = os.environ["DONOR"]
 RECIPIENT = os.environ["RECIPIENT"]
 
-with open(f"{DONOR}/frontend/package.json")     as f: d = json.load(f)
-with open(f"{RECIPIENT}/frontend/package.json") as f: r = json.load(f)
+with open(f"{DONOR}/frontend/package.json") as f:
+    d = json.load(f)
+with open(f"{RECIPIENT}/frontend/package.json") as f:
+    r = json.load(f)
 
 merged = {**d, "name": r["name"]}
 
@@ -502,11 +525,13 @@ with open(f"{RECIPIENT}/frontend/package.json", "w") as f:
 ```python
 import yaml, os
 
-DONOR     = os.environ["DONOR"]
+DONOR = os.environ["DONOR"]
 RECIPIENT = os.environ["RECIPIENT"]
 
-with open(f"{DONOR}/quickscale.yml")     as f: d = yaml.safe_load(f)
-with open(f"{RECIPIENT}/quickscale.yml") as f: r = yaml.safe_load(f)
+with open(f"{DONOR}/quickscale.yml") as f:
+    d = yaml.safe_load(f)
+with open(f"{RECIPIENT}/quickscale.yml") as f:
+    r = yaml.safe_load(f)
 
 new_modules = set(d["modules"].keys()) - set(r["modules"].keys())
 for mod in sorted(new_modules):

@@ -8,7 +8,7 @@ The generated root `Makefile` is the default local entrypoint for setup, linting
 
 ### Prerequisites
 
-- Python 3.13+ installed
+- Python {{ python_version }} installed (this project pins `{{ python_constraint }}` — newer minors are not accepted)
 - Poetry installed (`pip install poetry`)
 {% if theme == "showcase_react" %}
 - Node.js 24+ installed for the generated `frontend/` workspace

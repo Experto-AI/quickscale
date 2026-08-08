@@ -5,7 +5,7 @@
 
 **Target**: New contributor can clone repository and run tests successfully in <15 minutes.
 
-**Tested On**: Ubuntu 22.04, Python 3.13
+**Tested On**: Ubuntu 22.04, Python 3.14
 
 ---
 
@@ -15,11 +15,13 @@ Before starting, ensure you have these tools installed:
 
 ### Required Tools
 
-1. **Python 3.13 or higher**
+1. **Python 3.14** (the project pins `>=3.14,<3.15`)
    ```bash
    python3 --version
-   # Should show 3.13.x or higher
+   # Should show 3.14.x
    ```
+   3.13 and older are not supported — the sources use syntax (PEP 758
+   unparenthesized `except`) that older interpreters cannot parse.
 
 2. **Git 2.25+**
    ```bash
@@ -37,9 +39,11 @@ Before starting, ensure you have these tools installed:
 
 **Ubuntu/Debian:**
 ```bash
-# Python 3.13+ (if not already installed)
+# Python 3.14 (if not already installed)
 sudo apt update
-sudo apt install python3.13 python3.13-venv python3-pip
+sudo apt install python3.14 python3.14-venv python3-pip
+# If your distro has no python3.14 package, `uv python install 3.14`
+# or pyenv both provide it without touching the system interpreter.
 
 # Git
 sudo apt install git
@@ -52,8 +56,8 @@ export PATH="$HOME/.local/bin:$PATH"
 
 **macOS:**
 ```bash
-# Python 3.13+ via Homebrew
-brew install python@3.13
+# Python 3.14 via Homebrew
+brew install python@3.14
 
 # Git (usually pre-installed)
 brew install git
@@ -342,7 +346,7 @@ quickscale/
 - `make MODULE=<name> test -- --modules` runs module tests with `PYTHONPATH` set correctly
 - `make test-integration` runs all module integration suites (requires PostgreSQL)
 - `make lint` lints modules using the ROOT poetry environment
-- See [Module Implementation Checklist](./decisions.md#module-implementation-checklist) for new module setup
+- See [Building a Module](./module-extension.md#building-a-module-authoring-checklist) for new module setup, and [Module Implementation Requirements](./decisions.md#module-implementation-checklist) for the rules it must satisfy
 
 ---
 
@@ -453,7 +457,7 @@ poetry install
 
 ### Issue: Python version mismatch
 
-**Cause**: System Python version doesn't match project requirements (3.13+)
+**Cause**: System Python version doesn't match project requirements (`>=3.14,<3.15`)
 
 **Solution:**
 ```bash
@@ -461,10 +465,12 @@ poetry install
 python3 --version
 
 # Install specific version (Ubuntu)
-sudo apt install python3.13 python3.13-venv
+sudo apt install python3.14 python3.14-venv
+# ...or, without touching the system interpreter:
+#   uv python install 3.14
 
 # Tell Poetry to use specific version
-poetry env use python3.13
+poetry env use python3.14
 
 # Verify
 poetry run python --version

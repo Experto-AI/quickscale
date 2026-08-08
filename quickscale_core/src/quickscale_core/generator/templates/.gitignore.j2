@@ -73,6 +73,10 @@ Thumbs.db
 *.tmp
 .cache/
 .quickscale/backups/
+# Transient advisory-lock files: created while a quickscale command holds the
+# project lock and removed on release.  Committing one leaves the working tree
+# dirty the moment the lock is released, which blocks module embedding.
+.quickscale/*.lock
 
 # Node.js / Frontend
 node_modules/

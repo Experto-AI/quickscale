@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Save, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,10 +22,16 @@ export function OrgSettingsPage() {
   const fieldErrors = getApiFieldErrors(updateSettingsMutation.error)
   const canManageSettings = isOrgAdminLike(actor)
 
-  useEffect(() => {
+  // Reset the draft fields when we switch to a different organization.
+  // Adjusting state during render is React's documented alternative to a
+  // reset-on-prop-change effect: it re-renders before anything is painted,
+  // where an effect would flash the previous org's values first.
+  const [syncedOrg, setSyncedOrg] = useState(organization)
+  if (syncedOrg.name !== organization.name || syncedOrg.slug !== organization.slug) {
+    setSyncedOrg(organization)
     setName(organization.name)
     setSlug(organization.slug)
-  }, [organization.name, organization.slug])
+  }
 
   if (!canManageSettings) {
     return (

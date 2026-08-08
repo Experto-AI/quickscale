@@ -215,7 +215,7 @@ def _read_managed_file_hashes(project_path: Path) -> dict[str, ManagedFileHash]:
             continue
         try:
             record = ManagedFileHash.from_dict(entry)
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             continue
         hashes[record.path] = record
     return hashes
@@ -349,7 +349,7 @@ class ProjectStateManager:
         try:
             with open(self.state_file) as handle:
                 data = yaml.safe_load(handle) or {}
-        except (yaml.YAMLError, OSError):
+        except yaml.YAMLError, OSError:
             return False
 
         if not isinstance(data, dict):
@@ -703,7 +703,7 @@ class ProjectStateManager:
         try:
             with open(self.state_file) as handle:
                 data = yaml.safe_load(handle) or {}
-        except (yaml.YAMLError, OSError):
+        except yaml.YAMLError, OSError:
             return None
 
         if not isinstance(data, dict):

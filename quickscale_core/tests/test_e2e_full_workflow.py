@@ -309,7 +309,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
             in pyproject_content
         )
         assert 'django-filter = "^26.1"' in pyproject_content
-        assert 'djangorestframework = "^3.16.1"' in pyproject_content
+        assert 'djangorestframework = "^3.17.1"' in pyproject_content
 
         assert _install_module_dependencies(project_path, "forms") is True
 
@@ -416,6 +416,33 @@ class TestGeneratedProjectDependencyInstallSmoke:
         storage_path_dependency = synced_dependencies["quickscale-module-storage"]
         assert isinstance(storage_path_dependency, dict)
         assert storage_path_dependency["extras"] == ["cloud"]
+
+        # The backups module's pyproject declares quickscale-core as a
+        # monorepo-local path dependency; after the sync above, both the
+        # generated project pyproject and the copied modules/backups
+        # pyproject carry a version constraint for the unpublished
+        # quickscale-core distribution, which poetry lock cannot resolve.
+        # Rewrite both temporary entries to a path/develop dependency on the
+        # maintainer-side package for the E2E duration only.
+        synced_core_constraint = 'quickscale-core = ">=0.87.0,<0.88.0"'
+        core_path_value = str(REPO_ROOT / "quickscale_core").replace("\\", "\\\\")
+        core_path_dependency = (
+            f'quickscale-core = {{path = "{core_path_value}", develop = true}}'
+        )
+        for core_pyproject_path in (
+            project_path / "pyproject.toml",
+            project_path / "modules" / "backups" / "pyproject.toml",
+        ):
+            core_pyproject_content = core_pyproject_path.read_text()
+            assert synced_core_constraint in core_pyproject_content, (
+                f"{core_pyproject_path} is missing the synced quickscale-core constraint"
+            )
+            core_pyproject_path.write_text(
+                core_pyproject_content.replace(
+                    synced_core_constraint,
+                    core_path_dependency,
+                )
+            )
 
         assert _run_poetry_lock(project_path) is True
         assert _run_poetry_install(project_path) is True
@@ -600,9 +627,17 @@ class TestFullE2EWorkflow:
                 'quickscale-module-auth = {path = "./modules/auth", develop = true}\n'
                 'quickscale-module-orgs = {path = "./modules/orgs", develop = true}\n'
             )
+            # Anchor on the section boundary rather than a specific
+            # dependency pin so routine version bumps don't silently
+            # break this insertion point.
+            anchor = "\n[tool.poetry.group.dev.dependencies]"
+            assert anchor in pyproject_content, (
+                "Generated pyproject.toml is missing the dev-dependencies "
+                "section used as the path-dependency insertion anchor"
+            )
             pyproject_content = pyproject_content.replace(
-                'dj-database-url = "^3.1.0"\n',
-                f'dj-database-url = "^3.1.0"\n{path_deps}',
+                anchor,
+                f"{path_deps}{anchor}",
             )
             pyproject_path.write_text(pyproject_content)
 
@@ -975,7 +1010,7 @@ class TestFullE2EWorkflow:
 
         ci_content = ci_file.read_text()
         assert "runs-on: ubuntu-24.04" in ci_content
-        assert 'python-version: ["3.13"]' in ci_content
+        assert 'python-version: ["3.14"]' in ci_content
         assert "apt.postgresql.org" in ci_content
         assert "apt.postgresql.org.asc" in ci_content
         assert "postgresql-client-18" in ci_content
@@ -995,10 +1030,10 @@ class TestFullE2EWorkflow:
         assert "file: ./coverage.xml" not in ci_content
         assert "version: 11.0.9" in ci_content
         assert (
-            "if: matrix.python-version == '3.13' && matrix.django-version == '6.0'"
+            "if: matrix.python-version == '3.14' && matrix.django-version == '6.0'"
             in ci_content
         )
-        assert "3.14" not in ci_content
+        assert "3.13" not in ci_content
         assert "10.28.2" not in ci_content
         assert "codecov/codecov-action@v4" not in ci_content
         assert "gpg --dearmor" not in ci_content

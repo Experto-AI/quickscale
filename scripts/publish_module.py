@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 Provenance-aware split-publish wrapper for QuickScale modules (F2.8, F2.9a, F2.9b).
 
 This script replaces the hardcoded module-path and branch-resolution logic
@@ -20,17 +20,27 @@ local-vs-published SHAs, and explicit next-action guidance.  --status stays
 read-only and never fails closed; the mutating flows continue to fail closed
 with the same explicit next-action guidance.
 
-Usage:
-    poetry run python scripts/publish_module.py <module_name> [--clean]
-    poetry run python scripts/publish_module.py --status
-    poetry run python scripts/publish_module.py --publish-outdated [--clean]
+    Usage:
+        poetry run python scripts/publish_module.py \\
+            <module_name> --expected-remote-sha <sha|ABSENT> [--clean]
+        poetry run python scripts/publish_module.py --status
+        poetry run python scripts/publish_module.py --publish-outdated [--clean]
+
+    Phase 4 (SA117): All mutating single-module publish calls require
+    ``--expected-remote-sha``.  The value must be a 40-character hex SHA
+    or the literal ``ABSENT``.  ``--publish-outdated`` and ``--status``
+    reject the flag.
+
+    Phase 4 also disables ``--publish-outdated`` entirely: it used bare
+    ``--force`` internally, which violates the force-with-lease safety
+    contract.  Use single-module publish with per-module
+    ``--expected-remote-sha`` instead.
 """
 
 from __future__ import annotations
 
 import argparse
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
@@ -43,13 +53,18 @@ if str(_CORE_SRC) not in sys.path:
 
 from quickscale_core.utils.git_utils import (  # noqa: E402
     GitError,
+    GitRunner,
+    build_publication_git_runner,
     is_git_repo,
     is_release_authoritative,
+    is_working_directory_clean,
     push_split_branch,
     resolve_module_path,
     resolve_split_branch,
     run_git_subtree_split,
+    validate_expected_sha,
     validate_module_name,
+    validate_publication_origin,
 )
 
 # ---------------------------------------------------------------------------
@@ -85,43 +100,77 @@ def _print_error(msg: str) -> None:
 
 
 def _list_modules() -> list[str]:
-    """Return sorted module names from quickscale_modules/."""
-    modules_dir = _REPO_ROOT / "quickscale_modules"
-    if not modules_dir.is_dir():
-        return []
-    return sorted(
-        entry.name
-        for entry in modules_dir.iterdir()
-        if entry.is_dir() and not entry.name.startswith(".")
+    """Return the fail-hard authoritative shipped-module inventory."""
+    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        authoritative_module_names,
     )
 
+    return authoritative_module_names()
 
-def _has_uncommitted_changes() -> bool:
+
+def _require_authoritative_module(module_name: str) -> None:
+    """
+    Fail closed unless *module_name* is in the authoritative shipped-module inventory.
+
+    This is the direct single-module selector guard (F-002): it consults
+    :func:`_list_modules` (backed by ``authoritative_module_names()``)
+    before any release-authority check, origin prompt, subtree split, or
+    push.  A placeholder name (``teams``) and an unapproved inventory
+    addition (count drift) therefore fail before any outward or mutating
+    path, instead of relying on on-disk directory existence alone.
+    """
+    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        ImproperlyConfigured,
+        get_placeholder_rejection_reason,
+    )
+
+    try:
+        authoritative_names = _list_modules()
+    except ImproperlyConfigured as exc:
+        _print_error(f"Authoritative module inventory unavailable: {exc}")
+        sys.exit(1)
+
+    if module_name not in authoritative_names:
+        placeholder_reason = get_placeholder_rejection_reason(module_name)
+        if placeholder_reason is not None:
+            _print_error(placeholder_reason)
+        else:
+            _print_error(
+                f"Module '{module_name}' is not in the authoritative shipped-module inventory."
+            )
+        print()
+        _print_info("Available modules:")
+        for name in authoritative_names:
+            print(f"  - {name}")
+        sys.exit(1)
+
+
+def _has_uncommitted_changes(runner: GitRunner) -> bool:
     """Return True if the working directory has uncommitted changes."""
-    result = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=normal"],
-        cwd=_REPO_ROOT,
-        capture_output=True,
-        text=True,
-    )
-    return bool(result.stdout.strip())
+    try:
+        # Publication uses git_utils' binary, NUL-safe status parser.  Any
+        # malformed non-empty stream is treated as dirty/fail-closed rather
+        # than being silently normalized by text or newline parsing.
+        return not is_working_directory_clean(_REPO_ROOT, runner=runner)
+    except GitError:
+        return True
 
 
-def _warn_uncommitted_changes() -> None:
-    if _has_uncommitted_changes():
+def _warn_uncommitted_changes(runner: GitRunner) -> None:
+    if _has_uncommitted_changes(runner):
         _print_warning(
             "You have uncommitted changes. "
             "Split status and published branches only include committed history."
         )
 
 
-def _confirm_uncommitted_changes() -> bool:
+def _confirm_uncommitted_changes(runner: GitRunner) -> bool:
     """
     Prompt the user when uncommitted changes are present.
 
     Returns True if the user wants to continue, False to abort.
     """
-    if not _has_uncommitted_changes():
+    if not _has_uncommitted_changes(runner):
         return True
     _print_warning(
         "You have uncommitted changes. Published split branches only include committed history."
@@ -142,7 +191,7 @@ def _maybe_clean_subtree_cache(clean: bool) -> None:
             shutil.rmtree(cache_dir)
 
 
-def _check_release_authoritative() -> None:
+def _check_release_authoritative(runner: GitRunner) -> None:
     """
     Gate: refuse mutating publish flows unless source is release-authoritative (F2.9a).
 
@@ -152,10 +201,11 @@ def _check_release_authoritative() -> None:
 
     Raises SystemExit with a clear operator-facing message when the source is
     not release-authoritative.  This gate applies to mutating flows only
-    (single-module publish and --publish-outdated); --status remains read-only
+    (single-module publish); --status remains read-only
     and must not fail closed just because HEAD is untagged.
+    (--publish-outdated was disabled in SA117 Phase 4.)
     """
-    is_auth, version, tag, reason = is_release_authoritative(_REPO_ROOT)
+    is_auth, version, tag, reason = is_release_authoritative(_REPO_ROOT, runner=runner)
     if is_auth:
         _print_success(f"Source is release-authoritative (VERSION={version}, tag={tag})")
         return
@@ -176,10 +226,10 @@ def _check_release_authoritative() -> None:
     sys.exit(1)
 
 
-def _get_local_split_sha(module_path: str) -> str | None:
+def _get_local_split_sha(module_path: str, runner: GitRunner) -> str | None:
     """Compute the subtree split SHA for *module_path* without creating a branch."""
-    result = subprocess.run(
-        ["git", "subtree", "split", f"--prefix={module_path}", "--ignore-joins"],
+    result = runner.run(
+        ["subtree", "split", f"--prefix={module_path}", "--ignore-joins"],
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
@@ -190,15 +240,15 @@ def _get_local_split_sha(module_path: str) -> str | None:
     return sha if sha else None
 
 
-def _get_published_split_ref(split_branch: str) -> tuple[str, str]:
+def _get_published_split_ref(split_branch: str, runner: GitRunner) -> tuple[str, str]:
     """
     Return ``(sha, source)`` for the published split branch.
 
     *source* is one of ``local-branch``, ``remote-tracking``, or ``none``.
     """
     # Check local branch first
-    result = subprocess.run(
-        ["git", "rev-parse", "--verify", split_branch],
+    result = runner.run(
+        ["rev-parse", "--verify", split_branch],
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
@@ -209,8 +259,8 @@ def _get_published_split_ref(split_branch: str) -> tuple[str, str]:
             return sha, "local-branch"
 
     # Check remote-tracking branch
-    result = subprocess.run(
-        ["git", "rev-parse", "--verify", f"origin/{split_branch}"],
+    result = runner.run(
+        ["rev-parse", "--verify", f"origin/{split_branch}"],
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
@@ -225,6 +275,7 @@ def _get_published_split_ref(split_branch: str) -> tuple[str, str]:
 
 def _get_module_publish_state(
     module_name: str,
+    runner: GitRunner,
 ) -> tuple[str, str, str, str]:
     """Return ``(state, local_sha, published_sha, published_source)``."""
     try:
@@ -234,12 +285,12 @@ def _get_module_publish_state(
         _print_error(str(e))
         sys.exit(1)
 
-    local_sha = _get_local_split_sha(module_path)
+    local_sha = _get_local_split_sha(module_path, runner)
     if local_sha is None:
         _print_error(f"Could not compute subtree split for module '{module_name}'")
         sys.exit(1)
 
-    published_sha, published_source = _get_published_split_ref(split_branch)
+    published_sha, published_source = _get_published_split_ref(split_branch, runner)
 
     if not published_sha:
         return "unpublished", local_sha, "", published_source
@@ -248,8 +299,20 @@ def _get_module_publish_state(
     return "outdated", local_sha, published_sha, published_source
 
 
-def _publish_module(module_name: str) -> None:
-    """Split and push a single module using the provenance-aware helpers."""
+def _publish_module(
+    module_name: str,
+    *,
+    expected_remote_sha: str,
+    runner: GitRunner,
+) -> None:
+    """
+    Split and push a single module using the provenance-aware helpers.
+
+    *expected_remote_sha* is required (SA117 Phase 4): a 40-character hex
+    SHA for force-with-lease pinning, or ``ABSENT`` for first-time publish
+    (no known remote SHA).  The legacy bare ``--force`` fallback has been
+    removed.
+    """
     # Defense-in-depth: validate name shape before any path/branch resolution
     # so callers that bypass main() still get a clean GitError, not a
     # traceback (CR-M5-P1-001).
@@ -273,6 +336,7 @@ def _publish_module(module_name: str) -> None:
             rejoin=True,
             ignore_joins=True,
             path=_REPO_ROOT,
+            runner=runner,
         )
         _print_success(f"Git subtree split completed (SHA: {split_sha[:12]}...)")
     except GitError as e:
@@ -285,7 +349,13 @@ def _publish_module(module_name: str) -> None:
 
     _print_info("Pushing split branch to origin...")
     try:
-        push_split_branch(split_branch, remote="origin", force=True, path=_REPO_ROOT)
+        push_split_branch(
+            split_branch,
+            remote="origin",
+            expected_remote_sha=expected_remote_sha,
+            path=_REPO_ROOT,
+            runner=runner,
+        )
         _print_success("Split branch pushed to origin")
     except GitError as e:
         _print_error(f"Failed to push split branch to origin: {e}")
@@ -302,7 +372,7 @@ def _publish_module(module_name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _show_provenance_diagnostics() -> bool:
+def _show_provenance_diagnostics(runner: GitRunner) -> bool:
     """
     Report read-only release-provenance diagnostics (F2.9b).
 
@@ -314,7 +384,7 @@ def _show_provenance_diagnostics() -> bool:
 
     Returns True when the source is release-authoritative, False otherwise.
     """
-    is_auth, version, tag, reason = is_release_authoritative(_REPO_ROOT)
+    is_auth, version, tag, reason = is_release_authoritative(_REPO_ROOT, runner=runner)
     if is_auth:
         _print_success(f"Release provenance: authoritative (VERSION={version}, tag={tag})")
         return True
@@ -326,21 +396,21 @@ def _show_provenance_diagnostics() -> bool:
     return False
 
 
-def _show_status() -> None:
+def _show_status(runner: GitRunner) -> None:
     """Show split-branch status and provenance diagnostics for every module (F2.9b)."""
-    _warn_uncommitted_changes()
+    _warn_uncommitted_changes(runner)
     _print_info("Inspecting module publish status...")
     print()
 
     # F2.9b: read-only release-provenance diagnostic (never fails closed).
-    is_auth = _show_provenance_diagnostics()
+    is_auth = _show_provenance_diagnostics(runner)
     print()
 
     outdated: list[str] = []
     unpublished: list[str] = []
 
     for module_name in _list_modules():
-        state, local_sha, pub_sha, pub_source = _get_module_publish_state(module_name)
+        state, local_sha, pub_sha, pub_source = _get_module_publish_state(module_name, runner)
         if state == "up-to-date":
             print(f"  {module_name:<16} up to date ({pub_source}, {local_sha[:12]})")
         elif state == "outdated":
@@ -375,26 +445,28 @@ def _show_status() -> None:
         # "not release-authoritative"; the read-only status test asserts that
         # substring is absent so --status is never mistaken for the F2.9a gate.
         _print_info("  1. Tag HEAD to match VERSION so the source is release-authoritative.")
-        _print_info("  2. Re-run 'make publish-module MODULE=<name>' or '--publish-outdated'.")
+        _print_info("  2. Re-run single-module publish:")
+        _print_info("       make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40hex|ABSENT>")
     else:
-        _print_info("  Run '--publish-outdated' to publish missing/outdated split branches.")
+        _print_info("  Publish each outdated module individually:")
+        _print_info("    make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40hex|ABSENT>")
 
 
-def _publish_outdated(clean: bool) -> None:
+def _publish_outdated(clean: bool, runner: GitRunner) -> None:
     """Publish only modules with missing or outdated split branches."""
     # F2.9a: Gate mutating flows on release-authoritative source state
     # This must fire BEFORE the uncommitted changes prompt so the gate
     # error is clear and does not get masked by interactive prompts.
-    _check_release_authoritative()
+    _check_release_authoritative(runner)
 
-    if not _confirm_uncommitted_changes():
+    if not _confirm_uncommitted_changes(runner):
         return
 
     _maybe_clean_subtree_cache(clean)
 
     queue: list[str] = []
     for module_name in _list_modules():
-        state, *_ = _get_module_publish_state(module_name)
+        state, *_ = _get_module_publish_state(module_name, runner)
         if state in ("outdated", "unpublished"):
             queue.append(module_name)
 
@@ -406,7 +478,7 @@ def _publish_outdated(clean: bool) -> None:
     print()
 
     for module_name in queue:
-        _publish_module(module_name)
+        _publish_module(module_name, expected_remote_sha="ABSENT", runner=runner)
         print()
 
 
@@ -432,12 +504,30 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--publish-outdated",
         action="store_true",
-        help="Publish only modules with missing or outdated split branches",
+        help=(
+            "[DISABLED in SA117 Phase 4] Previously published modules with "
+            "missing or outdated split branches.  Now exits with safety "
+            "guidance; use single-module publish instead."
+        ),
     )
     parser.add_argument(
         "--clean",
         action="store_true",
         help="Clear git subtree cache before splitting",
+    )
+    parser.add_argument(
+        "--expected-remote-sha",
+        help=(
+            "Exact 40-char hex SHA expected on remote, or ABSENT for first publish. "
+            "Required for single-module publish; rejected with --publish-outdated and --status."
+        ),
+    )
+    parser.add_argument(
+        "--git-executable",
+        help=(
+            "Absolute Git executable for publication, or omit to resolve git "
+            "from PATH (QUICKSCALE_GIT_EXECUTABLE is also supported)."
+        ),
     )
     return parser
 
@@ -453,7 +543,16 @@ def main() -> None:
         )
         sys.exit(1)
 
-    if not is_git_repo(_REPO_ROOT):
+    # Bootstrap and validate the publication runner before the first Git
+    # process.  In particular, a hostile PATH/config/repository environment
+    # must not get an opportunity to influence the bootstrap probe itself.
+    try:
+        runner = build_publication_git_runner(args.git_executable)
+    except GitError as e:
+        _print_error(f"Publication Git bootstrap failed: {e}")
+        sys.exit(1)
+
+    if not is_git_repo(_REPO_ROOT, runner=runner):
         _print_error("Not a git repository")
         sys.exit(1)
 
@@ -462,11 +561,39 @@ def main() -> None:
         sys.exit(1)
 
     if args.status:
-        _show_status()
+        if args.expected_remote_sha is not None:
+            _print_error("--expected-remote-sha is not supported with --status")
+            sys.exit(1)
+        _show_status(runner)
     elif args.publish_outdated:
-        _publish_outdated(clean=args.clean)
+        _print_error("--publish-outdated is disabled in SA117 Phase 4")
+        _print_info(
+            "Batch --publish-outdated used bare --force, which violates the "
+            "force-with-lease safety contract."
+        )
+        _print_info("Publish each module individually with --expected-remote-sha:")
+        for name in _list_modules():
+            _print_info(f"  make publish-module MODULE={name} EXPECTED_REMOTE_SHA=<40hex|ABSENT>")
+        sys.exit(1)
     elif args.module_name:
         module_name = args.module_name
+
+        # Phase 4: --expected-remote-sha is required for single-module publish
+        expected_sha = args.expected_remote_sha
+        if not expected_sha:
+            _print_error(
+                "--expected-remote-sha is required for single-module publish "
+                "(use: --expected-remote-sha <40hex|ABSENT>)"
+            )
+            sys.exit(1)
+
+        # Validate expected SHA format before any git operations
+        try:
+            validate_expected_sha(expected_sha)
+        except GitError as e:
+            _print_error(f"Invalid --expected-remote-sha: {e}")
+            sys.exit(1)
+
         # Validate module name shape BEFORE any path resolution or subtree
         # operations so invalid input fails closed with a clean error instead
         # of an uncaught traceback (CR-M5-P1-001).
@@ -476,26 +603,40 @@ def main() -> None:
             _print_error(str(e))
             sys.exit(1)
 
-        # Validate module exists
-        module_dir = _REPO_ROOT / resolve_module_path(module_name)
-        if not module_dir.is_dir():
-            _print_error(f"Module '{module_name}' not found in quickscale_modules/")
-            print()
-            _print_info("Available modules:")
-            for name in _list_modules():
-                print(f"  - {name}")
+        # F-002: reject any direct selection absent from the authoritative
+        # shipped-module inventory before the release-authority gate, origin
+        # validation, prompts, subtree split, or push.  A placeholder name
+        # (teams) and an unapproved inventory addition (count drift) both
+        # fail closed here, before any outward or mutating path.  This
+        # supersedes the previous on-disk directory-existence check: the
+        # authoritative inventory is the single source of truth for what a
+        # direct selector may publish.
+        _require_authoritative_module(module_name)
+
+        # First enforce the existing release-authoritative gate so callers get
+        # the established diagnostic for an untagged/mismatched source.  The
+        # origin check immediately follows and remains before any prompt,
+        # subtree split, or other mutation.
+        _check_release_authoritative(runner)
+
+        # This is the final pre-mutation source gate.  It checks effective
+        # fetch and push identity while allowing unrelated remotes, and fails
+        # closed for blank, mixed, or untrusted origin configuration.
+        try:
+            validate_publication_origin(_REPO_ROOT, runner=runner)
+        except GitError as e:
+            _print_error(f"Publication origin validation failed: {e}")
             sys.exit(1)
 
-        # F2.9a: Gate mutating flows on release-authoritative source state
-        # This must fire BEFORE the uncommitted changes prompt so the gate
-        # error is clear and does not get masked by interactive prompts.
-        _check_release_authoritative()
-
-        if not _confirm_uncommitted_changes():
+        if not _confirm_uncommitted_changes(runner):
             return
 
         _maybe_clean_subtree_cache(args.clean)
-        _publish_module(module_name)
+        _publish_module(
+            module_name,
+            expected_remote_sha=expected_sha,
+            runner=runner,
+        )
     else:
         parser.print_help()
         sys.exit(1)

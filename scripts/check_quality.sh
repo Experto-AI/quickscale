@@ -114,6 +114,30 @@ check_dependencies() {
     fi
 }
 
+check_baseline_monotonicity() {
+    print_header "Checking Baseline Monotonicity (SA121)"
+
+    local mon_exit=0
+    poetry run python scripts/check_quality_baseline_monotonicity.py || mon_exit=$?
+
+    if [ $mon_exit -ne 0 ]; then
+        echo ""
+        print_error "Baseline monotonicity gate FAILED (exit $mon_exit)"
+
+        # CR-005: Helper already emits canonical JSON to stdout.
+        # Shell inline summary does NOT duplicate output — only manages
+        # stale artifacts and lifecycle messages.
+
+        # Clear stale success artifacts (preserve policy artifact)
+        rm -f "$JSON_OUTPUT" "$MD_OUTPUT" "$STATUS_OUTPUT"
+        echo ""
+        print_error "Quality gate aborted — monotonicity policy violation (SA121)"
+        exit 1
+    fi
+
+    print_success "Baseline monotonicity gate passed"
+}
+
 discover_python_modules() {
     # Auto-discover Python packages with pyproject.toml and src/ directory
     # Returns: Space-separated list of src/ paths to analyze
@@ -559,20 +583,9 @@ def validate_baseline(data):
             "max_complexity": max_complexity,
         }
 
-    large_files = require_mapping(baseline.get("large_files"), "large_files")
-    allowed_files_raw = require_mapping(
-        large_files.get("allowed_files"),
-        "large_files.allowed_files",
-    )
-    allowed_files = {}
-    for key, entry in allowed_files_raw.items():
-        file_path = require_string(key, "large_files.allowed_files key")
-        item = require_mapping(entry, f"large_files.allowed_files[{key}]")
-        max_lines = require_non_negative_int(
-            item.get("max_lines"),
-            f"large_files.allowed_files[{key}].max_lines",
-        )
-        allowed_files[file_path] = {"max_lines": max_lines}
+    # SA125-DEC-001: per-file line ceilings are retired. Legacy/extra
+    # large_files data is intentionally ignored; only the surviving sections
+    # below participate in baseline comparisons or exit status.
 
     duplication = require_mapping(baseline.get("duplication"), "duplication")
     allowed_blocks = require_non_negative_int(
@@ -595,7 +608,6 @@ def validate_baseline(data):
         "schema_version": schema_version,
         "dead_code": {"allowed_messages": allowed_messages},
         "complexity": {"allowed_functions": allowed_functions},
-        "large_files": {"allowed_files": allowed_files},
         "duplication": {
             "allowed_blocks": allowed_blocks,
             "allowed_block_identities": allowed_block_identities,
@@ -694,6 +706,14 @@ for entry in duplication_raw:
         normalized_entry["locations"] = normalized_locations
     normalized_entry["identity"] = normalize_duplication_identity(normalized_entry)
     matching_duplication_blocks.append(normalized_entry)
+
+# Monotonicity gate results (written by check_quality_baseline_monotonicity.py)
+monotonicity_data = None
+monotonicity_file = output_dir / "quality_baseline_policy.json"
+try:
+    monotonicity_data = json.loads(monotonicity_file.read_text())
+except (OSError, json.JSONDecodeError):
+    pass
 
 high_complexity_count = sum(
     1 for entry in actual_complexity.values() if entry["complexity"] >= high_complexity_threshold
@@ -821,40 +841,9 @@ if baseline_data is not None:
         resolved_entry["key"] = key
         complexity_resolved.append(resolved_entry)
 
+    # SA125-DEC-001: large files are reported advisorily but never gate.
     large_file_regressions = []
-    for file_path, actual_entry in actual_large_files.items():
-        baseline_entry = baseline_data["large_files"]["allowed_files"].get(file_path)
-        if baseline_entry is None:
-            allowed_max_lines = None
-            regression_type = "new"
-        elif actual_entry["lines"] > baseline_entry["max_lines"]:
-            allowed_max_lines = baseline_entry["max_lines"]
-            regression_type = "grown"
-        else:
-            continue
-
-        regression = dict(actual_entry)
-        regression["severity"] = (
-            "critical"
-            if actual_entry["lines"] >= large_file_error_threshold
-            else "warning"
-        )
-        regression["regression_type"] = regression_type
-        regression["allowed_max_lines"] = allowed_max_lines
-        if allowed_max_lines is not None:
-            regression["delta"] = actual_entry["lines"] - allowed_max_lines
-        large_file_regressions.append(regression)
-
     large_files_resolved = []
-    for file_path, baseline_entry in baseline_data["large_files"]["allowed_files"].items():
-        if file_path in actual_large_files:
-            continue
-        large_files_resolved.append(
-            {
-                "file": file_path,
-                "max_lines": baseline_entry["max_lines"],
-            }
-        )
 
     allowed_duplication_blocks = baseline_data["duplication"]["allowed_blocks"]
     remaining_allowed_duplication_blocks = Counter(
@@ -877,7 +866,6 @@ if baseline_data is not None:
     warning_regressions = (
         len(new_dead_code)
         + sum(1 for entry in complexity_regressions if entry["severity"] == "warning")
-        + sum(1 for entry in large_file_regressions if entry["severity"] == "warning")
         + len(duplication_regressions)
     )
     critical_regressions = sum(
@@ -896,16 +884,9 @@ if baseline_data is not None:
                 for entry in baseline_data["complexity"]["allowed_functions"].values()
                 if entry["max_complexity"] >= error_complexity_threshold
             ),
-            "large_files_warning": sum(
-                1
-                for entry in baseline_data["large_files"]["allowed_files"].values()
-                if large_file_warning_threshold <= entry["max_lines"] < large_file_error_threshold
-            ),
-            "large_files_error": sum(
-                1
-                for entry in baseline_data["large_files"]["allowed_files"].values()
-                if entry["max_lines"] >= large_file_error_threshold
-            ),
+            # SA125-DEC-001: no accepted large-file ceilings exist any more.
+            "large_files_warning": 0,
+            "large_files_error": 0,
             "duplication_blocks": allowed_duplication_blocks,
         },
     }
@@ -971,6 +952,7 @@ report = {
         ),
     },
     "duplication": duplication_raw,
+    "monotonicity": monotonicity_data,
 }
 
 status_payload = {
@@ -979,6 +961,11 @@ status_payload = {
     "warning_regressions": regressions["warning_count"],
     "critical_regressions": regressions["critical_count"],
     "total_regressions": regressions["total_count"],
+    "monotonicity_verdict": monotonicity_data.get("verdict") if monotonicity_data else None,
+    "monotonicity_merge_base": monotonicity_data.get("merge_base") if monotonicity_data else None,
+    "monotonicity_base_ref": monotonicity_data.get("base_ref") if monotonicity_data else None,
+    "monotonicity_waiver_count": monotonicity_data.get("summary", {}).get("total_waivers") if monotonicity_data else None,
+    "monotonicity_diagnostics": monotonicity_data.get("diagnostics", []) if monotonicity_data else [],
 }
 
 json_output.write_text(json.dumps(report, indent=2) + "\n")
@@ -1117,15 +1104,6 @@ else:
                 lines.append(
                     f"- [{entry['severity']}] Complexity: {entry['file']}::{entry['symbol']} is {entry['complexity']} (baseline {entry['allowed_max_complexity']})"
                 )
-        for entry in regressions["large_files"]["new_or_grown"]:
-            if entry["allowed_max_lines"] is None:
-                lines.append(
-                    f"- [{entry['severity']}] Large file: {entry['file']} is {entry['lines']} lines (new above threshold)"
-                )
-            else:
-                lines.append(
-                    f"- [{entry['severity']}] Large file: {entry['file']} is {entry['lines']} lines (baseline {entry['allowed_max_lines']})"
-                )
         for entry in regressions["duplication"]["new_blocks"]:
             path = entry.get("path") or "unknown-path"
             line = entry.get("line")
@@ -1174,6 +1152,35 @@ lines.extend(
         "",
         "---",
         "",
+        "## Baseline Monotonicity Gate (SA121)",
+        "",
+    ])
+
+monotonicity_data = report.get("monotonicity")
+if monotonicity_data and monotonicity_data.get("verdict"):
+    lines.extend([
+        f"- **Verdict:** {monotonicity_data['verdict']}",
+        f"- **Merge base:** {monotonicity_data.get('merge_base', 'unknown')}",
+        f"- **Base ref:** {monotonicity_data.get('base_ref', 'unknown')}",
+        f"- **Total waivers:** {monotonicity_data.get('summary', {}).get('total_waivers', 0)}",
+        f"- **Violations:** {monotonicity_data.get('summary', {}).get('total_violations', 0)} total, {monotonicity_data.get('summary', {}).get('unresolved_violations', 0)} unresolved",
+        "",
+        "### Diagnostics",
+        "",
+        json_block(monotonicity_data.get("diagnostics", [])),
+        "",
+    ])
+    # CR-005: No raw waiver_evaluations/lifecycle prose section.
+    # Canonical diagnostics fenced JSON above is authoritative.
+else:
+    lines.extend([
+        "- Baseline monotonicity gate not evaluated.",
+        "",
+    ])
+
+lines.extend([
+        "---",
+        "",
         "## Tool Details",
         "",
         "- vulture: Dead code detection",
@@ -1201,6 +1208,9 @@ main() {
 
     # Check all dependencies are installed
     check_dependencies
+
+    # Check baseline monotonicity before running analyzers
+    check_baseline_monotonicity
 
     # Run all analyses
     analyze_dead_code

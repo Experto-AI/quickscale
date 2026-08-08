@@ -464,7 +464,7 @@ run_e2e_lane() {
 
     if [ "$lane" = "core" ]; then
         lane_label="Core"
-        lane_pythonpath="$CORE_DIR:$CORE_DIR/src"
+        lane_pythonpath="$PROJECT_ROOT:$CORE_DIR:$CORE_DIR/src"
         lane_tests="$CORE_DIR/tests/"
         lane_rootdir="$CORE_DIR"
     else

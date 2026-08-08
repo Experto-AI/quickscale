@@ -60,11 +60,30 @@
         version-check version-update bump-version \
         check-core-compat check-module-core-imports check-manifest-sync \
         check-org-context-primitives \
-        check-csrf-exempt \
+         check-csrf-exempt check-gate-parity check-ci-gate-generation \
+        sa117-check sa117-emit sa117-lock sa117-lock-diff \
+        sa117-capture sa117-verify sa117-authorize sa117-rollback \
+        sa117-apply sa117-check-origin sa117-check-containers \
         help
 
 # Default Python command (uses root Poetry environment)
 PYTHON ?= poetry run python
+GATE_REGISTRY ?= scripts/gate_registry.json
+# Keep the fast check aggregation aligned with the registry.  The helper uses
+# the parity checker's strict JSON/schema validator (including duplicate-key
+# and dependency-cycle checks).  Capture its status explicitly because GNU
+# Make's $(shell ...) otherwise discards command failures and can continue with
+# a partial target list.
+CHECK_GATE_TARGETS_RAW := $(shell \
+	$(PYTHON) scripts/sync_ci_gate_jobs.py --print-check-targets --registry "$(GATE_REGISTRY)" 2>&1 \
+	|| printf '__CHECK_GATE_TARGETS_ERROR__')
+ifneq ($(findstring __CHECK_GATE_TARGETS_ERROR__,$(CHECK_GATE_TARGETS_RAW)),)
+$(error Unable to derive local check gate targets from $(GATE_REGISTRY): $(CHECK_GATE_TARGETS_RAW))
+endif
+CHECK_GATE_TARGETS := $(strip $(CHECK_GATE_TARGETS_RAW))
+ifeq ($(strip $(CHECK_GATE_TARGETS)),)
+$(error Unable to derive local check gate targets from $(GATE_REGISTRY))
+endif
 RUFF_CACHE_DIR ?= .ruff_cache/make
 # Unit-test worker count. Use ``0`` for a true serial run, ``auto`` for pytest's
 # own CPU-count default, or an explicit integer (e.g. CI pins a fixed count).
@@ -169,9 +188,9 @@ help:
 	@echo "  make publish-test         - Publish to TestPyPI"
 	@echo "  make publish-prod         - Publish to production PyPI"
 	@echo "  make publish-full         - Publish TestPyPI → verify → PyPI"
-	@echo "  make publish-module       - Publish module to split branch (MODULE=<name>)"
+	@echo "  make publish-module       - Publish module to split branch (MODULE=<name> EXPECTED_REMOTE_SHA=<sha|ABSENT>)"
 	@echo "  make publish-module-status - Show split-branch status for all modules"
-	@echo "  make publish-modules-outdated - Publish modules with missing or outdated branches"
+	@echo "  make publish-modules-outdated - [DISABLED SA117 Phase 4] Was publish outdated modules; use per-module publish instead"
 	@echo "  make clean                - Remove build artifacts"
 	@echo ""
 	@echo "Legacy:"
@@ -186,6 +205,21 @@ help:
 	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
+	@echo "  make check-gate-parity            - SA122a: verify declared gates match every execution context (exit 0 = parity, 1 = JSONL diffs)"
+	@echo "  make check-ci-gate-generation     - SA122b: verify registry-bound hosted CI jobs are generated and current"
+	@echo ""
+	@echo "SA117 scope / publication / apply gates:"
+	@echo "  make sa117-check PATHS='...'      - Scope-guard: compare candidate changed paths against baseline (SCRIPTS_ONLY=1)"
+	@echo "  make sa117-emit                   - Emit scope allowlist paths (PHASE=name to filter)"
+	@echo "  make sa117-lock PATHS='...'       - Lock check: verify candidate paths match allowlist exactly"
+	@echo "  make sa117-lock-diff              - Fail-closed poetry.lock drift proof (SA117_BASELINE_REF required)"
+	@echo "  make sa117-capture VERSION=0.87.0 PHASE=final - Capture publication evidence"
+	@echo "  make sa117-verify EVIDENCE=path   - Verify publication evidence"
+	@echo "  make sa117-authorize VERSION=X DIGEST=D - Authorize a publication"
+	@echo "  make sa117-rollback TOKEN=T DIGEST=D - Rollback a prior authorization"
+	@echo "  make sa117-apply MODULE=M TARGET=T EXEC=E ARGV=A - Execute and verify a module apply"
+	@echo "  make sa117-check-origin MODULE=M DECLARED=O EXPECTED=E - Check origin map consistency"
+	@echo "  make sa117-check-containers TARGET=T - Check for zero container/volume configuration"
 	@echo ""
 	@echo "Version Management:"
 	@echo "  make version-check        - Verify VERSION matches all pyproject.toml files"
@@ -820,6 +854,164 @@ check-org-context-primitives:
 check-csrf-exempt:
 	@$(PYTHON) scripts/check_csrf_exempt_gate.py
 
+# --- Gate Registry Parity Check (SA122a) ---
+
+# Verify that every gate declared in scripts/gate_registry.json is present in
+# every execution context (Makefile, check_ci_locally.sh, ci.yml, publish.yml,
+# e2e.yml).  Exits 0 when all declared gates are wired; exits 1 with JSONL
+# diagnostics when conformance gates are missing from a required context.
+# This is a standalone diagnostic — it is NOT wired into make check/ci yet.
+check-gate-parity:
+	@tmp=$$(mktemp); \
+	$(PYTHON) scripts/check_gate_parity.py > $$tmp 2>&1; \
+	exit_code=$$?; \
+	output=$$(cat $$tmp); \
+	rm -f $$tmp; \
+	if [ "$$exit_code" -ne 0 ]; then \
+		echo "ERROR: [GATE_FAILED] check-gate-parity exited with code $$exit_code" >&2; \
+		echo "$$output" >&2; \
+		exit 2; \
+	fi; \
+	echo "$$output"
+
+# --- Hosted CI Gate Generation (SA122b) ---
+
+# Verify that registry-bound hosted jobs and their consumer needs lists match
+# deterministic generator output against the Make-selected registry.  Use
+# --write only for intentional refreshes.  This target is wired into `make
+# check` directly (non-recursive, F-006); run it solo only to debug generation
+# drift.  Both invocations pass --registry "$(GATE_REGISTRY)" so Make's target
+# derivation and every generator validation consume the identical registry.
+check-ci-gate-generation:
+	@$(PYTHON) scripts/sync_ci_gate_jobs.py --check --registry "$(GATE_REGISTRY)"
+
+# --- SA117 Scope / Publication / Apply Gates ---
+
+# Scope-guard worktree check (compare a candidate changed-path set against
+# the baseline allowlist).  PATHS is required — pass the changed file set
+# explicitly as a space-separated list.  Add SCRIPTS_ONLY=1 for Phase 1
+# backward compat.
+sa117-check:
+	@if [ -z "$(PATHS)" ]; then \
+		echo "Error: PATHS is required (space-separated list of changed files)."; \
+		echo "  e.g. make sa117-check PATHS='scripts/foo.py Makefile'"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/check_sa117_scope.py worktree \
+		--paths $(PATHS) \
+		$(if $(SCRIPTS_ONLY),--scripts-only,)
+
+# Emit allowlist paths (optionally filtered by PHASE).
+sa117-emit:
+	@$(PYTHON) scripts/check_sa117_scope.py emit $(if $(PHASE),--phase $(PHASE),)
+
+# Lock check: verify candidate paths match allowlist exactly.
+sa117-lock:
+	@if [ -z "$(PATHS)" ]; then \
+		echo "Error: PATHS is required (space-separated list)."; \
+		echo "  e.g. make sa117-lock PATHS='scripts/foo.py Makefile'"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/check_sa117_scope.py lock \
+		--paths $(PATHS) \
+		$(if $(SCRIPTS_ONLY),--scripts-only,)
+
+# SA117c lock-drift proof. The candidate is always the supplied repository-root
+# poetry.lock; the checker derives its root from that path and requires it to
+# be the exact Git top-level. Keep the root anchor and every path argument
+# quoted so worktrees with spaces are supported.
+SA117_BASELINE_REF ?=
+SA117_CANDIDATE ?= $(CURDIR)/poetry.lock
+SA117_EXPECTED_VERSION ?= $(VERSION)
+SA117_EVIDENCE ?= /tmp/sa117-lock-diff-evidence.json
+
+sa117-lock-diff:
+	@if [ -z "$(SA117_BASELINE_REF)" ]; then \
+		echo "Error: SA117_BASELINE_REF is required (full or resolvable Git commit ref)."; \
+		exit 2; \
+	fi
+	@if [ -z "$(SA117_EXPECTED_VERSION)" ]; then \
+		echo "Error: SA117_EXPECTED_VERSION is required (defaults to VERSION)."; \
+		exit 2; \
+	fi
+	@set -e; \
+	root="$(CURDIR)"; \
+	candidate="$(SA117_CANDIDATE)"; \
+	cd "$$root"; \
+	$(PYTHON) "$$root/scripts/check_sa117_scope.py" lock-diff \
+		--baseline-ref "$(SA117_BASELINE_REF)" \
+		--candidate "$$candidate" \
+		--expected-version "$(SA117_EXPECTED_VERSION)" \
+		--output "$(SA117_EVIDENCE)"
+
+# Capture publication evidence.
+sa117-capture:
+	@if [ -z "$(VERSION)" ] || [ -z "$(PHASE)" ]; then \
+		echo "Error: VERSION and PHASE are required (e.g. make sa117-capture VERSION=0.87.0 PHASE=final)"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_sa117_publication.py capture --version $(VERSION) --phase $(PHASE)
+
+# Verify publication evidence.
+sa117-verify:
+	@if [ -z "$(EVIDENCE)" ]; then \
+		echo "Error: EVIDENCE path is required (e.g. make sa117-verify EVIDENCE=/path/to/evidence.json)"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_sa117_publication.py verify --evidence $(EVIDENCE)
+
+# Authorize a publication.
+sa117-authorize:
+	@if [ -z "$(VERSION)" ] || [ -z "$(DIGEST)" ]; then \
+		echo "Error: VERSION and DIGEST are required (e.g. make sa117-authorize VERSION=0.87.0 DIGEST=abc123)"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_sa117_publication.py authorize --version $(VERSION) --evidence-digest $(DIGEST)
+
+# Rollback a prior authorization.
+sa117-rollback:
+	@if [ -z "$(TOKEN)" ] || [ -z "$(DIGEST)" ]; then \
+		echo "Error: TOKEN and DIGEST are required (e.g. make sa117-rollback TOKEN=sa117_auth_xxx DIGEST=abc123)"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_sa117_publication.py rollback --auth-token $(TOKEN) --evidence-digest $(DIGEST)
+
+# Execute and verify a module apply.
+sa117-apply:
+	@if [ -z "$(MODULE)" ] || [ -z "$(TARGET)" ] || [ -z "$(EXEC)" ] || [ -z "$(ARGV)" ] || [ -z "$(DECLARED)" ] || [ -z "$(EXPECTED)" ]; then \
+		echo "Error: MODULE, TARGET, EXEC, ARGV, DECLARED, and EXPECTED are required."; \
+		echo "  e.g. make sa117-apply MODULE=auth TARGET=/tmp/test EXEC=/usr/bin/git ARGV='git clone repo' DECLARED=url1 EXPECTED=url2"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_public_module_apply.py apply \
+		--module $(MODULE) \
+		--target $(TARGET) \
+		--executable $(EXEC) \
+		--argv $(ARGV) \
+		--version $(VERSION) \
+		--declared-origin $(DECLARED) \
+		--expected-origin $(EXPECTED)
+
+# Check origin map consistency.
+sa117-check-origin:
+	@if [ -z "$(MODULE)" ] || [ -z "$(DECLARED)" ] || [ -z "$(EXPECTED)" ]; then \
+		echo "Error: MODULE, DECLARED, and EXPECTED are required."; \
+		echo "  e.g. make sa117-check-origin MODULE=auth DECLARED=url1 EXPECTED=url2"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_public_module_apply.py check-origin \
+		--module $(MODULE) \
+		--declared-origin $(DECLARED) \
+		--expected-origin $(EXPECTED)
+
+# Check for zero container/volume configuration.
+sa117-check-containers:
+	@if [ -z "$(TARGET)" ]; then \
+		echo "Error: TARGET is required (e.g. make sa117-check-containers TARGET=/tmp/test)"; \
+		exit 1; \
+	fi
+	@$(PYTHON) scripts/verify_public_module_apply.py check-containers --target $(TARGET)
+
 # --- Combined Checks ---
 
 # Auto-format and auto-fix lint across the active sections (write mode).
@@ -904,7 +1096,7 @@ check:
 		fi; \
 		q_test_dirs="$$(echo $$q_test_dirs)"; \
 		if [ -n "$$q_test_dirs" ]; then \
-			$(PYTHON) -m pytest $$q_test_dirs -q --tb=short $(PYTEST_XDIST_ARGS) > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm -f pytest_log.txt; exit 1; }; \
+			$(PYTHON) -m pytest $$q_test_dirs -q --tb=short -m "not integration and not e2e" $(PYTEST_XDIST_ARGS) $(PYTEST_TIMEOUT_ARGS) > pytest_log.txt 2>&1 || { cat pytest_log.txt; rm -f pytest_log.txt; exit 1; }; \
 			rm -f pytest_log.txt; \
 		fi; \
 	else \
@@ -914,11 +1106,24 @@ check:
 			$(MAKE) test-unit SECTIONS="$$sections_for_test_unit" MODULE="$(MODULE)"; \
 		fi; \
 	fi; \
-	$(MAKE) check-core-compat check-module-core-imports check-manifest-sync check-org-context-primitives check-csrf-exempt
+	$(MAKE) $(CHECK_GATE_TARGETS)
+	@# F-006: registry-bound hosted CI generation drift must fail the mandatory gate.
+	@# Non-recursive by design: the direct Python --check (same command as the
+	@# standalone check-ci-gate-generation target) cannot recurse through make.
+	@# --registry "$(GATE_REGISTRY)" keeps generation validation on the same
+	@# registry Make used to derive the check targets (no false green override).
+	$(PYTHON) scripts/sync_ci_gate_jobs.py --check --registry "$(GATE_REGISTRY)"
+	@if [ -n "$(QUIET)" ]; then \
+		if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then \
+			frontend_lint_log=$$(mktemp /tmp/frontend_lint_log.XXXXXX); \
+			$(MAKE) lint-frontend > $$frontend_lint_log 2>&1 || { cat $$frontend_lint_log; rm -f $$frontend_lint_log; exit 1; }; \
+			rm -f $$frontend_lint_log; \
+		fi; \
+	fi
 	@if [ -z "$(QUIET)" ]; then \
 		if command -v node >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then \
 			echo "📦 Linting rendered frontend..."; \
-			$(MAKE) lint-frontend; \
+			$(MAKE) lint-frontend || exit $$?; \
 		else \
 			echo "ℹ️ Skipping rendered frontend lint (node and pnpm are required)."; \
 		fi; \
@@ -971,10 +1176,15 @@ publish-prod:
 publish-full:
 	@scripts/publish.sh full
 
-# Publish module changes to its split branch (e.g. make publish-module MODULE=auth)
+# Publish module changes to its split branch using force-with-lease safety (SA117 Phase 4).
+# Usage: make publish-module MODULE=auth EXPECTED_REMOTE_SHA=<40hex|ABSENT>
+#   EXPECTED_REMOTE_SHA is required: 40-char hex SHA expected on remote,
+#   or ABSENT for first-time publish (branch does not exist remotely).
+#   --clean clears the git subtree cache.
 publish-module:
-	@if [ -z "$(MODULE)" ]; then echo "Error: MODULE is required (e.g. make publish-module MODULE=auth)"; exit 1; fi
-	@scripts/publish_module.sh $(MODULE) $(if $(CLEAN),--clean,)
+	@if [ -z "$(MODULE)" ]; then echo "Error: MODULE is required (e.g. make publish-module MODULE=auth EXPECTED_REMOTE_SHA=40hex_or_ABSENT)"; exit 1; fi
+	@if [ -z "$(EXPECTED_REMOTE_SHA)" ]; then echo "Error: EXPECTED_REMOTE_SHA is required (e.g. make publish-module MODULE=auth EXPECTED_REMOTE_SHA=40hex_or_ABSENT)"; exit 1; fi
+	@scripts/publish_module.sh $(MODULE) --expected-remote-sha $(EXPECTED_REMOTE_SHA) $(if $(CLEAN),--clean,)
 
 # Show split-branch status for all modules
 publish-module-status:

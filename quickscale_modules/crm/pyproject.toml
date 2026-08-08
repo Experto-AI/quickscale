@@ -1,8 +1,8 @@
 [project]
 name = "quickscale-module-crm"
-version = "0.73.0"
+version = "0.87.0"
 description = "QuickScale CRM module with contacts, companies, deals, and pipeline management"
-requires-python = ">=3.13,<3.15"
+requires-python = ">=3.14,<3.15"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "Experto AI", email = "victor@experto.ai"}]
@@ -12,9 +12,9 @@ dynamic = ["dependencies"]
 packages = [{include = "quickscale_modules_crm", from = "src"}]
 
 [tool.poetry.dependencies]
-python = ">=3.13,<3.15"
-Django = ">=6.0.5,<6.1.0"
-djangorestframework = "^3.16.1"
+python = ">=3.14,<3.15"
+Django = ">=6.0.7,<6.1.0"
+djangorestframework = "^3.17.1"
 django-filter = "^26.1"
 
 [tool.poetry.group.dev.dependencies]
@@ -31,7 +31,18 @@ build-backend = "poetry.core.masonry.api"
 # Package-specific overrides:
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
+
+# Ruff's default rule set, restated explicitly. Any [tool.ruff.*] table makes
+# this file Ruff's config root for the module, which shadows the repo-root
+# ruff.toml — so this module has always been linted with Ruff's built-in
+# defaults, never the shared select. Pinning them makes that implicit
+# dependency explicit: a Ruff release that widens its defaults then lands as
+# a deliberate opt-in instead of a wall of surprise findings (0.16 widened
+# them by ~900 across the modules). Adopting the shared select here is
+# worthwhile, but it is its own cleanup.
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
 
 [[tool.mypy.overrides]]
 module = "rest_framework.*"

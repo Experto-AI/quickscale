@@ -59,7 +59,7 @@ RUN echo "📦 Installing system build dependencies..." && \
 
 # Install Poetry
 RUN echo "📦 Installing Poetry..." && \
-    pip install poetry==2.4.0 && \
+    pip install poetry==2.4.1 && \
     echo "✅ Poetry installed: $(poetry --version)"
 
 # Set working directory
@@ -85,7 +85,7 @@ ARG INSTALL_DEV=false
 # For production (INSTALL_DEV=false): Install only main dependencies
 # Retry up to 3 times to handle transient network issues (PyPI timeouts)
 RUN echo "📦 Installing Python dependencies (INSTALL_DEV=$INSTALL_DEV)..." && \
-    export POETRY_HTTP_TIMEOUT=120 && \
+    export POETRY_REQUESTS_TIMEOUT=120 && \
     for attempt in 1 2 3; do \
         echo "  Attempt $attempt of 3 (started $(date -u +%H:%M:%SZ))..." && \
         if [ "$INSTALL_DEV" = "true" ]; then \

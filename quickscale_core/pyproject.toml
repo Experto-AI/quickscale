@@ -2,7 +2,7 @@
 name = "quickscale-core"
 version = "0.87.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
-requires-python = ">=3.13,<3.15"
+requires-python = ">=3.14,<3.15"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{name = "Experto AI", email = "victor@experto.ai"}]
@@ -11,7 +11,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Framework :: Django",
     "Framework :: Django :: 6.0",
@@ -31,7 +30,7 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.13,<3.15"
+python = ">=3.14,<3.15"
 Jinja2 = "^3.1.6"
 pyyaml = "^6.0.3"
 
@@ -90,6 +89,28 @@ exclude_lines = [
 ]
 
 # Ruff and mypy configurations centralized in root ruff.toml and mypy.ini
+# Ruff treats this file as its config root for the package (any [tool.ruff.*]
+# table does that), so the root ruff.toml's target-version does NOT apply here
+# and Ruff would otherwise infer py314 from requires-python above. Restate it:
+# so it must be restated here to stay in step with the root ruff.toml.
+[tool.ruff]
+target-version = "py314"
+
+# Ruff's default rule set, restated explicitly. Because this file shadows the
+# root ruff.toml (see above), these packages have always been linted with
+# Ruff's built-in defaults rather than the shared select. Pinning them makes
+# that dependency-on-a-default explicit, so a Ruff release that widens its
+# defaults lands as a deliberate opt-in rather than hundreds of surprise
+# findings (0.16 widened them by ~486 across these two packages).
+# Adopting the shared select here is worthwhile but is its own cleanup.
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+# NOTE: `I` (isort) is not in the select above, so the [tool.ruff.lint.isort]
+# override below is currently inert — it configures a rule that is not
+# enabled. It is kept because it becomes correct the moment this package
+# adopts the shared select (which does enable `I`); see implementation_contract.md.
+
 # Package-specific isort override
 [tool.ruff.lint.isort]
 known-first-party = ["quickscale_core"]

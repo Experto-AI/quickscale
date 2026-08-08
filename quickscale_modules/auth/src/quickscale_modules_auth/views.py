@@ -226,7 +226,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
                     user,
                     organization=org,
                 )
-            except (BillingDisabledError, BillingValidationError):
+            except BillingDisabledError, BillingValidationError:
                 pass  # billing disabled or no active subscription to cancel
             except BillingSubscriptionAnomalyError:
                 logger.warning(

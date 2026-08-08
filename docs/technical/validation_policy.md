@@ -24,7 +24,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make test-e2e` - End-to-end validation with PostgreSQL and browser automation.
 - `make ci-e2e` - CI-parity release-gate validation including E2E.
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
-- `make publish-module MODULE=<name>` - Maintainer helper for split-branch publishing.
+- `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<sha|ABSENT>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). The expected remote SHA (40 hex characters or `ABSENT` for first publish) is required.
 
 **Assistant guidance:**
 - Prefer `make` targets for shared repository workflows instead of calling lower-level helper scripts directly.
@@ -36,6 +36,16 @@ This companion owns repository validation entrypoints, testing standards, covera
 
 <a id="testing-standards"></a>
 ## Testing Standards
+
+**Gate split** — the rule is authoritative in
+[decisions.md §Unit/Integration Gate Split](./decisions.md#unitintegration-gate-split).
+
+| Gate | Make target | Scope | Database | Role |
+|------|-------------|-------|----------|------|
+| Unit | `make test-unit` | `quickscale_core/tests`, `quickscale_cli/tests` (DB-free, marked `not integration and not e2e`) | None | N/A |
+| Integration | `make test-integration` | `quickscale_modules/*/tests` (PostgreSQL-required, marked `not e2e`) | PostgreSQL 18 per-module test DB | `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` |
+
+`make test` runs both gates sequentially as a combined check.
 
 **Coverage Targets:**
 - 90% equal-weight package mean coverage plus 80% minimum per file for `quickscale_core`, `quickscale_cli`, modules, and themes.

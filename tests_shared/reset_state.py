@@ -78,7 +78,7 @@ def reset_test_state() -> Iterator[None]:
                 cur.execute("RESET app.current_org_id")
                 cur.execute("RESET app.operator_access")
                 cur.execute("RESET ROLE")
-        except (RuntimeError, InterfaceError):
+        except RuntimeError, InterfaceError:
             # Database access not allowed or connection already closed
             # (pytest-django tears down the db fixture before autouse
             # fixture teardown in some fixture-resolution orders).

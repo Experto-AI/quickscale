@@ -11,11 +11,17 @@ from quickscale_core.contracts.module_discovery import (
     set_modules_base_path,
 )
 from quickscale_core.manifest.entry_point import (
+    MANIFEST_ADAPTER_REGISTRY,
     ManifestAdapterNotFound,
     build_manifest_wiring_spec,
+    load_module_manifest,
     refresh_managed_adapters,
 )
-from quickscale_core.manifest.loader import ManifestError
+from quickscale_core.manifest.loader import (
+    ManifestError,
+    ModuleVersionMismatchError,
+    assert_manifest_version_matches_core,
+)
 from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_core.schema.config_schema import validate_config
 from quickscale_core.schema.state_schema import StateManager
@@ -200,6 +206,27 @@ def _build_wiring_specs(
     module_options: Mapping[str, Mapping[str, Any]],
     package_name: str,
 ) -> tuple[dict[str, ModuleWiringSpec] | None, str | None]:
+    # SA117: pre-check manifest version compatibility for registered modules
+    # in deterministic sorted order.  A dedicated mismatch surfaces before
+    # any ManifestError from the spec builder.  Modules without a registered
+    # adapter are skipped (the spec builder handles them with the existing
+    # skip-unknown contract); missing or unreadable manifests are also
+    # deferred to the spec builder.
+    for module_name in selected_modules:
+        if module_name not in MANIFEST_ADAPTER_REGISTRY:
+            # No registered adapter — this is an unknown or unregistered
+            # module; let the spec builder skip it silently.
+            continue
+        try:
+            manifest = load_module_manifest(module_name)
+            assert_manifest_version_matches_core(manifest.version, module_name)
+        except ManifestError:
+            # Missing or unreadable manifest — let the spec builder handle
+            # it with the existing skip-unknown logic.
+            continue
+        except ModuleVersionMismatchError as exc:
+            return None, str(exc)
+
     specs: dict[str, ModuleWiringSpec] = {}
     for module_name in selected_modules:
         spec, error = _build_one_wiring_spec(
@@ -273,6 +300,11 @@ def regenerate_managed_wiring(
     if error is not None:
         return False, error
     assert module_options is not None
+
+    if not selected_modules:
+        # SA127: empty module selection requires no base path, manifests, or
+        # adapter refresh. Write empty managed wiring and return success.
+        return _write_wiring_files(project_path, package_name, {})
 
     prior_base_path: Path | None = None
     try:

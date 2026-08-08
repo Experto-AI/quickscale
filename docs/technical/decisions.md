@@ -1,33 +1,23 @@
 # decisions.md
 
 <!--
-decisions.md - Authoritative Technical Policy Hub
+decisions.md — Authoritative Technical Policy Hub
 
-PURPOSE: This document is the repository-wide source of truth for cross-cutting architectural decisions, tie-breakers, prohibitions, and technical document ownership for QuickScale.
+WHAT THIS FILE IS: the repository-wide SSOT for rules, constraints, tie-breakers,
+prohibitions, and technical document ownership. Every entry must be a statement
+someone could *violate*.
 
-CONTENT GUIDELINES:
-- Record all authoritative architectural decisions with rationale
-- Document technical implementation rules (package naming, directory structure, testing)
-- Specify behavioral decisions and operational patterns
-- List explicit prohibitions (what NOT to do)
-- Include detailed technical notes and code examples
-- Maintain consistency across all QuickScale packages and extensions
-- Update when technical standards change or new decisions are made
+WHAT BELONGS HERE: architectural decisions with their rationale; cross-cutting
+implementation rules; explicit prohibitions; the document-ownership map.
 
-WHAT TO ADD HERE:
-- New architectural decisions with full context and rationale
-- Changes to package naming conventions or directory structures
-- Updates to testing strategies or development patterns
-- New prohibitions or anti-patterns discovered during development
-- Technical implementation details that affect multiple packages
-- Integration patterns between core, modules, and themes
+WHAT DOES NOT: status reports and "current state" narrative (CHANGELOG.md);
+workflow walkthroughs and examples (user_manual.md); timelines and open work
+(roadmap.md); structure/spec detail owned by a narrow companion doc under
+docs/technical/. If a statement can only become "out of date" rather than
+"violated", it belongs in one of those.
 
-WHAT NOT TO ADD HERE:
-- Strategic rationale or competitive analysis (belongs in quickscale.md)
-- User-facing documentation or getting started guides (belongs in README.md)
-- Implementation timelines or roadmap items (belongs in roadmap.md)
-
-TARGET AUDIENCE: Maintainers, core contributors, community package developers, CI engineers
+TARGET AUDIENCE: Maintainers, core contributors, community package developers,
+CI engineers.
 -->
 
 # Technical Decisions (Authoritative)
@@ -39,25 +29,10 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 
 **Scope:** All first-party packages (core, CLI, themes, modules). Experto-AI and core contributors own these decisions.
 
-## Quick Reference (AI Context)
-
-**Current Essentials:**
-- ✅ CLI workflow: `quickscale plan myapp`, enter the generated directory, then run `quickscale apply`
-- ✅ Generates standalone Django project (Poetry + pyproject.toml)
-- ✅ Production-ready: Docker, PostgreSQL, pytest, CI/CD, security best practices
-- ✅ Git subtree for module distribution
-- ✅ Declarative YAML configuration (quickscale.yml)
-
-**Development Stack:**
-- ✅ Poetry (package manager), Ruff (format + lint), MyPy (type check), pytest (testing)
-- ✅ src/ layout for all packages
-- ❌ NO Black, NO Flake8, NO requirements.txt, NO setup.py
-
-**Key Constraints:**
-- 90% overall mean + 80% per file minimum test coverage (CI enforced)
-- decisions.md is the repo-wide tie-breaker; narrow companion docs in `docs/technical/` own current contract, validation, and structure slices
-- Package README.md files are informational context only; they MUST defer to root docs
-- Settings: Standalone by default (NO automatic inheritance)
+**For what QuickScale currently ships** — CLI surface, feature matrix, runtime
+pins, architecture boundaries — see
+[implementation_contract.md](./implementation_contract.md). This file states the
+rules that shipped surface must obey; it is not a description of it.
 
 ## Critical Rules
 
@@ -86,257 +61,102 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 
 See [implementation_contract.md § Current Implementation Scope](./implementation_contract.md#mvp-vs-post-mvp-scope) for the canonical current-contract summary and generated-output pointer. This file remains the tie-breaker for cross-cutting policy; that file owns the shipped-surface description.
 
+## Architecture Decisions
+
 ### Module & Theme Architecture {#module-theme-architecture}
 
-**Architectural Decision:** Modules and themes serve different purposes and use different distribution mechanisms.
-
-#### **Modules: Split Branch Distribution (Ongoing Dependencies)**
-
-**Purpose:** Reusable Django apps that users embed and update over project lifetime.
+**Decision:** Modules and themes serve different purposes and use different
+distribution mechanisms. Modules are ongoing runtime dependencies; themes are
+one-time scaffolding.
 
 <a id="integration-note-personal-toolkit-git-subtree"></a>
 <a id="module-extraction-workflow"></a>
-**Distribution Strategy:**
-1. Develop modules on `main` branch in `quickscale_modules/`
-2. Auto-split to `splits/{module}-module` branches on release (GitHub Actions)
-3. Users embed via `quickscale plan --add <module>` + `quickscale apply`
-4. Users update via `quickscale update` (updates installed modules only)
 
-**Workflow:**
-```bash
-# User adds auth module to configuration
-quickscale plan myapp --add auth
-# Adds auth module to quickscale.yml
+#### Modules — split-branch distribution
 
-# Apply configuration (embeds module from splits/auth-module)
-quickscale apply
-# Embeds from splits/auth-module branch to modules/auth/
+- ✅ Modules are developed on `main` in `quickscale_modules/`, auto-split to
+  `splits/{module}-module` branches on release, and embedded by git subtree
+- ✅ Users embed via `quickscale plan --add <module>` + `quickscale apply`, and
+  update via `quickscale update`
+- ✅ **The published `splits/*` branches are what users receive — never the
+  working tree.** This is why release ordering is mandatory; see
+  §[Module Version Lockstep](#module-version-lockstep) Rule 3
+- ✅ Modules are runtime dependencies (in `INSTALLED_APPS`), theme-agnostic, and
+  backend-weighted; users can contribute improvements back via
+  `quickscale push --module <name>`
+- ❌ Modules are never tightly coupled to a theme
 
-# Later: Update installed modules
-quickscale update
-# Updates modules/auth/ and other installed modules
+Workflow examples: [user_manual.md §4.3](./user_manual.md#43-planapply-commands).
+Branch and generated-project layouts:
+[repository_layout.md](./repository_layout.md) and
+[generated_project_structure.md](./generated_project_structure.md).
 
-# Contribute improvements back
-quickscale push --module auth
-# Pushes to feature branch, maintainer merges to main, auto-split updates split branch
-```
+#### Themes — generator templates
 
-**Split Branch Architecture:**
-```
-QuickScale Repo Branches:
-├── main                       # All development (implemented modules + placeholders)
-├── splits/auth-module         # Auto-generated from quickscale_modules/auth/
-├── splits/blog-module         # Auto-generated from quickscale_modules/blog/
-└── splits/storage-module      # Auto-generated from quickscale_modules/storage/
-```
+- ✅ `showcase_react` (React + TypeScript + shadcn/ui) is the **sole** supported
+  and configured theme; the plan/apply CLI offers no other theme selection
+- ✅ Themes are copied once at generation time (Jinja2 rendering); the user owns
+  the generated code completely
+- ✅ Any desired/state/recovery reference to `showcase_html` — or any other
+  non-React theme — MUST fail closed before operational side effects
+- ✅ Module releases MAY extend managed backend/runtime surfaces in existing
+  projects, but newly scaffolded theme-owned routes, navigation, registries, and
+  page source are guaranteed only on fresh generation or explicit manual adoption
+- ❌ No embed/update path for themes — apply performs no automatic rewrite of
+  user-owned files
+- ❌ Vertical themes (CRM and similar) are not part of the shipped generator
+  surface until a release note and this file explicitly add them
 
-**User Project Structure:**
-```
-myproject/
-├── .quickscale/
-│   └── state.yml              # Sole authoritative applied-state store
-├── modules/                   # Embedded modules (git subtrees)
-│   ├── auth/                  # From splits/auth-module
-│   └── blog/                  # From splits/blog-module
-└── myproject/
-    └── settings/
-  └── base.py            # INSTALLED_APPS = [..., "modules.auth", "modules.blog"]
-```
+Theme-owned scaffolding that only fresh generations receive — the dormant PostHog
+analytics helper and the Django-owned public `/social` and `/social/embeds`
+entrypoints — is enumerated in
+[generated_project_structure.md §React Starter Output](./generated_project_structure.md#react-starter-output).
+Existing projects adopt equivalents manually; the backend-managed social transport
+endpoints and settings wiring stay theme-agnostic.
 
-Billing now has a public-ready implementation line in `quickscale_modules/billing` through the current runtime APIs, module-owned billing pages, and React integration guide. Public `quickscale plan`, `quickscale.yml`, and `quickscale apply` flows now surface billing. The generated `showcase_react` SPA surfaces billing as a module flag only (`modules.billing`); it does not currently include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards/links, module paths for billing, or full-document links into billing Django pages. The org-switch blocker that originally prevented these entry points is now resolved — see "Multi-org membership and org-switch" below; restoration is separate implementation work. Teams remains placeholder inventory only.
+The approved frontend stack (React 19+, TypeScript, Vite, pnpm, shadcn/ui,
+Tailwind, React Router v7, TanStack Query, Zustand, React Hook Form + Zod,
+Vitest, Playwright, ESLint + Prettier) is pinned in
+[implementation_contract.md §Runtime Pins](./implementation_contract.md#runtime-pins-and-constraints).
+Adding or swapping a frontend dependency requires a decision entry here.
 
-**Teams module status:** `quickscale_modules/teams/` is a README-only placeholder from early brainstorming; it has never been scoped, designed, or scheduled. It is **not next** and **not planned** — there is no committed timeline or kickoff date. Structural findings in [arch-audit.md](../others/arch-audit.md) that key their horizon or trigger off "teams kickoff"/"the teams build" (e.g. `deletion-invariants-per-boundary-reimplementation`, `org-model-universe-hand-enumerated`) describe conditions that would apply *if and when* teams is scheduled — they are not on a 6–18 month clock and should not be read as committed roadmap items. Treat them as open-ended/deferred until a separate scheduling decision is made and recorded here.
+#### Starter surface: billing and teams
 
-**Key Characteristics:**
-- ✅ Runtime dependencies (in INSTALLED_APPS)
-- ✅ Updated over project lifetime
-- ✅ Backend-heavy (~70% backend, ~30% frontend)
-- ✅ Theme-agnostic (work with all themes)
-- ✅ Users can contribute improvements back
+- ✅ Generated starter output surfaces billing as a module flag only
+  (`modules.billing`). Billing ships module-owned Django routes; QuickScale does
+  not generate a starter-owned billing React page and does not rewrite existing
+  project React files to adopt billing
+- ✅ Billing SPA entry points (dashboard cards, sidebar navigation,
+  `modulePaths.billing`, org-dashboard links) are restorable — restoring them is
+  separate implementation work, not a blocked item
+- ❌ Teams routes, flags, dashboard cards, and navigation stay excluded until
+  teams ships as a valid public `quickscale plan` / `quickscale.yml` /
+  `quickscale apply` selection
 
----
+**Teams tie-breaker:** `quickscale_modules/teams/` is a README-only placeholder.
+It is **not next** and **not planned** — no committed timeline, no kickoff date.
+[arch-audit.md](../../arch-audit.md) findings whose horizon keys off "teams
+kickoff" (e.g. `deletion-invariants-per-boundary-reimplementation`,
+`org-model-universe-hand-enumerated`) describe conditions that apply *if and when*
+teams is scheduled. Treat them as open-ended and deferred — not roadmap items on a
+clock — until a scheduling decision is recorded here.
 
-#### **Themes: Generator Templates (One-time Copy)**
+#### Multi-org membership and org-switch
 
-**Purpose:** Complete project scaffolding ranging from empty starters to full vertical applications.
+- ✅ Regular SaaS users belong to **exactly one** organization
+- ✅ The server session (`ACTIVE_ORG_SESSION_KEY`) is the sole authority for org
+  resolution for regular users
+- ✅ VIEW-AS (superuser-only session override) is the sole path for operator
+  org-scope debugging
+- ❌ No org switcher in the user-facing UI
+- ❌ No explicit-org API contract or session-sync endpoint — a client-side org
+  parameter alongside a server-resolved session is a dual-authority defect
 
-**Current Shipped Theme Surface:**
+Future multi-org membership is not precluded, but requires revisiting this
+decision and implementing the explicit-org API contract at that time.
 
-QuickScale currently ships one starter theme only:
-
-1. `showcase_react` — **React + TypeScript + shadcn/ui (default)** ✅
-  - Empty foundation for custom development
-  - Fresh generations include dormant frontend-only PostHog starter wiring in the
-    generated `frontend/src/lib/analytics.ts`
-  - Fresh generations also auto-generate Django-owned public social entrypoints at
-    `/social` and `/social/embeds` that hydrate the shared React bundle outside the
-    SPA router
-  - Those public pages are fresh-generation scaffolding only; existing projects keep
-    manual adoption for any equivalent public pages, while the backend-managed social
-    transport endpoints and settings wiring remain theme-agnostic
-
-`showcase_react` is the sole supported and configured theme; the plan/apply CLI offers no
-other theme selection. Any desired/state/recovery reference to `showcase_html` (or any other
-non-React theme) fails closed before operational side effects. Existing generated projects keep
-their user-owned files — apply performs no automatic rewrite.
-
-Planned vertical themes such as CRM remain roadmap work. They are not part of the
-current shipped generator surface until a release note and this file explicitly add
-them.
-
-Generated starter output surfaces billing as a module flag only (`modules.billing`).
-The generated `showcase_react` SPA does not currently include billing dashboard cards, sidebar
-navigation entries, org-dashboard billing cards/links, module paths for billing, or
-full-document links into billing Django pages. The org-switch blocker that originally
-prevented these entry points is now resolved — see "Multi-org membership and org-switch" below; restoration is separate
-implementation work. QuickScale does not generate a starter-owned billing React page.
-Teams routes, flags, dashboard cards, and navigation remain excluded until teams ships
-as a valid public `quickscale plan` / `quickscale.yml` / `quickscale apply` selection.
-
-**Default React Theme Tech Stack:**
-
-| # | Category | Technology | Rationale |
-|---|----------|------------|-----------|
-| | **Core** | | |
-| 1 | Framework | React 19+ | Industry standard, excellent ecosystem |
-| 2 | Language | TypeScript | Type safety, better developer experience |
-| 3 | Build Tool | Vite | Fast HMR, modern bundling |
-| 4 | Package Manager | pnpm | Best disk efficiency, fast installs, enterprise adoption |
-| | **UI/Styling** | | |
-| 5 | UI Components | shadcn/ui | Copy-paste components, full ownership |
-| 6 | Admin Components | shadcn/admin | Pre-built admin patterns |
-| 7 | Icons | Lucide React | Clean, modern, shadcn default |
-| 8 | CSS Framework | Tailwind CSS | Required by shadcn/ui, utility-first |
-| 9 | Animation | Motion (Framer Motion) | De-facto standard for React animations |
-| | **Data & State** | | |
-| 10 | Routing | React Router v7 | Approved stable routing baseline for QuickScale and matches the shipped `showcase_react` dependency surface |
-| 11 | Server State | TanStack Query | Best performance, highest satisfaction |
-| 12 | Client State | Zustand | Simplest API, fastest growing, #1 sentiment |
-| 13 | Forms | React Hook Form + Zod | Most popular, best performance |
-| | **Quality** | | |
-| 14 | Unit Testing | Vitest + React Testing Library | Fast, Vite-native, modern |
-| 15 | E2E Testing | Playwright | Already in QuickScale |
-| 16 | Linting | ESLint + Prettier | Standard tooling |
-| | **Backend Integration** | | |
-| 17 | Authentication | Django allauth (backend) | Handled by QuickScale auth module |
-| 18 | API Client | TanStack Query | Handles fetch + caching |
-
-**Optional Utilities (for CRM):**
-- **date-fns** — Date handling (tree-shakeable, shadcn uses it)
-- **Recharts** — Charts (shadcn/charts uses it)
-- **TanStack Table** — Data tables (shadcn uses it)
-
-**Distribution Strategy:**
-1. Store themes in `quickscale_core/generator/templates/themes/{theme_name}/`
-2. User selects theme via `quickscale plan` → `quickscale apply`
-3. Generator copies theme files to user's project (Jinja2 rendering)
-4. User owns generated code completely, customizes immediately
-5. **NO embed/update for themes** - one-time scaffolding only
-
-**Workflow:**
-```bash
-# Create project with React theme (sole theme)
-quickscale plan myproject
-# → Theme is always: showcase_react (React + shadcn/ui)
-# → Select modules to embed: auth, blog
-quickscale apply
-
-# Vertical themes such as CRM remain planned work, not current CLI syntax
-```
-
-**Theme Directory Structure:**
-```
-quickscale_core/generator/templates/
-└── themes/
-    └── showcase_react/        # React + shadcn/ui (DEFAULT) ✅
-      ├── src/
-      │   ├── components/
-      │   │   ├── social/
-      │   │   └── ui/               # shadcn/ui components
-      │   ├── hooks/
-      │   │   ├── useModules.ts
-      │   │   └── usePublicSocialSurface.ts
-      │   ├── lib/
-      │   │   ├── analytics.ts      # Dormant PostHog starter helper
-      │   │   └── utils.ts          # shadcn/ui utilities
-      │   ├── pages/
-      │   │   ├── SocialEmbedsPublicPage.tsx
-      │   │   └── SocialLinkTreePublicPage.tsx
-      │   ├── App.tsx
-      │   └── main.tsx
-      ├── templates/
-      │   ├── index.html.j2         # SPA entry point
-      │   └── social/
-      │       ├── embeds.html.j2    # Django-owned public embed route
-      │       └── link_tree.html.j2 # Django-owned public social route
-      ├── components.json.j2
-      ├── tailwind.config.js.j2
-      ├── vite.config.ts.j2
-      ├── package.json.j2
-      └── public/
-          └── favicon.svg.j2         # Static assets
-```
-
-Fresh generations copy `showcase_react/src/**` into the generated project's
-`frontend/src/` directory and copy `showcase_react/templates/**` into Django
-  `templates/`. Only fresh `showcase_react` generations auto-scaffold the Django-owned
-  public `/social` and `/social/embeds` pages. `showcase_react` is the sole theme;
-  QuickScale ships no server-rendered theme stubs and no vertical theme template trees.
-
-
-**Key Characteristics:**
-- ❌ NOT runtime dependencies (just generated code)
-- ❌ NO updates after generation (user owns completely)
-- ✅ One-time scaffolding, user owns completely
-- ✅ `showcase_react` is the sole shipped starter theme
-- ✅ Fresh `showcase_react` generations include dormant analytics starter support and
-  Django-owned public social pages
-- ✅ Generated starter output surfaces billing as a module flag only (`modules.billing`);
-  the generated SPA does not currently include billing dashboard cards, sidebar navigation entries,
-  org-dashboard billing cards/links, module paths for billing, or full-document links into
-  billing Django pages. The org-switch blocker is resolved — see "Multi-org membership and org-switch" below; these entry points
-  can now be restored. Teams routes, navigation, flags, and dashboard cards remain excluded until teams ships
-- ❌ Complete vertical themes are not part of the current shipped CLI surface yet
-- ✅ Module releases may extend managed backend/runtime surfaces in existing projects, but newly scaffolded theme-owned routes, navigation, registries, and page source are only guaranteed on fresh generation or explicit manual adoption
-
-**Multi-org membership and org-switch:**
-Previously, the `showcase_react` SPA performed org-switches client-side while the
-server resolved the org from the session, creating a dual-authority problem (a
-client-side switch could silently operate on the previous session org).
-
-**Resolution:** Regular SaaS users belong to
-exactly one organization. There is no org switcher in the user-facing UI. The
-server session (`ACTIVE_ORG_SESSION_KEY`) is the sole authority for org resolution
-for regular users, eliminating the dual-source-of-truth problem.
-
-Consequences:
-- Billing SPA entry points (dashboard cards, sidebar navigation,
-  `modulePaths.billing`) can be restored — the wrong-org-after-switch bug does
-  not exist when there is no switch
-- The org switcher is removed from the regular user UI
-- VIEW-AS (superuser-only session override, already shipped) remains the sole
-  path for operator org-scope debugging
-- No explicit-org API contract or session-sync endpoint is needed
-- Future multi-org membership is not precluded, but would require revisiting
-  this decision and implementing the explicit-org API contract at that time
-
----
-
-
-
-#### **Summary: Modules vs Themes**
-
-| Aspect | Modules | Themes |
-|--------|---------|--------|
-| **Distribution** | Split branches (git subtree) | Generator templates (Jinja2) |
-| **User Command** | `quickscale plan --add` | `quickscale plan` (theme selection) |
-| **Updates** | `quickscale update` (ongoing) | N/A (user owns code) |
-| **Lifecycle** | Runtime dependency | One-time scaffolding |
-| **Ownership** | Shared (can push back) | User owns completely |
-| **Customization** | Minimal (mostly backend) | Heavy (colors, layout, etc.) |
-| **Backend/Frontend** | 70% backend, 30% frontend | 10% backend, 90% frontend |
-
-**For detailed workflow documentation** (split branch mechanics, conflict resolution, troubleshooting), see [§Module & Theme Architecture](#module-theme-architecture) above
+Design detail: [organizations.md](./organizations.md). Isolation rules:
+§[Multi-tenant SaaS Architecture](#multitenant-saas-architecture).
 
 ---
 
@@ -390,130 +210,50 @@ Legacy `config.yml` and `file_hashes.yml` are compatibility inputs only: they ar
 - ✅ Package `pyproject.toml` version fields and any exported module `__version__` string MUST match `module.yml` when they exist
 - ✅ Legacy `v`-prefixed stored versions normalize to the manifest form without the prefix
 
-#### **Operational Properties**
+#### **Idempotency Requirements**
 
-- **Declarative**: User specifies desired state in YAML; tool computes and executes changes
-- **Idempotent**: Running apply with unchanged config is safe (no-op, no re-execution)
-- **Incremental**: Apply computes delta between desired and applied state; only applies necessary changes
-- **Traceable**: State file records what modules/versions/commits were applied and when
-- **Recoverable**: State enables drift detection and recovery workflows
-
-#### **Implementation Rules**
-
-**State Computation** (`quickscale apply`):
-1. Acquire advisory lock on `.quickscale/state.yml` (fail-fast if held)
-2. Read `quickscale.yml` (desired state)
-3. Read `.quickscale/state.yml` (applied state; read-through import from legacy `config.yml`/`file_hashes.yml` when consolidated sections are absent)
-4. Compute delta (what changed)
-5. Show delta to user for confirmation
-6. Execute changes
-7. Write new state to `.quickscale/state.yml` with consolidated sub-sections
-8. Release advisory lock
-
-**Idempotency Requirements**:
 - ❌ NEVER re-execute already-applied modules
 - ✅ Skip modules that are already embedded
 - ✅ Only embed modules that appear in desired state but not in applied state
 - ✅ Remove modules that were applied but no longer appear in desired state
 
-**State Integrity**:
+#### **State Integrity**
+
 - ✅ Write state file atomically (no partial writes)
 - ✅ Include timestamps plus canonical installed module version/commit metadata for auditing
-- ✅ Never corrupt state from manual edits (reject if format invalid)
-- ✅ Advisory lock around `state.yml` read/modify/write so concurrent `apply` fails closed instead of racing
+- ✅ Never repair state from manual edits — reject an invalid format outright
+- ✅ Hold an advisory lock (`.quickscale/<name>.lock`, exclusive-create, fail-fast)
+  around every `state.yml` read/modify/write so concurrent `apply` fails closed
+  instead of racing
+- ✅ Recovery state is separate: `.quickscale/apply-recovery.yml` holds the
+  saga-model apply-recovery ledger and is not part of applied state
 
-#### **Related Files**
-
-- **Module tracking**: `.quickscale/state.yml` — The sole authoritative applied-state store. Per-module consolidated tracking fields (`prefix`, `branch`, `installed_at`) and the `managed_files` sub-section replace the legacy `config.yml` and `file_hashes.yml`. Legacy files are read-through imported as compatibility inputs when `state.yml` lacks consolidated sections and ignored when consolidated sections are present.
-- **Advisory lock**: `.quickscale/<name>.lock` — Exclusive-create file-based advisory lock used to serialize concurrent operations that mutate `state.yml`. Fail-fast contention; stale-lock inspection and manual-clear guidance only.
-- **Recovery state**: `.quickscale/apply-recovery.yml` — Separate recovery-only state for the saga-model apply recovery ledger, shipped as a 16-step checkpointed ledger with atomic writes and resume gating (`quickscale_core/apply/executor.py`, `ledger.py`).
-- **User manual**: See [user_manual.md §4.3](./user_manual.md#43-planapply-commands-shipped-in-v0680) for workflow examples and CLI usage.
-- **Project structure**: See [scaffolding.md §5](./scaffolding.md#generated-project-output) for complete project layout including state files.
-
----
+The apply execution sequence, the delta computation, and the declarative/
+idempotent/incremental/traceable/recoverable properties they produce are described
+in [plan-apply-system.md §Execution Order](./plan-apply-system.md#execution-order)
+and [§State Management](./plan-apply-system.md#state-management). Workflow examples:
+[user_manual.md §4.3](./user_manual.md#43-planapply-commands).
+Generated layout: [generated_project_structure.md](./generated_project_structure.md#state-and-module-metadata).
 
 ### Module Configuration Strategy {#module-configuration-strategy}
 
-**Architectural Decision:** Modules require configuration when embedded. QuickScale uses a **plan/apply workflow with declarative YAML configuration**:
+**Rule:** Module configuration is declarative. `quickscale plan` selects modules
+and writes `quickscale.yml`; module-specific values are set in `quickscale.yml`
+(optionally captured interactively via `quickscale plan --configure-modules`);
+`quickscale apply` materializes them.
 
-#### **Configuration via Plan/Apply**
+- ✅ Plan/apply is the primary workflow — desired config lives in
+  `quickscale.yml`, applied config is tracked in `.quickscale/state.yml`
+- ✅ Apply owns the wiring: `INSTALLED_APPS`, module-specific settings,
+  module URLs, and the initial migration
+- ❌ The user never hand-edits `settings.py`, `urls.py`, or `INSTALLED_APPS` to
+  install a module
 
-**How**:
-- `quickscale plan myapp --add auth` → adds auth module to configuration
-- `quickscale plan` selects modules and writes `quickscale.yml`
-- Module-specific options are configured in `quickscale.yml` before `quickscale apply`
-- `quickscale apply` → embeds modules and applies configuration automatically
-- User does NOT manually edit settings.py, urls.py, or INSTALLED_APPS
-- Configuration is tracked in `.quickscale/state.yml`
+Schema and worked examples:
+[plan-apply-system.md §Schema Definitions](./plan-apply-system.md#schema-definitions) and
+[user_manual.md §4.3](./user_manual.md#43-planapply-commands).
 
-**Example**:
-```bash
-$ quickscale plan myapp
-? Select theme (showcase_react): showcase_react
-? Select modules: auth,storage
-
-✅ Configuration saved to quickscale.yml
-
-$ quickscale plan myapp --configure-modules
-# optionally capture module-specific values such as modules.storage.public_base_url
-
-$ quickscale apply
-✅ Modules embedded successfully!
-Automatic changes made:
-  ✅ Added selected modules to INSTALLED_APPS
-  ✅ Added module-specific settings wiring
-  ✅ Added module URLs where needed
-  ✅ Ran initial migrations where applicable
-```
-
-**Benefits**:
-- ✅ Declarative configuration (version-controllable quickscale.yml)
-- ✅ Reproducible project generation
-- ✅ No manual settings.py / urls.py editing required
-- ✅ Terraform-style workflow (plan → review → apply)
-
-**Implementation Requirements**:
-1. `quickscale plan` selects modules and writes `quickscale.yml`
-2. Apply handler automatically updates:
-   - INSTALLED_APPS in settings.py
-   - Module-specific settings (e.g., ACCOUNT_ALLOW_REGISTRATION)
-   - urls.py (include module URLs)
-   - Runs initial migration (`python manage.py migrate`)
-3. Configuration state stored in `.quickscale/state.yml` for tracking/updates
-
-**Current workflow**:
-- ✅ Use `quickscale plan` to select modules and generate `quickscale.yml`
-- ✅ Use `quickscale plan --configure-modules` when you want supported module
-  options captured interactively during planning
-- ✅ Edit module-specific values directly in `quickscale.yml` as needed
-- ✅ Use `quickscale apply` to materialize the configuration
-
----
-
-#### **Current YAML Workflow**
-
-**Current workflow**:
-```yaml
-# quickscale.yml
-version: "1"
-project:
-  slug: myproject
-  package: myproject
-  theme: showcase_react
-modules:
-  auth: {}
-  storage:
-    backend: s3
-    public_base_url: https://cdn.example.com
-docker:
-  start: true
-  build: true
-
-# Usage: quickscale plan myproject --configure-modules → optionally captures
-#        module values interactively for supported modules
-#        edit quickscale.yml module values as needed
-#        quickscale apply → executes configuration
-```
+#### Per-module desired-config contracts
 
 **Auth desired-config validation rule:** `quickscale.yml` is
 validated against the canonical auth desired-config contract before
@@ -537,45 +277,39 @@ URLs must use `public_base_url` when configured and fall back to `MEDIA_URL`
 behavior in local development when it is blank. `custom_domain` is not part of
 the supported storage contract.
 
-**Backups contract rule:** `modules.backups` artifacts are
-private operational files. They MUST NOT use `public_base_url`, public media
-URLs, or template-visible asset helpers. For generated QuickScale PostgreSQL
-projects, the supported local Docker and Railway backup/restore contract
-targets PostgreSQL 18 server/client tooling and native PostgreSQL custom dumps
-as the real disaster-recovery path. JSON artifacts are export-only: they
-remain acceptable for non-PostgreSQL development/test fixture export and
-operator inspection, but they are NOT a supported restore surface for
-generated PostgreSQL projects. Admin create/delete/history flows remain
-available, admin download and validate stay local-file-only in v1, and the
-BackupPolicy admin page exposes a guarded restore surface only for row-backed
-local artifacts already present on disk; there is no standalone admin
-upload/offload action and no admin materialization path for remote-only
-artifacts. Scheduled execution remains command-driven only
-(`manage.py backups_create --scheduled` or equivalent platform cron job).
-Destructive restore execution remains guarded across both supported surfaces:
-BackupPolicy-admin restore requires exact filename confirmation plus the
-existing environment gate and never materializes remote-only artifacts, while
-CLI restore remains available with its existing syntax under the same
-guardrails. Private-remote credentials MUST be referenced by
-environment-variable name only; raw credential values MUST NOT be persisted in
-`quickscale.yml`, `.quickscale/state.yml`, or `BackupArtifact` rows. When
-`modules.backups.local_directory` is repo-relative, `quickscale apply` MUST add
-that directory to `.gitignore` without hiding `.quickscale/state.yml`.
-`quickscale apply` MAY update managed backend/runtime wiring, but it does NOT
-rewrite user-owned Docker, Compose, CI, or E2E workflow files in already-
-generated projects; when the PostgreSQL 18 backups contract requires new image
-packages or runner tooling, existing generated projects MUST adopt those
-changes manually, while fresh generations pick them up from the updated
-templates. This section defines the authoritative contract for the implemented
-follow-up, and the current runtime enforcement, generated templates, and
-workflow coverage are aligned to it.
+**Backups contract rule:** `modules.backups` artifacts are private operational
+files.
 
-**Decision Rule**:
-- Plan/apply is the primary workflow
-- `quickscale plan` selects modules and creates `quickscale.yml`
-- Module-specific values are configured in `quickscale.yml` before apply
+- ✅ Native PostgreSQL 18 custom dumps are the real disaster-recovery path for
+  generated PostgreSQL projects, on both local Docker and Railway
+- ✅ JSON artifacts are **export-only** — acceptable for non-PostgreSQL
+  development/test fixture export and operator inspection
+- ✅ Destructive restore is guarded on both supported surfaces: BackupPolicy-admin
+  restore requires exact filename confirmation plus the environment gate; CLI
+  restore keeps its existing syntax under the same guardrails
+- ✅ Scheduled execution is command-driven only (`manage.py backups_create
+  --scheduled`, or an equivalent platform cron job)
+- ✅ Private-remote credentials are referenced by environment-variable **name**
+  only
+- ✅ When `modules.backups.local_directory` is repo-relative, `quickscale apply`
+  MUST add that directory to `.gitignore` without hiding `.quickscale/state.yml`
+- ❌ Backup artifacts MUST NOT use `public_base_url`, public media URLs, or
+  template-visible asset helpers
+- ❌ JSON artifacts are NOT a supported restore surface for generated PostgreSQL
+  projects
+- ❌ No standalone admin upload/offload action, and no admin materialization path
+  for remote-only artifacts — the admin restore surface covers row-backed local
+  artifacts already on disk; admin download and validate stay local-file-only
+- ❌ Raw credential values MUST NOT be persisted in `quickscale.yml`,
+  `.quickscale/state.yml`, or `BackupArtifact` rows
 
-**Authoritative Reference**: [§Plan/Apply Architecture](#planapply-architecture) above (this document)
+`quickscale apply` MAY update managed backend/runtime wiring, but does NOT rewrite
+user-owned Docker, Compose, CI, or E2E workflow files in already-generated
+projects. When the PostgreSQL 18 backups contract requires new image packages or
+runner tooling, existing generated projects adopt those changes manually; fresh
+generations pick them up from the updated templates.
+
+Engine boundary: §[DR Engine Boundary Contract](#disaster-recovery-engine-boundary-contract-f5--m10).
 
 ---
 
@@ -619,174 +353,69 @@ workflow coverage are aligned to it.
 
 ### Module Derivation Schema {#module-derivation-schema}
 
-**Architectural Decision (Phase 4, Finding 1):** A companion derivation schema describes how `module.yml` configuration options normalise, validate, and project into Django settings, making the manifest authoritative for behaviour that was historically duplicated across CLI contract files, the now-deleted `module_wiring_specs.py`, and imperative `normalize_*` / `validate_*` helpers.
-
-**Companion, not extension:** `ModuleDerivationSchema` and its six dataclasses (`NormalizationRule`, `ValidationRule`, `LegacyKeyAlias`, `DerivedSetting`, `OptionDerivation`, `ModuleDerivationSchema`) live in `quickscale_core/src/quickscale_core/manifest/derivation.py`. They are exported from `quickscale_core.manifest` alongside the existing `ModuleManifest` and `ConfigOption` types. They do **not** extend, subclass, or alter `ModuleManifest` or `ConfigOption`. The existing manifest loader, runtime behaviour, and CLI contract-file path are unchanged.
-
-**YAML-friendly shapes:** All dataclass fields use simple scalars (`str`, `int`, `float`, `bool`, `None`), lists, and dicts so `module.yml` `derivation:` sections round-trip through `yaml.safe_load` (via `load_manifest`/`build_schema_from_manifest`) without custom codecs.
-
-**Dataclass summary:**
-
-| Type | Purpose |
-|------|---------|
-| `NormalizationRule` | Declarative normalisation transformation (choice-map, lowercase, strip, coerce) |
-| `ValidationRule` | Declarative validation constraint (choices, range, required, pattern, type) |
-| `LegacyKeyAlias` | Mapping from deprecated configuration keys to current replacements |
-| `DerivedSetting` | Django setting projected from one or more configuration options |
-| `OptionDerivation` | Per-option bundle of normalisation, validation, alias, and derivation rules |
-| `ModuleDerivationSchema` | Top-level container keyed by module name with per-option derivations and shared rules |
-
-**Why this exists:** Declarative derivation is the single source of per-module normalisation and validation knowledge, replacing imperative `normalize_*` / `validate_*` functions and hand-written CLI contract files. An imperative-freeze guardrail prevents modules from growing new imperative contract logic.
+**Rule:** Declarative derivation is the **single source** of per-module
+normalisation and validation knowledge. `module.yml` — not imperative helpers —
+is authoritative for how a configuration option normalises, validates, and
+projects into a Django setting.
 
 **Constraints:**
-- ✅ Derivation types are frozen dataclasses (immutable after construction)
-- ✅ All field types are YAML-safe (scalars, lists, dicts)
-- ✅ `ModuleDerivationSchema` is a companion to `ModuleManifest`, not a replacement
-- ✅ YAML loading from `module.yml` is supported
-- ✅ Runtime derivation execution is active for analytics and listings
+- ✅ Derivation types are frozen dataclasses and all field types are YAML-safe
+  (scalars, lists, dicts), so `module.yml` `derivation:` sections round-trip
+  through `yaml.safe_load` without custom codecs
+- ✅ `ModuleDerivationSchema` is a **companion** to `ModuleManifest` — it does not
+  extend, subclass, or alter `ModuleManifest` or `ConfigOption`
+- ✅ Runtime derivation execution is currently active for analytics and listings;
+  completing the migration across the remaining modules is separate work
+- ❌ No new imperative `normalize_*` / `validate_*` contract logic, and no
+  hand-written CLI contract files — an imperative-freeze guardrail enforces this
 
----
+Type reference:
+[implementation_contract.md §Manifest Adapter Architecture](./implementation_contract.md#manifest-adapter-architecture).
 
-### Module Implementation Checklist {#module-implementation-checklist}
 
-**Architectural Decision:** Every QuickScale module must be complete, embeddable, and usable immediately after `quickscale apply`. This checklist ensures no gaps between planning and implementation.
+### Module Implementation Requirements {#module-implementation-checklist}
 
-#### **Required Components (All Modules)**
+**Rule:** Every QuickScale module must be complete, embeddable, and usable
+immediately after `quickscale apply`. A module that requires the user to write
+code before it works is not shippable.
 
-**Service-style exception (integration-only modules):**
-- [ ] If a module's approved contract is settings plus helper/service APIs only, it may omit `models.py`, `views.py`, `urls.py`, `admin.py`, and migrations
-- [ ] This exception must be called out explicitly in `decisions.md` or the active roadmap milestone before implementation starts
-- [ ] Service-style modules still require package metadata, documented public APIs, lifecycle wiring when needed, and tests for the shipped contract
+**Constraints:**
+
+- ✅ `src/` layout, with `tests/` outside `src/`, and a `module.yml` at package root
+- ✅ Domain modules MUST ship **concrete** models plus a `0001_initial` migration
+  — abstract-only modules force user implementation and produce "missing
+  QuerySet" errors at runtime
+- ✅ `quickscale_modules/*` MUST have a `README.md` (they are distributed standalone)
+- ✅ Templates, settings wiring, URLs, and migrations must work immediately after
+  embed, with no user customization required
+- ✅ `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in any
+  test settings file is a Database Policy violation
+- ✅ 90% overall mean + 80% per-file minimum coverage (CI enforced)
+- ✅ Module code MUST read configurable values from settings, never hardcode them
+- ❌ Do not hand-edit `AVAILABLE_MODULES` — CLI module discovery is
+  discovery-derived (`get_discovered_module_names()`); a module only needs to be
+  discoverable
+
+**Service-style exception (integration-only modules):** a module whose approved
+contract is settings plus helper/service APIs only MAY omit `models.py`,
+`views.py`, `urls.py`, `admin.py`, and migrations. The exception MUST be recorded
+explicitly in this file or in the active roadmap milestone **before**
+implementation starts — it is prior approval, not a post-hoc justification.
+Service-style modules still require package metadata, documented public APIs,
+lifecycle wiring where needed, and tests for the shipped contract.
+
+**Why this is a rule and not a preference:** `quickscale plan --add <name>` +
+`quickscale apply` is the primary distribution mechanism. `manage.py migrate`
+must succeed straight after embedding, so migrations for concrete models are the
+module's responsibility, not the user's. Forcing placeholder models or admin
+classes onto genuinely service-style modules creates fake extension seams — which
+is why the exception exists but must be explicit.
+
+**Authoring guide** — package layout, the `pyproject.toml` and `mypy.ini`
+templates, registration steps, and the per-component checklist are in
+[module-extension.md § Building a Module](./module-extension.md#building-a-module-authoring-checklist).
 
 <a id="package-structure-and-naming-conventions"></a>
-**1. Package Structure:**
-- [ ] `quickscale_modules/<name>/pyproject.toml` — Package config (see template below)
-- [ ] `quickscale_modules/<name>/README.md` — Installation, configuration, and usage guide
-- [ ] `quickscale_modules/<name>/src/quickscale_modules_<name>/` — Source code (src/ layout)
-- [ ] `quickscale_modules/<name>/tests/` — Test suite (outside src/)
-- [ ] `quickscale_modules/<name>/tests/__init__.py` — Tests package init
-- [ ] `quickscale_modules/<name>/tests/settings.py` — Django test settings
-- [ ] `quickscale_modules/<name>/tests/conftest.py` — pytest fixtures
-
-**1.1. Module pyproject.toml Template:**
-```toml
-[project]
-name = "quickscale-module-<name>"
-version = "0.XX.0"
-description = "QuickScale <name> module - brief description"
-requires-python = ">=3.13,<3.15"
-authors = [{name = "Experto AI", email = "victor@experto.ai"}]
-license = "Apache-2.0"
-readme = "README.md"
-dynamic = ["dependencies"]
-
-[tool.poetry]
-packages = [{include = "quickscale_modules_<name>", from = "src"}]
-
-[tool.poetry.dependencies]
-python = ">=3.13,<3.15"
-Django = ">=6.0.3,<7.0.0"
-# Add module-specific runtime dependencies here (e.g., django-allauth, Pillow)
-
-[tool.poetry.group.dev.dependencies]
-# Minimal dev dependencies - shared tools come from root pyproject.toml
-pytest-django = "^4.7.0"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "tests.settings"
-pythonpath = ["."]
-python_files = ["test_*.py"]
-testpaths = ["tests"]
-addopts = "-v --cov=src/quickscale_modules_<name> --cov-report=html --cov-report=term-missing --cov-fail-under=70"
-```
-
-**1.2. Register Module in Root pyproject.toml:**
-Add the module to root `pyproject.toml` for centralized testing:
-```toml
-[tool.poetry.dependencies]
-quickscale-module-<name> = {path = "./quickscale_modules/<name>", develop = true}
-```
-
-**1.3. Register Module in Root mypy.ini:**
-Add mypy overrides for the module (Django models need relaxed type checking):
-```ini
-[mypy-quickscale_modules_<name>.*]
-disallow_untyped_defs = False
-warn_return_any = False
-warn_unused_ignores = False
-disable_error_code = var-annotated
-```
-
-**2. Source Code (src/quickscale_modules_<name>/):**
-- [ ] `__init__.py` — Module version (e.g., `__version__ = "0.67.0"`)
-- [ ] `apps.py` — Django AppConfig with proper `name` and `label`
-- [ ] `models.py` — **Concrete model(s)** for immediate use (required for domain modules; not required for explicitly approved service-style/integration-only modules)
-- [ ] `views.py` — Views with `model` attribute set (required when the module ships routed views)
-- [ ] `urls.py` — URL patterns with `app_name` for namespacing (required when the module ships routed views)
-- [ ] `admin.py` — Admin registration for concrete models or operational surfaces (required only when the module ships an admin surface)
-- [ ] `migrations/0001_initial.py` — **Initial migration for concrete models** (not required for explicitly approved service-style/integration-only modules)
-- [ ] `migrations/__init__.py` — Migrations package init (only when migrations exist)
-
-**3. Templates (if applicable):**
-- [ ] `templates/quickscale_modules_<name>/` — Zero-style semantic HTML templates
-- [ ] Templates must work immediately after embed (no user customization required)
-
-**4. CLI Integration (quickscale_cli):**
-- [ ] `AVAILABLE_MODULES` in `module_commands.py` is discovery-derived (`get_discovered_module_names()`) — no manual list edit needed; just ensure the module is discoverable (correct manifest/package layout)
-- [ ] Create `configure_<name>_module()` function for interactive prompts
-- [ ] Create `apply_<name>_configuration()` function to:
-  - [ ] Add dependencies to project's `pyproject.toml`
-  - [ ] Add module to `INSTALLED_APPS` in settings.py
-  - [ ] Add module-specific settings
-  - [ ] Add module URLs to project's `urls.py`
-- [ ] Add module to `MODULE_CONFIGURATORS` dictionary
-- [ ] Update embed command docstring with module description
-- [ ] Add module-specific "Next steps" instructions in embed output
-
-**5. Template Integration (showcase_react theme):**
-- [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure
-
-**6. Testing:**
-- [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
-- [ ] 90% overall mean + 80% per file minimum coverage (CI enforced)
-- [ ] Tests use concrete models (not abstract stubs)
-- [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
-
-**7. Split Branch Publishing:**
-- [ ] Run `./scripts/publish_module.sh <name>` after implementation
-- [ ] Verify split branch exists: `splits/<name>-module`
-
-#### **Rationale**
-
-**Why service-style modules can skip models/admin/migrations when explicitly approved:**
-- Some modules exist to wrap an external provider or shared runtime behavior rather than own domain data
-- Forcing placeholder models, admin classes, or migrations creates fake extension seams and misleading maintenance work
-- The exception must stay explicit so modules do not silently narrow their supported contract
-
-**Why concrete models are required (not just abstract):**
-- Modules must work immediately after `quickscale apply`
-- Users should not need to create their own models to use the module
-- Abstract-only modules require user implementation, causing "missing QuerySet" errors
-- Concrete models can still be extended by users who need customization
-
-**Why initial migrations are required:**
-- `poetry run python manage.py migrate` must succeed after embedding
-- Migrations for concrete models are module responsibility, not user's
-- Abstract models cannot be migrated; concrete models can and must be
-
-**Why CLI integration is required:**
-- `quickscale plan --add <name>` + `quickscale apply` is the primary distribution mechanism
-- Interactive configuration provides immediate, working setup
-- Users should not manually edit settings.py, urls.py, or pyproject.toml
-
-**Why template integration is required:**
-- Generated projects show module status in navigation and homepage
-- Users can immediately see what's installed and access module features
-- Reduces confusion about which modules are available
 
 ---
 
@@ -840,38 +469,20 @@ The authoritative current CLI command surface now lives in [implementation_contr
 
 ### Module-Specific Architecture Decisions {#module-specific-architecture}
 
-#### Blog Module - Custom Django Implementation
+#### Blog Module — Custom Django Implementation
 
-**Architectural Decision:** Build custom Django blog instead of using existing solutions.
+**Decision:** The blog module is a custom Django implementation, not a wrapper
+around an existing blogging package.
 
-**Rationale**:
-- ❌ **Wagtail**: Too heavy (full CMS with 50+ dependencies), contradicts QuickScale's lightweight philosophy
-- ❌ **django-blog-zinnia**: Unmaintained (last release 2016), incompatible with Django 4.x+
-- ❌ **Puput**: Wagtail-based (inherits Wagtail's complexity), overkill for simple blogging
-- ✅ **Custom Django**: Lightweight, Django-native, exactly the features needed, no CMS overhead
+**Rejected (do not re-introduce):**
+- ❌ **Wagtail** — a full CMS with 50+ dependencies; contradicts QuickScale's lightweight philosophy
+- ❌ **django-blog-zinnia** — unmaintained (last release 2016), incompatible with Django 4.x+
+- ❌ **Puput** — Wagtail-based, so it inherits Wagtail's complexity
 
-**Technical Stack**:
-- Django models (Post, Category, Tag, AuthorProfile)
-- django-markdownx for WYSIWYG Markdown editing
-- Pillow for image processing and thumbnails
-- Django syndication framework for RSS feeds
-
-**Features Included**:
-- Markdown content editing with live preview
-- Categories and tags for organization
-- Featured images with automatic thumbnail generation
-- RSS feed for content syndication
-- Responsive templates for the sole showcase_react theme
-
-**Features Deferred**:
-- Comments (use third-party like Disqus/Commento)
-- Advanced SEO (Open Graph, JSON-LD schema)
-- Related posts algorithm
-- Scheduled publishing (use django-celery-beat if needed)
-
-**Distribution**: Split branch pattern (`splits/simple-blog`), added via `quickscale plan` and `quickscale apply`
-
-**Theme Support**: showcase_react
+**Scope boundary:** comments, advanced SEO (Open Graph, JSON-LD), related-posts
+algorithms, and scheduled publishing are deliberately **out of scope** — users
+reach for a third party (Disqus/Commento, django-celery-beat). Adding any of them
+to the module requires a decision entry here.
 
 ---
 
@@ -883,40 +494,6 @@ management-command + environment-variable protocol. That orchestration
 belongs in centrally owned code, leaving only thin Django-facing surfaces in
 the embeddable module, reached through an explicit typed adapter rather than
 implicit env-var/stdout-JSON coupling.
-
-**Current state:**
-- **Centrally owned DR engine (`quickscale_core.dr_engine`):**
-  - `primitives` — snapshot creation, archive packaging, database custom-dump
-    capture.
-  - `recovery` — restore validation, ordered execution sequencing,
-    destructive-operation gating, orchestration flow.
-  - `verification` — verification-record assembly, rollback-pin lifecycle and
-    pin-field logic.
-  - `adapter` — explicit typed adapter boundary (`capture_snapshot`,
-    `fetch_snapshot_report`, `record_verification`,
-    `set_rollback_pin`, `build_database_plan`, `execute_database_restore`,
-    `sync_media`) that the CLI calls through a single bridge management
-    command.
-- **Embeddable `backups` module (`quickscale_modules_backups.services`):**
-  retains Django-backed orchestration surfaces including snapshot capture,
-  archive upload, sidecar capture, media-sync orchestration, and report-assembly
-  logic that reference the `quickscale_modules` Django app environment — the
-  higher-level platform orchestration that depends on Django project context.
-  ``sync_backup_snapshot_media`` takes an explicit ``target_runtime_settings``
-  parameter, with an env-var fallback preserved for admin/manual use through
-  the management commands below.
-- **CLI protocol:** The CLI
-  (`quickscale_cli/src/quickscale_cli/commands/dr_commands.py`) drives DR
-  through the explicit typed adapter (`quickscale_core.dr_engine.adapter`), called
-  via the single ``dr_adapter_call`` management command bridge (subprocess +
-  JSON stdout). The route kind marker is carried explicitly via the
-  ``target_runtime_settings`` dict — there is no env-var protocol in CLI
-  orchestration. Remaining management commands (``backups_create``,
-  ``backups_report``, etc.) are thin Django/admin-facing surfaces for manual
-  use, with env-var fallback in the service layer
-  (``_load_target_runtime_settings``). Railway-target media sync fail-closed
-  guard is preserved through the explicit ``ROUTE_KIND`` marker in the adapter
-  path.
 
 **Target ownership split:**
 
@@ -978,6 +555,12 @@ implicit env-var/stdout-JSON coupling.
 - **generated_project_structure.md**: Generated-project layout, artifact placement, and generation guardrails
 - **repository_layout.md**: Maintainer-repository layout and naming/import matrix
 - **scaffolding.md**: Concise structure hub plus compatibility anchors and backlinks into the structure companions
+- **plan-apply-system.md**: Plan/apply schemas, state management, and execution order
+- **module-extension.md**: Module extension contract and the module-authoring checklist
+- **generated_file_ownership.md**: Beta-migration `INTENTIONALLY_UNMANAGED` category inventory
+- **quality_tools.md**: Quality analyzers plus the baseline-monotonicity gate specification
+- **dr_engine_migration.md**: DR engine architecture and generated-project migration guidance
+- **user_manual.md**: CLI workflows and worked examples
 - **CHANGELOG.md**: Canonical all-version release history index
 - **docs/releases/**: Single public release notes, whether they are clearly labeled prepared artifacts awaiting publish or notes already linked from GitHub tags and release PRs
 - **docs/technical/release_summary_template.md**: Template for public release notes and release-prepared artifacts
@@ -990,23 +573,24 @@ implicit env-var/stdout-JSON coupling.
 
 ## Unit/Integration Gate Split
 
-**Rule:** The test suite is split into two independent gates — a DB-free unit gate and a PostgreSQL 18 integration gate. This split ensures fast, environment-independent feedback for core/CLI unit tests while module integration tests run against a restricted `NOBYPASSRLS` role for tenant-isolation coverage.
+**Rule:** The test suite is split into two independent gates — a DB-free unit gate
+and a PostgreSQL 18 integration gate.
 
-**Gate responsibilities:**
+- ✅ The unit gate (`make test-unit`) covers core + CLI only and requires no
+  PostgreSQL and no special database role
+- ✅ The integration gate (`make test-integration`) runs module suites against a
+  restricted `NOBYPASSRLS NOSUPERUSER` role, in both `ci.yml` and `publish.yml`,
+  with the RLS boot guard active — that restricted role *is* the tenant-isolation
+  coverage
+- ✅ `QUICKSCALE_ALLOW_BYPASSRLS=1` is set explicitly per-suite by a developer when
+  a BYPASSRLS-dependent test needs it
+- ✅ Known restricted-role failures are quarantined **individually against a
+  ticket**; quarantined entries are excluded from the exit code and coverage mean
+- ❌ No blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export on the unit path
+- ❌ Non-quarantined module-suite regressions never pass the gate
 
-| Gate | Make target | Scope | Database | Role |
-|------|-------------|-------|----------|------|
-| Unit | `make test-unit` | `quickscale_core/tests`, `quickscale_cli/tests` (DB-free, marked `not integration and not e2e`) | None | N/A |
-| Integration | `make test-integration` | `quickscale_modules/*/tests` (PostgreSQL-required, marked `not e2e`) | PostgreSQL 18 per-module test DB | `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` |
-
-**Key properties:**
-
-- The unit gate (`make test-unit`) is DB-free and runs core + CLI tests only. It requires no PostgreSQL and no special database role. The blanket `QUICKSCALE_ALLOW_BYPASSRLS=1` export is removed from the unit-only path.
-- The integration gate (`make test-integration`) runs module suites against a `NOBYPASSRLS` role in both `ci.yml` and `publish.yml`. The boot guard (RLS role check) stays active. Developers set the `QUICKSCALE_ALLOW_BYPASSRLS=1` hatch explicitly per-suite when BYPASSRLS-dependent tests need to run.
-- Non-quarantined module-suite regressions fail the gate. Known restricted-role failures are tracked individually with a ticketed quarantine mechanism that excludes quarantined entries from the exit code and coverage mean.
-- `make test` runs both gates sequentially as a combined check.
-
-**Related docs:** [validation_policy.md](./validation_policy.md) | [roadmap.md §Track 1](./roadmap.md)
+Gate scopes, make targets, and role grants:
+[validation_policy.md §Testing Standards](./validation_policy.md#testing-standards).
 
 ## Testing Standards
 
@@ -1140,7 +724,7 @@ alias.
 |-----|----------|---------------|--------|
 | F12.2 | `project_state.py:_read_through_import_legacy()` and `materialize_authoritative_state()`; `remove_command.py:_load_legacy_tracking()` and `_record_mutation_snapshots()` (legacy `config.yml` / `file_hashes.yml` compatibility paths) | One-time compatibility window: projects predating the consolidated `state.yml` format may still depend on legacy `config.yml` / `file_hashes.yml` data while consolidated `state.yml` becomes authoritative. `project_state.py` logs-and-skips stale legacy import failures so consolidation is not blocked; `remove_command.py` still consults and snapshots legacy `config.yml` so rollback-safe module removal can preserve compatibility tracking during the same sunset window. Does NOT cover `_load_managed_file_records_for_drift()` — its legacy `file_hashes.yml` fallback is a drift-detection design choice, not a compatibility path. | Remove once the consolidated state format has been deployed for two full releases with no known pre-consolidation projects in active use. |
 
-**Known violations:** tracked in [tech-audit.md](../others/tech-audit.md), the SSOT for found-not-yet-fixed fail-hard violations. Remediated findings are dropped from that file and closed out in CHANGELOG.md.
+**Known violations:** tracked in [tech-audit.md](../../tech-audit.md), the SSOT for found-not-yet-fixed fail-hard violations. Remediated findings are dropped from that file and closed out in CHANGELOG.md.
 
 ---
 
@@ -1157,7 +741,7 @@ alias.
 
 The CSRF CI gate continues to enforce the pairing requirement across all `csrf_exempt` callsites.
 
-**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../others/arch-audit.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../../arch-audit.md)
 
 ---
 
@@ -1179,7 +763,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - ✅ Shared database + shared schema; isolation enforced by PostgreSQL FORCE RLS on the 21 ENROLLED models (CRM 7, Forms 4, Billing 3, Blog 4, Listings 1, Social 2) plus ContextVar-driven `TenantManager` scoping — the authoritative registry overview is derived from model markers
 - ✅ Billing unit: `Subscription → Organization` (not per-user)
 - ✅ URL routing: flat routes only — `/crm/`, `/blog/`; no `/orgs/<slug>/` content routes
-- ✅ Users may belong to multiple organizations; org-switcher in the React UI
+- ✅ Regular users belong to exactly one organization; no org switcher in the user-facing UI (see §[Module & Theme Architecture](#module-theme-architecture) → Multi-org membership)
 - ✅ Module access is differentiated by credits plus ORM-backed `Plan.features` gates
 
 **RLS enforcement rule (critical):**
@@ -1215,15 +799,12 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 
 4. **Preserved schema surfaces — keep matching the baseline:** forms' four presets / 16 fields (auto-created via initial data migration), the five parent UNIQUE constraints and six composite FKs, and listings' pinned index names.
 
-5. **Quality maxima are shrink-only (v87):** the checked-in quality baseline
-   remains the comparison authority; remediation may only reduce a measured
-   maximum or leave it unchanged.  Documentation does not affect the quality
-   gate, and no migration or other historical artifact may be allowlisted to
-   avoid the gate.  The CRM and Forms initial migrations were remediated below
-   the generic large-file threshold through migration-local compaction while
-   preserving their exact historical operation, schema, data, and reverse
-   contracts.  Future compacting changes must use the same parity proof rather
-   than a baseline, threshold, or gate exemption.
+5. **Quality maxima are shrink-only.** Remediation may only reduce a measured
+   maximum or leave it unchanged. A migration that exceeds a threshold must be
+   compacted with a parity proof preserving its exact historical operation,
+   schema, data, and reverse contracts — never allowlisted, threshold-exempted,
+   or gate-exempted. See §[Quality Baseline Monotonicity](#quality-baseline-monotonicity)
+   for how the ceiling comparison is enforced.
 
 **Related docs:** [roadmap.md](./roadmap.md) | [CHANGELOG.md](../../CHANGELOG.md)
 
@@ -1233,13 +814,26 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - ❌ **PostgreSQL schema-per-tenant isolation** — schema metadata bloat, migration complexity with many tenants
 - ❌ **Supabase as the database provider** — valid for teams that want managed infrastructure, but introduces vendor lock-in and changes the cost/operational model; our self-hosted Railway approach uses the same GUC-carried tenant-context pattern without changing the current contract
 
-**Supabase architecture parity note:**
-QuickScale's shared-schema + FORCE RLS model is structurally equivalent to Supabase's multi-tenant architecture. Both use a PostgreSQL GUC parameter as the per-transaction tenant context carrier and `FORCE ROW LEVEL SECURITY` for tenant data isolation. The key difference is injection mechanism: Supabase's PostgREST sets the GUC from JWT claims before every query; QuickScale's execute-wrapper derives the GUC from the ContextVar at transaction start. Supabase also ships a dashboard "Impersonate User" button — QuickScale now ships VIEW-AS for the same restricted-role debugging need. In QuickScale's shipped surface, runtime admin/debug access stays on the restricted role; BYPASSRLS is reserved for the migration exception and any future explicitly documented non-runtime privileged path.
+**Supabase architecture parity note:** QuickScale's shared-schema + FORCE RLS
+model is structurally equivalent to Supabase's — both carry per-transaction tenant
+context in a PostgreSQL GUC and isolate with `FORCE ROW LEVEL SECURITY`; only the
+injection mechanism differs (PostgREST sets the GUC from JWT claims, QuickScale's
+execute-wrapper derives it from the ContextVar at transaction start). The rule this
+supports: runtime admin/debug access stays on the restricted role. **BYPASSRLS is
+reserved for the migration exception and any future explicitly documented
+non-runtime privileged path** — never for a debug or impersonation feature.
 
-**Operator debug mode — shipped VIEW-AS contract:**
-Django superusers may activate a debug session that scopes the entire request to a selected organization so they can see the app exactly as that org's members see it. The shipped surface uses the session key `quickscale_modules_orgs.debug_as_org_id` (superuser-only); `TenantMiddleware._resolve_debug_org()` overrides Solo/SaaS resolution when the key is present; the admin surface activates or exits the session; a debug banner renders while active; and every activation is audit-logged. No BYPASSRLS — the debug session runs under the same restricted runtime role as all other tenant paths, so RLS remains fully enforced.
+**Operator debug mode (VIEW-AS) contract:**
+- ✅ VIEW-AS is superuser-only, session-keyed
+  (`quickscale_modules_orgs.debug_as_org_id`), and resolved by
+  `TenantMiddleware._resolve_debug_org()` ahead of Solo/SaaS resolution
+- ✅ Every activation is audit-logged, and a debug banner renders while active
+- ❌ No BYPASSRLS — the debug session runs under the same restricted runtime role
+  as every other tenant path, so RLS stays fully enforced
 
-**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (current open work) | [arch-audit.md](../others/arch-audit.md) (current risk posture)
+Implementation detail: [organizations.md §Operator Debug Mode](./organizations.md#operator-debug-mode-view-as).
+
+**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (current open work) | [arch-audit.md](../../arch-audit.md) (current risk posture)
 
 ---
 
@@ -1300,148 +894,12 @@ and asserts every emitted file is classified.
    where a new or renamed template file is silently missed by both migration
    paths (e.g. ``start.sh``/``production.py``).
 
-5. **``INTENTIONALLY_UNMANAGED`` entries are organized by category with explicit rationale.** Each category below documents why those generated files are deliberately outside all migration paths. Add new entries to the appropriate category; add a new category only when the existing ones do not fit, with rationale.
-
-   **Category U1 — Project-level user-owned files (root-level generated config/docs):**
-    ``Makefile``, ``README.md``, ``.gitignore``, ``.dockerignore``, ``.editorconfig``,
-    ``.env.example``, ``.env``, ``scripts/lint.sh``, ``.github/workflows/ci.yml``,
-    ``poetry.lock``, ``db/init.sql``, ``OPERATIONS.md``.
-    Rationale: One-time scaffold that the user tailors to their deployment,
-    CI, and documentation needs.  ``poetry.lock`` is a dynamically generated
-    artifact created by ``_generate_poetry_lock()`` after all templates are
-    rendered; it is regenerated by the verification stack (``poetry lock``)
-    and is not a migration target.  Not migration targets.
-
-   **Category U2 — Package ``__init__`` markers:**
-   ``{package}/__init__.py``, ``{package}/settings/__init__.py``.
-   Rationale: These are identity-dependent only through the package name,
-   which the fresh-first path resolves by renaming the entire package
-   directory.  A separate taxonomy entry would duplicate the package-
-   rename logic.
-
-   **Category U3 — Django HTML templates:**
-   ``templates/404.html``, ``templates/500.html``, ``templates/base.html``,
-   ``templates/index.html``, ``templates/admin/index.html``,
-   ``templates/admin/app_index.html``,
-   ``templates/social/link_tree.html``, ``templates/social/embeds.html``.
-   Rationale: User-editable Django templates.  Unlike infrastructure files
-   (``Dockerfile``, ``start.sh``), they are not copy targets during migration.
-   Fresh-first preserves the recipient's templates; in-place does not touch
-   them.  Theme-specific template overrides (social) are
-   user-owned once generated.  ``templates/components/navigation.html`` is not a
-   copy target — ``showcase_react`` does not emit a
-   ``templates/components/navigation.html`` template.
-
-   **Category U4 — Static assets:**
-   ``frontend/public/favicon.svg``.
-   Rationale: User-owned static file.  Generated once; not a migration target.
-   ``static/css/style.css`` and ``static/images/favicon.svg`` are not copy
-   targets — ``showcase_react`` does not emit them.
-
-   **Category U5 — Test scaffolding:**
-   ``tests/__init__.py``, ``tests/conftest.py``, ``tests/test_example.py``.
-   Rationale: One-time generated test scaffold that users customize.
-
-   **Category U6 — Frontend root configs (user-owned after generation):**
-   ``frontend/package.json``, ``frontend/pnpm-workspace.yaml``,
-   ``frontend/.prettierignore``, ``frontend/.prettierrc``,
-   ``frontend/vitest.config.ts``, ``frontend/playwright.config.ts``,
-   ``frontend/components.json``, ``frontend/tailwind.config.js``,
-   ``frontend/index.html``.
-   Rationale: Unlike infrastructure frontend configs (``vite.config.ts``,
-   ``tsconfig.json``, ``eslint.config.js``, ``postcss.config.js``,
-   ``prettier.config.js``) which are in ``IN_PLACE_INFRASTRUCTURE_TARGETS``,
-   these files are either merged in-place with recipient identity
-   preservation (``package.json``) or user-editable after generation.
-   ``package.json`` is identity-preserved during in-place merge but does
-   not need to be a managed copy target since the donor's version already
-   carries the correct structural content.  ``tailwind.config.js``,
-   ``components.json``, ``playwright.config.ts``, ``.prettierrc``, and
-   ``index.html`` are user-owned after one-time generation.
-
-   **Category U7 — Frontend user-owned source files:**
-    ``frontend/src/main.tsx``, ``frontend/src/renderQuickScaleRoot.tsx``,
-    ``frontend/src/index.css``,
-    ``frontend/src/vite-env.d.ts``, ``frontend/src/posthog-js.d.ts``,
-    ``frontend/src/lib/utils.ts``, ``frontend/src/lib/analytics.ts``,
-    ``frontend/src/stores/themeStore.ts``, ``frontend/src/test/setup.ts``,
-    ``frontend/src/test/App.test.tsx``,
-    ``frontend/src/test/RootDispatch.test.tsx``,
-    ``frontend/src/test/PublicSocialPages.test.tsx``,
-    ``frontend/e2e/home.spec.ts``.
-    Rationale: User-editable application source, styles, type declarations,
-    utility helpers, and test files.  Not migration targets.  Specific
-    infrastructure-relevant files under ``frontend/src/`` (``useModules.ts``,
-    ``vite.config.ts``, ``tsconfig*.json``, ``eslint.config.js``,
-    ``postcss.config.js``, ``prettier.config.js``) are in the managed
-    tuples.  ``frontend/src/App.tsx`` is classified by the fresh-first
-    required recipient spec (``MODE_REQUIRED_SPECS``) — it is a required
-    preflight check for the fresh-first path and is copied from donor to
-    recipient during the copy-custom-router-and-pages step (see rule 7).
-    Everything else stays with the user.
-
-   **Category U8 — shadcn/ui components:**
-   All ``frontend/src/components/ui/*.tsx`` files.
-   Rationale: shadcn/ui components are copy-pasted user-owned code after
-   generation.  They are not migration targets.
-
-   **Category U9 — Layout components:**
-   ``frontend/src/components/layout/Header.tsx``,
-   ``frontend/src/components/layout/Layout.tsx``,
-   ``frontend/src/components/layout/Sidebar.tsx``.
-   Rationale: User-editable theme layout components.  Fresh-first copies
-   the donor component directory (via copy-custom-components, skipping
-   ``ui/``), but the taxonomy models these as user-owned because users
-   customize them extensively.
-
-   **Category U10 — Org/state components:**
-   ``frontend/src/components/orgs/OrgStatePanel.tsx``,
-   ``frontend/src/components/orgs/OrgSwitcher.tsx``.
-   Rationale: Generated org-management components that users customise
-   per-project.  Not migration targets.
-
-   **Category U11 — Social wrapper component:**
-   ``frontend/src/components/social/PublicSocialShell.tsx``.
-   Rationale: Theme-owned React wrapper for social module public pages.
-   The module-owned social surfaces (pages, hooks) are tracked separately
-   in ``IN_PLACE_MODULE_REACT_SURFACES``.  This shell is user-editable.
-
-   **Category U12 — Non-module pages:**
-   ``frontend/src/pages/Dashboard.tsx``, ``frontend/src/pages/NotFound.tsx``,
-   ``frontend/src/pages/ProfilePage.tsx``, ``frontend/src/pages/SettingsPage.tsx``.
-   Rationale: User-editable application pages, always emitted for the
-   React theme.  Fresh-first copies donor-only pages via the hardcoded
-   copy-custom-router-and-pages step, but individual pages are not
-   migration-managed taxonomy entries.
-
-   **Category U13 — Module-conditional pages (non-module-surface):**
-   ``frontend/src/pages/BlogPage.tsx``, ``frontend/src/pages/CrmPage.tsx``,
-   ``frontend/src/pages/ListingsPage.tsx``.
-   Rationale: Emitted only when the gating module is selected at generation
-   time.  After generation they are user-editable.  ``FormsPage.tsx``,
-   ``SocialLinkTreePublicPage.tsx``, and ``SocialEmbedsPublicPage.tsx``
-   are managed via ``IN_PLACE_MODULE_REACT_SURFACES`` (post-apply module
-   surface adoption targets) and are **not** in this category — they are
-   migration-managed, not intentionally unmanaged.
-
-   **Category U14 — Org pages (React theme):**
-   ``frontend/src/pages/orgs/OrgLayout.tsx``,
-   ``frontend/src/pages/orgs/OrgDashboardPage.tsx``,
-   ``frontend/src/pages/orgs/OrgMembersPage.tsx``,
-   ``frontend/src/pages/orgs/OrgSettingsPage.tsx``,
-   ``frontend/src/pages/orgs/OrgCreatePage.tsx``,
-   ``frontend/src/pages/orgs/OrgListPage.tsx``.
-   Rationale: Generated org-management pages that are user-editable after
-   generation.  Not migration targets.
-
-   **Category U15 — Non-infrastructure hooks:**
-   ``frontend/src/hooks/useOrgNavigation.ts``,
-   ``frontend/src/hooks/useOrgs.ts``,
-   ``frontend/src/hooks/useApi.ts``,
-   ``frontend/src/hooks/useFormSchema.ts``.
-   Rationale: User-editable React hooks.  ``useModules.ts`` and
-   ``usePublicSocialSurface.ts`` are in the managed tuples; the rest are
-   user-owned after generation.
+5. **Every ``INTENTIONALLY_UNMANAGED`` entry carries an explicit category and
+   rationale.** No entry may be added without stating why that generated file is
+   deliberately outside all migration paths. The inventory itself (categories
+   U1–U15) is owned by
+   [generated_file_ownership.md](./generated_file_ownership.md) — it is data the
+   conformance gate cross-checks, not policy.
 
 6. **Directory-level classification support.** The conformance gate
    (``_classify_emitted_path``) checks whether any parent directory of an
@@ -1467,7 +925,7 @@ and asserts every emitted file is classified.
    gate (rule 6) also checks ``MODE_REQUIRED_SPECS`` entries against
    ``INTENTIONALLY_UNMANAGED``.
 
-**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Finding 7](../others/arch-audit.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Finding 7](../../arch-audit.md)
 
 ---
 
@@ -1511,7 +969,7 @@ manual-verification ask as a maintainer to-do in
 roadmap.md checklist entry — the roadmap tracks repo-local implementation
 work, not manual maintainer operations against external infrastructure.
 
-**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Red flags](../others/arch-audit.md) | [beta-site-migration.md](../planning/beta-site-migration.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Red flags](../../arch-audit.md) | [beta-site-migration.md](../planning/beta-site-migration.md)
 
 ---
 
@@ -1604,13 +1062,9 @@ the per-file migration merge and a second hand-synced list.
 from real module source. The installed-wheel context uses synchronized bundled manifests
 for inventory and discovery; source-required paths remain fail-hard.
 
-**Background:** The ``quickscale_core`` package ships a synchronized manifest snapshot at
-``quickscale_core/data/manifests/*/module.yml`` for every shipped module. Before SA109,
-module discovery (``get_discovered_module_names``) only consulted the maintainer monorepo
-``quickscale_modules/`` workspace and raised ``ImproperlyConfigured`` for any other context
-— meaning the installed wheel crashed on import. AF7 was previously docstring-only
-(recorded in ``module_discovery.py:127`` and ``entry_point.py:17-23``) but was absent from
-the policy hub.
+The ``quickscale_core`` package ships a synchronized manifest snapshot at
+``quickscale_core/data/manifests/*/module.yml`` for every shipped module. Bundled
+manifests are inventory metadata, **not** module source trees.
 
 **Resolution precedence** (``get_discovered_module_names``):
 1. **Source inventory** — ``quickscale_modules/*/module.yml`` via ``discover_shipped_module_names()``
@@ -1643,15 +1097,11 @@ manifests raise ``ImproperlyConfigured`` rather than being silently skipped. Thi
 the AF7 fail-hard intent where it is genuinely load-bearing — generation needs real module
 source — while allowing the shipped module universe to be read from the bundled snapshot.
 
-**Eager discovery sites — remediated.** Two call sites previously triggered filesystem
-discovery at import time:
-
-1.  ``config_schema.py`` — had ``AVAILABLE_MODULES = set(get_discovered_module_names())``
-    at module level. Now lazy: discovery runs only when ``_validate_modules_section()``
-    encounters a non-empty ``modules`` mapping.
-2.  ``module_commands.py`` — used a static ``click.Choice`` that evaluated module names at
-    module load time. Now uses ``_LazyModuleChoice`` which defers resolution to first CLI
-    argument parsing.
+❌ **No import-time filesystem discovery.** Module discovery must be lazy —
+resolved on first use (config validation, CLI argument parsing), never at module
+import. An eager `AVAILABLE_MODULES = set(get_discovered_module_names())` or a
+static `click.Choice` evaluated at load time makes the installed wheel crash on
+import in the ``BUNDLED`` context.
 
 **Cross-reference:** This decision is a specific expression of the
 `Fail-Hard Principle <#fail-hard-principle>`_: source-required operations fail immediately
@@ -1662,6 +1112,159 @@ The ``ImproperlyConfigured`` identity rules in
 `§ImproperlyConfigured Exception Identity <#improperlyconfigured-exception-identity>`_
 apply: contracts-layer catchers import the contracts-layer exception; Django-runtime
 catchers import Django's.
+
+---
+
+### Module Version Lockstep and Embed Compatibility {#module-version-lockstep}
+
+**Architectural Decision (SA117):** Shipped modules are versioned in lockstep with the
+repository `VERSION`, and an embedded module manifest whose version does not match the
+running core is a hard error.
+
+**Rule 1 — Lockstep versioning.** Every `quickscale_modules/*/module.yml` `version:` field
+equals the repository `VERSION` at release time. Modules are not independently versioned.
+A module's version denotes *which release it shipped with*, not what changed inside it, so
+untouched modules are bumped along with everything else.
+
+**Why lockstep and not independent versions:** independent module versions only earn their
+keep when mixed-version combinations are supported. The global constraint above — *no
+existing users, no migration path, no backward compatibility; every change is a clean
+break* — means mixed versions are never a supported configuration. An independent version
+number therefore advertises a compatibility model that does not exist, and is worse than no
+number at all because consumers reach for it when checking compatibility.
+
+**Rule 2 — Embed compatibility is asserted, not assumed.** Module embedding and managed
+wiring regeneration must compare the embedded `module.yml` version against the running
+core's version and raise an explicit, descriptive error naming **both** versions when they
+differ. A version mismatch must never be allowed to surface as a downstream failure
+(missing setting, `KeyError`, absent derivation). This is a specific expression of the
+[Fail-Hard Principle](#fail-hard-principle): surface the root cause where it can be fixed.
+
+**Rule 2a — The comparison is canonical, not literal.** Version equality is decided on a
+canonical parse, so padded, whitespace-bearing, or otherwise non-canonical spellings
+(`0.87.0 `, `0.087.0`) do not satisfy a lockstep check they should fail. A version string
+that cannot be canonically parsed is itself a hard error, never a fallback to literal
+string comparison — a permissive comparison is the same defect class as the missing
+assertion Rule 2 exists to close.
+
+**Rule 3 — Release ordering is mandatory.** Modules are embedded by git subtree from
+`splits/<module>-module` on the public remote, so the published splits — not the working
+tree — are what users receive. The release sequence is therefore:
+
+1. Tag HEAD so the source is release-authoritative (`VERSION` matches the tag) — already
+   enforced by `scripts/publish_module.py`.
+2. Push refreshed `splits/*` carrying the tagged manifests.
+3. Publish to PyPI.
+
+Publishing core before the splits carry matching manifests ships a `quickscale apply` that
+fails for every user selecting any module. This ordering is not advisory.
+
+**Known limitation (tracked, not accepted as final):** the embed ref is a *branch*, so a
+matched version is not by itself a guaranteed-matched artifact — the branch can move after
+a release. Rules 1 and 2 make skew visible and diagnosable; making it structurally
+impossible requires pinning the embed to an immutable ref, tracked as roadmap **SA136**
+(retitled from SA119 on 2026-08-06, when the maintainer ratified the loop/seal contract and
+moved the work into the v87 release path). Until SA136 lands, Rule 3 is the only thing
+preventing skew, which is why it is mandatory rather than advisory. **SA136f replaces this
+section's Rule 3 and this paragraph** with the ratified loop/seal ordering; until that child
+closes, the rules below remain normative as written.
+
+---
+
+### Publish-Path Gate Coverage {#publish-path-gate-coverage}
+
+**Architectural Decision:** The publish path is a **full-coverage** gate context. Every
+repository conformance gate required in local and hosted contexts is also required in
+`.github/workflows/publish.yml`. Publish is not a narrower context.
+
+**Why publish does not get to trust upstream.** Publishing is the last step and the only
+irreversible one: a published artifact reaches users and cannot be recalled, only yanked
+after the fact. Every earlier context — local `check`, local CI, hosted CI — gates a state
+that is still editable, so a gap there costs a fix. A gap at publish costs a release. The
+asymmetry means the last step must **re-verify rather than trust**, even when the same
+gates already passed upstream on what is nominally the same commit. Re-running a gate that
+will pass is cheap; discovering at publish time that a required property was never checked
+in the path that ships is not.
+
+**Rule — no silent narrowing.** A gate absent from a required context is a defect unless
+that absence is a *declared exclusion* carried as registry metadata with a recorded
+rationale. An undeclared absence is an unowned gap, not an intentional design. This applies
+to every gate context, but publish specifically may not hold exclusions for reasons of
+redundancy or cost — those are exactly the reasons that produce a false-green release path.
+
+**Consequence.** A parity checker failing on a gate missing from `publish.yml` is
+reporting a real defect. Close the gap by adding the gate — never by declaring an
+exclusion to silence the check. Open gap status is tracked in
+[roadmap.md](./roadmap.md).
+
+---
+
+### Quality Baseline Monotonicity Gate (SA121) {#quality-baseline-monotonicity}
+
+**Rule:** The shrink-only quality baseline (`scripts/quality_baseline.json`) is
+enforced against its **merge-base ancestor**, never against its own current
+values. Any ceiling increase relative to the merge-base blob is a violation
+unless a structured, time-bounded waiver in `scripts/quality_waivers.json`
+covers it.
+
+**Why a separate helper exists:** `check_quality.sh` reads the current baseline
+and trusts it as authority, so an edit that raises a ceiling simultaneously
+erases the evidence of the prohibited growth.
+`scripts/check_quality_baseline_monotonicity.py` uses a different comparison
+authority — the merge-base blob from Git — so the growth stays visible.
+
+**Standing constraints:**
+
+- ✅ An active waiver is the only thing that clears an increase; every other
+  ledger state (malformed, duplicate, expired, orphan, stale base, over
+  ceiling) blocks the gate, as does missing coverage
+- ✅ Every waiver carries an owner, a reason, an expiry date, and a
+  `decision_ref` that MUST resolve to an anchor declared in **this file** — a
+  waived increase with no recorded decision is not a decision
+- ✅ The gate reads the merge-base blob from the local Git object store only
+- ❌ No automatic fetch, no `HEAD`/`HEAD^` fallback, and no silent skipping when
+  the base ref or base blob cannot be resolved — that is a hard failure, per
+  §[Fail-Hard Principle](#fail-hard-principle)
+- ❌ No migration or other historical artifact may be allowlisted, threshold-
+  exempted, or gate-exempted to avoid this check (see
+  §[Migration-Squash Decision](#migration-squash-decision) rule 5)
+- ✅ Per-file line ceilings (`large_files.*.max_lines`) are retired; see
+  [File-Size Metric Policy](#file-size-metric-policy). The large-file analyzer
+  may report advisory diagnostics, but line counts are not baseline entries,
+  monotonicity keys, waiver keys, regressions, or gate exit-status inputs. The
+  retained baseline sections are `dead_code`, `complexity`, and `duplication`.
+
+**Specification** — the baseline and waiver-ledger schemas, the waiver state
+machine, the canonical diagnostic record, the deterministic error envelope,
+ceiling-index construction, and merge-base resolution precedence are owned by
+[quality_tools.md §Baseline Monotonicity Gate](./quality_tools.md#baseline-monotonicity-gate-sa121).
+
+<!-- Compatibility anchors for inbound links and waiver `decision_ref` values.
+     The specification they name is owned by quality_tools.md. -->
+<a id="exact-baseline-schema"></a>
+<a id="exact-waiver-ledger-schema"></a>
+<a id="canonical-diagnostic-record"></a>
+<a id="deterministic-error-envelope"></a>
+<a id="waiver-state-machine"></a>
+<a id="validated-ceiling-indexes"></a>
+<a id="merge-base-resolution-precedence"></a>
+
+**Related docs:** [quality_tools.md](./quality_tools.md#baseline-monotonicity-gate-sa121) |
+[arch-audit.md Finding 12](../../arch-audit.md) | [roadmap.md](./roadmap.md) |
+[CHANGELOG.md](../../CHANGELOG.md)
+
+---
+
+### File-Size Metric Policy {#file-size-metric-policy}
+
+**Rule:** Per-file line ceilings are retired from the blocking quality policy.
+The large-file analyzer may continue to report advisory diagnostics, but line
+counts are not baseline entries, monotonicity keys, waiver keys, regressions, or
+gate exit-status inputs. The retained baseline sections are `dead_code`,
+`complexity`, and `duplication`.
+
+**Related docs:** [Quality Baseline Monotonicity Gate](#quality-baseline-monotonicity) |
+[roadmap.md](./roadmap.md) | [CHANGELOG.md](../../CHANGELOG.md)
 
 ---
 
@@ -1699,62 +1302,54 @@ catchers import Django's.
 - ❌ Ad hoc or undocumented module HTTP APIs beyond the documented module-owned routes and webhooks QuickScale wires today
 - ❌ Tight coupling themes to modules
 
+**Module Versioning & Embedding:**
+- ❌ Independent per-module version numbers — every `module.yml` `version:` tracks the repository `VERSION` (see §[Module Version Lockstep](#module-version-lockstep))
+- ❌ Publishing `quickscale_core`/`quickscale_cli` to PyPI before the matching `splits/*` branches are pushed — ships a `quickscale apply` that fails for every user
+- ❌ Letting an embedded/core version mismatch surface as a downstream failure (missing setting, `KeyError`) instead of an explicit version-mismatch error
+
 **Configuration:**
 - ❌ Execute code in config files (pure data YAML only)
 - ❌ Deep nesting in config syntax (keep flat and readable)
 
 ## Package Structure
 
-**Standalone Module Installation — Not Supported:** Individual `quickscale_modules/*` packages (`auth`, `orgs`, `billing`, etc.) are never installed or resolved on their own outside the monorepo. They're only meant to run interconnected, wired together by the `quickscale` CLI's bundle generation (`quickscale plan`/`quickscale apply`) into a generated project. The root `pyproject.toml` is the single source of truth for dependency resolution — it wires every module in as a `path = "...", develop = true` dependency and resolves them all together into one `poetry.lock`. Do not add per-module `poetry.lock` files, sibling-module version-range dependencies (e.g. a module pyproject declaring `quickscale-module-orgs = ">=x,<y"` instead of relying on the root-level path wiring), or any other standalone-install machinery for a module package.
+**Standalone module installation is not supported.** Individual
+`quickscale_modules/*` packages are never installed or resolved on their own
+outside the monorepo — they run interconnected, wired together by
+`quickscale plan`/`quickscale apply` into a generated project.
 
-**Namespace Packaging Notes (maintainer reference, not current generated-project contract):**
-- ✅ `quickscale_modules/`, `quickscale_themes/`: PEP 420 namespaces (no `__init__.py` at root)
-- ✅ `quickscale_core`: Regular package (has `__init__.py`)
+- ✅ The root `pyproject.toml` is the single source of dependency resolution: it
+  wires every module in as a `path = "...", develop = true` dependency and
+  resolves them together into one `poetry.lock`
+- ✅ `quickscale_modules/` and `quickscale_themes/` are PEP 420 namespaces (no
+  `__init__.py` at the namespace root); `quickscale_core` is a regular package
 - ✅ Use `find_namespace_packages()` in `pyproject.toml`
+- ✅ CI fails the build if a namespace `__init__.py` exists
+- ❌ No per-module `poetry.lock` files
+- ❌ No sibling-module version-range dependencies (a module pyproject declaring
+  `quickscale-module-orgs = ">=x,<y"` instead of relying on root path wiring)
+- ❌ No other standalone-install machinery for a module package
 
-**See:** [scaffolding.md §6](./scaffolding.md#6-naming-import-matrix-summary) for complete matrix
+**Layout examples:**
 
-**Namespace Packaging Checklist:**
-1. ✅ Verify editable install works
-2. ❌ Delete namespace `__init__.py` files
-3. ✅ Update to `find_namespace_packages()`
-4. ✅ Test multi-module install
-5. ✅ Publish to PyPI
-
-**CI Requirements:**
-- ✅ Fail build if namespace `__init__.py` exists
-- ✅ Validate PEP 420 compliance
-
-## Technical Reference
-
-**src/ Layout Example:**
 ```
-quickscale_core/
+quickscale_core/            # src/ layout, tests parallel to src/
   pyproject.toml
   src/quickscale_core/
     __init__.py
     apps.py
   tests/
-```
 
-**Namespace Example (PEP 420):**
-```
 quickscale_themes/ecommerce/src/quickscale_themes/ecommerce/...
 # NO __init__.py at quickscale_themes/
 ```
 
-**Compatibility Metadata:**
+**Compatibility metadata:**
 ```toml
 [project.metadata.quickscale]
 core-compatibility = ">=2.0.0,<3.0.0"
 ```
 
-**Module Boundaries:**
-
-| Concern | Billing Module | Payments Module |
-|---------|----------------|-----------------|
-| Role | Subscriptions, entitlements | Charge execution, refunds |
-| Models | Plan, Subscription | Transaction, WebhookEvent |
-| Integration | Stripe Billing API | Stripe Payments API |
-| Provides | Status checks, decorators | Payment execution services |
-| NOT | Charge execution | Subscription logic |
+Full naming/import matrix: [scaffolding.md §6](./scaffolding.md#6-naming-import-matrix-summary).
+Module responsibility boundaries:
+[implementation_contract.md §Module Boundaries](./implementation_contract.md#module-boundaries).

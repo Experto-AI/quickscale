@@ -14,7 +14,7 @@ from textwrap import dedent
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from quickscale_core.contracts.module_discovery import get_modules_base_path
+from quickscale_core.contracts.module_discovery import resolve_manifest_base_path
 from quickscale_core.contracts.module_options import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
@@ -154,11 +154,13 @@ def load_social_manifest() -> Any:
     """Load the social module manifest from ``module.yml``.
 
     The manifest path is resolved dynamically at call time via
-    :func:`get_modules_base_path` so that any runtime override set
-    via :func:`~quickscale_core.contracts.module_discovery.set_modules_base_path`
-    is picked up correctly.
+    :func:`~quickscale_core.contracts.module_discovery.resolve_manifest_base_path`
+    so that any runtime override set via
+    :func:`~quickscale_core.contracts.module_discovery.set_modules_base_path`
+    is picked up correctly, and so an installed wheel with no source workspace
+    falls back to the bundled manifest snapshots.
     """
-    manifest_path = get_modules_base_path() / "social" / "module.yml"
+    manifest_path = resolve_manifest_base_path() / "social" / "module.yml"
     return load_manifest_from_path(manifest_path)
 
 
@@ -322,9 +324,7 @@ def normalize_social_url(url: str, *, provider: Any | None = None) -> str:
     return resolve_social_target(url, provider=provider).url
 
 
-# ---------------------------------------------------------------------------
 # Managed-file renderers
-# ---------------------------------------------------------------------------
 
 
 def render_social_managed_init_module() -> str:

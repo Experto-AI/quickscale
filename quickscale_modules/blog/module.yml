@@ -2,7 +2,7 @@
 # Defines configuration options and their mutability for the blog module
 
 name: blog
-version: "0.73.0"
+version: "0.87.0"
 description: "Markdown-powered blog module"
 
 config:
@@ -31,8 +31,8 @@ required_modules:
   - orgs>=0.86.0
 
 dependencies:
-  - django-markdownx>=4.0
-  - Pillow>=12.1.1,<13.0.0
+  - django-markdownx>=4.0.11
+  - Pillow>=12.3.0,<13.0.0
 
 django_apps:
   - markdownx

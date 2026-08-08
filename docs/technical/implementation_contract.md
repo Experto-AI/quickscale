@@ -197,6 +197,16 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 - User registration and profile management.
 - Not admin interface enhancements.
 
+**Billing vs Payments:**
+
+| Concern | Billing Module | Payments Module |
+|---------|----------------|-----------------|
+| Role | Subscriptions, entitlements | Charge execution, refunds |
+| Models | Plan, Subscription | Transaction, WebhookEvent |
+| Integration | Stripe Billing API | Stripe Payments API |
+| Provides | Status checks, decorators | Payment execution services |
+| NOT | Charge execution | Subscription logic |
+
 **Dependency Injection (Testing Only):**
 - Production: direct imports.
 - Tests: constructor injection for mocking.
@@ -206,6 +216,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 class OrderProcessor:
     def __init__(self, payment_service=None):
         from quickscale_modules.payments import services
+
         self.payment_service = payment_service or services.DefaultPaymentService()
 ```
 
@@ -242,6 +253,27 @@ storage) are registered at import time in ``entry_point.py``.
 > billing, and CRM are too thin and do not preserve parity with the module-owned
 > implementations, and bundled-context regression coverage is missing. Treat the
 > fallback path as not-at-parity.
+
+#### Module Derivation Schema Types
+
+The declarative-derivation *rule* is authoritative in
+[decisions.md §Module Derivation Schema](./decisions.md#module-derivation-schema);
+this is the type reference.
+
+**Companion, not extension:** `ModuleDerivationSchema` and its six dataclasses (`NormalizationRule`, `ValidationRule`, `LegacyKeyAlias`, `DerivedSetting`, `OptionDerivation`, `ModuleDerivationSchema`) live in `quickscale_core/src/quickscale_core/manifest/derivation.py`. They are exported from `quickscale_core.manifest` alongside the existing `ModuleManifest` and `ConfigOption` types. They do **not** extend, subclass, or alter `ModuleManifest` or `ConfigOption`. The existing manifest loader, runtime behaviour, and CLI contract-file path are unchanged.
+
+**YAML-friendly shapes:** All dataclass fields use simple scalars (`str`, `int`, `float`, `bool`, `None`), lists, and dicts so `module.yml` `derivation:` sections round-trip through `yaml.safe_load` (via `load_manifest`/`build_schema_from_manifest`) without custom codecs.
+
+**Dataclass summary:**
+
+| Type | Purpose |
+|------|---------|
+| `NormalizationRule` | Declarative normalisation transformation (choice-map, lowercase, strip, coerce) |
+| `ValidationRule` | Declarative validation constraint (choices, range, required, pattern, type) |
+| `LegacyKeyAlias` | Mapping from deprecated configuration keys to current replacements |
+| `DerivedSetting` | Django setting projected from one or more configuration options |
+| `OptionDerivation` | Per-option bundle of normalisation, validation, alias, and derivation rules |
+| `ModuleDerivationSchema` | Top-level container keyed by module name with per-option derivations and shared rules |
 
 ### Configuration Boundaries
 
@@ -312,32 +344,38 @@ The generator is a standalone Python toolchain with no Django or PostgreSQL runt
 
 | Package | File | Python Constraint |
 |---------|------|------------------|
-| `quickscale-monorepo` (root) | `pyproject.toml` | `>=3.13,<3.15` |
-| `quickscale` (meta-package) | `pyproject.toml` | `>=3.13,<3.15` |
-| `quickscale-core` | `pyproject.toml` | `>=3.13,<3.15` |
-| `quickscale-cli` | `pyproject.toml` | `>=3.13,<3.15` |
+| `quickscale-monorepo` (root) | `pyproject.toml` | `>=3.14,<3.15` |
+| `quickscale` (meta-package) | `pyproject.toml` | `>=3.14,<3.15` |
+| `quickscale-core` | `pyproject.toml` | `>=3.14,<3.15` |
+| `quickscale-cli` | `pyproject.toml` | `>=3.14,<3.15` |
+| `quickscale-devtools` | `pyproject.toml` | `>=3.14,<3.15` |
+
+These are separate literals that are **required to be equal**: `check_generator_python_constraints` and `check_generator_poetry_python_constraints` compare each against `runtime_pins.PYTHON_CONSTRAINT` on every test run, so a bump must touch all of them together.
+
+⚠️ **Coverage gap:** `_GENERATOR_PACKAGES` in `constraint_validation.py` lists only the first four. `quickscale-devtools` carries the same constraint but is **not** checked, so drift there is silent. It is maintainer-only and unpublished, which is why it was omitted; add it to `_GENERATOR_PACKAGES` if that ever changes.
 
 **Generator runtime dependencies (no Django/PostgreSQL):**
 - `quickscale-core`: Jinja2, pyyaml.
 - `quickscale-cli`: click, quickscale-core.
 - `quickscale` (meta): quickscale-core, quickscale-cli only.
+- `quickscale-devtools`: quickscale-core (maintainer-only, not published in the coordinated release flow).
 
 **Key property:** The generator has zero runtime dependency on Django, `psycopg2-binary`, Gunicorn, or any PostgreSQL client. It is a non-Django-aware scaffolding tool.
 
 ### Embedded-Module Runtime (`quickscale_modules/*/pyproject.toml`)
 
-Each first-party embedded module is independently packaged with its own Python and Django constraints. These constraints are duplicated literals — an intentional copy rather than automatic inheritance — and must be manually synchronized with the generated-project template pins when updated.
+Each first-party embedded module is independently packaged with its own Python and Django constraints. These are duplicated literals rather than automatic inheritance, so a bump must be applied to each module by hand — but the duplication is *enforced*, not merely conventional: `check_module_python_constraints` and `check_module_django_constraints` fail the suite if any module drifts from the expected value.
 
 | Package | Python Constraint | Django Constraint |
 |---------|------------------|-------------------|
-| All 12 `quickscale_modules/*` | `>=3.13,<3.15` | `>=6.0.5,<6.1.0` |
+| All 12 `quickscale_modules/*` | `>=3.14,<3.15` | `>=6.0.7,<6.1.0` |
 
 The 12 packaged modules are: analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage.
 
 **Key properties:**
-- Module Django pins (`>=6.0.5`) are slightly tighter than the generated-project template pin (`>=6.0.3`), reflecting a verified lower-bound drift between these two independently maintained constraint sets.
+- Module Django pins (`>=6.0.7`) and the generated-project template pin (`>=6.0.7`) currently match. The two are expressed separately and the module bound is *allowed* to be tighter (it was, at `>=6.0.5` vs `>=6.0.3`, before the 6.0.7 bump), so both must be updated together.
 - No module carries PostgreSQL, Docker, CI matrix, or Node.js constraints — those are generated-project-only.
-- Module Python constraints match the generator and generated-project constraints (`>=3.13,<3.15`), but as an independent copy that must be manually bumped.
+- Module Python constraints match the generator and generated-project constraints (`>=3.14,<3.15`), but as an independent copy that must be manually bumped.
 
 ### Generated-Project Runtime (`runtime_pins.py` SSOT + injected template variables)
 
@@ -363,10 +401,10 @@ Generated-project runtime pins are owned by `quickscale_core/src/quickscale_core
 | Node.js (CI matrix) | `github/workflows/ci.yml.j2` | `'24'` |
 | Node.js (Docker Compose) | `docker-compose.yml.j2` | `node:24-slim` |
 | Node.js (engines) | `themes/showcase_react/package.json.j2` | `>=24` |
-| pnpm | `github/workflows/ci.yml.j2`, `themes/showcase_react/package.json.j2` | `11.0.9` |
+| pnpm | `github/workflows/ci.yml.j2`, `themes/showcase_react/package.json.j2` | `11.18.0` |
 
 **Generated-project `pyproject.toml.j2` runtime deps:**
-- Django (via `{{ django_constraint }}`), psycopg2-binary `^2.9.11`, gunicorn `^25.0.0`, whitenoise `^6.8.0`, dj-database-url `^3.1.0`, python-decouple `^3.8`.
+- Django (via `{{ django_constraint }}`), psycopg2-binary `^2.9.12`, gunicorn `^26.0.0`, whitenoise `^6.12.0`, dj-database-url `^3.1.2`, python-decouple `^3.8`.
 
 **Generated-project dev deps:** pytest, pytest-django, pytest-cov, factory-boy, ruff, mypy, django-stubs, pre-commit, virtualenv.
 
@@ -377,12 +415,15 @@ Generated-project runtime pins are owned by `quickscale_core/src/quickscale_core
 Drift-detection and validation properties in force:
 
 - **Drift detection (constraint parity):** `quickscale_core.generator.constraint_validation` provides functions to detect unintended drift between `runtime_pins.py` and generator/embedded-module `pyproject.toml` files. Tests in `TestRuntimePinDriftDetection` (`test_templates.py`) enforce parity on every test run. See the test class for the current contract encoding.
+- **Sources require a 3.14 interpreter to parse, not merely to run:** `ruff.toml` (and the restated `target-version` in each package/module `pyproject.toml`) is `py314`, so the formatter emits PEP 758 unparenthesized `except A, B:`. That is a *syntax* feature — a 3.13 interpreter raises `SyntaxError` at import, it does not merely warn. Consequence: anything that executes repo sources must use the project interpreter (`sys.executable`, `poetry run python`, `$(PYTHON)`), never a bare `python`/`python3` off `PATH`. `test_git_utils.py::_run_wrapper` violated this and was fixed; `scripts/lint_frontend.sh` still uses bare `python3`, which is safe only because `render_j2_template.py` imports nothing from the repo. Keep it that way.
 - **Ruff target-version variableization:** The generated project `pyproject.toml.j2` derives `[tool.ruff] target-version` from the `python_version` template variable rather than hardcoding a value, so the ruff setting stays aligned when `PYTHON_VERSION` changes.
 
 Standing constraint-duplication concerns:
 
-1. **Generator ↔ generated-project Python constraint duplication:** The generator repo-level `pyproject.toml` files and `runtime_pins.PYTHON_CONSTRAINT` remain independent copies (`>=3.13,<3.15`). A coordinated version bump still requires manual synchronization across these two systems, but drift detection now alerts on any unnoticed mismatch.
+1. **Generator ↔ generated-project Python constraint duplication:** The generator repo-level `pyproject.toml` files and `runtime_pins.PYTHON_CONSTRAINT` are separate strings that are *required to be equal* (`>=3.14,<3.15`). `check_generator_python_constraints` / `check_module_python_constraints` compare all four generator packages and all 12 modules against the pin on every test run, so a coordinated bump must touch every copy or the suite fails. They are not independently versionable despite being written out separately.
 
-2. **Embedded-module pin intentional drift:** All 12 packaged modules carry Django `>=6.0.5,<6.1.0` while `runtime_pins.DJANGO_CONSTRAINT` uses `>=6.0.3,<6.1.0`. This is the documented, intentional lower-bound drift. The drift detection tests (`test_module_django_lower_bound_drift`) enforce the exact expected module constraint and will fail if a version bump changes either side without an intentional update to both.
+2. **Embedded-module Django pin:** All 12 packaged modules and `runtime_pins.DJANGO_CONSTRAINT` currently both carry `>=6.0.7,<6.1.0`. The module value is expressed separately from the pin (`_EXPECTED_MODULE_DJANGO_CONSTRAINT` in `test_templates.py`) so the modules *may* carry a tighter lower bound than the template — they historically did (`>=6.0.5` vs `>=6.0.3`). The two coincide as of the 6.0.7 bump. `test_module_django_lower_bound_drift` pins the expected module value, so changing either side without the other fails.
 
-3. **Frontend constraints are template literals:** Node.js v24, pnpm 11.0.9, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates are literal values, not sourced from `runtime_pins.py`.
+3. **Frontend constraints are template literals:** Node.js v24, pnpm 11.18.0, and the React/Vite/TypeScript stack in `package.json.j2` and theme templates are literal values, not sourced from `runtime_pins.py`. Note `@types/node` tracks the *Node runtime major* (24), not npm's newest release, so it is deliberately held back from `latest`.
+
+4. **Ruff config roots shadow the shared `ruff.toml`:** Every package and module `pyproject.toml` that carries any `[tool.ruff.*]` table (e.g. an isort override) becomes Ruff's config root for that subtree, so the repo-root `ruff.toml` does **not** apply there. Those files therefore restate `target-version` and pin `[tool.ruff.lint] select` to Ruff's historical defaults (`E4`, `E7`, `E9`, `F`) explicitly — otherwise a Ruff release that widens its built-in defaults silently lands as hundreds of new findings. Ruff 0.16 did exactly that (~900 across the modules). Adopting the shared `select` in those packages is a worthwhile, separate cleanup — and it has a second payoff: because `I` is not among the pinned defaults, the `[tool.ruff.lint.isort] known-first-party` overrides in `quickscale_core`, `quickscale_cli`, and `quickscale_devtools` are presently **inert configuration** (they tune a rule that is not enabled). Enabling the shared select turns them on; at the time of writing that surfaces ~163 auto-fixable import-order findings across core and CLI.

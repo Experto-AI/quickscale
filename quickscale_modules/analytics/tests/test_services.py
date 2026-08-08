@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
-import warnings
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory, override_settings
 
+from quickscale_modules_analytics import services
 from quickscale_modules_analytics.events import (
     ANALYTICS_EVENT_FORM_SUBMIT,
     ANALYTICS_EVENT_SOCIAL_LINK_CLICK,
 )
-from quickscale_modules_analytics import services
 
 
 class DummyClient:
@@ -49,7 +49,7 @@ class DummyPosthogModule:
     def __init__(self) -> None:
         self.clients: list[DummyClient] = []
 
-    def Posthog(self, **kwargs: Any) -> DummyClient:  # noqa: N802 - mimics library API
+    def Posthog(self, **kwargs: Any) -> DummyClient:
         client = DummyClient(**kwargs)
         self.clients.append(client)
         return client
@@ -217,12 +217,14 @@ def test_configure_analytics_client_missing_enabled_setting_raises_attribute_err
     )
     monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
 
-    with patch(
-        "quickscale_modules_analytics.services.settings",
-        runtime_settings,
+    with (
+        patch(
+            "quickscale_modules_analytics.services.settings",
+            runtime_settings,
+        ),
+        pytest.raises(AttributeError, match="QUICKSCALE_ANALYTICS_ENABLED"),
     ):
-        with pytest.raises(AttributeError, match="QUICKSCALE_ANALYTICS_ENABLED"):
-            services.get_analytics_runtime_settings()
+        services.get_analytics_runtime_settings()
 
 
 @override_settings(
@@ -306,7 +308,7 @@ def test_configure_analytics_client_handles_factory_initialization_errors(
     """SDK constructor failures should disable analytics without breaking startup."""
 
     class BrokenPosthogModule:
-        def Posthog(self, **kwargs: Any) -> DummyClient:  # noqa: N802 - library API
+        def Posthog(self, **kwargs: Any) -> DummyClient:
             del kwargs
             raise RuntimeError("boom")
 

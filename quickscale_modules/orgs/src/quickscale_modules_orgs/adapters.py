@@ -35,7 +35,7 @@ class OrgsAccountAdapter(_BaseAccountAdapter):
 
         try:
             normalized_token = UUID(str(invitation_token))
-        except (TypeError, ValueError, AttributeError):
+        except TypeError, ValueError, AttributeError:
             session.pop(PENDING_ORG_INVITATION_TOKEN_SESSION_KEY, None)
             return None
 

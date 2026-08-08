@@ -16,6 +16,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from unittest.mock import patch
+
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_core.manifest.entry_point import MANIFEST_ADAPTER_REGISTRY
 
@@ -672,5 +674,318 @@ class TestRegenerateManagedWiringPriorBasePath:
             assert settings_modules.exists()
             content = settings_modules.read_text()
             assert "quickscale_modules_billing" in content
+        finally:
+            _md._modules_base_path = original_override
+
+
+class TestRegenerateManagedWiringVersionMismatch:
+    """SA117: version mismatch enforcement in regenerate_managed_wiring.
+
+    When a loaded module manifest has a version older than the current core
+    version, ``regenerate_managed_wiring`` must return ``(False, message)``
+    with the dedicated mismatch message, before any ``ManifestError`` from
+    the spec builder.
+    """
+
+    def test_embedded_module_with_old_version_blocks_regeneration(
+        self, tmp_path: Path
+    ) -> None:
+        """An embedded module with version < core must be rejected."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        # Create an embedded analytics module with an old version.
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            'name: analytics\nversion: "0.86.0"\n'
+        )
+
+        with patch(
+            "quickscale_cli.utils.module_wiring_manager.build_manifest_wiring_spec",
+        ) as spy_spec:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+
+        assert success is False
+        # Complete expected message including trailing period.
+        assert message == (
+            "Module 'analytics' version mismatch: "
+            "found 0.86.0; expected core version 0.87.0."
+        )
+        # No spec building occurs when version mismatch is detected early.
+        spy_spec.assert_not_called()
+
+    def test_known_module_with_matching_version_succeeds(self, tmp_path: Path) -> None:
+        """A module whose version matches core must still succeed."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        # Use the real analytics module.yml from the repository.
+        analytics_yml = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_modules"
+            / "analytics"
+            / "module.yml"
+        )
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            analytics_yml.read_text()
+        )
+
+        success, message = regenerate_managed_wiring(
+            project, module_names=["analytics"]
+        )
+
+        assert success, f"regenerate_managed_wiring failed: {message}"
+
+    def test_mixed_versions_blocks_on_first_mismatch(self, tmp_path: Path) -> None:
+        """When multiple modules are processed, the first version mismatch
+        must block regeneration with a dedicated message (deterministic
+        sorted order)."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(
+            project,
+            modules={
+                "analytics": {"enabled": True},
+                "auth": {},
+            },
+        )
+
+        # analytics has version 0.86.0 (will be processed first in sorted order).
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            'name: analytics\nversion: "0.86.0"\n'
+        )
+        # auth has version 0.87.0 (matching core).
+        auth_yml = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_modules"
+            / "auth"
+            / "module.yml"
+        )
+        (project / "modules" / "auth").mkdir(parents=True)
+        (project / "modules" / "auth" / "module.yml").write_text(auth_yml.read_text())
+
+        with patch(
+            "quickscale_cli.utils.module_wiring_manager.build_manifest_wiring_spec",
+        ) as spy_spec:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics", "auth"]
+            )
+
+        assert success is False
+        # Complete expected message including trailing period.
+        assert message == (
+            "Module 'analytics' version mismatch: "
+            "found 0.86.0; expected core version 0.87.0."
+        )
+        # First-mismatch blocks spec building for all modules.
+        spy_spec.assert_not_called()
+
+    def test_unknown_module_still_skipped_before_version_check(
+        self, tmp_path: Path
+    ) -> None:
+        """A module without a registered adapter must be skipped before the
+        version check runs, preserving the skip-unknown contract."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project)
+
+        (project / "modules" / "nonexistent").mkdir(parents=True)
+        (project / "modules" / "nonexistent" / "module.yml").write_text(
+            'name: nonexistent\nversion: "0.86.0"\n'
+        )
+
+        success, message = regenerate_managed_wiring(
+            project, module_names=["nonexistent"]
+        )
+
+        # Unknown module should be skipped — regeneration succeeds with
+        # no wiring written.
+        assert success
+        assert "regenerated" in message.lower()
+
+    # ------------------------------------------------------------------
+    # SA117a: non-canonical manifest version blocks regeneration
+    # ------------------------------------------------------------------
+
+    def test_embedded_module_with_noncanonical_version_blocks_regeneration(
+        self, tmp_path: Path
+    ) -> None:
+        """An embedded module with a non-canonical version (leading zeros)
+        must be rejected before any wiring is built."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            'name: analytics\nversion: "0.87.00"\n'
+        )
+
+        with patch(
+            "quickscale_cli.utils.module_wiring_manager.build_manifest_wiring_spec",
+        ) as spy_spec:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+
+        assert success is False
+        # Complete expected message including trailing period.
+        assert message == (
+            "Module 'analytics' version mismatch: "
+            "found 0.87.00; expected core version 0.87.0."
+        )
+        # No spec building — version rejection happens before _build_wiring_specs.
+        spy_spec.assert_not_called()
+
+    def test_embedded_module_with_whitespace_padded_version_blocks_regeneration(
+        self, tmp_path: Path
+    ) -> None:
+        """A manifest with whitespace-padded version must be rejected."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            'name: analytics\nversion: " 0.87.0 "\n'
+        )
+
+        with patch(
+            "quickscale_cli.utils.module_wiring_manager.build_manifest_wiring_spec",
+        ) as spy_spec:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+
+        assert success is False
+        # Exact whitespace-sensitive message: the raw " 0.87.0 " spelling
+        # (leading space before 0, trailing space before semicolon) is
+        # preserved verbatim without stripping or repr escaping.
+        assert message == (
+            "Module 'analytics' version mismatch: "
+            "found  0.87.0 ; expected core version 0.87.0."
+        )
+        # No spec building — version rejection happens before _build_wiring_specs.
+        spy_spec.assert_not_called()
+
+
+class TestRegenerateManagedWiringEmptySelection:
+    """SA127: empty module selection bypasses base-path preparation and adapter
+    refresh. Empty selection succeeds in unconfigured contexts; non-empty
+    selection still fails hard with the established error message."""
+
+    # ------------------------------------------------------------------
+    # SA127a: empty selection succeeds without base path
+    # ------------------------------------------------------------------
+
+    def test_empty_selection_succeeds_without_base_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """regenerate_managed_wiring with module_names=[] must succeed even
+        when no modules base path is configured and no embedded manifests
+        exist, because the empty-selection short-circuit skips base-path
+        preparation and adapter refresh entirely."""
+        from quickscale_core.contracts import module_discovery as _md
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(project)  # No modules in config.
+
+        # Ensure unconfigured state: no prior base path.  Also monkeypatch
+        # the monorepo path to appear non-existent so get_modules_base_path
+        # raises ImproperlyConfigured (simulating an installed-context project
+        # outside the maintainer monorepo).
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+
+        monorepo_path = Path(_md.__file__).resolve().parents[4] / "quickscale_modules"
+        _real_is_dir = Path.is_dir
+
+        def _selective_is_dir(self: Path) -> bool:
+            if str(self.resolve()) == str(monorepo_path.resolve()):
+                return False
+            return _real_is_dir(self)
+
+        monkeypatch.setattr(Path, "is_dir", _selective_is_dir)
+
+        try:
+            success, message = regenerate_managed_wiring(project, module_names=[])
+            assert success, (
+                "Empty module selection should succeed without base path, "
+                f"but got: {message}"
+            )
+            assert "regenerated" in message.lower()
+
+            # Empty wiring files should still be written.
+            modules_file = project / "myapp" / "settings" / "modules.py"
+            assert modules_file.exists()
+            content = modules_file.read_text()
+            assert "MODULE_INSTALLED_APPS: list[str] = []" in content
+            assert "MODULE_MIDDLEWARE: list[str] = []" in content
+            assert "MODULE_SETTINGS: dict[str, object] = {}" in content
+
+            urls_file = project / "myapp" / "urls_modules.py"
+            assert urls_file.exists()
+            urls_content = urls_file.read_text()
+            assert (
+                "PRE_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []"
+                in urls_content
+            )
+            assert (
+                "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []"
+                in urls_content
+            )
+
+            # No managed files when no module specs exist.
+            managed_init = project / "myapp" / "quickscale_managed" / "__init__.py"
+            assert not managed_init.exists()
+        finally:
+            _md._modules_base_path = original_override
+
+    # ------------------------------------------------------------------
+    # SA127b: non-empty selection still fails with exact message
+    # ------------------------------------------------------------------
+
+    def test_non_empty_selection_fails_without_base_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """regenerate_managed_wiring with a non-empty module_names must still
+        fail when no modules base path is configured and no embedded manifests
+        exist, preserving the exact established error message."""
+        from quickscale_core.contracts import module_discovery as _md
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(project)  # No modules in config.
+
+        # Ensure unconfigured state: no prior base path.  Also monkeypatch
+        # the monorepo path to appear non-existent so get_modules_base_path
+        # raises ImproperlyConfigured (simulating an installed-context project
+        # outside the maintainer monorepo).
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+
+        monorepo_path = Path(_md.__file__).resolve().parents[4] / "quickscale_modules"
+        _real_is_dir = Path.is_dir
+
+        def _selective_is_dir(self: Path) -> bool:
+            if str(self.resolve()) == str(monorepo_path.resolve()):
+                return False
+            return _real_is_dir(self)
+
+        monkeypatch.setattr(Path, "is_dir", _selective_is_dir)
+
+        try:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+            assert not success, (
+                "Non-empty module selection should fail without base path, "
+                f"but succeeded with: {message}"
+            )
+            assert message == (
+                "Modules base path not configured and no embedded module "
+                "manifests found. Run inside the maintainer monorepo, call "
+                "set_modules_base_path(), or embed at least one module with "
+                "a module.yml file."
+            )
         finally:
             _md._modules_base_path = original_override

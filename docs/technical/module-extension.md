@@ -179,6 +179,126 @@ Every module README should include a required section using this taxonomy:
 
 > Extend QuickScale through a **project-owned extension app** when a module requires project-owned glue, and otherwise through the module's **documented extension surfaces**. Use abstract base classes only for modules that are explicitly designed for subclassing. Avoid editing embedded module source directly; extension should happen through the module's documented surfaces rather than ad hoc edits inside embedded module code.
 
+## Building a Module (Authoring Checklist) {#building-a-module-authoring-checklist}
+
+Mechanics for creating a new `quickscale_modules/<name>` package. The *rules* this
+checklist serves — concrete models, initial migrations, PostgreSQL-only test settings,
+coverage minimums, and the service-style exception — are authoritative in
+[decisions.md § Module Implementation Requirements](./decisions.md#module-implementation-checklist).
+
+**1. Package Structure:**
+- [ ] `quickscale_modules/<name>/pyproject.toml` — Package config (see template below)
+- [ ] `quickscale_modules/<name>/README.md` — Installation, configuration, and usage guide
+- [ ] `quickscale_modules/<name>/src/quickscale_modules_<name>/` — Source code (src/ layout)
+- [ ] `quickscale_modules/<name>/tests/` — Test suite (outside src/)
+- [ ] `quickscale_modules/<name>/tests/__init__.py` — Tests package init
+- [ ] `quickscale_modules/<name>/tests/settings.py` — Django test settings
+- [ ] `quickscale_modules/<name>/tests/conftest.py` — pytest fixtures
+
+**1.1. Module pyproject.toml Template:**
+```toml
+[project]
+name = "quickscale-module-<name>"
+version = "0.XX.0"
+description = "QuickScale <name> module - brief description"
+requires-python = ">=3.14,<3.15"
+authors = [{name = "Experto AI", email = "victor@experto.ai"}]
+license = "Apache-2.0"
+readme = "README.md"
+dynamic = ["dependencies"]
+
+[tool.poetry]
+packages = [{include = "quickscale_modules_<name>", from = "src"}]
+
+[tool.poetry.dependencies]
+python = ">=3.14,<3.15"
+Django = ">=6.0.7,<6.1.0"
+# Add module-specific runtime dependencies here (e.g., django-allauth, Pillow)
+
+[tool.poetry.group.dev.dependencies]
+# Minimal dev dependencies - shared tools come from root pyproject.toml
+pytest-django = "^4.7.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# Required. Any [tool.ruff.*] table makes this file Ruff's config root for the
+# module, so the repo-root ruff.toml no longer applies here and these values
+# have to be restated. Without the explicit `select`, the module falls back to
+# whatever Ruff's built-in defaults happen to be in the installed version, and
+# a release that widens them breaks `make lint`. Keep these in step with the
+# other modules — see the runtime-pin inventory in implementation_contract.md.
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = ["."]
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "-v --cov=src/quickscale_modules_<name> --cov-report=html --cov-report=term-missing --cov-fail-under=70"
+```
+
+**1.2. Register Module in Root pyproject.toml:**
+Add the module to root `pyproject.toml` for centralized testing:
+```toml
+[tool.poetry.dependencies]
+quickscale-module-<name> = {path = "./quickscale_modules/<name>", develop = true}
+```
+
+**1.3. Register Module in Root mypy.ini:**
+Add mypy overrides for the module (Django models need relaxed type checking):
+```ini
+[mypy-quickscale_modules_<name>.*]
+disallow_untyped_defs = False
+warn_return_any = False
+warn_unused_ignores = False
+disable_error_code = var-annotated
+```
+
+**2. Source Code (src/quickscale_modules_<name>/):**
+- [ ] `__init__.py` — Module version (e.g., `__version__ = "0.67.0"`)
+- [ ] `apps.py` — Django AppConfig with proper `name` and `label`
+- [ ] `models.py` — **Concrete model(s)** for immediate use (required for domain modules; not required for explicitly approved service-style/integration-only modules)
+- [ ] `views.py` — Views with `model` attribute set (required when the module ships routed views)
+- [ ] `urls.py` — URL patterns with `app_name` for namespacing (required when the module ships routed views)
+- [ ] `admin.py` — Admin registration for concrete models or operational surfaces (required only when the module ships an admin surface)
+- [ ] `migrations/0001_initial.py` — **Initial migration for concrete models** (not required for explicitly approved service-style/integration-only modules)
+- [ ] `migrations/__init__.py` — Migrations package init (only when migrations exist)
+
+**3. Templates (if applicable):**
+- [ ] `templates/quickscale_modules_<name>/` — Zero-style semantic HTML templates
+- [ ] Templates must work immediately after embed (no user customization required)
+
+**4. CLI Integration (quickscale_cli):**
+- [ ] `AVAILABLE_MODULES` in `module_commands.py` is discovery-derived (`get_discovered_module_names()`) — no manual list edit needed; just ensure the module is discoverable (correct manifest/package layout)
+- [ ] Create `configure_<name>_module()` function for interactive prompts
+- [ ] Create `apply_<name>_configuration()` function to:
+  - [ ] Add dependencies to project's `pyproject.toml`
+  - [ ] Add module to `INSTALLED_APPS` in settings.py
+  - [ ] Add module-specific settings
+  - [ ] Add module URLs to project's `urls.py`
+- [ ] Add module to `MODULE_CONFIGURATORS` dictionary
+- [ ] Update embed command docstring with module description
+- [ ] Add module-specific "Next steps" instructions in embed output
+
+**5. Template Integration (showcase_react theme):**
+- [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure
+
+**6. Testing:**
+- [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
+- [ ] 90% overall mean + 80% per file minimum coverage (CI enforced)
+- [ ] Tests use concrete models (not abstract stubs)
+- [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
+
+**7. Split Branch Publishing:**
+- [ ] Run `./scripts/publish_module.sh <name>` after implementation
+- [ ] Verify split branch exists: `splits/<name>-module`
+
 ## References
 
 ### Internal QuickScale References
