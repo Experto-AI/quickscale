@@ -163,31 +163,42 @@ def test_serial_opt_out_forwards_flags_and_preserves_cleanup_mode(tmp_path: Path
 
 
 def test_memory_guard_falls_back_to_serial_when_headroom_is_low(tmp_path: Path) -> None:
-    """Low resting RAM headroom downshifts concurrent lanes to serial."""
+    """Low resting RAM headroom downshifts lanes and xdist workers to serial."""
     # Re-enable the guard (the fake env disables it) and set an unsatisfiable
     # available-RAM floor so the preflight always trips on any host.
     result = _run(
         tmp_path,
         QS_E2E_NO_MEMORY_GUARD="0",
         QS_E2E_MIN_AVAIL_MB="999999999",
+        QS_E2E_XDIST_WORKERS="4",
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert _max_active(_events(tmp_path)) == 1
     assert "Lane mode: serial" in result.stdout
+    assert "Xdist: serial" in result.stdout
+    calls = [event for event in _events(tmp_path) if event.startswith("CALL|")]
+    assert all(" -n " not in event for event in calls)
+    assert all("--dist" not in event for event in calls)
     assert "Low memory headroom" in result.stderr
+    assert "pytest will run serially in each lane" in result.stderr
 
 
 def test_memory_guard_can_be_disabled(tmp_path: Path) -> None:
-    """The opt-out keeps lanes concurrent even below the RAM floor."""
+    """The opt-out keeps lanes concurrent and preserves explicit xdist workers."""
     result = _run(
         tmp_path,
         QS_E2E_NO_MEMORY_GUARD="1",
         QS_E2E_MIN_AVAIL_MB="999999999",
+        QS_E2E_XDIST_WORKERS="4",
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert _max_active(_events(tmp_path)) == 2
+    assert "Xdist: 4 per lane" in result.stdout
+    calls = [event for event in _events(tmp_path) if event.startswith("CALL|")]
+    assert all(" -n 4 " in event for event in calls)
+    assert all("--dist loadscope" in event for event in calls)
     assert "Low memory headroom" not in result.stderr
 
 

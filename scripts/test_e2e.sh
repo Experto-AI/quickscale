@@ -22,7 +22,7 @@
 # Environment:
 #   QS_E2E_PARALLEL=0          Run Core and CLI lanes serially (default: concurrent)
 #   QS_E2E_XDIST_WORKERS=N     pytest-xdist workers per lane (default: heuristic; 0/1 = serial)
-#   QS_E2E_NO_MEMORY_GUARD=1   Skip the low-memory preflight (never auto-fall back to serial)
+#   QS_E2E_NO_MEMORY_GUARD=1   Skip the low-memory preflight (preserve lane/worker settings)
 #   QS_E2E_MIN_AVAIL_MB=N      Fall back to serial below N MB available RAM (default: 4096)
 #   QS_E2E_COMFORT_AVAIL_MB=N  At/above N MB available RAM, ignore free swap entirely (default: 8192)
 #   QS_E2E_MIN_SWAP_MB=N       Fall back to serial below N MB free swap, checked only
@@ -243,9 +243,10 @@ memory_preflight_guard() {
 
     if [ -n "$reason" ]; then
         E2E_PARALLEL=false
+        E2E_XDIST_WORKERS=1
         SERIAL_CAUSE="low-memory guard: $reason"
         echo -e "${YELLOW}⚠ Low memory headroom ($reason).${NC}" >&2
-        echo -e "${YELLOW}  Falling back to serial lanes to avoid an out-of-memory kill (systemd-oomd).${NC}" >&2
+        echo -e "${YELLOW}  Falling back to serial lanes; pytest will run serially in each lane to avoid an out-of-memory kill (systemd-oomd).${NC}" >&2
         echo    "  Override with QS_E2E_NO_MEMORY_GUARD=1 to force concurrent lanes anyway." >&2
         echo "" >&2
     fi
