@@ -1,8 +1,12 @@
 """Unit tests for git utilities."""
 
+import shlex
 import shutil
+import stat
 import subprocess
 import sys
+from collections.abc import Collection
+from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +18,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts import publish_module  # noqa: E402
 from scripts.publish_module import _has_uncommitted_changes  # noqa: E402
 
 from quickscale_core.utils.git_utils import (  # noqa: E402
@@ -2524,7 +2529,7 @@ class TestPublishModuleReleaseAuthoritativeGate:
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
-class TestPublishModuleExpectedRemoteSha:
+class _PublishModuleExpectedRemoteShaBase:
     """Hermetic integration tests for --expected-remote-sha in publish_module.py.
 
     These tests prove:
@@ -2665,6 +2670,676 @@ class TestPublishModuleExpectedRemoteSha:
         assert "Traceback" not in result.stderr
         assert "Traceback" not in result.stdout
 
+
+# ---------------------------------------------------------------------------
+# F-006 — real-Git seal lifecycle and trusted-origin proofs
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _RealPublishRepository:
+    """A local working/bare repository pair with captured Git identities."""
+
+    working: Path
+    origin: Path
+    runner: GitRunner
+    first_commit: str
+    equal_tree_commit: str
+    current_commit: str
+    branch: str
+
+
+def _run_local_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run a real Git command against a temporary repository."""
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _local_git_output(repo: Path, *args: str) -> str:
+    """Return trimmed stdout from a real Git command."""
+    return _run_local_git(repo, *args).stdout.strip()
+
+
+def _ref_inventory(repo: Path) -> dict[str, str]:
+    """Capture the complete local or bare-repository ref inventory."""
+    output = _local_git_output(
+        repo,
+        "for-each-ref",
+        "--format=%(refname)\t%(objectname)",
+    )
+    return {
+        ref: object_id
+        for ref, object_id in (
+            line.split("\t", 1) for line in output.splitlines() if line
+        )
+    }
+
+
+def _assert_ref_inventory_delta(
+    before: dict[str, str],
+    after: dict[str, str],
+    *,
+    added: Collection[str] = frozenset(),
+    changed: Collection[str] = frozenset(),
+) -> None:
+    """Assert that a real-Git operation changed only explicitly named refs."""
+    assert set(after) - set(before) == added
+    assert set(before) - set(after) == set()
+    assert {ref for ref in before if before[ref] != after.get(ref)} == changed
+    for ref in before:
+        if ref not in changed:
+            assert after[ref] == before[ref]
+
+
+def _install_bare_update_hook(origin: Path, body: str) -> Path:
+    """Install an executable deterministic receive/update hook in a bare repo."""
+    hook = origin / "hooks" / "update"
+    hook.write_text(f"#!/bin/sh\nset -eu\n{body}\n")
+    hook.chmod(hook.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return hook
+
+
+@pytest.fixture
+def real_publish_repository(tmp_path: Path) -> _RealPublishRepository:
+    """Create controlled local commits and a real publication GitRunner."""
+    working = tmp_path / "working"
+    origin = tmp_path / "origin.git"
+    working.mkdir()
+    origin.mkdir()
+    subprocess.run(
+        ["git", "init", str(working)], check=True, capture_output=True, text=True
+    )
+    subprocess.run(
+        ["git", "init", "--bare", str(origin)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    _run_local_git(working, "checkout", "-b", "source")
+    _run_local_git(working, "config", "user.name", "QuickScale Test")
+    _run_local_git(working, "config", "user.email", "quickscale-test@example.invalid")
+
+    module_dir = working / "quickscale_modules" / "auth"
+    module_dir.mkdir(parents=True)
+    (module_dir / "module.txt").write_text("first tree\n")
+    _run_local_git(working, "add", "--", ".")
+    _run_local_git(working, "commit", "-m", "first controlled commit")
+    first_commit = _local_git_output(working, "rev-parse", "HEAD")
+
+    # An empty commit deliberately keeps the tree identical while changing the
+    # commit object.  The following content change supplies the unequal tree.
+    _run_local_git(working, "commit", "--allow-empty", "-m", "equal tree commit")
+    equal_tree_commit = _local_git_output(working, "rev-parse", "HEAD")
+    (module_dir / "module.txt").write_text("current tree\n")
+    _run_local_git(working, "add", "--", ".")
+    _run_local_git(working, "commit", "-m", "current unequal tree commit")
+    current_commit = _local_git_output(working, "rev-parse", "HEAD")
+
+    assert first_commit != equal_tree_commit != current_commit
+    assert _local_git_output(working, "rev-parse", f"{first_commit}^{{tree}}") == (
+        _local_git_output(working, "rev-parse", f"{equal_tree_commit}^{{tree}}")
+    )
+    assert _local_git_output(working, "rev-parse", f"{first_commit}^{{tree}}") != (
+        _local_git_output(working, "rev-parse", f"{current_commit}^{{tree}}")
+    )
+
+    branch = "splits/auth-module"
+    _run_local_git(working, "remote", "add", "origin", str(origin))
+    _run_local_git(working, "push", "origin", f"HEAD:refs/heads/{branch}")
+    git_path = shutil.which("git")
+    assert git_path is not None
+    return _RealPublishRepository(
+        working=working,
+        origin=origin,
+        runner=build_publication_git_runner(git_path),
+        first_commit=first_commit,
+        equal_tree_commit=equal_tree_commit,
+        current_commit=current_commit,
+        branch=branch,
+    )
+
+
+class _RecordingRealGitRunner(GitRunner):
+    """Record calls while delegating every operation to a real GitRunner."""
+
+    def __init__(self, delegate: GitRunner) -> None:
+        super().__init__(
+            executable=delegate.executable,
+            env=delegate.env,
+            publication=delegate.publication,
+        )
+        self.delegate = delegate
+        self.calls: list[tuple[str, ...]] = []
+
+    def run(
+        self, args: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[object]:
+        self.calls.append(tuple(args))
+        return self.delegate.run(args, **kwargs)
+
+
+class _MoveOnBranchReadRunner(_RecordingRealGitRunner):
+    """Move one real bare ref at a selected branch-read synchronization point."""
+
+    def __init__(
+        self,
+        delegate: GitRunner,
+        *,
+        origin: Path,
+        branch: str,
+        expected: str,
+        replacement: str,
+    ) -> None:
+        super().__init__(delegate)
+        self.origin = origin
+        self.branch = branch
+        self.expected = expected
+        self.replacement = replacement
+        self.branch_reads = 0
+
+    def run(
+        self, args: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[object]:
+        if args == ["ls-remote", "--heads", "origin", self.branch]:
+            self.branch_reads += 1
+            if self.branch_reads == 2:
+                self.delegate.run(
+                    [
+                        "update-ref",
+                        f"refs/heads/{self.branch}",
+                        self.replacement,
+                        self.expected,
+                    ],
+                    cwd=self.origin,
+                    capture_output=True,
+                    text=True,
+                )
+        return super().run(args, **kwargs)
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestPublishModuleSealRealGit:
+    """Exercise the production seal helpers against real temporary Git refs."""
+
+    version = "0.88.0"
+    previous_version = "0.87.0"
+
+    @staticmethod
+    def _patch_repo_root(
+        monkeypatch: pytest.MonkeyPatch, repo: _RealPublishRepository
+    ) -> None:
+        # _seal_module intentionally resolves its repository through the
+        # production module root.  Redirecting only this test seam keeps every
+        # helper and state-machine operation real while retaining hermeticity.
+        monkeypatch.setattr(publish_module, "_REPO_ROOT", repo.working)
+
+    @staticmethod
+    def _tag(version: str) -> str:
+        return f"splits/auth-module/{version}"
+
+    def test_fixture_captures_real_commit_and_tree_identities(
+        self, real_publish_repository: _RealPublishRepository
+    ) -> None:
+        """The fixture oracle is Git-derived and distinguishes equal/unequal trees."""
+        repo = real_publish_repository
+        assert len(repo.first_commit) == 40
+        assert len(repo.equal_tree_commit) == 40
+        assert len(repo.current_commit) == 40
+        assert _local_git_output(
+            repo.working, "rev-parse", f"{repo.first_commit}^{{tree}}"
+        ) == _local_git_output(
+            repo.working, "rev-parse", f"{repo.equal_tree_commit}^{{tree}}"
+        )
+        assert _local_git_output(
+            repo.working, "rev-parse", f"{repo.equal_tree_commit}^{{tree}}"
+        ) != _local_git_output(
+            repo.working, "rev-parse", f"{repo.current_commit}^{{tree}}"
+        )
+
+    @pytest.mark.parametrize(
+        "annotated", [False, True], ids=["lightweight", "annotated"]
+    )
+    def test_local_tag_lookup_peels_lightweight_and_annotated_tags(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        annotated: bool,
+    ) -> None:
+        """Production local lookup returns the commit for either tag object form."""
+        repo = real_publish_repository
+        tag = self._tag("0.87.1" if annotated else "0.87.2")
+        if annotated:
+            _run_local_git(
+                repo.working,
+                "tag",
+                "--annotate",
+                tag,
+                repo.first_commit,
+                "--message",
+                "annotated fixture tag",
+            )
+        else:
+            _run_local_git(repo.working, "tag", tag, repo.first_commit)
+
+        assert (
+            publish_module.get_local_tag_commit(
+                tag, path=repo.working, runner=repo.runner
+            )
+            == repo.first_commit
+        )
+
+    def test_create_annotated_tag_is_message_backed_and_peels_to_commit(
+        self, real_publish_repository: _RealPublishRepository
+    ) -> None:
+        """The production creation helper creates one annotated, non-forced tag."""
+        repo = real_publish_repository
+        tag = self._tag("0.87.3")
+        publish_module.create_annotated_tag(
+            tag,
+            repo.current_commit,
+            path=repo.working,
+            runner=repo.runner,
+        )
+        assert _local_git_output(
+            repo.working, "cat-file", "-t", f"refs/tags/{tag}"
+        ) == ("tag")
+        tag_body = _local_git_output(repo.working, "cat-file", "-p", f"refs/tags/{tag}")
+        assert "annotated tag" not in tag_body
+        assert tag in tag_body
+        assert (
+            publish_module.get_local_tag_commit(
+                tag, path=repo.working, runner=repo.runner
+            )
+            == repo.current_commit
+        )
+
+    def test_push_tag_uses_one_real_explicit_refspec(
+        self, real_publish_repository: _RealPublishRepository
+    ) -> None:
+        """A real push records exactly the one intended tag refspec."""
+        repo = real_publish_repository
+        tag = self._tag("0.87.4")
+        publish_module.create_annotated_tag(
+            tag, repo.current_commit, path=repo.working, runner=repo.runner
+        )
+        recording_runner = _RecordingRealGitRunner(repo.runner)
+        publish_module.push_tag(
+            tag,
+            remote="origin",
+            path=repo.working,
+            refspec=f"{tag}:refs/tags/{tag}",
+            runner=recording_runner,
+        )
+        assert recording_runner.calls == [
+            ("push", "--", "origin", f"refs/tags/{tag}:refs/tags/{tag}")
+        ]
+        assert (
+            _local_git_output(repo.origin, "rev-parse", f"refs/tags/{tag}^{{}}")
+            == repo.current_commit
+        )
+
+    def test_absent_tag_seal_has_exact_success_ref_delta_and_peeled_identity(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A first seal creates exactly one local and one remote intended tag."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        tag = self._tag(self.version)
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        outcome = publish_module._seal_module("auth", self.version, runner=repo.runner)
+
+        after_work = _ref_inventory(repo.working)
+        after_origin = _ref_inventory(repo.origin)
+        tag_ref = f"refs/tags/{tag}"
+        _assert_ref_inventory_delta(before_work, after_work, added={tag_ref})
+        _assert_ref_inventory_delta(before_origin, after_origin, added={tag_ref})
+        assert outcome == publish_module.SealOutcome(
+            "auth", self.version, repo.branch, tag, repo.current_commit, True
+        )
+        assert after_work[tag_ref] == after_origin[tag_ref]
+        assert (
+            _local_git_output(repo.origin, "rev-parse", f"{tag_ref}^{{}}")
+            == repo.current_commit
+        )
+
+    def test_second_seal_is_idempotent_with_zero_ref_delta(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A verified existing remote tag is a no-mutation second run."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        first = publish_module._seal_module("auth", self.version, runner=repo.runner)
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        second = publish_module._seal_module("auth", self.version, runner=repo.runner)
+
+        assert first.pushed is True
+        assert second == publish_module.SealOutcome(
+            "auth",
+            self.version,
+            repo.branch,
+            self._tag(self.version),
+            repo.current_commit,
+            False,
+        )
+        assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+
+    def test_remote_conflicting_tag_fails_without_any_ref_mutation(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A conflicting remote tag is rejected before local creation or push."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        tag = self._tag(self.version)
+        publish_module.create_annotated_tag(
+            tag, repo.first_commit, path=repo.working, runner=repo.runner
+        )
+        publish_module.push_tag(
+            tag, remote="origin", path=repo.working, runner=repo.runner
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        with pytest.raises(publish_module.SealError, match="conflicts"):
+            publish_module._seal_module("auth", self.version, runner=repo.runner)
+
+        assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+        assert (
+            _local_git_output(repo.origin, "rev-parse", f"refs/tags/{tag}^{{}}")
+            == repo.first_commit
+        )
+
+    def test_conflicting_local_tag_fails_without_remote_mutation(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A conflicting local tag is rejected while preserving both inventories."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        tag = self._tag(self.version)
+        publish_module.create_annotated_tag(
+            tag, repo.first_commit, path=repo.working, runner=repo.runner
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        with pytest.raises(publish_module.SealError, match="Local tag"):
+            publish_module._seal_module("auth", self.version, runner=repo.runner)
+
+        assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+
+    def test_equal_previous_tree_reuses_previous_commit(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Equal trees seal the prior commit; the current unequal case is separate."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        _run_local_git(
+            repo.origin,
+            "update-ref",
+            f"refs/heads/{repo.branch}",
+            repo.equal_tree_commit,
+            repo.current_commit,
+        )
+        previous_tag = self._tag(self.previous_version)
+        target_tag = self._tag(self.version)
+        publish_module.create_annotated_tag(
+            previous_tag, repo.first_commit, path=repo.working, runner=repo.runner
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        outcome = publish_module._seal_module(
+            "auth",
+            self.version,
+            previous_version=self.previous_version,
+            runner=repo.runner,
+        )
+
+        assert outcome.commit == repo.first_commit
+        assert (
+            _local_git_output(repo.origin, "rev-parse", f"refs/tags/{target_tag}^{{}}")
+            == repo.first_commit
+        )
+        _assert_ref_inventory_delta(
+            before_work, _ref_inventory(repo.working), added={f"refs/tags/{target_tag}"}
+        )
+        _assert_ref_inventory_delta(
+            before_origin,
+            _ref_inventory(repo.origin),
+            added={f"refs/tags/{target_tag}"},
+        )
+
+    def test_unequal_previous_tree_seals_current_branch_commit(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Unequal trees select the captured current remote branch commit."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        previous_tag = self._tag(self.previous_version)
+        target_tag = self._tag(self.version)
+        publish_module.create_annotated_tag(
+            previous_tag, repo.first_commit, path=repo.working, runner=repo.runner
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        outcome = publish_module._seal_module(
+            "auth",
+            self.version,
+            previous_version=self.previous_version,
+            runner=repo.runner,
+        )
+
+        assert outcome.commit == repo.current_commit
+        assert (
+            _local_git_output(repo.origin, "rev-parse", f"refs/tags/{target_tag}^{{}}")
+            == repo.current_commit
+        )
+        _assert_ref_inventory_delta(
+            before_work, _ref_inventory(repo.working), added={f"refs/tags/{target_tag}"}
+        )
+        _assert_ref_inventory_delta(
+            before_origin,
+            _ref_inventory(repo.origin),
+            added={f"refs/tags/{target_tag}"},
+        )
+
+    def test_immediate_branch_move_stops_before_local_tag_creation(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An event-controlled real runner makes the precondition race deterministic."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        race_runner = _MoveOnBranchReadRunner(
+            repo.runner,
+            origin=repo.origin,
+            branch=repo.branch,
+            expected=repo.current_commit,
+            replacement=repo.equal_tree_commit,
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        with pytest.raises(
+            publish_module.SealError, match="moved before seal mutation"
+        ):
+            publish_module._seal_module("auth", self.version, runner=race_runner)
+
+        assert race_runner.branch_reads == 2
+        assert _ref_inventory(repo.working) == before_work
+        _assert_ref_inventory_delta(
+            before_origin,
+            _ref_inventory(repo.origin),
+            changed={f"refs/heads/{repo.branch}"},
+        )
+        assert f"refs/tags/{self._tag(self.version)}" not in _ref_inventory(repo.origin)
+
+    def test_receive_hook_branch_move_is_detected_after_tag_push_and_cleaned_up(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A receive-time branch race leaves the remote tag but no local cleanup tag."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        tag = self._tag(self.version)
+        _install_bare_update_hook(
+            repo.origin,
+            'if [ "$1" = '
+            f"{shlex.quote(f'refs/tags/{tag}')}"
+            " ]; then\n"
+            f"  git update-ref refs/heads/{shlex.quote(repo.branch)} "
+            f"{shlex.quote(repo.equal_tree_commit)} {shlex.quote(repo.current_commit)}\n"
+            "fi",
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        with pytest.raises(publish_module.SealError, match="moved after tag push"):
+            publish_module._seal_module("auth", self.version, runner=repo.runner)
+
+        _assert_ref_inventory_delta(before_work, _ref_inventory(repo.working))
+        _assert_ref_inventory_delta(
+            before_origin,
+            _ref_inventory(repo.origin),
+            added={f"refs/tags/{tag}"},
+            changed={f"refs/heads/{repo.branch}"},
+        )
+        assert f"refs/tags/{tag}" not in _ref_inventory(repo.working)
+        assert (
+            _local_git_output(repo.origin, "rev-parse", f"refs/tags/{tag}^{{}}")
+            == repo.current_commit
+        )
+
+    def test_rejected_push_cleans_local_tag_and_preserves_remote_refs(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A rejected tag push is primary and leaves no local created-tag residue."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        tag = self._tag(self.version)
+        _install_bare_update_hook(
+            repo.origin,
+            f'if [ "$1" = {shlex.quote(f"refs/tags/{tag}")} ]; then exit 1; fi',
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        with pytest.raises(publish_module.SealError, match="Tag push failed"):
+            publish_module._seal_module("auth", self.version, runner=repo.runner)
+
+        assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+
+    def test_rejected_push_and_unavailable_probe_keep_push_error_primary(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A local hook can reject and remove only the temporary origin before probing."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        tag = self._tag(self.version)
+        offline_origin = Path(f"{repo.origin}.offline")
+        _install_bare_update_hook(
+            repo.origin,
+            'if [ "$1" = '
+            f"{shlex.quote(f'refs/tags/{tag}')}"
+            " ]; then\n"
+            f"  mv -- {shlex.quote(str(repo.origin))} {shlex.quote(str(offline_origin))}\n"
+            "  exit 1\n"
+            "fi",
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        try:
+            with pytest.raises(publish_module.SealError) as excinfo:
+                publish_module._seal_module("auth", self.version, runner=repo.runner)
+            message = str(excinfo.value)
+            assert message.startswith("Tag push failed")
+            assert "remote tag probe failed" in message
+            assert f"refs/tags/{tag}" not in _ref_inventory(repo.working)
+        finally:
+            if offline_origin.exists() and not repo.origin.exists():
+                shutil.move(str(offline_origin), str(repo.origin))
+
+        assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+class TestPublishModuleCliTrustedOrigin:
+    """Prove the unmodified CLI gate rejects a local origin before mutation."""
+
+    def test_tagged_local_origin_is_rejected_before_seal_mutation(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """CLI release authority can pass while the trusted-origin gate fails closed."""
+        repo = real_publish_repository
+        version = "0.89.0"
+        (repo.working / "VERSION").write_text(f"{version}\n")
+        _run_local_git(repo.working, "add", "--", "VERSION")
+        _run_local_git(repo.working, "commit", "-m", "tagged CLI gate fixture")
+        _run_local_git(repo.working, "tag", version)
+        self_tag = f"refs/tags/{publish_module.resolve_split_tag('auth', version)}"
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        monkeypatch.setattr(publish_module, "_REPO_ROOT", repo.working)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "publish_module.py",
+                "auth",
+                "--expected-remote-sha",
+                "ABSENT",
+            ],
+        )
+        with pytest.raises(SystemExit) as excinfo:
+            publish_module.main()
+
+        assert excinfo.value.code == 1
+        output = capsys.readouterr().out
+        assert "Publication origin validation failed" in output
+        assert "trusted github.com/Experto-AI/quickscale repository" in output
+        assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+        assert self_tag not in before_work
+
+
+class TestPublishModuleExpectedRemoteSha(_PublishModuleExpectedRemoteShaBase):
+    """Continue the pre-existing CLI expected-SHA tests after Phase 4 proofs."""
+
     # ------------------------------------------------------------------
     # Invalid --expected-remote-sha rejection
     # ------------------------------------------------------------------
@@ -2677,7 +3352,8 @@ class TestPublishModuleExpectedRemoteSha:
         )
         assert result.returncode != 0
         combined = result.stdout + result.stderr
-        assert "expected-remote-sha is required" in combined
+        assert "Invalid --expected-remote-sha" in combined
+        assert "must not be empty" in combined
         assert "Traceback" not in result.stderr
 
     def test_rejects_short_sha(self, tmp_path: Path) -> None:
