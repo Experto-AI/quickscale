@@ -23,13 +23,18 @@ with the same explicit next-action guidance.
     Usage:
         poetry run python scripts/publish_module.py \\
             <module_name> --expected-remote-sha <sha|ABSENT> [--clean]
-        poetry run python scripts/publish_module.py --status
+        poetry run python scripts/publish_module.py --seal <module_name> \
+            --version <version> [--previous-version <version>]
+        poetry run python scripts/publish_module.py --seal-all \
+            --version <version> [--previous-version <version>]
+        poetry run python scripts/publish_module.py --status [--version <version>]
         poetry run python scripts/publish_module.py --publish-outdated [--clean]
 
     Phase 4 (SA117): All mutating single-module publish calls require
     ``--expected-remote-sha``.  The value must be a 40-character hex SHA
-    or the literal ``ABSENT``.  ``--publish-outdated`` and ``--status``
-    reject the flag.
+    or the literal ``ABSENT``.  ``--status`` rejects the flag; the disabled
+    ``--publish-outdated`` action accepts it only long enough to emit its
+    Phase 4 safety guidance.
 
     Phase 4 also disables ``--publish-outdated`` entirely: it used bare
     ``--force`` internally, which violates the force-with-lease safety
@@ -40,8 +45,11 @@ with the same explicit next-action guidance.
 from __future__ import annotations
 
 import argparse
+import inspect
+import re
 import shutil
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # Ensure the quickscale_core package is importable when running from the
@@ -61,10 +69,12 @@ from quickscale_core.utils.git_utils import (  # noqa: E402
     push_split_branch,
     resolve_module_path,
     resolve_split_branch,
+    resolve_split_tag,
     run_git_subtree_split,
     validate_expected_sha,
     validate_module_name,
     validate_publication_origin,
+    validate_tag_name,
 )
 
 # ---------------------------------------------------------------------------
@@ -191,6 +201,564 @@ def _maybe_clean_subtree_cache(clean: bool) -> None:
             shutil.rmtree(cache_dir)
 
 
+# ---------------------------------------------------------------------------
+# SA136d seal primitive
+# ---------------------------------------------------------------------------
+
+
+_SEAL_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+
+
+@dataclass(frozen=True)
+class SealOutcome:
+    """The immutable result of one module seal attempt."""
+
+    module: str
+    version: str
+    branch: str
+    tag: str
+    commit: str
+    pushed: bool
+
+
+class SealError(GitError):
+    """A fail-closed seal error with machine-readable operation context."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        module: str,
+        version: str,
+        cleanup_error: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.module = module
+        self.version = version
+        self.cleanup_error = cleanup_error
+
+
+# These aliases keep the result/error vocabulary explicit for callers that
+# consume the primitive without exposing a CLI or batch dispatch yet.
+SealResult = SealOutcome
+
+
+@dataclass(frozen=True)
+class SealBatchOutcome:
+    """The cumulative result of a serial seal-all attempt."""
+
+    succeeded: tuple[str, ...]
+    failed: str | None
+    not_attempted: tuple[str, ...]
+
+
+def _seal_error(
+    message: str,
+    *,
+    module: str,
+    version: str,
+    cleanup_error: str | None = None,
+) -> SealError:
+    return SealError(
+        message,
+        module=module,
+        version=version,
+        cleanup_error=cleanup_error,
+    )
+
+
+def _seal_sha(value: object, *, description: str, module: str, version: str) -> str:
+    """Return a canonical SHA or reject ambiguous Git output."""
+    if not isinstance(value, str):
+        raise _seal_error(
+            f"Malformed {description}: expected a 40-hex SHA",
+            module=module,
+            version=version,
+        )
+    sha = value.strip()
+    if not _SEAL_SHA_RE.fullmatch(sha):
+        raise _seal_error(
+            f"Malformed {description}: expected one 40-hex SHA, got {value!r}",
+            module=module,
+            version=version,
+        )
+    return sha.lower()
+
+
+def _parse_remote_records(
+    output: object,
+    *,
+    expected_refs: set[str],
+    description: str,
+    module: str,
+    version: str,
+) -> dict[str, str]:
+    """Parse one strict ``ls-remote`` response without accepting ambiguity."""
+    if not isinstance(output, str):
+        raise _seal_error(
+            f"Malformed {description}: expected text output",
+            module=module,
+            version=version,
+        )
+    records = output.splitlines()
+    if any(not record.strip() for record in records):
+        raise _seal_error(
+            f"Malformed {description}: blank record",
+            module=module,
+            version=version,
+        )
+    parsed: dict[str, str] = {}
+    for record in records:
+        fields = record.split()
+        if len(fields) != 2:
+            raise _seal_error(
+                f"Malformed {description}: expected SHA and ref, got {record!r}",
+                module=module,
+                version=version,
+            )
+        sha, ref = fields
+        if ref not in expected_refs:
+            raise _seal_error(
+                f"Unexpected ref in {description}: {ref!r}",
+                module=module,
+                version=version,
+            )
+        if ref in parsed:
+            raise _seal_error(
+                f"Duplicate ref in {description}: {ref!r}",
+                module=module,
+                version=version,
+            )
+        parsed[ref] = _seal_sha(
+            sha,
+            description=f"{description} SHA",
+            module=module,
+            version=version,
+        )
+    return parsed
+
+
+def resolve_remote_ref(
+    remote: str,
+    ref: str,
+    path: Path | None = None,
+    *,
+    runner: GitRunner,
+) -> str:
+    """
+    Resolve a branch or split tag using the trusted publication runner.
+
+    A tag lookup reads its direct and peeled records together.  A peeled
+    lookup (used for post-action verification) reads only the peeled record.
+    The empty string is reserved for an absent tag; branches are required.
+    """
+    module = "seal"
+    version = "unknown"
+    # The wrapper is also a test seam.  The seal itself supplies the precise
+    # module/version context when validating the returned value.
+    cwd = path or _REPO_ROOT
+    if ref.endswith("^{}"):
+        tag = ref[:-3]
+        validate_tag_name(tag)
+        args = ["ls-remote", "--tags", "--", remote, f"refs/tags/{tag}^{{}}"]
+        result = runner.run(args, cwd=cwd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise GitError(f"Failed to resolve remote tag {tag!r}: {result.stderr}")
+        parsed = _parse_remote_records(
+            result.stdout,
+            expected_refs={f"refs/tags/{tag}^{{}}"},
+            description=f"peeled remote tag {tag!r}",
+            module=module,
+            version=version,
+        )
+        return next(iter(parsed.values()), "")
+
+    if ref.startswith("splits/") and ref.count("/") == 1:
+        args = ["ls-remote", "--heads", remote, ref]
+        result = runner.run(args, cwd=cwd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise GitError(f"Failed to resolve remote branch {ref!r}: {result.stderr}")
+        parsed = _parse_remote_records(
+            result.stdout,
+            expected_refs={f"refs/heads/{ref}"},
+            description=f"remote branch {ref!r}",
+            module=module,
+            version=version,
+        )
+        if not parsed:
+            raise GitError(f"Remote branch {ref!r} is absent")
+        return next(iter(parsed.values()))
+
+    validate_tag_name(ref)
+    direct_ref = f"refs/tags/{ref}"
+    peeled_ref = f"{direct_ref}^{{}}"
+    args = ["ls-remote", "--tags", "--", remote, direct_ref, peeled_ref]
+    result = runner.run(args, cwd=cwd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise GitError(f"Failed to resolve remote tag {ref!r}: {result.stderr}")
+    parsed = _parse_remote_records(
+        result.stdout,
+        expected_refs={direct_ref, peeled_ref},
+        description=f"remote tag {ref!r}",
+        module=module,
+        version=version,
+    )
+    return parsed.get(peeled_ref) or parsed.get(direct_ref, "")
+
+
+def get_tree_sha(
+    commit: str,
+    path: Path | None = None,
+    *,
+    runner: GitRunner,
+) -> str:
+    """Resolve a commit's verified tree through the trusted runner."""
+    result = runner.run(
+        ["rev-parse", f"{commit}^{{tree}}"],
+        cwd=path or _REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise GitError(f"Failed to resolve tree for {commit}: {result.stderr}")
+    return _seal_sha(
+        result.stdout,
+        description=f"tree for {commit}",
+        module="seal",
+        version="unknown",
+    )
+
+
+def get_local_tag_commit(
+    tag: str,
+    path: Path | None = None,
+    *,
+    runner: GitRunner,
+) -> str | None:
+    """Return an exact local tag object SHA, or ``None`` when absent."""
+    validate_tag_name(tag)
+    result = runner.run(
+        ["rev-parse", "--verify", f"refs/tags/{tag}"],
+        cwd=path or _REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 1 and not result.stdout.strip():
+        return None
+    if result.returncode != 0:
+        raise GitError(f"Failed to resolve local tag {tag!r}: {result.stderr}")
+    return _seal_sha(
+        result.stdout,
+        description=f"local tag {tag!r}",
+        module="seal",
+        version="unknown",
+    )
+
+
+def create_annotated_tag(
+    tag: str,
+    commit: str,
+    path: Path | None = None,
+    *,
+    runner: GitRunner,
+) -> None:
+    """Create one annotated local tag without force or replacement flags."""
+    validate_tag_name(tag)
+    result = runner.run(
+        ["tag", "--annotate", tag, commit],
+        cwd=path or _REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise GitError(f"Failed to create local tag {tag!r}: {result.stderr}")
+
+
+def push_tag(
+    tag: str,
+    remote: str = "origin",
+    path: Path | None = None,
+    *,
+    refspec: str | None = None,
+    runner: GitRunner,
+) -> None:
+    """Push exactly one tag ref through the trusted runner."""
+    validate_tag_name(tag)
+    expected_refspec = f"{tag}:refs/tags/{tag}"
+    if refspec is not None and refspec != expected_refspec:
+        raise GitError(f"Unexpected tag refspec: {refspec!r}")
+    result = runner.run(
+        ["push", "--", remote, f"refs/tags/{tag}:refs/tags/{tag}"],
+        cwd=path or _REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise GitError(f"Failed to push tag {tag!r}: {result.stderr}")
+
+
+def delete_local_tag(
+    tag: str,
+    path: Path | None = None,
+    *,
+    runner: GitRunner,
+) -> None:
+    """Delete only the local tag named by the seal cleanup obligation."""
+    validate_tag_name(tag)
+    result = runner.run(
+        ["tag", "--delete", tag],
+        cwd=path or _REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise GitError(f"Failed to delete local tag {tag!r}: {result.stderr}")
+
+
+def _cleanup_created_tag(
+    tag: str,
+    *,
+    created: bool,
+    runner: GitRunner,
+) -> str | None:
+    """Discharge the local cleanup obligation without touching any remote ref."""
+    if not created:
+        return None
+    try:
+        delete_local_tag(tag, runner=runner)
+    except GitError as exc:
+        return str(exc)
+    return None
+
+
+def _seal_module(
+    module: str,
+    version: str,
+    *,
+    previous_version: str | None = None,
+    runner: GitRunner,
+) -> SealOutcome:
+    """Seal one split module with strict check-then-act verification."""
+    branch = resolve_split_branch(module)
+    tag = resolve_split_tag(module, version)
+    branch_sha = _seal_sha(
+        resolve_remote_ref("origin", branch, runner=runner),
+        description=f"remote branch {branch!r}",
+        module=module,
+        version=version,
+    )
+
+    if previous_version is not None:
+        previous_tag = resolve_split_tag(module, previous_version)
+        previous_tree = get_tree_sha(
+            f"refs/tags/{previous_tag}",
+            runner=runner,
+        )
+        branch_tree = get_tree_sha(branch_sha, runner=runner)
+        # The tree comparison is deliberately observational: the captured
+        # branch commit remains the immutable commit sealed by this invocation.
+        # A changed tree simply means the branch is not a same-tree continuation.
+        _ = previous_tree == branch_tree
+
+    reread_branch = _seal_sha(
+        resolve_remote_ref("origin", branch, runner=runner),
+        description=f"precondition remote branch {branch!r}",
+        module=module,
+        version=version,
+    )
+    if reread_branch != branch_sha:
+        raise _seal_error(
+            f"Remote branch {branch!r} moved before seal mutation",
+            module=module,
+            version=version,
+        )
+
+    remote_tag = resolve_remote_ref("origin", tag, runner=runner)
+    if remote_tag:
+        remote_tag_sha = _seal_sha(
+            remote_tag,
+            description=f"remote tag {tag!r}",
+            module=module,
+            version=version,
+        )
+        if remote_tag_sha != branch_sha:
+            raise _seal_error(
+                f"Remote tag {tag!r} conflicts: {remote_tag_sha} != {branch_sha}",
+                module=module,
+                version=version,
+            )
+        post_tag = _seal_sha(
+            resolve_remote_ref("origin", f"{tag}^{{}}", runner=runner),
+            description=f"post-action remote tag {tag!r}",
+            module=module,
+            version=version,
+        )
+        post_branch = _seal_sha(
+            resolve_remote_ref("origin", branch, runner=runner),
+            description=f"post-action remote branch {branch!r}",
+            module=module,
+            version=version,
+        )
+        if post_tag != branch_sha:
+            raise _seal_error(
+                f"Remote tag {tag!r} failed post-action verification",
+                module=module,
+                version=version,
+            )
+        if post_branch != branch_sha:
+            raise _seal_error(
+                f"Remote branch {branch!r} moved after seal verification",
+                module=module,
+                version=version,
+            )
+        return SealOutcome(module, version, branch, tag, branch_sha, pushed=False)
+
+    local_tag = get_local_tag_commit(tag, runner=runner)
+    if local_tag is not None:
+        local_tag_sha = _seal_sha(
+            local_tag,
+            description=f"local tag {tag!r}",
+            module=module,
+            version=version,
+        )
+        if local_tag_sha != branch_sha:
+            raise _seal_error(
+                f"Local tag {tag!r} conflicts: {local_tag_sha} != {branch_sha}",
+                module=module,
+                version=version,
+            )
+
+    created = local_tag is None
+    if created:
+        create_annotated_tag(tag, branch_sha, runner=runner)
+
+    try:
+        push_tag(
+            tag,
+            remote="origin",
+            refspec=f"{tag}:refs/tags/{tag}",
+            runner=runner,
+        )
+    except GitError as exc:
+        remote_after_failure = resolve_remote_ref("origin", tag, runner=runner)
+        cleanup_error = None
+        if not remote_after_failure:
+            cleanup_error = _cleanup_created_tag(tag, created=created, runner=runner)
+        message = f"Tag push failed for {tag!r}: {exc}"
+        if cleanup_error:
+            message = f"{message}; local cleanup also failed: {cleanup_error}"
+        raise _seal_error(
+            message,
+            module=module,
+            version=version,
+            cleanup_error=cleanup_error,
+        ) from exc
+
+    post_tag = resolve_remote_ref("origin", f"{tag}^{{}}", runner=runner)
+    if (
+        not post_tag
+        or _seal_sha(
+            post_tag,
+            description=f"post-action remote tag {tag!r}",
+            module=module,
+            version=version,
+        )
+        != branch_sha
+    ):
+        cleanup_error = _cleanup_created_tag(tag, created=created, runner=runner)
+        message = f"Remote tag {tag!r} failed post-action verification"
+        if cleanup_error:
+            message = f"{message}; local cleanup also failed: {cleanup_error}"
+        raise _seal_error(
+            message,
+            module=module,
+            version=version,
+            cleanup_error=cleanup_error,
+        )
+
+    post_branch = _seal_sha(
+        resolve_remote_ref("origin", branch, runner=runner),
+        description=f"post-action remote branch {branch!r}",
+        module=module,
+        version=version,
+    )
+    if post_branch != branch_sha:
+        raise _seal_error(
+            f"Remote branch {branch!r} moved after tag push; immutable tag remains",
+            module=module,
+            version=version,
+        )
+    return SealOutcome(module, version, branch, tag, branch_sha, pushed=True)
+
+
+def _invoke_seal_module(
+    module: str,
+    version: str,
+    *,
+    previous_version: str | None,
+    runner: GitRunner,
+) -> SealOutcome:
+    """Call the seal primitive without adding a meaningless ``None`` kwarg."""
+    if previous_version is None:
+        parameter = inspect.signature(_seal_module).parameters.get("previous_version")
+        if parameter is not None and parameter.default is inspect.Parameter.empty:
+            return _seal_module(
+                module,
+                version,
+                previous_version=None,
+                runner=runner,
+            )
+        return _seal_module(module, version, runner=runner)
+    return _seal_module(module, version, previous_version=previous_version, runner=runner)
+
+
+def _print_seal_batch_summary(outcome: SealBatchOutcome) -> None:
+    """Print stable cumulative batch categories for operators and tests."""
+    succeeded = " ".join(outcome.succeeded) or "none"
+    failed = outcome.failed or "none"
+    not_attempted = " ".join(outcome.not_attempted) or "none"
+    _print_info(f"Succeeded: {succeeded}")
+    _print_error(f"Failed: {failed}") if outcome.failed else _print_info("Failed: none")
+    _print_info(f"Not-attempted: {not_attempted}")
+
+
+def _seal_all(
+    version: str,
+    *,
+    previous_version: str | None = None,
+    runner: GitRunner,
+    modules: list[str] | tuple[str, ...] | None = None,
+) -> SealBatchOutcome:
+    """Seal a frozen authoritative module set serially, stopping on failure."""
+    frozen_modules = list(_list_modules() if modules is None else modules)
+    succeeded: list[str] = []
+
+    for index, module in enumerate(frozen_modules):
+        _print_info(f"Sealing module: {module}")
+        try:
+            _invoke_seal_module(
+                module,
+                version,
+                previous_version=previous_version,
+                runner=runner,
+            )
+        except (GitError, SystemExit) as exc:
+            outcome = SealBatchOutcome(tuple(succeeded), module, tuple(frozen_modules[index + 1 :]))
+            _print_seal_batch_summary(outcome)
+            if isinstance(exc, SystemExit):
+                raise
+            raise _seal_error(
+                f"Seal-all stopped at module {module!r}: {exc}",
+                module=module,
+                version=version,
+            ) from exc
+        succeeded.append(module)
+
+    outcome = SealBatchOutcome(tuple(succeeded), None, ())
+    _print_seal_batch_summary(outcome)
+    return outcome
+
+
 def _check_release_authoritative(runner: GitRunner) -> None:
     """
     Gate: refuse mutating publish flows unless source is release-authoritative (F2.9a).
@@ -299,6 +867,51 @@ def _get_module_publish_state(
     return "outdated", local_sha, published_sha, published_source
 
 
+def _read_repository_version() -> str:
+    """Read the repository VERSION value used by implicit status."""
+    try:
+        version = (_REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise GitError(f"Could not read repository VERSION: {exc}") from exc
+    if not version:
+        raise GitError("Repository VERSION is empty")
+    return version
+
+
+def _get_module_seal_state(
+    module_name: str,
+    version: str,
+    published_sha: str,
+    runner: GitRunner,
+) -> str:
+    """Determine seal state from the peeled remote tag target, read-only."""
+    try:
+        tag = resolve_split_tag(module_name, version)
+        peeled_sha = resolve_remote_ref("origin", f"{tag}^{{}}", runner=runner)
+    except GitError, ModuleNotFoundError:
+        # Status is diagnostic rather than a gate.  A runner that cannot resolve
+        # a remote target is represented as unsealed instead of causing a
+        # mutation or turning inspection into a release-authority failure.  The
+        # minimal hermetic publication fixture also omits the manifest package
+        # used by the shared version parser; that is the same unsealed state for
+        # this read-only diagnostic.
+        return "unsealed"
+    if not peeled_sha:
+        return "unsealed"
+    try:
+        normalized_peeled = _seal_sha(
+            peeled_sha,
+            description=f"peeled remote tag {tag!r}",
+            module=module_name,
+            version=version,
+        )
+    except SealError:
+        return "unsealed"
+    if published_sha and normalized_peeled == published_sha.lower():
+        return f"sealed@{version}"
+    return "sealed-conflict"
+
+
 def _publish_module(
     module_name: str,
     *,
@@ -396,8 +1009,16 @@ def _show_provenance_diagnostics(runner: GitRunner) -> bool:
     return False
 
 
-def _show_status(runner: GitRunner) -> None:
-    """Show split-branch status and provenance diagnostics for every module (F2.9b)."""
+def _show_status(
+    runner: GitRunner,
+    *,
+    version: str | None = None,
+    modules: list[str] | tuple[str, ...] | None = None,
+) -> bool:
+    """Show split-branch and peeled-tag status for one frozen module set."""
+    if version is None:
+        version = _read_repository_version()
+    frozen_modules = list(_list_modules() if modules is None else modules)
     _warn_uncommitted_changes(runner)
     _print_info("Inspecting module publish status...")
     print()
@@ -409,19 +1030,26 @@ def _show_status(runner: GitRunner) -> None:
     outdated: list[str] = []
     unpublished: list[str] = []
 
-    for module_name in _list_modules():
+    all_sealed = True
+    for module_name in frozen_modules:
         state, local_sha, pub_sha, pub_source = _get_module_publish_state(module_name, runner)
+        seal_state = _get_module_seal_state(module_name, version, pub_sha, runner)
         if state == "up-to-date":
-            print(f"  {module_name:<16} up to date ({pub_source}, {local_sha[:12]})")
+            print(f"  {module_name:<16} {seal_state} up to date ({pub_source}, {local_sha[:12]})")
         elif state == "outdated":
             print(
-                f"  {module_name:<16} outdated "
+                f"  {module_name:<16} {seal_state} outdated "
                 f"({pub_source}: local {local_sha[:12]} != published {pub_sha[:12]})"
             )
             outdated.append(module_name)
         elif state == "unpublished":
-            print(f"  {module_name:<16} unpublished (local {local_sha[:12]}, no split branch)")
+            print(
+                f"  {module_name:<16} {seal_state} unpublished "
+                f"(local {local_sha[:12]}, no split branch)"
+            )
             unpublished.append(module_name)
+        if seal_state != f"sealed@{version}":
+            all_sealed = False
 
     print()
     if not outdated and not unpublished:
@@ -430,7 +1058,7 @@ def _show_status(runner: GitRunner) -> None:
             print()
             _print_info("Next action:")
             _print_info("  Tag HEAD to match VERSION before any mutating publish flow.")
-        return
+        return all_sealed
 
     if outdated:
         _print_warning(f"Outdated split branches: {' '.join(outdated)}")
@@ -450,6 +1078,7 @@ def _show_status(runner: GitRunner) -> None:
     else:
         _print_info("  Publish each outdated module individually:")
         _print_info("    make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40hex|ABSENT>")
+    return all_sealed
 
 
 def _publish_outdated(clean: bool, runner: GitRunner) -> None:
@@ -496,10 +1125,21 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         help="Module name to publish (e.g. auth, billing)",
     )
-    parser.add_argument(
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument(
         "--status",
         action="store_true",
-        help="Show split-branch status for every module",
+        help="Show split-branch and seal status for every module",
+    )
+    actions.add_argument(
+        "--seal",
+        action="store_true",
+        help="Seal one module's split branch at VERSION",
+    )
+    actions.add_argument(
+        "--seal-all",
+        action="store_true",
+        help="Seal every authoritative module serially at VERSION",
     )
     parser.add_argument(
         "--publish-outdated",
@@ -513,13 +1153,23 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--clean",
         action="store_true",
-        help="Clear git subtree cache before splitting",
+        help="Clear git subtree cache before splitting (publish only)",
+    )
+    parser.add_argument(
+        "--version",
+        metavar="VERSION",
+        help="Release version for seal actions, or an explicit status version",
+    )
+    parser.add_argument(
+        "--previous-version",
+        metavar="VERSION",
+        help="Optional prior release version for seal actions",
     )
     parser.add_argument(
         "--expected-remote-sha",
         help=(
             "Exact 40-char hex SHA expected on remote, or ABSENT for first publish. "
-            "Required for single-module publish; rejected with --publish-outdated and --status."
+            "Required for single-module publish; rejected with --status."
         ),
     )
     parser.add_argument(
@@ -532,9 +1182,72 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Reject action/argument combinations before Git bootstrap or mutation."""
+    if args.status:
+        if args.module_name is not None:
+            parser.error("--status does not accept a module name")
+        if args.clean:
+            parser.error("--clean is only supported with publish actions")
+        if args.expected_remote_sha is not None:
+            parser.error("--expected-remote-sha is not supported with --status")
+        if args.previous_version is not None:
+            parser.error("--previous-version is only supported with --seal or --seal-all")
+        return
+
+    if args.seal:
+        if args.module_name is None:
+            parser.error("--seal requires a module name")
+        if args.version is None:
+            parser.error("--seal requires --version VERSION")
+        if args.clean:
+            parser.error("--clean is only supported with publish actions")
+        if args.expected_remote_sha is not None:
+            parser.error("--expected-remote-sha is not supported with --seal")
+        return
+
+    if args.seal_all:
+        if args.module_name is not None:
+            parser.error("--seal-all does not accept a module name")
+        if args.version is None:
+            parser.error("--seal-all requires --version VERSION")
+        if args.clean:
+            parser.error("--clean is only supported with publish actions")
+        if args.expected_remote_sha is not None:
+            parser.error("--expected-remote-sha is not supported with --seal-all")
+        return
+
+    if args.publish_outdated:
+        if args.module_name is not None:
+            parser.error("--publish-outdated does not accept a module name")
+        if args.version is not None:
+            parser.error("--version is not supported with --publish-outdated")
+        if args.previous_version is not None:
+            parser.error("--previous-version is only supported with --seal or --seal-all")
+        return
+
+    if args.module_name is None and (args.clean or args.expected_remote_sha is not None):
+        parser.error("publish options require a module name")
+    if args.previous_version is not None:
+        parser.error("--previous-version is only supported with --seal or --seal-all")
+    if args.version is not None:
+        parser.error("--version is only supported with --seal, --seal-all, or --status")
+
+
+def _run_release_gates(runner: GitRunner) -> None:
+    """Apply the existing release and origin gates with one trusted runner."""
+    try:
+        _check_release_authoritative(runner)
+        validate_publication_origin(_REPO_ROOT, runner=runner)
+    except GitError as exc:
+        _print_error(f"Publication origin or release validation failed: {exc}")
+        sys.exit(1)
+
+
 def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
+    _validate_cli_args(parser, args)
 
     # Validate repo root
     if not (_REPO_ROOT / "quickscale_modules").is_dir():
@@ -556,15 +1269,55 @@ def main() -> None:
         _print_error("Not a git repository")
         sys.exit(1)
 
-    if args.status and args.clean:
-        _print_error("--clean is only supported with publish actions")
-        sys.exit(1)
-
     if args.status:
-        if args.expected_remote_sha is not None:
-            _print_error("--expected-remote-sha is not supported with --status")
+        _show_status(runner, version=args.version)
+    elif args.seal:
+        module_name = args.module_name
+        assert module_name is not None
+        assert args.version is not None
+        try:
+            validate_module_name(module_name)
+        except GitError as exc:
+            _print_error(str(exc))
             sys.exit(1)
-        _show_status(runner)
+        _require_authoritative_module(module_name)
+        _run_release_gates(runner)
+        if not _confirm_uncommitted_changes(runner):
+            return
+        try:
+            _invoke_seal_module(
+                module_name,
+                args.version,
+                previous_version=args.previous_version,
+                runner=runner,
+            )
+        except GitError as exc:
+            _print_error(f"Failed to seal module '{module_name}': {exc}")
+            sys.exit(1)
+        _print_success(f"Module '{module_name}' sealed at {args.version}")
+    elif args.seal_all:
+        assert args.version is not None
+        # Freeze the authoritative inventory before any gate, prompt, or seal
+        # operation.  The same set is used by the final read-only proof.
+        frozen_modules = list(_list_modules())
+        _run_release_gates(runner)
+        if not _confirm_uncommitted_changes(runner):
+            return
+        try:
+            _seal_all(
+                args.version,
+                previous_version=args.previous_version,
+                runner=runner,
+                modules=frozen_modules,
+            )
+        except (GitError, SystemExit) as exc:
+            if isinstance(exc, SystemExit):
+                raise
+            _print_error(str(exc))
+            sys.exit(1)
+        if not _show_status(runner, version=args.version, modules=frozen_modules):
+            _print_error("Seal-all verification did not produce a sealed status for every module")
+            sys.exit(1)
     elif args.publish_outdated:
         _print_error("--publish-outdated is disabled in SA117 Phase 4")
         _print_info(
