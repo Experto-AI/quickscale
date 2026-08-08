@@ -547,7 +547,7 @@ def _cleanup_created_tag(
         return None
     try:
         delete_local_tag(tag, runner=runner)
-    except GitError as exc:
+    except (GitError, OSError) as exc:
         return str(exc)
     return None
 
@@ -668,7 +668,7 @@ def _seal_module(
                 refspec=f"{tag}:refs/tags/{tag}",
                 runner=runner,
             )
-        except GitError as push_error:
+        except (GitError, OSError) as push_error:
             try:
                 remote_after_failure = resolve_remote_ref("origin", tag, runner=runner)
                 if remote_after_failure:
@@ -683,7 +683,7 @@ def _seal_module(
                             f"remote tag probe found conflicting commit "
                             f"{remote_after_failure_sha} != {seal_commit}"
                         )
-            except GitError as probe_error:
+            except (GitError, OSError) as probe_error:
                 probe_context = f"remote tag probe failed: {probe_error}"
             raise _seal_error(
                 f"Tag push failed for {tag!r}: {push_error}",
@@ -720,7 +720,7 @@ def _seal_module(
                 module=module,
                 version=version,
             )
-    except GitError as exc:
+    except (GitError, OSError) as exc:
         cleanup_error = _cleanup_created_tag(
             tag,
             armed=cleanup_armed,

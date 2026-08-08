@@ -257,13 +257,28 @@ class _GitResponse:
 class _ScriptedGitRunner:
     """CompletedProcess-compatible runner with an explicit call ledger."""
 
-    def __init__(self, responses: list[_GitResponse], *, local_tag: str | None = None) -> None:
+    def __init__(
+        self,
+        responses: list[_GitResponse],
+        *,
+        local_tag: str | None = None,
+        runner_oserrors: dict[tuple[str, ...], list[str | None]] | None = None,
+    ) -> None:
         self._responses = iter(responses)
         self.local_tag = local_tag
+        self.runner_oserrors = {
+            args: list(messages) for args, messages in (runner_oserrors or {}).items()
+        }
         self.calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
 
     def run(self, args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        self.calls.append((tuple(args), kwargs))
+        call_args = tuple(args)
+        self.calls.append((call_args, kwargs))
+        fault_queue = self.runner_oserrors.get(call_args)
+        if fault_queue:
+            message = fault_queue.pop(0)
+            if message is not None:
+                raise OSError(message)
         try:
             response = next(self._responses)
         except StopIteration:
@@ -306,8 +321,9 @@ class _SealLedger:
         probe_value: str | None = None,
         cleanup_error: str | None = None,
         local_tag: str | None = None,
+        runner_oserrors: dict[tuple[str, ...], list[str | None]] | None = None,
     ) -> None:
-        self.runner = _ScriptedGitRunner([], local_tag=local_tag)
+        self.runner = _ScriptedGitRunner([], local_tag=local_tag, runner_oserrors=runner_oserrors)
         self.branch_reads = list(branch_reads)
         self.target_tag = target_tag
         self.local_tag = local_tag
@@ -402,9 +418,9 @@ class _SealLedger:
         runner: object,
     ) -> None:
         assert runner is self.runner
+        self.push_attempted = True
         self.runner.run(["push", remote, refspec or f"{tag}:refs/tags/{tag}"])
         self.events.append(("push-tag", remote, tag, refspec))
-        self.push_attempted = True
         if self.push_error is not None:
             raise publish_module.GitError(self.push_error)
 
@@ -755,6 +771,95 @@ class TestSealMechanics:
         assert "remote tag probe failed: probe unavailable" in str(excinfo.value)
         assert excinfo.value.cleanup_error is None
         assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    @pytest.mark.parametrize(
+        ("runner_oserrors", "push_error", "expected_message"),
+        [
+            pytest.param(
+                {
+                    ("tag", "--annotate", TAG, HEAD_SHA, "--message", TAG): [
+                        "runner create unavailable"
+                    ]
+                },
+                None,
+                "runner create unavailable",
+                id="creation",
+            ),
+            pytest.param(
+                {("push", "origin", f"{TAG}:refs/tags/{TAG}"): ["runner push unavailable"]},
+                None,
+                "runner push unavailable",
+                id="push",
+            ),
+            pytest.param(
+                {
+                    ("ls-remote", "--heads", "origin", TAG): [
+                        None,
+                        "runner probe unavailable",
+                    ]
+                },
+                "remote rejected tag",
+                "remote tag probe failed: runner probe unavailable",
+                id="diagnostic-probe",
+            ),
+            pytest.param(
+                {
+                    ("ls-remote", "--heads", "origin", f"{TAG}^{{}}"): [
+                        "runner peeled verification unavailable"
+                    ]
+                },
+                None,
+                "runner peeled verification unavailable",
+                id="peeled-verification",
+            ),
+            pytest.param(
+                {
+                    ("ls-remote", "--heads", "origin", BRANCH): [
+                        None,
+                        None,
+                        "runner branch verification unavailable",
+                    ]
+                },
+                None,
+                "runner branch verification unavailable",
+                id="branch-verification",
+            ),
+        ],
+    )
+    def test_runner_oserror_matrix_preserves_cleanup_obligation(
+        self,
+        runner_oserrors: dict[tuple[str, ...], list[str | None]],
+        push_error: str | None,
+        expected_message: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Runner failures after tag absence always attempt local cleanup once."""
+        ledger = _SealLedger(runner_oserrors=runner_oserrors, push_error=push_error)
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert expected_message in str(excinfo.value)
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    def test_runner_oserror_cleanup_failure_keeps_primary_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A deletion OSError is secondary to the post-verification failure."""
+        ledger = _SealLedger(
+            post_push_tag=OTHER_SHA,
+            runner_oserrors={("tag", "--delete", TAG): ["runner cleanup unavailable"]},
+        )
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert str(excinfo.value).startswith("Remote tag")
+        assert "runner cleanup unavailable" in str(excinfo.value)
+        assert excinfo.value.cleanup_error == "runner cleanup unavailable"
+        assert sum(call[0] == ("tag", "--delete", TAG) for call in ledger.runner.calls) == 1
 
     def test_malformed_remote_probe_keeps_primary_and_cleans_up(
         self, monkeypatch: pytest.MonkeyPatch
