@@ -20,6 +20,7 @@ import json
 import math
 import os
 import subprocess
+import sys
 import tempfile
 import textwrap
 from pathlib import Path
@@ -615,6 +616,67 @@ class TestCheckCoveragePolicy:
         )
 
 
+class TestMakefileGateTargetDerivation:
+    """Real-Make regressions for cwd-invariant registry target discovery."""
+
+    MAKEFILE_PATH = Path(__file__).resolve().parents[1] / "Makefile"
+    CHECK_TARGETS = (
+        "check-core-compat",
+        "check-module-core-imports",
+        "check-manifest-sync",
+        "check-org-context-primitives",
+        "check-csrf-exempt",
+    )
+
+    def _derive_targets(self, cwd: Path, *, registry: Path | None = None) -> str:
+        """Run the real Make parser and return its expanded gate target line."""
+        command = [
+            "make",
+            "--no-print-directory",
+            "--dry-run",
+            "-f",
+            str(self.MAKEFILE_PATH),
+            f"PYTHON={sys.executable}",
+            "MAKE=true",
+        ]
+        if registry is not None:
+            command.append(f"GATE_REGISTRY={registry}")
+        command.append("check")
+
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert result.returncode == 0, (
+            f"real Make target derivation failed from {cwd}:\n"
+            f"stdout={result.stdout}\nstderr={result.stderr}"
+        )
+
+        expected = "true " + " ".join(self.CHECK_TARGETS)
+        assert expected in result.stdout.splitlines(), (
+            f"Make did not derive the bounded registry target list from {cwd}: {result.stdout}"
+        )
+        return expected
+
+    def test_gate_targets_are_cwd_invariant_with_absolute_override(self, tmp_path: Path) -> None:
+        """Default and absolute-registry derivation match from root and tmp cwd."""
+        repository_root = self.MAKEFILE_PATH.parent
+        absolute_registry = repository_root / "scripts" / "gate_registry.json"
+
+        from_root = self._derive_targets(repository_root)
+        from_tmp = self._derive_targets(tmp_path)
+        from_tmp_with_absolute_override = self._derive_targets(
+            tmp_path,
+            registry=absolute_registry,
+        )
+
+        assert from_root == from_tmp == from_tmp_with_absolute_override
+
+
 class TestMakefileCoveragePipeline:
     """Bounded behavioural assertions for the ``make test-cov`` pipeline."""
 
@@ -648,6 +710,16 @@ class TestMakefileCoveragePipeline:
                     coverage_file=os.environ.get("COVERAGE_FILE"),
                     cwd=os.getcwd(),
                 )
+
+                if "--print-check-targets" in args:
+                    print(
+                        "check-core-compat "
+                        "check-module-core-imports "
+                        "check-manifest-sync "
+                        "check-org-context-primitives "
+                        "check-csrf-exempt"
+                    )
+                    raise SystemExit(0)
 
                 if args[:1] == ["-c"]:
                     raise SystemExit(int(os.environ.get("FAKE_PG_EXIT", "1")))
@@ -1104,6 +1176,15 @@ class TestCheckQuietSectionDispatch:
                 with log_path.open("a", encoding="utf-8") as stream:
                     json.dump({"kind": "invoke", "args": args}, stream)
                     stream.write("\\n")
+                if "--print-check-targets" in args:
+                    print(
+                        "check-core-compat "
+                        "check-module-core-imports "
+                        "check-manifest-sync "
+                        "check-org-context-primitives "
+                        "check-csrf-exempt"
+                    )
+                    raise SystemExit(0)
                 raise SystemExit(0)
             """).lstrip(),
             encoding="utf-8",
@@ -1220,6 +1301,7 @@ class TestCheckQuietSectionDispatch:
         cmd = [
             "make",
             "--no-print-directory",
+            "--silent",
             "-f",
             self.MAKEFILE_PATH,
             f"PYTHON={fake_python}",
@@ -2143,6 +2225,15 @@ class TestCheckNormalFrontendLint:
                 with log_path.open("a", encoding="utf-8") as stream:
                     json.dump({"kind": "invoke", "args": args}, stream)
                     stream.write("\\n")
+                if "--print-check-targets" in args:
+                    print(
+                        "check-core-compat "
+                        "check-module-core-imports "
+                        "check-manifest-sync "
+                        "check-org-context-primitives "
+                        "check-csrf-exempt"
+                    )
+                    raise SystemExit(0)
                 raise SystemExit(0)
             """).lstrip(),
             encoding="utf-8",
