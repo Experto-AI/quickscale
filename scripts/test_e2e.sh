@@ -21,7 +21,8 @@
 #
 # Environment:
 #   QS_E2E_PARALLEL=0          Run Core and CLI lanes serially (default: concurrent)
-#   QS_E2E_NO_MEMORY_GUARD=1   Skip the low-memory preflight (never auto-fall back to serial)
+#   QS_E2E_XDIST_WORKERS=N     pytest-xdist workers per lane (default: heuristic; 0/1 = serial)
+#   QS_E2E_NO_MEMORY_GUARD=1   Skip the low-memory preflight (preserve lane/worker settings)
 #   QS_E2E_MIN_AVAIL_MB=N      Fall back to serial below N MB available RAM (default: 4096)
 #   QS_E2E_COMFORT_AVAIL_MB=N  At/above N MB available RAM, ignore free swap entirely (default: 8192)
 #   QS_E2E_MIN_SWAP_MB=N       Fall back to serial below N MB free swap, checked only
@@ -71,6 +72,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Environment:"
             echo "  QS_E2E_PARALLEL=0            Run Core and CLI lanes serially"
+            echo "  QS_E2E_XDIST_WORKERS=N       pytest-xdist workers per lane (default: heuristic; 0/1 = serial)"
             echo "  QS_E2E_NO_MEMORY_GUARD=1     Skip the low-memory preflight"
             echo "  QS_E2E_MIN_AVAIL_MB=N        Serial fallback below N MB available RAM (default 4096)"
             echo "  QS_E2E_COMFORT_AVAIL_MB=N    Ignore free swap at/above N MB available RAM (default 8192)"
@@ -141,6 +143,33 @@ else
     E2E_PARALLEL=true
     SERIAL_CAUSE=""
 fi
+
+# Resolve QS_E2E_XDIST_WORKERS: non-negative integer, default via heuristic.
+# Values 0 or 1 skip pytest-xdist flags; values >=2 append -n N --dist loadscope.
+E2E_XDIST_WORKERS="${QS_E2E_XDIST_WORKERS:-}"
+if [ -z "$E2E_XDIST_WORKERS" ]; then
+    # Default: min(max(1,floor(nproc/2)), max(1,floor(MemAvailable_GiB/4)), 4)
+    _NPROC_VAL=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+    _NPROC_VAL=${_NPROC_VAL:-1}
+    _MEM_AVAIL_GB=$(awk '/MemAvailable/{printf "%d", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo 0)
+    _MEM_AVAIL_GB=${_MEM_AVAIL_GB:-0}
+    _HALF_NPROC=$(( _NPROC_VAL / 2 ))
+    [ "$_HALF_NPROC" -lt 1 ] && _HALF_NPROC=1
+    _QUART_MEM=1
+    if [ "$_MEM_AVAIL_GB" -ge 4 ]; then
+        _QUART_MEM=$(( _MEM_AVAIL_GB / 4 ))
+    fi
+    _CANDIDATE=$_HALF_NPROC
+    [ "$_QUART_MEM" -lt "$_CANDIDATE" ] && _CANDIDATE=$_QUART_MEM
+    [ "$_CANDIDATE" -gt 4 ] && _CANDIDATE=4
+    E2E_XDIST_WORKERS=$_CANDIDATE
+fi
+case "$E2E_XDIST_WORKERS" in
+    *[!0-9]*)
+        echo -e "${RED}Error: QS_E2E_XDIST_WORKERS must be a non-negative integer (got: $E2E_XDIST_WORKERS)${NC}" >&2
+        exit 1
+        ;;
+esac
 
 # _meminfo_kb  — read a /proc/meminfo field (KB) by name; prints 0 if absent.
 _meminfo_kb() {
@@ -214,9 +243,10 @@ memory_preflight_guard() {
 
     if [ -n "$reason" ]; then
         E2E_PARALLEL=false
+        E2E_XDIST_WORKERS=1
         SERIAL_CAUSE="low-memory guard: $reason"
         echo -e "${YELLOW}⚠ Low memory headroom ($reason).${NC}" >&2
-        echo -e "${YELLOW}  Falling back to serial lanes to avoid an out-of-memory kill (systemd-oomd).${NC}" >&2
+        echo -e "${YELLOW}  Falling back to serial lanes; pytest will run serially in each lane to avoid an out-of-memory kill (systemd-oomd).${NC}" >&2
         echo    "  Override with QS_E2E_NO_MEMORY_GUARD=1 to force concurrent lanes anyway." >&2
         echo "" >&2
     fi
@@ -281,6 +311,11 @@ if [ "$E2E_PARALLEL" = true ]; then
     echo "Lane mode: concurrent (Core + CLI)"
 else
     echo "Lane mode: serial (${SERIAL_CAUSE:-unknown cause})"
+fi
+if [ "${E2E_XDIST_WORKERS:-0}" -ge 2 ]; then
+    echo "Xdist: ${E2E_XDIST_WORKERS} per lane (total $(( E2E_XDIST_WORKERS * 2 )) across 2 lanes)"
+else
+    echo "Xdist: serial"
 fi
 echo ""
 
@@ -506,6 +541,9 @@ run_e2e_lane() {
     fi
     if [ "$lane" = "core" ] && [ -n "$HEADED" ]; then
         pytest_cmd+=("$HEADED")
+    fi
+    if [ "${E2E_XDIST_WORKERS:-0}" -ge 2 ]; then
+        pytest_cmd+=(-n "$E2E_XDIST_WORKERS" --dist loadscope)
     fi
     if [ "${#PYTEST_ARGS[@]}" -gt 0 ]; then
         pytest_cmd+=("${PYTEST_ARGS[@]}")

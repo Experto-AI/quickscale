@@ -163,31 +163,42 @@ def test_serial_opt_out_forwards_flags_and_preserves_cleanup_mode(tmp_path: Path
 
 
 def test_memory_guard_falls_back_to_serial_when_headroom_is_low(tmp_path: Path) -> None:
-    """Low resting RAM headroom downshifts concurrent lanes to serial."""
+    """Low resting RAM headroom downshifts lanes and xdist workers to serial."""
     # Re-enable the guard (the fake env disables it) and set an unsatisfiable
     # available-RAM floor so the preflight always trips on any host.
     result = _run(
         tmp_path,
         QS_E2E_NO_MEMORY_GUARD="0",
         QS_E2E_MIN_AVAIL_MB="999999999",
+        QS_E2E_XDIST_WORKERS="4",
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert _max_active(_events(tmp_path)) == 1
     assert "Lane mode: serial" in result.stdout
+    assert "Xdist: serial" in result.stdout
+    calls = [event for event in _events(tmp_path) if event.startswith("CALL|")]
+    assert all(" -n " not in event for event in calls)
+    assert all("--dist" not in event for event in calls)
     assert "Low memory headroom" in result.stderr
+    assert "pytest will run serially in each lane" in result.stderr
 
 
 def test_memory_guard_can_be_disabled(tmp_path: Path) -> None:
-    """The opt-out keeps lanes concurrent even below the RAM floor."""
+    """The opt-out keeps lanes concurrent and preserves explicit xdist workers."""
     result = _run(
         tmp_path,
         QS_E2E_NO_MEMORY_GUARD="1",
         QS_E2E_MIN_AVAIL_MB="999999999",
+        QS_E2E_XDIST_WORKERS="4",
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert _max_active(_events(tmp_path)) == 2
+    assert "Xdist: 4 per lane" in result.stdout
+    calls = [event for event in _events(tmp_path) if event.startswith("CALL|")]
+    assert all(" -n 4 " in event for event in calls)
+    assert all("--dist loadscope" in event for event in calls)
     assert "Low memory headroom" not in result.stderr
 
 
@@ -281,3 +292,82 @@ def test_signal_after_core_lane_completes_only_targets_active_lane(tmp_path: Pat
     events = _events(tmp_path)
     assert any(event.startswith("SIGNAL|cli|") for event in events)
     assert not any(event.startswith("SIGNAL|core|") for event in events)
+
+
+# ── QS_E2E_XDIST_WORKERS (Phase 2) ──────────────────────────────────────
+
+
+def test_xdist_default_resolves(tmp_path: Path) -> None:
+    """The default QS_E2E_XDIST_WORKERS heuristic resolves and banners correctly."""
+    result = _run(tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    xdist_lines = [line for line in result.stdout.splitlines() if "Xdist:" in line]
+    assert len(xdist_lines) == 1
+    xdist_line = xdist_lines[0]
+
+    events = _events(tmp_path)
+    calls = [e for e in events if e.startswith("CALL|")]
+    assert len(calls) == 2
+
+    if "serial" in xdist_line:
+        assert all(" -n " not in c for c in calls)
+        assert all("--dist" not in c for c in calls)
+    else:
+        assert "per lane" in xdist_line
+        assert all(" -n " in c for c in calls)
+        assert all("--dist loadscope" in c for c in calls)
+
+
+def test_xdist_serial_when_zero(tmp_path: Path) -> None:
+    """QS_E2E_XDIST_WORKERS=0 runs without -n/--dist on every lane."""
+    result = _run(tmp_path, QS_E2E_XDIST_WORKERS="0")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Xdist: serial" in result.stdout
+    events = _events(tmp_path)
+    calls = [e for e in events if e.startswith("CALL|")]
+    assert all(" -n " not in c for c in calls)
+    assert all("--dist" not in c for c in calls)
+
+
+def test_xdist_serial_when_one(tmp_path: Path) -> None:
+    """QS_E2E_XDIST_WORKERS=1 also runs without -n/--dist on every lane."""
+    result = _run(tmp_path, QS_E2E_XDIST_WORKERS="1")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Xdist: serial" in result.stdout
+    events = _events(tmp_path)
+    calls = [e for e in events if e.startswith("CALL|")]
+    assert all(" -n " not in c for c in calls)
+    assert all("--dist" not in c for c in calls)
+
+
+def test_xdist_explicit_workers(tmp_path: Path) -> None:
+    """QS_E2E_XDIST_WORKERS=4 adds -n 4 --dist loadscope to each lane."""
+    result = _run(tmp_path, QS_E2E_XDIST_WORKERS="4")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Xdist: 4 per lane" in result.stdout
+    assert "total 8 across 2 lanes" in result.stdout
+    events = _events(tmp_path)
+    calls = [e for e in events if e.startswith("CALL|")]
+    for call in calls:
+        assert " -n 4 " in call
+        assert "--dist loadscope" in call
+
+
+def test_xdist_malformed_non_numeric(tmp_path: Path) -> None:
+    """A non-numeric QS_E2E_XDIST_WORKERS fails early."""
+    result = _run(tmp_path, QS_E2E_XDIST_WORKERS="abc")
+
+    assert result.returncode != 0
+    assert "must be a non-negative integer" in result.stderr
+
+
+def test_xdist_malformed_negative(tmp_path: Path) -> None:
+    """A negative QS_E2E_XDIST_WORKERS fails early."""
+    result = _run(tmp_path, QS_E2E_XDIST_WORKERS="-1")
+
+    assert result.returncode != 0
+    assert "must be a non-negative integer" in result.stderr
