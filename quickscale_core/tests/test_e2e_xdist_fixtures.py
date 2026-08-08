@@ -6,11 +6,21 @@ deterministic and need no Docker daemon.
 """
 
 import re
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 from typing import Final
 
 import pytest
 
-from conftest import _build_docker_compose_project_name
+_CONFTEST_SPEC = spec_from_file_location(
+    "quickscale_core_tests_conftest",
+    Path(__file__).with_name("conftest.py"),
+)
+assert _CONFTEST_SPEC is not None
+assert _CONFTEST_SPEC.loader is not None
+_CONFTEST = module_from_spec(_CONFTEST_SPEC)
+_CONFTEST_SPEC.loader.exec_module(_CONFTEST)
+_build_docker_compose_project_name = _CONFTEST._build_docker_compose_project_name
 
 _DOCKER_NAME_RE: Final = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
