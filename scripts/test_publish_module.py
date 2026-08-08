@@ -661,6 +661,11 @@ class TestSealCliAndStatus:
             "_get_module_publish_state",
             lambda module, runner: ("up-to-date", HEAD_SHA, HEAD_SHA, "remote-tracking"),
         )
+        monkeypatch.setattr(
+            publish_module,
+            "resolve_remote_ref",
+            lambda remote, ref, *, runner: HEAD_SHA,
+        )
 
         publish_module._show_status(object(), version=VERSION)
         output = capsys.readouterr().out
@@ -710,16 +715,17 @@ class TestSealMakeInterfaces:
         assert "git push --tags" in text
         assert "PyPI" in text
 
-    def test_make_seal_module_requires_module_version_and_expected_sha(self) -> None:
+    def test_make_seal_module_requires_module_and_version(self) -> None:
         text = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
         assert "seal-module:" in text, "planned seal-module target is absent"
         assert "seal-modules:" in text, "planned seal-modules target is absent"
         block = text[text.index("seal-module:") : text.index("seal-modules:")]
-        assert "ifndef MODULE" in block
-        assert "ifndef VERSION" in block
-        assert "ifndef EXPECTED_REMOTE_SHA" in block
-        assert "--expected-remote-sha $(EXPECTED_REMOTE_SHA)" in block
+        assert 'if [ -z "$(MODULE)" ]' in block
+        assert "$(origin VERSION)" in block
+        assert '[ -z "$(VERSION)" ]' in block
         assert "--seal" in block
+        assert "--version $(VERSION)" in block
+        assert "--previous-version $(PREVIOUS_VERSION)" in block
 
     def test_make_seal_all_and_status_require_version(self) -> None:
         text = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
@@ -727,8 +733,8 @@ class TestSealMakeInterfaces:
         assert "seal-status:" in text, "planned seal-status target is absent"
         all_block = text[text.index("seal-modules:") : text.index("seal-status:")]
         status_block = text[text.index("seal-status:") :]
-        assert "ifndef VERSION" in all_block
-        assert "ifndef VERSION" in status_block
+        assert "$(origin VERSION)" in all_block
+        assert "$(origin VERSION)" in status_block
         assert "--seal-all" in all_block
         assert "--status" in status_block
         assert "$(VERSION)" in all_block

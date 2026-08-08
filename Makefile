@@ -43,6 +43,9 @@
 #   make publish-prod         - Publish to production PyPI
 #   make publish-full         - Publish to TestPyPI then PyPI
 #   make publish-module       - Publish module to split branch (MODULE=<name>)
+#   make seal-module          - Seal one split-branch tag (MODULE=<name> VERSION=<version>)
+#   make seal-modules         - Seal all split-branch tags (VERSION=<version>)
+#   make seal-status          - Show seal status (VERSION=<version>)
 #   make legacy-mount         - Mount legacy quickscale symlink
 #   make legacy-unmount       - Unmount legacy quickscale symlink
 #   make legacy-status        - Show legacy symlink status
@@ -56,6 +59,7 @@
         build clean \
 		beta-migrate-fresh beta-migrate-in-place \
         publish-build publish-test publish-prod publish-full publish-module \
+        seal-module seal-modules seal-status \
         legacy-mount legacy-unmount legacy-status \
         version-check version-update bump-version \
         check-core-compat check-module-core-imports check-manifest-sync \
@@ -191,6 +195,9 @@ help:
 	@echo "  make publish-module       - Publish module to split branch (MODULE=<name> EXPECTED_REMOTE_SHA=<sha|ABSENT>)"
 	@echo "  make publish-module-status - Show split-branch status for all modules"
 	@echo "  make publish-modules-outdated - [DISABLED SA117 Phase 4] Was publish outdated modules; use per-module publish instead"
+	@echo "  make seal-module          - Seal one split-branch tag (MODULE=<name> VERSION=<version> [PREVIOUS_VERSION=<version>])"
+	@echo "  make seal-modules         - Seal all split-branch tags (VERSION=<version> [PREVIOUS_VERSION=<version>])"
+	@echo "  make seal-status          - Show seal status (VERSION=<version>)"
 	@echo "  make clean                - Remove build artifacts"
 	@echo ""
 	@echo "Legacy:"
@@ -1193,6 +1200,22 @@ publish-module-status:
 # Publish modules whose split branches are missing or outdated
 publish-modules-outdated:
 	@scripts/publish_module.sh --publish-outdated $(if $(CLEAN),--clean,)
+
+# Seal tags are deliberately narrower than a broad ``git push --tags``: that
+# unsafe command could push the local core tag and trigger PyPI publication.
+# These recipes never push directly; all operations go through the wrapper.
+seal-module:
+	@if [ -z "$(MODULE)" ]; then echo "Error: MODULE is required (e.g. make seal-module MODULE=auth VERSION=0.87.0)"; exit 1; fi
+	@if [ "$(origin VERSION)" != "command line" ] || [ -z "$(VERSION)" ]; then echo "Error: VERSION is required explicitly (e.g. make seal-module MODULE=auth VERSION=0.87.0)"; exit 1; fi
+	@scripts/publish_module.sh $(MODULE) --seal --version $(VERSION) $(if $(PREVIOUS_VERSION),--previous-version $(PREVIOUS_VERSION),)
+
+seal-modules:
+	@if [ "$(origin VERSION)" != "command line" ] || [ -z "$(VERSION)" ]; then echo "Error: VERSION is required explicitly (e.g. make seal-modules VERSION=0.87.0)"; exit 1; fi
+	@scripts/publish_module.sh --seal-all --version $(VERSION) $(if $(PREVIOUS_VERSION),--previous-version $(PREVIOUS_VERSION),)
+
+seal-status:
+	@if [ "$(origin VERSION)" != "command line" ] || [ -z "$(VERSION)" ]; then echo "Error: VERSION is required explicitly (e.g. make seal-status VERSION=0.87.0)"; exit 1; fi
+	@scripts/publish_module.sh --status --version $(VERSION)
 
 # Clean build artifacts
 clean:

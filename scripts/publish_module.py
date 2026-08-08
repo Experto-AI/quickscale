@@ -23,7 +23,11 @@ with the same explicit next-action guidance.
     Usage:
         poetry run python scripts/publish_module.py \\
             <module_name> --expected-remote-sha <sha|ABSENT> [--clean]
-        poetry run python scripts/publish_module.py --status
+        poetry run python scripts/publish_module.py --seal <module_name> \
+            --version <version> [--previous-version <version>]
+        poetry run python scripts/publish_module.py --seal-all \
+            --version <version> [--previous-version <version>]
+        poetry run python scripts/publish_module.py --status [--version <version>]
         poetry run python scripts/publish_module.py --publish-outdated [--clean]
 
     Phase 4 (SA117): All mutating single-module publish calls require
@@ -40,6 +44,7 @@ with the same explicit next-action guidance.
 from __future__ import annotations
 
 import argparse
+import inspect
 import re
 import shutil
 import sys
@@ -235,6 +240,15 @@ class SealError(GitError):
 # These aliases keep the result/error vocabulary explicit for callers that
 # consume the primitive without exposing a CLI or batch dispatch yet.
 SealResult = SealOutcome
+
+
+@dataclass(frozen=True)
+class SealBatchOutcome:
+    """The cumulative result of a serial seal-all attempt."""
+
+    succeeded: tuple[str, ...]
+    failed: str | None
+    not_attempted: tuple[str, ...]
 
 
 def _seal_error(
@@ -676,11 +690,72 @@ def _seal_module(
     return SealOutcome(module, version, branch, tag, branch_sha, pushed=True)
 
 
-def _seal_all(version: str, *, runner: GitRunner) -> None:
-    """Run the primitive sequentially for mechanics-level cumulative proof."""
-    for module in _list_modules():
+def _invoke_seal_module(
+    module: str,
+    version: str,
+    *,
+    previous_version: str | None,
+    runner: GitRunner,
+) -> SealOutcome:
+    """Call the seal primitive without adding a meaningless ``None`` kwarg."""
+    if previous_version is None:
+        parameter = inspect.signature(_seal_module).parameters.get("previous_version")
+        if parameter is not None and parameter.default is inspect.Parameter.empty:
+            return _seal_module(
+                module,
+                version,
+                previous_version=None,
+                runner=runner,
+            )
+        return _seal_module(module, version, runner=runner)
+    return _seal_module(module, version, previous_version=previous_version, runner=runner)
+
+
+def _print_seal_batch_summary(outcome: SealBatchOutcome) -> None:
+    """Print stable cumulative batch categories for operators and tests."""
+    succeeded = " ".join(outcome.succeeded) or "none"
+    failed = outcome.failed or "none"
+    not_attempted = " ".join(outcome.not_attempted) or "none"
+    _print_info(f"Succeeded: {succeeded}")
+    _print_error(f"Failed: {failed}") if outcome.failed else _print_info("Failed: none")
+    _print_info(f"Not-attempted: {not_attempted}")
+
+
+def _seal_all(
+    version: str,
+    *,
+    previous_version: str | None = None,
+    runner: GitRunner,
+    modules: list[str] | tuple[str, ...] | None = None,
+) -> SealBatchOutcome:
+    """Seal a frozen authoritative module set serially, stopping on failure."""
+    frozen_modules = list(_list_modules() if modules is None else modules)
+    succeeded: list[str] = []
+
+    for index, module in enumerate(frozen_modules):
         _print_info(f"Sealing module: {module}")
-        _seal_module(module, version, runner=runner)
+        try:
+            _invoke_seal_module(
+                module,
+                version,
+                previous_version=previous_version,
+                runner=runner,
+            )
+        except (GitError, SystemExit) as exc:
+            outcome = SealBatchOutcome(tuple(succeeded), module, tuple(frozen_modules[index + 1 :]))
+            _print_seal_batch_summary(outcome)
+            if isinstance(exc, SystemExit):
+                raise
+            raise _seal_error(
+                f"Seal-all stopped at module {module!r}: {exc}",
+                module=module,
+                version=version,
+            ) from exc
+        succeeded.append(module)
+
+    outcome = SealBatchOutcome(tuple(succeeded), None, ())
+    _print_seal_batch_summary(outcome)
+    return outcome
 
 
 def _check_release_authoritative(runner: GitRunner) -> None:
@@ -791,6 +866,48 @@ def _get_module_publish_state(
     return "outdated", local_sha, published_sha, published_source
 
 
+def _read_repository_version() -> str:
+    """Read the repository VERSION value used by implicit status."""
+    try:
+        version = (_REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise GitError(f"Could not read repository VERSION: {exc}") from exc
+    if not version:
+        raise GitError("Repository VERSION is empty")
+    return version
+
+
+def _get_module_seal_state(
+    module_name: str,
+    version: str,
+    published_sha: str,
+    runner: GitRunner,
+) -> str:
+    """Determine seal state from the peeled remote tag target, read-only."""
+    tag = resolve_split_tag(module_name, version)
+    try:
+        peeled_sha = resolve_remote_ref("origin", f"{tag}^{{}}", runner=runner)
+    except GitError:
+        # Status is diagnostic rather than a gate.  A runner that cannot resolve
+        # a remote target is represented as unsealed instead of causing a
+        # mutation or turning inspection into a release-authority failure.
+        return "unsealed"
+    if not peeled_sha:
+        return "unsealed"
+    try:
+        normalized_peeled = _seal_sha(
+            peeled_sha,
+            description=f"peeled remote tag {tag!r}",
+            module=module_name,
+            version=version,
+        )
+    except SealError:
+        return "unsealed"
+    if published_sha and normalized_peeled == published_sha.lower():
+        return f"sealed@{version}"
+    return "sealed-conflict"
+
+
 def _publish_module(
     module_name: str,
     *,
@@ -888,8 +1005,16 @@ def _show_provenance_diagnostics(runner: GitRunner) -> bool:
     return False
 
 
-def _show_status(runner: GitRunner) -> None:
-    """Show split-branch status and provenance diagnostics for every module (F2.9b)."""
+def _show_status(
+    runner: GitRunner,
+    *,
+    version: str | None = None,
+    modules: list[str] | tuple[str, ...] | None = None,
+) -> bool:
+    """Show split-branch and peeled-tag status for one frozen module set."""
+    if version is None:
+        version = _read_repository_version()
+    frozen_modules = list(_list_modules() if modules is None else modules)
     _warn_uncommitted_changes(runner)
     _print_info("Inspecting module publish status...")
     print()
@@ -901,19 +1026,26 @@ def _show_status(runner: GitRunner) -> None:
     outdated: list[str] = []
     unpublished: list[str] = []
 
-    for module_name in _list_modules():
+    all_sealed = True
+    for module_name in frozen_modules:
         state, local_sha, pub_sha, pub_source = _get_module_publish_state(module_name, runner)
+        seal_state = _get_module_seal_state(module_name, version, pub_sha, runner)
         if state == "up-to-date":
-            print(f"  {module_name:<16} up to date ({pub_source}, {local_sha[:12]})")
+            print(f"  {module_name:<16} {seal_state} up to date ({pub_source}, {local_sha[:12]})")
         elif state == "outdated":
             print(
-                f"  {module_name:<16} outdated "
+                f"  {module_name:<16} {seal_state} outdated "
                 f"({pub_source}: local {local_sha[:12]} != published {pub_sha[:12]})"
             )
             outdated.append(module_name)
         elif state == "unpublished":
-            print(f"  {module_name:<16} unpublished (local {local_sha[:12]}, no split branch)")
+            print(
+                f"  {module_name:<16} {seal_state} unpublished "
+                f"(local {local_sha[:12]}, no split branch)"
+            )
             unpublished.append(module_name)
+        if seal_state != f"sealed@{version}":
+            all_sealed = False
 
     print()
     if not outdated and not unpublished:
@@ -922,7 +1054,7 @@ def _show_status(runner: GitRunner) -> None:
             print()
             _print_info("Next action:")
             _print_info("  Tag HEAD to match VERSION before any mutating publish flow.")
-        return
+        return all_sealed
 
     if outdated:
         _print_warning(f"Outdated split branches: {' '.join(outdated)}")
@@ -942,6 +1074,7 @@ def _show_status(runner: GitRunner) -> None:
     else:
         _print_info("  Publish each outdated module individually:")
         _print_info("    make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40hex|ABSENT>")
+    return all_sealed
 
 
 def _publish_outdated(clean: bool, runner: GitRunner) -> None:
@@ -988,10 +1121,21 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         help="Module name to publish (e.g. auth, billing)",
     )
-    parser.add_argument(
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument(
         "--status",
         action="store_true",
-        help="Show split-branch status for every module",
+        help="Show split-branch and seal status for every module",
+    )
+    actions.add_argument(
+        "--seal",
+        action="store_true",
+        help="Seal one module's split branch at VERSION",
+    )
+    actions.add_argument(
+        "--seal-all",
+        action="store_true",
+        help="Seal every authoritative module serially at VERSION",
     )
     parser.add_argument(
         "--publish-outdated",
@@ -1005,7 +1149,17 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--clean",
         action="store_true",
-        help="Clear git subtree cache before splitting",
+        help="Clear git subtree cache before splitting (publish only)",
+    )
+    parser.add_argument(
+        "--version",
+        metavar="VERSION",
+        help="Release version for seal actions, or an explicit status version",
+    )
+    parser.add_argument(
+        "--previous-version",
+        metavar="VERSION",
+        help="Optional prior release version for seal actions",
     )
     parser.add_argument(
         "--expected-remote-sha",
@@ -1024,9 +1178,74 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Reject action/argument combinations before Git bootstrap or mutation."""
+    if args.status:
+        if args.module_name is not None:
+            parser.error("--status does not accept a module name")
+        if args.clean:
+            parser.error("--clean is only supported with publish actions")
+        if args.expected_remote_sha is not None:
+            parser.error("--expected-remote-sha is not supported with --status")
+        if args.previous_version is not None:
+            parser.error("--previous-version is only supported with --seal or --seal-all")
+        return
+
+    if args.seal:
+        if args.module_name is None:
+            parser.error("--seal requires a module name")
+        if args.version is None:
+            parser.error("--seal requires --version VERSION")
+        if args.clean:
+            parser.error("--clean is only supported with publish actions")
+        if args.expected_remote_sha is not None:
+            parser.error("--expected-remote-sha is not supported with --seal")
+        return
+
+    if args.seal_all:
+        if args.module_name is not None:
+            parser.error("--seal-all does not accept a module name")
+        if args.version is None:
+            parser.error("--seal-all requires --version VERSION")
+        if args.clean:
+            parser.error("--clean is only supported with publish actions")
+        if args.expected_remote_sha is not None:
+            parser.error("--expected-remote-sha is not supported with --seal-all")
+        return
+
+    if args.publish_outdated:
+        if args.module_name is not None:
+            parser.error("--publish-outdated does not accept a module name")
+        if args.expected_remote_sha is not None:
+            parser.error("--expected-remote-sha is not supported with --publish-outdated")
+        if args.version is not None:
+            parser.error("--version is not supported with --publish-outdated")
+        if args.previous_version is not None:
+            parser.error("--previous-version is only supported with --seal or --seal-all")
+        return
+
+    if args.module_name is None and (args.clean or args.expected_remote_sha is not None):
+        parser.error("publish options require a module name")
+    if args.previous_version is not None:
+        parser.error("--previous-version is only supported with --seal or --seal-all")
+    if args.version is not None:
+        parser.error("--version is only supported with --seal, --seal-all, or --status")
+
+
+def _run_release_gates(runner: GitRunner) -> None:
+    """Apply the existing release and origin gates with one trusted runner."""
+    try:
+        _check_release_authoritative(runner)
+        validate_publication_origin(_REPO_ROOT, runner=runner)
+    except GitError as exc:
+        _print_error(f"Publication origin or release validation failed: {exc}")
+        sys.exit(1)
+
+
 def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
+    _validate_cli_args(parser, args)
 
     # Validate repo root
     if not (_REPO_ROOT / "quickscale_modules").is_dir():
@@ -1048,15 +1267,55 @@ def main() -> None:
         _print_error("Not a git repository")
         sys.exit(1)
 
-    if args.status and args.clean:
-        _print_error("--clean is only supported with publish actions")
-        sys.exit(1)
-
     if args.status:
-        if args.expected_remote_sha is not None:
-            _print_error("--expected-remote-sha is not supported with --status")
+        _show_status(runner, version=args.version)
+    elif args.seal:
+        module_name = args.module_name
+        assert module_name is not None
+        assert args.version is not None
+        try:
+            validate_module_name(module_name)
+        except GitError as exc:
+            _print_error(str(exc))
             sys.exit(1)
-        _show_status(runner)
+        _require_authoritative_module(module_name)
+        _run_release_gates(runner)
+        if not _confirm_uncommitted_changes(runner):
+            return
+        try:
+            _invoke_seal_module(
+                module_name,
+                args.version,
+                previous_version=args.previous_version,
+                runner=runner,
+            )
+        except GitError as exc:
+            _print_error(f"Failed to seal module '{module_name}': {exc}")
+            sys.exit(1)
+        _print_success(f"Module '{module_name}' sealed at {args.version}")
+    elif args.seal_all:
+        assert args.version is not None
+        # Freeze the authoritative inventory before any gate, prompt, or seal
+        # operation.  The same set is used by the final read-only proof.
+        frozen_modules = list(_list_modules())
+        _run_release_gates(runner)
+        if not _confirm_uncommitted_changes(runner):
+            return
+        try:
+            _seal_all(
+                args.version,
+                previous_version=args.previous_version,
+                runner=runner,
+                modules=frozen_modules,
+            )
+        except (GitError, SystemExit) as exc:
+            if isinstance(exc, SystemExit):
+                raise
+            _print_error(str(exc))
+            sys.exit(1)
+        if not _show_status(runner, version=args.version, modules=frozen_modules):
+            _print_error("Seal-all verification did not produce a sealed status for every module")
+            sys.exit(1)
     elif args.publish_outdated:
         _print_error("--publish-outdated is disabled in SA117 Phase 4")
         _print_info(
