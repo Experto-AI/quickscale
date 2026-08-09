@@ -242,6 +242,7 @@ VERSION = "0.88.0"
 PREVIOUS_VERSION = "0.87.0"
 HEAD_SHA = "a" * 40
 OTHER_SHA = "b" * 40
+PREVIOUS_COMMIT = "c" * 40
 TAG = f"{BRANCH}/{VERSION}"
 PREVIOUS_TAG = f"{BRANCH}/{PREVIOUS_VERSION}"
 
@@ -256,18 +257,39 @@ class _GitResponse:
 class _ScriptedGitRunner:
     """CompletedProcess-compatible runner with an explicit call ledger."""
 
-    def __init__(self, responses: list[_GitResponse], *, local_tag: str | None = None) -> None:
+    def __init__(
+        self,
+        responses: list[_GitResponse],
+        *,
+        local_tag: str | None = None,
+        runner_oserrors: dict[tuple[str, ...], list[str | None]] | None = None,
+    ) -> None:
         self._responses = iter(responses)
         self.local_tag = local_tag
+        self.runner_oserrors = {
+            args: list(messages) for args, messages in (runner_oserrors or {}).items()
+        }
         self.calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
 
     def run(self, args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        self.calls.append((tuple(args), kwargs))
+        call_args = tuple(args)
+        self.calls.append((call_args, kwargs))
+        fault_queue = self.runner_oserrors.get(call_args)
+        if fault_queue:
+            message = fault_queue.pop(0)
+            if message is not None:
+                raise OSError(message)
         try:
             response = next(self._responses)
         except StopIteration:
             local_ref = f"refs/tags/{TAG}"
-            if tuple(args[:3]) == ("rev-parse", "--verify", local_ref):
+            if tuple(args[:4]) == ("show-ref", "--verify", "--quiet", local_ref):
+                response = _GitResponse(returncode=0 if self.local_tag else 1)
+            elif tuple(args[:3]) == (
+                "rev-parse",
+                "--verify",
+                f"{local_ref}^{{commit}}",
+            ):
                 response = _GitResponse(
                     stdout=self.local_tag or "", returncode=0 if self.local_tag else 1
                 )
@@ -290,18 +312,31 @@ class _SealLedger:
         branch_reads: tuple[str, str, str] = (HEAD_SHA, HEAD_SHA, HEAD_SHA),
         target_tag: str | None = None,
         post_push_tag: str = HEAD_SHA,
+        previous_commit: str = PREVIOUS_COMMIT,
         previous_tree: str = "tree-stable",
         head_tree: str = "tree-stable",
+        create_error: str | None = None,
         push_error: str | None = None,
+        probe_error: str | None = None,
+        probe_value: str | None = None,
+        cleanup_error: str | None = None,
         local_tag: str | None = None,
+        runner_oserrors: dict[tuple[str, ...], list[str | None]] | None = None,
     ) -> None:
-        self.runner = _ScriptedGitRunner([], local_tag=local_tag)
+        self.runner = _ScriptedGitRunner([], local_tag=local_tag, runner_oserrors=runner_oserrors)
         self.branch_reads = list(branch_reads)
         self.target_tag = target_tag
+        self.local_tag = local_tag
         self.post_push_tag = post_push_tag
+        self.previous_commit = previous_commit
         self.previous_tree = previous_tree
         self.head_tree = head_tree
+        self.create_error = create_error
         self.push_error = push_error
+        self.probe_error = probe_error
+        self.probe_value = probe_value
+        self.cleanup_error = cleanup_error
+        self.push_attempted = False
         self.events: list[tuple[object, ...]] = []
 
     def resolve_remote_ref(
@@ -318,10 +353,30 @@ class _SealLedger:
         if ref == BRANCH:
             return self.branch_reads.pop(0)
         if ref == TAG:
+            if self.push_attempted:
+                if self.probe_error is not None:
+                    raise publish_module.GitError(self.probe_error)
+                if self.probe_value is not None:
+                    return self.probe_value
             return self.target_tag if self.target_tag is not None else ""
         if ref == f"{TAG}^{{}}":
             return self.post_push_tag
         raise AssertionError(f"unexpected remote ref: {ref}")
+
+    def get_local_tag_commit(
+        self,
+        tag: str,
+        path: Path | None = None,
+        *,
+        runner: object,
+    ) -> str | None:
+        assert runner is self.runner
+        self.events.append(("local-tag", tag))
+        if tag == PREVIOUS_TAG:
+            return self.previous_commit
+        if tag == TAG:
+            return self.local_tag
+        raise AssertionError(f"unexpected local tag: {tag}")
 
     def get_tree_sha(
         self,
@@ -333,7 +388,7 @@ class _SealLedger:
         assert runner is self.runner
         self.runner.run(["rev-parse", f"{commit}^{{tree}}"])
         self.events.append(("tree", commit))
-        if commit == f"refs/tags/{PREVIOUS_TAG}":
+        if commit == PREVIOUS_COMMIT:
             return self.previous_tree
         if commit == HEAD_SHA:
             return self.head_tree
@@ -348,8 +403,10 @@ class _SealLedger:
         runner: object,
     ) -> None:
         assert runner is self.runner
-        self.runner.run(["tag", "--annotate", tag, commit])
+        self.runner.run(["tag", "--annotate", tag, commit, "--message", tag])
         self.events.append(("create-tag", tag, commit))
+        if self.create_error is not None:
+            raise publish_module.GitError(self.create_error)
 
     def push_tag(
         self,
@@ -361,6 +418,7 @@ class _SealLedger:
         runner: object,
     ) -> None:
         assert runner is self.runner
+        self.push_attempted = True
         self.runner.run(["push", remote, refspec or f"{tag}:refs/tags/{tag}"])
         self.events.append(("push-tag", remote, tag, refspec))
         if self.push_error is not None:
@@ -376,6 +434,8 @@ class _SealLedger:
         assert runner is self.runner
         self.runner.run(["tag", "--delete", tag])
         self.events.append(("delete-tag", tag))
+        if self.cleanup_error is not None:
+            raise publish_module.GitError(self.cleanup_error)
 
 
 def _install_seal_ledger(monkeypatch: pytest.MonkeyPatch, ledger: _SealLedger) -> None:
@@ -387,6 +447,12 @@ def _install_seal_ledger(monkeypatch: pytest.MonkeyPatch, ledger: _SealLedger) -
         raising=False,
     )
     monkeypatch.setattr(publish_module, "get_tree_sha", ledger.get_tree_sha, raising=False)
+    monkeypatch.setattr(
+        publish_module,
+        "get_local_tag_commit",
+        ledger.get_local_tag_commit,
+        raising=False,
+    )
     monkeypatch.setattr(
         publish_module,
         "create_annotated_tag",
@@ -408,6 +474,104 @@ def _install_seal_ledger(monkeypatch: pytest.MonkeyPatch, ledger: _SealLedger) -
     )
 
 
+class TestSealLocalTagPrimitives:
+    def _assert_call_ledger(
+        self,
+        runner: _ScriptedGitRunner,
+        expected_args: list[tuple[str, ...]],
+    ) -> None:
+        assert [call[0] for call in runner.calls] == expected_args
+        assert all(
+            call[1]
+            == {
+                "cwd": publish_module._REPO_ROOT,
+                "capture_output": True,
+                "text": True,
+            }
+            for call in runner.calls
+        )
+
+    def test_absent_tag_is_only_returned_for_show_ref_status_one(self) -> None:
+        runner = _ScriptedGitRunner([_GitResponse(returncode=1, stdout="unexpected")])
+
+        assert publish_module.get_local_tag_commit(TAG, runner=runner) is None
+
+        self._assert_call_ledger(
+            runner,
+            [("show-ref", "--verify", "--quiet", f"refs/tags/{TAG}")],
+        )
+
+    @pytest.mark.parametrize(
+        ("description", "ref_object", "commit"),
+        [
+            ("lightweight", HEAD_SHA, HEAD_SHA),
+            ("annotated", "c" * 40, OTHER_SHA),
+        ],
+    )
+    def test_present_tag_is_peeled_to_commit(
+        self,
+        description: str,
+        ref_object: str,
+        commit: str,
+    ) -> None:
+        del description
+        runner = _ScriptedGitRunner(
+            [
+                _GitResponse(stdout=ref_object),
+                _GitResponse(stdout=f"{commit}\n"),
+            ]
+        )
+
+        assert publish_module.get_local_tag_commit(TAG, runner=runner) == commit
+
+        self._assert_call_ledger(
+            runner,
+            [
+                ("show-ref", "--verify", "--quiet", f"refs/tags/{TAG}"),
+                ("rev-parse", "--verify", f"refs/tags/{TAG}^{{commit}}"),
+            ],
+        )
+
+    @pytest.mark.parametrize(
+        "responses",
+        [
+            [_GitResponse(returncode=2, stderr="show-ref failed")],
+            [_GitResponse(), _GitResponse(returncode=1, stderr="rev-parse failed")],
+            [_GitResponse(), _GitResponse(returncode=128, stderr="rev-parse failed")],
+        ],
+    )
+    def test_operational_lookup_failures_raise(self, responses: list[_GitResponse]) -> None:
+        runner = _ScriptedGitRunner(responses)
+
+        with pytest.raises(publish_module.GitError):
+            publish_module.get_local_tag_commit(TAG, runner=runner)
+
+    def test_malformed_peeled_commit_raises(self) -> None:
+        runner = _ScriptedGitRunner([_GitResponse(), _GitResponse(stdout="not-a-sha\n")])
+
+        with pytest.raises(publish_module.GitError):
+            publish_module.get_local_tag_commit(TAG, runner=runner)
+
+    def test_runner_oserror_fails_closed(self) -> None:
+        class _FailingRunner:
+            def run(self, args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+                raise OSError("git executable unavailable")
+
+        with pytest.raises(publish_module.GitError):
+            publish_module.get_local_tag_commit(TAG, runner=_FailingRunner())
+
+    def test_annotated_creation_is_non_interactive_and_not_forced(self) -> None:
+        runner = _ScriptedGitRunner([])
+
+        publish_module.create_annotated_tag(TAG, HEAD_SHA, runner=runner)
+
+        self._assert_call_ledger(
+            runner,
+            [("tag", "--annotate", TAG, HEAD_SHA, "--message", TAG)],
+        )
+        assert "--force" not in runner.calls[0][0]
+
+
 class TestSealMechanics:
     def test_success_returns_structured_seal_outcome(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ledger = _SealLedger()
@@ -427,23 +591,26 @@ class TestSealMechanics:
     def test_trusted_runner_propagates_and_reuses_previous_tree_commit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        ledger = _SealLedger()
+        ledger = _SealLedger(post_push_tag=PREVIOUS_COMMIT)
         _install_seal_ledger(monkeypatch, ledger)
 
-        publish_module._seal_module(
+        outcome = publish_module._seal_module(
             MODULE,
             VERSION,
             previous_version=PREVIOUS_VERSION,
             runner=ledger.runner,
         )
 
+        assert outcome.commit == PREVIOUS_COMMIT
         assert ledger.events == [
             ("remote-ref", "origin", BRANCH),
-            ("tree", f"refs/tags/{PREVIOUS_TAG}"),
+            ("local-tag", PREVIOUS_TAG),
+            ("tree", PREVIOUS_COMMIT),
             ("tree", HEAD_SHA),
             ("remote-ref", "origin", BRANCH),
             ("remote-ref", "origin", TAG),
-            ("create-tag", TAG, HEAD_SHA),
+            ("local-tag", TAG),
+            ("create-tag", TAG, PREVIOUS_COMMIT),
             ("push-tag", "origin", TAG, f"{TAG}:refs/tags/{TAG}"),
             ("remote-ref", "origin", f"{TAG}^{{}}"),
             ("remote-ref", "origin", BRANCH),
@@ -504,6 +671,7 @@ class TestSealMechanics:
             assert result is False
         assert ("create-tag", TAG, HEAD_SHA) in ledger.events
         assert ("push-tag", "origin", TAG, f"{TAG}:refs/tags/{TAG}") in ledger.events
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
 
     def test_branch_move_at_immediate_precondition_stops_before_mutation(
         self, monkeypatch: pytest.MonkeyPatch
@@ -556,6 +724,188 @@ class TestSealMechanics:
             publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
         assert ("create-tag", TAG, HEAD_SHA) in ledger.events
         assert ("delete-tag", TAG) in ledger.events
+
+    def test_create_failure_is_primary_and_cleanup_is_attempted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(create_error="local tag creation failed")
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert "local tag creation failed" in str(excinfo.value)
+        assert not any(event[0] == "push-tag" for event in ledger.events)
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    def test_create_failure_keeps_primary_when_cleanup_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(
+            create_error="local tag creation failed",
+            cleanup_error="local tag deletion failed",
+        )
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert str(excinfo.value).startswith("local tag creation failed")
+        assert "local tag creation failed" in str(excinfo.value)
+        assert "local cleanup also failed: local tag deletion failed" in str(excinfo.value)
+        assert excinfo.value.cleanup_error == "local tag deletion failed"
+        assert not any(event[0] == "push-tag" for event in ledger.events)
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    def test_push_failure_keeps_primary_when_remote_probe_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(push_error="remote rejected tag", probe_error="probe unavailable")
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert "Tag push failed" in str(excinfo.value)
+        assert "remote rejected tag" in str(excinfo.value)
+        assert "remote tag probe failed: probe unavailable" in str(excinfo.value)
+        assert excinfo.value.cleanup_error is None
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    @pytest.mark.parametrize(
+        ("runner_oserrors", "push_error", "expected_message"),
+        [
+            pytest.param(
+                {
+                    ("tag", "--annotate", TAG, HEAD_SHA, "--message", TAG): [
+                        "runner create unavailable"
+                    ]
+                },
+                None,
+                "runner create unavailable",
+                id="creation",
+            ),
+            pytest.param(
+                {("push", "origin", f"{TAG}:refs/tags/{TAG}"): ["runner push unavailable"]},
+                None,
+                "runner push unavailable",
+                id="push",
+            ),
+            pytest.param(
+                {
+                    ("ls-remote", "--heads", "origin", TAG): [
+                        None,
+                        "runner probe unavailable",
+                    ]
+                },
+                "remote rejected tag",
+                "remote tag probe failed: runner probe unavailable",
+                id="diagnostic-probe",
+            ),
+            pytest.param(
+                {
+                    ("ls-remote", "--heads", "origin", f"{TAG}^{{}}"): [
+                        "runner peeled verification unavailable"
+                    ]
+                },
+                None,
+                "runner peeled verification unavailable",
+                id="peeled-verification",
+            ),
+            pytest.param(
+                {
+                    ("ls-remote", "--heads", "origin", BRANCH): [
+                        None,
+                        None,
+                        "runner branch verification unavailable",
+                    ]
+                },
+                None,
+                "runner branch verification unavailable",
+                id="branch-verification",
+            ),
+        ],
+    )
+    def test_runner_oserror_matrix_preserves_cleanup_obligation(
+        self,
+        runner_oserrors: dict[tuple[str, ...], list[str | None]],
+        push_error: str | None,
+        expected_message: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Runner failures after tag absence always attempt local cleanup once."""
+        ledger = _SealLedger(runner_oserrors=runner_oserrors, push_error=push_error)
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert expected_message in str(excinfo.value)
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    def test_runner_oserror_cleanup_failure_keeps_primary_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A deletion OSError is secondary to the post-verification failure."""
+        ledger = _SealLedger(
+            post_push_tag=OTHER_SHA,
+            runner_oserrors={("tag", "--delete", TAG): ["runner cleanup unavailable"]},
+        )
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert str(excinfo.value).startswith("Remote tag")
+        assert "runner cleanup unavailable" in str(excinfo.value)
+        assert excinfo.value.cleanup_error == "runner cleanup unavailable"
+        assert sum(call[0] == ("tag", "--delete", TAG) for call in ledger.runner.calls) == 1
+
+    def test_malformed_remote_probe_keeps_primary_and_cleans_up(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(push_error="remote rejected tag", probe_value="ambiguous")
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert "Tag push failed" in str(excinfo.value)
+        assert "remote rejected tag" in str(excinfo.value)
+        assert "Malformed remote tag probe" in str(excinfo.value)
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    def test_remote_conflict_after_push_failure_is_secondary_to_primary(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(push_error="remote rejected tag", probe_value=OTHER_SHA)
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert str(excinfo.value).startswith("Tag push failed")
+        assert "remote rejected tag" in str(excinfo.value)
+        assert "remote tag probe found conflicting commit" in str(excinfo.value)
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
+
+    def test_cleanup_failure_is_secondary_to_push_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ledger = _SealLedger(
+            push_error="remote rejected tag",
+            cleanup_error="local tag deletion failed",
+        )
+        _install_seal_ledger(monkeypatch, ledger)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert str(excinfo.value).startswith("Tag push failed")
+        assert "remote rejected tag" in str(excinfo.value)
+        assert "local cleanup also failed: local tag deletion failed" in str(excinfo.value)
+        assert excinfo.value.cleanup_error == "local tag deletion failed"
+        assert sum(event[0] == "delete-tag" for event in ledger.events) == 1
 
     def test_batch_stops_on_first_failure_and_reports_cumulative_proof(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -699,43 +1049,219 @@ class TestSealCliAndStatus:
         assert calls == ["module_00", "module_01"]
 
 
-class TestSealMakeInterfaces:
-    def test_makefile_has_guarded_seal_targets_and_explicit_single_dispatch(
+def _run_cli_with_bootstrap_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+) -> tuple[int, list[str], list[str]]:
+    """Run ``main`` while making runner and inventory bootstrap observable."""
+    bootstrap_calls: list[str] = []
+    inventory_calls: list[str] = []
+
+    def bootstrap_sentinel(git_executable: str | None) -> object:
+        del git_executable
+        bootstrap_calls.append("build_publication_git_runner")
+        return object()
+
+    def inventory_sentinel() -> list[str]:
+        inventory_calls.append("_list_modules")
+        return []
+
+    monkeypatch.setattr(publish_module, "build_publication_git_runner", bootstrap_sentinel)
+    monkeypatch.setattr(publish_module, "_list_modules", inventory_sentinel)
+    monkeypatch.setattr(sys, "argv", ["publish_module.py", *argv])
+
+    with pytest.raises(SystemExit) as excinfo:
+        publish_module.main()
+    code = excinfo.value.code
+    assert isinstance(code, int)
+    return code, bootstrap_calls, inventory_calls
+
+
+class TestCliArgumentMatrix:
+    @pytest.mark.parametrize(
+        ("argv", "expected_message"),
+        [
+            (["--status", "--seal"], "not allowed with argument"),
+            (["--status", "--seal-all"], "not allowed with argument"),
+            (["--seal", "--seal-all"], "not allowed with argument"),
+            (["--publish-outdated", "--status"], "--publish-outdated is disabled in SA117 Phase 4"),
+            (
+                ["--publish-outdated", "--seal", MODULE, "--version", VERSION],
+                "--publish-outdated is disabled in SA117 Phase 4",
+            ),
+            (
+                ["--publish-outdated", "--seal-all", "--version", VERSION],
+                "--publish-outdated is disabled in SA117 Phase 4",
+            ),
+            (["--publish-outdated", MODULE], "--publish-outdated is disabled in SA117 Phase 4"),
+            (["--publish-outdated", "--clean"], "--publish-outdated is disabled in SA117 Phase 4"),
+            (
+                ["--publish-outdated", "--version", VERSION],
+                "--publish-outdated is disabled in SA117 Phase 4",
+            ),
+            (
+                ["--publish-outdated", "--previous-version", PREVIOUS_VERSION],
+                "--publish-outdated is disabled in SA117 Phase 4",
+            ),
+            (
+                ["--publish-outdated", "--expected-remote-sha", "ABSENT"],
+                "--publish-outdated is disabled in SA117 Phase 4",
+            ),
+            (["--status", MODULE], "--status does not accept a module name"),
+            (["--status", "--clean"], "--clean is only supported with publish actions"),
+            (
+                ["--status", "--expected-remote-sha", "ABSENT"],
+                "--expected-remote-sha is not supported with --status",
+            ),
+            (
+                ["--status", "--previous-version", PREVIOUS_VERSION],
+                "--previous-version is only supported with --seal or --seal-all",
+            ),
+            (["--seal", "--version", VERSION], "--seal requires a module name"),
+            (
+                [MODULE, "--seal", "--clean", "--version", VERSION],
+                "--clean is only supported with publish actions",
+            ),
+            (
+                [MODULE, "--seal", "--version", VERSION, "--expected-remote-sha", "ABSENT"],
+                "--expected-remote-sha is not supported with --seal",
+            ),
+            ([MODULE, "--seal"], "--seal requires --version VERSION"),
+            (
+                ["--seal-all", "--version", VERSION, MODULE],
+                "--seal-all does not accept a module name",
+            ),
+            (["--seal-all"], "--seal-all requires --version VERSION"),
+            (
+                ["--seal-all", "--version", VERSION, "--clean"],
+                "--clean is only supported with publish actions",
+            ),
+            (
+                ["--seal-all", "--version", VERSION, "--expected-remote-sha", "ABSENT"],
+                "--expected-remote-sha is not supported with --seal-all",
+            ),
+            (["--clean"], "publish options require a module name"),
+            (["--expected-remote-sha", "ABSENT"], "publish options require a module name"),
+            (
+                ["--version", VERSION],
+                "--version is only supported with --seal, --seal-all, or --status",
+            ),
+            (
+                ["--previous-version", PREVIOUS_VERSION],
+                "--previous-version is only supported with --seal or --seal-all",
+            ),
+            ([MODULE], "--expected-remote-sha is required for single-module publish"),
+            ([MODULE, "--expected-remote-sha", "not-a-sha"], "Invalid --expected-remote-sha"),
+        ],
+    )
+    def test_invalid_action_option_matrix_fails_before_bootstrap(
         self,
+        argv: list[str],
+        expected_message: str,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
+        """Every invalid action/option row is rejected before Git or inventory work."""
+        code, bootstrap_calls, inventory_calls = _run_cli_with_bootstrap_sentinel(monkeypatch, argv)
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+
+        assert code != 0
+        assert expected_message in output
+        assert bootstrap_calls == []
+        assert inventory_calls == []
+
+        if "--publish-outdated" in argv:
+            assert "force-with-lease safety contract" in output
+            assert "Traceback" not in output
+
+    def test_publish_outdated_rejected_with_phase4_message(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The retained regression proves disabled-action precedence and no bootstrap."""
+        code, bootstrap_calls, inventory_calls = _run_cli_with_bootstrap_sentinel(
+            monkeypatch,
+            ["--publish-outdated", "--expected-remote-sha", "a" * 40],
+        )
+        output = capsys.readouterr().out
+
+        assert code == 1
+        assert "--publish-outdated is disabled in SA117 Phase 4" in output
+        assert "force-with-lease safety contract" in output
+        assert "Traceback" not in output
+        assert bootstrap_calls == []
+        assert inventory_calls == []
+
+
+class TestSealMakeInterfaces:
+    @staticmethod
+    def _make(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["make", "--no-print-directory", *args],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    @pytest.mark.parametrize(
+        ("make_args", "expected_dispatch"),
+        [
+            (
+                ["-n", "seal-module", "MODULE=auth", "VERSION=0.88.0", "PREVIOUS_VERSION=0.87.0"],
+                "scripts/publish_module.sh auth --seal --version 0.88.0 --previous-version 0.87.0",
+            ),
+            (
+                ["-n", "seal-modules", "VERSION=0.88.0", "PREVIOUS_VERSION=0.87.0"],
+                "scripts/publish_module.sh --seal-all --version 0.88.0 --previous-version 0.87.0",
+            ),
+            (
+                ["-n", "seal-status", "VERSION=0.88.0"],
+                "scripts/publish_module.sh --status --version 0.88.0",
+            ),
+        ],
+    )
+    def test_make_seal_interfaces_use_actual_dry_run_dispatch(
+        self,
+        make_args: list[str],
+        expected_dispatch: str,
+    ) -> None:
+        """GNU Make's expanded recipe is the caller-path oracle."""
+        result = self._make(*make_args)
+        assert result.returncode == 0, result.stderr
+        assert expected_dispatch in result.stdout.splitlines()
+        assert "git push --tags" not in result.stdout
+
+    @pytest.mark.parametrize(
+        ("make_args", "expected_message"),
+        [
+            (["seal-module"], "Error: MODULE is required"),
+            (["seal-module", "MODULE=auth"], "Error: VERSION is required explicitly"),
+            (["seal-modules"], "Error: VERSION is required explicitly"),
+            (["seal-status"], "Error: VERSION is required explicitly"),
+        ],
+    )
+    def test_make_seal_guards_fail_before_dispatch(
+        self,
+        make_args: list[str],
+        expected_message: str,
+    ) -> None:
+        """Missing-variable calls run only their target guard, never the wrapper."""
+        result = self._make(*make_args)
+        output = result.stdout + result.stderr
+        assert result.returncode != 0
+        assert expected_message in output
+        assert "scripts/publish_module.sh" not in output
+
+    def test_make_seal_safety_warning_remains_and_no_unsafe_push_is_dispatched(self) -> None:
+        """The source warning remains while GNU Make emits no broad tag push."""
         makefile = Path(__file__).resolve().parents[1] / "Makefile"
         text = makefile.read_text()
-        for target in ("seal-module:", "seal-modules:", "seal-status:"):
-            assert target in text
-        assert "EXPECTED_REMOTE_SHA" in text
-        assert "scripts/publish_module.sh" in text
-        assert "--seal" in text
-        assert "--seal-all" in text
-        assert "--status" in text
-        assert "git push --tags" in text
-        assert "PyPI" in text
+        assert "Seal tags are deliberately narrower" in text
+        assert "unsafe command could push the local core tag" in text
 
-    def test_make_seal_module_requires_module_and_version(self) -> None:
-        text = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
-        assert "seal-module:" in text, "planned seal-module target is absent"
-        assert "seal-modules:" in text, "planned seal-modules target is absent"
-        block = text[text.index("seal-module:") : text.index("seal-modules:")]
-        assert 'if [ -z "$(MODULE)" ]' in block
-        assert "$(origin VERSION)" in block
-        assert '[ -z "$(VERSION)" ]' in block
-        assert "--seal" in block
-        assert "--version $(VERSION)" in block
-        assert "--previous-version $(PREVIOUS_VERSION)" in block
-
-    def test_make_seal_all_and_status_require_version(self) -> None:
-        text = (Path(__file__).resolve().parents[1] / "Makefile").read_text()
-        assert "seal-modules:" in text, "planned seal-modules target is absent"
-        assert "seal-status:" in text, "planned seal-status target is absent"
-        all_block = text[text.index("seal-modules:") : text.index("seal-status:")]
-        status_block = text[text.index("seal-status:") :]
-        assert "$(origin VERSION)" in all_block
-        assert "$(origin VERSION)" in status_block
-        assert "--seal-all" in all_block
-        assert "--status" in status_block
-        assert "$(VERSION)" in all_block
-        assert "$(VERSION)" in status_block
+        result = self._make("-n", "seal-status", "VERSION=0.88.0")
+        assert result.returncode == 0, result.stderr
+        assert "git push --tags" not in result.stdout
