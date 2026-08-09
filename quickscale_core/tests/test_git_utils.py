@@ -2743,6 +2743,14 @@ def _install_bare_update_hook(origin: Path, body: str) -> Path:
     return hook
 
 
+def _install_bare_post_receive_hook(origin: Path, body: str) -> Path:
+    """Install an executable deterministic post-receive hook in a bare repo."""
+    hook = origin / "hooks" / "post-receive"
+    hook.write_text(f"#!/bin/sh\nset -eu\n{body}\n")
+    hook.chmod(hook.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return hook
+
+
 @pytest.fixture
 def real_publish_repository(tmp_path: Path) -> _RealPublishRepository:
     """Create controlled local commits and a real publication GitRunner."""
@@ -2859,6 +2867,74 @@ class _MoveOnBranchReadRunner(_RecordingRealGitRunner):
                     text=True,
                 )
         return super().run(args, **kwargs)
+
+
+class _FaultInjectingRealGitRunner(_RecordingRealGitRunner):
+    """Inject one named fault while delegating all other calls to real Git."""
+
+    def __init__(
+        self,
+        delegate: GitRunner,
+        *,
+        raise_operations: Collection[str] = (),
+        output_overrides: dict[tuple[str, ...], str] | None = None,
+    ) -> None:
+        super().__init__(delegate)
+        self.raise_operations = set(raise_operations)
+        self.output_overrides = output_overrides or {}
+        self.remote_tag_queries = 0
+        self.creation_verifications: list[tuple[Path, str, str]] = []
+
+    @staticmethod
+    def _operation(args: list[str]) -> str | None:
+        if args[:1] == ["tag"] and args[1:2] == ["--annotate"]:
+            return "create"
+        if args[:1] == ["push"]:
+            return "push"
+        if args[:2] == ["ls-remote", "--tags"] and len(args) == 6:
+            return "remote-tag-query"
+        if args[:2] == ["ls-remote", "--tags"] and len(args) == 5:
+            return "peeled-probe"
+        if args[:2] == ["tag", "--delete"]:
+            return "delete"
+        return None
+
+    def run(
+        self, args: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[object]:
+        self.calls.append(tuple(args))
+        operation = self._operation(args)
+        if operation == "remote-tag-query":
+            self.remote_tag_queries += 1
+            if self.remote_tag_queries == 2:
+                operation = "remote-tag-probe"
+        if operation == "create" and operation in self.raise_operations:
+            result = self.delegate.run(args, **kwargs)
+            cwd = kwargs.get("cwd")
+            if not isinstance(cwd, Path):
+                raise AssertionError("creation fault requires a Path cwd")
+            tag = args[2]
+            tag_ref = f"refs/tags/{tag}"
+            assert _local_git_output(cwd, "cat-file", "-t", tag_ref) == "tag"
+            peeled_commit = _local_git_output(
+                cwd, "rev-parse", "--verify", f"{tag_ref}^{{commit}}"
+            )
+            assert peeled_commit == args[3]
+            self.creation_verifications.append((cwd, tag, peeled_commit))
+            raise OSError("injected create OSError")
+        if operation in self.raise_operations:
+            raise OSError(f"injected {operation} OSError")
+
+        result = self.delegate.run(args, **kwargs)
+        replacement = self.output_overrides.get(tuple(args))
+        if replacement is None and tuple(args) not in self.output_overrides:
+            return result
+        return subprocess.CompletedProcess(
+            result.args,
+            result.returncode,
+            stdout=replacement,
+            stderr=result.stderr,
+        )
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
@@ -3290,6 +3366,247 @@ class TestPublishModuleSealRealGit:
                 shutil.move(str(offline_origin), str(repo.origin))
 
         assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+
+    @pytest.mark.parametrize(
+        ("output", "message"),
+        [
+            ("not-a-record\n", "Malformed remote tag"),
+            (
+                "a" * 40
+                + "\trefs/tags/splits/auth-module/0.88.0\n"
+                + "b" * 40
+                + "\trefs/tags/splits/auth-module/0.88.0\n",
+                "Duplicate ref",
+            ),
+            (
+                "a" * 40
+                + "\trefs/tags/splits/auth-module/0.88.0^{}\n"
+                + "b" * 40
+                + "\trefs/tags/splits/auth-module/0.88.0^{}\n",
+                "Duplicate ref",
+            ),
+        ],
+        ids=["malformed", "duplicate-direct", "duplicate-peeled"],
+    )
+    def test_malformed_or_duplicate_remote_records_are_fail_closed(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+        output: str,
+        message: str,
+    ) -> None:
+        """Production remote parsing rejects ambiguous records before mutation."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        tag = self._tag("0.88.0")
+        direct_query = (
+            "ls-remote",
+            "--tags",
+            "--",
+            "origin",
+            f"refs/tags/{tag}",
+            f"refs/tags/{tag}^{{}}",
+        )
+        runner = _FaultInjectingRealGitRunner(
+            repo.runner,
+            output_overrides={direct_query: output},
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        with pytest.raises(publish_module.SealError, match=message):
+            publish_module._seal_module("auth", "0.88.0", runner=runner)
+
+        assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+
+    @pytest.mark.parametrize("post_output", ["", "first"], ids=["absent", "mismatch"])
+    def test_post_push_peeled_tag_verification_cleans_local_tag(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+        post_output: str,
+    ) -> None:
+        """Absent or mismatched peeled verification leaves only the remote tag."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        tag = self._tag("0.88.0")
+        peeled_query = (
+            "ls-remote",
+            "--tags",
+            "--",
+            "origin",
+            f"refs/tags/{tag}^{{}}",
+        )
+        if post_output == "first":
+            output = f"{repo.first_commit}\trefs/tags/{tag}^{{}}\n"
+            runner: GitRunner = _FaultInjectingRealGitRunner(
+                repo.runner,
+                output_overrides={peeled_query: output},
+            )
+        else:
+            runner = _FaultInjectingRealGitRunner(
+                repo.runner,
+                output_overrides={peeled_query: ""},
+            )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        with pytest.raises(
+            publish_module.SealError, match="failed post-action verification"
+        ):
+            publish_module._seal_module("auth", "0.88.0", runner=runner)
+
+        tag_ref = f"refs/tags/{tag}"
+        assert _ref_inventory(repo.working) == before_work
+        _assert_ref_inventory_delta(
+            before_origin, _ref_inventory(repo.origin), added={tag_ref}
+        )
+        assert _local_git_output(repo.origin, "rev-parse", f"{tag_ref}^{{}}") == (
+            repo.current_commit
+        )
+
+    def test_hook_induced_peeled_tag_mismatch_fails_unsealed(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A real receive hook can alter the peeled tag before verification."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        tag = self._tag("0.88.0")
+        tag_ref = f"refs/tags/{tag}"
+        _install_bare_post_receive_hook(
+            repo.origin,
+            "while read _old new ref; do\n"
+            f'  if [ "$ref" = {shlex.quote(tag_ref)} ]; then\n'
+            f'    git update-ref {shlex.quote(tag_ref)} {shlex.quote(repo.first_commit)} "$new"\n'
+            "  fi\n"
+            "done",
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        with pytest.raises(
+            publish_module.SealError, match="failed post-action verification"
+        ):
+            publish_module._seal_module("auth", "0.88.0", runner=repo.runner)
+
+        assert _ref_inventory(repo.working) == before_work
+        _assert_ref_inventory_delta(
+            before_origin, _ref_inventory(repo.origin), added={tag_ref}
+        )
+        assert _local_git_output(repo.origin, "rev-parse", f"{tag_ref}^{{}}") == (
+            repo.first_commit
+        )
+
+    def test_creation_then_error_is_caught_with_prearmed_cleanup(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A created tag is cleaned when creation reports an ambiguous OSError."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        runner = _FaultInjectingRealGitRunner(repo.runner, raise_operations={"create"})
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+        tag = self._tag("0.88.0")
+        tag_ref = f"refs/tags/{tag}"
+
+        with pytest.raises(publish_module.SealError, match="create OSError") as excinfo:
+            publish_module._seal_module("auth", "0.88.0", runner=runner)
+
+        assert str(excinfo.value) == "injected create OSError"
+        assert excinfo.value.cleanup_error is None
+        assert runner.creation_verifications == [
+            (repo.working, tag, repo.current_commit)
+        ]
+        create_calls = [
+            call for call in runner.calls if call[:2] == ("tag", "--annotate")
+        ]
+        delete_calls = [
+            call for call in runner.calls if call[:2] == ("tag", "--delete")
+        ]
+        assert create_calls == [
+            ("tag", "--annotate", tag, repo.current_commit, "--message", tag)
+        ]
+        assert delete_calls == [("tag", "--delete", tag)]
+        assert runner.calls.index(create_calls[0]) < runner.calls.index(delete_calls[0])
+        assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+        assert tag_ref not in _ref_inventory(repo.working)
+
+    def test_push_oserror_after_creation_cleans_local_tag(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A push OSError after real creation preserves zero ref delta."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        runner = _FaultInjectingRealGitRunner(repo.runner, raise_operations={"push"})
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        with pytest.raises(publish_module.SealError, match="Tag push failed"):
+            publish_module._seal_module("auth", "0.88.0", runner=runner)
+
+        assert any(call[:2] == ("tag", "--annotate") for call in runner.calls)
+        assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+
+    def test_push_and_probe_oserrors_preserve_primary_failure(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Push and diagnostic-probe OSErrors retain the push error as primary."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        runner = _FaultInjectingRealGitRunner(
+            repo.runner,
+            raise_operations={"push", "remote-tag-probe"},
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module("auth", "0.88.0", runner=runner)
+
+        message = str(excinfo.value)
+        assert message.startswith("Tag push failed")
+        assert "remote tag probe failed" in message
+        assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+
+    def test_local_delete_oserror_preserves_primary_failure(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A cleanup OSError is reported without replacing the push failure."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        runner = _FaultInjectingRealGitRunner(
+            repo.runner,
+            raise_operations={"push", "delete"},
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module("auth", "0.88.0", runner=runner)
+
+        message = str(excinfo.value)
+        assert message.startswith("Tag push failed")
+        assert "local cleanup also failed" in message
+        assert excinfo.value.cleanup_error is not None
+        tag_ref = f"refs/tags/{self._tag('0.88.0')}"
+        _assert_ref_inventory_delta(
+            before_work, _ref_inventory(repo.working), added={tag_ref}
+        )
         assert _ref_inventory(repo.origin) == before_origin
 
 
