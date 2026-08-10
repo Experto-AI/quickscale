@@ -813,19 +813,47 @@ class TestPostGenerationHelpers:
         monkeypatch.setenv("VIRTUAL_ENV", fake_venv)
         monkeypatch.setenv("POETRY_ACTIVE", "1")
         monkeypatch.setenv("PATH", f"{fake_venv}/bin:/usr/bin:/bin")
+        monkeypatch.setenv("POETRY_CACHE_DIR", "/tmp/worker-cache")
 
-        env = _isolated_poetry_env()
+        env = _isolated_poetry_env(
+            {
+                "DJANGO_SETTINGS_MODULE": "generated.settings.test_e2e",
+                "VIRTUAL_ENV": "/tmp/override-venv",
+                "POETRY_ACTIVE": "override",
+            }
+        )
 
         assert "VIRTUAL_ENV" not in env
         assert "POETRY_ACTIVE" not in env
         assert f"{fake_venv}/bin" not in env["PATH"].split(":")
         assert env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
+        assert env["DJANGO_SETTINGS_MODULE"] == "generated.settings.test_e2e"
+        assert env["POETRY_CACHE_DIR"] == "/tmp/worker-cache"
 
     @patch("quickscale_cli.commands.apply_command._run_command")
     def test_migrations(self, mock_run):
         """Test run migrations wrapper"""
         mock_run.return_value = (True, "")
         assert _run_migrations(Path("/tmp/proj")) is True
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    def test_migrations_uses_isolated_poetry_env(
+        self, mock_run: Mock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Migrations must strip ambient Poetry and virtualenv state."""
+        fake_venv = "/home/victor/code/quickscale/.venv"
+        monkeypatch.setenv("VIRTUAL_ENV", fake_venv)
+        monkeypatch.setenv("POETRY_ACTIVE", "1")
+        monkeypatch.setenv("PATH", f"{fake_venv}/bin:/usr/bin:/bin")
+        mock_run.return_value = (True, "")
+
+        assert _run_migrations(Path("/tmp/proj")) is True
+
+        passed_env = mock_run.call_args.kwargs["env"]
+        assert "VIRTUAL_ENV" not in passed_env
+        assert "POETRY_ACTIVE" not in passed_env
+        assert f"{fake_venv}/bin" not in passed_env["PATH"].split(":")
+        assert passed_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
 
     @patch("quickscale_cli.commands.apply_command._run_command")
     def test_migrations_in_docker(self, mock_run):

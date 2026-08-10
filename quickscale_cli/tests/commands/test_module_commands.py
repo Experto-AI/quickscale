@@ -797,12 +797,18 @@ class TestInstallModuleDependencies:
         assert resolved is None
 
     @patch("quickscale_cli.commands.module_commands.subprocess.run")
-    def test_successful_installation(self, mock_run, tmp_path):
+    def test_successful_installation(self, mock_run, tmp_path, monkeypatch):
         """Test successful dependency installation."""
         # Create module directory
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
+
+        fake_venv = "/tmp/quickscale-root-venv"
+        monkeypatch.setenv("VIRTUAL_ENV", fake_venv)
+        monkeypatch.setenv("POETRY_ACTIVE", "1")
+        monkeypatch.setenv("PATH", f"{fake_venv}/bin:/usr/bin:/bin")
+        monkeypatch.setenv("POETRY_CACHE_DIR", "/tmp/worker-cache")
 
         mock_run.side_effect = [
             Mock(returncode=0, stderr="", stdout=""),
@@ -815,6 +821,14 @@ class TestInstallModuleDependencies:
         assert mock_run.call_count == 2
         assert mock_run.call_args_list[0][0][0] == ["poetry", "lock"]
         assert mock_run.call_args_list[1][0][0] == ["poetry", "install"]
+        lock_env = mock_run.call_args_list[0].kwargs["env"]
+        install_env = mock_run.call_args_list[1].kwargs["env"]
+        assert lock_env is install_env
+        assert "VIRTUAL_ENV" not in lock_env
+        assert "POETRY_ACTIVE" not in lock_env
+        assert f"{fake_venv}/bin" not in lock_env["PATH"].split(":")
+        assert lock_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
+        assert lock_env["POETRY_CACHE_DIR"] == "/tmp/worker-cache"
 
     @patch("quickscale_cli.commands.module_commands.subprocess.run")
     def test_root_module_path_detection(self, mock_run, tmp_path):

@@ -60,6 +60,7 @@ from quickscale_core.utils.git_utils import (
     run_git_subtree_push,
     validate_tag_name,
 )
+from quickscale_core.utils.poetry_env import build_isolated_poetry_env
 from .module_config import (
     APPLY_MODULE_EXECUTION_MODE,
     MODULE_CONFIGURATOR_REGISTRY,
@@ -770,11 +771,13 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
             return True
 
         click.echo("  • Refreshing poetry.lock...")
+        poetry_env = build_isolated_poetry_env()
         lock_result = subprocess.run(
             ["poetry", "lock"],
             cwd=project_path,
             capture_output=True,
             text=True,
+            env=poetry_env,
         )
 
         if lock_result.returncode != 0:
@@ -794,6 +797,7 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
             cwd=project_path,
             capture_output=True,
             text=True,
+            env=poetry_env,
         )
 
         if result.returncode != 0:
