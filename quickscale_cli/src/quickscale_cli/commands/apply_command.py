@@ -127,6 +127,9 @@ from quickscale_core.utils.theme_validation import (
     ThemeValidationError,
     validate_theme_preflight,
 )
+from quickscale_core.utils.poetry_env import (
+    build_isolated_poetry_env as _isolated_poetry_env,
+)
 from quickscale_core.utils.git_utils import (
     GitError,
     is_working_directory_clean,
@@ -585,28 +588,6 @@ def _embed_module(
         return False
 
 
-def _isolated_poetry_env() -> dict[str, str]:
-    """Build a subprocess environment that keeps Poetry off an ambient venv.
-
-    Poetry treats an active ``VIRTUAL_ENV`` as taking precedence over its own
-    per-project virtualenv resolution. If the caller's shell has a venv
-    activated (e.g. a developer running the CLI/tests from within the main
-    repo's venv), an unmodified ``poetry install``/``poetry lock`` for a
-    generated project installs straight into that unrelated venv instead of
-    one scoped to the generated project.
-    """
-    env = os.environ.copy()
-    venv_path = env.pop("VIRTUAL_ENV", None)
-    env.pop("POETRY_ACTIVE", None)
-    if venv_path:
-        venv_bin = str(Path(venv_path) / "bin")
-        env["PATH"] = os.pathsep.join(
-            p for p in env.get("PATH", "").split(os.pathsep) if p != venv_bin
-        )
-    env["POETRY_VIRTUALENVS_IN_PROJECT"] = "true"
-    return env
-
-
 def _run_poetry_install(project_path: Path) -> bool:
     """Run poetry install in project"""
     return _run_command(
@@ -633,6 +614,7 @@ def _run_migrations(project_path: Path) -> bool:
         ["poetry", "run", "python", "manage.py", "migrate"],
         project_path,
         "Running migrations",
+        env=_isolated_poetry_env(),
     )[0]
 
 

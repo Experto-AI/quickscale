@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+from quickscale_core.utils.poetry_env import build_isolated_poetry_env
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_LOCAL_ARTIFACT_NAMES = frozenset(
     {
@@ -94,12 +96,14 @@ def _install_project_dependencies(project_path: Path) -> None:
     Skips the test when PyPI is unreachable so CI does not fail on
     transient network issues.
     """
+    poetry_env = build_isolated_poetry_env()
     lock_result = subprocess.run(
         ["poetry", "lock"],
         cwd=project_path,
         capture_output=True,
         text=True,
         timeout=120,
+        env=poetry_env,
     )
     lock_output = f"{lock_result.stdout}\n{lock_result.stderr}"
     if lock_result.returncode != 0 and _is_poetry_network_failure(lock_output):
@@ -112,6 +116,7 @@ def _install_project_dependencies(project_path: Path) -> None:
         capture_output=True,
         text=True,
         timeout=180,
+        env=poetry_env,
     )
     install_output = f"{install_result.stdout}\n{install_result.stderr}"
     if install_result.returncode != 0 and _is_poetry_network_failure(install_output):
@@ -273,10 +278,9 @@ def _run_migrations(project_path: Path, project_name: str) -> None:
         cwd=project_path,
         capture_output=True,
         text=True,
-        env={
-            **os.environ,
-            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_smoke",
-        },
+        env=build_isolated_poetry_env(
+            {"DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_smoke"}
+        ),
     )
     assert result.returncode == 0, (
         f"Migrations failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
@@ -300,10 +304,9 @@ def _start_dev_server(
         cwd=project_path,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        env={
-            **os.environ,
-            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_smoke",
-        },
+        env=build_isolated_poetry_env(
+            {"DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_smoke"}
+        ),
         text=True,
         bufsize=1,
     )
@@ -581,10 +584,9 @@ class TestGeneratedProjectRuntimeSmoke:
             cwd=project_path,
             capture_output=True,
             text=True,
-            env={
-                **os.environ,
-                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_smoke",
-            },
+            env=build_isolated_poetry_env(
+                {"DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_smoke"}
+            ),
         )
         assert result.returncode == 0, (
             f"createcachetable failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
@@ -690,15 +692,16 @@ class TestGeneratedProjectRuntimeSmoke:
         # invocation).
         # Build subprocess env from a copy so we can strip ambient REDIS_URL.
         # The test must prove DatabaseCache/no-Redis path (CR-SA63-002).
-        subprocess_env = {
-            **os.environ,
-            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
-            "SECRET_KEY": "qs-sa63-test-production-secret-key-not-for-real-use",
-            "DATABASE_URL": postgres_url,
-            "RUNTIME_DATABASE_URL": "",
-            "QUICKSCALE_ALLOW_BYPASSRLS": "1",
-            "ALLOWED_HOSTS": "localhost,127.0.0.1",
-        }
+        subprocess_env = build_isolated_poetry_env(
+            {
+                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+                "SECRET_KEY": "qs-sa63-test-production-secret-key-not-for-real-use",
+                "DATABASE_URL": postgres_url,
+                "RUNTIME_DATABASE_URL": "",
+                "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+                "ALLOWED_HOSTS": "localhost,127.0.0.1",
+            }
+        )
         subprocess_env.pop("REDIS_URL", None)
 
         result = subprocess.run(
@@ -813,15 +816,16 @@ class TestGeneratedProjectRuntimeSmoke:
         # Build subprocess env from a copy so we can strip ambient REDIS_URL.
         # The test must prove DatabaseCache/no-Redis path via privileged
         # command (CR-SA68-001).
-        subprocess_env = {
-            **os.environ,
-            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
-            "SECRET_KEY": "qs-sa68-test-production-secret-key-not-for-real-use",
-            "DATABASE_URL": postgres_url,
-            "RUNTIME_DATABASE_URL": "",
-            "QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable",
-            "ALLOWED_HOSTS": "localhost,127.0.0.1",
-        }
+        subprocess_env = build_isolated_poetry_env(
+            {
+                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+                "SECRET_KEY": "qs-sa68-test-production-secret-key-not-for-real-use",
+                "DATABASE_URL": postgres_url,
+                "RUNTIME_DATABASE_URL": "",
+                "QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable",
+                "ALLOWED_HOSTS": "localhost,127.0.0.1",
+            }
+        )
         subprocess_env.pop("REDIS_URL", None)
         # No QUICKSCALE_ALLOW_BYPASSRLS — the guard must pass via
         # _is_privileged_command() recognising createcachetable.
@@ -870,13 +874,16 @@ class TestGeneratedProjectRuntimeSmoke:
         # Run collectstatic with production settings and the non-DB command env var.
         # No DATABASE_URL or RUNTIME_DATABASE_URL is needed — the non-DB path
         # provides a dummy URL that Django never actually connects to.
-        subprocess_env = {
-            **os.environ,
-            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
-            "SECRET_KEY": ("test-secret-key-for-collectstatic-e2e-not-for-real-use"),
-            "QUICKSCALE_NON_DB_COMMAND": "collectstatic",
-            "ALLOWED_HOSTS": "localhost,127.0.0.1",
-        }
+        subprocess_env = build_isolated_poetry_env(
+            {
+                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.production",
+                "SECRET_KEY": (
+                    "test-secret-key-for-collectstatic-e2e-not-for-real-use"
+                ),
+                "QUICKSCALE_NON_DB_COMMAND": "collectstatic",
+                "ALLOWED_HOSTS": "localhost,127.0.0.1",
+            }
+        )
         subprocess_env.pop("REDIS_URL", None)
 
         result = subprocess.run(

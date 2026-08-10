@@ -27,6 +27,7 @@ from pathlib import Path
 import pytest
 
 from quickscale_cli.utils.docker_utils import get_docker_compose_command
+from quickscale_core.utils.poetry_env import build_isolated_poetry_env
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -325,6 +326,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
             capture_output=True,
             text=True,
             timeout=60,
+            env=build_isolated_poetry_env(),
         )
         assert import_result.returncode == 0, (
             "Generated project dependencies did not install correctly: "
@@ -472,6 +474,7 @@ class TestGeneratedProjectDependencyInstallSmoke:
             capture_output=True,
             text=True,
             timeout=120,
+            env=build_isolated_poetry_env(),
         )
         assert verification_result.returncode == 0, (
             "Generated project is missing synced shipped-module distributions: "
@@ -584,10 +587,9 @@ class TestFullE2EWorkflow:
             cwd=project_path,
             capture_output=True,
             text=True,
-            env={
-                **os.environ,
-                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
-            },
+            env=build_isolated_poetry_env(
+                {"DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e"}
+            ),
         )
 
         # Generated project tests should pass
@@ -642,12 +644,14 @@ class TestFullE2EWorkflow:
             pyproject_path.write_text(pyproject_content)
 
         # Regenerate lock and install with the new path dependency
+        poetry_env = build_isolated_poetry_env()
         lock_result = subprocess.run(
             ["poetry", "lock"],
             cwd=project_path,
             capture_output=True,
             text=True,
             timeout=120,
+            env=poetry_env,
         )
         assert lock_result.returncode == 0, (
             f"poetry lock failed after adding orgs dep: {lock_result.stderr}"
@@ -658,6 +662,7 @@ class TestFullE2EWorkflow:
             capture_output=True,
             text=True,
             timeout=180,
+            env=poetry_env,
         )
         assert install_result.returncode == 0, (
             f"poetry install failed after adding orgs dep: {install_result.stderr}"
@@ -759,11 +764,12 @@ class TestFullE2EWorkflow:
             cwd=project_path,
             capture_output=True,
             text=True,
-            env={
-                **os.environ,
-                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
-                "QUICKSCALE_ALLOW_BYPASSRLS": "1",
-            },
+            env=build_isolated_poetry_env(
+                {
+                    "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
+                    "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+                }
+            ),
         )
         assert migrate_result.returncode == 0, (
             f"Migrations failed: {migrate_result.stderr}"
@@ -784,11 +790,12 @@ class TestFullE2EWorkflow:
             cwd=project_path,
             capture_output=True,
             text=True,
-            env={
-                **os.environ,
-                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
-                "QUICKSCALE_ALLOW_BYPASSRLS": "1",
-            },
+            env=build_isolated_poetry_env(
+                {
+                    "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
+                    "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+                }
+            ),
         )
 
         # Exit code 1 — isolation check failed
@@ -945,10 +952,9 @@ class TestFullE2EWorkflow:
         self._run_migrations(project_path)
         self._collect_static(project_path)
 
-        local_env = {
-            **os.environ,
-            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
-        }
+        local_env = build_isolated_poetry_env(
+            {"DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e"}
+        )
         check_result = subprocess.run(
             ["poetry", "run", "python", "manage.py", "check"],
             cwd=project_path,
@@ -1206,12 +1212,14 @@ class TestFullE2EWorkflow:
     def _install_project_dependencies(self, project_path: Path):
         """Install dependencies in the generated project using poetry."""
         # First, regenerate lock file to match current Python version
+        poetry_env = build_isolated_poetry_env()
         lock_result = subprocess.run(
             ["poetry", "lock"],
             cwd=project_path,
             capture_output=True,
             text=True,
             timeout=120,  # 2 minutes timeout for lock
+            env=poetry_env,
         )
         lock_output = f"{lock_result.stdout}\n{lock_result.stderr}"
         if lock_result.returncode != 0 and _is_poetry_network_failure(lock_output):
@@ -1225,6 +1233,7 @@ class TestFullE2EWorkflow:
             capture_output=True,
             text=True,
             timeout=180,  # 3 minutes timeout for installation
+            env=poetry_env,
         )
         install_output = f"{install_result.stdout}\n{install_result.stderr}"
         if install_result.returncode != 0 and _is_poetry_network_failure(
@@ -1397,10 +1406,9 @@ LOGGING = {{
             cwd=project_path,
             capture_output=True,
             text=True,
-            env={
-                **os.environ,
-                "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
-            },
+            env=build_isolated_poetry_env(
+                {"DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e"}
+            ),
         )
         assert result.returncode == 0, f"Django checks failed: {result.stderr}"
 
@@ -1419,12 +1427,12 @@ LOGGING = {{
                 environment variables with the same key.
 
         """
-        env = {
-            **os.environ,
-            "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
-        }
-        if env_overrides:
-            env.update(env_overrides)
+        env = build_isolated_poetry_env(
+            {
+                "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
+                **(env_overrides or {}),
+            }
+        )
 
         result = subprocess.run(
             ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
@@ -1442,10 +1450,9 @@ LOGGING = {{
             cwd=project_path,
             capture_output=True,
             text=True,
-            env={
-                **os.environ,
-                "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
-            },
+            env=build_isolated_poetry_env(
+                {"DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e"}
+            ),
         )
         assert result.returncode == 0, f"collectstatic failed: {result.stderr}"
 
@@ -1466,12 +1473,12 @@ LOGGING = {{
                 environment variables with the same key.
 
         """
-        env = {
-            **os.environ,
-            "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
-        }
-        if env_overrides:
-            env.update(env_overrides)
+        env = build_isolated_poetry_env(
+            {
+                "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
+                **(env_overrides or {}),
+            }
+        )
 
         # Start server without capturing output so we can see errors
         return subprocess.Popen(
@@ -1604,6 +1611,41 @@ LOGGING = {{
             assert "frontend/assets/index" in html, (
                 f"React JS bundle not referenced for route: {url}"
             )
+
+
+def test_collect_static_uses_isolated_poetry_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Generated-project collectstatic must strip ambient Poetry state."""
+    from unittest.mock import patch
+
+    fake_venv = "/home/victor/code/quickscale/.venv"
+    monkeypatch.setenv("VIRTUAL_ENV", fake_venv)
+    monkeypatch.setenv("POETRY_ACTIVE", "1")
+    monkeypatch.setenv("PATH", f"{fake_venv}/bin:/usr/bin:/bin")
+    completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+
+    with patch.object(subprocess, "run", return_value=completed) as mock_run:
+        TestFullE2EWorkflow()._collect_static(tmp_path)
+
+    assert mock_run.call_count == 1
+    passed_env = mock_run.call_args.kwargs["env"]
+    assert "VIRTUAL_ENV" not in passed_env
+    assert "POETRY_ACTIVE" not in passed_env
+    assert f"{fake_venv}/bin" not in passed_env["PATH"].split(os.pathsep)
+    assert passed_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
+    assert passed_env["DJANGO_SETTINGS_MODULE"] == f"{tmp_path.name}.settings.test_e2e"
+
+
+def test_repo_poetry_command_remains_ambient() -> None:
+    """Maintainer-repository Poetry commands intentionally inherit the environment."""
+    from unittest.mock import patch
+
+    completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+    with patch.object(subprocess, "run", return_value=completed) as mock_run:
+        TestFullE2EWorkflow()._run_repo_poetry_command(["python", "--version"], 10)
+
+    assert mock_run.call_args.kwargs["env"] is None
 
 
 @pytest.mark.e2e
