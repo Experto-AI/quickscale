@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -250,12 +251,15 @@ def _init_clean_git_repo(path: Path) -> None:
 
 def _install_verification_success_stub(
     monkeypatch: pytest.MonkeyPatch,
+    env_calls: list[tuple[tuple[str, ...], dict[str, str] | None]] | None = None,
 ) -> list[tuple[tuple[str, ...], Path]]:
     calls: list[tuple[tuple[str, ...], Path]] = []
 
     def fake_run(command, cwd=None, **kwargs):
         command_tuple = tuple(command)
         call_cwd = Path(cwd) if cwd is not None else Path.cwd()
+        if env_calls is not None:
+            env_calls.append((command_tuple, kwargs.get("env")))
         calls.append((command_tuple, call_cwd))
         joined = " ".join(command_tuple)
         return subprocess.CompletedProcess(
@@ -959,7 +963,13 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
         'LOGGER = "experto_ai_web"\n'
     )
 
-    calls = _install_verification_success_stub(monkeypatch)
+    env_calls: list[tuple[tuple[str, ...], dict[str, str] | None]] = []
+    ambient_venv = tmp_path / "ambient-venv"
+    ambient_venv_bin = str(ambient_venv / "bin")
+    monkeypatch.setenv("VIRTUAL_ENV", str(ambient_venv))
+    monkeypatch.setenv("POETRY_ACTIVE", "1")
+    monkeypatch.setenv("PATH", os.pathsep.join((ambient_venv_bin, "/usr/bin")))
+    calls = _install_verification_success_stub(monkeypatch, env_calls)
     report = run_beta_migration(
         BetaMigrationInput(
             mode="fresh-first",
@@ -973,6 +983,32 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
     assert report.phase == "fresh-first-executed"
     assert report.identity_reconciliation_required is True
     _assert_verification_report(report, recipient, calls)
+
+    poetry_envs = {
+        command: env
+        for command, env in env_calls
+        if command in {("poetry", "lock"), ("poetry", "install")}
+    }
+    assert set(poetry_envs) == {("poetry", "lock"), ("poetry", "install")}
+    for isolated_env in poetry_envs.values():
+        assert isolated_env is not None
+        assert "VIRTUAL_ENV" not in isolated_env
+        assert "POETRY_ACTIVE" not in isolated_env
+        assert ambient_venv_bin not in isolated_env["PATH"]
+        assert isolated_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
+
+    ambient_commands = {
+        command
+        for command, env in env_calls
+        if command not in {("poetry", "lock"), ("poetry", "install")} and env is None
+    }
+    assert ambient_commands == {
+        ("pnpm", "install"),
+        ("pnpm", "build"),
+        ("quickscale", "manage", "migrate"),
+        ("pytest",),
+        ("pnpm", "test"),
+    }
 
     new_package_dir = recipient / "experto_ai_web"
     assert new_package_dir.is_dir()
@@ -2069,6 +2105,117 @@ def test_verification_command_timeout_blocks_with_actionable_diagnostic(
     assert any(
         "VERIFICATION_COMMAND_TIMEOUT_SECONDS" in blocker for blocker in report.blockers
     )
+
+
+def test_verification_command_nonzero_exit_blocks_and_stops_stack(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A nonzero verification exit should be recorded and stop later commands."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command, **kwargs):
+        command_tuple = tuple(command)
+        calls.append(command_tuple)
+        return subprocess.CompletedProcess(
+            command_tuple,
+            7,
+            stdout="nonzero stdout",
+            stderr="nonzero stderr",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert calls == [EXPECTED_VERIFICATION_SEQUENCE[0][0]]
+    assert len(report.verification_results) == 1
+    result = report.verification_results[0]
+    assert result.command == "poetry lock"
+    assert result.status == "failed"
+    assert result.return_code == 7
+    assert result.stdout == "nonzero stdout"
+    assert result.stderr == "nonzero stderr"
+    assert report.blockers == [
+        "run-verification-stack failed: Verification command failed with exit code 7: poetry lock"
+    ]
+
+
+def test_verification_command_launch_oserror_blocks_and_stops_stack(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A verification launch OSError should be recorded and stop later commands."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command, **kwargs):
+        command_tuple = tuple(command)
+        calls.append(command_tuple)
+        raise OSError("poetry executable missing")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert calls == [EXPECTED_VERIFICATION_SEQUENCE[0][0]]
+    assert len(report.verification_results) == 1
+    result = report.verification_results[0]
+    assert result.command == "poetry lock"
+    assert result.status == "failed"
+    assert result.return_code is None
+    assert result.stdout == ""
+    assert result.stderr == "poetry executable missing"
+    assert report.blockers == [
+        "run-verification-stack failed: Verification command failed to start: poetry lock: poetry executable missing"
+    ]
 
 
 # ---------------------------------------------------------------------------

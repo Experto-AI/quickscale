@@ -1,5 +1,6 @@
 """Tests for railway_utils module."""
 
+import os
 import subprocess
 from unittest.mock import Mock, patch
 
@@ -1405,6 +1406,31 @@ class TestCheckPoetryLockConsistency:
             assert is_consistent is False
             assert "inconsistent" in message.lower()
 
+    def test_consistency_check_uses_isolated_poetry_environment(
+        self, tmp_path, monkeypatch
+    ):
+        """Generated-project Poetry checks must not inherit the ambient virtualenv."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\npython = "^3.14"'
+        )
+        (tmp_path / "poetry.lock").write_text("")
+        ambient_venv = tmp_path / "ambient-venv"
+        ambient_venv_bin = str(ambient_venv / "bin")
+        monkeypatch.setenv("VIRTUAL_ENV", str(ambient_venv))
+        monkeypatch.setenv("POETRY_ACTIVE", "1")
+        monkeypatch.setenv("PATH", os.pathsep.join((ambient_venv_bin, "/usr/bin")))
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            check_poetry_lock_consistency()
+
+        isolated_env = mock_run.call_args.kwargs["env"]
+        assert "VIRTUAL_ENV" not in isolated_env
+        assert "POETRY_ACTIVE" not in isolated_env
+        assert ambient_venv_bin not in isolated_env["PATH"]
+        assert isolated_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
+
     def test_missing_pyproject(self, tmp_path, monkeypatch):
         """Test pyproject.toml not found."""
         monkeypatch.chdir(tmp_path)
@@ -1478,6 +1504,24 @@ class TestFixPoetryLock:
 
             assert success is False
             assert "failed" in message.lower()
+
+    def test_fix_uses_isolated_poetry_environment(self, monkeypatch):
+        """Generated-project Poetry lock fixes must use the isolation contract."""
+        ambient_venv = "/tmp/ambient-venv"
+        ambient_venv_bin = f"{ambient_venv}/bin"
+        monkeypatch.setenv("VIRTUAL_ENV", ambient_venv)
+        monkeypatch.setenv("POETRY_ACTIVE", "1")
+        monkeypatch.setenv("PATH", os.pathsep.join((ambient_venv_bin, "/usr/bin")))
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            fix_poetry_lock()
+
+        isolated_env = mock_run.call_args.kwargs["env"]
+        assert "VIRTUAL_ENV" not in isolated_env
+        assert "POETRY_ACTIVE" not in isolated_env
+        assert ambient_venv_bin not in isolated_env["PATH"]
+        assert isolated_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
 
     def test_poetry_not_found(self):
         """Test when poetry is not installed."""
