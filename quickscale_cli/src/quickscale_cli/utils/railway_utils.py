@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from quickscale_core.utils.poetry_env import build_isolated_poetry_env
+
 
 def is_npm_installed() -> bool:
     """Check if npm is installed."""
@@ -701,6 +703,7 @@ def check_poetry_lock_consistency() -> tuple[bool, str]:
             capture_output=True,
             text=True,
             timeout=10,
+            env=build_isolated_poetry_env(),
         )
 
         if result.returncode == 0:
@@ -733,6 +736,7 @@ def fix_poetry_lock() -> tuple[bool, str]:
             capture_output=True,
             text=True,
             timeout=120,
+            env=build_isolated_poetry_env(),
         )
 
         if result.returncode == 0:

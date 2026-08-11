@@ -22,6 +22,7 @@ from quickscale_core.utils.project_identity import (
     ProjectIdentity,
     resolve_project_identity,
 )
+from quickscale_core.utils.poetry_env import build_isolated_poetry_env
 from quickscale_core.utils.theme_validation import (
     SOLE_VALID_THEME,
     ThemeValidationError,
@@ -2422,14 +2423,23 @@ def _execute_verification_stack(report: BetaMigrationReport) -> None:
             if spec.cwd_suffix == "."
             else report.recipient.path / spec.cwd_suffix
         )
+        subprocess_kwargs: dict[str, Any] = {
+            "cwd": working_dir,
+            "capture_output": True,
+            "text": True,
+            "check": False,
+            "timeout": VERIFICATION_COMMAND_TIMEOUT_SECONDS,
+        }
+        if (
+            len(spec.argv) >= 2
+            and spec.argv[0] == "poetry"
+            and spec.argv[1] in {"lock", "install"}
+        ):
+            subprocess_kwargs["env"] = build_isolated_poetry_env()
         try:
             result = subprocess.run(
                 list(spec.argv),
-                cwd=working_dir,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=VERIFICATION_COMMAND_TIMEOUT_SECONDS,
+                **subprocess_kwargs,
             )
         except subprocess.TimeoutExpired as exc:
             report.verification_results.append(

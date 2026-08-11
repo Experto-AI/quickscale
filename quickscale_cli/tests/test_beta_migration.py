@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -250,12 +251,15 @@ def _init_clean_git_repo(path: Path) -> None:
 
 def _install_verification_success_stub(
     monkeypatch: pytest.MonkeyPatch,
+    env_calls: list[tuple[tuple[str, ...], dict[str, str] | None]] | None = None,
 ) -> list[tuple[tuple[str, ...], Path]]:
     calls: list[tuple[tuple[str, ...], Path]] = []
 
     def fake_run(command, cwd=None, **kwargs):
         command_tuple = tuple(command)
         call_cwd = Path(cwd) if cwd is not None else Path.cwd()
+        if env_calls is not None:
+            env_calls.append((command_tuple, kwargs.get("env")))
         calls.append((command_tuple, call_cwd))
         joined = " ".join(command_tuple)
         return subprocess.CompletedProcess(
@@ -959,7 +963,13 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
         'LOGGER = "experto_ai_web"\n'
     )
 
-    calls = _install_verification_success_stub(monkeypatch)
+    env_calls: list[tuple[tuple[str, ...], dict[str, str] | None]] = []
+    ambient_venv = tmp_path / "ambient-venv"
+    ambient_venv_bin = str(ambient_venv / "bin")
+    monkeypatch.setenv("VIRTUAL_ENV", str(ambient_venv))
+    monkeypatch.setenv("POETRY_ACTIVE", "1")
+    monkeypatch.setenv("PATH", os.pathsep.join((ambient_venv_bin, "/usr/bin")))
+    calls = _install_verification_success_stub(monkeypatch, env_calls)
     report = run_beta_migration(
         BetaMigrationInput(
             mode="fresh-first",
@@ -973,6 +983,32 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
     assert report.phase == "fresh-first-executed"
     assert report.identity_reconciliation_required is True
     _assert_verification_report(report, recipient, calls)
+
+    poetry_envs = {
+        command: env
+        for command, env in env_calls
+        if command in {("poetry", "lock"), ("poetry", "install")}
+    }
+    assert set(poetry_envs) == {("poetry", "lock"), ("poetry", "install")}
+    for isolated_env in poetry_envs.values():
+        assert isolated_env is not None
+        assert "VIRTUAL_ENV" not in isolated_env
+        assert "POETRY_ACTIVE" not in isolated_env
+        assert ambient_venv_bin not in isolated_env["PATH"]
+        assert isolated_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
+
+    ambient_commands = {
+        command
+        for command, env in env_calls
+        if command not in {("poetry", "lock"), ("poetry", "install")} and env is None
+    }
+    assert ambient_commands == {
+        ("pnpm", "install"),
+        ("pnpm", "build"),
+        ("quickscale", "manage", "migrate"),
+        ("pytest",),
+        ("pnpm", "test"),
+    }
 
     new_package_dir = recipient / "experto_ai_web"
     assert new_package_dir.is_dir()
