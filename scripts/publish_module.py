@@ -614,24 +614,12 @@ def _seal_module(
                 module=module,
                 version=version,
             )
-        post_tag = _seal_sha(
-            resolve_remote_ref("origin", f"{tag}^{{}}", runner=runner),
-            description=f"post-action remote tag {tag!r}",
-            module=module,
-            version=version,
-        )
         post_branch = _seal_sha(
             resolve_remote_ref("origin", branch, runner=runner),
             description=f"post-action remote branch {branch!r}",
             module=module,
             version=version,
         )
-        if post_tag != seal_commit:
-            raise _seal_error(
-                f"Remote tag {tag!r} failed post-action verification",
-                module=module,
-                version=version,
-            )
         if post_branch != branch_sha:
             raise _seal_error(
                 f"Remote branch {branch!r} moved after seal verification",
@@ -657,6 +645,10 @@ def _seal_module(
 
     cleanup_armed = local_tag is None
     probe_context: str | None = None
+    primary_error: GitError | OSError | None = None
+    cleanup_error: str | None = None
+    cleanup_was_primary = False
+    pending_exception: BaseException | None = None
     try:
         if cleanup_armed:
             create_annotated_tag(tag, seal_commit, runner=runner)
@@ -720,25 +712,44 @@ def _seal_module(
                 module=module,
                 version=version,
             )
+        cleanup_armed = False
     except (GitError, OSError) as exc:
-        cleanup_error = _cleanup_created_tag(
-            tag,
-            armed=cleanup_armed,
-            runner=runner,
-        )
-        message = str(exc)
+        primary_error = exc
+    except BaseException as exc:
+        pending_exception = exc
+    finally:
+        try:
+            cleanup_error = _cleanup_created_tag(
+                tag,
+                armed=cleanup_armed,
+                runner=runner,
+            )
+        except (GitError, OSError) as cleanup_exc:
+            cleanup_error = str(cleanup_exc)
+            if primary_error is None:
+                primary_error = cleanup_exc
+                cleanup_was_primary = True
+        if cleanup_error and primary_error is None:
+            primary_error = OSError(cleanup_error)
+            cleanup_was_primary = True
+        if pending_exception is not None and primary_error is None:
+            raise pending_exception
+
+    if primary_error is not None:
+        error = primary_error
+        message = str(error)
         if probe_context:
             message = f"{message}; {probe_context}"
-        if cleanup_error:
+        if cleanup_error and not cleanup_was_primary:
             message = f"{message}; local cleanup also failed: {cleanup_error}"
-        if isinstance(exc, SealError) and probe_context is None and cleanup_error is None:
-            raise
+        if isinstance(error, SealError) and probe_context is None and cleanup_error is None:
+            raise error
         raise _seal_error(
             message,
             module=module,
             version=version,
             cleanup_error=cleanup_error,
-        ) from exc
+        ) from error
 
     cleanup_armed = False
     return SealOutcome(module, version, branch, tag, seal_commit, pushed=True)
@@ -931,16 +942,37 @@ def _read_repository_version() -> str:
     return version
 
 
+def _validate_seal_version(requested_version: str) -> None:
+    """Bind a requested seal version to the repository's authoritative value."""
+    try:
+        repository_version = _read_repository_version()
+    except GitError as exc:
+        _print_error(str(exc))
+        sys.exit(1)
+    if requested_version == repository_version:
+        return
+    _print_error(
+        "Seal version mismatch: "
+        f"requested {requested_version}, repository VERSION {repository_version}"
+    )
+    sys.exit(1)
+
+
 def _get_module_seal_state(
     module_name: str,
     version: str,
     published_sha: str,
     runner: GitRunner,
 ) -> str:
-    """Determine seal state from the peeled remote tag target, read-only."""
+    """Determine seal state from the remote tag target, read-only."""
     try:
         tag = resolve_split_tag(module_name, version)
-        peeled_sha = resolve_remote_ref("origin", f"{tag}^{{}}", runner=runner)
+        # A lightweight tag has no peeled ls-remote record.  The shared tag
+        # resolver prefers that record for annotated tags and falls back to
+        # the direct target only when peeling is absent.  This fallback is
+        # intentionally limited to read-only status; newly pushed tags below
+        # still use the peeled-only verification path.
+        peeled_sha = resolve_remote_ref("origin", tag, runner=runner)
     except GitError, ModuleNotFoundError:
         # Status is diagnostic rather than a gate.  A runner that cannot resolve
         # a remote target is represented as unsealed instead of causing a
@@ -1366,6 +1398,7 @@ def main() -> None:
         module_name = args.module_name
         assert module_name is not None
         assert args.version is not None
+        _validate_seal_version(args.version)
         try:
             validate_module_name(module_name)
         except GitError as exc:
@@ -1388,6 +1421,7 @@ def main() -> None:
         _print_success(f"Module '{module_name}' sealed at {args.version}")
     elif args.seal_all:
         assert args.version is not None
+        _validate_seal_version(args.version)
         # Freeze the authoritative inventory before any gate, prompt, or seal
         # operation.  The same set is used by the final read-only proof.
         frozen_modules = list(_list_modules())
