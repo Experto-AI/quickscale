@@ -2412,88 +2412,123 @@ def _execute_preserve_managed_recipient_files(report: BetaMigrationReport) -> No
     )
 
 
+def _build_verification_subprocess_context(
+    report: BetaMigrationReport, spec: VerificationCommandSpec
+) -> tuple[Path, dict[str, Any]]:
+    """Build the working directory and subprocess kwargs for one command."""
+    if report.recipient is None:
+        raise ValueError("Recipient snapshot is unavailable.")
+
+    working_dir = (
+        report.recipient.path
+        if spec.cwd_suffix == "."
+        else report.recipient.path / spec.cwd_suffix
+    )
+    subprocess_kwargs: dict[str, Any] = {
+        "cwd": working_dir,
+        "capture_output": True,
+        "text": True,
+        "check": False,
+        "timeout": VERIFICATION_COMMAND_TIMEOUT_SECONDS,
+    }
+    if (
+        len(spec.argv) >= 2
+        and spec.argv[0] == "poetry"
+        and spec.argv[1] in {"lock", "install"}
+    ):
+        subprocess_kwargs["env"] = build_isolated_poetry_env()
+    return working_dir, subprocess_kwargs
+
+
+def _append_verification_result(
+    report: BetaMigrationReport,
+    spec: VerificationCommandSpec,
+    working_dir: Path,
+    *,
+    status: CheckStatus,
+    return_code: int | None,
+    stdout: str,
+    stderr: str,
+) -> None:
+    """Append one captured verification result to the report."""
+    report.verification_results.append(
+        VerificationCommandResult(
+            command=spec.display_command,
+            cwd=str(working_dir),
+            status=status,
+            return_code=return_code,
+            stdout=stdout,
+            stderr=stderr,
+        )
+    )
+
+
+def _run_verification_command(
+    report: BetaMigrationReport, spec: VerificationCommandSpec
+) -> None:
+    """Run one verification command and record its success or failure."""
+    working_dir, subprocess_kwargs = _build_verification_subprocess_context(
+        report, spec
+    )
+    try:
+        result = subprocess.run(list(spec.argv), **subprocess_kwargs)
+    except subprocess.TimeoutExpired as exc:
+        _append_verification_result(
+            report,
+            spec,
+            working_dir,
+            status="failed",
+            return_code=None,
+            stdout="",
+            stderr=(
+                f"Verification command timed out after "
+                f"{VERIFICATION_COMMAND_TIMEOUT_SECONDS}s: {spec.display_command}"
+            ),
+        )
+        raise ValueError(
+            f"Verification command timed out after "
+            f"{VERIFICATION_COMMAND_TIMEOUT_SECONDS}s: {spec.display_command} "
+            f"in {working_dir}. "
+            "Re-run the migration or increase VERIFICATION_COMMAND_TIMEOUT_SECONDS "
+            "if the command is legitimately slow."
+        ) from exc
+    except OSError as exc:
+        _append_verification_result(
+            report,
+            spec,
+            working_dir,
+            status="failed",
+            return_code=None,
+            stdout="",
+            stderr=str(exc),
+        )
+        raise ValueError(
+            f"Verification command failed to start: {spec.display_command}: {exc}"
+        ) from exc
+
+    verification_status: CheckStatus = "passed" if result.returncode == 0 else "failed"
+    _append_verification_result(
+        report,
+        spec,
+        working_dir,
+        status=verification_status,
+        return_code=result.returncode,
+        stdout=result.stdout or "",
+        stderr=result.stderr or "",
+    )
+    if result.returncode != 0:
+        raise ValueError(
+            f"Verification command failed with exit code {result.returncode}: {spec.display_command}"
+        )
+
+
 def _execute_verification_stack(report: BetaMigrationReport) -> None:
     """Execute the shared verification stack and capture subprocess output."""
     if report.recipient is None:
         raise ValueError("Recipient snapshot is unavailable.")
 
     for spec in VERIFICATION_COMMAND_SPECS:
-        working_dir = (
-            report.recipient.path
-            if spec.cwd_suffix == "."
-            else report.recipient.path / spec.cwd_suffix
-        )
-        subprocess_kwargs: dict[str, Any] = {
-            "cwd": working_dir,
-            "capture_output": True,
-            "text": True,
-            "check": False,
-            "timeout": VERIFICATION_COMMAND_TIMEOUT_SECONDS,
-        }
-        if (
-            len(spec.argv) >= 2
-            and spec.argv[0] == "poetry"
-            and spec.argv[1] in {"lock", "install"}
-        ):
-            subprocess_kwargs["env"] = build_isolated_poetry_env()
-        try:
-            result = subprocess.run(
-                list(spec.argv),
-                **subprocess_kwargs,
-            )
-        except subprocess.TimeoutExpired as exc:
-            report.verification_results.append(
-                VerificationCommandResult(
-                    command=spec.display_command,
-                    cwd=str(working_dir),
-                    status="failed",
-                    return_code=None,
-                    stdout="",
-                    stderr=(
-                        f"Verification command timed out after "
-                        f"{VERIFICATION_COMMAND_TIMEOUT_SECONDS}s: {spec.display_command}"
-                    ),
-                )
-            )
-            raise ValueError(
-                f"Verification command timed out after "
-                f"{VERIFICATION_COMMAND_TIMEOUT_SECONDS}s: {spec.display_command} "
-                f"in {working_dir}. "
-                "Re-run the migration or increase VERIFICATION_COMMAND_TIMEOUT_SECONDS "
-                "if the command is legitimately slow."
-            ) from exc
-        except OSError as exc:
-            report.verification_results.append(
-                VerificationCommandResult(
-                    command=spec.display_command,
-                    cwd=str(working_dir),
-                    status="failed",
-                    return_code=None,
-                    stdout="",
-                    stderr=str(exc),
-                )
-            )
-            raise ValueError(
-                f"Verification command failed to start: {spec.display_command}: {exc}"
-            ) from exc
-
-        verification_status: CheckStatus = (
-            "passed" if result.returncode == 0 else "failed"
-        )
-        report.verification_results.append(
-            VerificationCommandResult(
-                command=spec.display_command,
-                cwd=str(working_dir),
-                status=verification_status,
-                return_code=result.returncode,
-                stdout=result.stdout or "",
-                stderr=result.stderr or "",
-            )
-        )
-        if result.returncode != 0:
-            raise ValueError(
-                f"Verification command failed with exit code {result.returncode}: {spec.display_command}"
-            )
+        _run_verification_command(report, spec)
 
     _append_completed_step(
         report,

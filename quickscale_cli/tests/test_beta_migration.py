@@ -2107,6 +2107,117 @@ def test_verification_command_timeout_blocks_with_actionable_diagnostic(
     )
 
 
+def test_verification_command_nonzero_exit_blocks_and_stops_stack(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A nonzero verification exit should be recorded and stop later commands."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command, **kwargs):
+        command_tuple = tuple(command)
+        calls.append(command_tuple)
+        return subprocess.CompletedProcess(
+            command_tuple,
+            7,
+            stdout="nonzero stdout",
+            stderr="nonzero stderr",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert calls == [EXPECTED_VERIFICATION_SEQUENCE[0][0]]
+    assert len(report.verification_results) == 1
+    result = report.verification_results[0]
+    assert result.command == "poetry lock"
+    assert result.status == "failed"
+    assert result.return_code == 7
+    assert result.stdout == "nonzero stdout"
+    assert result.stderr == "nonzero stderr"
+    assert report.blockers == [
+        "run-verification-stack failed: Verification command failed with exit code 7: poetry lock"
+    ]
+
+
+def test_verification_command_launch_oserror_blocks_and_stops_stack(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A verification launch OSError should be recorded and stop later commands."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command, **kwargs):
+        command_tuple = tuple(command)
+        calls.append(command_tuple)
+        raise OSError("poetry executable missing")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert calls == [EXPECTED_VERIFICATION_SEQUENCE[0][0]]
+    assert len(report.verification_results) == 1
+    result = report.verification_results[0]
+    assert result.command == "poetry lock"
+    assert result.status == "failed"
+    assert result.return_code is None
+    assert result.stdout == ""
+    assert result.stderr == "poetry executable missing"
+    assert report.blockers == [
+        "run-verification-stack failed: Verification command failed to start: poetry lock: poetry executable missing"
+    ]
+
+
 # ---------------------------------------------------------------------------
 # CR-SA94-REV-B-001: Theme preflight blocks on retired/malformed sources
 # ---------------------------------------------------------------------------
