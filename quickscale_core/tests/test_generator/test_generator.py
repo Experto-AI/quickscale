@@ -627,6 +627,29 @@ class TestProjectGeneratorErrorPaths:
 
         assert mock_run.call_args.kwargs.get("timeout") is not None
 
+    def test_generate_poetry_lock_uses_isolated_environment(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Generated-project Poetry lock must not inherit the ambient virtualenv."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_path = tmp_path / "fakeproject"
+        project_path.mkdir()
+        ambient_venv = tmp_path / "ambient-venv"
+        ambient_venv_bin = str(ambient_venv / "bin")
+        monkeypatch.setenv("VIRTUAL_ENV", str(ambient_venv))
+        monkeypatch.setenv("POETRY_ACTIVE", "1")
+        monkeypatch.setenv("PATH", os.pathsep.join((ambient_venv_bin, "/usr/bin")))
+
+        mock_result = MagicMock(returncode=0, stderr="")
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            generator._generate_poetry_lock(project_path)
+
+        isolated_env = mock_run.call_args.kwargs["env"]
+        assert "VIRTUAL_ENV" not in isolated_env
+        assert "POETRY_ACTIVE" not in isolated_env
+        assert ambient_venv_bin not in isolated_env["PATH"]
+        assert isolated_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
+
     def test_generate_poetry_lock_handles_nonzero_return_code(
         self, tmp_path: Path, capsys: pytest.CaptureFixture
     ) -> None:

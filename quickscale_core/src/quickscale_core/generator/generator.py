@@ -22,6 +22,7 @@ from quickscale_core.utils.file_utils import (
     validate_project_name,
     write_file,
 )
+from quickscale_core.utils.poetry_env import build_isolated_poetry_env
 
 
 # Hard ceiling for the `poetry lock` subprocess during generation. Without a
@@ -626,6 +627,7 @@ class ProjectGenerator:
                 text=True,
                 check=False,
                 timeout=POETRY_LOCK_TIMEOUT_SECONDS,
+                env=build_isolated_poetry_env(),
             )
 
             if result.returncode != 0:
