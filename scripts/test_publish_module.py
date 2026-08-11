@@ -640,6 +640,38 @@ class TestSealMechanics:
         assert not any(
             event[0] in {"create-tag", "push-tag", "delete-tag"} for event in ledger.events
         )
+        assert ("remote-ref", "origin", f"{TAG}^{{}}") not in ledger.events
+
+    def test_cleanup_oserror_is_primary_when_no_operation_failed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A cleanup runner OSError is primary without an earlier Git error."""
+        ledger = _SealLedger(
+            runner_oserrors={("tag", "--delete", TAG): ["runner cleanup unavailable"]}
+        )
+        _install_seal_ledger(monkeypatch, ledger)
+
+        original_resolve = ledger.resolve_remote_ref
+
+        def stop_before_verification(
+            remote: str,
+            ref: str,
+            path: Path | None = None,
+            *,
+            runner: object,
+        ) -> str:
+            value = original_resolve(remote, ref, path, runner=runner)
+            if ref == f"{TAG}^{{}}":
+                raise SystemExit("stop before verification")
+            return value
+
+        monkeypatch.setattr(publish_module, "resolve_remote_ref", stop_before_verification)
+
+        with pytest.raises(publish_module.SealError) as excinfo:
+            publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
+
+        assert str(excinfo.value) == "runner cleanup unavailable"
+        assert sum(call[0] == ("tag", "--delete", TAG) for call in ledger.runner.calls) == 1
 
     def test_conflicting_target_tag_fails_closed_without_moving_it(
         self, monkeypatch: pytest.MonkeyPatch
@@ -938,6 +970,89 @@ class TestSealMechanics:
 
 
 class TestSealCliAndStatus:
+    @pytest.mark.parametrize("action", ["--seal", "--seal-all"])
+    def test_seal_dispatch_rejects_version_mismatch_before_release_path(
+        self,
+        action: str,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """F-007 binds both seal dispatches before gates or remote work."""
+        (tmp_path / "VERSION").write_text("0.87.0\n")
+        (tmp_path / "quickscale_modules").mkdir()
+        _patch_selector_surroundings(tmp_path, monkeypatch)
+        calls: list[str] = []
+        monkeypatch.setattr(
+            publish_module, "_run_release_gates", lambda runner: calls.append("gate")
+        )
+        monkeypatch.setattr(
+            publish_module,
+            "_require_authoritative_module",
+            lambda module: calls.append("inventory"),
+        )
+        monkeypatch.setattr(publish_module, "_list_modules", lambda: ["auth"])
+        monkeypatch.setattr(publish_module, "_confirm_uncommitted_changes", lambda runner: True)
+        monkeypatch.setattr(
+            publish_module, "_invoke_seal_module", lambda *args, **kwargs: calls.append("mutation")
+        )
+        monkeypatch.setattr(
+            publish_module, "_seal_all", lambda *args, **kwargs: calls.append("mutation")
+        )
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["publish_module.py", "auth", action, "--version", VERSION]
+            if action == "--seal"
+            else ["publish_module.py", action, "--version", VERSION],
+        )
+
+        with pytest.raises(SystemExit) as excinfo:
+            publish_module.main()
+
+        assert excinfo.value.code == 1
+        output = capsys.readouterr().out
+        assert "requested 0.88.0" in output
+        assert "repository VERSION 0.87.0" in output
+        assert calls == []
+
+    @pytest.mark.parametrize("action", ["--seal", "--seal-all"])
+    def test_matching_seal_dispatch_reaches_existing_gate(
+        self,
+        action: str,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """F-007 does not bypass the existing release-gate sentinel."""
+        (tmp_path / "VERSION").write_text(f"{VERSION}\n")
+        (tmp_path / "quickscale_modules").mkdir()
+        _patch_selector_surroundings(tmp_path, monkeypatch)
+        calls: list[str] = []
+        monkeypatch.setattr(
+            publish_module, "_run_release_gates", lambda runner: calls.append("gate")
+        )
+        monkeypatch.setattr(publish_module, "_require_authoritative_module", lambda module: None)
+        monkeypatch.setattr(publish_module, "_list_modules", lambda: ["auth"])
+        monkeypatch.setattr(publish_module, "_confirm_uncommitted_changes", lambda runner: True)
+        monkeypatch.setattr(
+            publish_module, "_invoke_seal_module", lambda *args, **kwargs: calls.append("mutation")
+        )
+        monkeypatch.setattr(
+            publish_module, "_seal_all", lambda *args, **kwargs: calls.append("mutation")
+        )
+        monkeypatch.setattr(publish_module, "_show_status", lambda *args, **kwargs: True)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["publish_module.py", "auth", action, "--version", VERSION]
+            if action == "--seal"
+            else ["publish_module.py", action, "--version", VERSION],
+        )
+
+        publish_module.main()
+
+        assert calls[0] == "gate"
+
     def test_parser_exposes_seal_modes_and_version_contract(self) -> None:
         parser = publish_module._build_parser()
         args = parser.parse_args(
@@ -958,6 +1073,7 @@ class TestSealCliAndStatus:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         (tmp_path / "quickscale_modules").mkdir()
+        (tmp_path / "VERSION").write_text(f"{VERSION}\n")
         runner = object()
         calls: list[str] = []
         monkeypatch.setattr(publish_module, "_REPO_ROOT", tmp_path)
@@ -1021,6 +1137,35 @@ class TestSealCliAndStatus:
         output = capsys.readouterr().out
         assert f"sealed@{VERSION}" in output
         assert all(name in output for name in names)
+
+    def test_status_accepts_lightweight_direct_target_fallback(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """F-008 status accepts a direct target when no peeled record exists."""
+        calls: list[str] = []
+        monkeypatch.setattr(publish_module, "resolve_split_tag", lambda module, version: TAG)
+
+        def resolve_direct_target(
+            remote: str,
+            ref: str,
+            *,
+            runner: publish_module.GitRunner,
+        ) -> str:
+            del remote, runner
+            calls.append(ref)
+            return HEAD_SHA
+
+        monkeypatch.setattr(
+            publish_module,
+            "resolve_remote_ref",
+            resolve_direct_target,
+        )
+
+        runner = publish_module.GitRunner(executable="git", env={})
+        assert publish_module._get_module_seal_state(MODULE, VERSION, HEAD_SHA, runner) == (
+            f"sealed@{VERSION}"
+        )
+        assert calls == [TAG]
 
     def test_seal_all_stops_without_calling_later_modules(
         self, monkeypatch: pytest.MonkeyPatch

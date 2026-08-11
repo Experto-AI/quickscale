@@ -3111,6 +3111,33 @@ class TestPublishModuleSealRealGit:
         assert _ref_inventory(repo.working) == before_work
         assert _ref_inventory(repo.origin) == before_origin
 
+    def test_lightweight_remote_tag_is_idempotent_and_status_sealed(
+        self,
+        real_publish_repository: _RealPublishRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A direct target at the branch commit is a read-only seal no-op."""
+        repo = real_publish_repository
+        self._patch_repo_root(monkeypatch, repo)
+        tag = self._tag(self.version)
+        _run_local_git(
+            repo.origin, "update-ref", f"refs/tags/{tag}", repo.current_commit
+        )
+        before_work = _ref_inventory(repo.working)
+        before_origin = _ref_inventory(repo.origin)
+
+        outcome = publish_module._seal_module("auth", self.version, runner=repo.runner)
+        status = publish_module._get_module_seal_state(
+            "auth", self.version, repo.current_commit, repo.runner
+        )
+
+        assert outcome == publish_module.SealOutcome(
+            "auth", self.version, repo.branch, tag, repo.current_commit, False
+        )
+        assert status == f"sealed@{self.version}"
+        assert _ref_inventory(repo.working) == before_work
+        assert _ref_inventory(repo.origin) == before_origin
+
     def test_remote_conflicting_tag_fails_without_any_ref_mutation(
         self,
         real_publish_repository: _RealPublishRepository,
