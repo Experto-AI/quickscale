@@ -3633,6 +3633,55 @@ class TestHostedCiGateGeneration:
 class TestE2eWorkflowGeneration:
     """The E2E allowlist is projected from registry order and owned markers."""
 
+    def test_markerless_exact_paths_check_write_and_clean_exit_contract(
+        self, tmp_path: Path
+    ) -> None:
+        """Marker ownership drift is reported even when the path values match."""
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        markerless = DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8")
+        for marker in (E2E_PATHS_BEGIN, E2E_PATHS_END):
+            markerless = markerless.replace(marker + "\n", "", 1)
+        workflow_path = tmp_path / "e2e.yml"
+        workflow_path.write_text(markerless, encoding="utf-8")
+
+        drift, expected = sync_ci_gate_jobs_module.sync_e2e_workflow(
+            workflow_path, DEFAULT_REGISTRY
+        )
+        assert drift
+        assert expected != markerless
+
+        command = [sys.executable, str(Path(sync_ci_gate_jobs_module.__file__))]
+        args = ["--e2e-workflow", str(workflow_path), "--registry", str(DEFAULT_REGISTRY)]
+        check = subprocess.run(
+            [*command, "--check", *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert check.returncode == 1, check.stderr
+        assert E2E_PATHS_BEGIN in check.stdout
+        assert E2E_PATHS_END in check.stdout
+
+        write = subprocess.run(
+            [*command, "--write", *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert write.returncode == 0, write.stderr
+        written = workflow_path.read_text(encoding="utf-8")
+        assert written.count(E2E_PATHS_BEGIN) == 1
+        assert written.count(E2E_PATHS_END) == 1
+        assert expected_e2e_workflow_text(written, registry) == written
+
+        clean = subprocess.run(
+            [*command, "--check", *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert clean.returncode == 0, clean.stderr
+
     def test_markerless_bootstrap_and_idempotence(self) -> None:
         registry = _parse_registry(DEFAULT_REGISTRY)
         current = DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8")
@@ -3690,6 +3739,46 @@ class TestE2eWorkflowGeneration:
         )
         with pytest.raises(GeneratorError, match=match):
             expected_e2e_workflow_text(mutation(valid), registry)
+
+    @pytest.mark.parametrize(
+        "mutation",
+        [
+            lambda text: text.replace(E2E_PATHS_BEGIN + "\n", "", 1),
+            lambda text: text.replace(
+                E2E_PATHS_END + "\n", E2E_PATHS_END + "\n" + E2E_PATHS_END + "\n", 1
+            ),
+            lambda text: text.replace(
+                "      - 'quickscale_modules/backups/**'\n",
+                E2E_PATHS_BEGIN + "\n      - 'quickscale_modules/backups/**'\n",
+                1,
+            ),
+        ],
+    )
+    def test_malformed_marker_cli_exits_two(self, tmp_path: Path, mutation: Any) -> None:
+        """Partial, duplicate, and nested markers remain exit-2 input errors."""
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        valid = expected_e2e_workflow_text(
+            DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8"), registry
+        )
+        workflow_path = tmp_path / "malformed-e2e.yml"
+        workflow_path.write_text(mutation(valid), encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(sync_ci_gate_jobs_module.__file__)),
+                "--check",
+                "--e2e-workflow",
+                str(workflow_path),
+                "--registry",
+                str(DEFAULT_REGISTRY),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 2
+        assert "ERROR: [CI_GATE_GENERATION]" in result.stderr
+        assert not result.stdout
 
     def test_duplicate_yaml_key_fails_closed(self) -> None:
         registry = _parse_registry(DEFAULT_REGISTRY)

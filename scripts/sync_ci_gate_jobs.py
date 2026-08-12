@@ -780,12 +780,6 @@ def sync_e2e_workflow(
         raise GeneratorError(f"cannot read E2E workflow {path}: {exc}") from None
     gates = _parse_registry(registry_path)
     expected = expected_e2e_workflow_text(current, gates)
-    lines = current.splitlines(keepends=True)
-    markerless = not any(_line_index(lines, marker) for marker in (E2E_PATHS_BEGIN, E2E_PATHS_END))
-    if markerless:
-        paths_index, path_items = _e2e_paths_line_indices(lines)
-        actual_paths = tuple(lines[index].strip()[3:-1] for index in path_items)
-        return actual_paths != _expected_e2e_paths(gates), expected
     return current != expected, expected
 
 
