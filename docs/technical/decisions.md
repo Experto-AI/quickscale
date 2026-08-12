@@ -78,9 +78,12 @@ one-time scaffolding.
   `splits/{module}-module` branches on release, and embedded by git subtree
 - ✅ Users embed via `quickscale plan --add <module>` + `quickscale apply`, and
   update via `quickscale update`
-- ✅ **The published `splits/*` branches are what users receive — never the
-  working tree.** This is why release ordering is mandatory; see
-  §[Module Version Lockstep](#module-version-lockstep) Rule 3
+- ✅ **The default embed path consumes the immutable
+  `splits/<module>-module/<version>` tag — never a moving branch or the
+  working tree.** Split branches are producer-side publication artifacts; the
+  identity-derived tag is the released module ref. This is why release
+  ordering is mandatory; see §[Module Version Lockstep](#module-version-lockstep)
+  Rule 3.
 - ✅ Modules are runtime dependencies (in `INSTALLED_APPS`), theme-agnostic, and
   backend-weighted; users can contribute improvements back via
   `quickscale push --module <name>`
@@ -1147,27 +1150,65 @@ that cannot be canonically parsed is itself a hard error, never a fallback to li
 string comparison — a permissive comparison is the same defect class as the missing
 assertion Rule 2 exists to close.
 
-**Rule 3 — Release ordering is mandatory.** Modules are embedded by git subtree from
-`splits/<module>-module` on the public remote, so the published splits — not the working
-tree — are what users receive. The release sequence is therefore:
+**Rule 3 — Release ordering is mandatory.** The producer publishes mutable
+`splits/<module>-module` branches, then seals the release as immutable
+`splits/<module>-module/X.Y.Z` tags. The default embed path consumes those
+identity-derived tags, not the branches or the working tree. For core release
+`X.Y.Z`, execute this exact six-step sequence:
 
-1. Tag HEAD so the source is release-authoritative (`VERSION` matches the tag) — already
-   enforced by `scripts/publish_module.py`.
-2. Push refreshed `splits/*` carrying the tagged manifests.
-3. Publish to PyPI.
+1. Bump the repository version, stamp every module manifest, and commit the release state.
+2. Create the core tag `X.Y.Z` locally only; do not push it yet.
+3. Repeatedly run `make publish-module` for the twelve modules with the
+   required per-branch remote expectation, testing installed all-module
+   `apply` with `--split-ref` between iterations; repeat until verification is
+   satisfactory. This is the reversible branch-publication loop.
+4. Run `make seal-modules VERSION=X.Y.Z` to create and push the twelve
+   immutable split tags. The seal command has no `EXPECTED_REMOTE_SHA` or
+   `ABSENT` authorization input: it samples each branch tip, immediately
+   rereads that branch, checks the tag for absence or an identical target, and
+   then performs its explicit tag push and post-push checks.
+5. Verify twelve-of-twelve split seals and a clean installed all-module
+   `apply` without `--split-ref` or any other override.
+6. Run `git push origin X.Y.Z`. Pushing the core tag is the irreversible
+   release trigger: the tag-matching publication workflow may publish the
+   packages to PyPI. It is distinct from both the repeatable branch loop and
+   the already-created immutable split-tag boundary.
 
 Publishing core before the splits carry matching manifests ships a `quickscale apply` that
 fails for every user selecting any module. This ordering is not advisory.
 
-**Known limitation (tracked, not accepted as final):** the embed ref is a *branch*, so a
-matched version is not by itself a guaranteed-matched artifact — the branch can move after
-a release. Rules 1 and 2 make skew visible and diagnosable; making it structurally
-impossible requires pinning the embed to an immutable ref, tracked as roadmap **SA136**
-(retitled from SA119 on 2026-08-06, when the maintainer ratified the loop/seal contract and
-moved the work into the v87 release path). Until SA136 lands, Rule 3 is the only thing
-preventing skew, which is why it is mandatory rather than advisory. **SA136f replaces this
-section's Rule 3 and this paragraph** with the ratified loop/seal ordering; until that child
-closes, the rules below remain normative as written.
+**Rule 4 — Publication is idempotent up to the seal.** Split branches are mutable working
+artifacts and may be republished safely as many times as verification requires. This breaks
+the publish-before-verification circular dependency: published state must exist before an
+installed `apply` can verify it, so publication cannot be modelled as a one-shot mutation.
+The immutable split tags are created only after the loop and its verification pass.
+
+**Rule 5 — Embed by identity-derived immutable ref.** An embed resolves
+`splits/<module>-module/X.Y.Z` directly from the running core version. No version-to-ref
+mapping table exists because the identity-derived ref makes one unnecessary. A missing
+immutable split tag is a hard error. `--split-ref` is an explicit maintainer override for
+controlled verification and does not change the default identity-derived resolution.
+
+**Rule 6 — Tags follow content identity.** When a re-split produces an unchanged tree, the
+same commit carries both release-version split tags. Tag reuse follows content identity,
+not an assumption that every release changes every module.
+
+**Rule 7 — Seal enforcement is client-side and fail-closed.** Sealing uses
+check-then-act: the client samples each remote branch tip, immediately rereads
+the branch and rejects movement, requires the immutable tag to be absent or
+already at the intended commit, and pushes one explicit tag refspec. A
+fail-closed post-push verification rereads both the tag target and branch and
+rejects any mismatch. The seal target accepts no pre-authorized SHA or
+`ABSENT` value; branch-publication expectations belong only to the preceding
+`publish-module` loop. The narrow reread-to-push race window is accepted and
+detected rather than eliminated; the 2026-08-07 re-scope accepted it because
+that window is strictly smaller than the already accepted residual risk that a
+force-privileged maintainer can move a tag.
+
+**Known limitation (accepted residual):** split-tag immutability is enforced by client-side
+checks plus transport refusal under ordinary permissions, not by a server-side transaction
+or an unbypassable repository policy. A force-privileged maintainer can still move a tag;
+that residual is recorded and accepted, while the normal release path remains fail-closed.
 
 ---
 
