@@ -403,6 +403,22 @@ Deferred deliberately. Nothing here blocks the v87 release. Backlog items carry 
   - Verify: an option declared with a default always yields its `django_setting` in the built spec; consumers reading such a key unconditionally cannot raise `KeyError`; parity fixtures rebaselined with a per-file rationale.
   *(why →* manifest-authoritative projection is the documented direction; the current gap lets a declared default silently fail to exist*)*
 
+- [ ] **SA142 — Stop E2E runs from leaking a fresh Docker image on every invocation.** `Tier 1 · deps: none`
+
+  Every E2E run accumulates one ~590 MB `*-backend:latest` image that nothing ever removes. Two independent leaks, one shared root cause — **the image tag is derived from a per-run-unique name, and cleanup only reclaims containers**:
+
+  1. **Per-run Compose project name.** `scripts/test_e2e.sh:483-490` appends `${BASHPID}` to both the container prefix and the Compose project name (`qs-e2e-cli-<pid>`). Compose derives the built image tag from the project name, so each run builds and tags a brand-new `qs_e2e_cli_<pid>-backend:latest` instead of reusing the previous one — this is also why every run pays a full backend image build.
+  2. **Timestamped project name in a test.** `quickscale_cli/tests/test_e2e_development_workflow.py:271` builds `f"{prefix}_apply_{int(time.time())}"`, producing the `e2e_cli_test_apply_<epoch>-backend:latest` family. The test's own `finally` runs `down --volumes`, which removes containers and volumes but **not** images.
+  3. **Cleanup reclaims containers only.** `cleanup_scoped_containers` (`scripts/test_e2e.sh:436-448`) and `cleanup_lane` (`:502-518`) run `docker rm -f` and `compose down -v`; no path runs `docker image rm`, and `compose down` never removes built images without `--rmi local`.
+
+  So the answer to "are tests not cleaning up?" is: they clean up containers correctly, but the uniqueness that makes lanes parallel-safe also makes every run's *image* unreclaimable, and no code ever reclaims it. **Yes, images should be reused** — the isolation requirement is on container names, host ports, and volumes, not on the build cache artifact.
+
+  Fix in both directions:
+  - **Reuse the image.** Pin the built image to a stable, run-independent tag (e.g. `image:` in the generated `docker-compose.yml`, or a fixed `COMPOSE_PROJECT_NAME` for the build with the per-run uniqueness kept only in container names/ports/volumes). Layer caching then makes repeat runs cheap instead of rebuilding ~590 MB each time.
+  - **Reclaim what still varies.** Add image teardown to `cleanup_lane` (`compose down -v --rmi local`, plus a prefix-filtered `docker image rm` sweep mirroring `cleanup_scoped_containers`), gated by the same `CLEANUP` flag so `--no-cleanup` still preserves debug state. Drop the `int(time.time())` suffix in `test_apply_with_docker_runs_migrations_in_container` — the lane prefix already provides isolation.
+  - Verify: back-to-back `./scripts/test_e2e.sh` runs leave `docker image ls` unchanged in count; the second run reuses the cached backend image and is measurably faster than the first; `--no-cleanup` still leaves containers and images inspectable; a pre-existing leaked-image set is documented as needing one manual `docker image prune`.
+  *(why →* an untracked ~590 MB/run disk leak that also forces a full image rebuild every run; observed 50+ orphaned backend images on a dev machine*)*
+
 - [ ] **SA135 — Give the test suites an owned PostgreSQL lifecycle.** `Tier 2 · deps: SA117e-4`
 
   No repository script starts a PostgreSQL: `make test-cov`, `make test-integration`, and `scripts/test_integration.sh` only *probe*, and `provision_test_roles.sh:52` errors with "No PostgreSQL container found … start one." The host `localhost:5432` instance is an out-of-band assumption that every integration and e2e gate silently depends on. The machinery already exists but is orphaned — `pytest-docker` is a declared dependency (`pyproject.toml:39`) and `quickscale_core/tests/conftest.py:121-155` defines `postgres_service`/`per_test_db` fixtures with healthcheck readiness and dynamic ports, requested by no test.
