@@ -26,6 +26,7 @@ from typing import Any
 
 import pytest
 import sync_ci_gate_jobs as sync_ci_gate_jobs_module
+import yaml
 from check_gate_parity import (
     _CONTEXT_SOURCES,
     SchemaValidationError,
@@ -407,7 +408,7 @@ class TestFakeGateFanOut:
 # =========================================================================
 
 
-# The 28 ordered paths from the real e2e.yml pull_request.paths allowlist
+# The pre-SA143 ordered paths from the real e2e.yml pull_request.paths allowlist
 _E2E_PATHS: list[str] = [
     "quickscale_modules/backups/**",
     "quickscale_cli/src/quickscale_cli/commands/plan_command.py",
@@ -954,10 +955,10 @@ class TestParserPrecision:
         gates = _extract_check_ci_parallel_gates(script)
         assert gates == {"check-core-compat"}
 
-    def test_e2e_extracts_twenty_eight_paths(self) -> None:
-        """e2e.yml has exactly 28 ordered trigger paths."""
+    def test_e2e_extracts_thirty_three_paths(self) -> None:
+        """The generated workflow has exactly 33 ordered trigger paths."""
         paths = _extract_e2e_trigger_paths(E2E_YML)
-        assert len(paths) == 28, f"Expected 28 paths, got {len(paths)}"
+        assert len(paths) == 33, f"Expected 33 paths, got {len(paths)}"
 
     def test_e2e_paths_order_preserved(self) -> None:
         """e2e trigger paths preserve the order from the workflow file."""
@@ -3632,6 +3633,23 @@ class TestHostedCiGateGeneration:
 
 class TestE2eWorkflowGeneration:
     """The E2E allowlist is projected from registry order and owned markers."""
+
+    def test_installed_wheel_trigger_slice_is_exact_and_unique(self) -> None:
+        """Generated E2E YAML retains the installed-wheel trigger slice exactly once."""
+        expected = [
+            "quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py",
+            "scripts/smoke_install.sh",
+            "scripts/_installed_wheel_venv.sh",
+            "scripts/provision_installed_venv.sh",
+            "scripts/_python_requirement.sh",
+        ]
+        workflow = yaml.load(E2E_YML.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+        paths = workflow["on"]["pull_request"]["paths"]
+        anchor = paths.index("scripts/test_e2e_parallel.py")
+
+        assert paths[anchor + 1 : anchor + 1 + len(expected)] == expected
+        for path in expected:
+            assert paths.count(path) == 1
 
     def test_markerless_exact_paths_check_write_and_clean_exit_contract(
         self, tmp_path: Path

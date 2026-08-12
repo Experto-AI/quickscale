@@ -40,6 +40,11 @@ on:
       - 'scripts/_qs_jobs.sh'
       - 'scripts/test_e2e.sh'
       - 'scripts/test_e2e_parallel.py'
+      - 'quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py'
+      - 'scripts/smoke_install.sh'
+      - 'scripts/_installed_wheel_venv.sh'
+      - 'scripts/provision_installed_venv.sh'
+      - 'scripts/_python_requirement.sh'
       - '.github/workflows/ci.yml'
       - '.github/workflows/e2e.yml'
       # END GENERATED: e2e-trigger-paths
