@@ -34,7 +34,7 @@ Preferred maintainer-facing command map:
 | `./scripts/publish.sh test` | `make publish-test` |
 | `./scripts/publish.sh prod` | `make publish-prod` |
 | `./scripts/publish.sh full` | `make publish-full` |
-| `./scripts/publish_module.sh <module> --expected-remote-sha <sha|ABSENT>` | `make publish-module MODULE=<module> EXPECTED_REMOTE_SHA=<sha|ABSENT>` |
+| `./scripts/publish_module.sh <module> --expected-remote-sha <40-hex-remote-sha>` | `make publish-module MODULE=<module> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` |
 | `./scripts/publish_module.sh --status` | `make publish-module-status` |
 | `./scripts/publish_module.sh --publish-outdated` | [DISABLED SA117 Phase 4] `make publish-modules-outdated` |
 | `./scripts/version_tool.sh check` | `make version-check` |
@@ -86,7 +86,7 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 ### Release and distribution
 
 - [publish.sh](./publish.sh) — builds and publishes packages (prefer `make publish-build`, `make publish-test`, `make publish-prod`, or `make publish-full`)
-- [publish_module.sh](./publish_module.sh) — publishes module changes to split branches using force-with-lease safety, reports module split-branch status (`make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<sha|ABSENT>`, `make publish-module-status`). **Note**: `--publish-outdated` / `make publish-modules-outdated` is **disabled** in SA117 Phase 4 — each module must be published individually with `--expected-remote-sha`.
+- [publish_module.sh](./publish_module.sh) — publishes module changes to split branches using force-with-lease safety, reports module split-branch status (`make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>`, `make publish-module-status`). The SHA must be freshly observed immediately before each mutable update. **Note**: `--publish-outdated` / `make publish-modules-outdated` is **disabled** in SA117 Phase 4 — each module must be published individually with `--expected-remote-sha`.
 - [version_tool.sh](./version_tool.sh) — checks and synchronizes version metadata (`make version-check`, `make version-update`, or `make bump-version X.Y.Z`; direct script commands: `check`, `update`)
 
 ### SA122a gate registry parity

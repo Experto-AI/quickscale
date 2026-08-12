@@ -22,7 +22,7 @@ with the same explicit next-action guidance.
 
     Usage:
         poetry run python scripts/publish_module.py \\
-            <module_name> --expected-remote-sha <sha|ABSENT> [--clean]
+            <module_name> --expected-remote-sha <40-hex-remote-sha> [--clean]
         poetry run python scripts/publish_module.py --seal <module_name> \
             --version <version> [--previous-version <version>]
         poetry run python scripts/publish_module.py --seal-all \
@@ -31,10 +31,12 @@ with the same explicit next-action guidance.
         poetry run python scripts/publish_module.py --publish-outdated [--clean]
 
     Phase 4 (SA117): All mutating single-module publish calls require
-    ``--expected-remote-sha``.  The value must be a 40-character hex SHA
-    or the literal ``ABSENT``.  ``--status`` rejects the flag; the disabled
-    ``--publish-outdated`` action accepts it only long enough to emit its
-    Phase 4 safety guidance.
+    ``--expected-remote-sha``.  The value must be a freshly observed
+    40-character hex SHA.  ``ABSENT`` remains a legacy compatibility value
+    parsed by the runtime, but is forbidden and is not valid first-publish
+    guidance while SA117E1-REV-001 remains open.  ``--status`` rejects the
+    flag; the disabled ``--publish-outdated`` action accepts it only long
+    enough to emit its Phase 4 safety guidance.
 
     Phase 4 also disables ``--publish-outdated`` entirely: it used bare
     ``--force`` internally, which violates the force-with-lease safety
@@ -1006,10 +1008,11 @@ def _publish_module(
     """
     Split and push a single module using the provenance-aware helpers.
 
-    *expected_remote_sha* is required (SA117 Phase 4): a 40-character hex
-    SHA for force-with-lease pinning, or ``ABSENT`` for first-time publish
-    (no known remote SHA).  The legacy bare ``--force`` fallback has been
-    removed.
+    *expected_remote_sha* is required (SA117 Phase 4): a freshly observed
+    exact 40-character hex SHA for force-with-lease pinning.  ``ABSENT`` is
+    retained only as a legacy runtime compatibility path; it is forbidden
+    and not valid first-publish guidance while SA117E1-REV-001 remains open.
+    The legacy bare ``--force`` fallback has been removed.
     """
     # Defense-in-depth: validate name shape before any path/branch resolution
     # so callers that bypass main() still get a clean GitError, not a
@@ -1159,10 +1162,12 @@ def _show_status(
         # substring is absent so --status is never mistaken for the F2.9a gate.
         _print_info("  1. Tag HEAD to match VERSION so the source is release-authoritative.")
         _print_info("  2. Re-run single-module publish:")
-        _print_info("       make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40hex|ABSENT>")
+        _print_info(
+            "       make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>"
+        )
     else:
         _print_info("  Publish each outdated module individually:")
-        _print_info("    make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40hex|ABSENT>")
+        _print_info("    make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>")
     return all_sealed
 
 
@@ -1264,7 +1269,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--expected-remote-sha",
         help=(
-            "Exact 40-char hex SHA expected on remote, or ABSENT for first publish. "
+            "Freshly observed exact 40-char hex SHA expected on remote. "
             "Required for single-module publish; rejected with --status."
         ),
     )
@@ -1340,7 +1345,7 @@ def _validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace
         if args.expected_remote_sha is None:
             _print_error(
                 "--expected-remote-sha is required for single-module publish "
-                "(use: --expected-remote-sha <40hex|ABSENT>)"
+                "(use a freshly observed exact 40-hex remote SHA)"
             )
             sys.exit(1)
         try:
