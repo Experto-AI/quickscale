@@ -56,11 +56,11 @@ git merge --no-ff wt-track{N}
 Open work and dependency-relevant checked closeouts are shown; all other prior tickets are complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 ```
-Track 1 (filler only)               Track 2 (COMPLETE)            Track 3 → release (CRITICAL PATH)
+Track 1 (MERGE-READY)               Track 2 (COMPLETE)            Track 3 → release (CRITICAL PATH)
 ─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
-SA144  docs: xdist knobs            (closed to new work)             SA117e-4 (head)
+SA144  docs: xdist knobs ✓          (closed to new work)             SA117e-4 (head)
   │  off-path, no dependency                                           │
-  │  validation_policy.md only                               SA117e-4 → -5
+  │  docs-only closeout (3 docs)                            SA117e-4 → -5
   └── no edge to any Track 3 ticket ────────────────────────────────┤
                                                                     ▼
                                                                     SA112b → c → d → f
@@ -78,21 +78,21 @@ SA144  docs: xdist knobs            (closed to new work)             SA117e-4 (h
 
 **SA112f's trigger-registration precondition is already satisfied** by the closed SA143 (Track 1, merged 2026-08-12; evidence in [CHANGELOG.md](../../CHANGELOG.md)). SA112f is now acceptance plus review.
 
-**Cross-track edges — none. The board has zero merge-order edges.** `.github/workflows/e2e.yml`'s `pull_request.paths` list is a *derived* artifact of `scripts/gate_registry.json` and has no open writer. SA112f must confirm the registered trigger paths are present in the tree under test, which is a precondition check, not a merge gate. Track 2 is closed and gate-free. `publish.yml` has no open writer. SA144 writes only `docs/technical/validation_policy.md`.
+**Cross-track edges — none. The board has zero merge-order edges.** `.github/workflows/e2e.yml`'s `pull_request.paths` list is a *derived* artifact of `scripts/gate_registry.json` and has no open writer. SA112f must confirm the registered trigger paths are present in the tree under test, which is a precondition check, not a merge gate. Track 1 has no open ticket and is merge-ready; its SA144 closeout is pending merge-back. Track 2 is closed and gate-free. `publish.yml` has no open writer. SA144's behavioral documentation target is `docs/technical/validation_policy.md`; `docs/technical/roadmap.md` and `CHANGELOG.md` are the required closeout/status artifacts. No scripts or production behavior changed.
 
 **Track readiness — three independent states.** A track is *truly green* only when all three are yes. Closed tracks report `n/a` for start/finish rather than an open-ticket readiness claim.
 
 | Track (head) | Can start | Can finish | Can merge | Truly green | On critical path |
 |---|---|---|---|---|---|
 | **Track 3** — SA117e-4 (head, **in process**) | **yes** — SA136a–f are closed and the sealed-publication execution scope is defined | **yes** — no other track's output is required to complete the human-gated step | **yes** — no merge-order gate | **yes** | ✅ **yes** |
-| **Track 1** — SA144 (docs) | **yes** — allowlist is one doc file, no upstream input | **yes** — acceptance is self-contained | **yes** — no merge-order gate | **yes** | no — filler work |
+| **Track 1** — SA144 merge-ready | **n/a** — no open ticket | **yes** — documentation complete | **yes** — no merge-order gate; merge-back pending | **yes** — documentation complete; merge-back pending | no — completed off-path work |
 | **Track 2** — closed | **n/a** — no open ticket | **n/a** — no open ticket | **yes** — merged, no merge-order gate | **yes** | no — completed off-path work |
 
-**Truly green today: Track 3 (SA117e-4) and Track 1 (SA144).** Only Track 3 is *on* the critical path — real progress; SA144 is filler that costs the critical path nothing. Track 2 is complete. The release-wide green gate remains unclaimed.
+**Truly green today: Track 3 (SA117e-4).** Only Track 3 is *on* the critical path — real progress. Track 1's SA144 documentation is complete and merge-ready but not merged back; Track 2 is complete off-path work. The release-wide green gate remains unclaimed.
 
 **Open maintainer decisions: none.** Every remaining "no" on this board is a hard upstream dependency, not a choice. The remaining human gates (the twelve-row seal confirmation, SA96-PUBLISH) are execution-time gates obtained at the outward-facing action, not pending decisions.
 
-**Infra serialization (not a track constraint).** SA112's e2e lanes, SA117e-4's `apply` verification, and any `make ci`/`make ci-e2e` rerun all need the same PostgreSQL server, Docker daemon, and ports. SA144 needs none of them — it is a documentation edit, which is why it is safe to run alongside a live Track 3. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL` knobs namespace lanes *within* one invocation, not across worktrees — **only one track exercises PG/Docker at a time, and Track 3 has priority when its next service-backed leg is active.** Track 3's head SA117e-4 is service-backed, so it takes priority when active; abandon or restart lower-priority work rather than queue an active critical-path leg.
+**Infra serialization (not a track constraint).** SA112's e2e lanes, SA117e-4's `apply` verification, and any `make ci`/`make ci-e2e` rerun all need the same PostgreSQL server, Docker daemon, and ports. Tracks 1 and 2 need none of them. The `QS_CI_PARALLEL`/`QS_E2E_PARALLEL` knobs namespace lanes *within* one invocation, not across worktrees — **only one track exercises PG/Docker at a time, and Track 3 has priority when its next service-backed leg is active.** Track 3's head SA117e-4 is service-backed, so it takes priority when active; abandon or restart lower-priority work rather than queue an active critical-path leg.
 
 **Shared executable surfaces.** No file has two open-ticket writers of the same construct:
 
@@ -100,7 +100,7 @@ SA144  docs: xdist knobs            (closed to new work)             SA117e-4 (h
 - **`scripts/gate_registry.json`** — no open writer; the five installed-wheel paths are committed.
 - **`.github/workflows/publish.yml`** — no open writer; SA122b-4 and SA136e both closed and merged.
 
-Single-writer or unowned: `apply_command.py` (SA140 alone), `docs/technical/validation_policy.md` (SA144 alone), `test_e2e_full_workflow.py` (no open writer), `docs/technical/decisions.md` (SA117e-5 is the only open writer). `scripts/publish_module.py`, `module_commands.py`, `module_output.py`, `git_utils.py`, `scripts/check_sa117_scope.py`, `scripts/version_tool.sh`, `scripts/quality_waivers.json`, and `scripts/quality_baseline.json` have no open v87 writer. No additional procedure is required.
+Single-writer or unowned: `apply_command.py` (SA140 alone), `docs/technical/validation_policy.md` (no open writer), `test_e2e_full_workflow.py` (no open writer), `docs/technical/decisions.md` (SA117e-5 is the only open writer). `scripts/publish_module.py`, `module_commands.py`, `module_output.py`, `git_utils.py`, `scripts/check_sa117_scope.py`, `scripts/version_tool.sh`, `scripts/quality_waivers.json`, and `scripts/quality_baseline.json` have no open v87 writer. No additional procedure is required.
 
 **Shared closeout files** (`CHANGELOG.md`, this roadmap, `decisions.md`) are touched by every track and remain the only broad conflict surface; the mandatory `git merge v87`-before-merge-back step in [Parallel execution tracks](#parallel-execution-tracks) covers them — keep both tracks' entries when resolving.
 
@@ -268,26 +268,17 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 **Status:** complete, merged, and **closed to new work**. SA115 and its sole child SA115a are closed; evidence is in [CHANGELOG.md](../../CHANGELOG.md).
 
-**One obligation survives the closure and is owned elsewhere:** the xdist speedup is **provisional** and gets one confirmation re-measure inside SA112f's acceptance run — not a re-review and not a merge gate. (The `F-003` documentation advisory is now ticketed as [SA144](#sa144--document-the-e2e-xdist-worker-knobs) on Track 1.)
+**One obligation survives the closure and is owned elsewhere:** the xdist speedup is **provisional** and gets one confirmation re-measure inside SA112f's acceptance run — not a re-review and not a merge gate. The `F-003` documentation advisory is recorded in the SA144 closeout history below.
 
 ---
 
 ## Track 1 — Release governance and product defects
 
-**Status:** SA143 and the SA122 registry series are closed and merged; `scripts/gate_registry.json` is the authoritative gate-membership source and `.github/workflows/e2e.yml`'s path list is generated from it. The SA128 parity checker is blocking and authoritative — an **input, not scope**, for every ticket. (SA139 and SA141 are closed; see [CHANGELOG.md](../../CHANGELOG.md).) One off-path documentation ticket is open.
+**Status:** SA143 and the SA122 registry series are closed and merged; SA144's documentation work is complete and merge-ready, with merge-back pending. `scripts/gate_registry.json` is the authoritative gate-membership source and `.github/workflows/e2e.yml`'s path list is generated from it. The SA128 parity checker is blocking and authoritative — an **input, not scope**, for every ticket. (SA139 and SA141 are closed; see [CHANGELOG.md](../../CHANGELOG.md).) Track 1 has no open tickets.
 
 ### SA144 — Document the E2E xdist worker knobs
 
-- [ ] **SA144 — Record `QS_E2E_XDIST_WORKERS` and the memory-guard clamp in `validation_policy.md`.** `Tier 1 · deps: none` · no merge gate · off critical path
-
-  SA115a shipped in-lane E2E xdist, but `QS_E2E_XDIST_WORKERS` appears nowhere in `validation_policy.md`'s Concurrency table, and the memory-guard table (which does list `QS_E2E_NO_MEMORY_GUARD`) never states that the guard **clamps to serial even over an explicitly set worker count**. A maintainer who sets a worker count and observes a serial run has no documented explanation. Carried as SA115a-review advisory `F-003`, outside that ticket's allowlist.
-
-  Add `QS_E2E_XDIST_WORKERS` (with its default and `--dist loadscope` pairing) to the Concurrency table at `validation_policy.md:150-155`, and state the clamp precedence — guard beats explicit worker count, bypassed only by `QS_E2E_NO_MEMORY_GUARD=1` — in the memory-guard section at `:157-169`. Do not change behaviour, defaults, or thresholds; this is a documentation-only delta and goes straight to implementation plus one change review per [Proportionality](#rules-every-ticket-inherits).
-
-  - Allowlist: `docs/technical/validation_policy.md`.
-  - Verify: the worker variable and the clamp precedence are described and match the shipped behaviour in `scripts/test_e2e.sh`; no production or script file is modified. No Docker or PostgreSQL capacity is required.
-  - Rollback: revert the allowlisted file.
-  *(why →* an explicit worker count that silently yields a serial run is undiagnosable without documented precedence*)*
+- [x] **SA144 — Record `QS_E2E_XDIST_WORKERS` and the memory-guard clamp in `validation_policy.md`.** `Tier 1 · deps: none` · no merge gate · off critical path. The shipped heuristic, `--dist loadscope` pairing, and guard-overrides-worker precedence are documented; `F-003` is closed by this documentation-only closeout. The documentation work, including this review-driven correction, is complete and merge-ready; SA144's merge-back is pending. Evidence and history: [CHANGELOG.md](../../CHANGELOG.md).
 
 ### Audit findings not ticketed
 
@@ -311,18 +302,18 @@ The SA122b-5-review advisory `F-003` (Make help/comment wording omits E2E covera
 
 ## Track topology — settled
 
-Every open v87 ticket carries a track: SA117e-4/-5, SA112b–f, SA140, and SA96-PUBLISH on Track 3; SA144 on Track 1. Track 2 stays closed to new work by standing rule.
+Every open v87 ticket carries a track: SA117e-4/-5, SA112b–f, SA140, and SA96-PUBLISH on Track 3. Tracks 1 and 2 stay closed to new work by standing rule.
 
 **Standing placements.**
 
-- **Track 1 carries off-path filler only.** SA143 (the relocated SA112 trigger-registration work) is merged and satisfies SA112f's trigger-contract precondition. **SA144** is homed here for the same reasons SA143 was: a single-file documentation allowlist with no shared writer, no evidence dependency, and no service need, so it runs alongside a live Track 3 without touching the critical path.
+- **Track 1 carries off-path filler only; its SA144 closeout is merge-ready.** SA143 (the relocated SA112 trigger-registration work) is merged and satisfies SA112f's trigger-contract precondition. **SA144** documented the shipped E2E xdist worker and memory-guard precedence under a docs-only, no-dependency, no-service rationale across three documentation files: `docs/technical/validation_policy.md` is the behavioral documentation target, while `docs/technical/roadmap.md` and `CHANGELOG.md` are required closeout/status artifacts. No scripts or production behavior changed, and SA144 touched no critical-path surface.
 - **SA136 stays a Track 3 sibling umbrella, not folded into SA117e-4.** Its machinery is production CLI/publish code, a different risk class from the push ceremony; folding it in would make `-4` Tier 3 — the sizing violation that forced the SA117e split. All six children are closed; SA117e-4 is the live Track 3 head.
 - **SA140 is homed on Track 3 and sequenced after SA112f.** It is the sole writer of `apply_command.py`, so it creates no conflict surface — but it must not land before SA112b captures its traceback from that same code path, which is why it sits after the SA112 chain rather than running in parallel on Track 1. It is not v88 backlog: the green gate requires an exit-0 `make quality`, so SA96-PUBLISH cannot claim its definition of done without it.
 - **SA112b–d–f stay serial on Track 3.** Each child consumes the previous child's evidence (`-c` may act only on `-b`'s traceback), so they are one coherent review unit, not parallelizable work — those boundaries are load-bearing and stay.
 - **SA117e-5 sits off the critical path** — SA112b's precondition is SA117e-**4**, not the umbrella's closure.
 - **The *fourth-worktree* variant is permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 
-**Rebalancing verdict: one ticket added to the idle track, nothing else is movable, and nothing is blocked.** The prior move (SA112f phase 1 → SA143 on Track 1) is merged. This pass adds **SA144** to Track 1, which was otherwise idle: it is the last unticketed obligation left by a closed track, it shares no file with any open ticket, and it needs no service capacity. It is filler — it does not shorten the critical path — but it costs the path nothing and clears standing doc debt. Everything else stays put: SA117e-4 is live on Track 3, SA112b–f are one serial evidence chain that must not be parallelized, SA140 is evidence-bound behind SA112b, and Track 2 stays closed to new work. Docker/PostgreSQL remains serialized with Track 3 priority whenever a service-backed critical-path leg is active; SA144 requires neither service.
+**Rebalancing verdict: the former idle-track ticket's documentation work is complete and merge-ready; merge-back is pending. Nothing else is movable, and nothing is blocked.** The prior move (SA112f phase 1 → SA143 on Track 1) is merged. **SA144** was the last unticketed obligation left by a closed track: it shared no file with any open ticket and needed no service capacity. It was filler — it did not shorten the critical path — but it cost the path nothing and cleared standing doc debt. Everything else stays put: SA117e-4 is live on Track 3, SA112b–f are one serial evidence chain that must not be parallelized, SA140 is evidence-bound behind SA112b, and Track 2 stays closed to new work. Docker/PostgreSQL remains serialized with Track 3 priority whenever a service-backed critical-path leg is active; no Track 1 work requires service.
 
 **Open track-topology decisions: none, and no non-topology decision remains either.** Every remaining “no” in the readiness table is a hard dependency that only the named upstream ticket can clear. All resolved topology decisions, the loop/seal artifact contract, and the `splits/<m>-module/<version>` tag scheme are recorded in [CHANGELOG.md](../../CHANGELOG.md).
 
