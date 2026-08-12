@@ -8,8 +8,9 @@
 # replacing the hardcoded conventions that previously lived here.
 #
 # Phase 4 (SA117): All mutating single-module publish calls require
-# ``--expected-remote-sha <40hex|ABSENT>``.  Use via Makefile:
-#   make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<sha|ABSENT>
+# a freshly observed exact ``--expected-remote-sha <40-hex-remote-sha>``.
+# Use via Makefile:
+#   make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>
 
 set -euo pipefail
 

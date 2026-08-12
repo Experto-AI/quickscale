@@ -24,7 +24,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make test-e2e` - End-to-end validation with PostgreSQL and browser automation.
 - `make ci-e2e` - CI-parity release-gate validation including E2E.
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
-- `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<sha|ABSENT>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). The expected remote SHA (40 hex characters or `ABSENT` for first publish) is required.
+- `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). Each mutable split-branch update requires a freshly observed exact 40-hex remote SHA. While `SA117E1-REV-001` remains open, `ABSENT` is forbidden and is not a valid input.
 
 **Assistant guidance:**
 - Prefer `make` targets for shared repository workflows instead of calling lower-level helper scripts directly.
@@ -153,6 +153,7 @@ when diagnosing a run or working under constrained resources. See
 | `QS_E2E_PARALLEL` | `1` | `0` runs the Core and CLI E2E lanes serially instead of concurrently. |
 | `QS_INTEGRATION_JOBS` | `0` | Caps concurrent module workers for `make test-integration`. `0` or unset = unlimited; `1` = serial; positive `N` = at most `N` workers. |
 | `PYTEST_XDIST_WORKERS` | `auto` | Pins xdist worker count for unit tests. `0` = true serial run; positive integer caps workers. |
+| `QS_E2E_XDIST_WORKERS` | `min(max(1,floor(nproc/2)), max(1,floor(MemAvailable_GiB/4)), 4)` | Pins pytest-xdist workers per E2E lane. `0` or `1` runs each lane serially; values `>=2` append `-n N --dist loadscope`. |
 
 **E2E memory guard.** A preflight check falls back to serial lanes when resting
 memory headroom is low, guarding against `systemd-oomd` reaping the run.
@@ -166,7 +167,11 @@ memory headroom is low, guarding against `systemd-oomd` reaping the run.
 
 The swap threshold is deliberately conditional: on a RAM-rich machine, gigabytes
 of swap held by idle browser or editor pages is normal and is not evidence of
-memory pressure.
+memory pressure. The memory guard takes precedence over the worker setting: when
+it fires, it forces serial lanes and sets the runner's internal
+`E2E_XDIST_WORKERS=1`, so pytest runs serially in each lane even when an explicit
+ `QS_E2E_XDIST_WORKERS` value was supplied. Only `QS_E2E_NO_MEMORY_GUARD=1`
+bypasses this clamp; the threshold overrides do not bypass it.
 
 **Progress and provenance:**
 
