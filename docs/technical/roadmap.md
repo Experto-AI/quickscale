@@ -58,10 +58,10 @@ Open work and dependency-relevant checked closeouts are shown; all other prior t
 ```
 Track 1 (COMPLETE)                  Track 2 (COMPLETE)            Track 3 → release (CRITICAL PATH)
 ─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
-SA143 ✓ reviewed                    (closed to new work)             SA117e-4 (head)
+SA143 ✓ merged                      (closed to new work)             SA117e-4 (head)
   │  installed-wheel trigger paths                                     │
   │  registered and reviewed                                 SA117e-4 → -5
-  └── will satisfy SA112f after merge-back ──────────────────────────┤
+  └── satisfies SA112f's trigger precondition ──────────────────────┤
                                                                     ▼
                                                                     SA112b → c → d → f
                                                                     │  serial reviewed handoffs
@@ -76,7 +76,7 @@ SA143 ✓ reviewed                    (closed to new work)             SA117e-4 
 
 **Critical path:** `SA117e-4 → SA112b → SA112c → SA112d → SA112f → SA140 → SA96-PUBLISH` — **seven** legs. SA117e-4 is the Track 3 head and the only outward-facing split publication step; all of SA136a–f are closed, so the seal machinery and its normative ordering are merged and reviewed. **SA140 is on the path**: per-ticket acceptance of the `apply_command.py` complexity overrun does not satisfy the green gate, which requires an exit-0 `make quality`, so the repair is v87 scope sequenced after SA112f. **SA117e-5 is closeout and sits *off* the critical path**: SA112b's precondition is the *sealed* splits delivered by SA117e-4, not the umbrella's closure. The green-gate milestone is governed by the four-command join below and is not claimed here. No seal command, remote-ref mutation, tag push, or publication is authorized anywhere on this board; those sit behind SA117e-4's execution-time human gate.
 
-**SA143 is complete and off-path, and its reviewed trigger contract shortens a critical-path leg once merged back.** It carried SA112f's trigger-registration phase — work that is on the path but not evidence-bound — onto Track 1, so SA112f is now acceptance plus review. It did not remove a leg; it removed duration from one.
+**SA143 is complete and off-path, and its merged trigger contract shortens a critical-path leg.** It carried SA112f's trigger-registration phase — work that is on the path but not evidence-bound — onto Track 1, so SA112f is now acceptance plus review. It did not remove a leg; it removed duration from one.
 
 **Cross-track edges — none. The board has zero merge-order edges.** `.github/workflows/e2e.yml`'s `pull_request.paths` list is a *derived* artifact of `scripts/gate_registry.json`, so SA143 appends to the registry rather than co-writing the YAML. SA112f must confirm SA143 is merged before its acceptance run, which is a precondition check, not a merge gate. Track 2 is closed and gate-free. `publish.yml` has no open writer.
 
@@ -85,10 +85,10 @@ SA143 ✓ reviewed                    (closed to new work)             SA117e-4 
 | Track (head) | Can start | Can finish | Can merge | Truly green | On critical path |
 |---|---|---|---|---|---|
 | **Track 3** — SA117e-4 (head, **in process**) | **yes** — SA136a–f are closed and the sealed-publication execution scope is defined | **yes** — no other track's output is required to complete the human-gated step | **yes** — no merge-order gate | **yes** | ✅ **yes** |
-| **Track 1** — closed (SA143 reviewed) | **n/a** — no open ticket | **n/a** — no open ticket | **yes** — reviewed and ready; no merge-order gate | **yes** | no — completed off-path work satisfies SA112f's trigger precondition after merge-back |
+| **Track 1** — closed (SA143 merged) | **n/a** — no open ticket | **n/a** — no open ticket | **yes** — merged, no merge-order gate | **yes** | no — completed off-path work satisfies SA112f's trigger precondition |
 | **Track 2** — closed | **n/a** — no open ticket | **n/a** — no open ticket | **yes** — merged, no merge-order gate | **yes** | no — completed off-path work |
 
-**Truly green today: live Track 3 (SA117e-4); Tracks 1 and 2 are complete.** Track 3 is *on* the critical path — real progress. SA143's completed off-path work becomes available to SA112f on merge-back. The release-wide green gate remains unclaimed.
+**Truly green today: live Track 3 (SA117e-4); Tracks 1 and 2 are complete.** Track 3 is *on* the critical path — real progress. SA143's completed off-path work is available to SA112f. The release-wide green gate remains unclaimed.
 
 **Open maintainer decisions: none.** Every remaining "no" on this board is a hard upstream dependency, not a choice. The remaining human gates (the twelve-row seal confirmation, SA96-PUBLISH) are execution-time gates obtained at the outward-facing action, not pending decisions.
 
@@ -277,7 +277,7 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 1 — Release governance and product defects
 
-**Status:** complete; **SA143 is closed, reviewed, and ready for merge-back**, and Track 1 has no open ticket. The SA122 registry series (`SA122b-1` … `-5`) is closed and merged, retiring arch Finding 11; `scripts/gate_registry.json` is now the authoritative gate-membership source and `.github/workflows/e2e.yml`'s path list is generated from it. The SA128 parity checker is blocking and authoritative — an **input, not scope**, for every ticket. (SA139 and SA141 are closed; see [CHANGELOG.md](../../CHANGELOG.md).)
+**Status:** complete; **SA143 is closed, reviewed, and merged**, and Track 1 has no open ticket. The SA122 registry series (`SA122b-1` … `-5`) is closed and merged, retiring arch Finding 11; `scripts/gate_registry.json` is now the authoritative gate-membership source and `.github/workflows/e2e.yml`'s path list is generated from it. The SA128 parity checker is blocking and authoritative — an **input, not scope**, for every ticket. (SA139 and SA141 are closed; see [CHANGELOG.md](../../CHANGELOG.md).)
 
 ### SA143 — Register the installed-wheel E2E trigger paths
 
@@ -325,14 +325,14 @@ Every open v87 ticket carries a track. Track 2 stays closed to new work by stand
 
 **Standing placements.**
 
-- **Track 1 is complete after SA143**, the relocated SA112 trigger-registration work. Its reviewed registry projection has no evidence dependency on SA112b–d, needed no Docker/PostgreSQL, and satisfies SA112f's trigger-contract precondition after merge-back.
+- **Track 1 is complete after SA143**, the relocated SA112 trigger-registration work. Its merged registry projection has no evidence dependency on SA112b–d, needed no Docker/PostgreSQL, and satisfies SA112f's trigger-contract precondition.
 - **SA136 stays a Track 3 sibling umbrella, not folded into SA117e-4.** Its machinery is production CLI/publish code, a different risk class from the push ceremony; folding it in would make `-4` Tier 3 — the sizing violation that forced the SA117e split. All six children are closed; SA117e-4 is the live Track 3 head.
 - **SA140 is homed on Track 3 and sequenced after SA112f.** It is the sole writer of `apply_command.py`, so it creates no conflict surface — but it must not land before SA112b captures its traceback from that same code path, which is why it sits after the SA112 chain rather than running in parallel on Track 1. It is not v88 backlog: the green gate requires an exit-0 `make quality`, so SA96-PUBLISH cannot claim its definition of done without it.
 - **SA112b–d–f stay serial on Track 3.** Each child consumes the previous child's evidence (`-c` may act only on `-b`'s traceback), so they are one coherent review unit, not parallelizable work — those boundaries are load-bearing and stay.
 - **SA117e-5 sits off the critical path** — SA112b's precondition is SA117e-**4**, not the umbrella's closure.
 - **The *fourth-worktree* variant is permanently declined** ([Rules every ticket inherits](#rules-every-ticket-inherits): three worktrees, no fourth).
 
-**Rebalancing verdict: one move completed, nothing else is movable, and nothing is blocked.** SA112f phase 1 moved to SA143 on Track 1 and is reviewed for merge-back: it was on-path work with no ordering constraint, no shared file, and no service contention, formerly parked behind four serial legs. Everything else stays put — SA117e-4 is live on Track 3, SA112b–f are one serial evidence chain, SA140 is evidence-bound behind SA112b, and Tracks 1 and 2 are closed to unrelated work. Docker/PostgreSQL remains serialized with Track 3 priority whenever a service-backed critical-path leg is active; SA143 required neither service.
+**Rebalancing verdict: one move completed, nothing else is movable, and nothing is blocked.** SA112f phase 1 moved to SA143 on Track 1 and is merged: it was on-path work with no ordering constraint, no shared file, and no service contention, formerly parked behind four serial legs. Everything else stays put — SA117e-4 is live on Track 3, SA112b–f are one serial evidence chain, SA140 is evidence-bound behind SA112b, and Tracks 1 and 2 are closed to unrelated work. Docker/PostgreSQL remains serialized with Track 3 priority whenever a service-backed critical-path leg is active; SA143 required neither service.
 
 **Open track-topology decisions: none, and no non-topology decision remains either.** Every remaining “no” in the readiness table is a hard dependency that only the named upstream ticket can clear. All resolved topology decisions, the loop/seal artifact contract, and the `splits/<m>-module/<version>` tag scheme are recorded in [CHANGELOG.md](../../CHANGELOG.md).
 
