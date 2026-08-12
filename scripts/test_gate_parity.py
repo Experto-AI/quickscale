@@ -55,16 +55,21 @@ from check_gate_parity import (
     _validate_registry,
 )
 from sync_ci_gate_jobs import (
+    DEFAULT_E2E_WORKFLOW,
     DEFAULT_REGISTRY,
     DEFAULT_WORKFLOW,
+    E2E_PATHS_BEGIN,
+    E2E_PATHS_END,
     JOB_BEGIN,
     JOB_END,
     NEEDS_BEGIN,
     NEEDS_END,
     GeneratorError,
     _atomic_write,
+    _expected_e2e_paths,
     _parse_registry,
     _parse_workflow,
+    expected_e2e_workflow_text,
     expected_workflow_text,
 )
 
@@ -3557,6 +3562,136 @@ class TestHostedCiGateGeneration:
             _parse_registry(path)
 
 
+class TestE2eWorkflowGeneration:
+    """The E2E allowlist is projected from registry order and owned markers."""
+
+    def test_markerless_bootstrap_and_idempotence(self) -> None:
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        current = DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8")
+        generated = expected_e2e_workflow_text(current, registry)
+        assert E2E_PATHS_BEGIN in generated
+        assert E2E_PATHS_END in generated
+        assert expected_e2e_workflow_text(generated, registry) == generated
+
+    def test_registry_append_is_at_declared_position(self, tmp_path: Path) -> None:
+        data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        data["gates"].insert(
+            1,
+            {
+                "id": "inserted-e2e-gate",
+                "description": "Inserted E2E gate",
+                "required_contexts": ["e2e-trigger"],
+                "bindings": {
+                    "make_target": "inserted-e2e-gate",
+                    "ci_job": None,
+                    "local_ci_stage": None,
+                },
+                "depends_on": [],
+                "trigger_inputs": ["inserted/path/**"],
+            },
+        )
+        path = tmp_path / "registry.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        gates = _parse_registry(path)
+        generated = expected_e2e_workflow_text(
+            DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8"), gates
+        )
+        owned = generated.split(E2E_PATHS_BEGIN + "\n", 1)[1].split(E2E_PATHS_END + "\n", 1)[0]
+        paths = [line.strip()[3:-1] for line in owned.splitlines() if line.startswith("      - '")]
+        expected = list(_expected_e2e_paths(gates))
+        assert paths == expected
+        assert paths[1] == "inserted/path/**"
+
+    @pytest.mark.parametrize(
+        "mutation,match",
+        [
+            (lambda text: text.replace(E2E_PATHS_BEGIN + "\n", "", 1), "marker"),
+            (
+                lambda text: text.replace(
+                    E2E_PATHS_END + "\n", E2E_PATHS_END + "\n" + E2E_PATHS_END + "\n", 1
+                ),
+                "marker",
+            ),
+            (lambda text: text.replace(E2E_PATHS_BEGIN + "\n", E2E_PATHS_END + "\n", 1), "marker"),
+        ],
+    )
+    def test_malformed_marker_ownership_fails_closed(self, mutation: Any, match: str) -> None:
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        valid = expected_e2e_workflow_text(
+            DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8"), registry
+        )
+        with pytest.raises(GeneratorError, match=match):
+            expected_e2e_workflow_text(mutation(valid), registry)
+
+    def test_duplicate_yaml_key_fails_closed(self) -> None:
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        malformed = DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8").replace(
+            "name: E2E Tests\n", "name: E2E Tests\nname: Duplicate\n", 1
+        )
+        with pytest.raises(GeneratorError, match="Duplicate YAML key"):
+            expected_e2e_workflow_text(malformed, registry)
+
+    def test_unowned_bytes_are_preserved(self) -> None:
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        current = DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8").replace(
+            "name: E2E Tests\n", "name: E2E Tests\n# unowned sentinel\n", 1
+        )
+        generated = expected_e2e_workflow_text(current, registry)
+        for marker in (E2E_PATHS_BEGIN, E2E_PATHS_END):
+            current = current.replace(marker + "\n", "", 1)
+            generated = generated.replace(marker + "\n", "", 1)
+        assert generated.split("    paths:\n", 1)[0] == current.split("    paths:\n", 1)[0]
+        assert "# unowned sentinel\n" in generated
+        assert "  e2e-tests:\n" in generated
+
+    def test_partial_and_nested_markers_fail_closed(self) -> None:
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        valid = expected_e2e_workflow_text(
+            DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8"), registry
+        )
+        nested = valid.replace(
+            "      - 'quickscale_modules/backups/**'\n",
+            E2E_PATHS_BEGIN + "\n      - 'quickscale_modules/backups/**'\n",
+            1,
+        )
+        with pytest.raises(GeneratorError, match="marker"):
+            expected_e2e_workflow_text(nested, registry)
+
+    def test_selector_truth_table_is_hermetic(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[str, Path]] = []
+
+        def fake_registry(_path: Path) -> list[dict[str, Any]]:
+            return []
+
+        def fake_hosted(path: Path, _registry: Path) -> tuple[bool, str]:
+            calls.append(("hosted", path))
+            return False, ""
+
+        def fake_e2e(path: Path, _registry: Path) -> tuple[bool, str]:
+            calls.append(("e2e", path))
+            return False, ""
+
+        monkeypatch.setattr(sync_ci_gate_jobs_module, "_parse_registry", fake_registry)
+        monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_workflow", fake_hosted)
+        monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_e2e_workflow", fake_e2e)
+        assert sync_ci_gate_jobs_module.main(["--check", "--e2e-workflow", "custom-e2e.yml"]) == 0
+        assert calls == [("e2e", Path("custom-e2e.yml"))]
+        calls.clear()
+        assert sync_ci_gate_jobs_module.main(["--check", "--workflow", "custom-ci.yml"]) == 0
+        assert calls == [("hosted", Path("custom-ci.yml"))]
+        calls.clear()
+        assert (
+            sync_ci_gate_jobs_module.main(
+                ["--check", "--workflow", "custom-ci.yml", "--e2e-workflow", "custom-e2e.yml"]
+            )
+            == 0
+        )
+        assert calls == [("hosted", Path("custom-ci.yml")), ("e2e", Path("custom-e2e.yml"))]
+        calls.clear()
+        assert sync_ci_gate_jobs_module.main(["--check"]) == 0
+        assert calls == [("hosted", DEFAULT_WORKFLOW), ("e2e", DEFAULT_E2E_WORKFLOW)]
+
+
 # =========================================================================
 # F-006 — mandatory generation drift gate
 # =========================================================================
@@ -3646,11 +3781,13 @@ class TestGenerationGateRegistryParity:
 
     @staticmethod
     def _custom_registry(tmp_path: Path, *, renamed: bool) -> Path:
-        """Write a repo-contained registry fixture, optionally with a run drift."""
+        """Write a pytest-managed registry fixture, optionally with a run drift."""
         data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
         if renamed:
             data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
-        path = _repo_fixture_file(tmp_path, "custom_registry.json")
+        fixture_dir = tmp_path / ("renamed" if renamed else "clean")
+        fixture_dir.mkdir()
+        path = fixture_dir / "custom_registry.json"
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return path
 

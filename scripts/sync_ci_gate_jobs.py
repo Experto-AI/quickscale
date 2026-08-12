@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Synchronize registry-bound hosted CI jobs without rewriting ``ci.yml``.
+Synchronize registry-bound hosted CI jobs and the E2E path allowlist.
 
 The registry owns gate membership, hosted job IDs, and Make targets.  This
 helper owns the intentionally static GitHub Actions display and step metadata.
-Only the marked hosted-job and consumer-``needs`` regions are generated; all
-other workflow text remains byte-for-byte untouched.
+Only the marked hosted-job, consumer-``needs``, and E2E path regions are
+generated; all other workflow text remains byte-for-byte untouched.
 
 Exit codes:
     0 - clean (``--check``) or successfully written (``--write``)
@@ -39,6 +39,7 @@ except ImportError:  # pragma: no cover - direct script execution supplies scrip
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+DEFAULT_E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e.yml"
 DEFAULT_REGISTRY = REPO_ROOT / "scripts" / "gate_registry.json"
 
 JOB_BEGIN = "  # BEGIN GENERATED: hosted-gate-jobs"
@@ -53,6 +54,8 @@ NEEDS_END = {
     "isolation-conformance": "    # END GENERATED: needs-isolation-conformance",
     "lint-cli": "    # END GENERATED: needs-lint-cli",
 }
+E2E_PATHS_BEGIN = "      # BEGIN GENERATED: e2e-trigger-paths"
+E2E_PATHS_END = "      # END GENERATED: e2e-trigger-paths"
 
 HOSTED_GATE_ORDER = (
     "check-core-compat",
@@ -226,6 +229,35 @@ def _check_gate_targets(gates: list[dict[str, Any]]) -> str:
     if not targets:
         raise GeneratorError("registry: no check-* Make targets are declared")
     return " ".join(targets)
+
+
+def _expected_e2e_paths(gates: list[dict[str, Any]]) -> tuple[str, ...]:
+    """Flatten E2E trigger inputs in registry declaration order."""
+    paths: list[str] = []
+    for gate in gates:
+        if "e2e-trigger" in gate["required_contexts"]:
+            trigger_inputs = gate["trigger_inputs"]
+            if not isinstance(trigger_inputs, list) or not all(
+                isinstance(path, str) for path in trigger_inputs
+            ):
+                raise GeneratorError(f"gate {gate['id']!r} trigger_inputs must be path strings")
+            paths.extend(trigger_inputs)
+    return tuple(paths)
+
+
+def _parse_e2e_workflow(text: str) -> dict[str, Any]:
+    """Parse E2E YAML and require exactly one pull-request path sequence."""
+    workflow = _parse_workflow(text, "e2e.yml")
+    trigger = workflow.get("on")
+    if not isinstance(trigger, dict):
+        raise GeneratorError("e2e.yml: on must be a mapping")
+    pull_request = trigger.get("pull_request")
+    if not isinstance(pull_request, dict):
+        raise GeneratorError("e2e.yml: on.pull_request must be a mapping")
+    paths = pull_request.get("paths")
+    if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+        raise GeneratorError("e2e.yml: on.pull_request.paths must be a sequence of strings")
+    return workflow
 
 
 def _job_steps(job: dict[str, Any], job_id: str) -> list[dict[str, Any]]:
@@ -439,6 +471,101 @@ def _any_marker_present(lines: list[str]) -> bool:
     return any(_line_index(lines, marker) for marker in markers)
 
 
+def _e2e_paths_line_indices(lines: list[str]) -> tuple[int, list[int]]:
+    path_lines = [
+        index for index, line in enumerate(lines) if re.match(r"^    paths:\s*$", line.rstrip("\n"))
+    ]
+    if len(path_lines) != 1:
+        raise GeneratorError("e2e.yml: expected exactly one pull_request.paths declaration")
+    paths_index = path_lines[0]
+    pull_request_index = next(
+        (
+            index
+            for index in range(paths_index - 1, -1, -1)
+            if lines[index].rstrip("\n") == "  pull_request:"
+        ),
+        None,
+    )
+    if pull_request_index is None:
+        raise GeneratorError("e2e.yml: pull_request.paths is misplaced")
+    for index in range(pull_request_index + 1, paths_index):
+        if lines[index].strip() and not lines[index].startswith("    "):
+            raise GeneratorError("e2e.yml: pull_request.paths is misplaced")
+    end = paths_index + 1
+    while end < len(lines) and (
+        not lines[end].strip()
+        or lines[end].startswith("      - ")
+        or lines[end].rstrip("\n") == E2E_PATHS_BEGIN
+        or lines[end].rstrip("\n") == E2E_PATHS_END
+    ):
+        end += 1
+    item_indices = [
+        index for index in range(paths_index + 1, end) if lines[index].startswith("      - ")
+    ]
+    return paths_index, item_indices
+
+
+def _render_e2e_paths(paths: tuple[str, ...]) -> list[str]:
+    return [f"      - '{path}'\n" for path in paths]
+
+
+def _validate_e2e_markers(lines: list[str]) -> tuple[int, int]:
+    begins = _line_index(lines, E2E_PATHS_BEGIN)
+    ends = _line_index(lines, E2E_PATHS_END)
+    if len(begins) != 1 or len(ends) != 1:
+        raise GeneratorError("e2e.yml: generated marker pair is incomplete or duplicated")
+    begin, end = begins[0], ends[0]
+    if begin >= end:
+        raise GeneratorError("e2e.yml: generated marker order is invalid")
+    paths_index, _ = _e2e_paths_line_indices(lines)
+    pull_request_index = next(
+        (
+            index
+            for index in range(paths_index - 1, -1, -1)
+            if lines[index].rstrip() == "  pull_request:"
+        ),
+        None,
+    )
+    if pull_request_index is None or not pull_request_index < begin < end:
+        raise GeneratorError("e2e.yml: generated markers are outside pull_request.paths")
+    if begin != paths_index + 1:
+        raise GeneratorError("e2e.yml: begin marker is not adjacent to paths sequence")
+    if end != begin + 1 and any(
+        not re.match(r"^      - .*$", line.rstrip("\n")) for line in lines[begin + 1 : end]
+    ):
+        raise GeneratorError("e2e.yml: generated region contains misplaced content")
+    if any("GENERATED:" in line for line in lines[begin + 1 : end]):
+        raise GeneratorError("e2e.yml: generated region contains nested markers")
+    return begin, end
+
+
+def expected_e2e_workflow_text(text: str, gates: list[dict[str, Any]]) -> str:
+    """Return E2E workflow text with only the owned allowlist projected."""
+    _parse_e2e_workflow(text)
+    lines = text.splitlines(keepends=True)
+    has_markers = any(_line_index(lines, marker) for marker in (E2E_PATHS_BEGIN, E2E_PATHS_END))
+    if has_markers:
+        _validate_e2e_markers(lines)
+        replacement = _render_e2e_paths(_expected_e2e_paths(gates))
+        lines = _replace_marked_region(
+            lines, E2E_PATHS_BEGIN, E2E_PATHS_END, replacement, "E2E path region"
+        )
+    else:
+        paths_index, path_items = _e2e_paths_line_indices(lines)
+        replacement = [
+            E2E_PATHS_BEGIN + "\n",
+            *_render_e2e_paths(_expected_e2e_paths(gates)),
+            E2E_PATHS_END + "\n",
+        ]
+        start = paths_index + 1
+        end = path_items[-1] + 1 if path_items else start
+        lines = lines[:start] + replacement + lines[end:]
+    result = "".join(lines)
+    _parse_e2e_workflow(result)
+    _validate_e2e_markers(result.splitlines(keepends=True))
+    return result
+
+
 def _top_level_job_headers(lines: list[str]) -> list[tuple[int, str]]:
     """Find job headers beneath ``jobs:`` without interpreting YAML scalars."""
     jobs_line = next((i for i, line in enumerate(lines) if line.rstrip() == "jobs:"), None)
@@ -643,12 +770,31 @@ def sync_workflow(
     return current != expected, expected
 
 
-def _print_drift(current: str, expected: str) -> None:
+def sync_e2e_workflow(
+    path: Path = DEFAULT_E2E_WORKFLOW, registry_path: Path = DEFAULT_REGISTRY
+) -> tuple[bool, str]:
+    """Compute expected E2E content and return ``(drift, expected_text)``."""
+    try:
+        current = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise GeneratorError(f"cannot read E2E workflow {path}: {exc}") from None
+    gates = _parse_registry(registry_path)
+    expected = expected_e2e_workflow_text(current, gates)
+    lines = current.splitlines(keepends=True)
+    markerless = not any(_line_index(lines, marker) for marker in (E2E_PATHS_BEGIN, E2E_PATHS_END))
+    if markerless:
+        paths_index, path_items = _e2e_paths_line_indices(lines)
+        actual_paths = tuple(lines[index].strip()[3:-1] for index in path_items)
+        return actual_paths != _expected_e2e_paths(gates), expected
+    return current != expected, expected
+
+
+def _print_drift(current: str, expected: str, label: str = "ci.yml") -> None:
     diff = difflib.unified_diff(
         current.splitlines(keepends=True),
         expected.splitlines(keepends=True),
-        fromfile="ci.yml",
-        tofile="ci.yml.generated",
+        fromfile=label,
+        tofile=f"{label}.generated",
     )
     print("".join(diff), end="")
 
@@ -663,7 +809,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="print registry-bound check-* Make targets for parse-time Make derivation",
     )
-    parser.add_argument("--workflow", type=Path, default=DEFAULT_WORKFLOW)
+    parser.add_argument(
+        "--workflow",
+        type=Path,
+        default=None,
+        help="hosted CI workflow (explicitly selecting this preserves hosted-only behavior)",
+    )
+    parser.add_argument("--e2e-workflow", type=Path, default=None)
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY)
     return parser.parse_args(argv)
 
@@ -676,14 +828,35 @@ def main(argv: list[str] | None = None) -> int:
             print(_check_gate_targets(gates))
             return 0
 
-        drift, expected = sync_workflow(args.workflow, args.registry)
-        if not drift:
+        selected: list[tuple[str, Path, bool, str]] = []
+        if args.workflow is not None:
+            selected.append(("ci.yml", args.workflow, *sync_workflow(args.workflow, args.registry)))
+        if args.e2e_workflow is not None:
+            selected.append(
+                ("e2e.yml", args.e2e_workflow, *sync_e2e_workflow(args.e2e_workflow, args.registry))
+            )
+        if args.workflow is None and args.e2e_workflow is None:
+            selected.append(
+                ("ci.yml", DEFAULT_WORKFLOW, *sync_workflow(DEFAULT_WORKFLOW, args.registry))
+            )
+            selected.append(
+                (
+                    "e2e.yml",
+                    DEFAULT_E2E_WORKFLOW,
+                    *sync_e2e_workflow(DEFAULT_E2E_WORKFLOW, args.registry),
+                )
+            )
+        drifted = [(label, path, expected) for label, path, drift, expected in selected if drift]
+        if not drifted and not args.write:
             return 0
         if args.check:
-            current = args.workflow.read_text(encoding="utf-8")
-            _print_drift(current, expected)
+            for label, path, expected in drifted:
+                current = path.read_text(encoding="utf-8")
+                _print_drift(current, expected, label)
             return 1
-        _atomic_write(args.workflow, expected)
+        for _label, path, _drift, expected in selected:
+            if path.read_text(encoding="utf-8") != expected:
+                _atomic_write(path, expected)
         return 0
     except (GeneratorError, OSError) as exc:
         print(f"ERROR: [CI_GATE_GENERATION] {exc}", file=sys.stderr)
