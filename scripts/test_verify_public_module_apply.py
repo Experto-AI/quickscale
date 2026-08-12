@@ -34,6 +34,7 @@ import pytest
 
 from scripts.verify_public_module_apply import (
     ResourceCleanup,
+    _docker_resource_ids,
     build_apply_evidence,
     check_no_container_or_volume,
     check_origin_map,
@@ -1003,6 +1004,34 @@ class TestComposeOwnership:
         assert ["docker", "volume", "rm", "owned-volume"] in calls
         assert ["docker", "network", "rm", "owned-network"] in calls
         assert not any("unrelated" in argument for call in calls for argument in call)
+
+    @pytest.mark.parametrize(
+        "error",
+        [OSError("docker unavailable"), subprocess.CalledProcessError(1, ["docker"])],
+    )
+    def test_resource_probe_failures_are_empty_and_exactly_scoped(self, error: Exception) -> None:
+        project_name = "qs-sa117b-" + "c" * 32
+        expected_command = [
+            "docker",
+            "container",
+            "ls",
+            "-aq",
+            "--filter",
+            f"label=com.docker.compose.project={project_name}",
+        ]
+
+        with patch(
+            "scripts.verify_public_module_apply.subprocess.run",
+            side_effect=error,
+        ) as mock_run:
+            assert _docker_resource_ids("container", project_name) == []
+
+        mock_run.assert_called_once_with(
+            expected_command,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
 
 
 # ---------------------------------------------------------------------------
