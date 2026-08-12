@@ -56,9 +56,9 @@ git merge --no-ff wt-track{N}
 Open work and dependency-relevant checked closeouts are shown; all other prior tickets are complete (see [CHANGELOG.md](../../CHANGELOG.md)).
 
 ```
-Track 1 (governance)                Track 2 (CLOSED to new work)  Track 3 → release (CRITICAL PATH)
+Track 1 (governance)                Track 2 (COMPLETE)            Track 3 → release (CRITICAL PATH)
 ─────────────────────────────────   ────────────────────────────  ─────────────────────────────────
-SA122b-5 ◐ (merge-gated)            SA115a ◐ (only ticket;          SA117e-4 (head)
+SA122b-5 ◐ (merge-gated)            SA115a ✓ (closed;                SA117e-4 (head)
   │  e2e paths (incl. xdist paths)     │   no gate, no shared file)     │
   │  + blocking checker; closes -b     │                        SA117e-4 → -5
   │                                    │                     loop · seal · PUSH(human)
@@ -85,9 +85,9 @@ SA122b-5 ◐ (merge-gated)            SA115a ◐ (only ticket;          SA117e-4
 |---|---|---|---|---|---|
 | **Track 3** — SA117e-4 (head) | **yes** — SA136a–f are closed and the sealed-publication execution scope is defined | **yes** — no other track's output is required to start the human-gated step | **yes** — no merge-order gate | **yes** | ✅ **yes** |
 | **Track 1** — SA122b-5 (head) | **yes** — its E2E path/checker slice is scoped and ready today | **yes** — no other track's output is in its acceptance criteria | **no** — **merge after SA112e** (hard dependency; only SA112e clears it) | no — merge-gated filler | no — off the critical path |
-| **Track 2** — SA115a | **yes** — no merge-order dependency | **yes** — its former acceptance dependency is cleared; no SA115a defect is identified | **yes** — no merge-order gate or shared executable-file writer | **yes** | no — off-path filler |
+| **Track 2** — SA115a (complete) | **n/a** — ticket closed | **n/a** — ticket closed | **yes** — reviewed closeout has no merge-order gate or shared executable-file writer | **yes** | no — completed off-path work |
 
-**Truly green today: Track 2 (SA115a) and Track 3 (SA117e-4).** Track 3 is *on* the critical path, so it is real progress rather than filler; SA115a is off-path filler that can be finished and merged at any time. **SA122b-5** is Track 1's head and stays merge-gated by SA112e. The release-wide green gate remains unclaimed.
+**Truly green today: completed Track 2 (SA115a) and live Track 3 (SA117e-4).** Track 3 is *on* the critical path, so it is real progress rather than filler; SA115a is closed off-path work. **SA122b-5** is Track 1's head and stays merge-gated by SA112e. The release-wide green gate remains unclaimed.
 
 **Open maintainer decisions: none.** Every remaining "no" on this board is a hard upstream dependency, not a choice. `SA136D-QG-001` remains dispositioned as reviewed acceptance with its repair ticketed as [SA140](#sa140--quality-ceiling-repair-on-the-apply-path). The remaining human gates (the twelve-row seal confirmation, SA96-PUBLISH) are execution-time gates obtained at the outward-facing action, not pending decisions.
 
@@ -261,7 +261,7 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 ## Track 2 — E2E parallelization
 
-**Status:** off the critical path and **closed to new work**. **SA115a is the track's only remaining ticket**, and the track carries **no merge-order gate and no shared executable file**. Its local implementation and direct E2E evidence are retained and reviewed `STATUS: ok`, and its sole acceptance dependency is closed. No SA115a defect is asserted.
+**Status:** complete and **closed to new work**. **SA115a is closed**, and the track carries **no merge-order gate and no shared executable file**. Its implementation and direct E2E evidence are retained and reviewed `STATUS: ok`; its sole acceptance dependency is closed. No SA115a defect is asserted.
 
 ### SA115 — E2E in-lane parallelization (pytest-xdist)
 
@@ -269,14 +269,14 @@ The AF7 installed-wheel discovery decision is in [decisions.md §Bundled Module 
 
 Items 1–3 are local and unblocked and are SA115a; item 4 (the shared `e2e.yml` edit) is owned by SA122b-5.
 
-- [ ] **SA115a — Guard clamp and local xdist validation.** `Tier 2 · deps: none` — items 1–3; **no `e2e.yml` edit**, no merge-order gate
+- [x] **SA115a — Guard clamp and local xdist validation.** `Tier 2 · deps: none` — items 1–3; **no `e2e.yml` edit**, no merge-order gate
 
   1. **xdist-safe fixtures (implemented).** A session-scoped `docker_compose_project_name` override deriving a unique per-worker Compose project name from the lane's `QS_E2E_COMPOSE_PROJECT_NAME` plus `PYTEST_XDIST_WORKER`, falling back to a single name outside xdist. The lane prefix stays intact so `cleanup_scoped_containers` still matches by substring; Compose auto-prefixes the named volume, so `docker-compose.test.yml` needs no change.
   2. **Configurable worker count (implemented).** `QS_E2E_XDIST_WORKERS` drives `-n <workers> --dist loadscope`, defaulting to an `nproc`/RAM-derived cap — **not** `auto`, since each worker runs a full Postgres container plus Chromium. `QS_E2E_XDIST_WORKERS=1` (or `0`) degrades to today's serial path. Total load is `2 lanes × N workers`.
   3. **Guard clamp (implemented).** The memory preflight counts only lanes, so a demoted run would still fan out N workers per lane. **When the guard fires it now also clamps workers to serial**, including over an explicit user-supplied `QS_E2E_XDIST_WORKERS`, and the existing warning path explains that pytest runs serially in each lane. `QS_E2E_NO_MEMORY_GUARD=1` remains the single escape hatch. The focused harness deterministically supplies four workers, proves the fired guard removes all xdist flags, and proves the bypass preserves the explicit count. *(why →* fits the house fail-closed style; the failure it prevents is an OOM kill that presents as a confusing random crash*)*
   - Allowlist: `quickscale_core/tests/conftest.py`, `scripts/test_e2e.sh`, the harness tests. **`.github/workflows/e2e.yml` is explicitly out of scope** — its trigger paths are owned by SA122b-5 since the 2026-08-08 fold.
   - Verify: the guard clamp behaves as above; baseline `time QS_E2E_XDIST_WORKERS=1 ./scripts/test_e2e.sh` versus the parallel default is faster with all e2e tests green; `docker ps` mid-run shows one Postgres container per active worker with distinct project names/ports; back-to-back runs leave no leftover containers or volumes (`docker volume ls | grep postgres_test_data`); `QS_E2E_XDIST_WORKERS=1` reproduces the serial path; `make ci-e2e` and local `./scripts/check_ci_locally.sh --e2e` stay green.
-  - **Retained implementation; task remains unchecked/recorded-partial.** All three phases are committed and reviewed `STATUS: ok`; the measured speedup, container/cleanup evidence, and review history are in [CHANGELOG.md](../../CHANGELOG.md). The former acceptance dependency on an empty-quarantine E2E gate is cleared; no SA115a defect is asserted. The speedup is provisional and gets one confirmation re-measure at SA112f, not a re-review or merge gate. Advisory `F-003` (document `QS_E2E_XDIST_WORKERS` and the coupled clamp in `docs/technical/validation_policy.md`) is outside this allowlist and rides with a future docs pass.
+  - **Closed.** All three phases are committed and reviewed `STATUS: ok`; the measured speedup, container/cleanup evidence, and review history are in [CHANGELOG.md](../../CHANGELOG.md). The former acceptance dependency on an empty-quarantine E2E gate is cleared; no SA115a defect or blocker remains. The speedup is provisional and gets one confirmation re-measure at SA112f, not a re-review or merge gate. Advisory `F-003` (document `QS_E2E_XDIST_WORKERS` and the coupled clamp in `docs/technical/validation_policy.md`) remains outside this allowlist and rides with a future docs pass.
   *(why →* `ci-e2e` is the longest gate in the SDLC; lanes are already concurrent but each runs serially inside*)*
 
 ---
