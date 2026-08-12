@@ -43,7 +43,6 @@ None open. Per this document's convention, closed findings exist only as dated R
 
 ## Structural smells
 
-- ~~**`quality-gate-topology-hand-synced` (arch-audit Finding 11)**~~ — **resolved 2026-08-12** by the SA122b series; all five gate inventories now derive from `scripts/gate_registry.json` behind blocking parity/generation checkers. `TA62`'s structural cause is closed.
 - **`generated-file-ownership-unmodeled` (arch-audit Finding 7):** generator/updater ownership remains a hand-authored 138-entry taxonomy; defer until another updater consumer.
 - **`deletion-invariants-per-boundary-reimplementation` (arch-audit Finding 2):** non-ownership cleanup obligations still terminate at the account-delete boundary; defer until a second deletion/erasure boundary.
 - **`org-model-universe-hand-enumerated` (arch-audit Finding 4):** purge membership is checked, but ordering remains a manual FK-graph shadow with only three asserted edges; defer until `teams` or model-universe growth.
@@ -70,7 +69,8 @@ None open. Per this document's convention, closed findings exist only as dated R
 - 2026-07-26 — `TA60`: resolved — frontend proof closure reverified in code: hosted `lint-frontend`, local-CI frontend lint, and publish `frontend-proof` remain wired. `TA62` was a distinct quiet-mode parity defect, not a regression of the publish/hosted closure.
 - 2026-07-26 — `TA61`: resolved — devtools closure reverified in code: all ten scoped lint/typecheck invocations across hosted CI, publishing, and local CI still include `--devtools`.
 - 2026-08-07 — Cross-reference refresh (no finding status changed; counts below stand). The 2026-07-26 orientation summary's "immutable-ref pinning deferred to SA119" is superseded: SA119 is closed by design and immutable artifact identity is owned by **SA136** in the v87 path, as the Structural smells and Notes sections already record. `split-modules.yml` — the sole origin of the stale `splits/teams-module` branch — was deleted on `v87` under **SA136e, now closed** (2026-08-07, full-scope review `STATUS: ok`), together with a conformance test proving `publish.yml`'s tag globs cannot match a `splits/` tag. The published-split skew itself is unresolved until SA117e-4 seals the twelve `splits/<m>-module/0.87.0` tags.
-- 2026-07-26 — `TA62` / `quiet-check-skips-frontend-lint`: resolved — SA120 adds frontend-lint parity under quiet mode with focused test coverage (79 policy tests); defect description above is historical pre-fix documentation.
+- 2026-07-26 — `TA62` / `quiet-check-skips-frontend-lint`: resolved — SA120 adds frontend-lint parity under quiet mode with focused test coverage (79 policy tests).
+- 2026-08-12 — `quality-gate-topology-hand-synced` (arch-audit Finding 11, `TA62`'s structural cause): resolved by the SA122b series; all five gate inventories now derive from `scripts/gate_registry.json` behind blocking parity/generation checkers. Closure detail is in [CHANGELOG.md](CHANGELOG.md).
 
 **Reconciliation counts:** prior still-open: 0 · prior resolved/carried: 62 · regressed: 0 · new: 0.
 
