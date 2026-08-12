@@ -120,7 +120,9 @@
                 "quickscale_core/tests/test_e2e_full_workflow.py",
                 "quickscale_core/tests/test_generated_project_runtime.py",
                 "quickscale_core/tests/generator/test_themes.py",
-                "quickscale_core/tests/fixtures/sa90_emission_manifests.json"
+                "quickscale_core/tests/fixtures/sa90_emission_manifests.json",
+                "quickscale_core/tests/test_e2e_xdist_fixtures.py",
+                "quickscale_core/tests/conftest.py"
             ]
         },
         {
@@ -141,7 +143,12 @@
                 "scripts/check_ci_locally.sh",
                 "scripts/_qs_jobs.sh",
                 "scripts/test_e2e.sh",
-                "scripts/test_e2e_parallel.py"
+                "scripts/test_e2e_parallel.py",
+                "quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py",
+                "scripts/smoke_install.sh",
+                "scripts/_installed_wheel_venv.sh",
+                "scripts/provision_installed_venv.sh",
+                "scripts/_python_requirement.sh"
             ]
         },
         {

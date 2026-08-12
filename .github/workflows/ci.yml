@@ -370,6 +370,10 @@ jobs:
       run: |
         poetry install --with dev
 
+    - name: Run gate parity check
+      run: |
+        make check-gate-parity
+
     - name: Check for stale sub-package venvs
       run: |
         # Fail if any sub-package has a local .venv (should use root venv)

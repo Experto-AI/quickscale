@@ -16,7 +16,7 @@ QuickScale is a Python 3.13–3.14 Poetry monorepo whose product has two deploym
 
 ## Findings
 
-None open. Per this document's convention, closed findings exist only as dated Reconciliation-log lines; their pre-fix narrative, evidence, and closeout record live in [CHANGELOG.md](CHANGELOG.md). The most recent closure is `TA62` (quiet-check frontend-lint parity, resolved by SA120 on 2026-07-26); its structural cause remains open as architectural [Finding 11](arch-audit.md).
+None open. Per this document's convention, closed findings exist only as dated Reconciliation-log lines; their pre-fix narrative, evidence, and closeout record live in [CHANGELOG.md](CHANGELOG.md). The most recent closure is `TA62` (quiet-check frontend-lint parity, resolved by SA120 on 2026-07-26); its structural cause, architectural Finding 11, was itself resolved on 2026-08-12 (see [arch-audit.md](arch-audit.md)).
 
 ## Per-subsystem verdicts
 
@@ -43,7 +43,7 @@ None open. Per this document's convention, closed findings exist only as dated R
 
 ## Structural smells
 
-- **`quality-gate-topology-hand-synced` (arch-audit Finding 11):** local, hosted, publish, and E2E assurance inventories are independently edited; `TA62` was another paid drift instance, but the boundary-level fix is structural.
+- ~~**`quality-gate-topology-hand-synced` (arch-audit Finding 11)**~~ — **resolved 2026-08-12** by the SA122b series; all five gate inventories now derive from `scripts/gate_registry.json` behind blocking parity/generation checkers. `TA62`'s structural cause is closed.
 - **`generated-file-ownership-unmodeled` (arch-audit Finding 7):** generator/updater ownership remains a hand-authored 138-entry taxonomy; defer until another updater consumer.
 - **`deletion-invariants-per-boundary-reimplementation` (arch-audit Finding 2):** non-ownership cleanup obligations still terminate at the account-delete boundary; defer until a second deletion/erasure boundary.
 - **`org-model-universe-hand-enumerated` (arch-audit Finding 4):** purge membership is checked, but ordering remains a manual FK-graph shadow with only three asserted edges; defer until `teams` or model-universe growth.

@@ -26,6 +26,7 @@ from typing import Any
 
 import pytest
 import sync_ci_gate_jobs as sync_ci_gate_jobs_module
+import yaml
 from check_gate_parity import (
     _CONTEXT_SOURCES,
     SchemaValidationError,
@@ -48,6 +49,7 @@ from check_gate_parity import (
     _live_process_group_members,
     _MakeOutputError,
     _observe_publish_run_blocks,
+    _parse_yaml_strict,
     _read_bash_event_log,
     _read_bash_recorder_log,
     _run_bash_observation,
@@ -55,16 +57,21 @@ from check_gate_parity import (
     _validate_registry,
 )
 from sync_ci_gate_jobs import (
+    DEFAULT_E2E_WORKFLOW,
     DEFAULT_REGISTRY,
     DEFAULT_WORKFLOW,
+    E2E_PATHS_BEGIN,
+    E2E_PATHS_END,
     JOB_BEGIN,
     JOB_END,
     NEEDS_BEGIN,
     NEEDS_END,
     GeneratorError,
     _atomic_write,
+    _expected_e2e_paths,
     _parse_registry,
     _parse_workflow,
+    expected_e2e_workflow_text,
     expected_workflow_text,
 )
 
@@ -339,6 +346,31 @@ class TestFakeGateFanOut:
             f"Expected diagnostics for all 5 contexts + makefile, got: {contexts_found}"
         )
 
+    def test_synthetic_gate_is_observed_in_all_five_contexts(self, tmp_path: Path) -> None:
+        """A synthetic registry entry maps to every production context."""
+        source_gate = next(
+            gate
+            for gate in json.loads(
+                (REPO_ROOT / "scripts" / "gate_registry.json").read_text(encoding="utf-8")
+            )["gates"]
+            if gate["id"] == "check-core-compat"
+        )
+        synthetic = dict(source_gate)
+        synthetic["id"] = "synthetic-all-contexts"
+        synthetic["description"] = "Synthetic all-context acceptance gate"
+        synthetic["required_contexts"] = list(_ALL_CONTEXTS)
+        reg_path = _make_registry_json([synthetic], tmp_path)
+
+        result = _run_checker(["--registry", str(reg_path)])
+        lines = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+        missing = [
+            record
+            for record in lines
+            if record.get("gate_id") == "synthetic-all-contexts"
+            and record.get("level") == "missing"
+        ]
+        assert not missing, f"Synthetic gate was not observed: {missing}"
+
     def test_fake_gate_with_matching_e2e_trigger_input_not_missing(self, tmp_path: Path) -> None:
         """Gate with trigger_inputs found in e2e.yml is NOT missing in e2e-trigger."""
         gates = [
@@ -376,7 +408,7 @@ class TestFakeGateFanOut:
 # =========================================================================
 
 
-# The 26 ordered paths from the real e2e.yml pull_request.paths allowlist
+# The pre-SA143 ordered paths from the real e2e.yml pull_request.paths allowlist
 _E2E_PATHS: list[str] = [
     "quickscale_modules/backups/**",
     "quickscale_cli/src/quickscale_cli/commands/plan_command.py",
@@ -397,6 +429,8 @@ _E2E_PATHS: list[str] = [
     "quickscale_core/tests/test_generated_project_runtime.py",
     "quickscale_core/tests/generator/test_themes.py",
     "quickscale_core/tests/fixtures/sa90_emission_manifests.json",
+    "quickscale_core/tests/test_e2e_xdist_fixtures.py",
+    "quickscale_core/tests/conftest.py",
     "Makefile",
     "scripts/check_ci_locally.sh",
     "scripts/_qs_jobs.sh",
@@ -549,7 +583,7 @@ class TestE2eTriggerAggregate:
 
     def test_aggregate_extra_path_in_e2e_detected(self, tmp_path: Path) -> None:
         """A path in e2e.yml but not in any trigger_input is reported as extra."""
-        # The real e2e.yml has 26 paths; use a subset that leaves some uncovered.
+        # The real e2e.yml has 28 paths; use a subset that leaves some uncovered.
         # Use just one path that exists in e2e.yml.
         gates = [
             {
@@ -794,6 +828,22 @@ class TestParserPrecision:
             f"ci.yml jobs {ci_jobs} missing some conformance jobs"
         )
 
+    def test_hosted_conformance_jobs_follow_registry_order(self) -> None:
+        """Hosted generated jobs retain registry declaration order."""
+        registry = json.loads(
+            (REPO_ROOT / "scripts" / "gate_registry.json").read_text(encoding="utf-8")
+        )
+        expected = [
+            gate["bindings"]["ci_job"]
+            for gate in registry["gates"]
+            if "hosted" in gate["required_contexts"]
+        ]
+        workflow = _parse_yaml_strict(CI_YML.read_text(encoding="utf-8"), str(CI_YML))
+        jobs = workflow["jobs"]
+        assert isinstance(jobs, dict)
+        actual = [job_id for job_id in jobs if job_id in expected]
+        assert actual == expected
+
     def test_publish_has_all_five_check_gates(self) -> None:
         """publish.yml contains every conformance gate make target."""
         targets = _extract_publish_gates(PUBLISH_YML)
@@ -905,10 +955,10 @@ class TestParserPrecision:
         gates = _extract_check_ci_parallel_gates(script)
         assert gates == {"check-core-compat"}
 
-    def test_e2e_extracts_twenty_six_paths(self) -> None:
-        """e2e.yml has exactly 26 ordered trigger paths."""
+    def test_e2e_extracts_thirty_three_paths(self) -> None:
+        """The generated workflow has exactly 33 ordered trigger paths."""
         paths = _extract_e2e_trigger_paths(E2E_YML)
-        assert len(paths) == 26, f"Expected 26 paths, got {len(paths)}"
+        assert len(paths) == 33, f"Expected 33 paths, got {len(paths)}"
 
     def test_e2e_paths_order_preserved(self) -> None:
         """e2e trigger paths preserve the order from the workflow file."""
@@ -920,6 +970,18 @@ class TestParserPrecision:
         backup_idx = paths.index("quickscale_modules/backups/**")
         plan_idx = paths.index("quickscale_cli/src/quickscale_cli/commands/plan_command.py")
         assert plan_idx > backup_idx, "plan_command should come after backups"
+
+    def test_e2e_xdist_paths_are_unique_declared_append(self) -> None:
+        """The xdist fixture paths are the final two paths and appear once."""
+        paths = _extract_e2e_trigger_paths(E2E_YML)
+        xdist_paths = [
+            "quickscale_core/tests/test_e2e_xdist_fixtures.py",
+            "quickscale_core/tests/conftest.py",
+        ]
+        assert paths[19:21] == xdist_paths
+        assert paths[21] == "Makefile"
+        for path in xdist_paths:
+            assert paths.count(path) == 1
 
     def test_publish_extracts_job_names_via_yaml(self) -> None:
         """publish.yml job names are extracted via structural YAML parsing (BaseLoader)."""
@@ -3064,7 +3126,19 @@ class TestRealCheckMembership:
         members = _extract_check_members(REPO_ROOT / "Makefile")
         assert "frontend-proof" not in members
         assert "smoke-install" not in members
-        assert "check-gate-parity" not in members
+
+    def test_parity_gate_is_explicitly_planned_by_check(self) -> None:
+        """The check recipe directly runs parity without recursive make."""
+        result = subprocess.run(
+            ["make", "-n", "check", "QUIET=1"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "scripts/check_gate_parity.py --registry" in result.stdout
+        assert "check-gate-parity GATE_REGISTRY" not in result.stdout
 
 
 class TestMakeRegistryDerivation:
@@ -3557,6 +3631,242 @@ class TestHostedCiGateGeneration:
             _parse_registry(path)
 
 
+class TestE2eWorkflowGeneration:
+    """The E2E allowlist is projected from registry order and owned markers."""
+
+    def test_installed_wheel_trigger_slice_is_exact_and_unique(self) -> None:
+        """Generated E2E YAML retains the installed-wheel trigger slice exactly once."""
+        expected = [
+            "quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py",
+            "scripts/smoke_install.sh",
+            "scripts/_installed_wheel_venv.sh",
+            "scripts/provision_installed_venv.sh",
+            "scripts/_python_requirement.sh",
+        ]
+        workflow = yaml.load(E2E_YML.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+        paths = workflow["on"]["pull_request"]["paths"]
+        anchor = paths.index("scripts/test_e2e_parallel.py")
+
+        assert paths[anchor + 1 : anchor + 1 + len(expected)] == expected
+        for path in expected:
+            assert paths.count(path) == 1
+
+    def test_markerless_exact_paths_check_write_and_clean_exit_contract(
+        self, tmp_path: Path
+    ) -> None:
+        """Marker ownership drift is reported even when the path values match."""
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        markerless = DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8")
+        for marker in (E2E_PATHS_BEGIN, E2E_PATHS_END):
+            markerless = markerless.replace(marker + "\n", "", 1)
+        workflow_path = tmp_path / "e2e.yml"
+        workflow_path.write_text(markerless, encoding="utf-8")
+
+        drift, expected = sync_ci_gate_jobs_module.sync_e2e_workflow(
+            workflow_path, DEFAULT_REGISTRY
+        )
+        assert drift
+        assert expected != markerless
+
+        command = [sys.executable, str(Path(sync_ci_gate_jobs_module.__file__))]
+        args = ["--e2e-workflow", str(workflow_path), "--registry", str(DEFAULT_REGISTRY)]
+        check = subprocess.run(
+            [*command, "--check", *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert check.returncode == 1, check.stderr
+        assert E2E_PATHS_BEGIN in check.stdout
+        assert E2E_PATHS_END in check.stdout
+
+        write = subprocess.run(
+            [*command, "--write", *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert write.returncode == 0, write.stderr
+        written = workflow_path.read_text(encoding="utf-8")
+        assert written.count(E2E_PATHS_BEGIN) == 1
+        assert written.count(E2E_PATHS_END) == 1
+        assert expected_e2e_workflow_text(written, registry) == written
+
+        clean = subprocess.run(
+            [*command, "--check", *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert clean.returncode == 0, clean.stderr
+
+    def test_markerless_bootstrap_and_idempotence(self) -> None:
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        current = DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8")
+        generated = expected_e2e_workflow_text(current, registry)
+        assert E2E_PATHS_BEGIN in generated
+        assert E2E_PATHS_END in generated
+        assert expected_e2e_workflow_text(generated, registry) == generated
+
+    def test_registry_append_is_at_declared_position(self, tmp_path: Path) -> None:
+        data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        data["gates"].insert(
+            1,
+            {
+                "id": "inserted-e2e-gate",
+                "description": "Inserted E2E gate",
+                "required_contexts": ["e2e-trigger"],
+                "bindings": {
+                    "make_target": "inserted-e2e-gate",
+                    "ci_job": None,
+                    "local_ci_stage": None,
+                },
+                "depends_on": [],
+                "trigger_inputs": ["inserted/path/**"],
+            },
+        )
+        path = tmp_path / "registry.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        gates = _parse_registry(path)
+        generated = expected_e2e_workflow_text(
+            DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8"), gates
+        )
+        owned = generated.split(E2E_PATHS_BEGIN + "\n", 1)[1].split(E2E_PATHS_END + "\n", 1)[0]
+        paths = [line.strip()[3:-1] for line in owned.splitlines() if line.startswith("      - '")]
+        expected = list(_expected_e2e_paths(gates))
+        assert paths == expected
+        assert paths[1] == "inserted/path/**"
+
+    @pytest.mark.parametrize(
+        "mutation,match",
+        [
+            (lambda text: text.replace(E2E_PATHS_BEGIN + "\n", "", 1), "marker"),
+            (
+                lambda text: text.replace(
+                    E2E_PATHS_END + "\n", E2E_PATHS_END + "\n" + E2E_PATHS_END + "\n", 1
+                ),
+                "marker",
+            ),
+            (lambda text: text.replace(E2E_PATHS_BEGIN + "\n", E2E_PATHS_END + "\n", 1), "marker"),
+        ],
+    )
+    def test_malformed_marker_ownership_fails_closed(self, mutation: Any, match: str) -> None:
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        valid = expected_e2e_workflow_text(
+            DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8"), registry
+        )
+        with pytest.raises(GeneratorError, match=match):
+            expected_e2e_workflow_text(mutation(valid), registry)
+
+    @pytest.mark.parametrize(
+        "mutation",
+        [
+            lambda text: text.replace(E2E_PATHS_BEGIN + "\n", "", 1),
+            lambda text: text.replace(
+                E2E_PATHS_END + "\n", E2E_PATHS_END + "\n" + E2E_PATHS_END + "\n", 1
+            ),
+            lambda text: text.replace(
+                "      - 'quickscale_modules/backups/**'\n",
+                E2E_PATHS_BEGIN + "\n      - 'quickscale_modules/backups/**'\n",
+                1,
+            ),
+        ],
+    )
+    def test_malformed_marker_cli_exits_two(self, tmp_path: Path, mutation: Any) -> None:
+        """Partial, duplicate, and nested markers remain exit-2 input errors."""
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        valid = expected_e2e_workflow_text(
+            DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8"), registry
+        )
+        workflow_path = tmp_path / "malformed-e2e.yml"
+        workflow_path.write_text(mutation(valid), encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(sync_ci_gate_jobs_module.__file__)),
+                "--check",
+                "--e2e-workflow",
+                str(workflow_path),
+                "--registry",
+                str(DEFAULT_REGISTRY),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 2
+        assert "ERROR: [CI_GATE_GENERATION]" in result.stderr
+        assert not result.stdout
+
+    def test_duplicate_yaml_key_fails_closed(self) -> None:
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        malformed = DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8").replace(
+            "name: E2E Tests\n", "name: E2E Tests\nname: Duplicate\n", 1
+        )
+        with pytest.raises(GeneratorError, match="Duplicate YAML key"):
+            expected_e2e_workflow_text(malformed, registry)
+
+    def test_unowned_bytes_are_preserved(self) -> None:
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        current = DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8").replace(
+            "name: E2E Tests\n", "name: E2E Tests\n# unowned sentinel\n", 1
+        )
+        generated = expected_e2e_workflow_text(current, registry)
+        for marker in (E2E_PATHS_BEGIN, E2E_PATHS_END):
+            current = current.replace(marker + "\n", "", 1)
+            generated = generated.replace(marker + "\n", "", 1)
+        assert generated.split("    paths:\n", 1)[0] == current.split("    paths:\n", 1)[0]
+        assert "# unowned sentinel\n" in generated
+        assert "  e2e-tests:\n" in generated
+
+    def test_partial_and_nested_markers_fail_closed(self) -> None:
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        valid = expected_e2e_workflow_text(
+            DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8"), registry
+        )
+        nested = valid.replace(
+            "      - 'quickscale_modules/backups/**'\n",
+            E2E_PATHS_BEGIN + "\n      - 'quickscale_modules/backups/**'\n",
+            1,
+        )
+        with pytest.raises(GeneratorError, match="marker"):
+            expected_e2e_workflow_text(nested, registry)
+
+    def test_selector_truth_table_is_hermetic(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[str, Path]] = []
+
+        def fake_registry(_path: Path) -> list[dict[str, Any]]:
+            return []
+
+        def fake_hosted(path: Path, _registry: Path) -> tuple[bool, str]:
+            calls.append(("hosted", path))
+            return False, ""
+
+        def fake_e2e(path: Path, _registry: Path) -> tuple[bool, str]:
+            calls.append(("e2e", path))
+            return False, ""
+
+        monkeypatch.setattr(sync_ci_gate_jobs_module, "_parse_registry", fake_registry)
+        monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_workflow", fake_hosted)
+        monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_e2e_workflow", fake_e2e)
+        assert sync_ci_gate_jobs_module.main(["--check", "--e2e-workflow", "custom-e2e.yml"]) == 0
+        assert calls == [("e2e", Path("custom-e2e.yml"))]
+        calls.clear()
+        assert sync_ci_gate_jobs_module.main(["--check", "--workflow", "custom-ci.yml"]) == 0
+        assert calls == [("hosted", Path("custom-ci.yml"))]
+        calls.clear()
+        assert (
+            sync_ci_gate_jobs_module.main(
+                ["--check", "--workflow", "custom-ci.yml", "--e2e-workflow", "custom-e2e.yml"]
+            )
+            == 0
+        )
+        assert calls == [("hosted", Path("custom-ci.yml")), ("e2e", Path("custom-e2e.yml"))]
+        calls.clear()
+        assert sync_ci_gate_jobs_module.main(["--check"]) == 0
+        assert calls == [("hosted", DEFAULT_WORKFLOW), ("e2e", DEFAULT_E2E_WORKFLOW)]
+
+
 # =========================================================================
 # F-006 — mandatory generation drift gate
 # =========================================================================
@@ -3646,11 +3956,13 @@ class TestGenerationGateRegistryParity:
 
     @staticmethod
     def _custom_registry(tmp_path: Path, *, renamed: bool) -> Path:
-        """Write a repo-contained registry fixture, optionally with a run drift."""
+        """Write a pytest-managed registry fixture, optionally with a run drift."""
         data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
         if renamed:
             data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
-        path = _repo_fixture_file(tmp_path, "custom_registry.json")
+        fixture_dir = tmp_path / ("renamed" if renamed else "clean")
+        fixture_dir.mkdir()
+        path = fixture_dir / "custom_registry.json"
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return path
 
