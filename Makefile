@@ -868,10 +868,10 @@ check-csrf-exempt:
 # every execution context (Makefile, check_ci_locally.sh, ci.yml, publish.yml,
 # e2e.yml).  Exits 0 when all declared gates are wired; exits 1 with JSONL
 # diagnostics when conformance gates are missing from a required context.
-# This is a standalone diagnostic — it is NOT wired into make check/ci yet.
+# This is a blocking diagnostic and is also invoked directly by make check.
 check-gate-parity:
 	@tmp=$$(mktemp); \
-	$(PYTHON) scripts/check_gate_parity.py > $$tmp 2>&1; \
+	$(PYTHON) scripts/check_gate_parity.py --registry "$(GATE_REGISTRY)" > $$tmp 2>&1; \
 	exit_code=$$?; \
 	output=$$(cat $$tmp); \
 	rm -f $$tmp; \
@@ -1115,6 +1115,8 @@ check:
 		fi; \
 	fi; \
 	$(MAKE) $(CHECK_GATE_TARGETS)
+	@# SA122a: parity is a direct, non-recursive mandatory check using the selected registry.
+	$(PYTHON) scripts/check_gate_parity.py --registry "$(GATE_REGISTRY)"
 	@# F-006: registry-bound hosted CI generation drift must fail the mandatory gate.
 	@# Non-recursive by design: the direct Python --check (same command as the
 	@# standalone check-ci-gate-generation target) cannot recurse through make.

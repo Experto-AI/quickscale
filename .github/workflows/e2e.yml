@@ -13,6 +13,7 @@ on:
   pull_request:
     branches: [ main ]
     paths:
+      # BEGIN GENERATED: e2e-trigger-paths
       - 'quickscale_modules/backups/**'
       - 'quickscale_cli/src/quickscale_cli/commands/plan_command.py'
       - 'quickscale_cli/src/quickscale_cli/commands/apply_command.py'
@@ -32,6 +33,8 @@ on:
       - 'quickscale_core/tests/test_generated_project_runtime.py'
       - 'quickscale_core/tests/generator/test_themes.py'
       - 'quickscale_core/tests/fixtures/sa90_emission_manifests.json'
+      - 'quickscale_core/tests/test_e2e_xdist_fixtures.py'
+      - 'quickscale_core/tests/conftest.py'
       - 'Makefile'
       - 'scripts/check_ci_locally.sh'
       - 'scripts/_qs_jobs.sh'
@@ -39,6 +42,7 @@ on:
       - 'scripts/test_e2e_parallel.py'
       - '.github/workflows/ci.yml'
       - '.github/workflows/e2e.yml'
+      # END GENERATED: e2e-trigger-paths
 
 jobs:
   e2e-tests:

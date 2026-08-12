@@ -48,6 +48,7 @@ from check_gate_parity import (
     _live_process_group_members,
     _MakeOutputError,
     _observe_publish_run_blocks,
+    _parse_yaml_strict,
     _read_bash_event_log,
     _read_bash_recorder_log,
     _run_bash_observation,
@@ -344,6 +345,31 @@ class TestFakeGateFanOut:
             f"Expected diagnostics for all 5 contexts + makefile, got: {contexts_found}"
         )
 
+    def test_synthetic_gate_is_observed_in_all_five_contexts(self, tmp_path: Path) -> None:
+        """A synthetic registry entry maps to every production context."""
+        source_gate = next(
+            gate
+            for gate in json.loads(
+                (REPO_ROOT / "scripts" / "gate_registry.json").read_text(encoding="utf-8")
+            )["gates"]
+            if gate["id"] == "check-core-compat"
+        )
+        synthetic = dict(source_gate)
+        synthetic["id"] = "synthetic-all-contexts"
+        synthetic["description"] = "Synthetic all-context acceptance gate"
+        synthetic["required_contexts"] = list(_ALL_CONTEXTS)
+        reg_path = _make_registry_json([synthetic], tmp_path)
+
+        result = _run_checker(["--registry", str(reg_path)])
+        lines = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+        missing = [
+            record
+            for record in lines
+            if record.get("gate_id") == "synthetic-all-contexts"
+            and record.get("level") == "missing"
+        ]
+        assert not missing, f"Synthetic gate was not observed: {missing}"
+
     def test_fake_gate_with_matching_e2e_trigger_input_not_missing(self, tmp_path: Path) -> None:
         """Gate with trigger_inputs found in e2e.yml is NOT missing in e2e-trigger."""
         gates = [
@@ -381,7 +407,7 @@ class TestFakeGateFanOut:
 # =========================================================================
 
 
-# The 26 ordered paths from the real e2e.yml pull_request.paths allowlist
+# The 28 ordered paths from the real e2e.yml pull_request.paths allowlist
 _E2E_PATHS: list[str] = [
     "quickscale_modules/backups/**",
     "quickscale_cli/src/quickscale_cli/commands/plan_command.py",
@@ -402,6 +428,8 @@ _E2E_PATHS: list[str] = [
     "quickscale_core/tests/test_generated_project_runtime.py",
     "quickscale_core/tests/generator/test_themes.py",
     "quickscale_core/tests/fixtures/sa90_emission_manifests.json",
+    "quickscale_core/tests/test_e2e_xdist_fixtures.py",
+    "quickscale_core/tests/conftest.py",
     "Makefile",
     "scripts/check_ci_locally.sh",
     "scripts/_qs_jobs.sh",
@@ -554,7 +582,7 @@ class TestE2eTriggerAggregate:
 
     def test_aggregate_extra_path_in_e2e_detected(self, tmp_path: Path) -> None:
         """A path in e2e.yml but not in any trigger_input is reported as extra."""
-        # The real e2e.yml has 26 paths; use a subset that leaves some uncovered.
+        # The real e2e.yml has 28 paths; use a subset that leaves some uncovered.
         # Use just one path that exists in e2e.yml.
         gates = [
             {
@@ -799,6 +827,22 @@ class TestParserPrecision:
             f"ci.yml jobs {ci_jobs} missing some conformance jobs"
         )
 
+    def test_hosted_conformance_jobs_follow_registry_order(self) -> None:
+        """Hosted generated jobs retain registry declaration order."""
+        registry = json.loads(
+            (REPO_ROOT / "scripts" / "gate_registry.json").read_text(encoding="utf-8")
+        )
+        expected = [
+            gate["bindings"]["ci_job"]
+            for gate in registry["gates"]
+            if "hosted" in gate["required_contexts"]
+        ]
+        workflow = _parse_yaml_strict(CI_YML.read_text(encoding="utf-8"), str(CI_YML))
+        jobs = workflow["jobs"]
+        assert isinstance(jobs, dict)
+        actual = [job_id for job_id in jobs if job_id in expected]
+        assert actual == expected
+
     def test_publish_has_all_five_check_gates(self) -> None:
         """publish.yml contains every conformance gate make target."""
         targets = _extract_publish_gates(PUBLISH_YML)
@@ -910,10 +954,10 @@ class TestParserPrecision:
         gates = _extract_check_ci_parallel_gates(script)
         assert gates == {"check-core-compat"}
 
-    def test_e2e_extracts_twenty_six_paths(self) -> None:
-        """e2e.yml has exactly 26 ordered trigger paths."""
+    def test_e2e_extracts_twenty_eight_paths(self) -> None:
+        """e2e.yml has exactly 28 ordered trigger paths."""
         paths = _extract_e2e_trigger_paths(E2E_YML)
-        assert len(paths) == 26, f"Expected 26 paths, got {len(paths)}"
+        assert len(paths) == 28, f"Expected 28 paths, got {len(paths)}"
 
     def test_e2e_paths_order_preserved(self) -> None:
         """e2e trigger paths preserve the order from the workflow file."""
@@ -925,6 +969,18 @@ class TestParserPrecision:
         backup_idx = paths.index("quickscale_modules/backups/**")
         plan_idx = paths.index("quickscale_cli/src/quickscale_cli/commands/plan_command.py")
         assert plan_idx > backup_idx, "plan_command should come after backups"
+
+    def test_e2e_xdist_paths_are_unique_declared_append(self) -> None:
+        """The xdist fixture paths are the final two paths and appear once."""
+        paths = _extract_e2e_trigger_paths(E2E_YML)
+        xdist_paths = [
+            "quickscale_core/tests/test_e2e_xdist_fixtures.py",
+            "quickscale_core/tests/conftest.py",
+        ]
+        assert paths[19:21] == xdist_paths
+        assert paths[21] == "Makefile"
+        for path in xdist_paths:
+            assert paths.count(path) == 1
 
     def test_publish_extracts_job_names_via_yaml(self) -> None:
         """publish.yml job names are extracted via structural YAML parsing (BaseLoader)."""
@@ -3069,7 +3125,19 @@ class TestRealCheckMembership:
         members = _extract_check_members(REPO_ROOT / "Makefile")
         assert "frontend-proof" not in members
         assert "smoke-install" not in members
-        assert "check-gate-parity" not in members
+
+    def test_parity_gate_is_explicitly_planned_by_check(self) -> None:
+        """The check recipe directly runs parity without recursive make."""
+        result = subprocess.run(
+            ["make", "-n", "check", "QUIET=1"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "scripts/check_gate_parity.py --registry" in result.stdout
+        assert "check-gate-parity GATE_REGISTRY" not in result.stdout
 
 
 class TestMakeRegistryDerivation:
