@@ -101,7 +101,7 @@ Track 1 (COMPLETE)      Track 2 (COMPLETE)      Track 3 → release (CRITICAL PA
 - **`scripts/gate_registry.json`** — no open writer; the five installed-wheel paths are committed.
 - **`.github/workflows/publish.yml`** — no open writer; SA122b-4 and SA136e both closed and merged.
 
-Single-writer or unowned: `apply_command.py` (SA140 alone), `docs/technical/validation_policy.md` (no open writer), `test_e2e_full_workflow.py` (no open writer), `docs/technical/decisions.md` (SA117e-5 is the only open writer). **`git_utils.py`, `scripts/publish_module.py`, `Makefile`, `docs/technical/module-extension.md`, `quickscale_core/tests/test_git_utils.py`, and `scripts/test_publish_module.py` are SA145's allowlist and SA145 is their sole open writer** — SA117e-4 *executes* that machinery but edits none of it, which is why SA145 is an ordering dependency, not a conflict surface. `module_commands.py`, `module_output.py`, `scripts/check_sa117_scope.py`, `scripts/version_tool.sh`, `scripts/quality_waivers.json`, and `scripts/quality_baseline.json` have no open v87 writer. No additional procedure is required.
+Single-writer or unowned: `apply_command.py` (SA140 alone), `docs/technical/validation_policy.md` (no open writer), `test_e2e_full_workflow.py` (no open writer), `docs/technical/decisions.md` (SA117e-5 is the only open writer). **`git_utils.py`, `scripts/publish_module.py`, `Makefile`, `docs/technical/module-extension.md`, `quickscale_core/tests/test_git_utils.py`, and `scripts/test_publish_module.py` have no open writer** — SA145's six-file implementation is merged and accepted, and its remaining slice touches only the shared closeout files; SA117e-4 *executes* that machinery but edits none of it, which is why SA145 is an ordering dependency, not a conflict surface. `module_commands.py`, `module_output.py`, `scripts/check_sa117_scope.py`, `scripts/version_tool.sh`, `scripts/quality_waivers.json`, and `scripts/quality_baseline.json` have no open v87 writer. No additional procedure is required.
 
 **Shared closeout files** (`CHANGELOG.md`, this roadmap, `decisions.md`) are touched by every track and remain the only broad conflict surface; the mandatory `git merge v87`-before-merge-back step in [Parallel execution tracks](#parallel-execution-tracks) covers them — keep both tracks' entries when resolving.
 
@@ -111,101 +111,21 @@ Single-writer or unowned: `apply_command.py` (SA140 alone), `docs/technical/vali
 
 **Status:** on the critical path with **SA145 as the checkpoint-review-blocked head**. DC-155 accepted its six-file implementation and resolved the two security findings; SA145 remains unchecked until the reconciled status text receives review. SA117e-4 remains blocked before the human-gated outward split-publication step.
 
-**Standing order constraints.** Do not run the branch loop before SA145 has removed the `ABSENT` bypass, do not seal or push splits before SA117e-4's human gate is satisfied, do not start SA112b until SA117e-4 has merged, and do not treat anything as release-ready until SA117e closes at `-5`. The loop/seal contract is normative in `decisions.md`; SA117e-4 is the outward publication step and SA117e-5 retains the SA117/SA136 closeout semantics.
+**Standing order constraints.** Do not run the branch loop before SA145's closeout is reviewed and checked (its `ABSENT` removal is merged), do not seal or push splits before SA117e-4's human gate is satisfied, do not start SA112b until SA117e-4 has merged, and do not treat anything as release-ready until SA117e closes at `-5`. The loop/seal contract is normative in `decisions.md`; SA117e-4 is the outward publication step and SA117e-5 retains the SA117/SA136 closeout semantics.
 
 ### SA145 — Remove the `ABSENT` force-with-lease bypass
 
 - [ ] **SA145 — Delete the `ABSENT` expected-remote-SHA path from the split-publish contract.** `Tier 2 · deps: none` · **blocks SA117e-4** · closes `F-001` and `SA117E1-REV-001`
 
-  **The defect is one hole at two layers.** `push_split_branch` (`quickscale_core/src/quickscale_core/utils/git_utils.py:957-962`) maps `expected_remote_sha == "ABSENT"` to a bare `--force-with-lease` carrying no refspec. Git's bare form protects only refs that have a local tracking ref, so on a first publish or from a fresh clone — exactly the cases `ABSENT` exists to name — it degrades to an unguarded force push. `validate_expected_sha` (`:912-913`) admits the value in the first place. That is `SA117E1-REV-001`. `F-001` is the same hole advertised to operators: `Makefile:196,1190,1192,1195,1196` still print `EXPECTED_REMOTE_SHA=<sha|ABSENT>` as valid usage, and `docs/technical/module-extension.md:299` instructs `./scripts/publish_module.sh <name>` with no SHA argument at all.
+  **Implementation is complete and accepted.** DC-155 returned full-scope functional acceptance of the six-file candidate at `81c7955c` and resolved both `F-001` and `SA117E1-REV-001`; no further product-code fix or review of that mechanism is required. Evidence, the removed defect, and the plan-review record are in [CHANGELOG.md](../../CHANGELOG.md).
 
-  **The policy is already ratified and half-enforced — this is drift, not an open design question.** `scripts/publish_module.py:35-38` and `:1012-1015` already document `ABSENT` as forbidden and not valid first-publish guidance while `SA117E1-REV-001` is open, and `scripts/publish_module.sh:11-13` only ever documents the exact-SHA form. The runtime acceptance and the two operator-facing surfaces never followed.
+  **Only the status closeout remains open** — `F-002` (**medium**, consistency): the roadmap/changelog text recording DC-155's outcome has not itself received review.
 
-  **Remove the path; do not document around it.** A doc-only `F-001` fix leaves the unguarded push reachable and defers `SA117E1-REV-001` into the release ceremony, which is where it is most expensive. Deleting the value closes both findings in one reviewed slice. `scripts/publish_module.py:1200` passes `expected_remote_sha="ABSENT"` inside `_publish_outdated`, which Phase 4 already disables entirely — that call site is deleted with the path, not migrated.
-
-  **Scope note.** This is deliberately wider than `F-001`'s literal checkpoint wording, which named only the Makefile and `module-extension.md`. Removing the runtime acceptance is the difference between recording the contract and enforcing it, and `SA117E1-REV-001` cannot close without it.
-
-  - **Plan review required before implementation.** This is a security boundary, so the [proportionality rule](#rules-every-ticket-inherits)'s straight-to-implementation path does not apply. Scoped plan review must return `STATUS: ok` before any mutation.
-  - **Not gated by `SA117E4-DRIFT-003`.** That gate binds Phase 1.A and release steps. This ticket creates no tag, push, remote-ref mutation, seal, or publication, and it is sequenced *before* the `v87` freeze precisely so the eventual DC-122 revision is drafted against a tree whose security contract is already correct.
-  - Allowlist: `quickscale_core/src/quickscale_core/utils/git_utils.py`, `scripts/publish_module.py`, `Makefile`, `docs/technical/module-extension.md`, `quickscale_core/tests/test_git_utils.py`, `scripts/test_publish_module.py`.
-  - Verify: `validate_expected_sha` rejects `"ABSENT"` with an operator-facing `GitError`; no `push_split_branch` input produces a `--force-with-lease` without a refspec; no Make target, script, or document advertises `ABSENT`; the 7 `test_git_utils.py` and 8 `scripts/test_publish_module.py` `ABSENT` assertions invert from accept to reject; `make check QUIET=1` exits 0 and `make quality` is no worse than the standing SA140 baseline.
-  - Rollback: revert the allowlisted files.
+  - Allowlist (closeout): `docs/technical/roadmap.md`, `CHANGELOG.md`.
+  - Verify: the reconciled status review returns `STATUS: ok`; both documents preserve the dated recorded-partial history while recording DC-155's acceptance and the two closed security IDs; SA117e-4's remaining blockers and authorization boundaries are unchanged; no completion language claims SA117e-4, SA117, SA136, release readiness, or publication.
+  - Rollback: revert the two closeout files.
+  - Then check SA145. No tag, push, seal, publication, or remote-ref mutation is authorized by this ticket.
   *(why →* `SA117e-4`'s branch loop cannot run under a contract whose only first-publish value is an unguarded force push*)*
-
-  <a id="sa145-recorded-partial-checkpoint-2026-08-13"></a>
-  **Recorded-partial checkpoint (2026-08-13).** The task remains unchecked. The user selected `Stop here, record Done / Pending-Blocking / Decisions-needed, and merge the checkpoint` after the third review-budget round.
-
-  - **Done:** the six-file allowlist removes valid-path `ABSENT`, preserves exact ref-qualified leases and internal `None` fast-forward-only behavior, deletes the disabled `_publish_outdated` body while preserving its pre-bootstrap diagnostic, aligns Make/help/operator guidance, and hardens Make transport against shell separators and raw single-dollar Make-function payloads. Validation on the final candidate: 16 sentinel tests, 225 core tests, and 104 script/Make tests passed; `make help` and `make check QUIET=1` exited 0; `make quality` exited 2 only on the unchanged accepted SA140 complexity 56/55 baseline; no tag, push, seal, publication, PyPI action, or configured/external remote-ref mutation occurred. Candidate ID6 is `55dd4052972e644d286b9032c9bd4e077fd2b5e302680ec6d46f79abcf938c8e` at base/HEAD `81c7955c40bcf5ea1f06a8a432c20d57033de260` over the exact six-file allowlist.
-  <a id="sa145-post-review-outcome-2026-08-13"></a>
-  - **Post-review outcome:** DC-155 returned full-scope functional acceptance and resolved `F-001` plus `SA117E1-REV-001`; no further product-code fix or review of the six-file mechanism is required.
-  - **Pending-Blocking:** `F-002` (**medium**, consistency) — the current roadmap/changelog reconciliation that records DC-155's outcome has not itself received review. SA145 remains unchecked until that status review returns `STATUS: ok`.
-  - **Decisions needed:** none. The next action is fixed: review the two status files against DC-155, then check SA145 if accepted. No release or outward mutation is authorized.
-
-  <a id="sa145-plan-review-record-2026-08-13"></a>
-  **Durable plan-review record.** The revised six-phase SA145 plan returned plan-review `STATUS: ok` in session `2026-08-13-07-03-01` (pass 2; source review `DC-140`). The retained approval summary is: focused `--no-cov` commands own assertion truth; `make check QUIET=1` owns broad repository coverage/policy; the historical isolated core command is recorded as 225 passing assertions with exit 1 solely from 37.55% aggregate coverage versus 90%; deterministic ID6/PC2/ID8 binding owns review and rollback identity; no remote-changing command is permitted.
-
-  ```yaml
-  plan_carryover:
-    status: continuation-carryover
-    reusable: false
-    approved_at_commit: 81c7955c40bcf5ea1f06a8a432c20d57033de260
-    approval:
-      status: ok
-      pass: 2
-      review_ref: docs/technical/roadmap.md#sa145-plan-review-record-2026-08-13
-      result_sha256: dc1e15cd3bb9fcf01b86b137e49d868ee385fd5d9bc5344dfc3e9ab5827400a1
-    session_id: 2026-08-13-07-03-01
-    planning_scope:
-      objective: Remove the ABSENT expected-remote-SHA split-publish bypass and align runtime, tests, Make, and operator guidance.
-      acceptance_criteria:
-        - ABSENT rejects before Git or publication bootstrap.
-        - Exact non-zero 40-hex SHA uses a ref-qualified force-with-lease; internal None remains non-force.
-        - Focused assertions, make help, make check, no-worse quality, deterministic identity, and independent review gate the closeout.
-      boundaries:
-        - Six-file SA145 implementation allowlist plus roadmap/changelog closeout only.
-        - No tag, push, seal, publication, PyPI action, or configured/external remote-ref mutation.
-    planning_scope_sha256: 460e3d630b2e18d82fa1f24ea7121dead17452b0e05ab52801d921c921e4e09d
-    continuation_required:
-      review_ref: docs/technical/roadmap.md#sa145-post-review-outcome-2026-08-13
-      finding_ids: [F-002]
-      summary: The post-review roadmap/changelog reconciliation must receive STATUS ok before SA145 can complete.
-    carried_slices:
-      - slice_id: 6
-        text: |-
-          ## Phase 6 — Record SA145 closeout and obtain final full-scope review
-          - PHASE GOAL: Move SA145 implementation evidence into release history, leave the roadmap with concise dependency-relevant closure, bind the final eight-file bytes deterministically, and obtain review of that exact final state.
-          - SCOPE_IN: `docs/technical/roadmap.md`, `CHANGELOG.md` only for tracked writes; the six reviewed implementation files are read-only context; generated `.quickscale/sa145-evidence/` may receive identity evidence only.
-          - LIKELY FILES/SYMBOLS: roadmap SA145 checkbox/detail, Track 3 head/blocker/topology text that directly depends on SA145, unreleased v0.87.0 changelog section, `SA145-ID6`, `SA145-PC2`, and `SA145-ID8`.
-          - EXECUTION MODE: serial.
-          - DEPENDS ON: Phase 5 join barrier.
-          - ACTIONS: Before any closeout write, have `Adaptive-quality-gate` verify current six-file bytes/status against frozen `SA145-ID6` and verify both stored `SA145-PC2` blobs against their manifest; any mismatch blocks Phase 6. Mark SA145 checked only after this precondition; condense/move its detailed implementation history per E10's roadmap ownership rule; record the frozen `SA145-ID6` digest, six implementation files plus two closeout files, focused `T-SENTINEL`, `T-CORE-FOCUSED`, and `T-SCRIPT-FOCUSED` exit-0 results, `T-MAKE-HELP` exit 0, the honest `T-CORE-COVERAGE-OBSERVED` result of 225 passed assertions plus coverage-only exit 1 at 37.55% versus 90%, `T-BROAD-POLICY` exit 0 as the repository coverage/policy proof, exact `T-QUALITY` result and unchanged SA140 disposition, executable review result, and explicit statement that no tag/push/seal/publication/remote-ref mutation occurred. Mark `F-001` and `SA117E1-REV-001` closed by SA145 and update only directly dependent topology so SA117e-4 is no longer blocked by those two items; do not claim SA117e-4, SA117, SA136, release readiness, or publication complete.
-          - VALIDATION CHECKPOINT: First perform the manual cross-document check against E1/E10: roadmap SA145 is checked and concise; changelog owns detailed evidence; both name the same frozen `SA145-ID6`, revised focused commands and exits, historical isolated coverage-only nonzero, `T-BROAD-POLICY` exit-0 coverage proof, quality disposition, closure IDs, and no-publication statement; no completion text predates Phase 5 evidence. Then have `Adaptive-quality-gate` capture candidate `SA145-ID8` from the exact final eight paths and require stable double reads, `HEAD` equal to the initial commit, no in-progress Git operation, and tracked changed-path set exactly equal to those eight paths. Supply candidate manifest/digest to final independent change review over exactly those paths and require `STATUS: ok`. After review, rerun `SA145-ID8` in verify-only mode and require a byte-identical manifest/status/digest. Raw final file bytes and local status are the authoritative source, candidate capture is the binding point, path-set parity plus post-review equality is the assertion, and only that equality freezes final reviewed `SA145-ID8`.
-          - ROLLBACK STATE/ACTION: On closeout edit, identity, or final-review failure, an execute-capable implementation or quality-gate task restores only `docs/technical/roadmap.md` and `CHANGELOG.md` byte-for-byte from immutable `SA145-PC2`, verifies restored byte counts/SHA-256 against its manifest, and verifies the six implementation files remain byte-identical to frozen `SA145-ID6`. Retain the already reviewed executable slice. This rollback source contains the actual pre-closeout blobs and is not re-derived from a later live state.
-          - PHASE END: SA145 closes only when final review is `STATUS: ok` and post-review `SA145-ID8` verification is byte-identical; otherwise restore the two closeout blobs, leave SA145 open, and report the closeout finding without widening scope.
-          - COLLAPSE: forbidden; shared closeout files are the primary merge-conflict surface and completion claims require their own post-evidence review and identity binding.
-    plan_sha256: f736a54405a0296d232ef9cafc78277797650be85f9200a34ec2b3f53f7ab95e
-    validation_surface:
-      paths:
-        - Makefile
-        - docs/technical/module-extension.md
-        - quickscale_core/src/quickscale_core/utils/git_utils.py
-        - quickscale_core/tests/test_git_utils.py
-        - scripts/publish_module.py
-        - scripts/test_publish_module.py
-      anchors:
-        - validate_expected_sha
-        - push_split_branch
-        - publish-module
-        - TestPublishModuleMakeInterfaces
-    validation_surface_sha256: 741ce205c4e98145fc629a782955e0903832b764b4e3c2bf81121ce6318be2f4
-    remaining_findings:
-      - finding_id: F-001
-        disposition: resolved
-        closure_criterion: The publish-module Make path transports both MODULE and EXPECTED_REMOTE_SHA without allowing either value to alter shell command structure; malformed/metacharacter-bearing values are rejected without executing an injected command and before any Git bootstrap/mutation, while a valid module plus exact non-zero 40-hex SHA still dispatches unchanged. Automated regressions prove both rejection and valid dispatch.
-      - finding_id: F-002
-        disposition: blocking
-        closure_criterion: docs/technical/roadmap.md and CHANGELOG.md preserve the dated recorded-partial history while recording DC-155's functional acceptance and F-001/SA117E1-REV-001 resolution; current topology, readiness, Pending-Blocking, next action, and plan-carryover continuation/remaining-finding state no longer claim the review never ran or that either security ID remains open. SA145 remains unchecked until the reconciled status text itself receives the required review, and downstream SA117e-4 blockers/authorization boundaries remain unchanged.
-  ```
 
 ### SA136 — Tag-sealed split publication
 
