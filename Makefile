@@ -42,7 +42,7 @@
 #   make publish-test         - Publish to TestPyPI
 #   make publish-prod         - Publish to production PyPI
 #   make publish-full         - Publish to TestPyPI then PyPI
-#   make publish-module       - Publish module to split branch (MODULE=<name>)
+#   make publish-module       - Publish module to split branch (MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>)
 #   make seal-module          - Seal one split-branch tag (MODULE=<name> VERSION=<version>)
 #   make seal-modules         - Seal all split-branch tags (VERSION=<version>)
 #   make seal-status          - Show seal status (VERSION=<version>)
@@ -73,6 +73,15 @@
 # Default Python command (uses root Poetry environment)
 PYTHON ?= poetry run python
 MAKEFILE_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+# Do not export caller-controlled Make syntax into subprocesses.  In
+# particular, GNU Make may expand command-line variable values while preparing
+# the environment even when the recipe uses ``value`` to preserve the text.
+unexport MODULE EXPECTED_REMOTE_SHA
+# Keep command-line data in one shell argument.  ``value`` prevents recursive
+# Make expansion of hostile input such as ``$(shell ...)`` before the shell
+# quoting is applied.
+single_quote := '
+shell_quote = '$(subst $(single_quote),$(single_quote)\$(single_quote)$(single_quote),$(1))'
 GATE_REGISTRY ?= $(MAKEFILE_ROOT)scripts/gate_registry.json
 # Keep the fast check aggregation aligned with the registry.  The helper uses
 # the parity checker's strict JSON/schema validator (including duplicate-key
@@ -128,7 +137,11 @@ SECTION_VARS := $(foreach section,$(RAW_SECTION_VARS),$(if $(filter module,$(sec
 SELECTED_SECTIONS := $(strip $(foreach arg,$(SECTION_FLAG_ARGS),$(call map_section,$(arg))))
 DEFAULT_SECTIONS := quickscale core cli devtools modules
 ACTIVE_SECTIONS := $(if $(SECTION_VARS),$(SECTION_VARS),$(if $(SELECTED_SECTIONS),$(SELECTED_SECTIONS),$(DEFAULT_SECTIONS)))
-MODULE_DIRS := $(if $(MODULE),quickscale_modules/$(MODULE),$(wildcard quickscale_modules/*))
+# ``MODULE`` may be supplied as a recursive command-line variable.  Read its
+# raw value here so Make cannot evaluate caller-controlled functions while it
+# parses the file; recipe-local validation and quoting remain responsible for
+# transporting it as data.
+MODULE_DIRS = $(if $(MODULE),quickscale_modules/$(MODULE),$(wildcard quickscale_modules/*))
 
 # Source directories for linting and type checking
 SRC_DIRS := quickscale/src quickscale_core/src quickscale_cli/src quickscale_devtools/src
@@ -193,7 +206,7 @@ help:
 	@echo "  make publish-test         - Publish to TestPyPI"
 	@echo "  make publish-prod         - Publish to production PyPI"
 	@echo "  make publish-full         - Publish TestPyPI → verify → PyPI"
-	@echo "  make publish-module       - Publish module to split branch (MODULE=<name> EXPECTED_REMOTE_SHA=<sha|ABSENT>)"
+	@echo "  make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha> - Publish module to split branch"
 	@echo "  make publish-module-status - Show split-branch status for all modules"
 	@echo "  make publish-modules-outdated - [DISABLED SA117 Phase 4] Was publish outdated modules; use per-module publish instead"
 	@echo "  make seal-module          - Seal one split-branch tag (MODULE=<name> VERSION=<version> [PREVIOUS_VERSION=<version>])"
@@ -1187,22 +1200,28 @@ publish-full:
 	@scripts/publish.sh full
 
 # Publish module changes to its split branch using force-with-lease safety (SA117 Phase 4).
-# Usage: make publish-module MODULE=auth EXPECTED_REMOTE_SHA=<40hex|ABSENT>
-#   EXPECTED_REMOTE_SHA is required: 40-char hex SHA expected on remote,
-#   or ABSENT for first-time publish (branch does not exist remotely).
+# Usage: make publish-module MODULE=auth EXPECTED_REMOTE_SHA=<40-hex-remote-sha>
+#   EXPECTED_REMOTE_SHA is required: the exact 40-hex SHA currently expected on
+#   the remote split branch. An absent remote branch is not authorization.
 #   --clean clears the git subtree cache.
 publish-module:
-	@if [ -z "$(MODULE)" ]; then echo "Error: MODULE is required (e.g. make publish-module MODULE=auth EXPECTED_REMOTE_SHA=40hex_or_ABSENT)"; exit 1; fi
-	@if [ -z "$(EXPECTED_REMOTE_SHA)" ]; then echo "Error: EXPECTED_REMOTE_SHA is required (e.g. make publish-module MODULE=auth EXPECTED_REMOTE_SHA=40hex_or_ABSENT)"; exit 1; fi
-	@scripts/publish_module.sh $(MODULE) --expected-remote-sha $(EXPECTED_REMOTE_SHA) $(if $(CLEAN),--clean,)
+	@set -eu; \
+	module=$(call shell_quote,$(value MODULE)); \
+	expected_remote_sha=$(call shell_quote,$(value EXPECTED_REMOTE_SHA)); \
+	if [ -z "$$module" ]; then echo "Error: MODULE is required (e.g. make publish-module MODULE=auth EXPECTED_REMOTE_SHA=<40-hex-remote-sha>)"; exit 1; fi; \
+	case "$$module" in ''|[!a-zA-Z0-9]*|*[!a-zA-Z0-9_-]*) echo "Error: MODULE must be a bare alphanumeric slug (letters, digits, '_' or '-')."; exit 1;; esac; \
+	if [ -z "$$expected_remote_sha" ]; then echo "Error: EXPECTED_REMOTE_SHA is required (e.g. make publish-module MODULE=auth EXPECTED_REMOTE_SHA=<40-hex-remote-sha>)"; exit 1; fi; \
+	case "$$expected_remote_sha" in *[!0-9a-fA-F]*) echo "Error: EXPECTED_REMOTE_SHA must be exactly 40 hexadecimal characters."; exit 1;; esac; \
+	if [ "$${#expected_remote_sha}" -ne 40 ]; then echo "Error: EXPECTED_REMOTE_SHA must be exactly 40 hexadecimal characters."; exit 1; fi; \
+	scripts/publish_module.sh "$$module" --expected-remote-sha "$$expected_remote_sha" $(if $(CLEAN),--clean,)
 
 # Show split-branch status for all modules
 publish-module-status:
 	@scripts/publish_module.sh --status
 
-# Publish modules whose split branches are missing or outdated
+# Disabled in SA117 Phase 4: publish each module only with an exact remote SHA.
 publish-modules-outdated:
-	@scripts/publish_module.sh --publish-outdated $(if $(CLEAN),--clean,)
+	@echo "Error: publish-modules-outdated is disabled in SA117 Phase 4; use per-module publish with EXPECTED_REMOTE_SHA=<40-hex-remote-sha>."; exit 1
 
 # Seal tags are deliberately narrower than a broad ``git push --tags``: that
 # unsafe command could push the local core tag and trigger PyPI publication.

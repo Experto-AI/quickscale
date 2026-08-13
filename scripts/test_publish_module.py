@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -117,7 +119,7 @@ def test_direct_selector_rejects_placeholder_before_prompts_or_mutation(
         monkeypatch.setattr(
             sys,
             "argv",
-            ["publish_module.py", "teams", "--expected-remote-sha", "ABSENT"],
+            ["publish_module.py", "teams", "--expected-remote-sha", "a" * 40],
         )
         with pytest.raises(SystemExit) as excinfo:
             publish_module.main()
@@ -148,7 +150,7 @@ def test_direct_selector_rejects_unapproved_thirteenth_before_prompts_or_mutatio
         monkeypatch.setattr(
             sys,
             "argv",
-            ["publish_module.py", "reports", "--expected-remote-sha", "ABSENT"],
+            ["publish_module.py", "reports", "--expected-remote-sha", "a" * 40],
         )
         with pytest.raises(SystemExit) as excinfo:
             publish_module.main()
@@ -203,7 +205,7 @@ def test_direct_selector_preserves_valid_authoritative_module_flow(
         monkeypatch.setattr(
             sys,
             "argv",
-            ["publish_module.py", names[0], "--expected-remote-sha", "ABSENT"],
+            ["publish_module.py", names[0], "--expected-remote-sha", "a" * 40],
         )
         publish_module.main()
         assert reached == ["release", "origin", "clean", "publish"]
@@ -1222,7 +1224,76 @@ def _run_cli_with_bootstrap_sentinel(
     return code, bootstrap_calls, inventory_calls
 
 
+def _run_direct_publish_with_path_sentinels(
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+) -> tuple[int, list[str]]:
+    """Run a direct publish while observing every post-argument-validation seam."""
+    reached: list[str] = []
+    monkeypatch.setattr(
+        publish_module,
+        "build_publication_git_runner",
+        lambda git_executable: reached.append("build_publication_git_runner"),
+    )
+    monkeypatch.setattr(publish_module, "_list_modules", lambda: reached.append("inventory"))
+    for name in (
+        "_check_release_authoritative",
+        "validate_publication_origin",
+        "_confirm_uncommitted_changes",
+        "_maybe_clean_subtree_cache",
+        "_publish_module",
+    ):
+        monkeypatch.setattr(
+            publish_module,
+            name,
+            lambda *args, _name=name, **kwargs: reached.append(_name),
+        )
+    monkeypatch.setattr(sys, "argv", ["publish_module.py", *argv])
+
+    with pytest.raises(SystemExit) as excinfo:
+        publish_module.main()
+    code = excinfo.value.code
+    assert isinstance(code, int)
+    return code, reached
+
+
 class TestCliArgumentMatrix:
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            [MODULE, "--expected-remote-sha", "ABSENT"],
+            ["--expected-remote-sha", "ABSENT", MODULE],
+            [MODULE, "--clean", "--expected-remote-sha", "ABSENT"],
+            [MODULE, "--expected-remote-sha", "ABSENT", "--clean"],
+            ["--clean", MODULE, "--expected-remote-sha", "ABSENT"],
+            [MODULE, "--expected-remote-sha", "ABSENT", "--git-executable", "/usr/bin/git"],
+            ["--git-executable", "/usr/bin/git", MODULE, "--expected-remote-sha", "ABSENT"],
+            [
+                MODULE,
+                "--clean",
+                "--git-executable",
+                "/usr/bin/git",
+                "--expected-remote-sha",
+                "ABSENT",
+            ],
+        ],
+    )
+    def test_direct_publish_rejects_absent_before_all_bootstrap_and_mutation(
+        self,
+        argv: list[str],
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The exact-SHA contract rejects ABSENT before every publication seam."""
+        code, reached = _run_direct_publish_with_path_sentinels(monkeypatch, argv)
+        output = capsys.readouterr().out
+
+        assert code == 1
+        assert "Invalid --expected-remote-sha" in output
+        assert "ABSENT" in output
+        assert "Traceback" not in output
+        assert reached == []
+
     @pytest.mark.parametrize(
         ("argv", "expected_message"),
         [
@@ -1249,13 +1320,13 @@ class TestCliArgumentMatrix:
                 "--publish-outdated is disabled in SA117 Phase 4",
             ),
             (
-                ["--publish-outdated", "--expected-remote-sha", "ABSENT"],
+                ["--publish-outdated", "--expected-remote-sha", "a" * 40],
                 "--publish-outdated is disabled in SA117 Phase 4",
             ),
             (["--status", MODULE], "--status does not accept a module name"),
             (["--status", "--clean"], "--clean is only supported with publish actions"),
             (
-                ["--status", "--expected-remote-sha", "ABSENT"],
+                ["--status", "--expected-remote-sha", "a" * 40],
                 "--expected-remote-sha is not supported with --status",
             ),
             (
@@ -1268,7 +1339,7 @@ class TestCliArgumentMatrix:
                 "--clean is only supported with publish actions",
             ),
             (
-                [MODULE, "--seal", "--version", VERSION, "--expected-remote-sha", "ABSENT"],
+                [MODULE, "--seal", "--version", VERSION, "--expected-remote-sha", "a" * 40],
                 "--expected-remote-sha is not supported with --seal",
             ),
             ([MODULE, "--seal"], "--seal requires --version VERSION"),
@@ -1282,11 +1353,11 @@ class TestCliArgumentMatrix:
                 "--clean is only supported with publish actions",
             ),
             (
-                ["--seal-all", "--version", VERSION, "--expected-remote-sha", "ABSENT"],
+                ["--seal-all", "--version", VERSION, "--expected-remote-sha", "a" * 40],
                 "--expected-remote-sha is not supported with --seal-all",
             ),
             (["--clean"], "publish options require a module name"),
-            (["--expected-remote-sha", "ABSENT"], "publish options require a module name"),
+            (["--expected-remote-sha", "a" * 40], "publish options require a module name"),
             (
                 ["--version", VERSION],
                 "--version is only supported with --seal, --seal-all, or --status",
@@ -1410,3 +1481,157 @@ class TestSealMakeInterfaces:
         result = self._make("-n", "seal-status", "VERSION=0.88.0")
         assert result.returncode == 0, result.stderr
         assert "git push --tags" not in result.stdout
+
+
+class TestPublishMakeInterfaces:
+    @staticmethod
+    def _make(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+        process_env = os.environ.copy()
+        if env is not None:
+            process_env.update(env)
+        return subprocess.run(
+            ["make", "--no-print-directory", *args],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=process_env,
+        )
+
+    def test_make_help_advertises_exact_sha_and_disabled_bulk_publish(self) -> None:
+        result = self._make("help")
+        output = result.stdout + result.stderr
+
+        assert result.returncode == 0, result.stderr
+        assert "make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>" in output
+        assert "EXPECTED_REMOTE_SHA=<sha|ABSENT>" not in output
+        assert "40hex_or_ABSENT" not in output
+        assert "publish-modules-outdated - [DISABLED SA117 Phase 4]" in output
+
+    @pytest.mark.parametrize(
+        ("make_args", "expected_message"),
+        [
+            (["publish-module"], "Error: MODULE is required"),
+            (["publish-module", "MODULE=auth"], "Error: EXPECTED_REMOTE_SHA is required"),
+        ],
+    )
+    def test_make_publish_guards_fail_before_wrapper_dispatch(
+        self,
+        make_args: list[str],
+        expected_message: str,
+    ) -> None:
+        result = self._make(*make_args)
+        output = result.stdout + result.stderr
+
+        assert result.returncode != 0
+        assert expected_message in output
+        assert "scripts/publish_module.sh" not in output
+
+    def test_make_publish_dry_run_expands_exact_sha_without_executing_wrapper(self) -> None:
+        result = self._make(
+            "-n",
+            "publish-module",
+            "MODULE=auth",
+            f"EXPECTED_REMOTE_SHA={HEAD_SHA}",
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert (
+            'scripts/publish_module.sh "$module" --expected-remote-sha "$expected_remote_sha"'
+            in result.stdout
+        )
+        assert "ABSENT" not in result.stdout
+
+    @pytest.mark.parametrize("variable", ["MODULE", "EXPECTED_REMOTE_SHA"])
+    def test_make_publish_rejects_literal_make_function_without_execution(
+        self,
+        variable: str,
+        tmp_path: Path,
+    ) -> None:
+        """Raw Make-function syntax stays inert until the recipe rejects it."""
+        marker = tmp_path / "make-function-executed"
+        payload = f"$(shell touch {marker})"
+        make_args = [
+            "publish-module",
+            f"MODULE={'auth' if variable != 'MODULE' else payload}",
+            f"EXPECTED_REMOTE_SHA={HEAD_SHA if variable != 'EXPECTED_REMOTE_SHA' else payload}",
+        ]
+
+        result = self._make(*make_args)
+        output = result.stdout + result.stderr
+
+        assert result.returncode != 0
+        assert not marker.exists()
+        assert "Traceback" not in output
+        assert "scripts/publish_module.sh" not in output
+
+    def test_make_publish_forwards_exact_module_and_sha_to_wrapper(self, tmp_path: Path) -> None:
+        """A valid Make invocation reaches the shell wrapper with exact argv."""
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        argv_file = tmp_path / "wrapper-argv.txt"
+        fake_poetry = bin_dir / "poetry"
+        real_poetry = shutil.which("poetry")
+        assert real_poetry is not None
+        fake_poetry.write_text(
+            "#!/bin/sh\n"
+            'case "$3" in\n'
+            "    */sync_ci_gate_jobs.py)\n"
+            f'        exec {real_poetry} "$@"\n'
+            "        ;;\n"
+            "esac\n"
+            'if [ "$1" = run ] && [ "$2" = python ]; then\n'
+            '    case "$3" in\n'
+            "        */publish_module.py)\n"
+            "            shift 3\n"
+            f"            printf '%s\\n' \"$@\" > {str(argv_file)!r}\n"
+            "            exit 0\n"
+            "            ;;\n"
+            "    esac\n"
+            "    shift 2\n"
+            f'    exec {sys.executable} "$@"\n'
+            "fi\n"
+            "exit 0\n"
+        )
+        fake_poetry.chmod(0o755)
+
+        result = self._make(
+            "publish-module",
+            "MODULE=auth",
+            f"EXPECTED_REMOTE_SHA={HEAD_SHA}",
+            env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        )
+
+        assert result.returncode == 0, result.stderr
+        recorded = argv_file.read_text().splitlines()
+        assert recorded == ["auth", "--expected-remote-sha", HEAD_SHA]
+
+    @pytest.mark.parametrize(
+        ("variable", "value"),
+        [
+            ("MODULE", "auth; touch {marker}"),
+            ("EXPECTED_REMOTE_SHA", "a" * 39 + "; touch {marker}"),
+        ],
+    )
+    def test_make_publish_rejects_hostile_values_without_shell_execution(
+        self,
+        variable: str,
+        value: str,
+        tmp_path: Path,
+    ) -> None:
+        """Make transports hostile data as one argv value before Python gates run."""
+        marker = tmp_path / "injected-command-ran"
+        value = value.format(marker=marker)
+        make_args = [
+            "publish-module",
+            f"MODULE={'auth' if variable != 'MODULE' else value}",
+            f"EXPECTED_REMOTE_SHA={HEAD_SHA if variable != 'EXPECTED_REMOTE_SHA' else value}",
+        ]
+
+        result = self._make(*make_args)
+        output = result.stdout + result.stderr
+
+        assert result.returncode != 0
+        assert not marker.exists()
+        assert "Traceback" not in output
+        assert "scripts/publish_module.sh" not in output

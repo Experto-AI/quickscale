@@ -32,11 +32,9 @@ with the same explicit next-action guidance.
 
     Phase 4 (SA117): All mutating single-module publish calls require
     ``--expected-remote-sha``.  The value must be a freshly observed
-    40-character hex SHA.  ``ABSENT`` remains a legacy compatibility value
-    parsed by the runtime, but is forbidden and is not valid first-publish
-    guidance while SA117E1-REV-001 remains open.  ``--status`` rejects the
-    flag; the disabled ``--publish-outdated`` action accepts it only long
-    enough to emit its Phase 4 safety guidance.
+    exact 40-hex SHA.  ``--status`` rejects the flag; the disabled
+    ``--publish-outdated`` action accepts it only long enough to emit its
+    Phase 4 safety guidance.
 
     Phase 4 also disables ``--publish-outdated`` entirely: it used bare
     ``--force`` internally, which violates the force-with-lease safety
@@ -1009,10 +1007,8 @@ def _publish_module(
     Split and push a single module using the provenance-aware helpers.
 
     *expected_remote_sha* is required (SA117 Phase 4): a freshly observed
-    exact 40-character hex SHA for force-with-lease pinning.  ``ABSENT`` is
-    retained only as a legacy runtime compatibility path; it is forbidden
-    and not valid first-publish guidance while SA117E1-REV-001 remains open.
-    The legacy bare ``--force`` fallback has been removed.
+    exact 40-hex SHA for force-with-lease pinning.  The bare ``--force``
+    fallback has been removed.
     """
     # Defense-in-depth: validate name shape before any path/branch resolution
     # so callers that bypass main() still get a clean GitError, not a
@@ -1171,36 +1167,6 @@ def _show_status(
     return all_sealed
 
 
-def _publish_outdated(clean: bool, runner: GitRunner) -> None:
-    """Publish only modules with missing or outdated split branches."""
-    # F2.9a: Gate mutating flows on release-authoritative source state
-    # This must fire BEFORE the uncommitted changes prompt so the gate
-    # error is clear and does not get masked by interactive prompts.
-    _check_release_authoritative(runner)
-
-    if not _confirm_uncommitted_changes(runner):
-        return
-
-    _maybe_clean_subtree_cache(clean)
-
-    queue: list[str] = []
-    for module_name in _list_modules():
-        state, *_ = _get_module_publish_state(module_name, runner)
-        if state in ("outdated", "unpublished"):
-            queue.append(module_name)
-
-    if not queue:
-        _print_success("All module split branches are already up to date.")
-        return
-
-    _print_info(f"Publishing outdated modules: {' '.join(queue)}")
-    print()
-
-    for module_name in queue:
-        _publish_module(module_name, expected_remote_sha="ABSENT", runner=runner)
-        print()
-
-
 # ---------------------------------------------------------------------------
 # CLI entrypoint
 # ---------------------------------------------------------------------------
@@ -1269,7 +1235,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--expected-remote-sha",
         help=(
-            "Freshly observed exact 40-char hex SHA expected on remote. "
+            "Freshly observed exact 40-hex SHA expected on remote. "
             "Required for single-module publish; rejected with --status."
         ),
     )
