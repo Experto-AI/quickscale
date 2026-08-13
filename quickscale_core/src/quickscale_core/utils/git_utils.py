@@ -900,9 +900,7 @@ def run_git_subtree_split(
 def validate_expected_sha(expected_remote_sha: str) -> None:
     """Validate an expected-remote-SHA value for force-with-lease safety.
 
-    *expected_remote_sha* must be exactly one of:
-    - A 40-character hex SHA (rejects all-zero and non-hex strings).
-    - The literal string ``"ABSENT"`` (meaning no known previous SHA).
+    *expected_remote_sha* must be a non-zero 40-character hex SHA.
 
     Raises :class:`GitError` with an operator-facing message when the value
     is malformed.
@@ -910,10 +908,13 @@ def validate_expected_sha(expected_remote_sha: str) -> None:
     if not expected_remote_sha:
         raise GitError("expected_remote_sha must not be empty")
     if expected_remote_sha == "ABSENT":
-        return
+        raise GitError(
+            "expected_remote_sha must be a non-zero 40-hex SHA; "
+            "literal 'ABSENT' is not supported"
+        )
     if len(expected_remote_sha) != 40:
         raise GitError(
-            f"expected_remote_sha must be exactly 40 hex characters or 'ABSENT'; "
+            f"expected_remote_sha must be exactly 40 hex characters; "
             f"got {len(expected_remote_sha)}-char value"
         )
     if not all(c in "0123456789abcdefABCDEF" for c in expected_remote_sha):
@@ -940,8 +941,6 @@ def push_split_branch(
     - A 40-character hex SHA produces
       ``--force-with-lease=refs/heads/<branch>:<sha>``, which rejects the
       push if the remote ref has moved away from the expected commit.
-    - The literal ``"ABSENT"`` produces plain ``--force-with-lease`` (no
-      refspec), which protects only refs that have a tracking ref.
 
     When *expected_remote_sha* is ``None``, the push is performed without
     any ``--force`` flag (fast-forward-only).  Callers that require
@@ -956,10 +955,7 @@ def push_split_branch(
 
     if expected_remote_sha is not None:
         validate_expected_sha(expected_remote_sha)
-        if expected_remote_sha == "ABSENT":
-            cmd.append("--force-with-lease")
-        else:
-            cmd.append(f"--force-with-lease=refs/heads/{branch}:{expected_remote_sha}")
+        cmd.append(f"--force-with-lease=refs/heads/{branch}:{expected_remote_sha}")
 
     cmd.extend([remote, branch])
 

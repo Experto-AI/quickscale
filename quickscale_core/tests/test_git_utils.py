@@ -1672,12 +1672,14 @@ class TestPushSplitBranch:
 
     @patch("subprocess.run")
     def test_push_with_expected_sha(self, mock_run: MagicMock) -> None:
-        """push_split_branch uses --force-with-lease when expected_remote_sha given."""
+        """push_split_branch uses an exact ref-qualified lease for an expected SHA."""
         mock_run.return_value = MagicMock(returncode=0)
         push_split_branch("splits/auth-module", expected_remote_sha="a" * 40)
         args = mock_run.call_args[0][0]
-        # --force-with-lease may appear bare or as --force-with-lease=refs/heads/...
-        assert any(a.startswith("--force-with-lease") for a in args)
+        expected_refspec = (
+            "--force-with-lease=refs/heads/splits/auth-module:" + "a" * 40
+        )
+        assert expected_refspec in args
         assert "--force" not in args
 
     @patch("subprocess.run")
@@ -1712,9 +1714,10 @@ class TestValidateExpectedSha:
         validate_expected_sha("abcdef0123456789" + "0" * 24)  # must not raise
         validate_expected_sha("A" * 40)  # uppercase hex is valid
 
-    def test_accepts_absent(self) -> None:
-        """validate_expected_sha accepts 'ABSENT'."""
-        validate_expected_sha("ABSENT")  # must not raise
+    def test_rejects_absent(self) -> None:
+        """validate_expected_sha rejects the unsupported ABSENT sentinel."""
+        with pytest.raises(GitError, match="ABSENT.*not supported"):
+            validate_expected_sha("ABSENT")
 
     def test_rejects_empty(self) -> None:
         """validate_expected_sha rejects empty string."""
@@ -1782,19 +1785,15 @@ class TestPushSplitBranchExpectedSha:
         assert expected_refspec in args
 
     @patch("subprocess.run")
-    def test_absent_uses_force_with_lease_plain(self, mock_run: MagicMock) -> None:
-        """ABSENT uses --force-with-lease without refspec."""
+    def test_absent_is_rejected_before_push(self, mock_run: MagicMock) -> None:
+        """The unsupported ABSENT sentinel is rejected before Git is invoked."""
         mock_run.return_value = MagicMock(returncode=0)
-        push_split_branch(
-            "splits/auth-module",
-            expected_remote_sha="ABSENT",
-        )
-        mock_run.assert_called_once()
-        args = mock_run.call_args[0][0]
-        assert "--force" not in args
-        assert "--force-with-lease" in args
-        # Must not have an =refspec suffix
-        assert not any(a.startswith("--force-with-lease=") for a in args)
+        with pytest.raises(GitError, match="ABSENT.*not supported"):
+            push_split_branch(
+                "splits/auth-module",
+                expected_remote_sha="ABSENT",
+            )
+        mock_run.assert_not_called()
 
     @patch("subprocess.run")
     def test_bare_force_removed(self, mock_run: MagicMock) -> None:
@@ -3666,7 +3665,7 @@ class TestPublishModuleCliTrustedOrigin:
                 "publish_module.py",
                 "auth",
                 "--expected-remote-sha",
-                "ABSENT",
+                "a" * 40,
             ],
         )
         with pytest.raises(SystemExit) as excinfo:
@@ -3760,16 +3759,17 @@ class TestPublishModuleExpectedRemoteSha(_PublishModuleExpectedRemoteShaBase):
         assert "Traceback" not in result.stderr
         assert "Traceback" not in result.stdout
 
-    def test_valid_absent_untagged_still_blocked(self, tmp_path: Path) -> None:
-        """Valid ABSENT --expected-remote-sha passes SHA validation, hits gate."""
+    def test_absent_sha_is_rejected_before_release_gate(self, tmp_path: Path) -> None:
+        """ABSENT --expected-remote-sha is rejected before the release gate."""
         repo_dir = self._setup_hermetic_repo(tmp_path, "0.86.0", tag=None)
         result = self._run_wrapper(
             repo_dir, "auth", "--expected-remote-sha", "ABSENT", timeout=120
         )
         assert result.returncode != 0
         combined = result.stdout + result.stderr
-        assert "Invalid --expected-remote-sha" not in combined
-        assert "not release-authoritative" in combined
+        assert "Invalid --expected-remote-sha" in combined
+        assert "ABSENT" in combined
+        assert "not release-authoritative" not in combined
         assert "Traceback" not in result.stderr
         assert "Traceback" not in result.stdout
 

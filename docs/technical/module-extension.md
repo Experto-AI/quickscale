@@ -296,7 +296,7 @@ disable_error_code = var-annotated
 - [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
 
 **7. Split Branch Publishing:**
-- [ ] Run `./scripts/publish_module.sh <name>` after implementation
+- [ ] Run `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` after implementation. Supply the exact 40-hex SHA expected on the remote split branch; an absent remote branch is not authorization.
 - [ ] Verify split branch exists: `splits/<name>-module`
 
 ## References
