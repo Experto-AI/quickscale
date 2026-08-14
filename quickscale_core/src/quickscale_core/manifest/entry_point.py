@@ -40,6 +40,7 @@ declarative resolver cannot express.
 from __future__ import annotations
 
 from collections.abc import Callable
+import sys
 from typing import Any
 
 from quickscale_core.contracts.module_discovery import get_modules_base_path
@@ -219,6 +220,7 @@ def refresh_managed_adapters() -> None:
             active base path but its Python adapter package is not importable.
     """
     import importlib  # noqa: PLC0415
+    import importlib.util  # noqa: PLC0415
 
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
         ImproperlyConfigured,
@@ -244,11 +246,33 @@ def refresh_managed_adapters() -> None:
                 f"quickscale_modules_{module_name}.adapter"
             )
         except ImportError as exc:
-            raise ImproperlyConfigured(
-                f"Managed adapter for '{module_name}' not importable: "
-                f"quickscale_modules_{module_name}.adapter could not be loaded. "
-                f"The module package must be installed and importable."
-            ) from exc
+            package_name = f"quickscale_modules_{module_name}"
+            package_root_importable = package_name in sys.modules or (
+                importlib.util.find_spec(package_name) is not None
+            )
+            adapter_src_path = get_modules_base_path() / module_name / "src"
+
+            if package_root_importable or not adapter_src_path.is_dir():
+                raise ImproperlyConfigured(
+                    f"Managed adapter for '{module_name}' not importable: "
+                    f"quickscale_modules_{module_name}.adapter could not be loaded. "
+                    f"The module package must be installed and importable."
+                ) from exc
+
+            original_sys_path = sys.path.copy()
+            try:
+                sys.path.insert(0, str(adapter_src_path))
+                adapter_module = importlib.import_module(
+                    f"quickscale_modules_{module_name}.adapter"
+                )
+            except ImportError as retry_exc:
+                raise ImproperlyConfigured(
+                    f"Managed adapter for '{module_name}' not importable: "
+                    f"quickscale_modules_{module_name}.adapter could not be loaded. "
+                    f"The module package must be installed and importable."
+                ) from retry_exc
+            finally:
+                sys.path[:] = original_sys_path
 
         sentinel = getattr(adapter_module, "get_manifest_adapter", None)
         if sentinel is not None:
