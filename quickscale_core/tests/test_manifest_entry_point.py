@@ -24,6 +24,8 @@ from __future__ import annotations
 import inspect
 import os
 from pathlib import Path
+import sys
+from types import ModuleType
 from typing import Any
 from unittest.mock import patch
 
@@ -984,6 +986,250 @@ class TestRefreshManagedAdaptersFailure:
             MANIFEST_ADAPTER_REGISTRY.update(_orig_registry)
             MANAGED_ADAPTER_ORIGINS.clear()
             MANAGED_ADAPTER_ORIGINS.update(_orig_origins)
+
+
+class TestSA146ManagedAdapterImportRetry:
+    """Embedded managed adapters can be imported without weakening fail-hard."""
+
+    @staticmethod
+    def _write_embedded_module(
+        modules_dir: Path,
+        module_name: str,
+        adapter_source: str,
+    ) -> Path:
+        module_dir = modules_dir / module_name
+        src_dir = module_dir / "src"
+        package_dir = src_dir / f"quickscale_modules_{module_name}"
+        package_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text(f"version: '1'\nname: {module_name}\n")
+        (package_dir / "__init__.py").write_text("")
+        (package_dir / "adapter.py").write_text(adapter_source)
+        return src_dir
+
+    @staticmethod
+    def _restore_state(
+        original_registry: dict[str, Any],
+        original_origins: set[str],
+        original_base: Path,
+        module_name: str,
+    ) -> None:
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            set_modules_base_path,
+        )
+
+        set_modules_base_path(original_base)
+        MANIFEST_ADAPTER_REGISTRY.clear()
+        MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+        MANAGED_ADAPTER_ORIGINS.clear()
+        MANAGED_ADAPTER_ORIGINS.update(original_origins)
+        sys.modules.pop(f"quickscale_modules_{module_name}.adapter", None)
+        sys.modules.pop(f"quickscale_modules_{module_name}", None)
+
+    def test_embedded_src_retry_registers_adapter_and_restores_sys_path(
+        self, tmp_path: Path
+    ) -> None:
+        """A fresh embedded source tree is searched only for the retry."""
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        module_name = "_test_sa146_retry"
+        adapter_source = """from quickscale_core.module_wiring import ModuleWiringSpec
+
+
+def get_manifest_adapter():
+    return lambda options, **kwargs: ModuleWiringSpec()
+"""
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_base = get_modules_base_path()
+        original_sys_path = sys.path.copy()
+        try:
+            modules_dir = tmp_path / "modules"
+            src_dir = self._write_embedded_module(
+                modules_dir, module_name, adapter_source
+            )
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.add(module_name)
+            set_modules_base_path(modules_dir)
+
+            refresh_managed_adapters()
+
+            assert module_name in MANIFEST_ADAPTER_REGISTRY
+            assert callable(MANIFEST_ADAPTER_REGISTRY[module_name])
+            assert sys.path == original_sys_path
+            assert str(src_dir) not in sys.path
+        finally:
+            self._restore_state(
+                original_registry, original_origins, original_base, module_name
+            )
+            sys.path[:] = original_sys_path
+
+    def test_embedded_src_import_failure_still_fails_and_restores_sys_path(
+        self, tmp_path: Path
+    ) -> None:
+        """A broken adapter in embedded source still raises fail-hard."""
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            ImproperlyConfigured,
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        module_name = "_test_sa146_broken"
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_base = get_modules_base_path()
+        original_sys_path = sys.path.copy()
+        try:
+            modules_dir = tmp_path / "modules"
+            self._write_embedded_module(
+                modules_dir,
+                module_name,
+                "raise ImportError('broken embedded adapter')\n",
+            )
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.add(module_name)
+            set_modules_base_path(modules_dir)
+
+            with pytest.raises(
+                ImproperlyConfigured, match="not importable"
+            ) as exc_info:
+                refresh_managed_adapters()
+
+            assert str(exc_info.value.__cause__) == "broken embedded adapter"
+            assert sys.path == original_sys_path
+        finally:
+            self._restore_state(
+                original_registry, original_origins, original_base, module_name
+            )
+            sys.path[:] = original_sys_path
+
+    def test_importable_package_does_not_mutate_sys_path(self, tmp_path: Path) -> None:
+        """An already importable package uses the primary path unchanged."""
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        module_name = "_test_sa146_importable"
+        adapter_source = """from quickscale_core.module_wiring import ModuleWiringSpec
+
+
+def get_manifest_adapter():
+    return lambda options, **kwargs: ModuleWiringSpec()
+"""
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_base = get_modules_base_path()
+        original_sys_path = sys.path.copy()
+        try:
+            modules_dir = tmp_path / "modules"
+            src_dir = self._write_embedded_module(
+                modules_dir, module_name, adapter_source
+            )
+            sys.path.insert(0, str(src_dir))
+            importable_sys_path = sys.path.copy()
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.add(module_name)
+            set_modules_base_path(modules_dir)
+
+            refresh_managed_adapters()
+
+            assert module_name in MANIFEST_ADAPTER_REGISTRY
+            assert sys.path == importable_sys_path
+        finally:
+            self._restore_state(
+                original_registry, original_origins, original_base, module_name
+            )
+            sys.path[:] = original_sys_path
+
+    def test_importable_package_does_not_retry_after_primary_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A broken adapter does not retry when its package root is importable."""
+        import importlib as _importlib_mod  # noqa: PLC0415
+
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            ImproperlyConfigured,
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        module_name = "_test_sa146_importable_failure"
+        package_name = f"quickscale_modules_{module_name}"
+        adapter_name = f"{package_name}.adapter"
+        adapter_source = """from quickscale_core.module_wiring import ModuleWiringSpec
+
+
+def get_manifest_adapter():
+    return lambda options, **kwargs: ModuleWiringSpec()
+"""
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_base = get_modules_base_path()
+        original_sys_path = sys.path.copy()
+        original_package = sys.modules.get(package_name)
+        import_attempts: list[str] = []
+        try:
+            modules_dir = tmp_path / "modules"
+            src_dir = self._write_embedded_module(
+                modules_dir, module_name, adapter_source
+            )
+
+            # The package root is already importable, while its adapter import
+            # fails.  A second call would succeed, so this test proves the
+            # importable-root guard prevents the embedded-src retry.
+            package_root = ModuleType(package_name)
+            package_root.__path__ = [str(src_dir / package_name)]
+            sys.modules[package_name] = package_root
+            fake_adapter = ModuleType(adapter_name)
+            setattr(
+                fake_adapter,
+                "get_manifest_adapter",
+                lambda: lambda options, **kwargs: ModuleWiringSpec(),
+            )
+
+            original_import = _importlib_mod.import_module
+
+            def _fail_once_then_succeed(
+                name: str, *args: object, **kwargs: object
+            ) -> object:
+                if name == adapter_name:
+                    import_attempts.append(name)
+                    if len(import_attempts) == 1:
+                        raise ImportError("primary adapter failure")
+                    return fake_adapter
+                return original_import(name, *args, **kwargs)
+
+            monkeypatch.setattr(
+                _importlib_mod,
+                "import_module",
+                _fail_once_then_succeed,
+            )
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.add(module_name)
+            set_modules_base_path(modules_dir)
+
+            with pytest.raises(ImproperlyConfigured, match="not importable"):
+                refresh_managed_adapters()
+
+            assert import_attempts == [adapter_name]
+            assert module_name not in MANIFEST_ADAPTER_REGISTRY
+            assert sys.path == original_sys_path
+        finally:
+            self._restore_state(
+                original_registry, original_origins, original_base, module_name
+            )
+            if original_package is None:
+                sys.modules.pop(package_name, None)
+            else:
+                sys.modules[package_name] = original_package
+            sys.path[:] = original_sys_path
 
 
 # ---------------------------------------------------------------------------
