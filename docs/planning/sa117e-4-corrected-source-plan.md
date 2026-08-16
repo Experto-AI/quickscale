@@ -1,7 +1,7 @@
 # SA117e-4 — Corrected-Source Resumption, Seal, and Verification Plan
 
-> **Execution identity:** `/home/victor/code/quickscale-wt-track3` at corrected-source
-> `HEAD=8fe7cdb1374de831746c34ed0a898d406cdcba1c`, with repository `VERSION=0.87.0`.
+> **Execution identity:** `/home/victor/code/quickscale-wt-track3` with corrected operational
+> source `28a894704954f456d18f9851c25fdb16c7e65a5f` and repository `VERSION=0.87.0`.
 > **Lifecycle:** this plan governs SA117e-4 resumption steps 1–5 only. The core tag remains
 > local and unpushed. Core-tag push and every PyPI action remain with SA96-PUBLISH.
 > **Document boundary:** `docs/planning/sa117e-4-release-plan.md` is historical evidence and
@@ -80,11 +80,13 @@ and invoked-behavior findings; no replacement discovery is required before execu
 | E-08 | `scripts/provision_installed_venv.sh:1-18,20-51` | Provisioning expects absolute source/output paths, exits 0 with `venv/` and `work/`, exits 2 for bad invocation, and otherwise fails nonzero. |
 | E-09 | `quickscale_cli/src/quickscale_cli/commands/plan_command.py:966-982,1083-1123,1203-1231`, `plan_selection.py:59-82,147-173` | The retained plan stdin has exactly seven corrected-source prompts: package, theme, modules, three Docker choices, and save. |
 | E-10 | `quickscale_cli/src/quickscale_cli/commands/apply_support.py:85-102` and `apply_command.py:3671-3706` | For the selected Docker config, apply has exactly three prompts: Docker-output, proceed, and late destructive/remote confirmation; accepting all required gates permits a clean exit. |
-| E-11 | `scripts/verify_public_module_apply.py:145-251,286-311,388-430,595-705` plus the reused snapshot's `invoked behavior` entry | The approved harness preserves argv/stdin/cwd, owns exact Compose cleanup, emits JSON evidence, and returns 0 only for successful apply verification. It captures child output internally but does not expose successful-child prompt transcript or stdin-consumption evidence, so Phase 5 preserves harness acceptance and adds a separate isolated proof. |
+| E-11 | `scripts/verify_public_module_apply.py:145-251,286-311,354-430,595-705`, read at corrected source | The approved harness preserves argv/stdin/cwd and emits the required semantic JSON, but its ordinary-nonzero path can return while descendants remain, its cleanup swallows Docker query/removal failures, and failed Docker queries are represented as an empty resource set. Phase 5 therefore preserves the reviewed semantic harness while replacing only its process/cleanup callables with the inline F-003 owner below. |
 | E-12 | `docs/planning/sa117e-4-release-plan.md` | Historical transcription source only. It remains unchanged and carries no mechanism by reference into this plan. |
+| E-13 | SA147 changed-file review F-003, carried from the 2026-08-15 checkpoint | Every service-backed apply must own a new process group, terminate and reap it on success, ordinary nonzero, timeout, exception, or parent signal; all Compose/query/removal failures must be observable; and exact-label containers, volumes, and networks must each be proven empty before cleanup is disarmed or a fixture is deleted. |
 
-Repeated-read evidence ledger: none; no file or seam was revisited after its initial
-snapshot-backed or top-anchored inspection.
+Repeated-read evidence ledger: this SA147 closeout reread the plan, roadmap, and changelog
+after each in-scope modification; no cited executable seam changed after its one top-anchored
+inspection.
 
 ## Common execution contract
 
@@ -97,6 +99,505 @@ Every unannotated command is expected to exit `0`. `set -euo pipefail` makes any
 an immediate stop. Never continue after an assertion, remote query, comparison, prompt-count
 check, harness, or cleanup failure.
 
+### Inline F-003 service-process and Compose owner
+
+The following is a literal Phase 1 sub-block: execute it immediately after Phase 1 creates
+`qs_evidence`, prints `EVIDENCE_ROOT`, and defines `qs_python`. It materializes the reviewed
+helper inside the retained evidence directory.
+It is not a repository edit. Every service-backed apply in phases 3 and 5 invokes this helper;
+none invokes `timeout`, bare `Popen`, or the harness's swallowing cleanup implementation.
+
+```bash
+qs_service_owner="$qs_evidence/sa117-service-owner.py"
+cat > "$qs_service_owner" <<'PY'
+from __future__ import annotations
+
+import argparse
+import ctypes
+import hashlib
+import importlib.util
+import json
+import os
+import re
+import selectors
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+PR_SET_CHILD_SUBREAPER = 36
+COMPOSE_PATTERN = re.compile(r"qs-sa117b-[0-9a-f]{32}")
+
+
+class ParentSignal(BaseException):
+    def __init__(self, signum: int) -> None:
+        super().__init__(f"parent received signal {signum}")
+        self.signum = signum
+
+
+def enable_subreaper() -> None:
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
+
+
+def group_exists(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def reap_group(pgid: int) -> None:
+    while True:
+        try:
+            waited, _status = os.waitpid(-pgid, os.WNOHANG)
+        except ChildProcessError:
+            return
+        if waited == 0:
+            return
+
+
+def terminate_and_reap(process: subprocess.Popen[Any], grace: float = 5.0) -> None:
+    pgid = process.pid
+    if group_exists(pgid):
+        os.killpg(pgid, signal.SIGTERM)
+    deadline = time.monotonic() + grace
+    while group_exists(pgid) and time.monotonic() < deadline:
+        process.poll()
+        reap_group(pgid)
+        time.sleep(0.05)
+    if group_exists(pgid):
+        os.killpg(pgid, signal.SIGKILL)
+    deadline = time.monotonic() + 10.0
+    while group_exists(pgid) and time.monotonic() < deadline:
+        process.poll()
+        reap_group(pgid)
+        time.sleep(0.05)
+    process.wait()
+    reap_group(pgid)
+    if group_exists(pgid):
+        raise RuntimeError(f"process group {pgid} survived SIGKILL/reap")
+
+
+def run_owned(
+    argv: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    stdin: str | None,
+    timeout: float,
+) -> subprocess.CompletedProcess[str]:
+    enable_subreaper()
+    process: subprocess.Popen[str] | None = None
+    managed_signals = (signal.SIGINT, signal.SIGTERM)
+    previous = {signum: signal.getsignal(signum) for signum in managed_signals}
+    previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, managed_signals)
+    signals_blocked = True
+
+    def on_parent_signal(signum: int, _frame: object) -> None:
+        raise ParentSignal(signum)
+
+    primary: BaseException | None = None
+    owner_failure: BaseException | None = None
+    stdout = ""
+    stderr = ""
+    try:
+        signal.signal(signal.SIGINT, on_parent_signal)
+        signal.signal(signal.SIGTERM, on_parent_signal)
+        process = subprocess.Popen(
+            argv,
+            cwd=cwd,
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        signals_blocked = False
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+        stdout, stderr = process.communicate(input=stdin, timeout=timeout)
+    except BaseException as exc:
+        primary = exc
+    finally:
+        restore_mask = (
+            previous_mask
+            if signals_blocked
+            else signal.pthread_sigmask(signal.SIG_BLOCK, managed_signals)
+        )
+        try:
+            if process is not None:
+                try:
+                    terminate_and_reap(process)
+                    if primary is not None:
+                        stdout, stderr = process.communicate()
+                except BaseException as exc:
+                    owner_failure = exc
+            for signum, handler in previous.items():
+                signal.signal(signum, handler)
+        finally:
+            signal.pthread_sigmask(signal.SIG_SETMASK, restore_mask)
+
+    if primary is not None and owner_failure is not None:
+        raise BaseExceptionGroup(
+            "service process and process-group cleanup both failed",
+            [primary, owner_failure],
+        )
+    if owner_failure is not None:
+        raise owner_failure
+    if isinstance(primary, subprocess.TimeoutExpired):
+        raise subprocess.TimeoutExpired(
+            argv,
+            timeout,
+            output=stdout,
+            stderr=stderr,
+        )
+    if primary is not None:
+        raise primary
+    assert process is not None
+    return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
+
+
+def docker(command: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
+def resource_ids(resource: str, compose: str) -> list[str]:
+    list_args = ["-aq"] if resource == "container" else ["-q"]
+    result = docker(
+        [
+            "docker",
+            resource,
+            "ls",
+            *list_args,
+            "--filter",
+            f"label=com.docker.compose.project={compose}",
+        ]
+    )
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def strict_cleanup(project: Path, compose: str, evidence: Path) -> None:
+    if COMPOSE_PATTERN.fullmatch(compose) is None:
+        raise ValueError(f"refusing malformed Compose identity: {compose!r}")
+    failures: list[Exception] = []
+    record: dict[str, Any] = {"compose_project": compose, "commands": [], "remaining": {}}
+
+    def attempt(command: list[str], *, cwd: Path | None = None) -> None:
+        try:
+            result = docker(command, cwd=cwd)
+            record["commands"].append(
+                {"argv": command, "returncode": 0, "stdout": result.stdout, "stderr": result.stderr}
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            stderr = getattr(exc, "stderr", "")
+            record["commands"].append(
+                {"argv": command, "returncode": getattr(exc, "returncode", None), "stderr": stderr}
+            )
+            failures.append(RuntimeError(f"cleanup command failed: {command!r}: {exc}: {stderr}"))
+
+    attempt(
+        [
+            "docker",
+            "compose",
+            "--project-name",
+            compose,
+            "down",
+            "--volumes",
+            "--remove-orphans",
+        ],
+        cwd=project,
+    )
+    removals = {
+        "container": ["docker", "rm", "-f"],
+        "volume": ["docker", "volume", "rm"],
+        "network": ["docker", "network", "rm"],
+    }
+    for resource, prefix in removals.items():
+        try:
+            ids = resource_ids(resource, compose)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            failures.append(RuntimeError(f"cannot enumerate exact-label {resource}s: {exc}"))
+            continue
+        if ids:
+            attempt([*prefix, *ids])
+
+    for resource in removals:
+        try:
+            remaining = resource_ids(resource, compose)
+            record["remaining"][resource] = remaining
+            if remaining:
+                failures.append(
+                    RuntimeError(f"exact-label {resource}s remain for {compose}: {remaining}")
+                )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            record["remaining"][resource] = "query-failed"
+            failures.append(RuntimeError(f"zero-resource proof failed for {resource}: {exc}"))
+
+    evidence.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+    if failures:
+        raise ExceptionGroup("Compose cleanup/zero proof failed", failures)
+
+
+def load_harness(path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location("sa117_approved_harness", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load harness: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def owned_execute_apply(**kwargs: Any) -> subprocess.CompletedProcess[str]:
+    executable = Path(kwargs["executable"])
+    argv = [str(executable), *list(kwargs["argv"])[1:]]
+    env = os.environ.copy()
+    env.update(kwargs.get("env") or {})
+    return run_owned(
+        argv,
+        cwd=Path(kwargs.get("cwd") or Path.cwd()),
+        env=env,
+        stdin=kwargs.get("stdin"),
+        timeout=float(kwargs["timeout"]),
+    )
+
+
+def run_prompt(args: argparse.Namespace) -> int:
+    enable_subreaper()
+    expected = (
+        (b"Show Docker build output?", b"n\n", "n"),
+        (b"Proceed with apply?", b"y\n", "y"),
+        (b"Proceed with destructive/remote operations?", b"y\n", "y"),
+    )
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env.pop("PYTHONHOME", None)
+    env["QUICKSCALE_DEBUG"] = "1"
+    env["QUICKSCALE_VERIFY_COMPOSE_PROJECT"] = args.compose
+    transcript = bytearray()
+    exchanges: list[dict[str, Any]] = []
+    response_index = 0
+    stdin_closed = False
+    return_code: int | None = None
+    failure: str | None = None
+    primary: BaseException | None = None
+    process: subprocess.Popen[bytes] | None = None
+    managed_signals = (signal.SIGINT, signal.SIGTERM)
+    previous = {signum: signal.getsignal(signum) for signum in managed_signals}
+    previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, managed_signals)
+    signals_blocked = True
+
+    def on_parent_signal(signum: int, _frame: object) -> None:
+        raise ParentSignal(signum)
+
+    deadline = time.monotonic() + args.timeout
+    try:
+        signal.signal(signal.SIGINT, on_parent_signal)
+        signal.signal(signal.SIGTERM, on_parent_signal)
+        process = subprocess.Popen(
+            [args.executable, "apply"],
+            cwd=args.project,
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=0,
+            start_new_session=True,
+        )
+        signals_blocked = False
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+        assert process.stdin is not None and process.stdout is not None
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
+        search_from = 0
+        for prompt, response, response_text in expected:
+            while transcript.find(prompt, search_from) < 0:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not selector.select(remaining):
+                    raise TimeoutError(f"timed out waiting for {prompt!r}")
+                chunk = os.read(process.stdout.fileno(), 4096)
+                if not chunk:
+                    raise RuntimeError(f"child output ended before {prompt!r}")
+                transcript.extend(chunk)
+            search_from = transcript.find(prompt, search_from) + len(prompt)
+            process.stdin.write(response)
+            process.stdin.flush()
+            response_index += 1
+            exchanges.append(
+                {"prompt": prompt.decode(), "response": response_text, "sent_after_prompt": True}
+            )
+        process.stdin.close()
+        stdin_closed = True
+        while process.poll() is None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("timed out waiting for final default apply exit")
+            if selector.select(min(remaining, 0.25)):
+                chunk = os.read(process.stdout.fileno(), 4096)
+                if chunk:
+                    transcript.extend(chunk)
+        return_code = process.wait()
+    except BaseException as exc:
+        failure = f"{type(exc).__name__}: {exc}"
+        primary = exc
+    finally:
+        owner_failure: BaseException | None = None
+        restore_mask = (
+            previous_mask
+            if signals_blocked
+            else signal.pthread_sigmask(signal.SIG_BLOCK, managed_signals)
+        )
+        try:
+            if process is not None:
+                try:
+                    terminate_and_reap(process)
+                    return_code = process.returncode
+                    assert process.stdout is not None
+                    transcript.extend(process.stdout.read())
+                except BaseException as exc:
+                    owner_failure = exc
+            for signum, handler in previous.items():
+                signal.signal(signum, handler)
+            args.transcript.write_bytes(transcript)
+            state_path = args.project / ".quickscale" / "state.yml"
+            state = state_path.read_bytes() if state_path.is_file() else b""
+            evidence = {
+                "quickscale_argv": ["quickscale", "apply"],
+                "override_arguments": [],
+                "prompt_source": "corrected-source E-10 apply prompt contract",
+                "exchanges": exchanges,
+                "response_count": response_index,
+                "pending_responses": len(expected) - response_index,
+                "stdin_closed_after_last_response": stdin_closed,
+                "prompt_occurrences": {
+                    prompt.decode(): transcript.count(prompt) for prompt, _, _ in expected
+                },
+                "exit_code": return_code,
+                "traceback": b"Traceback (most recent call last)" in transcript,
+                "key_error": b"KeyError" in transcript,
+                "state_success": bool(state),
+                "state_digest": hashlib.sha256(state).hexdigest() if state else None,
+                "failure": failure,
+                "process_group_reaped": owner_failure is None,
+            }
+            args.evidence.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
+            if primary is not None and owner_failure is not None:
+                raise BaseExceptionGroup(
+                    "prompt proof and process-group cleanup both failed",
+                    [primary, owner_failure],
+                )
+            if owner_failure is not None:
+                raise owner_failure
+        finally:
+            signal.pthread_sigmask(signal.SIG_SETMASK, restore_mask)
+    if primary is not None:
+        raise primary
+    return 0 if return_code == 0 else 1
+
+
+def parser() -> argparse.ArgumentParser:
+    root = argparse.ArgumentParser()
+    sub = root.add_subparsers(dest="command", required=True)
+    run = sub.add_parser("run")
+    run.add_argument("--cwd", type=Path, required=True)
+    run.add_argument("--timeout", type=float, required=True)
+    run.add_argument("--transcript", type=Path, required=True)
+    run.add_argument("argv", nargs=argparse.REMAINDER)
+    cleanup = sub.add_parser("cleanup")
+    cleanup.add_argument("--project", type=Path, required=True)
+    cleanup.add_argument("--compose", required=True)
+    cleanup.add_argument("--evidence", type=Path, required=True)
+    harness = sub.add_parser("harness")
+    harness.add_argument("--module-file", type=Path, required=True)
+    harness.add_argument("--cleanup-evidence", type=Path, required=True)
+    harness.add_argument("harness_argv", nargs=argparse.REMAINDER)
+    prompt = sub.add_parser("prompt")
+    prompt.add_argument("--executable", required=True)
+    prompt.add_argument("--project", type=Path, required=True)
+    prompt.add_argument("--compose", required=True)
+    prompt.add_argument("--timeout", type=float, required=True)
+    prompt.add_argument("--transcript", type=Path, required=True)
+    prompt.add_argument("--evidence", type=Path, required=True)
+    return root
+
+
+def main() -> int:
+    args = parser().parse_args()
+    try:
+        if args.command == "cleanup":
+            strict_cleanup(args.project, args.compose, args.evidence)
+            return 0
+        if args.command == "run":
+            command = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
+            env = os.environ.copy()
+            env.pop("PYTHONPATH", None)
+            env.pop("PYTHONHOME", None)
+            completed = run_owned(
+                command,
+                cwd=args.cwd,
+                env=env,
+                stdin=sys.stdin.read(),
+                timeout=args.timeout,
+            )
+            args.transcript.write_text(completed.stdout + completed.stderr)
+            return completed.returncode
+        if args.command == "harness":
+            module = load_harness(args.module_file)
+            module.execute_apply = owned_execute_apply
+            module.cleanup_compose_project = lambda project, compose: strict_cleanup(
+                project,
+                compose,
+                args.cleanup_evidence,
+            )
+            harness_argv = (
+                args.harness_argv[1:]
+                if args.harness_argv[:1] == ["--"]
+                else args.harness_argv
+            )
+            return int(module.main(harness_argv))
+        if args.command == "prompt":
+            return run_prompt(args)
+    except ParentSignal as exc:
+        return 128 + exc.signum
+    raise AssertionError(args.command)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+PY
+chmod 700 "$qs_service_owner"
+"$qs_python" -m py_compile "$qs_service_owner"
+```
+
+`run_owned` makes the operator Python process a Linux child subreaper, blocks parent
+`SIGINT`/`SIGTERM` across the spawn-to-owned-handle handoff, starts each apply in a new
+session/process group, converts either signal into a cleanup path, and executes TERM → bounded
+wait → KILL → bounded process-group absence proof → direct/adopted-child reap. Managed signals
+stay blocked during that final cleanup and handler-restoration critical section, closing both
+the pre-assignment spawn race and the interrupted-finalizer race. That finalizer runs after
+success and ordinary nonzero as well as timeout/exception/signal.
+An owner failure is raised alone or alongside the primary error in a `BaseExceptionGroup`;
+it is never replaced by a success result.
+
+`strict_cleanup` validates the exact generated Compose identity, captures `compose down`,
+enumeration, and removal diagnostics, and treats every command/query failure as failure. It
+then performs fresh exact-label queries for containers, volumes, and networks and writes their
+three empty result sets to the named evidence JSON. A failed query is `query-failed`, never
+zero resources. The calling trap stays armed unless this helper exits `0`; no worktree or
+fixture deletion precedes that exit.
+
 ## Phase 1 — Resume against the corrected source
 
 **PHASE GOAL:** Bind this execution to the required workspace, commit, version, clean
@@ -107,7 +608,9 @@ reports. No Git ref or remote mutation.
 
 **LIKELY FILES/SYMBOLS:** Read-only: `VERSION`, `Makefile`, `scripts/`, `quickscale/`,
 `quickscale_cli/`, `quickscale_core/`, `quickscale_modules/`, and
-`authoritative_module_names`. The only permitted worktree delta is this new planning file.
+`authoritative_module_names`. Permitted worktree deltas are this planning file and, if SA147
+closeout has not yet been committed, its authorized `docs/technical/roadmap.md` and
+`CHANGELOG.md` changes; no executable/product delta is permitted.
 
 **EXECUTION MODE:** serial.
 
@@ -120,7 +623,7 @@ orchestrator explicitly authorized SA117e-4 execution. Review alone is not autho
 set -euo pipefail
 
 qs_repo=/home/victor/code/quickscale-wt-track3
-qs_source=8fe7cdb1374de831746c34ed0a898d406cdcba1c
+qs_source=28a894704954f456d18f9851c25fdb16c7e65a5f
 qs_version=0.87.0
 qs_origin=https://github.com/Experto-AI/quickscale.git
 qs_venv="$qs_repo/.venv"
@@ -131,7 +634,8 @@ qs_evidence=$(mktemp -d /tmp/quickscale-sa117e4-corrected-evidence-XXXXXX)
 printf '%s\n' "$qs_evidence" | tee "$qs_evidence/EVIDENCE_ROOT"
 
 test -d "$qs_repo/.git" || test -f "$qs_repo/.git"
-test "$(git -C "$qs_repo" rev-parse HEAD)" = "$qs_source"
+current_head=$(git -C "$qs_repo" rev-parse HEAD)
+git -C "$qs_repo" merge-base --is-ancestor "$qs_source" "$current_head"
 test "$(git -C "$qs_repo" show "$qs_source:VERSION")" = "$qs_version"
 test -x "$qs_python"
 git -C "$qs_repo" remote get-url origin | tee "$qs_evidence/origin.txt"
@@ -140,11 +644,21 @@ test "$(cat "$qs_evidence/origin.txt")" = "$qs_origin"
 git -C "$qs_repo" status --porcelain --untracked-files=all \
   | tee "$qs_evidence/source-status.txt"
 while IFS= read -r status_line; do
-  test "${status_line:3}" = "$qs_plan"
+  case "${status_line:3}" in
+    "$qs_plan"|docs/technical/roadmap.md|CHANGELOG.md) ;;
+    *) printf 'unauthorized worktree delta: %s\n' "$status_line" >&2; exit 1 ;;
+  esac
 done < "$qs_evidence/source-status.txt"
 
 git -C "$qs_repo" diff --quiet "$qs_source" -- \
   Makefile scripts quickscale quickscale_cli quickscale_core quickscale_modules VERSION
+git -C "$qs_repo" diff --name-only "$qs_source" "$current_head" -- \
+  | while IFS= read -r committed_delta; do
+      case "$committed_delta" in
+        "$qs_plan"|docs/technical/roadmap.md|CHANGELOG.md) ;;
+        *) printf 'operational source drift: %s\n' "$committed_delta" >&2; exit 1 ;;
+      esac
+    done
 test -z "$(git -C "$qs_repo" status --porcelain --untracked-files=all -- \
   Makefile scripts quickscale quickscale_cli quickscale_core quickscale_modules VERSION)"
 
@@ -168,6 +682,7 @@ test "$(sort -u "$qs_evidence/authoritative-modules.txt" | wc -l)" -eq 12
   printf 'qs_plan=%q\n' "$qs_plan"
   printf 'qs_backup_ref=%q\n' "$qs_backup_ref"
   printf 'qs_evidence=%q\n' "$qs_evidence"
+  printf 'qs_service_owner=%q\n' "$qs_service_owner"
   declare -p qs_modules
 } > "$qs_evidence/session.env"
 
@@ -212,7 +727,8 @@ exactly `2`, and its generated JSON—not a transcribed expectation—is the ora
 one-regression set at the phase-1 binding point. The inline Python assertion compares that
 captured report to the accepted SA140 tuple.
 
-**ABORT CONDITIONS:** Wrong path/HEAD/version/origin; any worktree delta outside this plan;
+**ABORT CONDITIONS:** Wrong path/source ancestry/version/origin; operational-source drift;
+any worktree delta outside this plan plus its authorized roadmap/changelog closeout;
 executable drift; inventory count/name failure; focused validation failure; or quality output
 differing from the one accepted SA140 result. Do not repair any failure in this ceremony.
 
@@ -447,31 +963,44 @@ branch_compose=$("$qs_python" -c \
 branch_project="$branch_work/testproj"
 branch_cleanup_armed=1
 cleanup_branch_compose() {
-  rc=$?
+  primary_rc=$?
   if test "${branch_cleanup_armed:-0}" -eq 1; then
-    QS_PROJECT="$branch_project" QS_COMPOSE="$branch_compose" "$qs_python" - <<'PY'
-import os
-from pathlib import Path
-from scripts.verify_public_module_apply import cleanup_compose_project
-cleanup_compose_project(Path(os.environ['QS_PROJECT']), os.environ['QS_COMPOSE'])
-PY
+    set +e
+    "$qs_python" "$qs_service_owner" cleanup \
+      --project "$branch_project" \
+      --compose "$branch_compose" \
+      --evidence "$qs_evidence/branch-compose-cleanup.json"
+    cleanup_rc=$?
+    set -e
+    if test "$cleanup_rc" -ne 0; then
+      printf 'branch apply primary_rc=%s cleanup_rc=%s\n' \
+        "$primary_rc" "$cleanup_rc" >&2
+      return "$cleanup_rc"
+    fi
   fi
-  return "$rc"
+  return "$primary_rc"
 }
 trap cleanup_branch_compose EXIT
 set +e
-(
-  cd "$branch_project"
-  printf 'n\ny\ny\n' | env -u PYTHONPATH -u PYTHONHOME \
-    QUICKSCALE_DEBUG=1 QUICKSCALE_VERIFY_COMPOSE_PROJECT="$branch_compose" \
-    timeout --foreground 1800 "$branch_qs" apply "${split_args[@]}"
-) > "$qs_evidence/branch-override-apply.log" 2>&1
+printf 'n\ny\ny\n' | env -u PYTHONPATH -u PYTHONHOME \
+  QUICKSCALE_DEBUG=1 QUICKSCALE_VERIFY_COMPOSE_PROJECT="$branch_compose" \
+  "$qs_python" "$qs_service_owner" run \
+    --cwd "$branch_project" \
+    --timeout 1800 \
+    --transcript "$qs_evidence/branch-override-apply.log" \
+    -- "$branch_qs" apply "${split_args[@]}"
 branch_apply_rc=$?
 set -e
+set +e
 cleanup_branch_compose
+branch_cleanup_rc=$?
+set -e
+test "$branch_cleanup_rc" -eq 0
 branch_cleanup_armed=0
 trap - EXIT
-test "$branch_apply_rc" -eq 0
+if test "$branch_apply_rc" -ne 0; then
+  exit "$branch_apply_rc"
+fi
 QS_APPLY_LOG="$qs_evidence/branch-override-apply.log" "$qs_python" - <<'PY'
 import os
 from pathlib import Path
@@ -488,6 +1017,9 @@ assert 'Traceback (most recent call last)' not in text
 PY
 test -s "$branch_project/.quickscale/state.yml"
 
+test "$("$qs_python" -c \
+  'import json,sys; d=json.load(open(sys.argv[1])); print(all(d["remaining"][k] == [] for k in ("container", "volume", "network")))' \
+  "$qs_evidence/branch-compose-cleanup.json")" = True
 git -C "$qs_repo" worktree remove "$branch_source"
 rm -rf "$branch_parent"
 ```
@@ -498,18 +1030,23 @@ log must contain each of the three corrected-source prompts exactly once. Those 
 assertions plus exit `0` prove the historical stdin bytes were fully consumed by the current
 prompt contract rather than silently shifted or left over. The final `y` crosses the late
 destructive gate; a retained `n` there would instead exit `1` after steps 1–10 and is not a
-clean proof.
+clean proof. The service owner terminates and reaps the complete apply process group even on
+that ordinary-nonzero path. Cleanup remains armed until `branch-compose-cleanup.json` proves
+empty exact-label container, volume, and network sets; only then may the fixture be deleted.
 
 **ABORT CONDITIONS:** Missing/non-annotated local tag; inability to create or verify the
 backup ref; remote core tag presence; failed rebind; provision/plan/apply nonzero; prompt
-count drift; module-set mismatch; traceback/`KeyError`; missing state; or cleanup failure.
+count drift; module-set mismatch; traceback/`KeyError`; missing state; process-group ownership
+failure; any Docker command/query/removal failure; nonempty exact-label resources; or cleanup
+failure.
 Retain the exact fixture on proof failure. The tag trap restores the old object only for an
 incomplete rebind; do not improvise tag rollback after a successful phase.
 
 **VALIDATION CHECKPOINT:** Backup/rebind TSVs prove both tag objects and corrected commit;
 remote core-tag query remains empty; installed branch apply exits `0`, consumes exactly the
 current seven-plus-three prompts, has all twelve branch overrides, emits no traceback or
-`KeyError`, writes state, and exact Compose cleanup runs. Oracle provenance: Git refs own tag
+`KeyError`, writes state, reaps the complete process group, and records empty exact-label
+container/volume/network sets before fixture deletion. Oracle provenance: Git refs own tag
 identity at capture; corrected prompt implementations E-09/E-10 own prompt names/counts;
 installed process exit/log/state own behavior; assertions compare each captured artifact.
 
@@ -881,7 +1418,10 @@ assert set(data['modules']) == set(os.environ['QS_MODULES'].split())
 PY
 
 env -u PYTHONPATH -u PYTHONHOME "$qs_python" \
-  "$final_source/scripts/verify_public_module_apply.py" apply \
+  "$qs_service_owner" harness \
+  --module-file "$final_source/scripts/verify_public_module_apply.py" \
+  --cleanup-evidence "$qs_evidence/harness-compose-cleanup.json" \
+  -- apply \
   --module analytics \
   --target "$final_work/testproj" \
   --executable "$final_qs" \
@@ -907,170 +1447,57 @@ assert data['exit_code'] == 0
 assert data['state_digest']
 PY
 test -s "$final_work/testproj/.quickscale/state.yml"
+test "$("$qs_python" -c \
+  'import json,sys; d=json.load(open(sys.argv[1])); print(all(d["remaining"][k] == [] for k in ("container", "volume", "network")))' \
+  "$qs_evidence/harness-compose-cleanup.json")" = True
 
 prompt_project="$final_work/promptproof"
 prompt_compose=$("$qs_python" -c \
   'from scripts.verify_public_module_apply import generate_compose_project_name; print(generate_compose_project_name())')
 prompt_cleanup_armed=1
 cleanup_prompt_compose() {
-  rc=$?
+  primary_rc=$?
   if test "${prompt_cleanup_armed:-0}" -eq 1; then
-    QS_PROJECT="$prompt_project" QS_COMPOSE="$prompt_compose" "$qs_python" - <<'PY'
-import os
-from pathlib import Path
-from scripts.verify_public_module_apply import cleanup_compose_project
-cleanup_compose_project(Path(os.environ['QS_PROJECT']), os.environ['QS_COMPOSE'])
-PY
+    set +e
+    "$qs_python" "$qs_service_owner" cleanup \
+      --project "$prompt_project" \
+      --compose "$prompt_compose" \
+      --evidence "$qs_evidence/prompt-compose-cleanup.json"
+    cleanup_rc=$?
+    set -e
+    if test "$cleanup_rc" -ne 0; then
+      printf 'prompt apply primary_rc=%s cleanup_rc=%s\n' \
+        "$primary_rc" "$cleanup_rc" >&2
+      return "$cleanup_rc"
+    fi
   fi
-  return "$rc"
+  return "$primary_rc"
 }
 trap cleanup_prompt_compose EXIT
 set +e
-QS_PROMPT_EXECUTABLE="$final_qs" \
-QS_PROMPT_PROJECT="$prompt_project" \
-QS_PROMPT_COMPOSE="$prompt_compose" \
-QS_PROMPT_TRANSCRIPT="$qs_evidence/final-default-apply.transcript" \
-QS_PROMPT_EVIDENCE="$qs_evidence/final-default-apply-interactions.json" \
-  "$qs_python" - <<'PY'
-import hashlib
-import json
-import os
-import selectors
-import subprocess
-import time
-from pathlib import Path
-
-executable = Path(os.environ['QS_PROMPT_EXECUTABLE'])
-project = Path(os.environ['QS_PROMPT_PROJECT'])
-transcript_path = Path(os.environ['QS_PROMPT_TRANSCRIPT'])
-evidence_path = Path(os.environ['QS_PROMPT_EVIDENCE'])
-argv = [str(executable), 'apply']
-expected = (
-    (b'Show Docker build output?', b'n\n', 'n'),
-    (b'Proceed with apply?', b'y\n', 'y'),
-    (b'Proceed with destructive/remote operations?', b'y\n', 'y'),
-)
-env = os.environ.copy()
-env.pop('PYTHONPATH', None)
-env.pop('PYTHONHOME', None)
-env['QUICKSCALE_DEBUG'] = '1'
-env['QUICKSCALE_VERIFY_COMPOSE_PROJECT'] = os.environ['QS_PROMPT_COMPOSE']
-transcript = bytearray()
-exchanges = []
-response_index = 0
-stdin_closed_after_last_response = False
-return_code = None
-failure = None
-deadline = time.monotonic() + 1800
-process = subprocess.Popen(
-    argv,
-    cwd=project,
-    env=env,
-    stdin=subprocess.PIPE,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.STDOUT,
-    bufsize=0,
-)
-assert process.stdin is not None
-assert process.stdout is not None
-selector = selectors.DefaultSelector()
-selector.register(process.stdout, selectors.EVENT_READ)
-search_from = 0
-
-def read_until(needle: bytes) -> None:
-    global search_from
-    while True:
-        found = transcript.find(needle, search_from)
-        if found >= 0:
-            search_from = found + len(needle)
-            return
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError(f'timed out waiting for {needle!r}')
-        if not selector.select(remaining):
-            raise TimeoutError(f'timed out waiting for {needle!r}')
-        chunk = os.read(process.stdout.fileno(), 4096)
-        if not chunk:
-            raise RuntimeError(f'child output ended before {needle!r}')
-        transcript.extend(chunk)
-
-try:
-    for prompt, response, response_text in expected:
-        read_until(prompt)
-        process.stdin.write(response)
-        process.stdin.flush()
-        response_index += 1
-        exchanges.append({
-            'prompt': prompt.decode(),
-            'response': response_text,
-            'sent_after_prompt': True,
-        })
-    process.stdin.close()
-    stdin_closed_after_last_response = True
-    while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError('timed out waiting for final default apply exit')
-        events = selector.select(min(remaining, 0.25))
-        if events:
-            chunk = os.read(process.stdout.fileno(), 4096)
-            if chunk:
-                transcript.extend(chunk)
-                continue
-        if process.poll() is not None:
-            while True:
-                chunk = os.read(process.stdout.fileno(), 4096)
-                if not chunk:
-                    break
-                transcript.extend(chunk)
-            break
-    return_code = process.wait()
-    state_path = project / '.quickscale' / 'state.yml'
-    state_bytes = state_path.read_bytes()
-    assert argv == [str(executable), 'apply']
-    assert response_index == len(expected) == 3
-    assert stdin_closed_after_last_response is True
-    assert all(transcript.count(prompt) == 1 for prompt, _, _ in expected)
-    assert b'Traceback (most recent call last)' not in transcript
-    assert b'KeyError' not in transcript
-    assert return_code == 0
-    assert state_bytes
-except BaseException as exc:
-    failure = f'{type(exc).__name__}: {exc}'
-    if process.poll() is None:
-        process.kill()
-    return_code = process.wait()
-    raise
-finally:
-    transcript_path.write_bytes(transcript)
-    state_path = project / '.quickscale' / 'state.yml'
-    state_bytes = state_path.read_bytes() if state_path.is_file() else b''
-    evidence = {
-        'quickscale_argv': ['quickscale', 'apply'],
-        'override_arguments': [],
-        'prompt_source': 'corrected-source E-10 apply prompt contract',
-        'exchanges': exchanges,
-        'response_count': response_index,
-        'pending_responses': len(expected) - response_index,
-        'stdin_closed_after_last_response': stdin_closed_after_last_response,
-        'prompt_occurrences': {
-            prompt.decode(): transcript.count(prompt) for prompt, _, _ in expected
-        },
-        'exit_code': return_code,
-        'traceback': b'Traceback (most recent call last)' in transcript,
-        'key_error': b'KeyError' in transcript,
-        'state_success': bool(state_bytes),
-        'state_digest': hashlib.sha256(state_bytes).hexdigest() if state_bytes else None,
-        'failure': failure,
-    }
-    evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + '\n')
-PY
+"$qs_python" "$qs_service_owner" prompt \
+  --executable "$final_qs" \
+  --project "$prompt_project" \
+  --compose "$prompt_compose" \
+  --timeout 1800 \
+  --transcript "$qs_evidence/final-default-apply.transcript" \
+  --evidence "$qs_evidence/final-default-apply-interactions.json"
 prompt_apply_rc=$?
 set -e
+
+set +e
 cleanup_prompt_compose
+prompt_cleanup_rc=$?
+set -e
+test "$prompt_cleanup_rc" -eq 0
 prompt_cleanup_armed=0
 trap - EXIT
-test "$prompt_apply_rc" -eq 0
+if test "$prompt_apply_rc" -ne 0; then
+  exit "$prompt_apply_rc"
+fi
+test "$("$qs_python" -c \
+  'import json,sys; d=json.load(open(sys.argv[1])); print(all(d["remaining"][k] == [] for k in ("container", "volume", "network")))' \
+  "$qs_evidence/prompt-compose-cleanup.json")" = True
 
 QS_PROMPT_JSON="$qs_evidence/final-default-apply-interactions.json" \
 QS_PROMPT_TRANSCRIPT="$qs_evidence/final-default-apply.transcript" \
@@ -1088,6 +1515,7 @@ prompts = (
 )
 assert data['quickscale_argv'] == ['quickscale', 'apply']
 assert data['override_arguments'] == []
+assert data['prompt_source'] == 'corrected-source E-10 apply prompt contract'
 assert [row['prompt'] for row in data['exchanges']] == list(prompts)
 assert [row['response'] for row in data['exchanges']] == ['n', 'y', 'y']
 assert all(row['sent_after_prompt'] is True for row in data['exchanges'])
@@ -1102,6 +1530,7 @@ assert data['key_error'] is False
 assert data['state_success'] is True
 assert data['state_digest']
 assert data['failure'] is None
+assert data['process_group_reaped'] is True
 PY
 test -s "$prompt_project/.quickscale/state.yml"
 
@@ -1111,18 +1540,23 @@ rm -rf "$final_parent"
 
 The approved harness must exit `0`; its exact argv assertion proves its invocation has no
 `--split-ref` or other QuickScale CLI override. Harness-owned JSON remains the oracle for its
-argv, origin, state digest, exit, and exact Compose cleanup, so its historical acceptance is
-not weakened. The separate isolated `promptproof` project is then the exact final default
-no-override `quickscale apply` invocation. E-10 owns the ordered three-prompt contract at the
-corrected-source binding point. The inline driver captures that invocation's combined output,
+argv, origin, state digest, and exit. Its reviewed semantic implementation is loaded unchanged,
+but the service owner replaces its two deficient lifecycle callables: `execute_apply` now owns
+and reaps the complete process group on every outcome, including ordinary nonzero and parent
+signal, and `cleanup_compose_project` now propagates every failure and writes the exact-label
+three-resource zero proof. The separate isolated `promptproof` project is then the exact final
+default no-override `quickscale apply` invocation. E-10 owns the ordered three-prompt contract
+at the corrected-source binding point. The inline driver captures that invocation's combined output,
 waits for each owned prompt before sending only its corresponding response (`n`, `y`, `y`),
 closes stdin immediately after the third response, and records zero pending responses. Its
 retained transcript and interaction JSON assert each prompt exactly once, the exact response
 order, no shift or leftover input, exit `0`, no traceback/`KeyError`, and nonempty state with
 a runtime digest. Any unexpected required prompt cannot receive input and therefore times out
-rather than passing silently. Exit `0` from the still-mandatory approved harness closes
-`SA117E3-PUBLIC-ANALYTICS-001`. On either failure, retain the exact fixture, JSON, transcript,
-and logs.
+rather than passing silently. Its owner finalizer runs on success, ordinary nonzero, timeout,
+exception, and parent signal. Each fixture remains allocated until its own cleanup JSON proves
+empty exact-label container, volume, and network sets. Exit `0` from the still-mandatory
+approved harness closes `SA117E3-PUBLIC-ANALYTICS-001`. On any process, cleanup, query,
+removal, or proof failure, retain the exact fixture, JSON, transcript, and logs.
 
 **MANDATORY SECOND HUMAN STOP — teams deletion:** Only after every seal, approved-harness,
 and exact final prompt-bound default-apply assertion above passes, freshly read teams state,
@@ -1250,7 +1684,9 @@ printf 'SA117e-4 evidence retained at %s\n' "$qs_evidence"
 **ABORT CONDITIONS:** Missing/mismatched confirmation; frozen table digest drift; branch
 movement; seal failure/conflict; missing/unexpected tag or branch; manifest/derivation
 mismatch; core tag observed remotely; harness hash drift; plan/apply/harness failure; prompt
-drift; final interaction transcript/response binding/exit/traceback/state failure; teams row
+drift; process-group ownership/reap failure on any outcome; parent-signal propagation failure;
+any Compose down/query/removal failure; nonempty or unprovable exact-label container, volume,
+or network set; final interaction transcript/response binding/exit/traceback/state failure; teams row
 ambiguity; teams fetch/object mismatch; missing or conflicting teams backup ref; teams lease
 failure; backup lifecycle-evidence failure; or evidence-index failure. After any pushed split
 tag, never move it. Diagnose and rerun only the reviewed idempotent seal/verification path.
@@ -1263,7 +1699,9 @@ absent remotely; static/ref evidence proves no PyPI-triggering tag; the approved
 harness exits `0` with argv exactly `quickscale apply`; the separate exact final default
 no-override invocation retains a transcript and interaction JSON proving each E-10 prompt
 exactly once, responses `n/y/y` sent only after their prompts with zero pending input, exit
-`0`, no traceback/`KeyError`, and state success; teams deletion has its own exact-SHA
+`0`, no traceback/`KeyError`, state success, and complete process-group reap; all three apply
+paths retain cleanup JSON proving zero exact-label containers, volumes, and networks before
+their cleanup traps are disarmed or their fixtures deleted; teams deletion has its own exact-SHA
 confirmation/lease and a pre-deletion local backup ref verified to that SHA; final branch set
 is exactly twelve. Oracle provenance: E-10 owns the prompt sequence at corrected-source
 binding; the inline driver captures and controls the exact final invocation and asserts its
@@ -1291,9 +1729,13 @@ confirmed teams deletion.
 3. **During/after seal:** remote split tags are immutable. If interrupted, retain evidence,
    verify existing tags against the frozen table, and rerun seal-all; never move/delete a
    pushed tag. A conflicting/wrong tag is an escalation, not a rollback command.
-4. **Temporary worktrees/fixtures:** arm exact-path cleanup before service-backed apply.
-   Remove only the allocated path after success; retain it on diagnostic failure. Harness
-   cleanup owns only its generated exact Compose project identity.
+4. **Temporary worktrees/fixtures:** arm exact-path cleanup before service-backed apply. Every
+   apply runs under the inline child-subreaper/process-group owner, which terminates and reaps
+   on success, ordinary nonzero, timeout, exception, and parent signal. Cleanup owns only its
+   exact generated Compose identity, propagates every down/query/removal failure, and must
+   record empty exact-label container, volume, and network sets before its trap is disarmed.
+   Remove only the allocated path after both the process owner and zero-resource proof pass;
+   retain it on diagnostic failure.
 5. **Before teams deletion:** freshly capture the teams SHA, fetch and verify that exact commit,
    create or verify `refs/sa117e4-backup/teams-branch/0.87.0` at that SHA, and record its
    lifecycle, exact-SHA lease, confirmation, and restoration refspec
@@ -1314,15 +1756,17 @@ SA117e-4 is ready for SA117e-5 only when the retained evidence directory include
   report/status;
 - corrected-source tree-parity TSV and all source/branch manifests;
 - core-tag backup and rebind TSVs proving prior object retention and corrected target;
-- installed branch plan/apply logs with exact prompt-count and clean-exit assertions;
+- installed branch plan/apply logs with exact prompt-count and clean-exit assertions, plus its
+  process-group and exact-label three-resource cleanup evidence;
 - twelve-row pre-seal TSV, digest, source/branch manifests, and fresh human confirmation;
 - seal log, exact expected/actual tag sets, sealed manifests, workflow snapshot, and
   `no-pypi-trigger.txt`;
 - approved-harness digest checks, final plan log, default-apply JSON with exact no-override
-  argv and exit 0, and its state evidence;
+  argv and exit 0, its state evidence, and its strict cleanup JSON;
 - the separate exact final default no-override transcript and interaction JSON proving the
   three prompts exactly once, prompt-bound `n/y/y` responses with zero pending input, exit 0,
-  no traceback/`KeyError`, and state success with a runtime digest;
+  no traceback/`KeyError`, state success with a runtime digest, process-group reap, and strict
+  cleanup JSON;
 - teams backup-anchor lifecycle evidence proving the named local ref resolves to the freshly
   confirmed SHA, the deletion obligation whose restoration refspec sources that anchor, the
   separate confirmation, exact final twelve-head and twelve-tag sets, and `SHA256SUMS`.
@@ -1339,7 +1783,8 @@ No evidence item authorizes the later core-tag push or a PyPI action.
   prompt-bound driver deliberately withholds each response until its owned prompt appears and
   times out on an unexpected required prompt; retain its transcript and JSON on failure.
 - Docker/PostgreSQL are shared infrastructure. Serialize service-backed proof with other
-  tracks and retain exact fixture identities on failure.
+  tracks and retain exact fixture identities on failure. A Docker daemon/query outage is a
+  cleanup failure, never evidence that zero resources remain.
 - The core-tag and teams-branch backup refs are local shared-repository state. Retain and never
   push them; SA117e-5 must record their disposition after the release lifecycle no longer
   needs rollback evidence. A conflicting pre-existing teams anchor blocks deletion rather
@@ -1349,8 +1794,8 @@ No evidence item authorizes the later core-tag push or a PyPI action.
 
 ## Open questions
 
-None. The only pending decisions are the two explicit execution-time human gates; neither is
-pre-granted and neither blocks independent review of this plan.
+None about plan design. Separate explicit authorization is still required before Phase 1, and
+the two execution-time human gates remain ungranted; none blocks review of this plan.
 
 ## Mandatory pre-return self-review
 
@@ -1362,8 +1807,8 @@ This is author hardening, not the independent plan-review gate.
    teams split branch,” while preserving the complete five-step outcome.
 2. **Integration fit — pass.** Evidence E-03/E-04 and every phase bind the decisions order,
    Make targets, seal helper, inventory, installed entrypoint, workflow trigger, and remote
-   refs; revised E-11 explicitly binds the approved harness limitation to the separate final
-   prompt-proof mechanism rather than altering the harness.
+   refs; revised E-11 preserves the approved harness's semantic assertions while the inline
+   owner replaces only its deficient process and Compose lifecycle callables.
 3. **Compatibility/contracts — pass.** The plan changes no code contract and explicitly
    preserves “The core tag remains local and unpushed,” while verifying both branch-override
    and default immutable-tag consumption.
@@ -1373,22 +1818,24 @@ This is author hardening, not the independent plan-review gate.
    core tag or either backup namespace.”
 5. **Scope discipline — pass.** The out-of-scope list forbids repository edits, historical
    plan edits, unreviewed republish, core-tag push, and PyPI action; Phase 5 scopes only the
-   new prompt evidence and local teams anchor required by F-001/F-002.
+   service-owner evidence, prompt evidence, and local teams anchor required by F-001/F-003.
 6. **Validation coverage — pass.** Phase 5 states that the inline driver “waits for each owned
    prompt before sending only its corresponding response (`n`, `y`, `y`), closes stdin
    immediately after the third response, and records zero pending responses,” then asserts
-   exact prompt counts, exit `0`, no traceback, and state. It also requires the fresh teams
-   commit to be fetched and the named anchor verified before deletion. Existing failure paths
-   for branch movement, partial seal, tag conflict, harness drift, and lease failure remain.
+   exact prompt counts, exit `0`, no traceback, state, and process-group reap. All three
+   service-backed applies use the same owner on success, ordinary nonzero, timeout, exception,
+   and parent signal, and each cleanup must prove empty exact-label containers, volumes, and
+   networks before fixture deletion. It also requires the fresh teams commit to be fetched and
+   the named anchor verified before deletion.
 7. **Caller parity — n/a.** No interface/signature/exported contract or same-fact repository
    artifact is changed; the plan only executes existing seams and verifies their parity.
-8. **Invoked-behavior evidence — pass.** E-01 and E-04 through E-11 cite actual helper
-   behavior. E-11 quotes the harness's output limitation, and the new prompt binding is
-   implemented inline rather than assumed from a helper name.
+8. **Invoked-behavior evidence — pass.** E-01, E-04 through E-11, and E-13 cite actual helper
+   behavior and the frozen review criterion. E-11 names the harness defects rather than
+   assuming safety from its helper names, and the replacement mechanisms are inline.
 9. **Cross-cutting hardening — pass.** Local patterns are reused, complete success/error/
-   interruption paths are owned, publication and exact-lease boundaries are explicit, the
-   teams restoration source is locally retained, and advisory residuals remain in risks
-   without widening scope.
+   interruption paths are owned, cleanup failures cannot become empty-resource success,
+   publication and exact-lease boundaries are explicit, the teams restoration source is
+   locally retained, and advisory residuals remain in risks without widening scope.
 10. **Review-bar readiness — pass.** The criterion-by-criterion rubric results below quote
     the revised plan text. Independent Adaptive-plan-review must still return `STATUS: ok`
     before execution.
@@ -1403,7 +1850,8 @@ This is author hardening, not the independent plan-review gate.
    controls the exact final invocation and asserts its transcript/input queue/exit/state.” It
    also states the concrete expected result: “each E-10 prompt exactly once, responses `n/y/y`
    sent only after their prompts with zero pending input, exit `0`, no traceback/`KeyError`,
-   and state success.” Execute-capable SA117e-4 operators, not review agents, own commands.
+   state success, process-group reap, and strict exact-label cleanup.” Execute-capable
+   SA117e-4 operators, not review agents, own commands.
 3. **Rollback handling — pass.** Before teams mutation, Phase 5 says: “The no-tag fetch must
    materialize that exact commit locally, and the named backup ref is created and verified
    against it before the human confirmation and deletion,” and the obligation's restoration
@@ -1415,9 +1863,9 @@ This is author hardening, not the independent plan-review gate.
    “No core-tag push or repository file edit.”
 5. **Evidence grounding — pass.** The plan states
    “`snapshot_id=SA147-CORRECTED-PLAN-DISCOVERY-2026-08-15`, `snapshot_reused=true`.” Revised
-   E-01 names the local-object prerequisite and E-11 states that the approved harness “does
-   not expose successful-child prompt transcript or stdin-consumption evidence,” grounding
-   both added mechanisms in the reused snapshot and reviewed source behavior.
+   E-01 names the local-object prerequisite, E-11 states the approved harness's observed
+   lifecycle gaps, and E-13 states F-003's frozen criterion, grounding the process, cleanup,
+   and prompt mechanisms in reviewed source behavior rather than names.
 6. **Contract-change handling — n/a.** The plan changes no interface, signature, schema, or
    exported contract; it consumes and verifies existing publication/apply contracts.
 7. **Parallel-safe metadata — n/a.** Every phase says `EXECUTION MODE: serial`; no phase is
@@ -1426,14 +1874,15 @@ This is author hardening, not the independent plan-review gate.
 ### Cross-cutting check verdicts
 
 - **Consistency — pass.** “The approved harness remains a mandatory acceptance run,” while
-  the isolated proof uses the existing installed CLI, prompt contract, and exact Compose
-  cleanup seam; the teams anchor uses Git's existing local-ref mechanism rather than a new
-  restoration store.
+  its semantic module is loaded unchanged and only the process/cleanup callables are replaced;
+  all service-backed paths share one inline owner and one exact-label cleanup contract. The
+  teams anchor uses Git's existing local-ref mechanism rather than a new restoration store.
 - **Completeness — pass.** The plan now owns the previously missing outcomes verbatim: the
-  exact final invocation records “zero pending responses” plus prompt/exit/state evidence,
-  and the teams obligation's restoration refspec “sources the retained local backup ref, not
-  a potentially unavailable raw object name.” All previously passing five-step mechanisms,
-  gates, aborts, rollback, and closeout evidence remain present.
+  service owner covers success, ordinary nonzero, timeout, exception, and parent signal; every
+  Docker failure is observable; three fresh exact-label queries must prove zero resources; the
+  exact final invocation records zero pending responses plus prompt/exit/state evidence; and
+  the teams restoration refspec sources the retained local backup ref. All previously passing
+  five-step mechanisms, gates, aborts, rollback, and closeout evidence remain present.
 - **Security boundaries — pass.** The plan retains “Never run `git push --tags`,” exact
   namespaced tags, absent remote core tag, no PyPI action, no seal authorization input,
   exact-SHA teams lease, and confirmation values frozen before mutation; it additionally says
@@ -1447,18 +1896,20 @@ This is author hardening, not the independent plan-review gate.
 
 | finding_id | lifecycle state | successor IDs | revision disposition |
 |---|---|---|---|
-| F-001 | resolved | none | The revised plan specifies pre-deletion fetch/object verification, creation or exact-match verification of `refs/sa117e4-backup/teams-branch/0.87.0`, restoration from that ref, and final lifecycle/disposition evidence; independent review confirmation remains pending. |
-| F-002 | resolved | none | The revised plan preserves the approved harness and specifies a separate exact final no-override invocation with prompt-bound response delivery, retained transcript/JSON, zero pending input, exit/no-traceback/state assertions, and closeout evidence; independent review confirmation remains pending. |
+| F-001 | resolved | none | The revised plan specifies pre-deletion fetch/object verification, creation or exact-match verification of `refs/sa117e4-backup/teams-branch/0.87.0`, restoration from that ref, and final lifecycle/disposition evidence; the prior independent plan review confirmed this unchanged mechanism. |
+| F-002 | resolved | none | The revised plan preserves the approved harness and specifies a separate exact final no-override invocation with prompt-bound response delivery, retained transcript/JSON, zero pending input, exit/no-traceback/state assertions, and closeout evidence; the prior independent plan review confirmed this unchanged mechanism. |
+| F-003 | resolved | none | One inline subreaper/process-group owner now governs all three service-backed apply paths on success, ordinary nonzero, timeout, exception, and parent signal; cleanup failures and failed queries propagate; and each exact Compose label must freshly prove zero containers, volumes, and networks before cleanup is disarmed or a fixture is deleted. |
 
 ## CHANGED SECTIONS
 
-- `Objective, scope, and fixed facts` — F-001, F-002.
-- `Evidence ledger and authority` (E-01 and E-11 only) — F-001, F-002.
+- `Execution identity` — corrected-source rebind.
+- `Evidence ledger and authority` (E-11 and E-13) — F-003.
+- `Common execution contract` (inline service-process and Compose owner) — F-003.
+- `Phase 3 — Preserve the prior tag object, rebind, and obtain a clean branch proof`
+  (service owner, cleanup propagation, exact-label zero proof, fixture-deletion gate) — F-003.
 - `Phase 5 — Seal, verify, then separately confirm teams deletion` (goal, scope, likely seams,
-  approved-harness/final-apply block, teams-deletion block, final evidence block, aborts,
-  checkpoint, and stop condition) — F-001, F-002.
-- `Rollback and interruption obligations` (item 5 only) — F-001.
-- `Final closeout evidence expectations` — F-001, F-002.
-- `Risks and advisory hardening` — F-001, F-002.
-- `Mandatory pre-return self-review` and its rubric/cross-cutting verdicts — F-001, F-002.
-- Every section not named above is preserved unchanged from DC-189.
+  approved-harness/final-apply process ownership, cleanup propagation, exact-label zero proofs,
+  aborts, checkpoint, and fixture-deletion gate) — F-003.
+- `Rollback and interruption obligations` (item 4), `Final closeout evidence expectations`,
+  and `Risks and advisory hardening` — F-003.
+- `Mandatory pre-return self-review`, rubric/cross-cutting verdicts, and finding status — F-003.
