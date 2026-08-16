@@ -61,7 +61,7 @@
 - Theme-agnostic (works with all themes)
 - Users can contribute improvements back
 
-**Distribution**: Split branches (git subtree) today. Any additional distribution model becomes part of the contract only when it is implemented and documented.
+**Distribution**: Maintainer-published split branches are sealed under identity-derived immutable version tags, which generated projects embed by git subtree. Any additional distribution model becomes part of the contract only when it is implemented and documented.
 
 **Examples**: `auth`, `backups`, `blog`, `crm`, `forms`, `listings`, `notifications`, `social`, `storage`
 
@@ -182,7 +182,7 @@ The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA
 ---
 
 ### Split Branch
-**Definition**: Git branch containing a single module's code, automatically generated from `quickscale_modules/<module>/` on the main branch for distribution.
+**Definition**: Mutable producer branch containing one module's code, published from `quickscale_modules/<module>/` by the maintainer release tooling before an immutable version tag is sealed for consumers.
 
 **Purpose**: Enable git subtree embedding of individual modules into user projects without pulling the entire QuickScale repository.
 
@@ -190,9 +190,9 @@ The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA
 
 **Workflow**:
 1. Develop module on `main` branch in `quickscale_modules/auth/`
-2. GitHub Actions auto-splits to `splits/auth-module` on release
-3. Users embed via `quickscale apply` (uses git subtree from split branch)
-4. Users update via `quickscale update` (pulls from split branch)
+2. Maintainer tooling publishes `splits/auth-module` under a fresh exact-SHA lease
+3. Release tooling seals `splits/auth-module/<version>` as the immutable consumer identity
+4. Users embed or update through QuickScale, which resolves the matching immutable tag and uses git subtree
 
 **See**: [decisions.md - Split Branch Distribution](./docs/technical/decisions.md#module-theme-architecture)
 
@@ -274,6 +274,6 @@ The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA
 
 ---
 
-**Last Updated**: 2026-04-03
+**Last Updated**: 2026-08-16
 **Maintained By**: QuickScale maintainers
 **Feedback**: Open issue if terms need clarification or addition

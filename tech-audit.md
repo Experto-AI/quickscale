@@ -1,77 +1,61 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Re-run:** 2026-07-26 · **Branch:** `v87` · **HEAD:** `ba1f808c83e897a06fe901e04356188e54270a30` · **Prior audit base:** `82a73d1f`
+> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-16 · **Branch:** `v87`
 
-## Orientation summary
+## Current verdict
 
-QuickScale is a Python 3.13–3.14 Poetry monorepo whose product has two deployment realities: a local/published Click CLI plus Django project/code generator (`quickscale`, `quickscale_cli`, `quickscale_core`, and `quickscale_devtools`), and the generated internet-facing Django 6/PostgreSQL 18/Vite-React application, shipped with Docker/Railway support and twelve first-party Django modules (`teams` is a placeholder). Entry points and trust boundaries are CLI arguments and `quickscale.yml`, manifest and installed-wheel resolution, generated Django routes and module APIs/admin/jobs, browser runtime configuration, PostgreSQL tenant data, subprocess adapters, and release/CI workflows. The oracle used for this pass was the repository's fail-hard policy; source-versus-bundled manifest rules G1/G2/G3 and AF7; restricted `NOSUPERUSER`/`NOBYPASSRLS` runtime role plus `FORCE RLS`; Option C direct `organization_id` and `NOT DEFERRABLE` composite-FK policy; complete typed frontend runtime configuration; SA90 emission parity; the sole fail-closed `showcase_react` theme; and parity among local, hosted, installed-artifact, and publish gates. Configuration cells enumerated were monorepo/installed wheel/runtime module override, source/bundled manifests, selected modules and theme, Docker/Railway, solo/SaaS and privileged/restricted DB roles, debug, `QUIET=1`, lock generation enabled/skipped, Node/pnpm present/absent, cache backend, and E2E concurrency. This is a re-run over 161 commits and 157 changed paths; using the companion architectural audit's commit classification plus the newest manifest-fallback commit, 65 were review/closeout-tracked, 78 housekeeping, and 18 side-channel or unlabeled behavioral commits, whose production and test hunks received elevated scrutiny. The full first-party production delta was reviewed; changed manifest discovery/resolvers, configuration/theme validation, generator and React templates, CLI plan/apply/module/dev/DR/remove paths, beta-migration extraction, CRM/forms initial-migration refactors, Make/scripts, and workflows were read at full depth. Unchanged module interiors were sampled at exposed/security-sensitive surfaces and their 2026-07-10 deep-pass verdicts carried; vendored/generated third-party code, lockfile internals, Docker/PostgreSQL execution, and network CVE resolution were skipped. Tooling run read-only: Ruff 0.15.22 over core/CLI/devtools/scripts (pass), Poetry 2.4.1 `check --lock` (pass), `git diff --check` (pass), and pytest 9.1.1: 65 quality-policy plus 563 focused manifest/config/theme/generator/beta-migration tests (628 total, all pass with coverage disabled). Empirical checks: normal versus `QUIET=1` `make -n check` proved only the normal path schedules `lint-frontend`; 96 manifest tests first passed behaviorally but the initial command status failed only because the repository-wide coverage threshold was applied to a focused subset, then passed cleanly with `--no-cov`; filename-only credential-signature scanning found only dummy test fixtures; `pip-audit`, Bandit, and Semgrep were unavailable. The first focused pytest invocation refreshed ignored `.coverage`/`htmlcov` output despite the intended read-only mode; that test command changed no tracked file. Concurrent roadmap and decision-record edits added SA117 during the final self-check and ratified lockstep module versions plus fail-hard embed/core mismatch detection, with immutable-ref pinning deferred to SA119. Their code anchors were re-opened and the current remote-skew symptom is classified below as a structural/release-contract smell, not silently omitted.
+| Severity | Open findings |
+|---|---:|
+| S1 | 0 |
+| S2 | 0 |
+| S3 | 0 |
+| S4 | 0 |
+| **Total** | **0** |
 
-## Summary table
+No technical finding is open. Closed findings and their evidence live in [CHANGELOG.md](CHANGELOG.md) and version control. The remaining release work is already owned by the [roadmap](docs/technical/roadmap.md), not duplicated as audit findings.
 
-| ID | Severity | Category | Title | Effort | Confidence | Status |
-|---|---|---|---|---|---|---|
-| — | — | — | *No open findings.* | — | — | — |
+## Reviewed subsystem posture
 
-**Counts:** S1: 0 · S2: 0 · S3: 0 · S4: 0 · Total: 0.
+- **Generator/core contracts:** clean at the reviewed boundaries. Source inventory remains authoritative in the monorepo; synchronized bundled manifests serve installed-wheel discovery; source-required operations fail hard.
+- **CLI/apply lifecycle:** no additional closeable source defect in the reviewed delta. The still-unproven installed-wheel `plan → apply → up` path belongs to roadmap `SA112b → c → d → f`.
+- **Maintainer migration tooling:** fixed-argv subprocesses, bounded execution, clean-worktree guards, checkpointing, and partial-failure reporting were clean in the audit sweep.
+- **Generated React/Django application:** reviewed runtime configuration, route, organization-scope, and browser sink boundaries were fail-hard and typed; no qualifying new finding emerged.
+- **CRM/forms migrations and Django modules:** tenant FK, RLS, composite-FK, purge, redirect, destructive-backup, and high-risk module seams retained their reviewed contracts.
+- **Scripts/workflows/Make:** gate topology now derives from `scripts/gate_registry.json`; parity and generation checks are blocking.
 
-## Findings
+## Clean-sweep evidence retained
 
-None open. Per this document's convention, closed findings exist only as dated Reconciliation-log lines; their pre-fix narrative, evidence, and closeout record live in [CHANGELOG.md](CHANGELOG.md). The most recent closure is `TA62` (quiet-check frontend-lint parity, resolved by SA120 on 2026-07-26); its structural cause, architectural Finding 11, was itself resolved on 2026-08-12 (see [arch-audit.md](arch-audit.md)).
+- Tenant request context is membership-checked, stored in a `ContextVar`, enforced by `TenantManager` and `FORCE RLS`, and cleared in `finally`; runtime boot rejects bypass-capable roles.
+- Project slugs are validated before filesystem/service and JavaScript use; generation stages in a temporary directory and rolls back failed swaps.
+- Frontend runtime values are validated before hooks or fetch; reviewed code contained no unsafe HTML, eval, cross-window, or browser-storage sink.
+- Source/bundled manifest selection is centralized and missing inventory fails hard; installed discovery does not broaden source-required operations.
+- Generated production settings require the restricted runtime DB URL; migration commands use the privileged cell; Docker runs non-root; changed long-running subprocesses are bounded.
+- No newly added skip/xfail, inverted assertion, weakened fail-closed assertion, or production-to-mock substitution was found.
+- Secret scanning found only dummy test patterns, not credential material.
 
-## Per-subsystem verdicts
+## Structural smells owned elsewhere
 
-- **Generator/core contracts (`quickscale_core`)** — clean; changed manifest discovery/resolvers, schema/theme validation, generator, Dockerfile, and React/template emission paths read in full. The installed-context fallback covers all twelve shipped module manifests and preserves source-mode fail-hard behavior.
-- **CLI/apply lifecycle (`quickscale_cli`)** — no additional closeable source defect in the reviewed delta; plan/apply/module/dev/DR/remove extractions and managed-wiring cleanup paths read. The incomplete installed-wheel `plan → apply → up` lifecycle remains owned by roadmap SA112. Current remote split manifests are also version-skewed and make module-bearing `apply` fail (roadmap SA117); its honest fix changes the split-version/publish contract and external branch state, so it is recorded as a structural smell rather than duplicated as a technical finding.
-- **Maintainer migration tool (`quickscale_devtools`)** — clean; extraction, path validation, fixed-argv subprocesses, timeouts, clean-worktree guard, checkpointing, and partial-failure reporting read; 52 focused seam tests passed.
-- **Generated React/Django application** — clean at the inspected trust boundaries; runtime seam is fail-hard and typed, project slug is constrained before JavaScript injection, organization slug uses `escapejs`, API endpoints are first-party relative paths, and no `innerHTML`, `dangerouslySetInnerHTML`, `postMessage`, browser storage, or eval sink was present.
-- **CRM/forms migrations** — clean; initial-migration changes are repetition-removing operation constructors, with tenant FK, RLS, composite-FK, callable, and payload contracts retained and migration/beta-seam tests strengthened.
-- **Django modules** — clean at sampled live surfaces; tenant manager/middleware/RLS boot guard, redirects, client-IP handling, destructive backup paths, and high-risk module callsites were re-opened. Unchanged interiors carry the prior whole-module verdict.
-- **Scripts/workflows/Make** — produced `TA62`; local/hosted/publish frontend gates, test worker cleanup, installed smoke wiring, and prior devtools lint/typecheck closure otherwise verified.
-
-## Clean sweeps worth recording
-
-- Tenant taint trace: session organization ID is type-checked and membership-checked in `TenantMiddleware`, stored in a `ContextVar`, and cleared in `finally`; `TenantManager` returns `.none()` without context, while the production boot guard rejects `rolsuper` and `rolbypassrls`.
-- Generator path/name taint trace: CLI/config project slug reaches templates only after `validate_project_name()` restricts it to lowercase identifier-safe characters; output creation stages in a temporary directory and rolls back failed swaps.
-- Frontend taint trace: Django owns the runtime URLs and booleans; `window.__QUICKSCALE__` validates required own-property booleans, path strings, owner shape, and public-page enums before hooks or `fetch`.
-- Manifest configuration matrix: source inventory remains source-authoritative; resolver fallback is centralized for installed-wheel reads; bundled absence/read failure stays fail-hard. Ninety-six focused tests passed.
-- Operational lifecycle: generated production settings require a restricted runtime DB URL, migration commands use the explicit privileged cell, Docker runs non-root, subprocess callsites use argv lists, and changed long-running commands have bounded timeouts.
-- Test-integrity diff: no added `skip`/`xfail`, inverted assertion, removed fail-closed assertion, or mock substitution that weakened a production invariant was found. The large frontend rewrite replaced specialization assertions with runtime-seam and emitted-source parity tests.
-- Prior frontend-proof and devtools-gate closures remain present: hosted/local/publish frontend checks are wired, and all ten scoped CI/local/publish lint/typecheck calls include devtools.
-- Secret scan returned only dummy token/key patterns in tests; no credential material was found in first-party production/configuration files.
-- Fix-regression pass over manifest fallback, CI checkpoint fixes, CLI extractions, frontend de-specialization, and migration constructor refactors found no sibling-case or caller-contract regression.
-- Chain-composition pass ran. `TA62` (now resolved) compounded with the accepted `v87` no-push-CI watch item and architectural Finding 11, but no two-to-three-step chain reached tenant data, credentials, backups, or money at a severity above S3.
-
-## Structural smells
-
-- **`generated-file-ownership-unmodeled` (arch-audit Finding 7):** generator/updater ownership remains a hand-authored 138-entry taxonomy; defer until another updater consumer.
-- **`deletion-invariants-per-boundary-reimplementation` (arch-audit Finding 2):** non-ownership cleanup obligations still terminate at the account-delete boundary; defer until a second deletion/erasure boundary.
-- **`org-model-universe-hand-enumerated` (arch-audit Finding 4):** purge membership is checked, but ordering remains a manual FK-graph shadow with only three asserted edges; defer until `teams` or model-universe growth.
-- **SA117 embedded-manifest/split-branch version skew:** `embed_module()` historically consumed moving `splits/<module>-module` branches whose manifests could predate the core schema. Both halves are now merged: the lockstep stamp/assert contract (SA117a–c) and immutable artifact identity via tag-sealed splits (**SA136**, all children closed 2026-08-12, closing the former v88 SA119) — `module_commands.py:669-686` resolves `splits/<m>-module/<core version>` and fails closed when absent. Remaining is external state, owned by **SA117e-4**: as of 2026-08-14 all twelve branches are republished at `0.87.0`, but zero `refs/tags/splits/*` exist, so a module-bearing `apply` still fails at missing-split-tag. A second, distinct core defect surfaced from that proof (managed adapters refreshed before embedded `modules/<name>/src` is importable) and is **fixed and merged** (SA146, closed 2026-08-14; see [CHANGELOG.md](CHANGELOG.md)). Functional closure therefore spans release-contract and external branch state rather than one boundary-preserving PR.
+- **Generated-file ownership taxonomy:** arch-audit Finding 7; deferred to the next updater consumer.
+- **Deletion-boundary cleanup:** arch-audit Finding 2; deferred to a second deletion/erasure boundary.
+- **Manual purge ordering:** arch-audit Finding 4; deferred to tenant-model growth.
+- **Unsealed split state:** all twelve remote split branches carry complete `0.87.0` manifests, and the managed-adapter import defect is fixed. Immutable `splits/<module>-module/0.87.0` tags are not yet sealed, so default module-bearing apply fails hard at the missing-tag boundary. Roadmap SA117e-4 owns that external state.
 
 ## Tooling gaps
 
-- **Dependency vulnerability audit:** `pip-audit`/Safety remains absent from local and CI tooling, so current lockfile CVEs could not be resolved in this pass; add a read-only blocking scanner with an explicit reviewed allowlist.
-- **Security static analysis:** Bandit/Semgrep remains absent; add a focused rule set for subprocess shell use, unsafe deserialization, TLS disabling, Django raw/marked-safe sinks, and committed credential signatures.
-- **Production-change testimony gate:** no automated check requires a CHANGELOG/decision/ticket trail for first-party behavioral commits, leaving the side-channel lane dependent on manual audit scrutiny.
+- **Dependency vulnerabilities:** no blocking `pip-audit`/Safety-equivalent scanner with a reviewed allowlist. Roadmap SA123 owns this for v88.
+- **Security static analysis:** no focused Bandit/Semgrep-equivalent rules for subprocess shell use, unsafe deserialization, TLS disabling, Django raw/marked-safe sinks, and committed credentials. SA123 owns this for v88.
+- **Production-change testimony:** no automated gate requires a changelog/decision/ticket trail for first-party behavioral commits; this remains maintainer-process risk rather than a source finding.
 
-## Notes (watch items)
+## Live watch items
 
-- **Integration-branch CI:** `.github/workflows/ci.yml` runs on pushes to `main`/`develop` and PRs to `main`, not pushes to `v87`. This remains an accepted solo-maintainer workflow choice; it materially amplified `TA62` (now resolved) but is not re-litigated as a separate finding.
-- **Installed-wheel lifecycle:** roadmap SA112a–f explicitly owns the still-unproven installed-artifact `plan → apply → up` path. The newest manifest fallback is a partial prerequisite, not closure; duplicating it here would create two owners.
-- **Published split skew:** roadmap SA117 now blocks publishing after a diagnostic reproduced stale remote manifests in source and installed contexts. The new decision SSOT ratifies v87 lockstep stamping, explicit embed/core mismatch rejection, and mandatory tag → split-push → PyPI ordering; **SA136** owns immutable-ref pinning and the loop/seal republish contract (2026-08-06, superseding the deferred SA119). This is not duplicated as a technical finding because present functionality also requires reconciling external split branches and the durable prevention changes artifact ownership/compatibility.
-- **Generator lock generation:** `_generate_poetry_lock()` warns and completes generation on missing Poetry, timeout, or nonzero exit. Tests and comments pin this as a deliberate usability trade-off; downstream apply/install remains fail-loud.
-- **Quality baseline:** the larger v87 baseline is governed by the ratified remediation/exemption decision; the monotonicity boundary is now enforced (SA121, arch Finding 12 resolved 2026-07-29).
-- Carried accepted items: SA68 persistent-env cell; dev `docker exec` unsets `RUNTIME_DATABASE_URL`; module packages omit real orgs dependencies by decision; forms anonymization uses one multi-org transaction; worker pools can exhibit head-of-line blocking; React `auth` is typed/defaulted false by decision; two `ImproperlyConfigured` identities coexist; sole-member self-removal can orphan an org; Stripe cancellation occurs inside the account-deletion atomic block; DR recovery fallbacks, analytics missing-key disablement, and public-context fail-closed broad catches are deliberate.
+- **Integration-branch CI:** hosted CI does not run on pushes to `v87`; this remains an accepted solo-maintainer workflow choice.
+- **Installed-wheel lifecycle:** SA112 owns the missing service-backed installed-artifact proof; manifest fallback and smoke-install are prerequisites, not closure.
+- **Unsealed splits:** SA136's producer tooling is merged and SA117e-4 owns the reviewed external seal. Core-tag/PyPI publication remains a later human gate.
+- **Generator lock generation:** missing Poetry, timeout, or nonzero lock generation warns and lets generation finish by explicit usability policy; downstream apply/install remains fail-loud.
+- **Quality baseline:** monotonicity is enforced, but `_execute_apply_steps_locked` remains 56 against 55 until roadmap SA140; this prevents the release-wide green gate, not ordinary ticket acceptance.
 
-## Reconciliation log
+## Reconciliation
 
-- 2026-07-26 — `TA1`–`TA59` (59 findings): resolved — historical closures pre-date the prior audit baseline; no matching regression appeared in the full current production delta or sampled live surfaces. Per-finding closeout detail is in [CHANGELOG.md](CHANGELOG.md) and version control.
-- 2026-07-26 — `TA60`: resolved — frontend proof closure reverified in code: hosted `lint-frontend`, local-CI frontend lint, and publish `frontend-proof` remain wired. `TA62` was a distinct quiet-mode parity defect, not a regression of the publish/hosted closure.
-- 2026-07-26 — `TA61`: resolved — devtools closure reverified in code: all ten scoped lint/typecheck invocations across hosted CI, publishing, and local CI still include `--devtools`.
-- 2026-08-07 — Cross-reference refresh (no finding status changed; counts below stand). The 2026-07-26 orientation summary's "immutable-ref pinning deferred to SA119" is superseded: SA119 is closed by design and immutable artifact identity is owned by **SA136** in the v87 path, as the Structural smells and Notes sections already record. `split-modules.yml` — the sole origin of the stale `splits/teams-module` branch — was deleted on `v87` under **SA136e, now closed** (2026-08-07, full-scope review `STATUS: ok`), together with a conformance test proving `publish.yml`'s tag globs cannot match a `splits/` tag. The published-split skew itself is unresolved until SA117e-4 seals the twelve `splits/<m>-module/0.87.0` tags.
-- 2026-07-26 — `TA62` / `quiet-check-skips-frontend-lint`: resolved — SA120 adds frontend-lint parity under quiet mode with focused test coverage (79 policy tests).
-- 2026-08-12 — `quality-gate-topology-hand-synced` (arch-audit Finding 11, `TA62`'s structural cause): resolved by the SA122b series; all five gate inventories now derive from `scripts/gate_registry.json` behind blocking parity/generation checkers. Closure detail is in [CHANGELOG.md](CHANGELOG.md).
+There are no open technical findings. TA1–TA62 closure detail, later structural-cause closure, and superseded cross-reference notes are archived in [CHANGELOG.md](CHANGELOG.md) and version control rather than repeated in this live audit.
 
-**Reconciliation counts:** prior still-open: 0 · prior resolved/carried: 62 · regressed: 0 · new: 0.
-
-Categories swept with no qualifying finding: correctness, concurrency, implementation security/authentication/authorization, resources/I/O, performance, data handling, multi-tenant isolation, CLI destructive-path safety, generator output security, dependency manifest consistency, and runtime lifecycle transitions.
+Categories swept with no qualifying finding: correctness, concurrency, implementation security/authentication/authorization, resources/I/O, performance, data handling, multi-tenant isolation, CLI destructive-path safety, generator output security, dependency-manifest consistency, and runtime lifecycle transitions.

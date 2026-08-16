@@ -74,8 +74,9 @@ one-time scaffolding.
 
 #### Modules — split-branch distribution
 
-- ✅ Modules are developed on `main` in `quickscale_modules/`, auto-split to
-  `splits/{module}-module` branches on release, and embedded by git subtree
+- ✅ Modules are developed on `main` in `quickscale_modules/`, published to mutable
+  `splits/{module}-module` branches by the maintainer release tooling, sealed under
+  identity-derived immutable version tags, and embedded by git subtree
 - ✅ Users embed via `quickscale plan --add <module>` + `quickscale apply`, and
   update via `quickscale update`
 - ✅ **The default embed path consumes the immutable
@@ -972,7 +973,7 @@ manual-verification ask as a maintainer to-do in
 roadmap.md checklist entry — the roadmap tracks repo-local implementation
 work, not manual maintainer operations against external infrastructure.
 
-**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Red flags](../../arch-audit.md) | [beta-site-migration.md](../planning/beta-site-migration.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md live findings](../../arch-audit.md) | [beta-site-migration.md](../planning/beta-site-migration.md)
 
 ---
 
@@ -1291,8 +1292,8 @@ ceiling-index construction, and merge-base resolution precedence are owned by
 <a id="merge-base-resolution-precedence"></a>
 
 **Related docs:** [quality_tools.md](./quality_tools.md#baseline-monotonicity-gate-sa121) |
-[arch-audit.md Finding 12](../../arch-audit.md) | [roadmap.md](./roadmap.md) |
-[CHANGELOG.md](../../CHANGELOG.md)
+[arch-audit.md current posture](../../arch-audit.md) | [roadmap.md](./roadmap.md) |
+[CHANGELOG.md closure history](../../CHANGELOG.md)
 
 ---
 

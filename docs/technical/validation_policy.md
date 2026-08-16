@@ -24,7 +24,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make test-e2e` - End-to-end validation with PostgreSQL and browser automation.
 - `make ci-e2e` - CI-parity release-gate validation including E2E.
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
-- `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). Each mutable split-branch update requires a freshly observed exact 40-hex remote SHA. While `SA117E1-REV-001` remains open, `ABSENT` is forbidden and is not a valid input.
+- `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). Each mutable split-branch update requires a freshly observed exact 40-hex remote SHA. The accepted SA145 exact-SHA contract forbids `ABSENT`; it is not a valid input.
 
 **Assistant guidance:**
 - Prefer `make` targets for shared repository workflows instead of calling lower-level helper scripts directly.
