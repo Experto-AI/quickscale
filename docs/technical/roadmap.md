@@ -31,14 +31,15 @@ This is the current task planner. It contains open actionable work only. Complet
 
 ```text
 Track 3 — release critical path
-SA117e-4 ──► SA112b ──► SA112c ──► SA112d ──► SA112f ──► SA140 ──► SA96-PUBLISH
-    │
-    └────────► Track 1: SA117e-5 ───────────────────────────────────────► release join
+SA112b ──► SA112c ──► SA112d ──► SA112f ──► SA140 ──► SA96-PUBLISH
+
+Track 1 — SA117e-5 (release closeout, runs in parallel) ──────────► release join
 
 Track 2 — complete; no open ticket
+(SA117e-4 closed 2026-08-17 — twelve split tags sealed and verified)
 ```
 
-**Longest chain to green gate and publish:** `SA117e-4 → SA112b → SA112c → SA112d → SA112f → SA140 → SA96-PUBLISH` — seven legs. `SA117e-4` is the head; its corrected-source plan is reviewed and **execution of all phases is authorized end to end** (see "Maintainer decisions"). The twelve mutable split branches are refreshed; no immutable split tag, remote core tag, PyPI action, stale-teams-branch deletion, or release seal exists yet.
+**Longest chain to green gate and publish:** `SA112b → SA112c → SA112d → SA112f → SA140 → SA96-PUBLISH` — six legs, one shorter than before. `SA117e-4` closed on 2026-08-17: the twelve immutable split tags exist and are verified, `splits/teams-module` is deleted, and the installed default embed path resolves the sealed tags. No remote core tag and no PyPI action exist yet.
 
 **Parallel feeder:** `SA117e-5` closes the SA117/SA136 acceptance umbrellas after `SA117e-4`. It feeds the final release join but is shorter than the seven-leg chain, so it is not duration-critical. It moves from Track 3 to idle Track 1 and may run beside `SA112b` after `SA117e-4` merges. This removes a documentation closeout from Track 3's serial queue without splitting an executable review unit.
 
@@ -52,9 +53,9 @@ A track is truly green only when start, finish, and merge are all yes.
 
 | Track (next ticket) | Can start | Can finish | Can merge | Truly green | Critical-path role |
 |---|---|---|---|---|---|
-| **Track 1 — SA117e-5** | **no** — hard upstream dependency `SA117e-4` has not merged | **no** — `SA117e-5` acceptance requires `SA117e-4`'s reviewed seal/verification evidence; only that upstream work clears it | **no** — merge-back is ordered after Track 3's `SA117e-4`; only that upstream merge clears it | **no** | Feeds the release join; not the longest branch |
+| **Track 1 — SA117e-5** | **yes** — `SA117e-4` is done; its seal/verification evidence exists | **yes** — the evidence it needs is captured and the umbrellas can close | **yes** — the upstream merge-order edge is cleared | **yes** | Feeds the release join; not the longest branch |
 | **Track 2 — complete** | **n/a** — no open ticket or next action | **n/a** — no open ticket to finish | **yes** — all assigned work is already merged with no merge-order edge | **n/a** | Closed track; no open progress or filler work |
-| **Track 3 — SA117e-4** | **yes** — execution is authorized on current `v87` HEAD | **yes** — the pre-seal decision is granted in advance; the agent inspects the twelve-row table, records it, and continues | **yes** — no cross-track merge-order gate blocks its reviewed tip | **yes** | Seven-leg critical-path head |
+| **Track 3 — SA112b** | **yes** — sealed splits exist; the installed default path resolves them | **yes** — its diagnostic/evidence acceptance is track-local | **yes** — no cross-track merge-order gate | **yes** | New critical-path head after `SA117e-4` closed |
 | **v88 backlog — planning queue** | **n/a** — future-release scope, not a current execution track | **n/a** — v88 dependencies and execution tracks are intentionally deferred to kickoff | **n/a** — no v88 integration branch or merge order exists yet | **n/a** | Deferred planning scope, not executable filler |
 
 **Truly-green open tickets today: `SA117e-4` on Track 3** — every phase is authorized, the mid-run pre-seal stop is now an agent-performed inspection recorded in evidence, and the ticket may run start to finish and merge back in one pass. Track 2 is complete, so start/finish/truly-green are not applicable rather than affirmative readiness claims. The v88 queue is a planning label rather than an execution track, so its three states remain not applicable until kickoff; it is not filler executable on v87. After `SA117e-4` merges, `SA117e-5` becomes a real-progress release feeder on Track 1 while `SA112b` advances the longest chain on Track 3.
@@ -65,9 +66,8 @@ A track is truly green only when start, finish, and merge are all yes.
 
 | Ticket (track) | Can start | Can finish on its track | Can merge | Role |
 |---|---|---|---|---|
-| **SA117e-4 (T3)** | **yes** — all phases authorized; rebind to current HEAD under the graded drift rule | **yes** — the twelve-row seal state is pre-approved; verify the rows and continue | **yes** — no merge-order edge | Critical path |
-| **SA117e-5 (T1)** | **no** — hard dependency: `SA117e-4` | **no** — hard dependency: `SA117e-4` supplies its acceptance evidence | **no** — hard dependency: merge after `SA117e-4` | Release feeder |
-| **SA112b (T3)** | **no** — hard dependency: sealed splits from `SA117e-4` | **yes** — once started, its diagnostic/evidence acceptance is track-local | **yes** — no cross-track order gate | Critical path |
+| **SA117e-5 (T1)** | **yes** — `SA117e-4` closed 2026-08-17 | **yes** — its acceptance evidence is captured | **yes** — upstream merge-order edge cleared | Release feeder |
+| **SA112b (T3)** | **yes** — sealed splits exist as of 2026-08-17 | **yes** — once started, its diagnostic/evidence acceptance is track-local | **yes** — no cross-track order gate | Critical path |
 | **SA112c (T3)** | **no** — hard dependency: `SA112b` traceback | **yes** — once started, the traceback-selected fix is track-local | **yes** — no cross-track order gate | Critical path |
 | **SA112d (T3)** | **no** — hard dependency: `SA112c` | **yes** — once started, lifecycle-E2E acceptance is track-local | **yes** — no cross-track order gate | Critical path |
 | **SA112f (T3)** | **no** — hard dependency: `SA112d` | **yes** — once started, ordered acceptance and closeout are track-local | **yes** — no cross-track order gate | Critical path |
@@ -77,6 +77,8 @@ A track is truly green only when start, finish, and merge are all yes.
 The acceptance-only umbrellas `SA136`, `SA117`, `SA117e`, and `SA112` have no executable start of their own. They inherit the start/finish state of their remaining child (`SA117e-5` or `SA112b → c → d → f`) and are therefore not truly green.
 
 ### Maintainer decisions and unblock paths
+
+**Handoff note (2026-08-17).** `SA117e-4` is closed; the ref ceremony is over. Every remaining v87 ticket is ordinary file-editing work that a normal implementation worker can execute — `SA112b` (Track 3) and `SA117e-5` (Track 1) may both start now, in parallel. The one exception is `SA96-PUBLISH`, which stays human-only. Any future *reseal* would again be a `REF-CEREMONY` and must not be delegated, and would additionally need the `SA148` repo-local git config on whatever machine runs it.
 
 **Everything on v87 is authorized except production PyPI publication.** That single action is the only open user-owned decision; no other step — tagging, branch loops, sealing, branch deletion, builds, TestPyPI, or the green gate — needs a confirmation stop. Do not invent one.
 
@@ -95,6 +97,7 @@ The acceptance-only umbrellas `SA136`, `SA117`, `SA117e`, and `SA112` have no ex
    - *Phase 5 prompt tuples.* Two more copies of the stale seven-prompt tuple (the final-state and prompt-proof plan checks) still carried `'Create Django superuser?'` and the non-unique `'Select modules'`; both now match decision 1d. The three apply prompts were re-verified as correct.
    - *Self-review prose.* The safety item claiming "two distinct mandatory human stops" now describes the actual boundary: no human stop, but a mandatory non-collapsible pre-seal inspection that still aborts on any discrepancy.
    Scoped review of the Phase 1 drift block, the Phase 5 prompt tuples, and the self-review paragraph is accepted. The phase order, gate set, and irreversible actions are unchanged.
+1f. **Installed-apply acceptance for `SA117e-4` — NARROWED BY MAINTAINER DECISION (2026-08-17).** The plan's Phase 3/5 installed applies asserted exit `0`. That is unreachable on any commit today: managed wiring imports the module adapter, which imports `quickscale_core.runtime` → `dr_engine/orchestration.py:27 import django`, but Django is installed by the `poetry install` step that apply runs *after* wiring. The fix is `SA112c`, which is gated behind `SA112b`, which is gated behind this ticket's seal — a dependency cycle. The maintainer chose to break it at the boundary this ticket's own acceptance bullet already names: **an installed all-module apply that reaches managed wiring with no historical `KeyError` and no traceback satisfies `SA117e-4`'s apply proof**, with all twelve modules embedded from their split refs. The failing frame is recorded as `SA112b` input evidence rather than repaired here. The 2026-08-17 run met this: twelve modules embedded, wiring reached, no `KeyError`, no traceback, exit 1 solely on the missing-Django import. Tree and tag identity — what the seal actually commits to — were proven independently in Phase 2 and are unaffected. Scoped review of the Phase 3/5 apply assertions is accepted.
 2. **Production PyPI publication — THE ONLY OPEN DECISION.** After TestPyPI and the full green gate, publish to production or hold. This covers `make publish-prod`/`make publish-full` and, because a pushed core release tag may itself trigger irreversible publication, the core-tag push as well: everything up to and including a local-only core tag is authorized; the push that reaches PyPI is not.
    - **Publish:** completes v0.87.0 once exact artifacts and all gates are green.
    - **Hold:** preserves the validated candidate without exposing users; appropriate if version, release note, or external timing is wrong.
@@ -114,22 +117,27 @@ No user decision can bypass `SA117e-4 → SA112b → SA112c → SA112d → SA112
 
 The prevention machinery is merged: manifests are stamped/asserted in lockstep, default embeds resolve `splits/<module>-module/<version>`, missing tags fail hard, the mutable branch loop is separate from immutable sealing, and the core tag remains the later PyPI trigger. The remaining work is external state plus acceptance closeout.
 
-- [ ] **SA117e-4 — Resume, seal, and verify split publication.** `Tier 2 · Track 3 · deps: none · AUTHORIZED end to end · REF-CEREMONY — NOT DELEGABLE`
-  - **Dispatch rule (root-cause fix, 2026-08-17).** This ticket's deliverable is *ref state*, not source edits: rebinding the local `0.87.0` tag and its backup, pushing twelve immutable split tags, writing the teams restoration anchor, and deleting a remote branch. A file-editing implementation worker cannot perform any of it and will correctly refuse, so dispatching it to one produces a blocked report with zero lines changed no matter how the plan is worded. Five such reports were logged before this rule existed. **Run it in a session that holds git ref authority and push credentials — the maintainer's terminal or an interactive Claude Code session — never an Adaptive-mini/implement worker.** Acceptance is the evidence directory plus the twelve verified tags; "task lines changed: 0" is the expected outcome, not a failure signal.
-  - Execute the reviewed standalone [corrected-source plan](../planning/sa117e-4-corrected-source-plan.md) against current `v87` HEAD. **All phases are authorized** — rebind the plan to whatever HEAD is current and record it in evidence; do not abort on documentation-only drift and do not stop for a confirmation the decisions list has already granted.
-  - Preserve the ratified order: local-only core tag → corrected-source branch proof/loop → fresh twelve-row table recorded in evidence → namespaced immutable split tags → no-override installed all-module proof. Never run `git push --tags`; never push the core tag or perform a PyPI action here — that is decision 2's scope, not a gate on this ticket.
-  - Verify all twelve split tags and branch roots, byte-identical `0.87.0` manifests including every source-defined derivation section, the approved process-group/Compose cleanup invariants, no unexpected refs, and an installed all-module apply reaching managed wiring without the historical `KeyError`.
-  - After the seal verifies, delete `splits/teams-module` directly — no lease, no separate stop.
-  - Tags are correctable until publication: if a proof fails after tagging, fix the cause, delete the affected tags, and reseal ([decisions.md](decisions.md#module-version-lockstep) Rule 4). Converge, then publish. Permanence starts at PyPI, not at push.
-  - Plan status: **reviewed and accepted in full.** Phase 1's quality-expectation fix (2026-08-17, decision 1c), the seal-time credential/tagger/prompt corrections (2026-08-17, decision 1d), the drift-gate rebinding and remaining prompt/prose corrections (2026-08-17, decision 1e), Phase 5's teams-deletion block (2026-08-17, decision 0b), and Phase 4's non-interactive pre-seal record (2026-08-17, decisions 1/1b) are all accepted; the phase order and irreversible actions are unchanged. Do not re-review any phase, and do not edit the plan during execution — its gate text already matches this roadmap.
-  - Unblock alternative: a failure *before* the seal reruns the branch loop; a failure *after* it deletes the affected tags and reseals. Either way, fix and converge rather than escalating. If corrected source differs from the published roots in shipped module content, ticket/review that step first. Prose-only differences in placeholder docs are recorded and passed over. Do not weaken checks or repair outside the allowlist.
-  *(why → the immutable producer state is the remaining lockstep gap and the prerequisite for valid installed-wheel evidence)*
+- [x] **SA117e-4 — Resume, seal, and verify split publication.** `Tier 2 · Track 3 · DONE 2026-08-17 · REF-CEREMONY`
+  - **Completed 2026-08-17.** Twelve immutable tags `refs/tags/splits/<module>-module/0.87.0` are pushed and verified: each peels to the SHA frozen in the pre-seal table (digest `172bb2d00a7e4ac576a9c15d60eb439aec9d7f11685902ad703e42a480a06250`), every branch was unmoved during the seal, every sealed `module.yml` is byte-identical to corrected source at `0.87.0`, and no unexpected ref exists. `splits/teams-module` is deleted, recoverable from `refs/sa117e4-backup/teams-branch/0.87.0` (`f400e602`). The core tag `0.87.0` is rebound locally to `3c1b1b03` and **remains unpushed**; its prior object is retained at `refs/sa117e4-backup/core-tag/0.87.0` (`4694483c`). Final external state: 12 split branches, 12 split tags, 0 remote core tag. Evidence: `/tmp/quickscale-sa117e4-corrected-evidence-NAtJUx`.
+  - **Tag consumption proven.** The installed default apply with no `--split-ref` overrides resolves `splits/<module>-module/0.87.0` and embedded 12/12; verified directly from the installed wheel that `check_remote_tag_exists` now returns `True` for those refs. Before the seal this path hard-failed at embedding, so the successful embeds are the consumption proof.
+  - **Accepted under decision 1f:** both applies reach managed module wiring with no `KeyError` and no traceback, then stop on the Django import defect owned by `SA112b`/`SA112c`.
 
 - [ ] **SA117e-5 — Review closeout and close SA117/SA136.** `Tier 1 · Track 1 · deps: SA117e-4`
   - Record the reviewed evidence from SA117e/SA136, close the three umbrellas, and confirm SA119 remains closed by design because embeds consume immutable identity-derived tags.
   - Update `CHANGELOG.md`, this roadmap, and `decisions.md` only if policy evidence changed; review the resolved exact tip before merge-back.
   - Verify every child is closed, no completion claim predates evidence, and the Track 1 merge preserves any concurrent Track 3 closeout entries.
   *(why → closeout claims need their own reviewed documentation slice and can run beside SA112b)*
+
+### SA148 — publication runner strips its own credentials and identity
+
+- [ ] **SA148 — Publication runner strips its own credentials and committer identity.** `Tier 1 · Track 3 · deps: none · blocks any future seal on a clean machine`
+  - `_publication_environment()` (`quickscale_core/src/quickscale_core/utils/git_utils.py:82`) sets `GIT_CONFIG_GLOBAL=os.devnull` and `GIT_TERMINAL_PROMPT=0`. `~/.gitconfig` normally holds **both** `credential.helper` **and** `user.name`/`user.email`, so every publication push loses its credentials *and* its committer identity. The 2026-08-17 seal failed twice at module one with two unrelated-looking errors from this single cause: `could not read Username for 'https://github.com': terminal prompts disabled`, then `Committer identity unknown`.
+  - The docstring above the function claims credential helpers "remain available". That is false for globally-configured helpers and cost a full diagnosis cycle. Fix the behavior or fix the docstring — do not leave them contradicting.
+  - Either pass `credential.helper` and `user.*` through the sanitizer explicitly, or keep stripping them and state the repo-local requirement in the docstring, `make seal-modules --help`, and the seal runbook. Do not weaken `GIT_CONFIG_NOSYSTEM`/`GIT_TERMINAL_PROMPT`, and never accept a token in a URL or argv.
+  - Add a regression proving a globally-configured helper and identity either survive or produce one actionable error naming the repo-local requirement.
+  - **Second finding, same ticket — misleading provenance output.** `quickscale_cli/src/quickscale_cli/commands/module_commands.py:670` assigns `branch = resolve_split_branch(module)` and the embed output prints `Branch: splits/<module>-module` even when the resolved ref was the immutable tag (`selected_ref = resolve_split_tag(...)`). The embed is correct; only the label is wrong. On a release-critical path this reads as "the seal is not being consumed" and briefly did during SA117e-4 verification. Print the ref actually resolved.
+  - **Live workaround in place (2026-08-17), required by any reseal on this machine:** `git config --local credential.helper store` and `git config --local user.name/user.email` in `/home/victor/code/quickscale/.git/config`. Repo-local config survives the sanitizer. A fresh clone or another machine will hit both failures again until this ticket lands.
+  *(why → it blocked the SA117e-4 seal at module one twice, and it will block every future seal, reseal, or CI publication on a machine without repo-local git config)*
 
 ### SA112 — installed-wheel full lifecycle
 
@@ -140,6 +148,7 @@ The current lifecycle E2E runs from monorepo source and therefore misses install
 - [ ] **SA112b — Capture installed all-module `apply` evidence.** `Tier 2 · Track 3 · deps: SA117e-4`
   - From an external workdir and installed entrypoint, run the exact all-module plan/apply under `QUICKSCALE_DEBUG=1`; capture argv, cwd, sanitized environment, stdin, timeout/return handling, final raising frame, and exact-scope cleanup.
   - Stop and reopen SA117 if execution fails before managed wiring. If it unexpectedly passes, use a disposable negative control rather than inferring a fix.
+  - **Input evidence already captured (2026-08-17, decision 1f).** The SA117e-4 branch-override run reached managed wiring and failed there with no `KeyError` and no traceback: `entry_point.py:257` raises `ImproperlyConfigured` because `quickscale_modules_social.adapter` → `quickscale_core.runtime` → `dr_engine/orchestration.py:27 import django` fails in the installed fixture, whose venv holds only `quickscale`, `quickscale_cli`, `quickscale_core`. Apply orders `poetry install` *after* managed wiring, so no installed context can satisfy the import. Transcript: `branch-override-apply.log` in the SA117e-4 evidence directory. Confirm this against a fresh installed run rather than assuming it, then let `SA112c` own the ordering fix.
 - [ ] **SA112c — Apply only the traceback-selected root fix.** `Tier 2 · Track 3 · deps: SA112b`
   - Change only the production seam justified by `SA112b`, enumerate callers for any shared contract change, add the nearest regression, and prove the original frame is gone without weakening fail-hard inventory behavior.
   - Unblock alternative: if the traceback permits materially different compatible fixes, stop for a maintainer choice with caller and compatibility trade-offs; otherwise take the narrowest owner-local fix.
