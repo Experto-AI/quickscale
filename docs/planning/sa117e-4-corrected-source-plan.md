@@ -12,8 +12,8 @@
 
 Resume SA117e-4 from corrected source, prove the already-published twelve split branches
 are tree-identical to that source, preserve and rebind the local annotated `0.87.0` tag,
-obtain a clean installed all-module branch proof, freeze and obtain human confirmation of
-the twelve-row pre-seal state, seal and verify all twelve namespaced split tags, prove a
+obtain a clean installed all-module branch proof, freeze, inspect, and record the
+twelve-row pre-seal state, seal and verify all twelve namespaced split tags, prove a
 clean default installed apply with exact prompt/response-consumption evidence, and only then
 retain and verify a local restoration anchor before deleting the stale teams split branch.
 
@@ -61,8 +61,9 @@ Two standing facts bind every phase:
   different commit; deleting it first is the explicit override. After publication the version
   is spent and a defect becomes a new version. See decisions.md
   §[Module Version Lockstep](../technical/decisions.md#module-version-lockstep) Rule 4.
-- Never treat this plan, its independent review, or an earlier confirmation as either of
-  the two execution-time maintainer confirmations.
+- Never treat the pre-seal record as authorization for the core-tag push or any PyPI action.
+  Roadmap decision 2 is the only remaining maintainer decision and lives entirely outside this
+  child.
 
 ## Evidence ledger and authority
 
@@ -616,8 +617,8 @@ closeout has not yet been committed, its authorized `docs/technical/roadmap.md` 
 
 **EXECUTION MODE:** serial.
 
-**DEPENDS ON:** Independent plan review of this complete file returned `STATUS: ok` and the
-orchestrator explicitly authorized SA117e-4 execution. Review alone is not authorization.
+**DEPENDS ON:** Independent plan review of this complete file returned `STATUS: ok`, and the
+maintainer authorized SA117e-4 execution end to end on 2026-08-17 (roadmap decision 0).
 
 **COMMANDS AND EXPECTED RESULTS:**
 
@@ -1058,13 +1059,13 @@ and clean branch proof passes. No split tag exists yet.
 **COLLAPSE:** forbidden; the reversible local rebind and clean branch proof must finish before
 preparing an immutable seal.
 
-## Phase 4 — Recapture, digest, and stop for fresh pre-seal confirmation
+## Phase 4 — Recapture, digest, and freeze the pre-seal state
 
 **PHASE GOAL:** Implement resumption step 4: recapture all twelve complete branch SHAs and
-corrected-source parity, freeze the exact table and digest, and stop for a new maintainer
-confirmation before any seal.
+corrected-source parity, freeze the exact table and digest, and record the pre-seal
+confirmation under the maintainer's standing authorization before any seal.
 
-**SCOPE_IN:** Read source/remote; write pre-seal artifacts and one human confirmation record.
+**SCOPE_IN:** Read source/remote; write pre-seal artifacts and one confirmation record.
 No tag push or remote mutation.
 
 **LIKELY FILES/SYMBOLS:** Twelve source/remote manifests, twelve split branches, twelve target
@@ -1126,25 +1127,23 @@ cat "$qs_evidence/preseal.tsv"
 cat "$qs_evidence/preseal.tsv.sha256"
 ```
 
-**MANDATORY HUMAN STOP:** Stop here. Do not run phase 5. The maintainer must inspect all
-twelve full SHAs, source/branch tree equality, manifest version `0.87.0`, byte-parity
-evidence, and tag absence, then explicitly confirm the displayed table's digest. This plan
-and its review provide no confirmation.
+**PRE-SEAL CHECK (standing authorization, no interactive stop):** The maintainer approved this
+state in advance on 2026-08-17 (roadmap decision 1). Do not block on a typed digest and do not
+prompt. The executing agent still performs the full inspection itself and must abort on any
+discrepancy: all twelve full SHAs present and distinct, source/branch tree equality for every
+row, manifest version `0.87.0`, byte-parity evidence, exactly twelve rows for the twelve
+authoritative modules, and no pre-existing split or core tag remotely. Print the complete table
+and its digest into the run evidence so the approval is auditable after the fact.
 
-Only after that fresh decision, record it with this literal interaction:
+The confirmation record is written non-interactively from the frozen digest:
 
 ```bash
 preseal_digest=$(cut -d' ' -f1 "$qs_evidence/preseal.tsv.sha256")
-read -r -p "Maintainer identity: " preseal_maintainer
-test -n "$preseal_maintainer"
-read -r -p \
-  "Type $preseal_digest to confirm all 12 corrected-source pre-seal rows: " \
-  preseal_typed_digest
-test "$preseal_typed_digest" = "$preseal_digest"
+test -n "$preseal_digest"
 preseal_confirmed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 {
   printf 'gate=corrected-source-preseal\n'
-  printf 'maintainer=%s\n' "$preseal_maintainer"
+  printf 'maintainer=standing-authorization:roadmap-decision-1:2026-08-17\n'
   printf 'confirmed_at=%s\n' "$preseal_confirmed_at"
   printf 'table=%s\n' "$qs_evidence/preseal.tsv"
   printf 'sha256=%s\n' "$preseal_digest"
@@ -1154,20 +1153,21 @@ preseal_confirmed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ```
 
 **ABORT CONDITIONS:** Any query/parity/version/tag/core-tag assertion fails; table does not
-have exactly twelve rows; digest cannot be captured; maintainer declines, does not inspect
-the complete rows, or does not type the exact digest. Recapture from scratch after any
-branch movement; an earlier table or confirmation is void.
+have exactly twelve rows; digest cannot be captured. Recapture from scratch after any
+branch movement; an earlier table or confirmation record is void. Standing authorization covers
+a *correct* twelve-row state only — it never authorizes sealing past a failed assertion.
 
 **VALIDATION CHECKPOINT:** `preseal.tsv`, its SHA-256 sidecar, twelve source/branch manifests,
 empty all-split-tag capture, and confirmation record bind the exact approved set before
 mutation. Oracle provenance: fresh remote rows/source Git objects own values at capture;
-SHA-256 binds the frozen table; the maintainer's exact digest entry binds authorization;
-shell assertions compare all values.
+SHA-256 binds the frozen table; the recorded digest binds the sealed rows to the inspected
+ones; shell assertions compare all values.
 
 **STOP CONDITION:** Without `preseal-confirmation.txt`, execution stops. With it, proceed
 directly to phase 5; do not reinterpret or regenerate the authorized rows.
 
-**COLLAPSE:** forbidden; this human gate must remain a visible stop before immutable pushes.
+**COLLAPSE:** forbidden; the freeze, full inspection, and digest record must complete as their
+own step before any immutable push, even though they no longer wait on a human.
 
 ## Phase 5 — Seal, verify, then delete the stale teams branch
 
@@ -1662,7 +1662,7 @@ confirmed teams deletion.
    `refs/sa117e4-backup/core-tag/0.87.0`. An incomplete rebind restores the exact old object
    with `git update-ref refs/tags/0.87.0 "$prior_tag_object"`. Retain the backup through
    SA117e-5; never push it.
-2. **Before seal:** no remote mutation exists to roll back. A failed tree/parity/human gate
+2. **Before seal:** no remote mutation exists to roll back. A failed tree/parity/pre-seal check
    stops. Branch mismatch requires a new reviewed republish plan.
 3. **During/after seal:** tags are still correctable until publication. If interrupted, retain
    evidence, verify existing tags against the table, and rerun seal-all; a tag at a wrong
@@ -1695,7 +1695,7 @@ SA117e-4 is ready for SA117e-5 only when the retained evidence directory include
 - core-tag backup and rebind TSVs proving prior object retention and corrected target;
 - installed branch plan/apply logs with exact prompt-count and clean-exit assertions, plus its
   process-group and exact-label three-resource cleanup evidence;
-- twelve-row pre-seal TSV, digest, source/branch manifests, and fresh human confirmation;
+- twelve-row pre-seal TSV, digest, source/branch manifests, and the fresh confirmation record;
 - seal log, exact expected/actual tag sets, sealed manifests, workflow snapshot, and
   `no-pypi-trigger.txt`;
 - approved-harness digest checks, final plan log, default-apply JSON with exact no-override
@@ -1729,8 +1729,9 @@ No evidence item authorizes the later core-tag push or a PyPI action.
 
 ## Open questions
 
-None about plan design. Separate explicit authorization is still required before Phase 1, and
-the two execution-time human gates remain ungranted; none blocks review of this plan.
+None about plan design. Execution of every phase is authorized (roadmap decisions 0, 0b, 1,
+1b). The only ungranted decision is roadmap decision 2 — production PyPI publication, including
+the core-tag push that can trigger it — and this plan performs no part of it.
 
 ## Mandatory pre-return self-review
 
