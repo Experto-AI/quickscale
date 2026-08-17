@@ -82,7 +82,7 @@ and invoked-behavior findings; no replacement discovery is required before execu
 | E-06 | `quickscale_core/src/quickscale_core/contracts/module_discovery.py:48-53,165-223,481-497` | Manifest discovery is the inventory source; placeholders including teams are excluded; count drift away from twelve fails hard. |
 | E-07 | `.github/workflows/publish.yml:1-12` | Only pushed tags matching `[0-9]*` or `v[0-9]*` trigger the PyPI workflow; namespaced split tags do not match. |
 | E-08 | `scripts/provision_installed_venv.sh:1-18,20-51` | Provisioning expects absolute source/output paths, exits 0 with `venv/` and `work/`, exits 2 for bad invocation, and otherwise fails nonzero. |
-| E-09 | `quickscale_cli/src/quickscale_cli/commands/plan_command.py:966-982,1083-1123,1203-1231`, `plan_selection.py:59-82,147-173` | The retained plan stdin has exactly seven corrected-source prompts: package, theme, modules, three Docker choices, and save. |
+| E-09 | `quickscale_cli/src/quickscale_cli/commands/plan_command.py:57-61,841,966-982,1083-1123,1203-1231`, `plan_selection.py:59-82,147-173` | The retained plan stdin has exactly seven corrected-source prompts: package, theme, modules, three Docker choices, and save. Exact texts are read from these lines — the superuser prompt is `Create Django superuser on first startup?`, and `Select modules` is non-unique because `plan_selection.py:150` also echoes it in the section header. |
 | E-10 | `quickscale_cli/src/quickscale_cli/commands/apply_support.py:85-102` and `apply_command.py:3671-3706` | For the selected Docker config, apply has exactly three prompts: Docker-output, proceed, and late destructive/remote confirmation; accepting all required gates permits a clean exit. |
 | E-11 | `scripts/verify_public_module_apply.py:145-251,286-311,354-430,595-705`, read at corrected source | The approved harness preserves argv/stdin/cwd and emits the required semantic JSON, but its ordinary-nonzero path can return while descendants remain, its cleanup swallows Docker query/removal failures, and failed Docker queries are represented as an empty resource set. Phase 5 therefore preserves the reviewed semantic harness while replacing only its process/cleanup callables with the inline F-003 owner below. |
 | E-12 | `docs/planning/sa117e-4-release-plan.md` | Historical transcription source only. It remains unchanged and carries no mechanism by reference into this plan. |
@@ -945,10 +945,13 @@ text = Path(os.environ['QS_PLAN_LOG']).read_text()
 prompts = (
     'Python package name',
     'Enter theme number or name',
-    'Select modules',
+    # plan_selection.py:150 echoes this header and :165 prompts with the bare
+    # 'Select modules', so the short form is not unique in a plan log.
+    'Select modules to embed (optional):',
     'Start Docker services after apply?',
     'Build Docker images?',
-    'Create Django superuser?',
+    # plan_command.py:61 — exact text; 'Create Django superuser?' never appears.
+    'Create Django superuser on first startup?',
     'Save configuration?',
 )
 assert all(text.count(prompt) == 1 for prompt in prompts)
@@ -1245,8 +1248,27 @@ test "$(git -C "$seal_source" rev-parse HEAD)" = "$qs_source"
 test "$(git -C "$seal_source" rev-parse \
   "refs/tags/$qs_version^{commit}")" = "$qs_source"
 
+# Push authentication and tagger identity (roadmap decision 1d).
+# Credentials come from the ambient helper only — never inline a token in a
+# command, a URL, or the evidence directory. GIT_TERMINAL_PROMPT=0 turns a
+# missing credential into an immediate non-zero exit instead of a hung prompt.
+# Assert a helper is configured before starting; seal-all pushes serially and
+# stops on the first failure, so an unauthorized push aborts with zero tags
+# created rather than leaving a partial seal.
+test -n "$(git -C "$qs_repo" config --get credential.helper)"
+GIT_TERMINAL_PROMPT=0 git -C "$qs_repo" ls-remote --exit-code origin \
+  'refs/heads/splits/*' > "$qs_evidence/preseal-remote-reachable.txt"
+# Annotated tags need a non-secret tagger identity; take the ambient config and
+# assert it rather than inventing one.
+qs_tagger_name=$(git -C "$qs_repo" config --get user.name)
+qs_tagger_email=$(git -C "$qs_repo" config --get user.email)
+test -n "$qs_tagger_name" && test -n "$qs_tagger_email"
+
 (
   cd "$seal_source"
+  export GIT_TERMINAL_PROMPT=0
+  export GIT_AUTHOR_NAME="$qs_tagger_name" GIT_COMMITTER_NAME="$qs_tagger_name"
+  export GIT_AUTHOR_EMAIL="$qs_tagger_email" GIT_COMMITTER_EMAIL="$qs_tagger_email"
   env -u EXPECTED_REMOTE_SHA -u ABSENT -u PREVIOUS_VERSION \
     make seal-status VERSION="$qs_version"
   env -u EXPECTED_REMOTE_SHA -u ABSENT -u PREVIOUS_VERSION \
