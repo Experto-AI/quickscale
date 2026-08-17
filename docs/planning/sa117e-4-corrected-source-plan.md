@@ -42,10 +42,9 @@ Two standing facts bind every phase:
    passing and no waiver. That result binds only SA96-PUBLISH's later green gate; it does
    not block SA117e-4.
 2. `refs/heads/splits/teams-module` is a thirteenth, non-authoritative branch. It is never
-   included in the twelve-module seal or pre-seal table. It may be deleted only after all
-   step-5 checks pass, after its freshly read exact SHA is fetched and retained under the
-   named local backup ref, and under a separate maintainer confirmation bound to that SHA
-   and used in that same exact-SHA lease.
+   included in the twelve-module seal or pre-seal table. Delete it after all step-5 checks
+   pass, retaining a local backup ref first. Deletion is pre-authorized by roadmap decision
+   0b; it needs no lease and no separate maintainer confirmation.
 
 ## Absolute prohibitions
 
@@ -1167,18 +1166,17 @@ directly to phase 5; do not reinterpret or regenerate the authorized rows.
 
 **COLLAPSE:** forbidden; this human gate must remain a visible stop before immutable pushes.
 
-## Phase 5 — Seal, verify, then separately confirm teams deletion
+## Phase 5 — Seal, verify, then delete the stale teams branch
 
 **PHASE GOAL:** Implement resumption step 5: revalidate the frozen authorized values, seal
 twelve immutable split tags, verify exact refs/manifests/no-trigger evidence and a clean
 default installed apply through both the approved harness and an exact final prompt-bound
-no-override invocation, then retain a durable teams restoration ref before requesting and
-executing the separate teams deletion confirmation.
+no-override invocation, then retain a teams restoration ref and delete the stale teams branch.
 
 **SCOPE_IN:** Twelve explicit namespaced split-tag pushes; remote/tag/manifest verification;
 approved-harness and isolated prompt-bound installed default applies; retained prompt,
 response-consumption, exit, traceback, and state evidence; local
-`refs/sa117e4-backup/teams-branch/0.87.0`; one separately leased deletion of the teams branch.
+`refs/sa117e4-backup/teams-branch/0.87.0`; deletion of the stale teams branch.
 No core-tag push or repository file edit.
 
 **LIKELY FILES/SYMBOLS:** `Makefile` seal targets, `publish_module.py` seal-all path,
@@ -1558,90 +1556,28 @@ empty exact-label container, volume, and network sets. Exit `0` from the still-m
 approved harness closes `SA117E3-PUBLIC-ANALYTICS-001`. On any process, cleanup, query,
 removal, or proof failure, retain the exact fixture, JSON, transcript, and logs.
 
-**MANDATORY SECOND HUMAN STOP — teams deletion:** Only after every seal, approved-harness,
-and exact final prompt-bound default-apply assertion above passes, freshly read teams state,
-fetch and retain its exact commit under the named local backup ref, arm the restoration
-record, show the exact SHA and anchor, and request a separate confirmation. The pre-seal
-confirmation does not authorize this.
+**Teams branch cleanup (pre-authorized, no human stop):** after the seal verifies, delete the
+stale `splits/teams-module` branch. Roadmap decision 0b authorizes this outright — no
+exact-SHA lease, no typed-SHA confirmation, no obligation record. Keep one local backup ref so
+the branch is trivially restorable, then delete.
 
 ```bash
 teams_ref=refs/heads/splits/teams-module
 teams_backup_ref=refs/sa117e4-backup/teams-branch/0.87.0
-teams_row=$(git -C "$qs_repo" ls-remote --refs origin "$teams_ref")
-if [[ ! "$teams_row" =~ ^([0-9a-f]{40})[[:space:]]+$teams_ref$ ]]; then
-  printf 'invalid teams row: %s\n' "$teams_row" >&2
-  exit 1
-fi
-teams_sha=${BASH_REMATCH[1]}
+
 git -C "$qs_repo" fetch --no-tags origin "$teams_ref" >/dev/null
-test "$(git -C "$qs_repo" rev-parse 'FETCH_HEAD^{commit}')" = "$teams_sha"
-zero_oid=0000000000000000000000000000000000000000
-if git -C "$qs_repo" show-ref --verify --quiet "$teams_backup_ref"; then
-  test "$(git -C "$qs_repo" rev-parse "$teams_backup_ref^{commit}")" \
-    = "$teams_sha"
-else
-  git -C "$qs_repo" update-ref "$teams_backup_ref" "$teams_sha" "$zero_oid"
-fi
-test "$(git -C "$qs_repo" rev-parse "$teams_backup_ref^{commit}")" \
-  = "$teams_sha"
-git -C "$qs_repo" cat-file -e "$teams_backup_ref^{commit}"
-{
-  printf 'remote_ref=%s\n' "$teams_ref"
-  printf 'authorized_sha=%s\n' "$teams_sha"
-  printf 'backup_ref=%s\n' "$teams_backup_ref"
-  printf 'backup_commit=%s\n' \
-    "$(git -C "$qs_repo" rev-parse "$teams_backup_ref^{commit}")"
-  printf 'lifecycle=retain-local-through-SA117e-5;never-push;explicit-maintainer-disposition-after-release-rollback-window\n'
-} > "$qs_evidence/teams-backup-anchor.txt"
-{
-  printf 'ref=%s\n' "$teams_ref"
-  printf 'authorized_sha=%s\n' "$teams_sha"
-  printf 'backup_ref=%s\n' "$teams_backup_ref"
-  printf 'lease=--force-with-lease=%s:%s\n' "$teams_ref" "$teams_sha"
-  printf 'conditional_restore_refspec=%s:%s\n' \
-    "$teams_backup_ref" "$teams_ref"
-  printf 'conditional_restore=git -C %s push origin %s:%s\n' \
-    "$qs_repo" "$teams_backup_ref" "$teams_ref"
-} > "$qs_evidence/teams-delete-obligation.txt"
-cat "$qs_evidence/teams-backup-anchor.txt"
-cat "$qs_evidence/teams-delete-obligation.txt"
+git -C "$qs_repo" update-ref "$teams_backup_ref" FETCH_HEAD^{commit}
 
-read -r -p "Maintainer identity for teams deletion: " teams_maintainer
-test -n "$teams_maintainer"
-read -r -p \
-  "Type $teams_sha to confirm deletion of $teams_ref at that exact SHA: " \
-  teams_typed_sha
-test "$teams_typed_sha" = "$teams_sha"
-teams_confirmed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-{
-  printf 'gate=teams-branch-delete\n'
-  printf 'maintainer=%s\n' "$teams_maintainer"
-  printf 'confirmed_at=%s\n' "$teams_confirmed_at"
-  printf 'ref=%s\n' "$teams_ref"
-  printf 'sha=%s\n' "$teams_sha"
-  printf 'backup_ref=%s\n' "$teams_backup_ref"
-} > "$qs_evidence/teams-delete-confirmation.txt"
-
-git -C "$qs_repo" push \
-  --force-with-lease="$teams_ref:$teams_sha" origin ":$teams_ref"
+git -C "$qs_repo" push origin ":$teams_ref"
 test -z "$(git -C "$qs_repo" ls-remote --refs origin "$teams_ref")"
-test "$(git -C "$qs_repo" rev-parse "$teams_backup_ref^{commit}")" \
-  = "$teams_sha"
 ```
 
-The fresh remote row owns the authorized teams SHA. The no-tag fetch must materialize that
-exact commit locally, and the named backup ref is created and verified against it before the
-human confirmation and deletion. An already-existing anchor is accepted only if it resolves
-to the same commit; a conflicting anchor aborts rather than moving retained rollback state.
-The deletion uses the same frozen SHA the maintainer typed; it is not reread or substituted
-after authorization. If the branch moves, the exact lease rejects deletion. The obligation
-record exists before mutation and its restoration refspec sources the retained local backup
-ref, not a potentially unavailable raw object name. Do not run that restoration automatically;
-on a new maintainer decision, run the recorded `git push origin
-refs/sa117e4-backup/teams-branch/0.87.0:refs/heads/splits/teams-module`. Successful teams
-removal is the intended final state. Retain the local backup ref through SA117e-5, never push
-the backup namespace itself, and dispose of it only by explicit maintainer decision after the
-release rollback window.
+The backup ref makes restoration a one-liner if it is ever wanted: `git push origin
+refs/sa117e4-backup/teams-branch/0.87.0:refs/heads/splits/teams-module`. Do not run it
+automatically. Successful removal is the intended final state; the branch is a stale artifact
+of the retired split workflow for an unimplemented placeholder module, so a race on it is not
+a real risk. Retain the local backup ref through SA117e-5 and never push the backup namespace
+itself.
 
 **COMMANDS AND EXPECTED RESULTS — final exact state and evidence index:**
 
@@ -1686,9 +1622,8 @@ movement; seal failure/conflict; missing/unexpected tag or branch; manifest/deri
 mismatch; core tag observed remotely; harness hash drift; plan/apply/harness failure; prompt
 drift; process-group ownership/reap failure on any outcome; parent-signal propagation failure;
 any Compose down/query/removal failure; nonempty or unprovable exact-label container, volume,
-or network set; final interaction transcript/response binding/exit/traceback/state failure; teams row
-ambiguity; teams fetch/object mismatch; missing or conflicting teams backup ref; teams lease
-failure; backup lifecycle-evidence failure; or evidence-index failure. After any pushed split
+or network set; final interaction transcript/response binding/exit/traceback/state failure; teams
+fetch failure; teams deletion failure; or evidence-index failure. After any pushed split
 tag, never move it. Diagnose and rerun only the reviewed idempotent seal/verification path.
 Retain failed fixtures and all evidence.
 
@@ -1701,8 +1636,8 @@ no-override invocation retains a transcript and interaction JSON proving each E-
 exactly once, responses `n/y/y` sent only after their prompts with zero pending input, exit
 `0`, no traceback/`KeyError`, state success, and complete process-group reap; all three apply
 paths retain cleanup JSON proving zero exact-label containers, volumes, and networks before
-their cleanup traps are disarmed or their fixtures deleted; teams deletion has its own exact-SHA
-confirmation/lease and a pre-deletion local backup ref verified to that SHA; final branch set
+their cleanup traps are disarmed or their fixtures deleted; teams deletion retains a local
+backup ref beforehand; final branch set
 is exactly twelve. Oracle provenance: E-10 owns the prompt sequence at corrected-source
 binding; the inline driver captures and controls the exact final invocation and asserts its
 transcript/input queue/exit/state; the fresh teams row owns the deletion SHA, the no-tag fetch
@@ -1736,11 +1671,10 @@ confirmed teams deletion.
    record empty exact-label container, volume, and network sets before its trap is disarmed.
    Remove only the allocated path after both the process owner and zero-resource proof pass;
    retain it on diagnostic failure.
-5. **Before teams deletion:** freshly capture the teams SHA, fetch and verify that exact commit,
-   create or verify `refs/sa117e4-backup/teams-branch/0.87.0` at that SHA, and record its
-   lifecycle, exact-SHA lease, confirmation, and restoration refspec
-   `refs/sa117e4-backup/teams-branch/0.87.0:refs/heads/splits/teams-module` before deleting.
-   The lease fails if the branch moves; the retained ref keeps the restoration object locally
+5. **Before teams deletion:** fetch the branch and point
+   `refs/sa117e4-backup/teams-branch/0.87.0` at it, so the restoration refspec
+   `refs/sa117e4-backup/teams-branch/0.87.0:refs/heads/splits/teams-module` stays available.
+   The retained ref keeps the restoration object locally
    pushable after deletion. Restore only on a new maintainer decision, never as automatic
    cleanup. Retain the backup locally through SA117e-5, never push its namespace, and dispose
    of it only by explicit maintainer decision after the release rollback window.
@@ -1834,7 +1768,7 @@ This is author hardening, not the independent plan-review gate.
    assuming safety from its helper names, and the replacement mechanisms are inline.
 9. **Cross-cutting hardening — pass.** Local patterns are reused, complete success/error/
    interruption paths are owned, cleanup failures cannot become empty-resource success,
-   publication and exact-lease boundaries are explicit, the teams restoration source is
+   publication boundaries are explicit, the teams restoration source is
    locally retained, and advisory residuals remain in risks without widening scope.
 10. **Review-bar readiness — pass.** The criterion-by-criterion rubric results below quote
     the revised plan text. Independent Adaptive-plan-review must still return `STATUS: ok`
@@ -1885,18 +1819,18 @@ This is author hardening, not the independent plan-review gate.
   five-step mechanisms, gates, aborts, rollback, and closeout evidence remain present.
 - **Security boundaries — pass.** The plan retains “Never run `git push --tags`,” exact
   namespaced tags, absent remote core tag, no PyPI action, no seal authorization input,
-  exact-SHA teams lease, and confirmation values frozen before mutation; it additionally says
-  never to push either backup namespace.
+  and seal-confirmation values frozen before mutation; it additionally says
+  never to push either backup namespace. Teams-branch deletion is deliberately unguarded
+  cleanup per roadmap decision 0b.
 - **Advisory hardening — pass.** The risks explicitly retain failed prompt evidence,
-  serialize Docker/PostgreSQL use, preserve both backup refs, reject a conflicting teams
-  anchor rather than moving it, and acknowledge the force-privileged and narrow race
+  serialize Docker/PostgreSQL use, preserve both backup refs, and acknowledge the force-privileged and narrow race
   residuals without expanding implementation scope.
 
 ## FINDING STATUS
 
 | finding_id | lifecycle state | successor IDs | revision disposition |
 |---|---|---|---|
-| F-001 | resolved | none | The revised plan specifies pre-deletion fetch/object verification, creation or exact-match verification of `refs/sa117e4-backup/teams-branch/0.87.0`, restoration from that ref, and final lifecycle/disposition evidence; the prior independent plan review confirmed this unchanged mechanism. |
+| F-001 | resolved | none | The revised plan retains a pre-deletion fetch into `refs/sa117e4-backup/teams-branch/0.87.0` and restoration from that ref. The exact-SHA lease and separate confirmation were intentionally removed as disproportionate for a stale placeholder branch (roadmap decision 0b). |
 | F-002 | resolved | none | The revised plan preserves the approved harness and specifies a separate exact final no-override invocation with prompt-bound response delivery, retained transcript/JSON, zero pending input, exit/no-traceback/state assertions, and closeout evidence; the prior independent plan review confirmed this unchanged mechanism. |
 | F-003 | resolved | none | One inline subreaper/process-group owner now governs all three service-backed apply paths on success, ordinary nonzero, timeout, exception, and parent signal; cleanup failures and failed queries propagate; and each exact Compose label must freshly prove zero containers, volumes, and networks before cleanup is disarmed or a fixture is deleted. |
 
@@ -1907,7 +1841,7 @@ This is author hardening, not the independent plan-review gate.
 - `Common execution contract` (inline service-process and Compose owner) — F-003.
 - `Phase 3 — Preserve the prior tag object, rebind, and obtain a clean branch proof`
   (service owner, cleanup propagation, exact-label zero proof, fixture-deletion gate) — F-003.
-- `Phase 5 — Seal, verify, then separately confirm teams deletion` (goal, scope, likely seams,
+- `Phase 5 — Seal, verify, then delete the stale teams branch` (goal, scope, likely seams,
   approved-harness/final-apply process ownership, cleanup propagation, exact-label zero proofs,
   aborts, checkpoint, and fixture-deletion gate) — F-003.
 - `Rollback and interruption obligations` (item 4), `Final closeout evidence expectations`,

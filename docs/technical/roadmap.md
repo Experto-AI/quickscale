@@ -16,6 +16,10 @@ This is the current task planner. It contains open actionable work only. Complet
 - Leave `make quality` no worse than found. Do not raise a complexity ceiling or reintroduce file-line ceilings.
 - Shared closeout files are `CHANGELOG.md`, this roadmap, and `decisions.md` when policy changes. Concurrent tracks may both append to them; the sync-before-merge-back procedure must preserve both entries and leave no unmerged files.
 - PostgreSQL/Docker work is serialized across worktrees. Track 3 has priority while an authorized service-backed critical-path leg is active.
+- **Source-drift rule (graded, not absolute).** A reviewed plan stays executable when the base commit moves. Rebind it to current `v87` HEAD and classify the difference:
+  - *Documentation-only drift* — Markdown, comments, changelog/roadmap/audit prose, placeholder READMEs: **proceed**, and note the new HEAD in the run evidence. No re-review, no re-authorization.
+  - *Executable or producer-state drift* — anything under a module's shipped source, packaging, manifests, split/seal tooling, or CI: **stop, re-review the affected step, then continue.** Only the changed step needs re-review, not the whole plan.
+  A plan is only aborted outright when a proof it depends on actually fails, not because a diff exists.
 
 ---
 
@@ -32,7 +36,7 @@ SA117e-4 ──► SA112b ──► SA112c ──► SA112d ──► SA112f ─
 Track 2 — complete; no open ticket
 ```
 
-**Longest chain to green gate and publish:** `SA117e-4 → SA112b → SA112c → SA112d → SA112f → SA140 → SA96-PUBLISH` — seven legs. `SA117e-4` is the head. Its corrected-source plan is reviewed and complete, but that review did not authorize execution. The twelve mutable split branches are refreshed; no immutable split tag, remote core tag, PyPI action, stale-teams-branch deletion, or release seal exists yet.
+**Longest chain to green gate and publish:** `SA117e-4 → SA112b → SA112c → SA112d → SA112f → SA140 → SA96-PUBLISH` — seven legs. `SA117e-4` is the head; its corrected-source plan is reviewed and **execution of Phase 1 is authorized** (see "Maintainer decisions"). The twelve mutable split branches are refreshed; no immutable split tag, remote core tag, PyPI action, stale-teams-branch deletion, or release seal exists yet.
 
 **Parallel feeder:** `SA117e-5` closes the SA117/SA136 acceptance umbrellas after `SA117e-4`. It feeds the final release join but is shorter than the seven-leg chain, so it is not duration-critical. It moves from Track 3 to idle Track 1 and may run beside `SA112b` after `SA117e-4` merges. This removes a documentation closeout from Track 3's serial queue without splitting an executable review unit.
 
@@ -48,10 +52,10 @@ A track is truly green only when start, finish, and merge are all yes.
 |---|---|---|---|---|---|
 | **Track 1 — SA117e-5** | **no** — hard upstream dependency `SA117e-4` has not merged | **no** — `SA117e-5` acceptance requires `SA117e-4`'s reviewed seal/verification evidence; only that upstream work clears it | **no** — merge-back is ordered after Track 3's `SA117e-4`; only that upstream merge clears it | **no** | Feeds the release join; not the longest branch |
 | **Track 2 — complete** | **n/a** — no open ticket or next action | **n/a** — no open ticket to finish | **yes** — all assigned work is already merged with no merge-order edge | **n/a** | Closed track; no open progress or filler work |
-| **Track 3 — SA117e-4** | **no** — maintainer execution authorization for `SA117e-4` Phase 1 is not granted | **no** — `SA117e-4` still requires the maintainer's pre-seal and stale-teams-branch decisions | **yes** — no cross-track merge-order gate blocks its reviewed tip | **no** | Seven-leg critical-path head |
+| **Track 3 — SA117e-4** | **yes** — Phase 1 execution is authorized on current `v87` HEAD | **no** — `SA117e-4` still requires the maintainer's pre-seal decision | **yes** — no cross-track merge-order gate blocks its reviewed tip | **no** | Seven-leg critical-path head |
 | **v88 backlog — planning queue** | **n/a** — future-release scope, not a current execution track | **n/a** — v88 dependencies and execution tracks are intentionally deferred to kickoff | **n/a** — no v88 integration branch or merge order exists yet | **n/a** | Deferred planning scope, not executable filler |
 
-**Truly-green open tickets today: none.** Track 2 is complete, so start/finish/truly-green are not applicable rather than affirmative readiness claims. The v88 queue is a planning label rather than an execution track, so its three states remain not applicable until kickoff; it is not filler executable on v87. After `SA117e-4` merges, `SA117e-5` becomes a real-progress release feeder on Track 1 while `SA112b` advances the longest chain on Track 3.
+**Truly-green open tickets today: none, but Track 3 is unblocked and executable now** — `SA117e-4` Phase 1 can start; it remains "not truly green" only because its one irreversible stop — seal approval — is still ahead. Track 2 is complete, so start/finish/truly-green are not applicable rather than affirmative readiness claims. The v88 queue is a planning label rather than an execution track, so its three states remain not applicable until kickoff; it is not filler executable on v87. After `SA117e-4` merges, `SA117e-5` becomes a real-progress release feeder on Track 1 while `SA112b` advances the longest chain on Track 3.
 
 ### Open-ticket readiness
 
@@ -59,7 +63,7 @@ A track is truly green only when start, finish, and merge are all yes.
 
 | Ticket (track) | Can start | Can finish on its track | Can merge | Role |
 |---|---|---|---|---|
-| **SA117e-4 (T3)** | **no** — user decision: authorize Phase 1 | **no** — user decisions: approve the exact twelve-row seal state and later the exact-SHA deletion of `splits/teams-module` | **yes** — no merge-order edge | Critical path |
+| **SA117e-4 (T3)** | **yes** — Phase 1 authorized; rebind to current HEAD under the graded drift rule | **no** — user decision: approve the twelve-row seal state | **yes** — no merge-order edge | Critical path |
 | **SA117e-5 (T1)** | **no** — hard dependency: `SA117e-4` | **no** — hard dependency: `SA117e-4` supplies its acceptance evidence | **no** — hard dependency: merge after `SA117e-4` | Release feeder |
 | **SA112b (T3)** | **no** — hard dependency: sealed splits from `SA117e-4` | **yes** — once started, its diagnostic/evidence acceptance is track-local | **yes** — no cross-track order gate | Critical path |
 | **SA112c (T3)** | **no** — hard dependency: `SA112b` traceback | **yes** — once started, the traceback-selected fix is track-local | **yes** — no cross-track order gate | Critical path |
@@ -72,21 +76,12 @@ The acceptance-only umbrellas `SA136`, `SA117`, `SA117e`, and `SA112` have no ex
 
 ### Maintainer decisions and unblock paths
 
-There are **four user-owned decisions**, none about track topology or product design.
+There are **two open user-owned decisions**, none about track topology or product design. The rest are settled.
 
-1. **Authorize `SA117e-4` Phase 1 now, or hold.** Phase 1 rebinds the reviewed procedure to current `v87` and runs reversible proofs; it does not itself approve the immutable seal, delete the stale branch, push the core tag, or publish to PyPI.
-   - **Authorize now:** fastest path; uses the independently reviewed corrected-source plan and retains separate stops before irreversible actions. Risk: it consumes service capacity and may surface drift requiring another reviewed repair.
-   - **Hold:** zero operational risk, but every release leg remains blocked and no alternate critical-path work can start.
-   - **Recommendation:** authorize Phase 1. This fits the prior loop/seal decision: reversible verification comes first, immutable mutation only after fresh evidence. It clears **SA117e-4/Track 3 can start** only.
-2. **At the pre-seal stop, approve the twelve-row exact state or abort.** The seal gives each module version an immutable identity; approving stale or mismatched rows would make a bad artifact permanent.
-   - **Approve only an exact, fresh table:** permits the twelve namespaced split tags; immutability makes later consumers reproducible.
-   - **Abort and republish/review:** costs time but keeps the mutable branch loop as the correction boundary.
-   - **Recommendation:** approve only if all twelve rows and the digest match the reviewed source; otherwise abort. This fits the ratified check-then-act seal policy and clears the seal portion of **SA117e-4 can finish**.
-3. **After seal verification, delete or retain `splits/teams-module`.** The branch is a thirteenth stale artifact created by the retired workflow; the authoritative inventory contains twelve modules and teams remains a README-only placeholder.
-   - **Delete with a freshly read exact-SHA lease:** restores remote state to the authoritative inventory and refuses deletion if the branch moved.
-   - **Retain:** avoids deletion now but preserves a misleading unsupported branch; under current acceptance, `SA117e-4` stays open or a separately reviewed exception ticket is required.
-   - **Recommendation:** delete under the exact-SHA lease after the twelve-module seal verifies. This fits the prior decision to retire automated split pushes and clears the remaining external-state portion of **SA117e-4 can finish**.
-4. **After TestPyPI and the full green gate, publish to production or hold.** A pushed core release tag may trigger irreversible PyPI publication.
+0. **`SA117e-4` Phase 1 — AUTHORIZED (2026-08-17).** Standing authorization: Phase 1 may execute against whatever `v87` HEAD is current at run time, rebinding under the graded source-drift rule above. It does not authorize the immutable seal, the core-tag push, or any PyPI action — those keep their own stops below. This authorization does not lapse when `v87` advances; documentation-only drift never requires re-authorization, and executable drift requires re-reviewing only the affected step.
+0b. **`splits/teams-module` deletion — AUTHORIZED, no ceremony.** Delete the stale branch with a plain `git push origin --delete splits/teams-module` once the twelve-module seal verifies. No exact-SHA lease, no separate authorization stop, no re-read-and-compare. It is a stale branch for an unimplemented placeholder module that nothing consumes, produced by a retired workflow; if it were ever needed again it is trivially recreatable from subtree. Treat it as cleanup, not as a guarded mutation.
+1. **At the pre-seal stop, approve the twelve-row state or abort.** This is the one genuinely irreversible step: a seal tag gives each module version a permanent identity. Approve if the twelve rows and the digest match the reviewed source; otherwise abort and correct on the mutable branch loop, which is the designed correction boundary. Clears the seal portion of **SA117e-4 can finish**.
+2. **After TestPyPI and the full green gate, publish to production or hold.** A pushed core release tag may trigger irreversible PyPI publication.
    - **Publish:** completes v0.87.0 once exact artifacts and all gates are green.
    - **Hold:** preserves the validated candidate without exposing users; appropriate if version, release note, or external timing is wrong.
    - **Recommendation:** publish only when the exact reviewed tip, version, release note, TestPyPI result, and four-command green gate all agree. This fits the “last step re-verifies” policy and clears **SA96-PUBLISH can finish**.
@@ -106,11 +101,11 @@ No user decision can bypass `SA117e-4 → SA112b → SA112c → SA112d → SA112
 The prevention machinery is merged: manifests are stamped/asserted in lockstep, default embeds resolve `splits/<module>-module/<version>`, missing tags fail hard, the mutable branch loop is separate from immutable sealing, and the core tag remains the later PyPI trigger. The remaining work is external state plus acceptance closeout.
 
 - [ ] **SA117e-4 — Resume, seal, and verify split publication.** `Tier 2 · Track 3 · deps: none · HUMAN-GATED`
-  - Execute the reviewed standalone [corrected-source plan](../planning/sa117e-4-corrected-source-plan.md) against current `v87`; plan approval is not execution authorization.
+  - Execute the reviewed standalone [corrected-source plan](../planning/sa117e-4-corrected-source-plan.md) against current `v87` HEAD. **Phase 1 is authorized** — rebind the plan to whatever HEAD is current and record it in evidence; do not abort on documentation-only drift.
   - Preserve the ratified order: local-only core tag → corrected-source branch proof/loop → fresh twelve-row human gate → namespaced immutable split tags → no-override installed all-module proof. Never run `git push --tags`; never push the core tag or perform a PyPI action here.
   - Verify all twelve split tags and branch roots, byte-identical `0.87.0` manifests including every source-defined derivation section, the approved process-group/Compose cleanup invariants, no unexpected refs, and an installed all-module apply reaching managed wiring without the historical `KeyError`.
-  - After verification, stop for separate authorization before deleting `splits/teams-module` under a fresh exact-SHA lease. A pushed seal tag is never moved; an invalid seal is superseded by a later version.
-  - Unblock alternative: if corrected source differs from the published roots or any proof fails, abort before the seal, ticket/review the drift, and rerun the reversible branch loop. Do not weaken checks or repair outside the allowlist.
+  - After the seal verifies, delete `splits/teams-module` directly — no lease, no separate stop. A pushed seal tag is never moved; an invalid seal is superseded by a later version.
+  - Unblock alternative: if a **proof fails** or corrected source differs from the published roots in shipped module content, stop before the seal, ticket/review that step, and rerun the reversible branch loop. Prose-only differences in placeholder docs are recorded and passed over. Do not weaken checks or repair outside the allowlist.
   *(why → the immutable producer state is the remaining lockstep gap and the prerequisite for valid installed-wheel evidence)*
 
 - [ ] **SA117e-5 — Review closeout and close SA117/SA136.** `Tier 1 · Track 1 · deps: SA117e-4`
