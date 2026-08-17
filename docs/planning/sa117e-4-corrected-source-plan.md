@@ -15,8 +15,7 @@ are tree-identical to that source, preserve and rebind the local annotated `0.87
 obtain a clean installed all-module branch proof, freeze and obtain human confirmation of
 the twelve-row pre-seal state, seal and verify all twelve namespaced split tags, prove a
 clean default installed apply with exact prompt/response-consumption evidence, and only then
-retain and verify a local restoration anchor before requesting a separate confirmation to
-delete the stale teams split branch.
+retain and verify a local restoration anchor before deleting the stale teams split branch.
 
 In scope:
 
@@ -25,7 +24,7 @@ In scope:
   `/tmp/quickscale-sa117e4-corrected-evidence-*` directory;
 - the local `refs/tags/0.87.0` rebind, its explicit local backup ref, the durable local
   `refs/sa117e4-backup/teams-branch/0.87.0` restoration anchor, twelve namespaced remote
-  split-tag pushes, and the separately confirmed teams-branch deletion;
+  split-tag pushes, and the pre-authorized teams-branch deletion;
 - runtime reads of remote state immediately before each gate or mutation.
 
 Out of scope:
@@ -56,8 +55,12 @@ Two standing facts bind every phase:
 - Perform no PyPI, TestPyPI, GitHub Release, or core publication action.
 - Pass neither `EXPECTED_REMOTE_SHA` nor `ABSENT` to a seal command. Also omit
   `PREVIOUS_VERSION` for `0.87.0`.
-- Never move, force-update, or delete a remote split tag after it has been pushed. A partial
-  seal is diagnosed and rerun; an existing tag is acceptable only at its intended commit.
+- Split tags for `0.87.0` are correctable until v0.87.0 is published to PyPI. Nothing external
+  consumes them before publication, so the intended convergence loop is: seal → test → fix →
+  delete the affected tags → reseal. `make seal-modules` will not move a tag that exists at a
+  different commit; deleting it first is the explicit override. After publication the version
+  is spent and a defect becomes a new version. See decisions.md
+  §[Module Version Lockstep](../technical/decisions.md#module-version-lockstep) Rule 4.
 - Never treat this plan, its independent review, or an earlier confirmation as either of
   the two execution-time maintainer confirmations.
 
@@ -1252,7 +1255,9 @@ rmdir "$seal_parent"
 Both make targets must exit `0`. `VERSION` is the sole seal input; no previous version,
 expected remote SHA, or absent sentinel is present. If seal-all stops partway, retain
 `seal.log`, run `verify_authorized_seal_state`, diagnose, and rerun this seal block from a
-fresh detached worktree. Existing correct tags are accepted. Never move a pushed tag.
+fresh detached worktree. Existing correct tags are accepted. A tag at a wrong commit makes
+seal-all raise by design; delete that remote tag and its local counterpart, then reseal
+(decisions.md Rule 4). This is available because v0.87.0 is not published yet.
 
 **COMMANDS AND EXPECTED RESULTS — exact refs, manifests, and no-trigger proof:**
 
@@ -1566,7 +1571,15 @@ teams_ref=refs/heads/splits/teams-module
 teams_backup_ref=refs/sa117e4-backup/teams-branch/0.87.0
 
 git -C "$qs_repo" fetch --no-tags origin "$teams_ref" >/dev/null
-git -C "$qs_repo" update-ref "$teams_backup_ref" FETCH_HEAD^{commit}
+teams_sha=$(git -C "$qs_repo" rev-parse 'FETCH_HEAD^{commit}')
+git -C "$qs_repo" update-ref "$teams_backup_ref" "$teams_sha"
+git -C "$qs_repo" cat-file -e "$teams_backup_ref^{commit}"
+{
+  printf 'remote_ref=%s\n' "$teams_ref"
+  printf 'backup_ref=%s\n' "$teams_backup_ref"
+  printf 'backup_commit=%s\n' "$teams_sha"
+  printf 'lifecycle=retain-local-through-SA117e-5;never-push;explicit-maintainer-disposition-after-release-rollback-window\n'
+} > "$qs_evidence/teams-backup-anchor.txt"
 
 git -C "$qs_repo" push origin ":$teams_ref"
 test -z "$(git -C "$qs_repo" ls-remote --refs origin "$teams_ref")"
@@ -1579,53 +1592,43 @@ of the retired split workflow for an unimplemented placeholder module, so a race
 a real risk. Retain the local backup ref through SA117e-5 and never push the backup namespace
 itself.
 
-**COMMANDS AND EXPECTED RESULTS — final exact state and evidence index:**
+The deletion necessarily precedes the final-state block below, because that block asserts the
+remote head set is exactly twelve. If final evidence collection fails after the deletion, the
+run is not stuck: the backup ref and `teams-backup-anchor.txt` are written before the push, so
+the branch is restorable with the recorded one-liner, and every step after the seal is
+idempotent and rerunnable. This ordering is accepted, not an abort condition.
+
+**COMMANDS AND EXPECTED RESULTS — final state check:**
+
+Four assertions. Each one can actually fail and means something when it does.
 
 ```bash
-: > "$qs_evidence/expected-heads-final.txt"
-for module in "${qs_modules[@]}"; do
-  printf 'refs/heads/splits/%s-module\n' "$module" \
-    >> "$qs_evidence/expected-heads-final.txt"
-done
-sort -o "$qs_evidence/expected-heads-final.txt" \
-  "$qs_evidence/expected-heads-final.txt"
-git -C "$qs_repo" ls-remote --heads origin 'refs/heads/splits/*' \
-  | cut -f2 | sort > "$qs_evidence/actual-heads-final.txt"
-diff -u "$qs_evidence/expected-heads-final.txt" \
-  "$qs_evidence/actual-heads-final.txt"
-git -C "$qs_repo" ls-remote --refs --tags origin 'refs/tags/splits/*' \
-  | cut -f2 | sort > "$qs_evidence/actual-tags-final.txt"
+# exactly twelve split branches and twelve 0.87.0 split tags on the remote
+test "$(git -C "$qs_repo" ls-remote --heads origin 'refs/heads/splits/*' \
+  | wc -l)" = 12
 diff -u "$qs_evidence/expected-tags.txt" \
-  "$qs_evidence/actual-tags-final.txt"
+  <(git -C "$qs_repo" ls-remote --refs --tags origin 'refs/tags/splits/*' \
+    | cut -f2 | sort)
+
+# the core tag stays local-only; it is the later PyPI trigger
 test -z "$(git -C "$qs_repo" ls-remote --refs --tags origin \
   "refs/tags/$qs_version")"
 test "$(git -C "$qs_repo" rev-parse \
   "refs/tags/$qs_version^{commit}")" = "$qs_source"
-test "$(git -C "$qs_repo" rev-parse "$qs_backup_ref")" = "$prior_tag_object"
-test "$(git -C "$qs_repo" rev-parse "$teams_backup_ref^{commit}")" \
-  = "$teams_sha"
-git -C "$qs_repo" cat-file -e "$teams_backup_ref^{commit}"
-grep -Fx "backup_ref=$teams_backup_ref" "$qs_evidence/teams-backup-anchor.txt"
-grep -Fx "backup_commit=$teams_sha" "$qs_evidence/teams-backup-anchor.txt"
-grep -Fx \
-  'lifecycle=retain-local-through-SA117e-5;never-push;explicit-maintainer-disposition-after-release-rollback-window' \
-  "$qs_evidence/teams-backup-anchor.txt"
 
-find "$qs_evidence" -type f ! -name SHA256SUMS -print0 \
-  | sort -z | xargs -0 sha256sum > "$qs_evidence/SHA256SUMS"
-test -s "$qs_evidence/SHA256SUMS"
 printf 'SA117e-4 evidence retained at %s\n' "$qs_evidence"
 ```
 
 **ABORT CONDITIONS:** Missing/mismatched confirmation; frozen table digest drift; branch
-movement; seal failure/conflict; missing/unexpected tag or branch; manifest/derivation
+movement; missing/unexpected tag or branch; manifest/derivation
 mismatch; core tag observed remotely; harness hash drift; plan/apply/harness failure; prompt
 drift; process-group ownership/reap failure on any outcome; parent-signal propagation failure;
 any Compose down/query/removal failure; nonempty or unprovable exact-label container, volume,
 or network set; final interaction transcript/response binding/exit/traceback/state failure; teams
-fetch failure; teams deletion failure; or evidence-index failure. After any pushed split
-tag, never move it. Diagnose and rerun only the reviewed idempotent seal/verification path.
-Retain failed fixtures and all evidence.
+fetch failure; or teams deletion failure. A seal conflict or a failed proof after tagging is
+not an abort: fix the
+cause, delete the affected tags, reseal, and rerun verification until it converges
+(decisions.md Rule 4). Retain failed fixtures and evidence.
 
 **VALIDATION CHECKPOINT:** Twelve exact namespaced tags peel to the twelve authorized SHAs;
 no unexpected split tag or branch exists; every sealed manifest is byte-identical to
@@ -1645,8 +1648,8 @@ materializes it, and Git's verified backup ref owns the restoration source befor
 Every other comparison names its emitting source, capture/freeze point, and asserting command
 above.
 
-**STOP CONDITION:** Phase 5 closes only when all final diffs/tests, exact final prompt-bound
-evidence, both retained backup refs, and `SHA256SUMS` pass and the evidence root is retained.
+**STOP CONDITION:** Phase 5 closes when the installed all-module apply passes and the four
+final-state assertions pass, with the evidence root retained.
 Do not push the core tag or either backup namespace. Hand the evidence path to SA117e-5 and
 the later SA96-PUBLISH gate.
 
@@ -1661,9 +1664,9 @@ confirmed teams deletion.
    SA117e-5; never push it.
 2. **Before seal:** no remote mutation exists to roll back. A failed tree/parity/human gate
    stops. Branch mismatch requires a new reviewed republish plan.
-3. **During/after seal:** remote split tags are immutable. If interrupted, retain evidence,
-   verify existing tags against the frozen table, and rerun seal-all; never move/delete a
-   pushed tag. A conflicting/wrong tag is an escalation, not a rollback command.
+3. **During/after seal:** tags are still correctable until publication. If interrupted, retain
+   evidence, verify existing tags against the table, and rerun seal-all; a tag at a wrong
+   commit is deleted and resealed, not escalated. Permanence begins at PyPI publication.
 4. **Temporary worktrees/fixtures:** arm exact-path cleanup before service-backed apply. Every
    apply runs under the inline child-subreaper/process-group owner, which terminates and reaps
    on success, ordinary nonzero, timeout, exception, and parent signal. Cleanup owns only its
@@ -1701,9 +1704,7 @@ SA117e-4 is ready for SA117e-5 only when the retained evidence directory include
   three prompts exactly once, prompt-bound `n/y/y` responses with zero pending input, exit 0,
   no traceback/`KeyError`, state success with a runtime digest, process-group reap, and strict
   cleanup JSON;
-- teams backup-anchor lifecycle evidence proving the named local ref resolves to the freshly
-  confirmed SHA, the deletion obligation whose restoration refspec sources that anchor, the
-  separate confirmation, exact final twelve-head and twelve-tag sets, and `SHA256SUMS`.
+- the teams backup anchor, and the final twelve-head/twelve-tag state check.
 
 No evidence item authorizes the later core-tag push or a PyPI action.
 
@@ -1778,7 +1779,7 @@ This is author hardening, not the independent plan-review gate.
 
 1. **Phase boundaries — pass.** Each numbered phase has an explicit stop; for example phase 4
    says: “Without `preseal-confirmation.txt`, execution stops,” and Phase 5 closes only when
-   “exact final prompt-bound evidence, both retained backup refs, and `SHA256SUMS` pass.”
+   “the installed all-module apply passes and the four final-state assertions pass.”
 2. **Validation checkpoints — pass.** Phase 5 names the final invocation's oracle and binding:
    “E-10 owns the prompt sequence at corrected-source binding; the inline driver captures and
    controls the exact final invocation and asserts its transcript/input queue/exit/state.” It
@@ -1786,11 +1787,11 @@ This is author hardening, not the independent plan-review gate.
    sent only after their prompts with zero pending input, exit `0`, no traceback/`KeyError`,
    state success, process-group reap, and strict exact-label cleanup.” Execute-capable
    SA117e-4 operators, not review agents, own commands.
-3. **Rollback handling — pass.** Before teams mutation, Phase 5 says: “The no-tag fetch must
-   materialize that exact commit locally, and the named backup ref is created and verified
-   against it before the human confirmation and deletion,” and the obligation's restoration
-   refspec “sources the retained local backup ref.” The exact prior core-tag restoration and
-   immutable-tag non-rollback remain explicit.
+3. **Rollback handling — pass.** Before teams mutation, Phase 5 fetches the branch, points the
+   named backup ref at it, and writes `teams-backup-anchor.txt`, all before the delete push;
+   the restoration refspec sources that retained local ref. The exact prior core-tag
+   restoration remains explicit, and post-seal correction follows decisions.md Rule 4
+   (delete the affected tags and reseal) rather than a rollback command.
 4. **Phase-local scope — pass.** Every phase has `SCOPE_IN` and likely files/symbols; Phase 5
    now explicitly includes “local `refs/sa117e4-backup/teams-branch/0.87.0`” and “retained
    prompt, response-consumption, exit, traceback, and state evidence,” while still stating
