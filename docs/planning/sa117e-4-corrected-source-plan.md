@@ -1,7 +1,11 @@
 # SA117e-4 — Corrected-Source Resumption, Seal, and Verification Plan
 
-> **Execution identity:** `/home/victor/code/quickscale-wt-track3` with corrected operational
-> source `28a894704954f456d18f9851c25fdb16c7e65a5f` and repository `VERSION=0.87.0`.
+> **Execution identity:** `/home/victor/code/quickscale-wt-track3` at whatever `v87` HEAD is
+> current at run time (`qs_source`), reviewed against baseline
+> `28a894704954f456d18f9851c25fdb16c7e65a5f` (`qs_baseline`), repository `VERSION=0.87.0`.
+> Phase 1 classifies the baseline-to-HEAD difference under the roadmap's graded source-drift
+> rule: documentation and placeholder-`teams` prose proceed; shipped-module or other
+> executable drift stops for scoped re-review of the affected step.
 > **Lifecycle:** this plan governs SA117e-4 resumption steps 1–5 only. The core tag remains
 > local and unpushed. Core-tag push and every PyPI action remain with SA96-PUBLISH.
 > **Document boundary:** `docs/planning/sa117e-4-release-plan.md` is historical evidence and
@@ -627,7 +631,11 @@ maintainer authorized SA117e-4 execution end to end on 2026-08-17 (roadmap decis
 set -euo pipefail
 
 qs_repo=/home/victor/code/quickscale-wt-track3
-qs_source=28a894704954f456d18f9851c25fdb16c7e65a5f
+# Graded source-drift rule (roadmap "Execution rules"): the plan rebinds to whatever
+# HEAD is current at run time. qs_baseline is the commit this plan was reviewed
+# against and is used only to classify the difference.
+qs_baseline=28a894704954f456d18f9851c25fdb16c7e65a5f
+qs_source=$(git -C "$qs_repo" rev-parse HEAD)
 qs_version=0.87.0
 qs_origin=https://github.com/Experto-AI/quickscale.git
 qs_venv="$qs_repo/.venv"
@@ -639,7 +647,10 @@ printf '%s\n' "$qs_evidence" | tee "$qs_evidence/EVIDENCE_ROOT"
 
 test -d "$qs_repo/.git" || test -f "$qs_repo/.git"
 current_head=$(git -C "$qs_repo" rev-parse HEAD)
-git -C "$qs_repo" merge-base --is-ancestor "$qs_source" "$current_head"
+test "$qs_source" = "$current_head"
+# The reviewed baseline must still be an ancestor: the plan rebinds forward, never
+# onto an unrelated history.
+git -C "$qs_repo" merge-base --is-ancestor "$qs_baseline" "$qs_source"
 test "$(git -C "$qs_repo" show "$qs_source:VERSION")" = "$qs_version"
 test -x "$qs_python"
 git -C "$qs_repo" remote get-url origin | tee "$qs_evidence/origin.txt"
@@ -654,15 +665,40 @@ while IFS= read -r status_line; do
   esac
 done < "$qs_evidence/source-status.txt"
 
-git -C "$qs_repo" diff --quiet "$qs_source" -- \
-  Makefile scripts quickscale quickscale_cli quickscale_core quickscale_modules VERSION
-git -C "$qs_repo" diff --name-only "$qs_source" "$current_head" -- \
-  | while IFS= read -r committed_delta; do
-      case "$committed_delta" in
-        "$qs_plan"|docs/technical/roadmap.md|CHANGELOG.md) ;;
-        *) printf 'operational source drift: %s\n' "$committed_delta" >&2; exit 1 ;;
-      esac
-    done
+# Classify baseline -> current drift. Documentation-only drift is recorded and
+# passed over; executable or producer-state drift stops for scoped re-review of
+# the affected step. Note the loop must not run in a pipeline subshell, or its
+# `exit 1` would be swallowed.
+mapfile -t qs_drift_paths < <(
+  git -C "$qs_repo" diff --name-only "$qs_baseline" "$qs_source"
+)
+: > "$qs_evidence/source-drift.txt"
+for committed_delta in ${qs_drift_paths+"${qs_drift_paths[@]}"}; do
+  case "$committed_delta" in
+    quickscale_modules/teams/*)
+      # Placeholder module: never sealed, never in the twelve-row table, so its
+      # prose is documentation for drift purposes (roadmap SA117e-4 bullet).
+      printf 'placeholder-module drift (recorded, proceeding): %s\n' \
+        "$committed_delta" | tee -a "$qs_evidence/source-drift.txt" ;;
+    quickscale_modules/*)
+      # Anything else under a shipped module is producer state: it changes the
+      # tree the split branches must match, so it stops even when it is prose.
+      printf 'shipped-module producer drift: %s\n' "$committed_delta" >&2
+      printf 'STOP: re-review the affected step, then continue.\n' >&2
+      exit 1 ;;
+    *.md|docs/*)
+      printf 'documentation drift (recorded, proceeding): %s\n' \
+        "$committed_delta" | tee -a "$qs_evidence/source-drift.txt" ;;
+    *)
+      printf 'executable or producer-state drift: %s\n' "$committed_delta" >&2
+      printf 'STOP: re-review the affected step, then continue.\n' >&2
+      exit 1 ;;
+  esac
+done
+printf 'qs_baseline=%s\nqs_source=%s\n' "$qs_baseline" "$qs_source" \
+  >> "$qs_evidence/source-drift.txt"
+
+# The worktree itself must carry no delta under executable paths.
 test -z "$(git -C "$qs_repo" status --porcelain --untracked-files=all -- \
   Makefile scripts quickscale quickscale_cli quickscale_core quickscale_modules VERSION)"
 
@@ -736,10 +772,13 @@ exactly `2`, and its generated JSON—not a transcribed expectation—is the ora
 one-regression set at the phase-1 binding point. The inline Python assertion compares that
 captured report to the accepted SA140 tuple.
 
-**ABORT CONDITIONS:** Wrong path/source ancestry/version/origin; operational-source drift;
+**ABORT CONDITIONS:** Wrong path/version/origin; `qs_baseline` not an ancestor of current
+HEAD; executable, packaging, CI, or shipped-module producer drift between baseline and HEAD;
 any worktree delta outside this plan plus its authorized roadmap/changelog closeout;
-executable drift; inventory count/name failure; focused validation failure; or quality output
-differing from the one accepted SA140 result. Do not repair any failure in this ceremony.
+inventory count/name failure; focused validation failure; or quality output differing from the
+one accepted SA140 result. Documentation-only drift and placeholder `quickscale_modules/teams`
+prose are **not** abort conditions — record them in `source-drift.txt` and proceed. Do not
+repair any failure in this ceremony.
 
 **VALIDATION CHECKPOINT:** `source-status.txt`, `authoritative-modules.txt`, the three exit-0
 logs, and the parsed quality JSON all pass. Oracle provenance: Git and `VERSION` own identity,
@@ -1404,9 +1443,12 @@ import os
 from pathlib import Path
 text = Path(os.environ['QS_PLAN_LOG']).read_text()
 prompts = (
-    'Python package name', 'Enter theme number or name', 'Select modules',
+    'Python package name', 'Enter theme number or name',
+    # E-09: 'Select modules' is non-unique (plan_selection.py:150 header);
+    # 'Create Django superuser?' does not exist (plan_command.py:61).
+    'Select modules to embed (optional):',
     'Start Docker services after apply?', 'Build Docker images?',
-    'Create Django superuser?', 'Save configuration?',
+    'Create Django superuser on first startup?', 'Save configuration?',
 )
 assert all(text.count(prompt) == 1 for prompt in prompts)
 assert 'Traceback (most recent call last)' not in text
@@ -1433,9 +1475,12 @@ import os
 from pathlib import Path
 text = Path(os.environ['QS_PLAN_LOG']).read_text()
 prompts = (
-    'Python package name', 'Enter theme number or name', 'Select modules',
+    'Python package name', 'Enter theme number or name',
+    # E-09: 'Select modules' is non-unique (plan_selection.py:150 header);
+    # 'Create Django superuser?' does not exist (plan_command.py:61).
+    'Select modules to embed (optional):',
     'Start Docker services after apply?', 'Build Docker images?',
-    'Create Django superuser?', 'Save configuration?',
+    'Create Django superuser on first startup?', 'Save configuration?',
 )
 assert all(text.count(prompt) == 1 for prompt in prompts)
 assert 'Traceback (most recent call last)' not in text
@@ -1777,9 +1822,11 @@ This is author hardening, not the independent plan-review gate.
    preserves “The core tag remains local and unpushed,” while verifying both branch-override
    and default immutable-tag consumption.
 4. **Safety/boundaries — pass.** “Never run `git push --tags`,” “Pass neither
-   `EXPECTED_REMOTE_SHA` nor `ABSENT` to a seal command,” and two distinct mandatory human
-   stops make the outward boundaries explicit. Phase 5 additionally says “Do not push the
-   core tag or either backup namespace.”
+   `EXPECTED_REMOTE_SHA` nor `ABSENT` to a seal command,” and the prohibition on the core-tag
+   push and every PyPI action make the outward boundaries explicit. The pre-seal freeze is no
+   longer a human stop (roadmap decisions 1/1b) but remains a mandatory, non-collapsible
+   inspection whose assertions still abort on any discrepancy. Phase 5 additionally says “Do
+   not push the core tag or either backup namespace.”
 5. **Scope discipline — pass.** The out-of-scope list forbids repository edits, historical
    plan edits, unreviewed republish, core-tag push, and PyPI action; Phase 5 scopes only the
    service-owner evidence, prompt evidence, and local teams anchor required by F-001/F-003.
