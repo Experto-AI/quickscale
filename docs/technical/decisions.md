@@ -85,6 +85,15 @@ one-time scaffolding.
   identity-derived tag is the released module ref. This is why release
   ordering is mandatory; see §[Module Version Lockstep](#module-version-lockstep)
   Rule 3.
+- ✅ **A split tag becomes permanent at PyPI publication, not at push.** Before the
+  core release for that version is published, `splits/<module>-module/<version>`
+  has no external consumer, so a wrong tag is corrected by deleting it and
+  resealing rather than by burning a version number. Seal → test → fix → delete
+  the affected tags → reseal, until the release converges. After `make
+  publish-prod` the version is permanent and a defect is corrected by a new
+  version. See §[Module Version Lockstep](#module-version-lockstep) Rule 4 for
+  the correction procedure; the pre-publication loop is the intended way to
+  converge, not a failure path.
 - ✅ Modules are runtime dependencies (in `INSTALLED_APPS`), theme-agnostic, and
   backend-weighted; users can contribute improvements back via
   `quickscale push --module <name>`
@@ -1169,7 +1178,9 @@ identity-derived tags, not the branches or the working tree. For core release
    rereads that branch, checks the tag for absence or an identical target, and
    then performs its explicit tag push and post-push checks.
 5. Verify twelve-of-twelve split seals and a clean installed all-module
-   `apply` without `--split-ref` or any other override.
+   `apply` without `--split-ref` or any other override. A failure here returns
+   to step 3 under Rule 4's correction procedure; it does not consume the
+   version.
 6. Run `git push origin X.Y.Z`. Pushing the core tag is the irreversible
    release trigger: the tag-matching publication workflow may publish the
    packages to PyPI. It is distinct from both the repeatable branch loop and
@@ -1178,11 +1189,24 @@ identity-derived tags, not the branches or the working tree. For core release
 Publishing core before the splits carry matching manifests ships a `quickscale apply` that
 fails for every user selecting any module. This ordering is not advisory.
 
-**Rule 4 — Publication is idempotent up to the seal.** Split branches are mutable working
+**Rule 4 — Publication is idempotent up to publication.** Split branches are mutable working
 artifacts and may be republished safely as many times as verification requires. This breaks
 the publish-before-verification circular dependency: published state must exist before an
 installed `apply` can verify it, so publication cannot be modelled as a one-shot mutation.
-The immutable split tags are created only after the loop and its verification pass.
+
+The same reasoning extends past the seal. Step 5 verifies *after* step 4 has pushed tags, so
+a failure there must be correctable or the sequence would have an unrecoverable step. Until
+the core tag is pushed and the packages published, a split tag has no external consumer and
+is correctable:
+
+1. Delete the affected remote tag(s) and their local counterparts.
+2. Fix the cause and rerun the step-3 branch loop for the affected modules.
+3. Rerun `make seal-modules VERSION=X.Y.Z` and step 5.
+
+`_seal_module` deliberately refuses to move a tag that exists at a different commit — that
+guardrail catches *accidental* moves, and the deletion above is the explicit, intentional
+override. Correction is bounded by publication, not by the seal: after the core tag is
+pushed and PyPI has the packages, the version is spent and a defect costs a new version.
 
 **Rule 5 — Embed by identity-derived immutable ref.** An embed resolves
 `splits/<module>-module/X.Y.Z` directly from the running core version. No version-to-ref
@@ -1206,10 +1230,13 @@ detected rather than eliminated; the 2026-08-07 re-scope accepted it because
 that window is strictly smaller than the already accepted residual risk that a
 force-privileged maintainer can move a tag.
 
-**Known limitation (accepted residual):** split-tag immutability is enforced by client-side
+**Known limitation (accepted residual):** split-tag permanence is enforced by client-side
 checks plus transport refusal under ordinary permissions, not by a server-side transaction
 or an unbypassable repository policy. A force-privileged maintainer can still move a tag;
 that residual is recorded and accepted, while the normal release path remains fail-closed.
+Note this is about *unintended* movement. Rule 4's pre-publication correction loop is a
+deliberate, documented use of the same privilege, and the fail-closed checks are what force
+it to be deliberate — the tooling never moves a tag on its own.
 
 ---
 
