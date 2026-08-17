@@ -37,9 +37,10 @@ Out of scope:
 Two standing facts bind every phase:
 
 1. `make quality` is expected to exit `2` only for the accepted SA140
-   `_execute_apply_steps_locked` complexity result (CC 56 against 55), with monotonicity
-   passing and no waiver. That result binds only SA96-PUBLISH's later green gate; it does
-   not block SA117e-4.
+   `_execute_apply_steps_locked` complexity result (CC 56 against 55), classified **critical**
+   because 56 is at or above the error threshold of 21, with monotonicity passing and no
+   waiver. Exactly one regression, zero warnings, one critical. That result binds only
+   SA96-PUBLISH's later green gate; it does not block SA117e-4.
 2. `refs/heads/splits/teams-module` is a thirteenth, non-authoritative branch. It is never
    included in the twelve-module seal or pre-seal table. Delete it after all step-5 checks
    pass, retaining a local backup ref first. Deletion is pre-authorized by roadmap decision
@@ -708,14 +709,19 @@ from pathlib import Path
 report = json.loads(Path('.quickscale/quality_report.json').read_text())
 regressions = report['regressions']
 assert regressions['total_count'] == 1
-assert regressions['warning_count'] == 1
-assert regressions['critical_count'] == 0
+# scripts/check_quality.sh classifies a complexity regression as 'critical' when
+# complexity >= RADON_ERROR_COMPLEXITY_CC (21). CC 56 is therefore always critical,
+# never a warning.
+assert regressions['warning_count'] == 0
+assert regressions['critical_count'] == 1
 rows = regressions['complexity']['new_or_worse']
 assert len(rows) == 1
 row = rows[0]
 assert row['symbol'] == '_execute_apply_steps_locked'
 assert row['complexity'] == 56
 assert row['allowed_max_complexity'] == 55
+assert row['severity'] == 'critical'
+assert row['regression_type'] == 'increased'
 status = json.loads(Path('.quickscale/quality_gate_status.json').read_text())
 assert status['monotonicity_verdict'] == 'pass'
 assert status['monotonicity_waiver_count'] == 0
