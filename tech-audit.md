@@ -1,6 +1,6 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-16 · **Branch:** `v87`
+> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-18 · **Branch:** `v87`
 
 ## Current verdict
 
@@ -17,7 +17,7 @@ No technical finding is open. Closed findings and their evidence live in [CHANGE
 ## Reviewed subsystem posture
 
 - **Generator/core contracts:** clean at the reviewed boundaries. Source inventory remains authoritative in the monorepo; synchronized bundled manifests serve installed-wheel discovery; source-required operations fail hard.
-- **CLI/apply lifecycle:** no additional closeable source defect in the reviewed delta. The still-unproven installed-wheel `plan → apply → up` path belongs to roadmap `SA112b → c → d → f`.
+- **CLI/apply lifecycle:** SA112b captured the installed all-module apply failure at managed wiring and selected the ordering defect for SA112c. The remaining repair, permanent service-backed lifecycle proof, and ordered acceptance belong to roadmap `SA112c → d → f`.
 - **Maintainer migration tooling:** fixed-argv subprocesses, bounded execution, clean-worktree guards, checkpointing, and partial-failure reporting were clean in the audit sweep.
 - **Generated React/Django application:** reviewed runtime configuration, route, organization-scope, and browser sink boundaries were fail-hard and typed; no qualifying new finding emerged.
 - **CRM/forms migrations and Django modules:** tenant FK, RLS, composite-FK, purge, redirect, destructive-backup, and high-risk module seams retained their reviewed contracts.
@@ -38,7 +38,6 @@ No technical finding is open. Closed findings and their evidence live in [CHANGE
 - **Generated-file ownership taxonomy:** arch-audit Finding 7; deferred to the next updater consumer.
 - **Deletion-boundary cleanup:** arch-audit Finding 2; deferred to a second deletion/erasure boundary.
 - **Manual purge ordering:** arch-audit Finding 4; deferred to tenant-model growth.
-- **Unsealed split state:** all twelve remote split branches carry complete `0.87.0` manifests, and the managed-adapter import defect is fixed. Immutable `splits/<module>-module/0.87.0` tags are not yet sealed, so default module-bearing apply fails hard at the missing-tag boundary. Roadmap SA117e-4 owns that external state.
 
 ## Tooling gaps
 
@@ -49,8 +48,7 @@ No technical finding is open. Closed findings and their evidence live in [CHANGE
 ## Live watch items
 
 - **Integration-branch CI:** hosted CI does not run on pushes to `v87`; this remains an accepted solo-maintainer workflow choice.
-- **Installed-wheel lifecycle:** SA112 owns the missing service-backed installed-artifact proof; manifest fallback and smoke-install are prerequisites, not closure.
-- **Unsealed splits:** SA136's producer tooling is merged and SA117e-4 owns the reviewed external seal. Core-tag/PyPI publication remains a later human gate.
+- **Installed-wheel lifecycle:** SA112b's installed diagnostic is complete; SA112c, SA112d, and SA112f own the ordering repair, service-backed lifecycle proof, and acceptance. Manifest fallback and smoke-install remain prerequisites, not closure.
 - **Generator lock generation:** missing Poetry, timeout, or nonzero lock generation warns and lets generation finish by explicit usability policy; downstream apply/install remains fail-loud.
 - **Quality baseline:** monotonicity is enforced, but `_execute_apply_steps_locked` remains 56 against 55 until roadmap SA140; this prevents the release-wide green gate, not ordinary ticket acceptance.
 

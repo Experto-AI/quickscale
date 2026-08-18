@@ -31,7 +31,7 @@ This is the current task planner. It contains open actionable work only. Complet
 
 ```text
 Track 3 — release critical path
-SA112b ──► SA112c ──► SA112d ──► SA112f ──► SA140 ──► SA96-PUBLISH
+SA112c ──► SA112d ──► SA112f ──► SA140 ──► SA96-PUBLISH
 
 Track 1 — SA117e-5 (release closeout, runs in parallel) ──────────► release join
 
@@ -39,13 +39,13 @@ Track 2 — complete; no open ticket
 (SA117e-4 closed 2026-08-17 — twelve split tags sealed and verified)
 ```
 
-**Longest chain to green gate and publish:** `SA112b → SA112c → SA112d → SA112f → SA140 → SA96-PUBLISH` — six legs, one shorter than before. `SA117e-4` closed on 2026-08-17: the twelve immutable split tags exist and are verified, `splits/teams-module` is deleted, and the installed default embed path resolves the sealed tags. No remote core tag and no PyPI action exist yet.
+**Longest chain to green gate and publish:** `SA112c → SA112d → SA112f → SA140 → SA96-PUBLISH` — five legs after `SA112b` closed on 2026-08-18 with a fresh installed traceback selecting the apply-ordering defect for `SA112c`. `SA117e-4` closed on 2026-08-17: the twelve immutable split tags exist and are verified, `splits/teams-module` is deleted, and the installed default embed path resolves the sealed tags. No remote core tag and no PyPI action exist yet.
 
-**Parallel feeder:** `SA117e-5` closes the SA117/SA136 acceptance umbrellas after `SA117e-4`. It feeds the final release join but is shorter than the seven-leg chain, so it is not duration-critical. It moves from Track 3 to idle Track 1 and may run beside `SA112b` after `SA117e-4` merges. This removes a documentation closeout from Track 3's serial queue without splitting an executable review unit.
+**Parallel feeder:** `SA117e-5` closes the SA117/SA136 acceptance umbrellas after `SA117e-4`. It feeds the final release join but is shorter than the five-leg chain, so it is not duration-critical. It moved from Track 3 to idle Track 1 and was allowed to run beside now-completed `SA112b`. This removed a documentation closeout from Track 3's serial queue without splitting an executable review unit.
 
-**Move safety and conflict surface:** `SA117e-5` edits only the release closeout documents; `SA112b` owns an installed-wheel diagnostic/evidence slice. They have no executable files, ordering after `SA117e-4`, or logical implementation unit in common. Both may touch `CHANGELOG.md` and this roadmap during closeout; that known textual conflict is covered by the mandatory `git merge v87` before review/merge-back, preserving both entries and reviewing the resolved exact tip. `decisions.md` is an `SA117e-5` writer only unless another ticket receives explicit policy scope.
+**Move safety and conflict surface:** `SA117e-5` edits only the release closeout documents; completed `SA112b` owned an installed-wheel diagnostic/evidence slice. They had no executable files, ordering after `SA117e-4`, or logical implementation unit in common. Both may touch `CHANGELOG.md` and this roadmap during closeout; that known textual conflict is covered by the mandatory `git merge v87` before review/merge-back, preserving both entries and reviewing the resolved exact tip. `decisions.md` is an `SA117e-5` writer only unless another ticket receives explicit policy scope.
 
-**No other move is safe.** `SA112b → c → d → f` is one evidence chain; `SA112c` may act only on `SA112b`'s traceback. `SA140` touches the same apply path and must follow that chain or it invalidates the evidence. `SA96-PUBLISH` is human-only behind `SA140`. Track 2 is complete and closed to new work. Moving any of these tickets would create an ordering edge without reducing the longest chain.
+**No other move is safe.** `SA112c → d → f` is the remaining evidence chain; `SA112c` is now bound to the traceback captured by completed `SA112b`. `SA140` touches the same apply path and must follow that chain or it invalidates the evidence. `SA96-PUBLISH` is human-only behind `SA140`. Track 2 is complete and closed to new work. Moving any of these tickets would create an ordering edge without reducing the longest chain.
 
 ### Track readiness
 
@@ -55,10 +55,10 @@ A track is truly green only when start, finish, and merge are all yes.
 |---|---|---|---|---|---|
 | **Track 1 — SA117e-5** | **yes** — `SA117e-4` is done; its seal/verification evidence exists | **yes** — the evidence it needs is captured and the umbrellas can close | **yes** — the upstream merge-order edge is cleared | **yes** | Feeds the release join; not the longest branch |
 | **Track 2 — complete** | **n/a** — no open ticket or next action | **n/a** — no open ticket to finish | **yes** — all assigned work is already merged with no merge-order edge | **n/a** | Closed track; no open progress or filler work |
-| **Track 3 — SA112b** | **yes** — sealed splits exist; the installed default path resolves them | **yes** — its diagnostic/evidence acceptance is track-local | **yes** — no cross-track merge-order gate | **yes** | New critical-path head after `SA117e-4` closed |
+| **Track 3 — SA112c** | **yes** — `SA112b` captured the installed managed-wiring traceback on 2026-08-18 | **yes** — the traceback selects one track-local apply-ordering repair | **yes** — no cross-track merge-order gate | **yes** | Critical-path head after `SA112b` closed |
 | **v88 backlog — planning queue** | **n/a** — future-release scope, not a current execution track | **n/a** — v88 dependencies and execution tracks are intentionally deferred to kickoff | **n/a** — no v88 integration branch or merge order exists yet | **n/a** | Deferred planning scope, not executable filler |
 
-**Truly-green open tickets today: `SA117e-4` on Track 3** — every phase is authorized, the mid-run pre-seal stop is now an agent-performed inspection recorded in evidence, and the ticket may run start to finish and merge back in one pass. Track 2 is complete, so start/finish/truly-green are not applicable rather than affirmative readiness claims. The v88 queue is a planning label rather than an execution track, so its three states remain not applicable until kickoff; it is not filler executable on v87. After `SA117e-4` merges, `SA117e-5` becomes a real-progress release feeder on Track 1 while `SA112b` advances the longest chain on Track 3.
+**Truly-green open tickets today: `SA117e-5` on Track 1 and `SA112c` on Track 3.** `SA112b` is complete, so its fresh installed traceback clears `SA112c` to start, finish, and merge without a cross-track edge. Track 2 is complete, so start/finish/truly-green are not applicable rather than affirmative readiness claims. The v88 queue is a planning label rather than an execution track, so its three states remain not applicable until kickoff; it is not filler executable on v87.
 
 ### Open-ticket readiness
 
@@ -67,18 +67,17 @@ A track is truly green only when start, finish, and merge are all yes.
 | Ticket (track) | Can start | Can finish on its track | Can merge | Role |
 |---|---|---|---|---|
 | **SA117e-5 (T1)** | **yes** — `SA117e-4` closed 2026-08-17 | **yes** — its acceptance evidence is captured | **yes** — upstream merge-order edge cleared | Release feeder |
-| **SA112b (T3)** | **yes** — sealed splits exist as of 2026-08-17 | **yes** — once started, its diagnostic/evidence acceptance is track-local | **yes** — no cross-track order gate | Critical path |
-| **SA112c (T3)** | **no** — hard dependency: `SA112b` traceback | **yes** — once started, the traceback-selected fix is track-local | **yes** — no cross-track order gate | Critical path |
+| **SA112c (T3)** | **yes** — `SA112b` closed with the required traceback on 2026-08-18 | **yes** — the traceback-selected fix is track-local | **yes** — no cross-track order gate | Critical path |
 | **SA112d (T3)** | **no** — hard dependency: `SA112c` | **yes** — once started, lifecycle-E2E acceptance is track-local | **yes** — no cross-track order gate | Critical path |
 | **SA112f (T3)** | **no** — hard dependency: `SA112d` | **yes** — once started, ordered acceptance and closeout are track-local | **yes** — no cross-track order gate | Critical path |
 | **SA140 (T3)** | **no** — hard dependency: `SA112f` | **yes** — once started, complexity repair and validation are track-local | **yes** — no cross-track order gate | Critical path |
 | **SA96-PUBLISH (T3)** | **no** — hard dependencies: `SA117e-5`, `SA140`, and the green-gate join | **no** — user decision: production publication confirmation after TestPyPI and the green gate | **yes** — no branch merge-order edge | Critical path; human-only |
 
-The acceptance-only umbrellas `SA136`, `SA117`, `SA117e`, and `SA112` have no executable start of their own. They inherit the start/finish state of their remaining child (`SA117e-5` or `SA112b → c → d → f`) and are therefore not truly green.
+The acceptance-only umbrellas `SA136`, `SA117`, `SA117e`, and `SA112` have no executable start of their own. They inherit the start/finish state of their remaining child (`SA117e-5` or `SA112c → d → f`) and are therefore not truly green.
 
 ### Maintainer decisions and unblock paths
 
-**Handoff note (2026-08-17).** `SA117e-4` is closed; the ref ceremony is over. Every remaining v87 ticket is ordinary file-editing work that a normal implementation worker can execute — `SA112b` (Track 3) and `SA117e-5` (Track 1) may both start now, in parallel. The one exception is `SA96-PUBLISH`, which stays human-only. Any future *reseal* would again be a `REF-CEREMONY` and must not be delegated, and would additionally need the `SA148` repo-local git config on whatever machine runs it.
+**Handoff note (updated 2026-08-18).** `SA117e-4` and `SA112b` are closed; the ref ceremony and installed diagnostic are over. Every remaining v87 ticket is ordinary file-editing work that a normal implementation worker can execute — `SA112c` (Track 3) and `SA117e-5` (Track 1) may both start now, in parallel. The one exception is `SA96-PUBLISH`, which stays human-only. Any future *reseal* would again be a `REF-CEREMONY` and must not be delegated, and would additionally need the `SA148` repo-local git config on whatever machine runs it.
 
 **Everything on v87 is authorized except production PyPI publication.** That single action is the only open user-owned decision; no other step — tagging, branch loops, sealing, branch deletion, builds, TestPyPI, or the green gate — needs a confirmation stop. Do not invent one.
 
@@ -103,7 +102,7 @@ The acceptance-only umbrellas `SA136`, `SA117`, `SA117e`, and `SA112` have no ex
    - **Hold:** preserves the validated candidate without exposing users; appropriate if version, release note, or external timing is wrong.
    - **Recommendation:** publish only when the exact reviewed tip, version, release note, TestPyPI result, and four-command green gate all agree. This fits the “last step re-verifies” policy and clears **SA96-PUBLISH can finish**.
 
-No user decision can bypass `SA117e-4 → SA112b → SA112c → SA112d → SA112f → SA140`; those are hard upstream dependencies.
+`SA117e-4 → SA112b` is complete. No user decision can bypass the remaining `SA112c → SA112d → SA112f → SA140` hard dependency chain.
 
 ---
 
@@ -120,13 +119,13 @@ The prevention machinery is merged: manifests are stamped/asserted in lockstep, 
 - [x] **SA117e-4 — Resume, seal, and verify split publication.** `Tier 2 · Track 3 · DONE 2026-08-17 · REF-CEREMONY`
   - **Completed 2026-08-17.** Twelve immutable tags `refs/tags/splits/<module>-module/0.87.0` are pushed and verified: each peels to the SHA frozen in the pre-seal table (digest `172bb2d00a7e4ac576a9c15d60eb439aec9d7f11685902ad703e42a480a06250`), every branch was unmoved during the seal, every sealed `module.yml` is byte-identical to corrected source at `0.87.0`, and no unexpected ref exists. `splits/teams-module` is deleted, recoverable from `refs/sa117e4-backup/teams-branch/0.87.0` (`f400e602`). The core tag `0.87.0` is rebound locally to `3c1b1b03` and **remains unpushed**; its prior object is retained at `refs/sa117e4-backup/core-tag/0.87.0` (`4694483c`). Final external state: 12 split branches, 12 split tags, 0 remote core tag. Evidence: `/tmp/quickscale-sa117e4-corrected-evidence-NAtJUx`.
   - **Tag consumption proven.** The installed default apply with no `--split-ref` overrides resolves `splits/<module>-module/0.87.0` and embedded 12/12; verified directly from the installed wheel that `check_remote_tag_exists` now returns `True` for those refs. Before the seal this path hard-failed at embedding, so the successful embeds are the consumption proof.
-  - **Accepted under decision 1f:** both applies reach managed module wiring with no `KeyError` and no traceback, then stop on the Django import defect owned by `SA112b`/`SA112c`.
+  - **Accepted under decision 1f:** both applies reach managed module wiring with no `KeyError` and no traceback, then stop on the Django import defect diagnosed by `SA112b` and owned for repair by `SA112c`.
 
 - [ ] **SA117e-5 — Review closeout and close SA117/SA136.** `Tier 1 · Track 1 · deps: SA117e-4`
   - Record the reviewed evidence from SA117e/SA136, close the three umbrellas, and confirm SA119 remains closed by design because embeds consume immutable identity-derived tags.
   - Update `CHANGELOG.md`, this roadmap, and `decisions.md` only if policy evidence changed; review the resolved exact tip before merge-back.
   - Verify every child is closed, no completion claim predates evidence, and the Track 1 merge preserves any concurrent Track 3 closeout entries.
-  *(why → closeout claims need their own reviewed documentation slice and can run beside SA112b)*
+  *(why → closeout claims need their own reviewed documentation slice and were safe to run beside SA112b)*
 
 ### SA148 — publication runner strips its own credentials and identity
 
@@ -141,15 +140,15 @@ The prevention machinery is merged: manifests are stamped/asserted in lockstep, 
 
 ### SA112 — installed-wheel full lifecycle
 
-- [ ] **SA112 — Installed-wheel `plan → apply → up` lifecycle.** `Umbrella · Track 3 · deps: SA117e-4 from SA112b`
+- [ ] **SA112 — Installed-wheel `plan → apply → up` lifecycle.** `Umbrella · Track 3 · SA112b complete`
 
-The current lifecycle E2E runs from monorepo source and therefore misses installed-artifact discovery. Keep the four children serial: each consumes evidence produced by the prior child. The five trigger paths are already registered by closed SA143; `SA112f` verifies that generated contract rather than editing it.
+The current lifecycle E2E runs from monorepo source and therefore misses installed-artifact discovery. Keep the three remaining children serial: each consumes evidence produced by the prior child. The five trigger paths are already registered by closed SA143; `SA112f` verifies that generated contract rather than editing it.
 
-- [ ] **SA112b — Capture installed all-module `apply` evidence.** `Tier 2 · Track 3 · deps: SA117e-4`
-  - From an external workdir and installed entrypoint, run the exact all-module plan/apply under `QUICKSCALE_DEBUG=1`; capture argv, cwd, sanitized environment, stdin, timeout/return handling, final raising frame, and exact-scope cleanup.
-  - Stop and reopen SA117 if execution fails before managed wiring. If it unexpectedly passes, use a disposable negative control rather than inferring a fix.
-  - **Input evidence already captured (2026-08-17, decision 1f).** The SA117e-4 branch-override run reached managed wiring and failed there with no `KeyError` and no traceback: `entry_point.py:257` raises `ImproperlyConfigured` because `quickscale_modules_social.adapter` → `quickscale_core.runtime` → `dr_engine/orchestration.py:27 import django` fails in the installed fixture, whose venv holds only `quickscale`, `quickscale_cli`, `quickscale_core`. Apply orders `poetry install` *after* managed wiring, so no installed context can satisfy the import. Transcript: `branch-override-apply.log` in the SA117e-4 evidence directory. Confirm this against a fresh installed run rather than assuming it, then let `SA112c` own the ordering fix.
-- [ ] **SA112c — Apply only the traceback-selected root fix.** `Tier 2 · Track 3 · deps: SA112b`
+- [x] **SA112b — Capture installed all-module `apply` evidence.** `Tier 2 · Track 3 · DONE 2026-08-18 · deps: SA117e-4`
+  - **Fresh installed result.** Staged wheels at source `d0197f114b46ebf545815ce65559645c0ac85b5a` ran from a disposable external workdir under `QUICKSCALE_DEBUG=1`. Installed `plan testproj` exited `0`; its generated config selected all twelve authoritative modules. Installed `apply` embedded and committed 12/12, then exited `1` at **managed module wiring generation** before the later `poetry install`; no historical `KeyError` occurred. Because managed wiring was reached, SA117 stays closed. The unexpected-pass negative control was not applicable.
+  - **Trace selected for SA112c.** The exact apply path catches `ImproperlyConfigured` into its returned error string, so its debug transcript contains no traceback. A bounded installed-Python diagnostic against the same embedded project exposed the caught chain: `quickscale_modules_social.adapter:18` imports `quickscale_core.runtime`, `dr_engine/orchestration.py:27` raises `ModuleNotFoundError: No module named 'django'`, and the final raising frame is installed `manifest/entry_point.py:269` raising `ImproperlyConfigured`. This confirms the prior input evidence rather than assuming it; `SA112c` owns the ordering fix.
+  - **Capture and cleanup.** Retained JSON records exact argv, absolute external cwd, the explicit environment allowlist with `PYTHONPATH`/`PYTHONHOME` excluded, stdin, 300/1800/60-second timeout contracts, actual return codes, and process-group reap results. Exact-label Docker cleanup proved zero containers, volumes, and networks, then the exact fixture root was removed. Evidence: `/tmp/quickscale-sa112b-evidence-20260818T075653Z`; manifest SHA-256 `7a7beb15f21c6f56278a4105d31b06d7b163f10d045025070bb3f773469acd73`.
+- [ ] **SA112c — Apply only the traceback-selected root fix.** `Tier 2 · Track 3 · deps: SA112b closed 2026-08-18`
   - Change only the production seam justified by `SA112b`, enumerate callers for any shared contract change, add the nearest regression, and prove the original frame is gone without weakening fail-hard inventory behavior.
   - Unblock alternative: if the traceback permits materially different compatible fixes, stop for a maintainer choice with caller and compatibility trade-offs; otherwise take the narrowest owner-local fix.
 - [ ] **SA112d — Add the permanent installed-wheel lifecycle E2E.** `Tier 2 · Track 3 · deps: SA112c`
