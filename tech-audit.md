@@ -17,7 +17,7 @@ No technical finding is open. Closed findings and their evidence live in [CHANGE
 ## Reviewed subsystem posture
 
 - **Generator/core contracts:** clean at the reviewed boundaries. Source inventory remains authoritative in the monorepo; synchronized bundled manifests serve installed-wheel discovery; source-required operations fail hard.
-- **CLI/apply lifecycle:** the installed all-module diagnostic, its traceback-selected managed-wiring repair, and the permanent service-backed lifecycle proof are closed. Roadmap `SA112f` owns ordered acceptance.
+- **CLI/apply lifecycle:** the installed all-module diagnostic, its traceback-selected managed-wiring repair, the permanent service-backed lifecycle proof, and its generated trigger contract are closed. Roadmap `SA112f` owns ordered acceptance.
 - **Maintainer migration tooling:** fixed-argv subprocesses, bounded execution, clean-worktree guards, checkpointing, and partial-failure reporting were clean in the audit sweep.
 - **Generated React/Django application:** reviewed runtime configuration, route, organization-scope, and browser sink boundaries were fail-hard and typed; no qualifying new finding emerged.
 - **CRM/forms migrations and Django modules:** tenant FK, RLS, composite-FK, purge, redirect, destructive-backup, and high-risk module seams retained their reviewed contracts.
@@ -48,7 +48,7 @@ No technical finding is open. Closed findings and their evidence live in [CHANGE
 ## Live watch items
 
 - **Integration-branch CI:** hosted CI does not run on pushes to `v87`; this remains an accepted solo-maintainer workflow choice.
-- **Installed-wheel lifecycle:** the installed diagnostic, ordering repair, and permanent service-backed proof are complete; roadmap SA112f owns ordered acceptance. Manifest fallback and smoke-install remain prerequisites, not closure.
+- **Installed-wheel lifecycle:** the installed diagnostic, ordering repair, permanent service-backed proof, and generated trigger contract are complete; roadmap SA112f owns ordered acceptance. Manifest fallback and smoke-install remain required acceptance coverage, not separate open findings.
 - **Generator lock generation:** missing Poetry, timeout, or nonzero lock generation warns and lets generation finish by explicit usability policy; downstream apply/install remains fail-loud.
 - **Quality baseline:** monotonicity is enforced, but `_execute_apply_steps_locked` remains 56 against 55 until roadmap SA140; this prevents the release-wide green gate, not ordinary ticket acceptance.
 
