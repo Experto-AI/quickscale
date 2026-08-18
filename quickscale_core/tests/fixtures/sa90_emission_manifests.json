@@ -29,7 +29,8 @@
       "sa107-fix-pass": "Regenerated 2026-07-20 \u2014 owner/modulePaths validation added to validateQuickScaleSeam.ts; templates/social/{embeds,link_tree}.html.j2 inject owner and full modulePaths; RootDispatch.test.tsx and validateQuickScaleSeam.test.ts expanded for production-shaped public-social boot coverage and wrong-type/enum validation. 5 fixture hashes updated: validateQuickScaleSeam.ts, RootDispatch.test.tsx, validateQuickScaleSeam.test.ts, templates/social/embeds.html, templates/social/link_tree.html (all 3 variants).",
       "sa107-cr-002-pass": "Regenerated 2026-07-20 \u2014 all 11 required module keys now enforced in validateQuickScaleSeam.ts (SA107-CR-002); renderQuickScaleRoot.tsx `?? false` fallback removed; parameterized and partial-module rejection tests added to validateQuickScaleSeam.test.ts; RootDispatch.test.tsx callsites updated for strict modules shape. 4 fixture hashes updated: validateQuickScaleSeam.ts, renderQuickScaleRoot.tsx, validateQuickScaleSeam.test.ts, RootDispatch.test.tsx (all 3 variants).",
       "sa107-cr-002-final-fix": "Regenerated 2026-07-20 \u2014 inherited/non-enumerable required-flag regression fix (SA107-CR-002): key in seam.modules replaced with Object.prototype.hasOwnProperty.call; typeof boolean check collapsed into same required-key loop. 4 inherited/non-enumerable regression tests added to validateQuickScaleSeam.test.ts. 2 fixture hashes updated: validateQuickScaleSeam.ts, validateQuickScaleSeam.test.ts (all 3 variants).",
-      "sa107-cr-002-inherited-boolean": "Regenerated 2026-07-20 \u2014 added inherited-boolean regression test for SA107-CR-002: validates that an inherited boolean auth:true/auth:false with own booleans for other 10 keys is rejected. 1 fixture hash updated: validateQuickScaleSeam.test.ts (all 3 variants)."
+      "sa107-cr-002-inherited-boolean": "Regenerated 2026-07-20 \u2014 added inherited-boolean regression test for SA107-CR-002: validates that an inherited boolean auth:true/auth:false with own booleans for other 10 keys is rejected. 1 fixture hash updated: validateQuickScaleSeam.test.ts (all 3 variants).",
+      "sa112d": "Regenerated 2026-08-18 \u2014 Dockerfile collectstatic now sets one-shot QUICKSCALE_ALLOW_BYPASSRLS=1 alongside QUICKSCALE_NON_DB_COMMAND so the orgs startup guard does not probe the deliberately absent build-time database. 1 fixture hash updated: Dockerfile (all 3 variants)."
     },
     "normalization_notes": [
       "Only project_name=\"testproject\" is used; package_name substitution is applied by the generator.",
@@ -2019,7 +2020,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "beda7d0b1a3902772f2c01eb692facd67c7f62ad33da9ceec1f231241f16e272"
+      "sha256": "ac6745eecd1640eccf2cbdf881f94659a9503ef92a035b8d14fc88d53c212780"
     },
     "Makefile": {
       "mode": "664",
@@ -4425,7 +4426,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "beda7d0b1a3902772f2c01eb692facd67c7f62ad33da9ceec1f231241f16e272"
+      "sha256": "ac6745eecd1640eccf2cbdf881f94659a9503ef92a035b8d14fc88d53c212780"
     },
     "Makefile": {
       "mode": "664",
@@ -6831,7 +6832,7 @@
     },
     "Dockerfile": {
       "mode": "664",
-      "sha256": "beda7d0b1a3902772f2c01eb692facd67c7f62ad33da9ceec1f231241f16e272"
+      "sha256": "ac6745eecd1640eccf2cbdf881f94659a9503ef92a035b8d14fc88d53c212780"
     },
     "Makefile": {
       "mode": "664",
