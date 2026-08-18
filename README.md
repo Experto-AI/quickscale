@@ -44,10 +44,10 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - **One-command deployment**: Deploy to Railway with `quickscale deploy railway`
 - **Full ownership**: Generated projects are 100% yours to customize—no vendor lock-in
 - **Standardized stack**: Build multiple client projects faster with consistent best practices
-- **Implemented first-party modules in the current release line**: analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage
+- **Implemented first-party modules in the current release line**: analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, and storage
 - **Creator-led evolution**: New capabilities land because they solve real project needs first, then get generalized into the shared stack
 
-The current published release is v0.82.0, which ships the public `quickscale dr capture/plan/execute/report` workflow for disaster recovery and environment promotion. Stored snapshots are addressed by `snapshot_id`, `quickscale dr capture --resume <snapshot_id>` resumes an interrupted capture on the same stored snapshot, `quickscale dr execute --resume` resumes partial execution from stored verification records, and production routes keep rollback pins and conservative env-var sync in the operator loop.
+The current published release is v0.86.0, which adds organization-based multi-tenancy to the v0.85.0 billing line. v0.87.0 hardening remains unreleased; its active acceptance, quality-gate, and publication work is tracked in the roadmap.
 
 QuickScale evolves through tagged releases and real owner usage rather than a separate phase model. For the current implementation surface, use [decisions.md](./docs/technical/decisions.md), [roadmap.md](./docs/technical/roadmap.md), and [CHANGELOG.md](./CHANGELOG.md).
 

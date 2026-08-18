@@ -26,7 +26,8 @@ This is the current task planner. It contains open planned work only. Completed 
 
 ```text
 Track 3 — release critical path
-SA112f ──► SA140 ──► integrated v87 green gate ──► SA96-PUBLISH
+SA112f ──► SA140 ──► SA96-PUBLISH: build/TestPyPI ──► exact-tip green gate ──► publish-or-hold
+                                                                      └─ publish ─► exact-tip core-tag push ─► hosted publish/PyPI
 
 Track 1 — no open v87 ticket ────────────────────────────────► green-gate join
 Track 2 — no open v87 ticket ────────────────────────────────► green-gate join
@@ -34,11 +35,11 @@ Track 2 — no open v87 ticket ────────────────�
 v88 planning queue — deferred post-v87 work; not part of the v87 join
 ```
 
-**Longest open chain:** `SA112f → SA140 → integrated v87 green gate → SA96-PUBLISH`. `SA112f` and `SA140` merge to `v87` in that order. The four-command green gate runs on one clean, exact integrated tip after `SA140`; production publication remains the final human-only action.
+**Longest open chain:** `SA112f → SA140 → SA96-PUBLISH (build/TestPyPI → exact-tip green gate → publish-or-hold; if authorized: exact-tip core-tag push → hosted publish/PyPI)`. `SA112f` and `SA140` merge to `v87` in that order. `SA96-PUBLISH` then owns TestPyPI, the four-command green gate on one clean, exact integrated tip, the final human-only publication decision, and verification of the tag-triggered hosted release.
 
 **Why this chain stays serial:** `SA112f` consumes the completed installed-wheel lifecycle proof in ordered acceptance and closes the umbrella; `SA140` then changes the same apply behavior and must rerun the accepted lifecycle suites before the final gate. Starting or merging `SA140` earlier would invalidate or race the evidence it must consume. `SA96-PUBLISH` cannot precede the repaired quality gate.
 
-**Parallelism result:** no open v87 ticket should move. Tracks 1 and 2 are idle, but `SA140` cannot safely overlap `SA112f` because both depend on the same apply/lifecycle evidence, and `SA96-PUBLISH` is ordered behind `SA140` and the exact-tip green gate. Moving either ticket would add a handoff without shortening the critical path. No per-module gate-list or ticket-tag update is required. The only expected cross-track overlap remains the shared closeout surfaces — `CHANGELOG.md`, this roadmap, and `decisions.md` when policy changes — and the sync-before-merge-back procedure in the execution rules covers their conflicts.
+**Parallelism result:** no open v87 ticket should move. Tracks 1 and 2 are idle, but `SA140` cannot safely overlap `SA112f` because both depend on the same apply/lifecycle evidence, and `SA96-PUBLISH` is ordered behind `SA140` and owns the exact-tip green gate. Moving either ticket would add a handoff without shortening the critical path. No per-module gate-list or ticket-tag update is required. The only expected cross-track overlap remains the shared closeout surfaces — `CHANGELOG.md`, this roadmap, and `decisions.md` when policy changes — and the sync-before-merge-back procedure in the execution rules covers their conflicts.
 
 ### Track readiness
 
@@ -62,22 +63,22 @@ A track is truly green only when start, finish, and merge are all yes.
 | **SA112 (T3 umbrella)** | **n/a** — acceptance-only, with no independent action | **no** — blocker `SA112f`; hard upstream dependency | **n/a** — closes through its child rather than a separate merge | Critical-path umbrella |
 | **SA112f (T3)** | **yes** — prerequisite `SA112d` is complete | **yes** — ordered acceptance and closeout are track-local | **yes** — no cross-track order gate | Critical path; truly green |
 | **SA140 (T3)** | **no** — blocker `SA112f`; hard upstream dependency | **yes** — once started, repair and validation are track-local | **yes** — no cross-track order gate | Critical path |
-| **SA96-PUBLISH (T3)** | **no** — blocker `SA140`; hard upstream dependency before this ticket's integrated green gate can run | **no** — blocker `SA96-PUBLISH` production authorization; user-decision-clearable after the green gate | **n/a** — human-only ref/publication action, not a branch merge | Critical path; human-only |
+| **SA96-PUBLISH (T3)** | **no** — blocker `SA140`; hard upstream dependency before this ticket's TestPyPI and integrated green gate can run | **no** — blocker `SA96-PUBLISH` production authorization; user-decision-clearable after the green gate, then contingent on its hosted publish run | **n/a** — human-only ref/publication action, not a branch merge | Critical path; human-only |
 
 ### Maintainer decision and unblock paths
 
-**The only current maintainer decision is whether to publish or hold v0.87.0 after the exact-tip green gate.** Publication turns the internally verified candidate into the public release and makes the version permanent. No decision can bypass `SA112f → SA140`. v88 kickoff remains deferred planning rather than a v87 release decision.
+**The only current maintainer decision is whether to publish or hold v0.87.0 after the exact-tip green gate.** The retained local core tag predates the remaining release work, so `SA96-PUBLISH` must rebind it locally if needed and prove it resolves to the exact green-gated integrated tip before any push. That push triggers the hosted publish gates, PyPI upload, and GitHub release, making the version permanent. No decision can bypass `SA112f → SA140`. v88 kickoff remains deferred planning rather than a v87 release decision.
 
-- **Publish:** completes v0.87.0 and exposes the verified artifacts; the core-tag push and production upload are irreversible.
-- **Hold:** preserves the reviewed candidate while version, release note, timing, or artifact identity is rechecked; v0.87.0 remains unavailable.
-- **Recommendation:** publish only when the reviewed tip, version, release note, TestPyPI result, split refs, and all four green-gate commands agree. This changes **SA96-PUBLISH can finish** from no to yes.
+- **Publish:** authorize the exact core-tag push, which starts the hosted production workflow. **Pros:** completes the release through the policy-owned, full-coverage publish path and exposes the verified artifacts. **Cons:** the tag-triggered production upload is irreversible; any later defect requires a new version. This clears the decision blocker for **SA96-PUBLISH can finish**, which becomes yes only after the hosted workflow and public verification pass.
+- **Hold:** do not push the core tag; retain the reviewed candidate while version, release note, timing, or artifact identity is rechecked. **Pros:** preserves the correction window and avoids an irreversible release. **Cons:** v0.87.0 remains unavailable and **SA96-PUBLISH can finish** stays no until a later publish authorization; if the candidate tip changes, rebuild/TestPyPI and the exact-tip green gate must be repeated.
+- **Recommendation:** publish only when the reviewed tip, version, release note, TestPyPI result, split refs, and all four green-gate commands agree. Otherwise hold with the specific discrepancy recorded and re-run every check invalidated by its correction.
 
 **Actionable hard-dependency sequence:**
 
 1. Execute `SA112f` in exclusive service capacity. If a registered trigger path is missing, repair the authoritative gate registry and regenerate the workflow; never hand-edit `.github/workflows/e2e.yml`.
 2. Execute `SA140` against the accepted lifecycle suite. Its only safe unblock is accepted `SA112f` evidence; planning may be prepared earlier, but implementation cannot overlap that evidence chain. If extraction changes behavior, restore parity instead of raising the ceiling or adding a waiver.
-3. Run the integrated green gate on the exact merged `v87` tip. A failure returns to the ticket that owns the failing surface; if correction changes a sealed module, use the completed `SA148` preflight before resealing and rerunning acceptance.
-4. Present the publish-or-hold decision. The release checklist may be prepared earlier, but production action cannot bypass `SA140` or the green gate. No partially implemented v87 ticket is otherwise parked without a next action.
+3. Start `SA96-PUBLISH`: confirm the reviewed tip and version, run `make publish-test` to build and publish to TestPyPI, and run the integrated green gate on that exact merged `v87` tip. A failure returns to the ticket that owns the failing surface; if correction changes a sealed module, use the completed `SA148` preflight before resealing and rerunning acceptance.
+4. Complete `SA96-PUBLISH` by proving the local `0.87.0` tag resolves to the exact tip that passed the green gate (rebind the still-unpushed tag first if it points at the earlier retained source), then present the publish-or-hold decision. On publish authorization, push only that exact core tag (`git push origin 0.87.0`), then require the tag-triggered hosted publish workflow, PyPI state, and GitHub release to verify successfully. Do not use direct `make publish-prod`/`make publish-full` as a substitute for the policy-owned tag-triggered path. The release checklist may be prepared earlier, but production action cannot bypass `SA140` or the green gate. No partially implemented v87 ticket is otherwise parked without a next action.
 
 ---
 
@@ -104,9 +105,9 @@ The permanent installed-artifact proof and its five registered trigger paths exi
 ### SA96-PUBLISH — staged human release
 
 - [ ] **SA96-PUBLISH — Publish v0.87.0.** `Tier 1 · Track 3 · deps: SA140 · HUMAN-ONLY`
-  - Confirm version and reviewed tip; run `make build`, `make publish-test`, and verification before any production action.
+  - Confirm version and reviewed tip; run `make publish-test` (build plus TestPyPI upload) and verify those artifacts before any production action.
   - On one clean exact-tip run, require `make check`, `make quality`, `make ci`, and `QUARANTINE_TICKETS= make ci-e2e` to exit 0; all twelve modules must be green in isolation.
-  - A maintainer then chooses whether to run `make publish-prod`/`make publish-full`. Verify PyPI after publication.
+  - Prove the retained local `0.87.0` tag resolves to that exact green-gated tip, rebinding it locally if needed. A maintainer then chooses hold or the exact core-tag push that triggers hosted publication; require the hosted workflow, PyPI packages, and GitHub release to pass verification before checking the ticket.
 
 ---
 

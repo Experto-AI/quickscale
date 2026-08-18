@@ -1,6 +1,6 @@
 # 🚀 Start Here - QuickScale Documentation Guide
 
-**Quick Mental Model**: QuickScale is a Django project generator that creates production-ready SaaS applications in minutes. It generates standalone projects you own completely, with optional reusable modules for common features (for example analytics, auth, backups, blog, listings, notifications, social, and storage). Think "create-react-app" but for Django SaaS applications.
+**Quick Mental Model**: QuickScale is a Django project generator that creates production-ready SaaS applications in minutes. It generates standalone projects you own completely, with optional reusable modules for common features (for example analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, and storage). Think "create-react-app" but for Django SaaS applications.
 
 ---
 
@@ -12,7 +12,7 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
 **Current Distribution**: Reusable modules are installed via git subtree, and starter themes are generated once into user-owned project code
 
-**Current Status**: The current published release is v0.84.0. [Release v0.84.0](./docs/releases/release-v0.84.0.md) remains the current public summary, and [Release v0.85.0](./docs/releases/release-v0.85.0.md) is the prepared public note awaiting official publication. See [roadmap.md](./docs/technical/roadmap.md) for active closeout status.
+**Current Status**: The current published release is v0.86.0; see its [official release note](./docs/releases/release-v0.86.0.md). v0.87.0 remains unreleased; see [roadmap.md](./docs/technical/roadmap.md) for active closeout status.
 **Target Audience**: Solo developers and development agencies building client projects
 
 ---
@@ -24,8 +24,8 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
 | Term | Quick Definition | Learn More |
 |------|------------------|------------|
 | **Generated Project** | The standalone Django app created by `quickscale plan`, then entering the generated directory and running `quickscale apply` | [GLOSSARY.md](./GLOSSARY.md#generated-project) |
-| **Module** | Reusable Django app (analytics, auth, backups, blog, listings, notifications, social, storage) | [GLOSSARY.md](./GLOSSARY.md#module) |
-| **Theme** | Frontend scaffolding (React default, HTML secondary option) | [GLOSSARY.md](./GLOSSARY.md#theme) |
+| **Module** | Reusable Django app (analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage) | [GLOSSARY.md](./GLOSSARY.md#module) |
+| **Theme** | Frontend scaffolding (`showcase_react` only) | [GLOSSARY.md](./GLOSSARY.md#theme) |
 | **Git Subtree** | Distribution mechanism for sharing code | [GLOSSARY.md](./GLOSSARY.md#git-subtree) |
 | **Plan/Apply** | Terraform-style declarative workflow | [GLOSSARY.md](./GLOSSARY.md#planapply-workflow) |
 | **Release Note** | Official public summary for a QuickScale version; may be prepared before official publication if clearly labeled | [GLOSSARY.md](./GLOSSARY.md#release-note) |
@@ -205,7 +205,7 @@ Detailed contributor references to use as needed:
 ## Quick Answers to Common Questions
 
 ### "Is QuickScale production-ready?"
-The current generator, starter-theme workflow, published first-party module line, and public disaster-recovery CLI surface are active and maintained through tagged releases. The current published release is v0.84.0, and v0.85.0 is already documented as a release-prepared public note pending official publication. See [Release v0.84.0](./docs/releases/release-v0.84.0.md), [Release v0.85.0](./docs/releases/release-v0.85.0.md), and [roadmap.md](./docs/technical/roadmap.md).
+The current generator, React starter, first-party module line, and public disaster-recovery CLI surface are active and maintained through tagged releases. The current published release is v0.86.0; v0.87.0 remains in release closeout. See [Release v0.86.0](./docs/releases/release-v0.86.0.md) and [roadmap.md](./docs/technical/roadmap.md).
 See: [roadmap.md](./docs/technical/roadmap.md)
 
 ### "Can I use it for my client projects?"
@@ -224,10 +224,10 @@ See: [deployment/railway.md](./docs/deployment/railway.md)
 ### "Where are the release notes?"
 Public release notes live in [docs/releases/](./docs/releases/). Each version there has a single public note, and a note may appear as a clearly labeled release-prepared artifact before official publication.
 [CHANGELOG.md](./CHANGELOG.md) remains the canonical all-version history index.
-The current published release is v0.84.0, and v0.85.0 is prepared and pending publication. [roadmap.md](./docs/technical/roadmap.md) keeps the active closeout detail that does not belong in the public release note.
+The current published release is v0.86.0. [roadmap.md](./docs/technical/roadmap.md) keeps the unreleased v0.87.0 closeout detail that does not belong in a published release note.
 
 ### "What modules are available?"
-Current published first-party modules include **analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage**. The prepared v0.85.0 release adds **billing** once publication is complete. The monorepo still contains the **teams** directory as placeholder inventory for follow-on module work.
+Current published first-party modules include **analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, and storage**. The monorepo still contains the **teams** directory as placeholder inventory with no committed timeline.
 See: [quickscale_modules/](./quickscale_modules/) for the current package list and per-module README files.
 
 ### "Can I contribute?"
@@ -324,7 +324,7 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 
 ---
 
-**Last Updated**: 2026-05-18
-**Published QuickScale Version**: v0.84.0
-**Prepared Release Note**: v0.85.0 pending publication
+**Last Updated**: 2026-08-18
+**Published QuickScale Version**: v0.86.0
+**Unreleased Integration Line**: v0.87.0
 **Feedback**: Open an issue if this guide needs improvement!

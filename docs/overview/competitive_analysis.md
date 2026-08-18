@@ -48,7 +48,7 @@ QuickScale is stronger now than an "early starter" framing suggests, but it stil
 - The surrounding ecosystem, commercial support story, and third-party extension surface are still smaller than the most mature paid products.
 - Some newer frontend-facing additions intentionally stay behind manual adoption boundaries for older generated projects because QuickScale does not rewrite user-owned theme files.
 
-The v0.85.0 (billing) and v0.86.0 (organizations/multi-tenancy) releases moved billing and tenant isolation into the shipped contract, and the v0.87.0 hardening release consolidated tenant isolation, fail-closed database access, and module configuration across the stack. The boundary still shows in the frontend: some billing entry points and browser-side surfaces respect the fresh-generation versus manual-adoption split for existing projects.
+The v0.85.0 (billing) and v0.86.0 (organizations/multi-tenancy) releases moved billing and tenant isolation into the shipped contract. The unreleased v0.87.0 hardening line further consolidates tenant isolation, fail-closed database access, and module configuration across the stack. The boundary still shows in the frontend: some billing entry points and browser-side surfaces respect the fresh-generation versus manual-adoption split for existing projects.
 
 ## When QuickScale Fits Best
 
