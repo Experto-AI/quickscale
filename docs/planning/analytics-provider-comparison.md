@@ -1,7 +1,7 @@
 # Analytics Provider Comparison: v0.80.0 Analytics Module
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Docs](../index.md) → **Planning** → Analytics Provider Comparison
-> **Related docs**: [Roadmap v0.80.0](../technical/roadmap.md#v0800-quickscale_modulesanalytics---analytics-module) | [Decisions](../technical/decisions.md) | [Competitive Analysis](../overview/competitive_analysis.md)
+> **Related docs**: [Changelog v0.80.0](../../CHANGELOG.md) | [Decisions](../technical/decisions.md) | [Competitive Analysis](../overview/competitive_analysis.md)
 
 ## Goal
 

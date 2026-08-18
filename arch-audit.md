@@ -6,7 +6,7 @@
 
 QuickScale is a Python/Poetry Django scaffolding platform with a Click CLI, apply/recovery tooling, and twelve shipped first-party modules; `teams` remains a README-only placeholder. Generated projects use Django 6, PostgreSQL 18, Vite/React, Docker, and Railway. Its public contracts are the CLI, `quickscale.yml` and applied state, module manifests, generated trees, and upgrade semantics.
 
-The current structural posture is stable at the reviewed trust boundaries. Quality-baseline monotonicity and release-gate topology are enforced; their closed findings are archived in [CHANGELOG.md](CHANGELOG.md). Three findings remain open but intentionally outside the `now` horizon. The split seal and installed diagnostic are complete; the immediate release path is the remaining serial installed-wheel lifecycle chain (`SA112c → d → f`), the apply-path quality repair, and human-only publication; see the [roadmap](docs/technical/roadmap.md).
+The current structural posture is stable at the reviewed trust boundaries. Quality-baseline monotonicity and release-gate topology are enforced; their closed findings are archived in [CHANGELOG.md](CHANGELOG.md). Three findings remain open but intentionally outside the `now` horizon. The split seal, installed diagnostic, and managed-wiring repair are complete; the immediate release path is the remaining serial installed-wheel lifecycle chain (`SA112d → SA112f`), the apply-path quality repair, the integrated green gate, and human-only publication; see the [roadmap](docs/technical/roadmap.md).
 
 ## Enforcement census
 

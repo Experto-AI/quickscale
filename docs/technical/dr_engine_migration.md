@@ -206,7 +206,6 @@ After migration:
 ## References
 
 - [decisions.md § Disaster Recovery Engine Boundary Contract](./decisions.md#disaster-recovery-engine-boundary-contract-f5--m10) — authoritative boundary definition and target ownership split
-- [roadmap.md § Finding 5](./roadmap.md#finding-5--split-the-dr-engine-out-of-the-embeddable-backups-module) — phase tracking and completion status
-- [CHANGELOG.md](../../CHANGELOG.md) — per-phase implementation summaries
+- [CHANGELOG.md](../../CHANGELOG.md) — phase tracking, completion status, and implementation summaries
 - `quickscale_core/src/quickscale_core/dr_engine/` — current DR engine source
 - `quickscale_modules/backups/src/quickscale_modules_backups/services.py` — retained module orchestration
