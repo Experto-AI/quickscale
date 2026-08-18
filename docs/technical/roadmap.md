@@ -31,7 +31,7 @@ This is the current task planner. It contains open actionable work plus current 
 
 ```text
 Track 3 — release critical path
-SA112c ──► SA112d ──► SA112f ──► SA140 ──► SA96-PUBLISH
+SA112d ──► SA112f ──► SA140 ──► SA96-PUBLISH
 
 Track 1 — complete (SA117e-5 closed 2026-08-18) ─────────────────► release join
 
@@ -39,13 +39,13 @@ Track 2 — complete; no open ticket
 (SA117e-4 closed 2026-08-17 — twelve split tags sealed and verified)
 ```
 
-**Longest chain to green gate and publish:** `SA112c → SA112d → SA112f → SA140 → SA96-PUBLISH` — five legs after `SA112b` closed on 2026-08-18 with a fresh installed traceback selecting the apply-ordering defect for `SA112c`. `SA117e-4` closed on 2026-08-17: the twelve immutable split tags exist and are verified, `splits/teams-module` is deleted, and the installed default embed path resolves the sealed tags. No remote core tag and no PyPI action exist yet.
+**Longest chain to green gate and publish:** `SA112d → SA112f → SA140 → SA96-PUBLISH` — four legs after `SA112c` closed on 2026-08-18 by removing the eager DR/Django import from the managed-manifest adapter path selected by `SA112b`. `SA117e-4` closed on 2026-08-17: the twelve immutable split tags exist and are verified, `splits/teams-module` is deleted, and the installed default embed path resolves the sealed tags. No remote core tag and no PyPI action exist yet.
 
 **Parallel feeder complete:** `SA117e-5` closed the SA117/SA136 acceptance umbrellas after reviewing `SA117e-4`'s retained and live ref evidence. Track 1 now feeds the final release join with no remaining ticket; the Track 3 chain remains duration-critical.
 
 **Move safety and conflict surface:** `SA117e-5` changed only the release closeout documents; completed `SA112b` owned an installed-wheel diagnostic/evidence slice. They had no executable files or logical implementation unit in common. The mandatory `git merge v87` preserved both closeout entries. `decisions.md` was reviewed but did not change because the closeout confirmed existing policy rather than adding policy evidence.
 
-**No other move is safe.** `SA112c → d → f` is the remaining evidence chain; `SA112c` is now bound to the traceback captured by completed `SA112b`. `SA140` touches the same apply path and must follow that chain or it invalidates the evidence. `SA96-PUBLISH` is human-only behind `SA140`. Track 2 is complete and closed to new work. Moving any of these tickets would create an ordering edge without reducing the longest chain.
+**No other move is safe.** `SA112d → f` is the remaining lifecycle evidence chain; `SA112d` now consumes the traceback-selected fix closed by `SA112c`. `SA140` touches the same apply path and must follow that chain or it invalidates the evidence. `SA96-PUBLISH` is human-only behind `SA140`. Track 2 is complete and closed to new work. Moving any of these tickets would create an ordering edge without reducing the longest chain.
 
 ### Track readiness
 
@@ -55,10 +55,10 @@ A track is truly green only when start, finish, and merge are all yes.
 |---|---|---|---|---|---|
 | **Track 1 — complete** | **n/a** — no open ticket or next action | **n/a** — all assigned work is closed | **yes** — all Track 1 work is ready for merge-back | **n/a** | Release feeder complete |
 | **Track 2 — complete** | **n/a** — no open ticket or next action | **n/a** — no open ticket to finish | **yes** — all assigned work is already merged with no merge-order edge | **n/a** | Closed track; no open progress or filler work |
-| **Track 3 — SA112c** | **yes** — `SA112b` captured the installed managed-wiring traceback on 2026-08-18 | **yes** — the traceback selects one track-local apply-ordering repair | **yes** — no cross-track merge-order gate | **yes** | Critical-path head after `SA112b` closed |
+| **Track 3 — SA112d** | **yes** — `SA112c` removed the missing-Django managed-wiring frame on 2026-08-18 | **yes** — its lifecycle-E2E acceptance is track-local | **yes** — no cross-track merge-order gate | **yes** | Critical-path head after `SA112c` closed |
 | **v88 backlog — planning queue** | **n/a** — future-release scope, not a current execution track | **n/a** — v88 dependencies and execution tracks are intentionally deferred to kickoff | **n/a** — no v88 integration branch or merge order exists yet | **n/a** | Deferred planning scope, not executable filler |
 
-**Truly-green open ticket today: `SA112c` on Track 3.** `SA112b` is complete, so its fresh installed traceback clears `SA112c` to start, finish, and merge without a cross-track edge. Track 1 and Track 2 are complete, so start/finish/truly-green are not applicable rather than affirmative readiness claims. The v88 queue is a planning label rather than an execution track, so its three states remain not applicable until kickoff; it is not filler executable on v87.
+**Truly-green open ticket today: `SA112d` on Track 3.** `SA112c` is complete, so its focused no-Django adapter proof clears `SA112d` to start, finish, and merge without a cross-track edge. Track 1 and Track 2 are complete, so start/finish/truly-green are not applicable rather than affirmative readiness claims. The v88 queue is a planning label rather than an execution track, so its three states remain not applicable until kickoff; it is not filler executable on v87.
 
 ### Open-ticket readiness
 
@@ -66,8 +66,7 @@ A track is truly green only when start, finish, and merge are all yes.
 
 | Ticket (track) | Can start | Can finish on its track | Can merge | Role |
 |---|---|---|---|---|
-| **SA112c (T3)** | **yes** — `SA112b` closed with the required traceback on 2026-08-18 | **yes** — the traceback-selected fix is track-local | **yes** — no cross-track order gate | Critical path |
-| **SA112d (T3)** | **no** — hard dependency: `SA112c` | **yes** — once started, lifecycle-E2E acceptance is track-local | **yes** — no cross-track order gate | Critical path |
+| **SA112d (T3)** | **yes** — `SA112c` closed with the missing-Django frame removed on 2026-08-18 | **yes** — lifecycle-E2E acceptance is track-local | **yes** — no cross-track order gate | Critical path |
 | **SA112f (T3)** | **no** — hard dependency: `SA112d` | **yes** — once started, ordered acceptance and closeout are track-local | **yes** — no cross-track order gate | Critical path |
 | **SA140 (T3)** | **no** — hard dependency: `SA112f` | **yes** — once started, complexity repair and validation are track-local | **yes** — no cross-track order gate | Critical path |
 | **SA96-PUBLISH (T3)** | **no** — hard dependencies: `SA140` and the green-gate join; `SA117e-5` is closed | **no** — user decision: production publication confirmation after TestPyPI and the green gate | **yes** — no branch merge-order edge | Critical path; human-only |
@@ -76,7 +75,7 @@ The remaining acceptance-only umbrella `SA112` has no executable start of its ow
 
 ### Maintainer decisions and unblock paths
 
-**Handoff note (updated 2026-08-18).** `SA117e-5`, Track 1, and `SA112b` are closed; `SA112c` is the next Track 3 ticket. `SA96-PUBLISH` stays human-only. Any future *reseal* would again be a `REF-CEREMONY` and must not be delegated, and would additionally need the `SA148` repo-local git config on whatever machine runs it.
+**Handoff note (updated 2026-08-18).** `SA117e-5`, Track 1, `SA112b`, and `SA112c` are closed; `SA112d` is the next Track 3 ticket. `SA96-PUBLISH` stays human-only. Any future *reseal* would again be a `REF-CEREMONY` and must not be delegated, and would additionally need the `SA148` repo-local git config on whatever machine runs it.
 
 **Everything on v87 is authorized except production PyPI publication.** That single action is the only open user-owned decision; no other step — tagging, branch loops, sealing, branch deletion, builds, TestPyPI, or the green gate — needs a confirmation stop. Do not invent one.
 
@@ -101,7 +100,7 @@ The remaining acceptance-only umbrella `SA112` has no executable start of its ow
    - **Hold:** preserves the validated candidate without exposing users; appropriate if version, release note, or external timing is wrong.
    - **Recommendation:** publish only when the exact reviewed tip, version, release note, TestPyPI result, and four-command green gate all agree. This fits the “last step re-verifies” policy and clears **SA96-PUBLISH can finish**.
 
-`SA117e-4 → SA112b` is complete. No user decision can bypass the remaining `SA112c → SA112d → SA112f → SA140` hard dependency chain.
+`SA117e-4 → SA112b → SA112c` is complete. No user decision can bypass the remaining `SA112d → SA112f → SA140` hard dependency chain.
 
 ---
 
@@ -118,7 +117,7 @@ The prevention machinery and acceptance closeout are complete: manifests are sta
 - [x] **SA117e-4 — Resume, seal, and verify split publication.** `Tier 2 · Track 3 · DONE 2026-08-17 · REF-CEREMONY`
   - **Completed 2026-08-17.** Twelve immutable tags `refs/tags/splits/<module>-module/0.87.0` are pushed and verified: each peels to the SHA frozen in the pre-seal table (digest `172bb2d00a7e4ac576a9c15d60eb439aec9d7f11685902ad703e42a480a06250`), every branch was unmoved during the seal, every sealed `module.yml` is byte-identical to corrected source at `0.87.0`, and no unexpected ref exists. `splits/teams-module` is deleted, recoverable from `refs/sa117e4-backup/teams-branch/0.87.0` (`f400e602`). The core tag `0.87.0` is rebound locally to `3c1b1b03` and **remains unpushed**; its prior object is retained at `refs/sa117e4-backup/core-tag/0.87.0` (`4694483c`). Final external state: 12 split branches, 12 split tags, 0 remote core tag. Evidence: `/tmp/quickscale-sa117e4-corrected-evidence-NAtJUx`.
   - **Tag consumption proven.** The installed default apply with no `--split-ref` overrides resolves `splits/<module>-module/0.87.0` and embedded 12/12; verified directly from the installed wheel that `check_remote_tag_exists` now returns `True` for those refs. Before the seal this path hard-failed at embedding, so the successful embeds are the consumption proof.
-  - **Accepted under decision 1f:** both applies reach managed module wiring with no `KeyError` and no traceback, then stop on the Django import defect diagnosed by `SA112b` and owned for repair by `SA112c`.
+  - **Accepted under decision 1f:** both applies reach managed module wiring with no `KeyError` and no traceback, then stop on the Django import defect diagnosed by `SA112b` and subsequently repaired by completed `SA112c`.
 
 - [x] **SA117e-5 — Review closeout and close SA117/SA136.** `Tier 1 · Track 1 · DONE 2026-08-18 · deps: SA117e-4`
   - Record the reviewed evidence from SA117e/SA136, close the three umbrellas, and confirm SA119 remains closed by design because embeds consume immutable identity-derived tags.
@@ -143,17 +142,20 @@ The prevention machinery and acceptance closeout are complete: manifests are sta
 
 ### SA112 — installed-wheel full lifecycle
 
-- [ ] **SA112 — Installed-wheel `plan → apply → up` lifecycle.** `Umbrella · Track 3 · SA112b complete`
+- [ ] **SA112 — Installed-wheel `plan → apply → up` lifecycle.** `Umbrella · Track 3 · SA112b/SA112c complete`
 
-The current lifecycle E2E runs from monorepo source and therefore misses installed-artifact discovery. Keep the three remaining children serial: each consumes evidence produced by the prior child. The five trigger paths are already registered by closed SA143; `SA112f` verifies that generated contract rather than editing it.
+The current lifecycle E2E runs from monorepo source and therefore misses installed-artifact discovery. Keep the two remaining children serial: each consumes evidence produced by the prior child. The five trigger paths are already registered by closed SA143; `SA112f` verifies that generated contract rather than editing it.
 
 - [x] **SA112b — Capture installed all-module `apply` evidence.** `Tier 2 · Track 3 · DONE 2026-08-18 · deps: SA117e-4`
   - **Fresh installed result.** Staged wheels at source `d0197f114b46ebf545815ce65559645c0ac85b5a` ran from a disposable external workdir under `QUICKSCALE_DEBUG=1`. Installed `plan testproj` exited `0`; its generated config selected all twelve authoritative modules. Installed `apply` embedded and committed 12/12, then exited `1` at **managed module wiring generation** before the later `poetry install`; no historical `KeyError` occurred. Because managed wiring was reached, SA117 stays closed. The unexpected-pass negative control was not applicable.
   - **Trace selected for SA112c.** The exact apply path catches `ImproperlyConfigured` into its returned error string, so its debug transcript contains no traceback. A bounded installed-Python diagnostic against the same embedded project exposed the caught chain: `quickscale_modules_social.adapter:18` imports `quickscale_core.runtime`, `dr_engine/orchestration.py:27` raises `ModuleNotFoundError: No module named 'django'`, and the final raising frame is installed `manifest/entry_point.py:269` raising `ImproperlyConfigured`. This confirms the prior input evidence rather than assuming it; `SA112c` owns the ordering fix.
   - **Capture and cleanup.** Retained JSON records exact argv, absolute external cwd, the explicit environment allowlist with `PYTHONPATH`/`PYTHONHOME` excluded, stdin, 300/1800/60-second timeout contracts, actual return codes, and process-group reap results. Exact-label Docker cleanup proved zero containers, volumes, and networks, then the exact fixture root was removed. Evidence: `/tmp/quickscale-sa112b-evidence-20260818T075653Z`; manifest SHA-256 `7a7beb15f21c6f56278a4105d31b06d7b163f10d045025070bb3f773469acd73`.
-- [ ] **SA112c — Apply only the traceback-selected root fix.** `Tier 2 · Track 3 · deps: SA112b closed 2026-08-18`
-  - Change only the production seam justified by `SA112b`, enumerate callers for any shared contract change, add the nearest regression, and prove the original frame is gone without weakening fail-hard inventory behavior.
-  - Unblock alternative: if the traceback permits materially different compatible fixes, stop for a maintainer choice with caller and compatibility trade-offs; otherwise take the narrowest owner-local fix.
+- [x] **SA112c — Apply only the traceback-selected root fix.** `Tier 2 · Track 3 · DONE 2026-08-18 · deps: SA112b`
+  - **Traceback-selected repair.** `quickscale_core.runtime.__init__` eagerly imported `runtime.dr`, so the social adapter's documented narrow import from `quickscale_core.runtime.manifest` still loaded `dr_engine/orchestration.py` and required Django. The combined facade now imports only the manifest surface eagerly and loads the internally eager DR submodule on first DR-symbol access. The social adapter and its allowed import path are unchanged; no dependency ordering, inventory fallback, or public symbol was weakened.
+  - **Caller and compatibility proof.** Repository enumeration found the shared root runtime surface consumed by the backups services/commands and their tests, while the social adapter is the sole `runtime.manifest` consumer and compatibility scripts inspect both paths. Root-runtime and explicit `runtime.dr` imports retain object identity and `from ... import` behavior through lazy delegation; the compatibility checker now follows that literal lazy-facade edge. The full core/CLI unit gate passed (2744 core tests with one skip and 2065 CLI tests), as did the 159-test runtime, checker, and managed-wiring focus.
+  - **Original-frame and fail-hard proof.** A fresh subprocess blocks every `django` import, imports `quickscale_modules_social.adapter`, and asserts neither `quickscale_core.runtime.dr` nor any `quickscale_core.dr_engine` module loaded; its focused adapter file passed 8 tests. The managed-wiring manifest suite still passes its strict malformed/missing inventory and adapter failures, so fail-hard inventory behavior remains intact.
+  - **Non-blocking environment finding.** The broad `make MODULE=social test -- --modules` command stopped during Django setup because this worktree's ambient PostgreSQL role has `BYPASSRLS`/`SUPERUSER`. The DB-free adapter file was rerun with module conftest/Django plugin disabled and passed; production compatibility was covered by `make test-unit`. Provisioning the restricted integration role remains environment setup, not an `SA112c` product change.
+  - **Execution metrics.** The Track 3 session ran from `2026-08-18T10:47:45+02:00` to validated closeout at `2026-08-18T11:06:21+02:00`, a difference of 0h 18m. The reviewed final diff changed 229 lines (202 insertions, 27 deletions), approximately 739 changed lines/hour.
 - [ ] **SA112d — Add the permanent installed-wheel lifecycle E2E.** `Tier 2 · Track 3 · deps: SA112c`
   - Cover installed external-cwd plan/apply/up, all twelve modules, live HTTP, `ps`, `manage migrate`, bounded subprocesses, exact lane scoping, and cleanup precedence for setup failure, timeout, exception, and nonzero teardown.
   - Confirm the existing E2E runner collects the CLI test directory; do not edit it if it already does.

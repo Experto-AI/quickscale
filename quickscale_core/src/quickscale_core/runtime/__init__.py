@@ -5,8 +5,9 @@ This is the public import path for generated-project code and module-owned
 adapters.  It re-exports all symbols from two sub-modules:
 
 * ``runtime.dr`` — DR adapter functions, primitives, and all backup-dependent
-  symbols (orchestration, recovery, persistence, verification) via eager
-  imports from the ``dr_engine`` sub-packages.
+  symbols (orchestration, recovery, persistence, verification).  The sub-module
+  remains eager internally, but this combined facade loads it only when a DR
+  symbol is requested.
 * ``runtime.manifest`` — manifest resolver, assembler, social-manifest path
   constants, renderers, and wiring types.
 
@@ -24,12 +25,13 @@ all symbols without Python import-time side effects.
 
 from __future__ import annotations
 
+import importlib
 import typing
 
-# Import sub-modules as module objects.  dr symbols are now eagerly imported
-# as module-level names in dr.py; runtime.__getattr__ delegates to sub-module
-# hasattr/getattr for any non-__all__ private symbols.
-from quickscale_core.runtime import dr as _dr  # noqa: F401
+# Keep the manifest surface importable without loading runtime.dr.  This matters
+# to installed apply: managed module adapters need manifest wiring before the
+# generated project's Django dependency has been installed.  DR symbols remain
+# eager inside dr.py and are loaded on first access through _load_dr().
 from quickscale_core.runtime import manifest as _manifest  # noqa: F401
 
 # ---------------------------------------------------------------------------
@@ -130,12 +132,22 @@ __all__ = [
 ]
 
 
+def _load_dr() -> typing.Any:
+    """Load and return the eager DR sub-module on first DR access."""
+    return importlib.import_module("quickscale_core.runtime.dr")
+
+
 def __getattr__(name: str) -> typing.Any:
-    """Resolve attribute from ``dr`` or ``manifest`` sub-module."""
-    if hasattr(_dr, name):
-        return getattr(_dr, name)
+    """Resolve attribute from ``manifest`` or the lazily loaded ``dr`` module."""
+    if name == "manifest":
+        return _manifest
     if hasattr(_manifest, name):
         return getattr(_manifest, name)
+    dr_module = _load_dr()
+    if name == "dr":
+        return dr_module
+    if hasattr(dr_module, name):
+        return getattr(dr_module, name)
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
 

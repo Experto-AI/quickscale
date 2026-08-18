@@ -36,9 +36,9 @@ Thoroughness notes
 - Both top-level imports (``from quickscale_core.x import y``) and
   lazy/nested imports (inside functions, classes) are detected by the
   static pass.
-- Dynamic imports (``importlib.import_module``) and try/except-based
-  optional imports are **not** detected statically — the script cannot
-  determine what string will be passed to ``import_module``.
+- Literal ``importlib.import_module("quickscale_core...")`` calls reached from
+  a module's ``__getattr__`` are followed as lazy facade edges. Other dynamic
+  imports and try/except-based optional imports are **not** detected statically.
 - Star imports (``from quickscale_core.x import *``) are flagged but
   resolved via ``__all__`` when the target module defines one, or
   reported as requiring manual review otherwise.
@@ -402,6 +402,54 @@ def _collect_submodule_aliases(tree: ast.AST) -> dict[str, str]:
     return aliases
 
 
+def _collect_getattr_dynamic_submodules(tree: ast.AST) -> set[str]:
+    """
+    Collect literal lazy-import edges reachable from ``__getattr__``.
+
+    Supports a facade that delegates to a helper such as ``_load_dr()`` whose
+    body returns ``importlib.import_module("quickscale_core.runtime.dr")``.
+    Only the ``__getattr__`` body and directly called local helpers are scanned,
+    so unrelated dynamic imports do not widen the facade's reported surface.
+    """
+    functions = {
+        node.name: node
+        for node in ast.iter_child_nodes(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    getattr_node = functions.get("__getattr__")
+    if getattr_node is None:
+        return set()
+
+    scan_nodes: list[ast.AST] = [getattr_node]
+    called_helpers = {
+        call.func.id
+        for call in ast.walk(getattr_node)
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+    }
+    scan_nodes.extend(functions[name] for name in called_helpers if name in functions)
+
+    module_paths: set[str] = set()
+    for scan_node in scan_nodes:
+        for call in ast.walk(scan_node):
+            if not isinstance(call, ast.Call) or not call.args:
+                continue
+            if not (
+                isinstance(call.func, ast.Attribute)
+                and call.func.attr == "import_module"
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "importlib"
+            ):
+                continue
+            module_arg = call.args[0]
+            if (
+                isinstance(module_arg, ast.Constant)
+                and isinstance(module_arg.value, str)
+                and module_arg.value.startswith("quickscale_core.")
+            ):
+                module_paths.add(module_arg.value)
+    return module_paths
+
+
 def _resolve_name_via_getattr_chain(
     name: str,
     target_file: Path,
@@ -459,6 +507,18 @@ def _resolve_name_via_getattr_chain(
             if name in sub_defined:
                 return True
             # Chase sub-module's __getattr__ chain
+            if _resolve_name_via_getattr_chain(name, sub_path, core_src_root, _visited=_visited):
+                return True
+
+    # Follow literal importlib edges used by lazy facade helpers reached from
+    # __getattr__. This preserves static compatibility checks without forcing
+    # the production facade to import heavyweight sub-modules eagerly.
+    for dynamic_module in _collect_getattr_dynamic_submodules(tree):
+        sub_path = _module_path_to_fs_path(core_src_root, dynamic_module)
+        if sub_path and sub_path.is_file():
+            sub_defined = _collect_defined_names(sub_path)
+            if name in sub_defined:
+                return True
             if _resolve_name_via_getattr_chain(name, sub_path, core_src_root, _visited=_visited):
                 return True
 

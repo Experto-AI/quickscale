@@ -223,6 +223,65 @@ def test_known_public_symbols() -> None:
     assert hasattr(compat, "main")
 
 
+def test_resolve_import_follows_getattr_literal_dynamic_submodule(
+    tmp_path: Path,
+) -> None:
+    """Lazy facade helpers retain static compatibility-check coverage."""
+    runtime_dir = tmp_path / "quickscale_core" / "runtime"
+    runtime_dir.mkdir(parents=True)
+    (runtime_dir / "__init__.py").write_text(
+        "import importlib\n"
+        "__all__ = []\n"
+        "def _load_dr():\n"
+        "    return importlib.import_module('quickscale_core.runtime.dr')\n"
+        "def __getattr__(name):\n"
+        "    dr_module = _load_dr()\n"
+        "    return getattr(dr_module, name)\n",
+        encoding="utf-8",
+    )
+    (runtime_dir / "dr.py").write_text(
+        "private_symbol = object()\n",
+        encoding="utf-8",
+    )
+
+    issues = compat._resolve_import(
+        tmp_path,
+        "quickscale_core.runtime",
+        ["private_symbol"],
+    )
+
+    assert issues == []
+
+
+def test_resolve_import_ignores_uncalled_dynamic_submodule_helper(
+    tmp_path: Path,
+) -> None:
+    """Unrelated dynamic imports cannot create false compatibility."""
+    runtime_dir = tmp_path / "quickscale_core" / "runtime"
+    runtime_dir.mkdir(parents=True)
+    (runtime_dir / "__init__.py").write_text(
+        "import importlib\n"
+        "__all__ = []\n"
+        "def _load_dr():\n"
+        "    return importlib.import_module('quickscale_core.runtime.dr')\n"
+        "def __getattr__(name):\n"
+        "    raise AttributeError(name)\n",
+        encoding="utf-8",
+    )
+    (runtime_dir / "dr.py").write_text(
+        "private_symbol = object()\n",
+        encoding="utf-8",
+    )
+
+    issues = compat._resolve_import(
+        tmp_path,
+        "quickscale_core.runtime",
+        ["private_symbol"],
+    )
+
+    assert issues == ["  Symbol 'private_symbol' not found in quickscale_core.runtime."]
+
+
 # ---------------------------------------------------------------------------
 # SA18.11 — malformed pyproject.toml raises instead of being silently skipped
 # ---------------------------------------------------------------------------
