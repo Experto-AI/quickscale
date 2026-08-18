@@ -4,7 +4,7 @@ Focused behavioural tests for the SA112a installed-wheel provisioner.
 These tests exercise the four-file SA112a scope (``scripts/smoke_install.sh``,
 ``scripts/_installed_wheel_venv.sh``, ``scripts/provision_installed_venv.sh``)
 against a fake repository and a fake Poetry toolchain, so the full pipeline
-(stage -> build -> venv -> install -> workdir) is exercised service-free in
+(stage -> build -> venv -> install -> retain wheels -> workdir) is exercised service-free in
 seconds.  The fake Poetry builds real, pip-installable wheels, so the
 provisioner's success path is a true end-to-end run with the exact
 ``[installed-wheel]`` stderr markers and the one-line stdout contract.
@@ -38,6 +38,12 @@ EXPECTED_MARKERS = (
     "[installed-wheel] INSTALL quickscale_cli==0.87.0",
     "[installed-wheel] INSTALL quickscale==0.87.0",
 )
+
+EXPECTED_WHEELS = {
+    "quickscale_core-0.87.0-py3-none-any.whl",
+    "quickscale_cli-0.87.0-py3-none-any.whl",
+    "quickscale-0.87.0-py3-none-any.whl",
+}
 
 EXPECTED_SUBCOMMANDS = (
     "version",
@@ -575,6 +581,7 @@ def test_output_dir_trailing_slash_empty_dir_accepted(tmp_path: Path) -> None:
     # Success stdout is the canonical absolute path (no trailing slash).
     assert result.stdout == f"{output}\n"
     assert (output / "venv" / "bin" / "python").exists()
+    assert {wheel.name for wheel in (output / "wheels").glob("*.whl")} == EXPECTED_WHEELS
     assert (output / "work").is_dir()
     assert _internal_leftovers(tmp_path, env) == []
 

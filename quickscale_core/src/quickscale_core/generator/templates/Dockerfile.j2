@@ -176,8 +176,10 @@ USER django
 # Use an ephemeral build-time SECRET_KEY so runtime startup still requires
 # a real non-default secret from the deployment environment.
 # QUICKSCALE_NON_DB_COMMAND signals to production.py that no DB is needed.
+# The one-shot BYPASSRLS opt-out prevents the orgs startup guard from probing
+# that deliberately absent database; neither variable persists at runtime.
 RUN echo "📦 Collecting static files..." && \
-    QUICKSCALE_NON_DB_COMMAND=collectstatic SECRET_KEY="$(python -c 'from secrets import token_urlsafe; print(token_urlsafe(50))')" python manage.py collectstatic --noinput && \
+    QUICKSCALE_NON_DB_COMMAND=collectstatic QUICKSCALE_ALLOW_BYPASSRLS=1 SECRET_KEY="$(python -c 'from secrets import token_urlsafe; print(token_urlsafe(50))')" python manage.py collectstatic --noinput && \
     echo "✅ Static files collected: $(ls -lh /app/staticfiles | wc -l) files"
 
 # Expose port

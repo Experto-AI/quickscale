@@ -13,7 +13,7 @@
 #   ./scripts/provision_installed_venv.sh REPO_ROOT OUTPUT_DIR
 #
 # Exit codes:
-#   0 — provisioned OUTPUT_DIR with an installed venv (venv/) and workdir (work/)
+#   0 — provisioned OUTPUT_DIR with venv/, retained wheels/, and work/
 #   1 — provisioning failed (Python/Poetry missing or a build/install failure)
 #   2 — usage or argument error
 

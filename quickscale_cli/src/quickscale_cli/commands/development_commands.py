@@ -37,6 +37,7 @@ from quickscale_cli.utils.project_manager import (
 
 VERIFY_COMPOSE_PROJECT_ENV_VAR = "QUICKSCALE_VERIFY_COMPOSE_PROJECT"
 _VERIFY_COMPOSE_PROJECT_PATTERN = re.compile(r"qs-sa117b-[0-9a-f]{32}\Z")
+_PRIVILEGED_DJANGO_COMMANDS = frozenset({"migrate", "createcachetable"})
 
 
 def _validated_verifier_compose_project() -> str | None:
@@ -225,6 +226,7 @@ def _run_migrations_after_up() -> None:
         container_name,
         ["python", "manage.py", "migrate"],
         capture=True,
+        extra_docker_args=["-e", "QUICKSCALE_PRIVILEGED_COMMAND=migrate"],
     )
     click.secho("✅ Database migrations applied", fg="green")
 
@@ -557,7 +559,18 @@ def manage(args: tuple) -> None:
     try:
         container_name = get_backend_container_name()
         cmd_args = ["python", "manage.py"] + list(args)
-        _run_docker_exec_command(container_name, cmd_args, capture=True)
+        extra_docker_args = None
+        if args and args[0] in _PRIVILEGED_DJANGO_COMMANDS:
+            extra_docker_args = [
+                "-e",
+                f"QUICKSCALE_PRIVILEGED_COMMAND={args[0]}",
+            ]
+        _run_docker_exec_command(
+            container_name,
+            cmd_args,
+            capture=True,
+            extra_docker_args=extra_docker_args,
+        )
 
     except subprocess.CalledProcessError as e:
         if e.returncode == 1:

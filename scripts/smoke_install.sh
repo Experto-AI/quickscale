@@ -62,7 +62,7 @@ VERSION_FILE="$ROOT/VERSION"
 # owns the stage, Poetry build-venv, and wheel-collection allocation classes
 # and cleans them on every path; this gate owns the output class after the
 # provisioner transfers it on success.
-SMOKE_OUTPUT_DIR=""   # Output class: installed venv + external workdir
+SMOKE_OUTPUT_DIR=""   # Output class: venv + retained wheels + external workdir
 SMOKE_VENV_DIR=""     # Throwaway venv for wheel installation
 SMOKE_WORK_DIR=""     # External cwd for sanitized probe execution
 SMOKE_QUICKSCALE=""   # Installed quickscale binary in the throwaway venv
@@ -203,9 +203,10 @@ echo ""
 
 # ---- Provision the installed wheel venv (SA112a) ----
 # The provisioner builds all three wheels from staged copies, installs them
-# into a throwaway venv, and creates the external workdir — all under the
-# output class.  On success stdout is exactly the absolute output dir; all
-# progress/tool chatter and the six [installed-wheel] markers go to stderr.
+# into a throwaway venv, retains the exact wheels, and creates the external
+# workdir — all under the output class.  On success stdout is exactly the
+# absolute output dir; all progress/tool chatter and the six [installed-wheel]
+# markers go to stderr.
 # The output class is transferred only on success (failure/signal paths are
 # the provisioner's own cleanup).
 
