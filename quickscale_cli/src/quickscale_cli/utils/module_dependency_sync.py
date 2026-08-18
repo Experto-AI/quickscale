@@ -1,6 +1,8 @@
 """Helpers for syncing generated-project Poetry dependencies for embedded modules."""
 
+import os
 import re
+import shutil
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,6 +16,7 @@ _VERSION_PATTERN = re.compile(r"(\d+(?:\.\d+)*)")
 _STORAGE_CLOUD_BACKENDS = frozenset({"r2", "s3"})
 _STORAGE_CLOUD_DEPENDENCIES = frozenset({"boto3", "django-storages"})
 _STORAGE_CLOUD_EXTRA = "cloud"
+_LOCAL_WHEELHOUSE_ENV = "QUICKSCALE_LOCAL_WHEELHOUSE"
 
 
 class DependencySyncError(Exception):
@@ -139,6 +142,40 @@ def _should_skip_manifest_dependency(
     if backend in _STORAGE_CLOUD_BACKENDS:
         return False
     return dependency_name in _STORAGE_CLOUD_DEPENDENCIES
+
+
+def _resolve_local_wheel_dependency(
+    project_path: Path,
+    dependency_base: Path,
+    dependency_name: str,
+) -> dict[str, str] | None:
+    """Materialize and return an exact local wheel for installed acceptance."""
+    wheelhouse_value = os.environ.get(_LOCAL_WHEELHOUSE_ENV)
+    if not wheelhouse_value:
+        return None
+
+    wheelhouse = Path(wheelhouse_value)
+    if not wheelhouse.is_absolute() or not wheelhouse.is_dir():
+        raise DependencySyncError(
+            f"{_LOCAL_WHEELHOUSE_ENV} must name an absolute wheelhouse directory"
+        )
+
+    normalized_name = dependency_name.replace("-", "_").lower()
+    candidates = sorted(wheelhouse.glob(f"{normalized_name}-*.whl"))
+    if not candidates:
+        return None
+    if len(candidates) != 1:
+        raise DependencySyncError(
+            f"{_LOCAL_WHEELHOUSE_ENV} has ambiguous wheels for {dependency_name}: "
+            f"{[candidate.name for candidate in candidates]}"
+        )
+
+    project_wheelhouse = project_path / ".quickscale" / "wheels"
+    project_wheelhouse.mkdir(parents=True, exist_ok=True)
+    project_wheel = project_wheelhouse / candidates[0].name
+    shutil.copy2(candidates[0], project_wheel)
+    relative_wheel = os.path.relpath(project_wheel, start=dependency_base)
+    return {"path": Path(relative_wheel).as_posix()}
 
 
 def _build_module_path_dependency_value(
@@ -384,7 +421,7 @@ def _patch_module_path_dependencies(
         if manifest is None:
             continue
 
-        overrides: dict[str, str] = {}
+        overrides: dict[str, Any] = {}
         raw_toml = module_pyproject_path.read_text(encoding="utf-8")
 
         for dep_name, dep_value in module_poetry_deps.items():
@@ -394,6 +431,15 @@ def _patch_module_path_dependencies(
             if not dep_path.is_absolute():
                 dep_path = (install_path / dep_path).resolve()
             if dep_path.exists():
+                continue
+
+            local_wheel = _resolve_local_wheel_dependency(
+                project_path,
+                install_path,
+                dep_name,
+            )
+            if local_wheel is not None:
+                overrides[dep_name] = local_wheel
                 continue
 
             # Look for a version constraint in the module.yml manifest.
@@ -417,7 +463,11 @@ def _patch_module_path_dependencies(
                         f"{dep_name}="
                     ):
                         indent = line[: len(line) - len(line.lstrip())]
-                        result_lines.append(f'{indent}{dep_name} = "{spec}"')
+                        if isinstance(spec, str):
+                            rendered_spec = f'"{spec}"'
+                        else:
+                            rendered_spec = _render_toml_literal(spec)
+                        result_lines.append(f"{indent}{dep_name} = {rendered_spec}")
                         matched = True
                         break
                 if not matched:
@@ -499,7 +549,19 @@ def sync_project_module_dependencies(
             ):
                 continue
 
+            local_wheel = _resolve_local_wheel_dependency(
+                project_path,
+                project_path,
+                dependency_name,
+            )
+
             if dependency_name in existing_dependency_names:
+                if (
+                    local_wheel is not None
+                    and project_dependencies[dependency_name] != local_wheel
+                ):
+                    pending_package_updates[dependency_name] = local_wheel
+                    continue
                 # Repin mode: replace existing entries that differ from the
                 # manifest-derived bounded range.
                 if repin_existing:
@@ -548,6 +610,8 @@ def sync_project_module_dependencies(
             if not isinstance(dependency_value, str):
                 spec = requirement[len(dependency_name) :].strip()
                 dependency_value = spec if spec else dependency_value
+            if local_wheel is not None:
+                dependency_value = local_wheel
 
             if dependency_name in pending_package_dependencies:
                 pending_package_dependencies[dependency_name] = (

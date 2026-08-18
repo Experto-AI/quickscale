@@ -5,7 +5,8 @@
 # Builds all three QuickScale wheels (quickscale_core, quickscale_cli,
 # quickscale) from per-run staged copies (never touches source pyproject.toml
 # bytes), installs them into a throwaway venv under a caller-provided output
-# directory, and creates an external workdir beside the venv.  Source-only —
+# directory, retains the exact wheelhouse, and creates an external workdir
+# beside the venv.  Source-only —
 # never run directly; both shipped callers (scripts/smoke_install.sh and
 # scripts/provision_installed_venv.sh) source this file.
 #
@@ -33,7 +34,7 @@
 # Emptiness is checked only on a real directory (the helper never
 # deletes pre-existing caller data, and a pre-existing empty directory
 # becomes helper-owned once validation accepts it).  On success the helper
-# transfers OUTPUT_DIR (containing venv/ and work/) to the caller and returns
+# transfers OUTPUT_DIR (containing venv/, wheels/, and work/) to the caller and returns
 # 0; on failure or signal it removes OUTPUT_DIR and exits non-zero (signal
 # exits are 129/130/143 for HUP/INT/TERM).  Repeated calls in one shell are
 # supported: every invocation resets its own allocation state first, so a
@@ -43,7 +44,7 @@
 #   1. stage             — per-run staged package copies for building
 #   2. Poetry build-venv — build venvs shared across staged builds
 #   3. wheel collection  — collected built wheels from all staged builds
-#   4. output            — the OUTPUT_DIR (installed venv + external workdir)
+#   4. output            — the OUTPUT_DIR (installed venv + retained wheels + workdir)
 # Internal classes (1-3) are cleaned on every path; the output class is
 # cleaned on failure/signal and transferred only after success.  The output
 # class is adopted — and its cleanup state set — immediately after argument
@@ -458,8 +459,9 @@ _qs_iv_read_version() {
 
 # ---- public seam ----
 
-# Build and install all three QuickScale wheels into OUTPUT_DIR/venv and
-# create the external OUTPUT_DIR/work dir.  On success stdout is exactly the
+# Build and install all three QuickScale wheels into OUTPUT_DIR/venv, retain
+# them in OUTPUT_DIR/wheels, and create the external OUTPUT_DIR/work dir.  On
+# success stdout is exactly the
 # absolute OUTPUT_DIR plus normal line termination; progress/tool chatter and
 # the six [installed-wheel] markers go to stderr.  The output class is adopted
 # right after argument validation and trap arming, so on failure or signal —
@@ -472,6 +474,7 @@ quickscale_provision_installed_venv() {
     local output_dir="$2"
     local version=""
     local venv_dir=""
+    local wheel_dir=""
     local work_dir=""
     local pkg=""
     local needs_path_fix=""
@@ -694,6 +697,12 @@ quickscale_provision_installed_venv() {
         "$_QS_IV_WHEEL_COLLECT_DIR/quickscale_core-"*.whl \
         "$_QS_IV_WHEEL_COLLECT_DIR/quickscale_cli-"*.whl \
         "$_QS_IV_WHEEL_COLLECT_DIR/quickscale-"*.whl >&2
+
+    # Retain the exact artifacts so an installed lifecycle can resolve the
+    # unpublished matching quickscale-core dependency without reading source.
+    wheel_dir="$_QS_IV_OUTPUT_DIR/wheels"
+    mkdir -p "$wheel_dir"
+    cp "$_QS_IV_WHEEL_COLLECT_DIR/"*.whl "$wheel_dir/"
 
     # ---- Create the external workdir inside the output class ----
     work_dir="$_QS_IV_OUTPUT_DIR/work"

@@ -26,7 +26,7 @@ This is the current task planner. It contains open planned work only. Completed 
 
 ```text
 Track 3 — release critical path
-SA112d ──► SA112f ──► SA140 ──► integrated v87 green gate ──► SA96-PUBLISH
+SA112f ──► SA140 ──► integrated v87 green gate ──► SA96-PUBLISH
 
 Track 1 — SA148 ──► pre-publication correction/reseal readiness ──► release join
 Track 2 — no open v87 ticket ────────────────────────────────► green-gate join
@@ -34,11 +34,11 @@ Track 2 — no open v87 ticket ────────────────�
 v88 planning queue — deferred post-v87 work; not part of the v87 join
 ```
 
-**Longest open chain:** `SA112d → SA112f → SA140 → integrated v87 green gate → SA96-PUBLISH`. Each executable ticket merges to `v87` in that order. The four-command green gate runs on one clean, exact integrated tip after `SA140`; production publication remains the final human-only action.
+**Longest open chain:** `SA112f → SA140 → integrated v87 green gate → SA96-PUBLISH`. Each executable ticket merges to `v87` in that order. The four-command green gate runs on one clean, exact integrated tip after `SA140`; production publication remains the final human-only action.
 
-**Why this chain stays serial:** `SA112d` creates the installed-wheel lifecycle proof; `SA112f` consumes that proof in ordered acceptance and closes the umbrella; `SA140` then changes the same apply behavior and must rerun the accepted lifecycle suites before the final gate. Starting or merging `SA140` earlier would invalidate or race the evidence it must consume. `SA96-PUBLISH` cannot precede the repaired quality gate.
+**Why this chain stays serial:** `SA112f` consumes the completed installed-wheel lifecycle proof in ordered acceptance and closes the umbrella; `SA140` then changes the same apply behavior and must rerun the accepted lifecycle suites before the final gate. Starting or merging `SA140` earlier would invalidate or race the evidence it must consume. `SA96-PUBLISH` cannot precede the repaired quality gate.
 
-**Track assignment result:** `SA148` moves from Track 3 to idle Track 1 and can run beside `SA112d`. The current split tags exist, but v0.87.0 is still unpublished and the mandatory pre-publication correction loop can require deleting and resealing affected tags if lifecycle or green-gate work finds a defect. `SA148` therefore feeds release completion by keeping that recovery path executable on a clean machine; deferring it to v88 would strand a known v87 publication-tooling defect. Its core/CLI publication surfaces are separate from `SA112d`'s lifecycle E2E, with no execution order between them and no PostgreSQL/Docker contention. Their only expected overlap is the shared closeout conflict surfaces (`CHANGELOG.md` and this roadmap), which the sync-before-merge-back procedure covers. Track 2 remains idle because no other open v87 ticket is independent of the Track 3 chain. No per-module gate-list update applies: `SA148` changes publication tooling rather than a module gate.
+**Track assignment result:** `SA148` moved from Track 3 to idle Track 1 and can run beside `SA112f`. The current split tags exist, but v0.87.0 is still unpublished and the mandatory pre-publication correction loop can require deleting and resealing affected tags if lifecycle or green-gate work finds a defect. `SA148` therefore feeds release completion by keeping that recovery path executable on a clean machine; deferring it to v88 would strand a known v87 publication-tooling defect. Its publication surfaces are separate from `SA112f`'s ordered lifecycle acceptance, with no execution order between them and no PostgreSQL/Docker contention. Their only expected overlap is the shared closeout conflict surfaces (`CHANGELOG.md` and this roadmap), which the sync-before-merge-back procedure covers. Track 2 remains idle because no other open v87 ticket is independent of the Track 3 chain. No per-module gate-list update applies: `SA148` changes publication tooling rather than a module gate.
 
 ### Track readiness
 
@@ -48,10 +48,10 @@ A track is truly green only when start, finish, and merge are all yes.
 |---|---|---|---|---|---|
 | **Track 1 — SA148** | **yes** — the fail-hard repo-local-config contract below removes the design ambiguity | **yes** — code, regression, help, and runbook acceptance are track-local | **yes** — no cross-track merge-order gate | **yes** | Pre-publication correction-loop feeder |
 | **Track 2 — no open v87 ticket** | **n/a** — no next action | **n/a** — no open ticket | **yes** — prior work is integrated and has no merge-order edge | **n/a** | Idle; no safe critical-path work to pull forward |
-| **Track 3 — SA112d** | **yes** — all open prerequisites are clear | **yes** — its lifecycle-E2E acceptance is track-local | **yes** — no cross-track merge-order gate | **yes** | Critical-path head |
+| **Track 3 — SA112f** | **yes** — SA112d's permanent lifecycle proof is complete | **yes** — ordered acceptance and closeout are track-local | **yes** — no cross-track merge-order gate | **yes** | Critical-path head |
 | **v88 backlog — planning queue** | **n/a** — no v88 execution track or integration branch exists | **n/a** — kickoff must derive dependencies and tracks | **n/a** — no v88 merge order exists | **n/a** | Deferred planning, not executable v87 filler |
 
-**Truly-green open tickets:** `SA112d` on Track 3 is the head of the longest dependency chain and is direct critical-path progress. `SA148` on Track 1 is not a leg of that longest chain, but it feeds the still-live pre-publication correction/reseal path and is therefore release risk-reduction rather than off-path filler. No truly-green filler ticket is assigned.
+**Truly-green open tickets:** `SA112f` on Track 3 is the head of the longest dependency chain and is direct critical-path progress. `SA148` on Track 1 is not a leg of that longest chain, but it feeds the still-live pre-publication correction/reseal path and is therefore release risk-reduction rather than off-path filler. No truly-green filler ticket is assigned.
 
 ### Open-ticket readiness
 
@@ -61,14 +61,13 @@ A track is truly green only when start, finish, and merge are all yes.
 |---|---|---|---|---|
 | **SA148 (T1)** | **yes** — no open blocker or user decision | **yes** — implementation and acceptance are track-local | **yes** — no cross-track order gate | Pre-publication correction-loop feeder; truly green |
 | **SA112 (T3 umbrella)** | **n/a** — acceptance-only, with no independent action | **no** — blocker `SA112f`; hard upstream dependency | **n/a** — closes through its child rather than a separate merge | Critical-path umbrella |
-| **SA112d (T3)** | **yes** — no open blocker | **yes** — implementation and focused acceptance are track-local | **yes** — no cross-track order gate | Critical path; truly green |
-| **SA112f (T3)** | **no** — blocker `SA112d`; hard upstream dependency | **yes** — once started, ordered acceptance and closeout are track-local | **yes** — no cross-track order gate | Critical path |
+| **SA112f (T3)** | **yes** — prerequisite `SA112d` is complete | **yes** — ordered acceptance and closeout are track-local | **yes** — no cross-track order gate | Critical path; truly green |
 | **SA140 (T3)** | **no** — blocker `SA112f`; hard upstream dependency | **yes** — once started, repair and validation are track-local | **yes** — no cross-track order gate | Critical path |
 | **SA96-PUBLISH (T3)** | **no** — blocker `SA140`; hard upstream dependency before the integrated green gate can run | **no** — blocker `SA96-PUBLISH` production-publish confirmation; user-decision-clearable after the green gate | **yes** — no branch merge-order edge remains after the exact-tip gate | Critical path; human-only |
 
 ### Maintainer decision and unblock paths
 
-**Only one current user decision exists: production publication in `SA96-PUBLISH`.** No decision can bypass `SA112d → SA112f → SA140`; those are hard upstream dependencies.
+**Only one current user decision exists: production publication in `SA96-PUBLISH`.** No decision can bypass `SA112f → SA140`; those are hard upstream dependencies.
 
 **`SA148` needs no user decision.** Passing selected values through from ambient global Git configuration would be convenient, but it would weaken the publication sanitizer and make behavior machine-dependent. Keep global/system Git configuration disabled instead; before mutation, fail once with an actionable message unless repo-local `credential.helper`, `user.name`, and `user.email` are configured. This is deterministic, preserves least privilege, matches the existing workaround and fail-hard policy, and clears **SA148 can start** without asking the maintainer to choose a security model.
 
@@ -78,12 +77,11 @@ A track is truly green only when start, finish, and merge are all yes.
 
 **Actionable hard-dependency sequence:**
 
-1. Execute `SA148` on Track 1 in parallel with `SA112d`. It has no merge dependency on Track 3, but it must be merged before any corrective reseal is attempted.
-2. Execute `SA112d`. If its permanent E2E exposes a product defect, fix that defect on Track 3 as part of the same evidence chain, rerun the focused lifecycle proof, and only then advance.
-3. Execute `SA112f` in exclusive service capacity. If a registered trigger path is missing, stop and repair the authoritative gate registry; never hand-edit the generated workflow.
-4. Execute `SA140` against the accepted lifecycle suite. If extraction changes behavior, restore parity instead of raising the ceiling or adding a waiver.
-5. Run the integrated green gate on the exact merged `v87` tip. A failure returns to the ticket that owns the failing surface; if correction changes a sealed module, use the repaired `SA148` path before resealing and rerunning acceptance.
-6. Present the publish-or-hold decision. No partially implemented or blocked v87 ticket is otherwise parked without a next action.
+1. Execute `SA148` on Track 1 in parallel with `SA112f`. It has no merge dependency on Track 3, but it must be merged before any corrective reseal is attempted.
+2. Execute `SA112f` in exclusive service capacity. If a registered trigger path is missing, stop and repair the authoritative gate registry; never hand-edit the generated workflow.
+3. Execute `SA140` against the accepted lifecycle suite. If extraction changes behavior, restore parity instead of raising the ceiling or adding a waiver.
+4. Run the integrated green gate on the exact merged `v87` tip. A failure returns to the ticket that owns the failing surface; if correction changes a sealed module, use the repaired `SA148` path before resealing and rerunning acceptance.
+5. Present the publish-or-hold decision. No partially implemented or blocked v87 ticket is otherwise parked without a next action.
 
 ---
 
@@ -101,12 +99,13 @@ A track is truly green only when start, finish, and merge are all yes.
 
 - [ ] **SA112 — Installed-wheel `plan → apply → up` lifecycle.** `Umbrella · Track 3 · children: SA112d → SA112f`
 
-The current lifecycle E2E runs from monorepo source and therefore misses installed-artifact discovery. Keep the two children serial because ordered acceptance consumes the permanent proof. The five trigger paths are registered already; `SA112f` verifies that generated contract rather than editing it.
+The legacy lifecycle E2E still runs from monorepo source; completed child `SA112d` adds the permanent installed-artifact proof alongside it. Keep the two children serial because ordered acceptance consumes that proof. The five trigger paths are registered already; `SA112f` verifies that generated contract rather than editing it.
 
-- [ ] **SA112d — Add the permanent installed-wheel lifecycle E2E.** `Tier 2 · Track 3 · deps: none open`
+- [x] **SA112d — Add the permanent installed-wheel lifecycle E2E.** `Tier 2 · Track 3 · deps: none open`
   - Cover installed external-cwd plan/apply/up, all twelve modules, live HTTP, `ps`, `manage migrate`, bounded subprocesses, exact lane scoping, and cleanup precedence for setup failure, timeout, exception, and nonzero teardown.
-  - Confirm the existing E2E runner collects the CLI test directory; do not edit it if it already does.
-- [ ] **SA112f — Run ordered acceptance, review, and close SA112.** `Tier 2 · Track 3 · deps: SA112d`
+  - Confirmed: the maintained E2E runner collects the entire `quickscale_cli/tests/` directory, so no runner edit was required.
+  - Resolved while establishing the proof: retained staged wheels now support the unpublished local core dependency; Docker build-time `collectstatic` no longer probes the deliberately absent database when orgs is installed; and Docker-backed `up`/`manage migrate` now carry the sanctioned privileged-command marker required by the orgs RLS guard.
+- [ ] **SA112f — Run ordered acceptance, review, and close SA112.** `Tier 2 · Track 3 · deps: SA112d complete`
   - Confirm the five registered trigger paths, preserve all 20 smoke-install probes, run focused checks then `make smoke-install` and `QUARANTINE_TICKETS= make ci-e2e` in exclusive service capacity, and remeasure the provisional xdist speedup once.
   - Review executable changes first, then review closeout documents. If trigger paths are absent, stop and escalate; never hand-edit `.github/workflows/e2e.yml`.
 
