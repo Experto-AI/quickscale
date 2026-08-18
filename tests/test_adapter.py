@@ -6,6 +6,9 @@ renderer-ID replacement, and the sentinel contract.
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
@@ -25,6 +28,45 @@ class TestGetManifestAdapter:
         """get_manifest_adapter must return a callable."""
         adapter = get_manifest_adapter()
         assert callable(adapter)
+
+    def test_import_does_not_require_django(self) -> None:
+        """Installed managed wiring can import the adapter before Django exists."""
+        workspace_root = Path(__file__).resolve().parents[3]
+        core_src = workspace_root / "quickscale_core" / "src"
+        social_src = workspace_root / "quickscale_modules" / "social" / "src"
+        code = f"""
+import importlib.abc
+import sys
+
+sys.path.insert(0, {str(social_src)!r})
+sys.path.insert(0, {str(core_src)!r})
+
+class BlockDjango(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "django" or fullname.startswith("django."):
+            raise ModuleNotFoundError("blocked Django import")
+        return None
+
+sys.meta_path.insert(0, BlockDjango())
+from quickscale_modules_social.adapter import get_manifest_adapter
+
+assert callable(get_manifest_adapter())
+assert "quickscale_core.runtime.dr" not in sys.modules
+assert not any(name.startswith("quickscale_core.dr_engine") for name in sys.modules)
+"""
+
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 0, (
+            f"adapter import failed without Django:\nstdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
+        )
 
 
 class TestSocialManifestAdapterProjectPackage:
