@@ -61,10 +61,11 @@ def _publication_environment() -> dict[str, str]:
     """Return a sanitized environment for publication-only Git commands.
 
     Repository/config redirection and indexed ``GIT_CONFIG`` injection are
-    removed.  Credential transports (for example ``SSH_AUTH_SOCK``,
-    ``GIT_SSH_COMMAND``, credential helpers, and proxy settings) remain
-    available; publication identity is enforced independently through the
-    effective ``origin`` URLs.
+    removed.  Transport environment (for example ``SSH_AUTH_SOCK``,
+    ``GIT_SSH_COMMAND``, and proxy settings) remains available, but system and
+    global Git configuration do not.  Publication callers must therefore pass
+    :func:`validate_publication_local_config` before mutation so credentials
+    and commit identity come only from explicit repository-local config.
     """
     env = os.environ.copy()
     for key in list(env):
@@ -121,6 +122,65 @@ def build_publication_git_runner(
         executable=str(executable_path),
         env=_publication_environment(),
         publication=True,
+    )
+
+
+_PUBLICATION_LOCAL_CONFIG_COMMANDS = {
+    "credential.helper": "git config --local credential.helper '<credential-helper>'",
+    "user.name": "git config --local user.name '<name>'",
+    "user.email": "git config --local user.email '<email>'",
+}
+
+
+def validate_publication_local_config(
+    path: Path,
+    *,
+    runner: GitRunner,
+) -> None:
+    """Require publication credentials and identity in repository-local config.
+
+    Publication deliberately disables system and global Git configuration.
+    Each required value is therefore read with ``git config --local`` through
+    the sanitized runner.  Missing and blank values are reported together so
+    an operator receives one complete, actionable pre-mutation failure.
+    """
+    missing: list[str] = []
+    for key in _PUBLICATION_LOCAL_CONFIG_COMMANDS:
+        try:
+            result = runner.run(
+                ["config", "--local", "--get", key],
+                cwd=path,
+                capture_output=True,
+                text=True,
+            )
+        except OSError as exc:
+            raise GitError(
+                f"Failed to read repository-local Git config {key!r}: {exc}"
+            ) from exc
+
+        if result.returncode == 1 or (
+            result.returncode == 0 and not result.stdout.strip()
+        ):
+            missing.append(key)
+            continue
+        if result.returncode != 0:
+            detail = result.stderr.strip() or "git returned a non-zero status"
+            raise GitError(
+                f"Failed to read repository-local Git config {key!r}: {detail}"
+            )
+
+    if not missing:
+        return
+
+    commands = "\n".join(
+        f"  {_PUBLICATION_LOCAL_CONFIG_COMMANDS[key]}" for key in missing
+    )
+    raise GitError(
+        "Publication requires repository-local Git credentials and identity "
+        "because system/global Git config is disabled. "
+        f"Missing or blank: {', '.join(missing)}.\n"
+        "Configure the missing values in this repository before retrying:\n"
+        f"{commands}"
     )
 
 

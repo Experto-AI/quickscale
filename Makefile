@@ -211,6 +211,7 @@ help:
 	@echo "  make publish-modules-outdated - [DISABLED SA117 Phase 4] Was publish outdated modules; use per-module publish instead"
 	@echo "  make seal-module          - Seal one split-branch tag (MODULE=<name> VERSION=<version> [PREVIOUS_VERSION=<version>])"
 	@echo "  make seal-modules         - Seal all split-branch tags (VERSION=<version> [PREVIOUS_VERSION=<version>])"
+	@echo "                             Requires repo-local credential.helper, user.name, and user.email; global/system Git config is ignored"
 	@echo "  make seal-status          - Show seal status (VERSION=<version>)"
 	@echo "  make clean                - Remove build artifacts"
 	@echo ""

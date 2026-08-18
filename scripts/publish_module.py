@@ -73,6 +73,7 @@ from quickscale_core.utils.git_utils import (  # noqa: E402
     run_git_subtree_split,
     validate_expected_sha,
     validate_module_name,
+    validate_publication_local_config,
     validate_publication_origin,
     validate_tag_name,
 )
@@ -1322,12 +1323,13 @@ def _validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace
 
 
 def _run_release_gates(runner: GitRunner) -> None:
-    """Apply the existing release and origin gates with one trusted runner."""
+    """Apply every read-only pre-mutation publication gate with one runner."""
     try:
         _check_release_authoritative(runner)
         validate_publication_origin(_REPO_ROOT, runner=runner)
+        validate_publication_local_config(_REPO_ROOT, runner=runner)
     except GitError as exc:
-        _print_error(f"Publication origin or release validation failed: {exc}")
+        _print_error(f"Publication preflight failed: {exc}")
         sys.exit(1)
 
 
@@ -1440,20 +1442,10 @@ def main() -> None:
         # direct selector may publish.
         _require_authoritative_module(module_name)
 
-        # First enforce the existing release-authoritative gate so callers get
-        # the established diagnostic for an untagged/mismatched source.  The
-        # origin check immediately follows and remains before any prompt,
-        # subtree split, or other mutation.
-        _check_release_authoritative(runner)
-
-        # This is the final pre-mutation source gate.  It checks effective
-        # fetch and push identity while allowing unrelated remotes, and fails
-        # closed for blank, mixed, or untrusted origin configuration.
-        try:
-            validate_publication_origin(_REPO_ROOT, runner=runner)
-        except GitError as e:
-            _print_error(f"Publication origin validation failed: {e}")
-            sys.exit(1)
+        # Release authority, effective origin identity, and repository-local
+        # publication credentials/identity are all required before the prompt,
+        # subtree split, or any other mutation.
+        _run_release_gates(runner)
 
         if not _confirm_uncommitted_changes(runner):
             return

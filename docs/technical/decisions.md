@@ -1171,7 +1171,14 @@ identity-derived tags, not the branches or the working tree. For core release
 3. Repeatedly run `make publish-module` for the twelve modules with the
    required per-branch remote expectation, testing installed all-module
    `apply` with `--split-ref` between iterations; repeat until verification is
-   satisfactory. This is the reversible branch-publication loop.
+   satisfactory. This is the reversible branch-publication loop. Before any
+   mutating publication command, configure the repository-local credential
+   helper and commit identity; publication disables system/global Git config
+   and fails once with these commands when any value is absent or blank:
+   `git config --local credential.helper '<credential-helper>'`,
+   `git config --local user.name '<name>'`, and
+   `git config --local user.email '<email>'`. Keep credentials in the helper or
+   SSH agent — never place tokens in a remote URL or command argument.
 4. Run `make seal-modules VERSION=X.Y.Z` to create and push the twelve
    immutable split tags. The seal command has no `EXPECTED_REMOTE_SHA` or
    `ABSENT` authorization input: it samples each branch tip, immediately

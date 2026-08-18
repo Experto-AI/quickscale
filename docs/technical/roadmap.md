@@ -91,11 +91,12 @@ A track is truly green only when start, finish, and merge are all yes.
 
 ### SA148 — make the correction/reseal path clean-machine safe
 
-- [ ] **SA148 — Make publication credentials, identity, and resolved-ref output accurate.** `Tier 1 · Track 1 · deps: none · feeds the pre-publication correction loop`
+- [x] **SA148 — Make publication credentials, identity, and resolved-ref output accurate.** `Tier 1 · Track 1 · deps: none · feeds the pre-publication correction loop`
   - Keep global/system Git configuration disabled. Before publication mutation, require repo-local `credential.helper`, `user.name`, and `user.email`; fail once with the exact configuration needed instead of surfacing unrelated authentication and identity errors later.
   - Align `_publication_environment()` behavior and docstring, `make seal-modules --help`, and the seal runbook; add a clean-machine regression for the fail-hard contract.
   - Print the immutable tag or explicit override ref actually selected during embed instead of labelling every resolution as a split branch.
   - Preserve `GIT_CONFIG_NOSYSTEM` and `GIT_TERMINAL_PROMPT=0`; never accept a token in a URL or argv.
+  - Findings: the sanitized runner now reads all three required values only from repo-local config and reports every missing command in one pre-mutation failure; embed success output reports the selected immutable tag or explicit override while provenance remains SHA-pinned.
 
 ### SA112 — installed-wheel full lifecycle
 

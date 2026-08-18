@@ -567,7 +567,7 @@ def _perform_module_embed(
     module_dir = project_path / "modules" / module
     click.secho(f"\n✅ Module '{module}' embedded successfully!", fg="green", bold=True)
     click.echo(f"   Location: {module_dir}")
-    click.echo(f"   Branch: {branch}")
+    click.echo(f"   Selected ref: {selected_ref or source_ref}")
 
     provenance = ModuleEmbedProvenance(
         module_name=module,

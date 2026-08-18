@@ -49,6 +49,7 @@ from quickscale_core.utils.git_utils import (  # noqa: E402
     run_git_subtree_push,
     run_git_subtree_split,
     create_annotated_tag,
+    validate_publication_local_config,
     validate_publication_origin,
     validate_expected_sha,
     validate_module_name,
@@ -365,6 +366,83 @@ class TestPublicationGitControls:
         assert git_path is not None
         runner = build_publication_git_runner(git_path)
         assert runner.executable == git_path
+
+    @patch("subprocess.run")
+    def test_local_publication_config_reports_every_missing_command_once(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        """Missing credentials and identity produce one complete remediation."""
+        mock_run.side_effect = [
+            MagicMock(returncode=1, stdout="", stderr=""),
+            MagicMock(returncode=0, stdout="\n", stderr=""),
+            MagicMock(returncode=1, stdout="", stderr=""),
+        ]
+        runner = GitRunner(executable="git", env={}, publication=True)
+
+        with pytest.raises(GitError) as excinfo:
+            validate_publication_local_config(tmp_path, runner=runner)
+
+        message = str(excinfo.value)
+        assert "Missing or blank: credential.helper, user.name, user.email" in message
+        assert "git config --local credential.helper '<credential-helper>'" in message
+        assert "git config --local user.name '<name>'" in message
+        assert "git config --local user.email '<email>'" in message
+        assert [call.args[0][1:] for call in mock_run.call_args_list] == [
+            ["config", "--local", "--get", "credential.helper"],
+            ["config", "--local", "--get", "user.name"],
+            ["config", "--local", "--get", "user.email"],
+        ]
+
+    @patch("subprocess.run")
+    def test_local_publication_config_operational_failure_is_not_missing(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        """A config-read failure surfaces its root cause instead of remediation."""
+        mock_run.return_value = MagicMock(
+            returncode=128,
+            stdout="",
+            stderr="fatal: repository config unavailable",
+        )
+        runner = GitRunner(executable="git", env={}, publication=True)
+
+        with pytest.raises(GitError, match="repository config unavailable"):
+            validate_publication_local_config(tmp_path, runner=runner)
+
+        assert mock_run.call_count == 1
+
+    @pytest.mark.skipif(not _git_available(), reason="git not available on PATH")
+    def test_clean_machine_requires_local_config_and_ignores_global_values(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Global credentials/identity cannot satisfy the publication preflight."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        global_config = tmp_path / "global.gitconfig"
+        global_config.write_text(
+            "[credential]\n\thelper = store\n"
+            "[user]\n\tname = Global User\n\temail = global@example.invalid\n"
+        )
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+        git_path = shutil.which("git")
+        assert git_path is not None
+        runner = build_publication_git_runner(git_path)
+
+        with pytest.raises(GitError, match="credential.helper, user.name, user.email"):
+            validate_publication_local_config(repo, runner=runner)
+
+        for key, value in (
+            ("credential.helper", "store"),
+            ("user.name", "Local User"),
+            ("user.email", "local@example.invalid"),
+        ):
+            subprocess.run(
+                ["git", "-C", str(repo), "config", "--local", key, value],
+                check=True,
+                capture_output=True,
+            )
+
+        validate_publication_local_config(repo, runner=runner)
 
     @staticmethod
     def _remote_result(mock_run: MagicMock, *, fetch: str, push: str) -> None:
@@ -2449,7 +2527,7 @@ class TestPublishModuleReleaseAuthoritativeGate:
         )
         combined = result.stdout + result.stderr
         assert result.returncode != 0
-        assert "Publication origin validation failed" in combined
+        assert "Publication preflight failed" in combined
         assert "Running git subtree split" not in combined
         assert "Traceback" not in combined
 
@@ -3673,7 +3751,7 @@ class TestPublishModuleCliTrustedOrigin:
 
         assert excinfo.value.code == 1
         output = capsys.readouterr().out
-        assert "Publication origin validation failed" in output
+        assert "Publication preflight failed" in output
         assert "trusted github.com/Experto-AI/quickscale repository" in output
         assert _ref_inventory(repo.working) == before_work
         assert _ref_inventory(repo.origin) == before_origin

@@ -87,8 +87,7 @@ def _patch_selector_surroundings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def _spy_post_guard_path(monkeypatch: pytest.MonkeyPatch, reached: list[str]) -> None:
     """Record any post-guard release/origin/prompt/mutation call that runs."""
     for name in (
-        "_check_release_authoritative",
-        "validate_publication_origin",
+        "_run_release_gates",
         "_confirm_uncommitted_changes",
         "_maybe_clean_subtree_cache",
         "_publish_module",
@@ -174,14 +173,7 @@ def test_direct_selector_preserves_valid_authoritative_module_flow(
 
     reached: list[str] = []
     monkeypatch.setattr(
-        publish_module,
-        "_check_release_authoritative",
-        lambda runner: reached.append("release"),
-    )
-    monkeypatch.setattr(
-        publish_module,
-        "validate_publication_origin",
-        lambda path, runner: reached.append("origin"),
+        publish_module, "_run_release_gates", lambda runner: reached.append("gates")
     )
     monkeypatch.setattr(
         publish_module,
@@ -208,7 +200,7 @@ def test_direct_selector_preserves_valid_authoritative_module_flow(
             ["publish_module.py", names[0], "--expected-remote-sha", "a" * 40],
         )
         publish_module.main()
-        assert reached == ["release", "origin", "clean", "publish"]
+        assert reached == ["gates", "clean", "publish"]
     finally:
         module_discovery.set_modules_base_path(original_base)
 
@@ -228,6 +220,42 @@ def test_require_authoritative_module_rejects_unknown_name(
     assert "nonexistent" in out
     for name in authoritative_names:
         assert f"  - {name}" in out
+
+
+def test_release_gates_require_local_config_before_mutation(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The shared mutating preflight includes the repo-local config gate."""
+    runner = object()
+    calls: list[str] = []
+    monkeypatch.setattr(
+        publish_module,
+        "_check_release_authoritative",
+        lambda active_runner: calls.append("release"),
+    )
+    monkeypatch.setattr(
+        publish_module,
+        "validate_publication_origin",
+        lambda path, runner: calls.append("origin"),
+    )
+
+    def reject_missing_local_config(path: Path, *, runner: object) -> None:
+        del path, runner
+        calls.append("local-config")
+        raise publish_module.GitError("missing repository-local publication config")
+
+    monkeypatch.setattr(
+        publish_module,
+        "validate_publication_local_config",
+        reject_missing_local_config,
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        publish_module._run_release_gates(runner)
+
+    assert excinfo.value.code == 1
+    assert calls == ["release", "origin", "local-config"]
+    assert "Publication preflight failed" in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------
@@ -1237,8 +1265,7 @@ def _run_direct_publish_with_path_sentinels(
     )
     monkeypatch.setattr(publish_module, "_list_modules", lambda: reached.append("inventory"))
     for name in (
-        "_check_release_authoritative",
-        "validate_publication_origin",
+        "_run_release_gates",
         "_confirm_uncommitted_changes",
         "_maybe_clean_subtree_cache",
         "_publish_module",
@@ -1507,6 +1534,10 @@ class TestPublishMakeInterfaces:
         assert "EXPECTED_REMOTE_SHA=<sha|ABSENT>" not in output
         assert "40hex_or_ABSENT" not in output
         assert "publish-modules-outdated - [DISABLED SA117 Phase 4]" in output
+        assert (
+            "Requires repo-local credential.helper, user.name, and user.email; "
+            "global/system Git config is ignored"
+        ) in output
 
     @pytest.mark.parametrize(
         ("make_args", "expected_message"),

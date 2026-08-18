@@ -276,6 +276,7 @@ class TestPerformModuleEmbed:
         mock_install,
         mock_sync_dependencies,
         tmp_path,
+        capsys,
     ):
         """Test successful module embedding without configurator."""
         mock_sync_dependencies.return_value = True
@@ -292,6 +293,7 @@ class TestPerformModuleEmbed:
             "splits/auth-module",
             {},
             source_ref="a" * 40,
+            selected_ref="splits/auth-module/0.87.0",
         )
 
         assert result[0] is True
@@ -306,6 +308,9 @@ class TestPerformModuleEmbed:
         )
         mock_sync_dependencies.assert_called_once_with(tmp_path, {"auth": {}})
         mock_install.assert_called_once_with(tmp_path, "auth")
+        output = capsys.readouterr().out
+        assert "Selected ref: splits/auth-module/0.87.0" in output
+        assert "Branch: splits/auth-module" not in output
 
     @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
@@ -478,6 +483,7 @@ class TestPerformModuleEmbed:
         mock_install,
         mock_sync_dependencies,
         tmp_path,
+        capsys,
     ):
         """Phase 1: source_ref binds subtree add and populates provenance."""
         mock_sync_dependencies.return_value = True
@@ -495,6 +501,7 @@ class TestPerformModuleEmbed:
             "splits/auth-module",
             {},
             source_ref=resolved_sha,
+            selected_ref="feature/preseal-auth",
         )
 
         assert success is True
@@ -512,6 +519,8 @@ class TestPerformModuleEmbed:
         assert provenance.module_name == "auth"
         assert provenance.prefix == "modules/auth"
         assert provenance.installed_version == "0.87.0"
+        assert provenance.selected_ref == "feature/preseal-auth"
+        assert "Selected ref: feature/preseal-auth" in capsys.readouterr().out
 
 
 class TestModuleVersionMismatchEnforcement:
@@ -1443,6 +1452,9 @@ class TestSA136cEmbedRefSelection:
             "splits/auth-module/0.91.2",
         )
         assert mock_perform.call_args.kwargs["source_ref"] == "b" * 40
+        assert mock_perform.call_args.kwargs["selected_ref"] == (
+            "splits/auth-module/0.91.2"
+        )
 
     def test_missing_default_tag_stops_before_resolve_or_embed(self, tmp_path):
         with ExitStack() as stack:
