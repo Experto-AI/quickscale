@@ -23,7 +23,7 @@ No technical finding is open. Closed findings and their evidence live in [CHANGE
 ## Live watch items
 
 - **Integration-branch CI:** hosted CI does not run on pushes to `v87`; this remains an accepted solo-maintainer workflow choice.
-- **Installed-wheel lifecycle:** the installed diagnostic, ordering repair, permanent service-backed proof, and generated trigger contract are complete; roadmap SA112f owns ordered acceptance. Manifest fallback and smoke-install remain required acceptance coverage, not separate open findings.
+- **Installed-wheel release acceptance:** roadmap `SA112F-QG-001` and `SA112f` own the remaining ordered verdict and closeout. Manifest fallback and smoke-install remain acceptance coverage, not separate open findings.
 - **Generator lock generation:** missing Poetry, timeout, or nonzero lock generation warns and lets generation finish by explicit usability policy; downstream apply/install remains fail-loud.
 - **Quality baseline:** monotonicity is enforced, but `_execute_apply_steps_locked` remains 56 against 55 until roadmap SA140; this prevents the release-wide green gate, not ordinary ticket acceptance.
 

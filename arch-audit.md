@@ -6,7 +6,7 @@
 
 QuickScale is a Python/Poetry Django scaffolding platform with a Click CLI, apply/recovery tooling, and twelve shipped first-party modules; `teams` remains a README-only placeholder. Generated projects use Django 6, PostgreSQL 18, Vite/React, Docker, and Railway. Its public contracts are the CLI, `quickscale.yml` and applied state, module manifests, generated trees, and upgrade semantics.
 
-The current structural posture is stable at the reviewed trust boundaries. Quality-baseline monotonicity and release-gate topology are enforced; their closed findings are archived in [CHANGELOG.md](CHANGELOG.md). Three findings remain open but intentionally outside the `now` horizon. The immediate release path is ordered acceptance (`SA112f`), the apply-path quality repair (`SA140`), and staged publication (`SA96-PUBLISH`); see the [roadmap](docs/technical/roadmap.md).
+The current structural posture is stable at the reviewed trust boundaries. Quality-baseline monotonicity and release-gate topology are enforced; their closed findings are archived in [CHANGELOG.md](CHANGELOG.md). Three findings remain open but intentionally outside the `now` horizon. The immediate release path is the acceptance verdict (`SA112F-QG-001`), lifecycle closeout (`SA112f`), apply-path quality repair (`SA140`), and staged publication (`SA96-PUBLISH`); see the [roadmap](docs/technical/roadmap.md).
 
 ## Enforcement census
 
@@ -25,7 +25,7 @@ The current structural posture is stable at the reviewed trust boundaries. Quali
 | Frontend runtime config is complete and typed | `window.__QUICKSCALE__` validation plus frontend proof | Structural and gated |
 | Local, hosted, publish, and E2E-trigger gates share one topology | `scripts/gate_registry.json`, parity and generation checks | Structural cause resolved |
 | Complexity maxima never ratchet upward | Merge-base monotonicity gate plus structured waiver ledger | Gated |
-| Installed artifacts perform their supported lifecycle | Permanent installed-wheel E2E and generated trigger contract exist; roadmap SA112f owns ordered acceptance | Partial; release-critical acceptance remains |
+| Installed artifacts perform their supported lifecycle | Roadmap `SA112F-QG-001` and `SA112f` own the remaining ordered acceptance | Partial; release-critical acceptance remains |
 
 ## Open findings
 
