@@ -1,12 +1,12 @@
 # Structural Autopsy: QuickScale
 
-> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-18 · **Branch:** `v87`
+> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-19 · **Branch:** `v87`
 
 ## Current posture
 
 QuickScale is a Python/Poetry Django scaffolding platform with a Click CLI, apply/recovery tooling, and twelve shipped first-party modules; `teams` remains a README-only placeholder. Generated projects use Django 6, PostgreSQL 18, Vite/React, Docker, and Railway. Its public contracts are the CLI, `quickscale.yml` and applied state, module manifests, generated trees, and upgrade semantics.
 
-The current structural posture is stable at the reviewed trust boundaries. Quality-baseline monotonicity and release-gate topology are enforced; their closed findings are archived in [CHANGELOG.md](CHANGELOG.md). Three findings remain open but intentionally outside the `now` horizon. The split seal, installed diagnostic, managed-wiring repair, permanent installed-wheel lifecycle proof, and generated trigger contract are complete; the immediate release path is ordered acceptance (`SA112f`), the apply-path quality repair, the integrated green gate, and human-only publication; see the [roadmap](docs/technical/roadmap.md).
+The current structural posture is stable at the reviewed trust boundaries. Quality-baseline monotonicity and release-gate topology are enforced; their closed findings are archived in [CHANGELOG.md](CHANGELOG.md). Three findings remain open but intentionally outside the `now` horizon. The immediate release path is ordered acceptance (`SA112f`), the apply-path quality repair (`SA140`), and staged publication (`SA96-PUBLISH`); see the [roadmap](docs/technical/roadmap.md).
 
 ## Enforcement census
 
