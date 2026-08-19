@@ -13,7 +13,9 @@ def build_isolated_poetry_env(
     Poetry gives an active ``VIRTUAL_ENV`` precedence over its own project
     environment.  Generated-project subprocesses must therefore scrub the
     caller's active environment while retaining unrelated variables, such as
-    per-worker Poetry cache directories.
+    per-worker Poetry cache directories.  Generated-project installs run
+    serially because Poetry's parallel installer can wedge its worker pool and
+    leave dependency installs blocked indefinitely.
     """
     ambient_venv_path = os.environ.get("VIRTUAL_ENV")
     env = os.environ.copy()
@@ -30,4 +32,5 @@ def build_isolated_poetry_env(
             if entry != ambient_venv_bin
         )
     env["POETRY_VIRTUALENVS_IN_PROJECT"] = "true"
+    env["POETRY_INSTALLER_PARALLEL"] = "false"
     return env
