@@ -76,6 +76,12 @@ def _fake_environment(tmp_path: Path, *, failure: str = "") -> dict[str, str]:
         executable.chmod(0o755)
 
     environment = os.environ.copy()
+    # This helper defines the baseline for runner self-tests.  Do not let an
+    # outer acceptance campaign silently force its serial lane/worker settings
+    # into tests that are meant to exercise the runner defaults.  Individual
+    # tests can still opt into either setting through _run() overrides.
+    environment.pop("QS_E2E_PARALLEL", None)
+    environment.pop("QS_E2E_XDIST_WORKERS", None)
     environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
     environment["FAKE_E2E_EVENT_LOG"] = str(tmp_path / "events.log")
     environment["FAKE_E2E_DOCKER_LOG"] = str(tmp_path / "docker.log")
@@ -86,6 +92,19 @@ def _fake_environment(tmp_path: Path, *, failure: str = "") -> dict[str, str]:
     # so lane scheduling is deterministic regardless of the runner's free RAM.
     environment["QS_E2E_NO_MEMORY_GUARD"] = "1"
     return environment
+
+
+def test_fake_environment_ignores_outer_lane_and_worker_controls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An outer serial campaign cannot contaminate runner-default tests."""
+    monkeypatch.setenv("QS_E2E_PARALLEL", "0")
+    monkeypatch.setenv("QS_E2E_XDIST_WORKERS", "1")
+
+    environment = _fake_environment(tmp_path)
+
+    assert "QS_E2E_PARALLEL" not in environment
+    assert "QS_E2E_XDIST_WORKERS" not in environment
 
 
 def _run(
