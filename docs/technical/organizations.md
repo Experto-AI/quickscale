@@ -1,7 +1,7 @@
 # QuickScale Organizations Module: Design Document
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Organizations Design**
-> **Related docs**: [Roadmap](roadmap.md) | [Decisions](decisions.md) | [Tenancy Strategies](../legacy/tenancy-isolation-strategies.md) | [Railway Deployment](../deployment/railway.md)
+> **Related docs**: [Roadmap](roadmap.md) | [Decisions](decisions.md) | [Railway Deployment](../deployment/railway.md)
 
 ## Purpose and Scope
 
@@ -181,7 +181,7 @@ The `true` second argument to `current_setting` returns `NULL` instead of raisin
 - **Cost**: 2 Railway services regardless of how many tenants exist. Railway bills by compute and memory, not by tenant count. At 100 tenants or 10 000, the bill changes only with actual usage.
 - **Defence-in-depth (active on the shipped tenant-table surface)**: the middleware-set org context gives RLS a fail-closed database hook. All 21 enrolled tenant tables now enforce database-level isolation on top of application-layer guards.
 - **Operational simplicity**: One backup covers all tenants. One migration covers all tenants. One deploy upgrades all tenants simultaneously.
-- **Proven pattern**: Supabase, Stripe, and Slack all use shared-database isolation at scale. Detailed code examples are in [`docs/legacy/tenancy-isolation-strategies.md`](../legacy/tenancy-isolation-strategies.md) — that document is the reference implementation; this document does not duplicate it.
+- **Proven pattern**: Supabase, Stripe, and Slack all use shared-database isolation at scale. The shipped implementation in `quickscale_modules/orgs/` is the reference for isolation code; see the Supabase comparison below for the structural argument.
 
 ### Supabase Architecture Comparison
 
@@ -755,7 +755,7 @@ No async job path should use the default tenant manager without first establishi
 
 ## References
 
-- [`docs/legacy/tenancy-isolation-strategies.md`](../legacy/tenancy-isolation-strategies.md) — full RLS code examples, cost matrix, and real-world company comparisons
+- [`quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`](../../quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py) — shipped RLS and org-context implementation
 - [`docs/deployment/railway.md`](../deployment/railway.md) — Railway deployment contract (connection pooling notes, future subdomain config)
 - [`docs/technical/decisions.md`](decisions.md) — architecture decision log
 - [`quickscale_modules/billing/`](../../quickscale_modules/billing/) — billing models to extend

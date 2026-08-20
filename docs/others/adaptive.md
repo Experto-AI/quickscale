@@ -1,7 +1,7 @@
 # How QuickScale Uses Adaptive
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Adaptive**
-> **Related docs**: [Roadmap](../technical/roadmap.md) | [AI Context](../technical/ai_context.md) | [AI Hydration Topology](../technical/ai_hydration_topology.md) | [adaptive.rules.md](adaptive.rules.md)
+> **Related docs**: [Roadmap](../technical/roadmap.md) | [AI Context](../technical/ai_context.md) | [AI Hydration Topology](../technical/ai_hydration_topology.md) | [adaptive.rules.md](../../adaptive.rules.md)
 
 ## What it is
 
