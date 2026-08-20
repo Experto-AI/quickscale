@@ -2,7 +2,7 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. Published releases pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. When a release note is prepared before the maintainer completes the manual tag/publish step, the changelog entry and note must say so explicitly and must not imply publication. Use `docs/technical/roadmap.md` for active or unpublished release status. Entries are version-ordered.
 
-- v0.87.0 — unreleased / core tag not pushed — [Hardening Release](docs/releases/release-v0.87.0.md) (release note prepared, not yet published). Consolidates a large hardening pass across tenant isolation, module configuration, the generator, split publication and lockstep, and disaster recovery.
+- v0.87.0 — released 2026-08-20 — [Hardening Release](docs/releases/release-v0.87.0.md). Consolidates a large hardening pass across tenant isolation, module configuration, the generator, split publication and lockstep, and disaster recovery.
   - **Tenant isolation unified.** Every tenant-scoped model inherits one shared isolation base instead of hand-copied boilerplate; a project-wide check requires each model to be explicitly tenant-scoped or excluded and is wired into generated projects' own CI.
   - **Fail-closed database access.** The app refuses to boot under a database role that bypasses row-level security (`BYPASSRLS` or `SUPERUSER`) unless explicitly overridden; production requires a restricted tenant-safe role, with the elevated role reserved for migrations.
   - **Database-level parent/child isolation.** Parent/child records (e.g. a CRM contact and its notes) are kept in the same organization via `NOT DEFERRABLE` composite foreign-key constraints, replacing the fragile trigger-based check; a conformance gate verifies every composite FK.
@@ -43,7 +43,7 @@
   - **Fail-closed split-tag sealing.** Sealing samples and rereads the branch tip, rejects conflicting tags, pushes one explicit refspec, and verifies the tag and branch afterward while documenting the unavoidable client-side race window.
   - **Seal tooling hardened.** Tag creation, peeling, equal-tree reuse, cleanup precedence, repository-version binding, and lightweight-tag idempotence are covered by fail-hard integrity checks.
   - **Publication sequence ratified.** The required order is version bump and commit, local core tag, idempotent split publication and testing, immutable split-tag sealing, clean all-module verification, then the human-gated core-tag push.
-  - **All twelve split modules sealed.** Every module has an immutable `0.87.0` split tag matching its source and branch, while the core tag remains unpushed and production publication remains pending.
+  - **All twelve split modules sealed.** Every module has an immutable `0.87.0` split tag matching its source and branch, and the core tag is published.
   - **Release rollback refs retained.** Local backup refs preserve the prior core tag and removed stale teams branch for the release rollback window.
   - **Installed apply ordering repaired.** `quickscale_core.runtime` loads its Django-dependent DR surface lazily so managed adapters can load before generated-project dependencies are installed.
   - **Managed adapter discovery repaired.** Embedded module adapters can be retried from their active `src` trees without leaking temporary `sys.path` changes or weakening fail-hard imports.

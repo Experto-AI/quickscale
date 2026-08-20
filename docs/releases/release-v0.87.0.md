@@ -1,9 +1,9 @@
 # Release v0.87.0 - Hardening Release
 
 **Date:** 2026-08-20
-**Status:** Prepared release artifact
+**Status:** Released
 
-**Release Artifact:** This document is the single public release note for v0.87.0. It is prepared ahead of publication — the `0.87.0` tag and its GitHub release do not exist yet. The maintainer completes the tag and publish step separately, after which this note is updated in place.
+**Release Artifact:** This document is the single public release note for v0.87.0. The `0.87.0` tag, its GitHub release, and the `quickscale`, `quickscale-cli`, and `quickscale-core` distributions on PyPI all exist as of 2026-08-20.
 
 ## Summary
 
