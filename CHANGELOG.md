@@ -68,6 +68,9 @@
   - **E2E memory guard.** Low-memory conditions override explicit xdist counts and force serial execution unless `QS_E2E_NO_MEMORY_GUARD=1` is set.
   - **E2E harness.** Concurrent Core and CLI lanes use isolated ports and scopes, signal-safe cleanup, stuck-lane heartbeats, and provenance banners explaining serial execution.
   - **Parallel unit and static gates.** Unit tests use xdist with isolated coverage and a serial override, while local-CI static gates run concurrently and replay output in declaration order.
+  - **Installed-wheel lifecycle acceptance.** The ordered serial-then-concurrent E2E acceptance campaign passed at one merged tip (serial 31m42s, concurrent 21m46s, 1.46x at three xdist workers per lane, no memory-guard bypass), with every Docker scope verified empty and the all-module installed-wheel lifecycle green in both runs.
+  - **Apply-path complexity repair.** The late destructive/remote confirmation block is extracted from `_execute_apply_steps_locked` into a dedicated helper with byte-identical prompts, banners, defaults, and cancellation behavior, returning the function under its fixed ceiling without touching step order or recovery.
+  - **Dependency-sync complexity repair.** `module_dependency_sync` path-dependency patching and project sync are decomposed into nine small helpers with no behavior change, restoring both functions below their baseline tuples; `make quality` reports `total_regressions: 0` and the repository holds no accepted quality exception.
   - **Quality baseline cleared.** Complexity-preserving extractions brought all measured functions within their fixed ceilings without rebaselining or adding waivers.
   - **Dependency upgrade.** Python floor 3.13 → 3.14; Django ≥6.0.7 with every module pin locked in lockstep — intentional drift retired.
 

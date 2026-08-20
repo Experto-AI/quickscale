@@ -23,9 +23,9 @@ No technical finding is open. Closed findings and their evidence live in [CHANGE
 ## Live watch items
 
 - **Integration-branch CI:** hosted CI does not run on pushes to `v87`; this remains an accepted solo-maintainer workflow choice.
-- **Installed-wheel release acceptance:** roadmap `SA112F-QG-001` and `SA112f` own the remaining ordered verdict and closeout. Manifest fallback and smoke-install remain acceptance coverage, not separate open findings.
+- **Local-wheelhouse seam:** `QUICKSCALE_LOCAL_WHEELHOUSE` is undocumented in `docs/technical/` and falls back to the manifest version spec when set but unmatched. Roadmap SA150 owns this for v88.
 - **Generator lock generation:** missing Poetry, timeout, or nonzero lock generation warns and lets generation finish by explicit usability policy; downstream apply/install remains fail-loud.
-- **Quality baseline:** monotonicity is enforced, but `_execute_apply_steps_locked` remains 56 against 55 until roadmap SA140; this prevents the release-wide green gate, not ordinary ticket acceptance.
+- **Quality baseline:** monotonicity is enforced and `make quality` reports `total_regressions: 0`; the repository holds no accepted quality exception. Any new positive ceiling delta requires a structured waiver.
 
 ## Reconciliation
 
