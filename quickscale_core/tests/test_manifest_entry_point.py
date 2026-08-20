@@ -158,9 +158,6 @@ def _refresh_session_managed_adapters() -> None:
             f"get_manifest_adapter function."
         )
 
-    if os.environ.get("CI"):
-        _assert_full_adapter_registry_present()
-
 
 @pytest.fixture(scope="session", autouse=True)
 def _session_managed_adapters() -> None:
@@ -170,9 +167,17 @@ def _session_managed_adapters() -> None:
     nongated environments. Broken managed-adapter imports keep failing
     closed, and CI additionally asserts that every expected adapter is
     present after the refresh.
+
+    The completeness assertion belongs to this session-scoped refresh of
+    the *real* shipped set, not to ``_refresh_session_managed_adapters``
+    itself: tests that deliberately narrow the shipped set to exercise
+    tolerance call the helper directly, and a registry that is expected
+    to be incomplete must not trip a completeness check.
     """
 
     _refresh_session_managed_adapters()
+    if os.environ.get("CI"):
+        _assert_full_adapter_registry_present()
 
 
 class TestSessionManagedAdaptersFixtureGuard:
@@ -273,11 +278,16 @@ class TestSessionManagedAdaptersFixtureGuard:
                 ModuleWiringSpec()
             )
 
+            # Mirrors the session fixture: refresh the real shipped set,
+            # then assert completeness. The guard lives on the fixture, so
+            # exercising it means running the same two steps in order.
             with pytest.raises(
                 AssertionError,
                 match="missing expected manifest adapters after session refresh",
             ):
                 _refresh_session_managed_adapters()
+                if os.environ.get("CI"):
+                    _assert_full_adapter_registry_present()
         finally:
             MANIFEST_ADAPTER_REGISTRY.clear()
             MANIFEST_ADAPTER_REGISTRY.update(original_registry)

@@ -1015,6 +1015,31 @@ class TestSa90ExactManifestParity:
 
     _EXCLUDED_PREFIXES = (".venv/",)
 
+    # Files whose *content* legitimately varies with the host running the
+    # generator, and so cannot carry a pinned cross-machine hash. .env
+    # embeds DOCKER_UID/DOCKER_GID from the invoking user (templates/.env.j2),
+    # which differs between a developer box and a CI runner. Their presence
+    # and mode are still asserted; only the hash is skipped.
+    _HOST_DEPENDENT_PATHS = frozenset({".env"})
+
+    @staticmethod
+    def _canonical_mode(path: Path) -> str:
+        """Return a umask-independent mode for *path*.
+
+        The generator writes files without an explicit chmod, so the
+        group/other bits it lands on are decided by the invoking process's
+        umask (002 on a typical developer box, 022 on a CI runner). Pinning
+        the raw mode would bind the fixture to one machine's umask. The
+        property the generator actually controls is whether a file is
+        executable, so normalize to that.
+        """
+        return "755" if os.stat(path).st_mode & 0o111 else "644"
+
+    @staticmethod
+    def _canonical_fixture_mode(mode: str) -> str:
+        """Normalize a fixture-recorded mode the same way as _canonical_mode."""
+        return "755" if int(mode, 8) & 0o111 else "644"
+
     # ------------------------------------------------------------------
     # Fixture validation
     # ------------------------------------------------------------------
@@ -1073,7 +1098,7 @@ class TestSa90ExactManifestParity:
                 continue
             content = fpath.read_bytes()
             actual[rel] = {
-                "mode": oct(os.stat(fpath).st_mode)[-3:],
+                "mode": self._canonical_mode(fpath),
                 "sha256": hashlib.sha256(content).hexdigest(),
             }
 
@@ -1091,10 +1116,13 @@ class TestSa90ExactManifestParity:
             if path not in actual:
                 continue
             act = actual[path]
-            if act["mode"] != exp_entry["mode"]:
-                mismatch.append(
-                    f"{path}: mode expected {exp_entry['mode']}, got {act['mode']}"
-                )
+            exp_mode = self._canonical_fixture_mode(exp_entry["mode"])
+            if act["mode"] != exp_mode:
+                mismatch.append(f"{path}: mode expected {exp_mode}, got {act['mode']}")
+            if path in self._HOST_DEPENDENT_PATHS:
+                # Present and correctly-moded, but its bytes embed host
+                # identity — see _HOST_DEPENDENT_PATHS.
+                continue
             if act["sha256"] != exp_entry["sha256"]:
                 mismatch.append(
                     f"{path}: sha256 expected {exp_entry['sha256']}, got {act['sha256']}"
