@@ -3238,6 +3238,44 @@ def _exec_step_railway_deploy(
         )
 
 
+def _confirm_destructive_remote_phase(
+    *,
+    should_auto_start_docker: bool,
+    should_run_local_migrations: bool,
+) -> None:
+    """Display the destructive/remote banner and confirm before steps 11-16.
+
+    Silently returns when ``_AF5_DESTRUCTIVE_CONFIRM_BYPASS`` is set (test
+    mode).  Raises ``click.Abort`` when the operator declines.
+    """
+    if _AF5_DESTRUCTIVE_CONFIRM_BYPASS:
+        return
+
+    click.echo("\n" + "=" * 50)
+    click.secho("⚠️  DESTRUCTIVE / REMOTE OPERATIONS AHEAD", fg="red", bold=True)
+    click.echo("=" * 50)
+    click.echo(
+        "\nThe following steps will modify your database and/or external services:"
+    )
+    click.echo("  • Apply mutable configuration changes")
+    if should_auto_start_docker:
+        click.echo("  • Start Docker services")
+        click.echo("  • Run database migrations (inside Docker backend container)")
+    elif should_run_local_migrations:
+        click.echo("  • Run database migrations (local)")
+    else:
+        click.echo("  • Database migrations step (no migration path configured)")
+    click.echo("  • Trigger Railway deployment (if Railway-linked)")
+    click.echo("  • Finalize authoritative apply state")
+    click.echo("  • Display next steps\n")
+    if not click.confirm("Proceed with destructive/remote operations?", default=True):
+        click.secho(
+            "\n❌ Destructive/remote phase cancelled. Steps 1-10 completed successfully.",
+            fg="yellow",
+        )
+        raise click.Abort()
+
+
 def _execute_apply_steps(
     ctx: ApplyContext,
     force: bool,
@@ -3678,32 +3716,10 @@ def _execute_apply_steps_locked(
     #
     # When ``_AF5_DESTRUCTIVE_CONFIRM_BYPASS`` is ``True`` (test mode),
     # the gate is silently skipped without printing or prompting.
-    if not _AF5_DESTRUCTIVE_CONFIRM_BYPASS:
-        click.echo("\n" + "=" * 50)
-        click.secho("⚠️  DESTRUCTIVE / REMOTE OPERATIONS AHEAD", fg="red", bold=True)
-        click.echo("=" * 50)
-        click.echo(
-            "\nThe following steps will modify your database and/or external services:"
-        )
-        click.echo("  • Apply mutable configuration changes")
-        if should_auto_start_docker:
-            click.echo("  • Start Docker services")
-            click.echo("  • Run database migrations (inside Docker backend container)")
-        elif should_run_local_migrations:
-            click.echo("  • Run database migrations (local)")
-        else:
-            click.echo("  • Database migrations step (no migration path configured)")
-        click.echo("  • Trigger Railway deployment (if Railway-linked)")
-        click.echo("  • Finalize authoritative apply state")
-        click.echo("  • Display next steps\n")
-        if not click.confirm(
-            "Proceed with destructive/remote operations?", default=True
-        ):
-            click.secho(
-                "\n❌ Destructive/remote phase cancelled. Steps 1-10 completed successfully.",
-                fg="yellow",
-            )
-            raise click.Abort()
+    _confirm_destructive_remote_phase(
+        should_auto_start_docker=should_auto_start_docker,
+        should_run_local_migrations=should_run_local_migrations,
+    )
 
     # ------------------------------------------------------------------
     # Steps 11-16: Destructive/remote operations with per-step

@@ -8661,3 +8661,60 @@ class TestPopulateConsolidatedTrackingFromLegacy:
         # installed_at should NOT be overwritten (already populated)
         _populate_consolidated_tracking_from_legacy(tmp_path, state)
         assert state.modules["auth"].installed_at == "2026-06-19"
+
+
+class TestConfirmDestructiveRemotePhase:
+    """SA140: direct tests for the extracted late destructive/remote gate."""
+
+    @staticmethod
+    def _call(capsys, *, docker: bool, local: bool, bypass: bool = False):
+        with patch.object(
+            _apply_command_mod, "_AF5_DESTRUCTIVE_CONFIRM_BYPASS", bypass
+        ):
+            _apply_command_mod._confirm_destructive_remote_phase(
+                should_auto_start_docker=docker,
+                should_run_local_migrations=local,
+            )
+        return capsys.readouterr().out
+
+    def test_bypass_prints_and_prompts_nothing(self, capsys):
+        with patch("click.confirm") as mock_confirm:
+            out = self._call(capsys, docker=True, local=False, bypass=True)
+        mock_confirm.assert_not_called()
+        assert out == ""
+
+    def test_docker_path_lists_docker_and_container_migrations(self, capsys):
+        with patch("click.confirm", return_value=True):
+            out = self._call(capsys, docker=True, local=False)
+        assert "⚠️  DESTRUCTIVE / REMOTE OPERATIONS AHEAD" in out
+        assert "  • Start Docker services" in out
+        assert "  • Run database migrations (inside Docker backend container)" in out
+        assert "  • Run database migrations (local)" not in out
+
+    def test_local_migration_path(self, capsys):
+        with patch("click.confirm", return_value=True):
+            out = self._call(capsys, docker=False, local=True)
+        assert "  • Start Docker services" not in out
+        assert "  • Run database migrations (local)" in out
+
+    def test_no_migration_path(self, capsys):
+        with patch("click.confirm", return_value=True):
+            out = self._call(capsys, docker=False, local=False)
+        assert "  • Database migrations step (no migration path configured)" in out
+
+    def test_prompt_text_and_default_yes(self, capsys):
+        with patch("click.confirm", return_value=True) as mock_confirm:
+            self._call(capsys, docker=True, local=False)
+        mock_confirm.assert_called_once_with(
+            "Proceed with destructive/remote operations?", default=True
+        )
+
+    def test_cancellation_aborts_with_message(self, capsys):
+        with patch("click.confirm", return_value=False):
+            with pytest.raises(click.Abort):
+                self._call(capsys, docker=False, local=True)
+        out = capsys.readouterr().out
+        assert (
+            "❌ Destructive/remote phase cancelled. Steps 1-10 completed successfully."
+            in out
+        )
