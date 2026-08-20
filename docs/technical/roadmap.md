@@ -27,7 +27,7 @@ This is the current task planner. It contains open planned work only. Completed 
 ```text
 v88 planning — critical path
 V88-KICKOFF: create v88 branch ──► prioritization choice ──► dependency graph + acceptance criteria ──► track/merge-order assignment
-                                                                                                        └─► eight implementation tickets become executable
+                                                                                                        └─► nine implementation tickets become executable
 
 Track 1 — unassigned until V88-KICKOFF ──────────────────────► kickoff join
 Track 2 — unassigned until V88-KICKOFF ──────────────────────► kickoff join
@@ -36,9 +36,9 @@ Track 3 — unassigned until V88-KICKOFF ─────────────
 
 **Longest open chain:** `V88-KICKOFF` alone. Its hard upstream blocker (`SA96-PUBLISH`) cleared when v0.87.0 published, so the ticket is now startable and nothing else can begin until it assigns tracks.
 
-**Parallelism result:** no rebalancing is available. All three tracks are idle by construction — `V88-KICKOFF` is the single ticket that assigns them, and the eight implementation tickets are deliberately not pre-bound to a track because kickoff owns that decision. Pulling any of them forward would create an unreviewed dependency graph rather than accelerate anything. The exclusive PostgreSQL/Docker slot is free.
+**Parallelism result:** no rebalancing is available. All three tracks are idle by construction — `V88-KICKOFF` is the single ticket that assigns them, and the nine implementation tickets are deliberately not pre-bound to a track because kickoff owns that decision. Pulling any of them forward would create an unreviewed dependency graph rather than accelerate anything. The exclusive PostgreSQL/Docker slot is free.
 
-**Deferred-task allocation check:** `SA123`, `SA124`, `SA134`, `SA137`, `SA118`, `SA142`, `SA135`, and `SA150` each depend on `V88-KICKOFF` for an accepted dependency graph, acceptance criteria, execution track, and merge order. Their track stays `v88 backlog` until kickoff completes.
+**Deferred-task allocation check:** `SA151`, `SA123`, `SA124`, `SA134`, `SA137`, `SA118`, `SA142`, `SA135`, and `SA150` each depend on `V88-KICKOFF` for an accepted dependency graph, acceptance criteria, execution track, and merge order. Their track stays `v88 backlog` until kickoff completes.
 
 ### Track readiness
 
@@ -60,7 +60,7 @@ A track is truly green only when start, finish, and merge are all yes.
 | Ticket (track) | Can start | Can finish on its track | Can merge | Role |
 |---|---|---|---|---|
 | **V88-KICKOFF (kickoff)** | **yes** — no open dependency | **no** — the prioritization choice is user-decision-clearable | **yes** — no cross-track merge-order gate | Critical path; head |
-| **Eight backlog tickets** | **no** — hard blocker `V88-KICKOFF` | **no** — hard blocker `V88-KICKOFF` | **no** — merge order is assigned by kickoff | Post-kickoff implementation |
+| **Nine backlog tickets** | **no** — hard blocker `V88-KICKOFF` | **no** — hard blocker `V88-KICKOFF` | **no** — merge order is assigned by kickoff | Post-kickoff implementation |
 
 ### Maintainer decision and unblock paths
 
@@ -70,27 +70,30 @@ A track is truly green only when start, finish, and merge are all yes.
 
 - **Choose `teams` first:** promotes architectural Findings 2 and 4 together. **Pros:** validates deletion and purge boundaries against real domain growth and lets their coupled design happen once. **Cons:** largest coherent scope; should not be split across tracks.
 - **Choose a third generated-project updater first:** promotes Finding 7. **Pros:** removes the hand-maintained ownership taxonomy before another consumer depends on it. **Cons:** requires an ownership-metadata migration and advances no domain feature.
-- **Choose neither:** leaves all three findings behind their gates and plans the eight backlog tickets on their own merits. **Pros:** avoids speculative architecture. **Cons:** retains the manual seams until a real trigger appears.
+- **Choose neither:** leaves all three findings behind their gates and plans the nine backlog tickets on their own merits. **Pros:** avoids speculative architecture. **Cons:** retains the manual seams until a real trigger appears.
 - **Recommendation:** choose neither until product work fires a trigger; this fits the standing decision that `teams` is not planned. The choice unblocks `V88-KICKOFF` **can finish**.
 
 ### Alternative unblock routes
 
 - **`V88-KICKOFF`:** head of the critical path with no open dependency. Only the prioritization choice is user-decision-clearable; everything else in the ticket is assistant-executable once that choice is recorded.
-- **Eight backlog tickets:** blocked only by kickoff. No route bypasses it, because the blocker is the absence of an accepted dependency graph and track assignment, not a technical precondition.
+- **Nine backlog tickets:** blocked only by kickoff. No route bypasses it, because the blocker is the absence of an accepted dependency graph and track assignment, not a technical precondition.
 
 **Actionable hard-dependency sequence:**
 
 1. Record the v88 prioritization choice, then run `V88-KICKOFF`: create the v88 integration branch, derive the dependency graph and acceptance criteria, and assign tracks and merge order.
-2. On `V88-KICKOFF` close, the eight backlog tickets become executable on their assigned tracks.
+2. On `V88-KICKOFF` close, the nine backlog tickets become executable on their assigned tracks.
 
 ---
 
 ## v88 backlog track
 
-These eight tasks are not executable until kickoff assigns them. Their planning track is **v88 backlog**; `V88-KICKOFF` assigns their executable Track 1/2/3 slots, so they are deliberately not pre-bound here.
+These nine tasks are not executable until kickoff assigns them. Their planning track is **v88 backlog**; `V88-KICKOFF` assigns their executable Track 1/2/3 slots, so they are deliberately not pre-bound here.
 
 - [ ] **V88-KICKOFF — Open v88 planning and assign executable tracks.** `Tier 1 · Track: kickoff · deps: none open`
   Create the v88 integration branch; record the `teams`/third-updater/neither prioritization choice; derive the dependency graph and acceptance criteria; and assign execution tracks, shared conflict surfaces, and merge order before implementation starts.
+
+- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Tier 1 · Track: v88 backlog · deps: V88-KICKOFF`
+  QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models. Verification: a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; existing databases are out of scope by policy — the documented upgrade path is a fresh database. Record the no-migration-history policy in [decisions.md](decisions.md).
 
 - [ ] **SA123 — Add dependency-vulnerability and security static-analysis gates.** `Tier 2 · Track: v88 backlog · deps: V88-KICKOFF`
   Add blocking dependency and focused security scanners with reviewed suppressions; register every new gate through the authoritative gate registry.
