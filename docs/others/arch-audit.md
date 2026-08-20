@@ -6,7 +6,7 @@
 
 QuickScale is a Python/Poetry Django scaffolding platform with a Click CLI, apply/recovery tooling, and twelve shipped first-party modules; `teams` remains a README-only placeholder. Generated projects use Django 6, PostgreSQL 18, Vite/React, Docker, and Railway. Its public contracts are the CLI, `quickscale.yml` and applied state, module manifests, generated trees, and upgrade semantics.
 
-The current structural posture is stable at the reviewed trust boundaries. Quality-baseline monotonicity and release-gate topology are enforced; their closed findings are archived in [CHANGELOG.md](CHANGELOG.md). Three findings remain open but intentionally outside the `now` horizon. The immediate release path is a single human-gated ticket, staged publication (`SA96-PUBLISH`); see the [roadmap](docs/technical/roadmap.md).
+The current structural posture is stable at the reviewed trust boundaries. Quality-baseline monotonicity and release-gate topology are enforced; their closed findings are archived in [CHANGELOG.md](../../CHANGELOG.md). Three findings remain open but intentionally outside the `now` horizon. The immediate release path is a single human-gated ticket, staged publication (`SA96-PUBLISH`); see the [roadmap](../technical/roadmap.md).
 
 ## Enforcement census
 
@@ -128,4 +128,4 @@ What is the first post-0.87 domain/consumer: `teams`, a third generated-project 
 - `deletion-invariants-per-boundary-reimplementation`: open but deferred, gated on a second deletion/erasure boundary.
 - `org-model-universe-hand-enumerated`: open but deferred, gated on tenant-model growth.
 
-Closed findings, retired watch items, historical option records, and cross-reference migrations are archived in [CHANGELOG.md](CHANGELOG.md) and version control rather than repeated in this live audit.
+Closed findings, retired watch items, historical option records, and cross-reference migrations are archived in [CHANGELOG.md](../../CHANGELOG.md) and version control rather than repeated in this live audit.

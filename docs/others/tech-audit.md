@@ -12,7 +12,7 @@
 | S4 | 0 |
 | **Total** | **0** |
 
-No technical finding is open. Closed findings and their evidence live in [CHANGELOG.md](CHANGELOG.md) and version control. The remaining release work is already owned by the [roadmap](docs/technical/roadmap.md), not duplicated as audit findings.
+No technical finding is open. Closed findings and their evidence live in [CHANGELOG.md](../../CHANGELOG.md) and version control. The remaining release work is already owned by the [roadmap](../technical/roadmap.md), not duplicated as audit findings.
 
 ## Tooling gaps
 
@@ -29,6 +29,6 @@ No technical finding is open. Closed findings and their evidence live in [CHANGE
 
 ## Reconciliation
 
-There are no open technical findings. TA1–TA62 closure detail, later structural-cause closure, and superseded cross-reference notes are archived in [CHANGELOG.md](CHANGELOG.md) and version control rather than repeated in this live audit.
+There are no open technical findings. TA1–TA62 closure detail, later structural-cause closure, and superseded cross-reference notes are archived in [CHANGELOG.md](../../CHANGELOG.md) and version control rather than repeated in this live audit.
 
 Categories swept with no qualifying finding: correctness, concurrency, implementation security/authentication/authorization, resources/I/O, performance, data handling, multi-tenant isolation, CLI destructive-path safety, generator output security, dependency-manifest consistency, and runtime lifecycle transitions.

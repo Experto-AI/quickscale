@@ -14,7 +14,7 @@ This is the current task planner. It contains open planned work only. Completed 
 - Start from a clean worktree after `git merge v87`. Before merge-back, sync `v87` into the worktree, resolve there, run the ticket's verification, review the exact tip, then merge that tip.
 - Every handoff declares its file allowlist, commands, expected exits/artifacts, rollback, and focused validation. Scope findings are ticketed rather than fixed in place.
 - Leave `make quality` no worse than found. Do not raise a complexity ceiling or reintroduce file-line ceilings.
-- Shared closeout conflict surfaces are `CHANGELOG.md`, `docs/technical/roadmap.md`, and `docs/technical/decisions.md` when policy changes. `arch-audit.md` and `tech-audit.md` join that surface only when a ticket changes or closes a live audit finding. The sync-before-merge-back procedure above must preserve every concurrent entry, resolve these files in the worktree, rerun the ticket's checks, and leave no unmerged files before the exact tip is reviewed and merged.
+- Shared closeout conflict surfaces are `CHANGELOG.md`, `docs/technical/roadmap.md`, and `docs/technical/decisions.md` when policy changes. `docs/others/arch-audit.md` and `docs/others/tech-audit.md` join that surface only when a ticket changes or closes a live audit finding. The sync-before-merge-back procedure above must preserve every concurrent entry, resolve these files in the worktree, rerun the ticket's checks, and leave no unmerged files before the exact tip is reviewed and merged.
 - PostgreSQL/Docker work is serialized across worktrees. Track 3 has priority while a service-backed critical-path leg is active.
 - A ticket whose deliverable is Git ref state cannot be delegated to a file-editing worker. Route it to a maintainer session with ref authority and push credentials.
 
@@ -134,7 +134,7 @@ These preserved open tasks are not executable on a v87 worktree. Their assigned 
 ## References
 
 - [Changelog — completed and closed work](../../CHANGELOG.md)
-- [Architectural audit — live structural findings](../../arch-audit.md)
-- [Technical audit — live defect posture](../../tech-audit.md)
+- [Architectural audit — live structural findings](../others/arch-audit.md)
+- [Technical audit — live defect posture](../others/tech-audit.md)
 - [Decisions — policy authority](decisions.md)
 - [Validation policy — command authority](validation_policy.md)

@@ -148,7 +148,7 @@ Adding or swapping a frontend dependency requires a decision entry here.
 
 **Teams tie-breaker:** `quickscale_modules/teams/` is a README-only placeholder.
 It is **not next** and **not planned** — no committed timeline, no kickoff date.
-[arch-audit.md](../../arch-audit.md) findings whose horizon keys off "teams
+[arch-audit.md](../others/arch-audit.md) findings whose horizon keys off "teams
 kickoff" (e.g. `deletion-invariants-per-boundary-reimplementation`,
 `org-model-universe-hand-enumerated`) describe conditions that apply *if and when*
 teams is scheduled. Treat them as open-ended and deferred — not roadmap items on a
@@ -737,7 +737,7 @@ alias.
 |-----|----------|---------------|--------|
 | F12.2 | `project_state.py:_read_through_import_legacy()` and `materialize_authoritative_state()`; `remove_command.py:_load_legacy_tracking()` and `_record_mutation_snapshots()` (legacy `config.yml` / `file_hashes.yml` compatibility paths) | One-time compatibility window: projects predating the consolidated `state.yml` format may still depend on legacy `config.yml` / `file_hashes.yml` data while consolidated `state.yml` becomes authoritative. `project_state.py` logs-and-skips stale legacy import failures so consolidation is not blocked; `remove_command.py` still consults and snapshots legacy `config.yml` so rollback-safe module removal can preserve compatibility tracking during the same sunset window. Does NOT cover `_load_managed_file_records_for_drift()` — its legacy `file_hashes.yml` fallback is a drift-detection design choice, not a compatibility path. | Remove once the consolidated state format has been deployed for two full releases with no known pre-consolidation projects in active use. |
 
-**Known violations:** tracked in [tech-audit.md](../../tech-audit.md), the SSOT for found-not-yet-fixed fail-hard violations. Remediated findings are dropped from that file and closed out in CHANGELOG.md.
+**Known violations:** tracked in [tech-audit.md](../others/tech-audit.md), the SSOT for found-not-yet-fixed fail-hard violations. Remediated findings are dropped from that file and closed out in CHANGELOG.md.
 
 ---
 
@@ -754,7 +754,7 @@ alias.
 
 The CSRF CI gate continues to enforce the pairing requirement across all `csrf_exempt` callsites.
 
-**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../../arch-audit.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../others/arch-audit.md)
 
 ---
 
@@ -846,7 +846,7 @@ non-runtime privileged path** — never for a debug or impersonation feature.
 
 Implementation detail: [organizations.md §Operator Debug Mode](./organizations.md#operator-debug-mode-view-as).
 
-**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (current open work) | [arch-audit.md](../../arch-audit.md) (current risk posture)
+**Related docs:** [organizations.md](./organizations.md) (design) | [roadmap.md](./roadmap.md) (current open work) | [arch-audit.md](../others/arch-audit.md) (current risk posture)
 
 ---
 
@@ -938,7 +938,7 @@ and asserts every emitted file is classified.
    gate (rule 6) also checks ``MODE_REQUIRED_SPECS`` entries against
    ``INTENTIONALLY_UNMANAGED``.
 
-**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Finding 7](../../arch-audit.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Finding 7](../others/arch-audit.md)
 
 ---
 
@@ -982,7 +982,7 @@ manual-verification ask as a maintainer to-do in
 roadmap.md checklist entry — the roadmap tracks repo-local implementation
 work, not manual maintainer operations against external infrastructure.
 
-**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md live findings](../../arch-audit.md) | [beta-site-migration.md](../planning/beta-site-migration.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md live findings](../others/arch-audit.md) | [beta-site-migration.md](../planning/beta-site-migration.md)
 
 ---
 
@@ -1326,7 +1326,7 @@ ceiling-index construction, and merge-base resolution precedence are owned by
 <a id="merge-base-resolution-precedence"></a>
 
 **Related docs:** [quality_tools.md](./quality_tools.md#baseline-monotonicity-gate-sa121) |
-[arch-audit.md current posture](../../arch-audit.md) | [roadmap.md](./roadmap.md) |
+[arch-audit.md current posture](../others/arch-audit.md) | [roadmap.md](./roadmap.md) |
 [CHANGELOG.md closure history](../../CHANGELOG.md)
 
 ---
