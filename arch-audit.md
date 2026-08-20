@@ -1,6 +1,6 @@
 # Structural Autopsy: QuickScale
 
-> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-19 · **Branch:** `v87`
+> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-20 · **Branch:** `v87`
 
 ## Current posture
 
