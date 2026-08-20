@@ -238,6 +238,21 @@ activate_installed_command() {
     fi
 }
 
+stage_install_wheelhouse() {
+    # Retain the exact wheels this install was built from next to the venv.
+    # A locally installed (unpublished) build must resolve quickscale-core
+    # from these wheels; otherwise every generated project pins a PyPI
+    # version that does not exist yet and `quickscale apply` fails at
+    # `poetry lock`.  Read by quickscale_cli.utils.module_dependency_sync
+    # via sys.prefix/quickscale_wheels.
+    local wheelhouse="$INSTALL_VENV_DIR/quickscale_wheels"
+
+    rm -rf "$wheelhouse"
+    mkdir -p "$wheelhouse"
+    cp "$ROOT/quickscale_core/dist/quickscale_core-"*.whl "$wheelhouse/"
+    echo "📦 Staged local wheelhouse: $wheelhouse"
+}
+
 path_contains_dir() {
     local candidate="$1"
     local entry
@@ -292,6 +307,7 @@ create_install_venv
 pip_install_isolated "$INSTALL_VENV_DIR" \
     "$ROOT/quickscale_core/dist/quickscale_core-"*.whl \
     "$ROOT/quickscale_cli/dist/quickscale_cli-"*.whl
+stage_install_wheelhouse
 activate_installed_command
 
 echo "✅ QuickScale installed for the current user. You can now run 'quickscale' from any directory."

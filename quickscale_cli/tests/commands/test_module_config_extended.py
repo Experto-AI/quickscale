@@ -439,6 +439,120 @@ class TestSharedModuleDependencySyncHelpers:
         assert pyproject.read_text() == original
 
 
+class TestUnpublishedCoreWheelhouseRegression:
+    """Regression: a local build must not pin an unpublished quickscale-core.
+
+    Module manifests pin ``quickscale-core>=X,<Y``.  When the running CLI is a
+    locally built (not yet published) release, that constraint resolves to
+    nothing on PyPI and ``quickscale apply`` dies at ``poetry lock`` with
+    "which doesn't match any versions".  ``scripts/install_global.sh`` stages
+    the built core wheel at ``sys.prefix/quickscale_wheels`` so the sync
+    resolves the local wheel instead.
+    """
+
+    BACKUPS_MANIFEST = (
+        "name: backups\n"
+        'version: "0.87.0"\n'
+        "dependencies:\n"
+        "  - quickscale-core>=0.87.0,<0.88.0\n"
+    )
+    BACKUPS_PYPROJECT = (
+        "[project]\n"
+        'name = "quickscale-module-backups"\n\n'
+        "[tool.poetry.dependencies]\n"
+        'python = "^3.14"\n'
+        'quickscale-core = {path = "../../quickscale_core", develop = true}\n'
+    )
+
+    def _write_backups(self, project: Path) -> None:
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=self.BACKUPS_MANIFEST,
+            pyproject_content=self.BACKUPS_PYPROJECT,
+        )
+
+    def test_sync_pins_published_range_without_wheelhouse(self, tmp_path, monkeypatch):
+        """Without any wheelhouse the manifest range is used (published path)."""
+        monkeypatch.delenv("QUICKSCALE_LOCAL_WHEELHOUSE", raising=False)
+        monkeypatch.setattr(
+            "quickscale_cli.utils.module_dependency_sync.sys.prefix",
+            str(tmp_path / "no-wheelhouse"),
+        )
+        project = _make_project(tmp_path)
+        self._write_backups(project)
+
+        sync_project_module_dependencies(project, {"backups": {}})
+
+        assert (
+            'quickscale-core = ">=0.87.0,<0.88.0"'
+            in (project / "pyproject.toml").read_text()
+        )
+
+    def test_sync_uses_wheelhouse_staged_beside_the_cli_install(
+        self, tmp_path, monkeypatch
+    ):
+        """A wheelhouse at sys.prefix/quickscale_wheels replaces the PyPI pin."""
+        monkeypatch.delenv("QUICKSCALE_LOCAL_WHEELHOUSE", raising=False)
+        install_prefix = tmp_path / "install-venv"
+        wheelhouse = install_prefix / "quickscale_wheels"
+        wheelhouse.mkdir(parents=True)
+        (wheelhouse / "quickscale_core-0.87.0-py3-none-any.whl").write_bytes(b"wheel")
+        monkeypatch.setattr(
+            "quickscale_cli.utils.module_dependency_sync.sys.prefix",
+            str(install_prefix),
+        )
+
+        project = _make_project(tmp_path)
+        self._write_backups(project)
+
+        sync_project_module_dependencies(project, {"backups": {}})
+
+        project_pyproject = (project / "pyproject.toml").read_text()
+        module_pyproject = (
+            project / "modules" / "backups" / "pyproject.toml"
+        ).read_text()
+
+        assert 'quickscale-core = ">=0.87.0,<0.88.0"' not in project_pyproject
+        assert "quickscale_core-0.87.0-py3-none-any.whl" in project_pyproject
+        assert "quickscale_core-0.87.0-py3-none-any.whl" in module_pyproject
+        assert (
+            project
+            / ".quickscale"
+            / "wheels"
+            / "quickscale_core-0.87.0-py3-none-any.whl"
+        ).exists()
+
+    def test_env_wheelhouse_still_wins_over_install_wheelhouse(
+        self, tmp_path, monkeypatch
+    ):
+        """QUICKSCALE_LOCAL_WHEELHOUSE keeps priority for acceptance runs."""
+        install_prefix = tmp_path / "install-venv"
+        install_wheelhouse = install_prefix / "quickscale_wheels"
+        install_wheelhouse.mkdir(parents=True)
+        (install_wheelhouse / "quickscale_core-0.87.0-py3-none-any.whl").write_bytes(
+            b"stale"
+        )
+        env_wheelhouse = tmp_path / "acceptance-wheels"
+        env_wheelhouse.mkdir()
+        (env_wheelhouse / "quickscale_core-0.87.1-py3-none-any.whl").write_bytes(b"new")
+
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", str(env_wheelhouse))
+        monkeypatch.setattr(
+            "quickscale_cli.utils.module_dependency_sync.sys.prefix",
+            str(install_prefix),
+        )
+
+        project = _make_project(tmp_path)
+        self._write_backups(project)
+
+        sync_project_module_dependencies(project, {"backups": {}})
+
+        project_pyproject = (project / "pyproject.toml").read_text()
+        assert "quickscale_core-0.87.1-py3-none-any.whl" in project_pyproject
+        assert "quickscale_core-0.87.0-py3-none-any.whl" not in project_pyproject
+
+
 # ============================================================================
 # _is_app_in_installed_apps / _filter_new_apps
 # ============================================================================

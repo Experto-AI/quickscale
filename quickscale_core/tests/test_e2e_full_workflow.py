@@ -426,6 +426,16 @@ class TestGeneratedProjectDependencyInstallSmoke:
         # quickscale-core distribution, which poetry lock cannot resolve.
         # Rewrite both temporary entries to a path/develop dependency on the
         # maintainer-side package for the E2E duration only.
+        #
+        # NOTE: this rewrite deliberately masks "quickscale-core for the
+        # current VERSION is not on PyPI" — pre-publish that is expected and
+        # unavoidable here.  The published-side coverage lives in
+        # scripts/check_release_published.py (wired into scripts/publish.sh
+        # and the publish workflow), which fails the release when a shipped
+        # CLI would pin a core version PyPI does not have.  Locally installed
+        # builds resolve their own staged wheels instead (see
+        # scripts/install_global.sh and quickscale_cli.utils
+        # .module_dependency_sync._resolve_wheelhouse_dir).
         synced_core_constraint = 'quickscale-core = ">=0.87.0,<0.88.0"'
         core_path_value = str(REPO_ROOT / "quickscale_core").replace("\\", "\\\\")
         core_path_dependency = (

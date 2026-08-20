@@ -78,6 +78,11 @@ from quickscale_cli.utils.module_dependency_sync import (
     DependencySyncError,
     sync_project_module_dependencies,
 )
+from quickscale_cli.utils.docker_utils import (
+    compose_down,
+    find_stale_project_volumes,
+    remove_volumes,
+)
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_cli.utils.railway_utils import (
     deploy_railway_service,
@@ -662,6 +667,91 @@ def _run_local_migrations(project_path: Path) -> bool:
         run_local_migrations_fn=_run_migrations,
     )
     return outcome.success
+
+
+def _should_check_stale_volumes(ctx: "ApplyContext") -> bool:
+    """Return whether this apply is provisioning a project's database anew.
+
+    ``had_existing_state`` is True only when an authoritative
+    ``.quickscale/state.yml`` was loaded, so it stays False for a resumed
+    apply — which carries a recovery ledger in ``existing_state`` but is
+    still a first-time provision, and is exactly the case that must not
+    silently adopt an unrelated project's volumes.
+    """
+    return not ctx.had_existing_state
+
+
+def _preflight_stale_docker_volumes(project_path: Path) -> bool:
+    """Handle leftover Compose volumes before a new project starts Docker.
+
+    Compose names volumes after the project directory, so a freshly generated
+    project reuses any volume left behind by an earlier project of the same
+    name.  The stale database still carries that project's migration history,
+    and Django then aborts with ``InconsistentMigrationHistory`` — an error
+    that says nothing about the real cause.  Detect it first and let the
+    operator remove the leftovers (destructive, so never automatic).
+
+    Returns:
+        True when it is safe to continue, False when the operator declined
+        and the apply should stop.
+    """
+    stale_volumes = find_stale_project_volumes(project_path)
+    if not stale_volumes:
+        return True
+
+    click.echo("")
+    click.secho(
+        "⚠️  Leftover Docker volumes found for this project name",
+        fg="yellow",
+        bold=True,
+    )
+    for volume in stale_volumes:
+        click.echo(f"  • {volume}")
+    click.echo(
+        "\nThis project was just generated, so these volumes belong to an "
+        "earlier\nproject that used the same directory name.  Starting on top "
+        "of that old\ndatabase makes migrations fail with "
+        "'InconsistentMigrationHistory'."
+    )
+
+    if _AF5_DESTRUCTIVE_CONFIRM_BYPASS:
+        return True
+
+    click.echo("")
+    if not click.confirm(
+        "Remove these volumes and start from a clean database?", default=True
+    ):
+        click.secho(
+            "\n❌ Keeping the existing volumes. Docker startup would fail on "
+            "the stale database.",
+            fg="yellow",
+        )
+        click.echo(
+            "💡 Remove them yourself and re-run 'quickscale apply':\n"
+            f"   docker volume rm {' '.join(stale_volumes)}"
+        )
+        return False
+
+    # Containers left over from the earlier project keep its volumes
+    # attached; release them first so removal can succeed.
+    compose_down(project_path)
+
+    removed, failed = remove_volumes(stale_volumes)
+    for volume in removed:
+        click.secho(f"✅ Removed volume: {volume}", fg="green")
+    if failed:
+        click.secho(
+            "❌ Could not remove: " + ", ".join(failed),
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "💡 A volume still in use must be released first:\n"
+            "   quickscale down  # or: docker compose down",
+            err=True,
+        )
+        return False
+    return True
 
 
 def _start_docker_impl(
@@ -3739,6 +3829,19 @@ def _execute_apply_steps_locked(
     docker_started: bool | None = None
     if _should_run(12):
         if should_auto_start_docker:
+            if _should_check_stale_volumes(ctx) and not _preflight_stale_docker_volumes(
+                ctx.output_path
+            ):
+                _abort_after_post_embed_failure(
+                    ctx,
+                    post_embed_state,
+                    checkpoint_tree_id=checkpoint_tree_id,
+                    failed_step=_FAILED_STEP["docker startup"],
+                    reason=(
+                        "Leftover Docker volumes from an earlier project of the "
+                        "same name would corrupt this project's migration history."
+                    ),
+                )
             docker_started = _start_docker(
                 ctx.output_path, ctx.qs_config.docker.build, verbose_docker
             )

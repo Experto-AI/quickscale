@@ -15,6 +15,7 @@ from quickscale_core.utils.theme_validation import (
 )
 from quickscale_cli.utils.docker_utils import (
     DockerComposePluginRequiredError,
+    find_stale_project_volumes,
     get_docker_compose_command,
     get_port_from_env,
     is_docker_running,
@@ -327,6 +328,46 @@ def _command_contains(error: subprocess.CalledProcessError, *tokens: str) -> boo
     return all(token in cmd_text for token in tokens)
 
 
+def _is_inconsistent_migration_history(error: subprocess.CalledProcessError) -> bool:
+    """Return whether a failed migrate reported InconsistentMigrationHistory."""
+    output = (error.stderr or "") + (error.stdout or "")
+    return "InconsistentMigrationHistory" in output
+
+
+def _show_inconsistent_migration_history_help() -> None:
+    """Explain the leftover-volume cause of an inconsistent migration history.
+
+    Compose names volumes after the project directory, so a project reusing an
+    earlier project's directory name attaches to that project's database.  Its
+    recorded migration history predates the modules embedded now (a swapped
+    ``AUTH_USER_MODEL`` in particular), and Django refuses to continue.
+    """
+    stale_volumes = find_stale_project_volumes(Path.cwd())
+    click.echo(
+        "\n💡 This usually means the database predates the modules embedded in "
+        "this project.\n"
+        "   Docker volumes are named after the project directory, so a new "
+        "project reuses\n"
+        "   the database of any earlier project with the same name.",
+        err=True,
+    )
+    if stale_volumes:
+        click.echo("\n   Volumes currently attached to this project:", err=True)
+        for volume in stale_volumes:
+            click.echo(f"     • {volume}", err=True)
+    click.echo(
+        "\n   To start from a clean database (destroys its contents):\n"
+        "     quickscale down\n"
+        "     docker volume rm "
+        + (" ".join(stale_volumes) if stale_volumes else "<project>_postgres_data")
+        + "\n"
+        "     quickscale up\n"
+        "\n   To keep the data instead, inspect it with 'quickscale logs backend' "
+        "and reconcile\n   the migration history manually.",
+        err=True,
+    )
+
+
 @click.command()
 @click.option("--build", is_flag=True, help="Rebuild containers before starting")
 @click.option("--no-cache", is_flag=True, help="Build without using cache")
@@ -396,10 +437,13 @@ def up(build: bool, no_cache: bool) -> None:
             )
             if e.stderr:
                 click.echo(f"\nError output:\n{e.stderr}", err=True)
-            click.echo(
-                "💡 Tip: Run 'quickscale manage migrate' and inspect logs with 'quickscale logs backend'",
-                err=True,
-            )
+            if _is_inconsistent_migration_history(e):
+                _show_inconsistent_migration_history_help()
+            else:
+                click.echo(
+                    "💡 Tip: Run 'quickscale manage migrate' and inspect logs with 'quickscale logs backend'",
+                    err=True,
+                )
         elif _command_contains(e, "manage.py", "createsuperuser"):
             click.secho(
                 "❌ Error: Services started but superuser creation failed",

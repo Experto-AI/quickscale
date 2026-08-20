@@ -472,6 +472,10 @@ publish_to_pypi() {
 
     log_success "All packages published to PyPI"
 
+    if ! verify_published_release; then
+        exit 1
+    fi
+
     local version
     version=$(read_version)
 
@@ -484,6 +488,20 @@ publish_to_pypi() {
     log_info "Users can now install with:"
     echo "  pip install quickscale==$version"
     echo ""
+}
+
+verify_published_release() {
+    # Post-publish gate: a generated project pins quickscale-core from the
+    # module manifests, so shipping the CLI while quickscale-core is missing
+    # from PyPI breaks every `quickscale apply` at `poetry lock`.
+    log_info "Verifying published releases on PyPI..."
+    if (cd "$ROOT" && poetry run python "$ROOT/scripts/check_release_published.py" \
+            --repo-root "$ROOT"); then
+        log_success "All pinned QuickScale distributions are published"
+        return 0
+    fi
+    log_error "Published-release verification failed (see above)"
+    return 1
 }
 
 cmd_build() {
@@ -560,6 +578,7 @@ Commands:
   test     Build and publish to TestPyPI only
   prod     Build and publish to production PyPI
   full     Build, publish to TestPyPI, verify, then publish to PyPI
+  verify   Verify the current VERSION is fully published on PyPI
 
 Prerequisites:
   - Poetry installed and configured
@@ -625,6 +644,8 @@ main() {
             cmd_prod ;;
         full)
             cmd_full ;;
+        verify)
+            verify_published_release ;;
         -h|--help|help)
             usage ;;
         *)

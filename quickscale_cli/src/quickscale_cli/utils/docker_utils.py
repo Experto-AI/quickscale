@@ -178,3 +178,163 @@ def get_port_from_env() -> int:
         raise ValueError(
             f"PORT environment variable must be an integer, got {port_str!r}"
         ) from error
+
+
+# ---------------------------------------------------------------------------
+# Stale Compose volume detection
+# ---------------------------------------------------------------------------
+# Compose derives its project name from the project directory and prefixes
+# every named volume with it.  A freshly generated project whose slug matches
+# a previously-used one therefore silently reattaches to the old database,
+# and Django then fails with an opaque ``InconsistentMigrationHistory``
+# because the leftover schema predates the modules embedded this time.
+
+
+def compose_project_name(project_path: Path) -> str:
+    """Return the Compose project name derived from *project_path*.
+
+    Mirrors Compose's normalization: lowercase, with every character outside
+    ``[a-z0-9_-]`` replaced by an underscore and leading separators dropped.
+    """
+    normalized = "".join(
+        char if char.isalnum() or char in "_-" else "_"
+        for char in project_path.resolve().name.lower()
+    )
+    return normalized.lstrip("_-")
+
+
+def compose_declared_volume_names(compose_file: Path) -> list[str]:
+    """Return the top-level named volumes declared in a Compose file.
+
+    Parsed with a minimal line reader rather than a YAML dependency so the
+    helper stays usable wherever the CLI runs.  Returns an empty list when the
+    file is unreadable or declares no top-level ``volumes:`` block.
+    """
+    try:
+        lines = compose_file.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+
+    volumes: list[str] = []
+    in_volumes_block = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not line[:1].isspace():
+            # A new top-level key ends any volumes block we were reading.
+            in_volumes_block = stripped.rstrip(":") == "volumes"
+            continue
+        if not in_volumes_block:
+            continue
+        # Only first-level entries under `volumes:` name a volume; deeper
+        # indentation carries that volume's own options.
+        indent = len(line) - len(line.lstrip())
+        if indent > 2:
+            continue
+        name = stripped.split(":", 1)[0].strip()
+        if name and name not in volumes:
+            volumes.append(name)
+    return volumes
+
+
+def list_existing_volumes(names: list[str]) -> list[str]:
+    """Return the subset of *names* that currently exist as Docker volumes."""
+    if not names:
+        return []
+    try:
+        result = subprocess.run(
+            ["docker", "volume", "ls", "--format", "{{.Name}}"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
+        return []
+
+    existing = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    return [name for name in names if name in existing]
+
+
+def find_stale_project_volumes(project_path: Path) -> list[str]:
+    """Return pre-existing Compose volumes belonging to *project_path*.
+
+    Meaningful only for a project whose database has never been provisioned
+    by this checkout: any hit is a leftover from an earlier project that
+    happened to use the same directory name.
+    """
+    compose_file = project_path / "docker-compose.yml"
+    if not compose_file.exists():
+        return []
+
+    project_name = compose_project_name(project_path)
+    if not project_name:
+        return []
+
+    candidates = [
+        f"{project_name}_{volume}"
+        for volume in compose_declared_volume_names(compose_file)
+    ]
+    return list_existing_volumes(candidates)
+
+
+def remove_volumes(names: list[str]) -> tuple[list[str], list[str]]:
+    """Remove Docker volumes, returning ``(removed, failed)`` name lists."""
+    removed: list[str] = []
+    failed: list[str] = []
+    for name in names:
+        try:
+            result = subprocess.run(
+                ["docker", "volume", "rm", name],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+        except (
+            subprocess.SubprocessError,
+            FileNotFoundError,
+            subprocess.TimeoutExpired,
+        ):
+            failed.append(name)
+            continue
+        if result.returncode == 0:
+            removed.append(name)
+        else:
+            failed.append(name)
+    return removed, failed
+
+
+def compose_down(project_path: Path) -> bool:
+    """Stop and remove this project's Compose containers (volumes untouched).
+
+    Containers left behind by an earlier project of the same name keep its
+    volumes attached, so they must be released before the volumes can be
+    removed.  Returns True when Compose reports success.
+    """
+    try:
+        compose_cmd = get_docker_compose_command()
+    except DockerComposePluginRequiredError:
+        return False
+
+    try:
+        result = subprocess.run(
+            compose_cmd + ["down", "--remove-orphans"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
+        return False
+    return result.returncode == 0

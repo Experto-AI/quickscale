@@ -363,10 +363,30 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
+  verify-published:
+    name: Verify Published Release
+    runs-on: ubuntu-latest
+    needs: publish-pypi
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      # Generated projects pin quickscale-core from the module manifests, so
+      # a release that ships the CLI without quickscale-core on PyPI breaks
+      # every `quickscale apply` at `poetry lock`.
+      - name: Verify every pinned distribution is published
+        run: |
+          python scripts/check_release_published.py --repo-root "$GITHUB_WORKSPACE" --retries 5 --retry-delay 30
+
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [verify, publish-pypi]
+    needs: [verify, publish-pypi, verify-published]
     permissions:
       contents: write
     steps:

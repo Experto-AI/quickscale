@@ -3,6 +3,7 @@
 import os
 import re
 import shutil
+import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,6 +18,11 @@ _STORAGE_CLOUD_BACKENDS = frozenset({"r2", "s3"})
 _STORAGE_CLOUD_DEPENDENCIES = frozenset({"boto3", "django-storages"})
 _STORAGE_CLOUD_EXTRA = "cloud"
 _LOCAL_WHEELHOUSE_ENV = "QUICKSCALE_LOCAL_WHEELHOUSE"
+# Wheelhouse staged next to a locally installed CLI (scripts/install_global.sh).
+# A local (unpublished) build must resolve its own quickscale-core from these
+# wheels; without it every generated project pins a PyPI version that does not
+# exist yet and `poetry lock` fails during `quickscale apply`.
+_INSTALL_WHEELHOUSE_DIRNAME = "quickscale_wheels"
 
 
 class DependencySyncError(Exception):
@@ -144,21 +150,38 @@ def _should_skip_manifest_dependency(
     return dependency_name in _STORAGE_CLOUD_DEPENDENCIES
 
 
+def _resolve_wheelhouse_dir() -> Path | None:
+    """Return the wheelhouse to resolve QuickScale distributions from, if any.
+
+    ``QUICKSCALE_LOCAL_WHEELHOUSE`` wins when set (installed-wheel acceptance
+    runs).  Otherwise a wheelhouse staged beside the running CLI install is
+    used, so a locally installed build resolves its own unpublished wheels
+    instead of pinning a PyPI version that does not exist.
+    """
+    wheelhouse_value = os.environ.get(_LOCAL_WHEELHOUSE_ENV)
+    if wheelhouse_value:
+        wheelhouse = Path(wheelhouse_value)
+        if not wheelhouse.is_absolute() or not wheelhouse.is_dir():
+            raise DependencySyncError(
+                f"{_LOCAL_WHEELHOUSE_ENV} must name an absolute wheelhouse directory"
+            )
+        return wheelhouse
+
+    install_wheelhouse = Path(sys.prefix) / _INSTALL_WHEELHOUSE_DIRNAME
+    if install_wheelhouse.is_dir():
+        return install_wheelhouse
+    return None
+
+
 def _resolve_local_wheel_dependency(
     project_path: Path,
     dependency_base: Path,
     dependency_name: str,
 ) -> dict[str, str] | None:
     """Materialize and return an exact local wheel for installed acceptance."""
-    wheelhouse_value = os.environ.get(_LOCAL_WHEELHOUSE_ENV)
-    if not wheelhouse_value:
+    wheelhouse = _resolve_wheelhouse_dir()
+    if wheelhouse is None:
         return None
-
-    wheelhouse = Path(wheelhouse_value)
-    if not wheelhouse.is_absolute() or not wheelhouse.is_dir():
-        raise DependencySyncError(
-            f"{_LOCAL_WHEELHOUSE_ENV} must name an absolute wheelhouse directory"
-        )
 
     normalized_name = dependency_name.replace("-", "_").lower()
     candidates = sorted(wheelhouse.glob(f"{normalized_name}-*.whl"))
@@ -166,7 +189,7 @@ def _resolve_local_wheel_dependency(
         return None
     if len(candidates) != 1:
         raise DependencySyncError(
-            f"{_LOCAL_WHEELHOUSE_ENV} has ambiguous wheels for {dependency_name}: "
+            f"Wheelhouse {wheelhouse} has ambiguous wheels for {dependency_name}: "
             f"{[candidate.name for candidate in candidates]}"
         )
 
