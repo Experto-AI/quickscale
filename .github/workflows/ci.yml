@@ -405,10 +405,36 @@ jobs:
       run: |
         make typecheck -- --core --cli --modules --devtools
 
+    - name: Install PostgreSQL 18 client tooling
+      # The backups module's DR engine enforces a PostgreSQL 18
+      # pg_dump/pg_restore contract. ubuntu-latest ships 16.x as
+      # `postgresql-client`, which fails that contract, so install from PGDG
+      # exactly as the backups-validation job does.
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ca-certificates curl
+        distro_codename="$(
+          . /etc/os-release
+          echo "$VERSION_CODENAME"
+        )"
+        sudo install -d /usr/share/postgresql-common/pgdg
+        sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+          -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \
+          | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client-18
+        echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+
+    - name: Verify PostgreSQL 18 client tooling
+      run: |
+        test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"
+        test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"
+        /usr/lib/postgresql/18/bin/pg_dump --version | grep -F "(PostgreSQL) 18"
+        /usr/lib/postgresql/18/bin/pg_restore --version | grep -F "(PostgreSQL) 18"
+
     - name: Create test databases in PostgreSQL
       run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq --no-install-recommends postgresql-client
         for db in \
           test_quickscale_smoke \
           test_quickscale_analytics \

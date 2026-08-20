@@ -168,16 +168,31 @@ SKIPPED_FOUND=0
 for xml_file in "${ISOLATION_XML_DIR}"/*.xml; do
   [ -f "$xml_file" ] || continue
 
-  skip_count=$(python3 -c "
-import sys, xml.etree.ElementTree as ET
+  # An empty pytest parametrize set reports as a skip, but it is not an
+  # environment skip: the isolation registry parametrizes over
+  # PENDING_REMEDIATION entries, and zero of them is the healthy state that
+  # test_exactly_zero_pending_remediation_entries independently asserts.
+  # Failing on it would make the gate red precisely when the registry is
+  # clean. Every other skip reason still fails the gate.
+  skip_report=$(python3 -c "
+import xml.etree.ElementTree as ET
 tree = ET.parse('${xml_file}')
-root = tree.getroot()
-skipped = root.findall('.//testcase/skipped')
-print(len(skipped))
+genuine = []
+for case in tree.getroot().findall('.//testcase'):
+    for skipped in case.findall('skipped'):
+        message = skipped.get('message', '')
+        if message.startswith('got empty parameter set'):
+            continue
+        genuine.append(f\"{case.get('name')}: {message}\")
+print(len(genuine))
+for line in genuine:
+    print(line)
 ")
+  skip_count=$(printf '%s\n' "$skip_report" | head -1)
   suite_name=$(basename "$xml_file" .xml)
   if [ "$skip_count" -gt 0 ]; then
     echo "  FAIL: ${skip_count} test(s) skipped in ${suite_name}"
+    printf '%s\n' "$skip_report" | tail -n +2 | sed 's/^/    /'
     SKIPPED_FOUND=1
   fi
 done
