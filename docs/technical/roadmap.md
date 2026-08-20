@@ -135,6 +135,16 @@ A track is truly green only when start, finish, and merge are all yes.
   - **Ordered validation:** add direct helper tests for bypass, Docker, local-migration, no-migration, default-yes, and cancellation paths; run `poetry run pytest quickscale_cli/tests/test_apply_command.py quickscale_cli/tests/test_apply_command_extended.py -q --tb=short`, `make check`, `make quality`, `make ci`, then `QUARANTINE_TICKETS= make ci-e2e`. Every command must exit 0; `.quickscale/quality_report.json` must report `_execute_apply_steps_locked` at 55 or below and no new helper above CC 10, `.quickscale/quality_gate_status.json` must report `total_regressions: 0`, and the installed-wheel all-module lifecycle must remain green.
   - **Failure/rollback/exit:** any output, ordering, recovery, confirmation, lifecycle, or new-complexity delta is a regression: restore parity and rerun from the narrow test onward. If the parent remains above 55, extract another bounded low-complexity display/decision seam; never move all steps into one helper, raise/rebaseline a ceiling, or add a waiver. If broader behavior repair is needed, stop and ticket it. Discard only candidate allowlisted edits on rollback. Independent exact-tip review plus all green checks clears `SA140`, makes `SA96-PUBLISH` can-start **yes**, and leaves can-merge **yes**.
 
+### SA141 — module_dependency_sync complexity drift
+
+- [ ] **SA141 — Restore `module_dependency_sync` to its baseline complexity tuples.** `Tier 1 · Track 3 · deps: none open · blocks SA96-PUBLISH`
+  - **Origin:** found during `SA140` ordered validation on 2026-08-20. On the clean `v87` tip (`cb826a0c`) `make quality` reports **three** critical regressions, not the one accepted `SA140` tuple. Two are unrelated pre-existing drift introduced by `3523f9f8` (`test: add installed-wheel lifecycle e2e`), which changed `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py` without updating any accepted tuple:
+    - `_patch_module_path_dependencies` is **26** against baseline **24**
+    - `sync_project_module_dependencies` is **30** against baseline **27**
+  - **Impact:** `make quality` exits 2 on the `SA140` tip even though `_execute_apply_steps_locked` is now 52 (ceiling 55) and no new helper exceeds CC 10. `SA140`'s ordered validation therefore cannot complete green, and `SA96-PUBLISH` stays blocked, until these two tuples are restored.
+  - **Goal:** reduce both functions back to at most their baseline values by bounded extraction, inside `module_dependency_sync.py` and its focused tests only. Do not raise or rebaseline a ceiling, add a waiver, or change the Poetry-install serialization behavior that `3523f9f8` introduced.
+  - **Ordered validation:** focused `module_dependency_sync` tests, then `make check`, `make quality` (must exit 0 with `total_regressions: 0`), `make ci`, then `QUARANTINE_TICKETS= make ci-e2e`.
+
 ### SA96-PUBLISH — staged human release
 
 - [ ] **SA96-PUBLISH — Publish v0.87.0.** `Tier 1 · Track 3 · deps: SA140 · HUMAN-ONLY`
