@@ -1,38 +1,437 @@
 # v88 Ticket Context — Concepts and Implementation Notes
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **v88 Ticket Context**
-> **Related docs**: [Roadmap](roadmap.md) (authority for scope, tracks, merge order) | [Decisions](decisions.md) | [Validation Policy](validation_policy.md)
+> **Related docs**: [Roadmap](roadmap.md) (authority for scope, bands, worktrees, merge order) | [Decisions](decisions.md) | [Validation Policy](validation_policy.md) | [Arch audit](../others/arch-audit.md) | [Tech audit](../others/tech-audit.md)
 
 ## What this document is
 
-The [roadmap](roadmap.md) says *what* each v88 ticket must achieve and *when* it may run. This companion says *why the problem exists*, *what mental model to hold*, and *where the code actually lives*. It is explanatory, not authoritative: if this document and the roadmap disagree, the roadmap wins.
+The [roadmap](roadmap.md) says *what* each v88 ticket must achieve and *when* it may run.
+This companion says *why the problem exists*, *what mental model to hold*, and *where the
+code actually lives*. It is explanatory, not authoritative: if this document and the
+roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
+It covers **all twenty v88 tickets** plus the three post-v88 entries. Sections are ordered
+by merge band (A → B → C), which is also the order in which the work becomes safe to do.
+
 ---
 
-## The one idea behind all nine tickets
+## The mind map
 
-Every v88 ticket is an instance of the same structural principle:
+The whole release is one principle with five failure modes. Every ticket is a leaf.
 
-> **Every fact should have exactly one home, and every consumer should read it from that home. When a consumer cannot read it, the system should stop, not guess.**
+```text
+                    ONE FACT, ONE HOME
+                    ─ and when the home cannot be read, STOP ─
+                              │
+      ┌──────────┬────────────┼────────────┬──────────────┐
+      │          │            │            │              │
+  UNEXECUTED  DUPLICATED   SILENT      UNOWNED       UNENFORCED
+  ENFORCEMENT  AUTHORITY   FALLBACK    LIFECYCLE       POLICY
+      │          │            │            │              │
+ the gate    the fact is   the answer   nobody owns   the rule is
+ doesn't run  written in    is missing   the thing     only in a
+ or lies      2+ places     so guess     we created    human's head
+      │          │            │            │              │
+   SA156      SA137         SA150        SA151          SA123
+   SA155      SA134         SA165a       SA142          SA166
+   SA157      SA124         SA152c       SA135          SA123
+   SA158      SA118           │          SA161            │
+   SA159      SA163         (state       SA160          (dep-vuln +
+   SA162      SA164a          file)      (dead/dup       security
+     │        SA160             │         code)          scanners)
+  (base ref,  SA161                                        │
+   suites,      │                                       SA166
+   oracles,   (paths, pins,                            (testimony
+   false-     manifests, CI                             trail)
+   greens)    env, cookies)
+```
 
-That principle splits into two failure modes, and each ticket fixes one or both:
+**The one sentence:** *Every fact should have exactly one home, and every consumer should
+read it from that home. When a consumer cannot read it, the system should stop, not guess —
+and the gate that proves all of this must itself actually run.*
+
+That last clause is what the revised priority model added. The original plan had four
+failure modes; auditing the gate layer found a fifth sitting underneath all of them.
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | devtools version pinned by hand; Python/Postgres versions retyped in tests; the SA117 required-path set restated in four places; manifest defaults restated in imperative code | SA137, SA134, SA124, SA118 |
-| **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | wheelhouse set but no wheel matches → returns the manifest spec instead | SA150 |
-| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; migration history accretes | SA142, SA135, SA151 |
-| **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate | SA123 |
+| **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | 10 of 14 `scripts/test_*.py` suites wired to nothing; the quality gate's base ref points at a deleted branch; a test that passes when its tool is deleted | SA156, SA155, SA157, SA158, SA159, SA162 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | devtools version pinned by hand; Python/Postgres versions retyped in tests; the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA137, SA134, SA124, SA118, SA163, SA160, SA164 |
+| **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | wheelhouse set but no wheel matches → returns the manifest spec; a corrupt state file returns silently; a skip where a failure belongs | SA150, SA165 |
+| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; migration history accretes; dead code nobody deletes | SA151, SA142, SA135, SA161 |
+| **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
 
-If you hold one sentence in your head for the whole release, hold that table. The track grouping in the roadmap follows it directly: **Track 1 is duplicated authority + silent fallback in the version/dependency domain**, **Track 2 is duplicated authority + unenforced policy in the tooling domain**, **Track 3 is unowned lifecycle in the service domain**.
+The worktree grouping follows it directly:
+
+- **W1** — duplicated authority + silent fallback in the **version/dependency/interpreter** domain.
+- **W2** — unexecuted enforcement, then duplicated authority + unenforced policy in the **tooling** domain.
+- **W3** — unowned lifecycle in the **service and emission** domain.
 
 ---
 
-# Track 1 — Pins and dependency-spec authority
+## Why band A goes first (the argument in one page)
+
+Read these four facts together:
+
+1. `scripts/check_quality_baseline_monotonicity.py:305-306` and `:1395-1396` fall back to
+   `ref = "v87"`. That branch was retired for `v88` and never existed as a tag.
+2. When the fallback fails, the gate exits 2 with `MERGE_BASE_ERROR`, and
+   `scripts/check_quality.sh:123` deletes the previous run's report *before* any analyzer
+   runs. So `make quality` produces nothing.
+3. Of 14 `scripts/test_*.py` suites, **10 are wired to no target at all**. Run under the
+   project interpreter, they produce **959 passed, 74 failed**.
+4. `scripts/test_check_sa117_scope.py:596-617` asserts `returncode == 2` from a subprocess
+   whose script path never resolves. CPython exits 2 on `can't open file`. The test would
+   pass if the tool were deleted.
+
+Now read the execution rule every ticket in this release inherits: *"Leave `make quality`
+no worse than found."*
+
+That rule has been unverifiable for the entire `v88` branch, and both audit documents
+recorded the invariant as enforced. Meanwhile SA124's headline acceptance criterion —
+*"`scripts/test_check_sa117_scope.py` covers the divergence failure"* — would have been
+written into an unexecuted suite, beside a guaranteed false-green, most plausibly by
+copying it.
+
+**Band A is not tidying. It is the difference between shipping tickets and shipping
+claims about tickets.**
+
+---
+
+# Band A — Make the gate layer tell the truth
+
+Five tickets, four of them independent and small, one integrating. W2 owns four; W1 owns
+SA159 because it edits `scripts/version_tool.sh`, which is SA137's file.
+
+## SA156 — Make the quality gate's fallback base ref resolve
+
+`Band A · Tier 1 · W2 · merge #1 · deps: none`
+
+### The mental model
+
+The quality gate enforces **monotonicity**: quality metrics may not get worse than they
+were at the merge base. That requires knowing what the merge base *is*, so the gate walks a
+precedence chain to find a reference:
+
+```
+QUALITY_BASELINE_BASE_REF  (explicit override)
+   ↓ unset
+GITHUB_BASE_REF            (hosted PR target — probes origin/<ref> then <ref>)
+   ↓ unset
+"v87"                      (hard-coded fallback — probes the bare name only)
+```
+
+Every link but the last is fine. The last one names a **per-release branch**, which is
+exactly the kind of thing that stops existing when the release it names is over.
+
+### The concrete defect
+
+`v87` was retired for `v88` and never tagged. Note the second asymmetry, which is the
+subtler half: the `GITHUB_BASE_REF` branch above probes `origin/<ref>` *and then* `<ref>`,
+but the fallback resolves the bare name only — so it misses the `origin/v87` that still
+survives. Two independent bugs stacked, either of which alone would have hidden the other.
+
+Nothing in the `Makefile`, `scripts/`, or any workflow sets `QUALITY_BASELINE_BASE_REF`, so
+a local `make quality` hits the fallback every time. It exits 2, and
+`scripts/check_quality.sh:123` then deletes the previous report before any analyzer runs.
+The failure mode is therefore *worse than no gate*: you lose the artifact that would have
+told you the gate did not run.
+
+This is also **72 of the 74 failures** in `scripts/test_quality_baseline_monotonicity.py`,
+which the arch audit had previously written off as unexplained environment sensitivity.
+That prior explanation is falsified and the falsification must be recorded.
+
+### Implementation shape
+
+Two things to fix, and do not fix only the first:
+
+1. **Resolution** — the fallback must use the same `origin/<ref>` → `<ref>` probe the
+   `GITHUB_BASE_REF` branch already implements. Factor the probe into one function and call
+   it from both sites; two probe implementations is the same duplicated-authority shape the
+   rest of the release is about.
+2. **Identity** — the fallback must name something durable: a long-lived ref (`main`), or a
+   ref derived from `VERSION`/`git tag`. Never the current or previous release branch.
+
+Then make it self-reporting: an unresolvable fallback should be a **startup-validated
+error whose message names the fix**, not a generic `MERGE_BASE_ERROR` at analysis time.
+
+The ~101 `v87` literals in the test suite move to the same derived ref — that count is
+itself evidence of how far one hardcoded string spread.
+
+### Verification
+
+```bash
+env -u QUALITY_BASELINE_BASE_REF -u GITHUB_BASE_REF \
+    poetry run python scripts/check_quality_baseline_monotonicity.py   # exit 0, real merge_base
+pytest scripts/test_quality_baseline_monotonicity.py                   # 72 failures → 0
+make quality                                                           # re-emits quality_report.json
+```
+
+Plus a regression test that runs the gate on a branch **not** named by the fallback — that
+is the case the current code gets wrong.
+
+---
+
+## SA158 — Regenerate the stale `publish.yml` parity oracle
+
+`Band A · Tier 2 · W2 · merge #4 · deps: none`
+
+### The mental model
+
+`scripts/test_gate_parity.py` proves the CI topology matches what the gate registry
+declares. Some of those proofs are **literal oracles**: a hardcoded copy of the expected
+content, compared against the real file. An oracle is a deliberate trade — you accept
+maintenance cost in exchange for catching *any* drift, including drift a structural
+assertion would wave through.
+
+That trade only pays if the oracle is maintained.
+
+### The concrete defect
+
+`test_all_twenty_one_publish_run_values_are_structural` (`:1090`) compares `publish.yml`'s
+ordered `run:` blocks against a literal oracle. Commit `d3d4c633` added two steps and
+removed two `apt-get` lines and never touched the oracle.
+
+The test is **red on HEAD**. Repository content versus repository content — no environment
+dependence, no flakiness, no excuse.
+
+### Why it is band A rather than a chore
+
+A red test is not a failure signal; it is a **destroyed** failure signal. The next real
+parity drift in `publish.yml` lands on an already-red test and is indistinguishable from
+this one. And SA155 must register the gate suites **green** — a red test in the suite is a
+direct blocker.
+
+### The broader question this ticket must answer
+
+The arch audit's change-cost probe named five more count-pinned literal oracles: `:1064`,
+`:958`, and the four `all_five_conformance_gates` assertions at `:803`, `:809`, `:815`,
+`:847`. Every one is the same bet. Decide per oracle:
+
+- **Derive it** — read the real file and assert structure. Cheap to maintain, weaker.
+- **Restate structurally** — assert the *properties* the oracle was protecting rather than
+  exact text.
+- **Re-carry it deliberately** — with a written rationale saying why exactness is worth the
+  maintenance. This is a legitimate answer; silence is not.
+
+### The review discipline
+
+Regenerating an oracle is trivially easy and trivially wrong: `regenerate && commit` makes
+the test green while proving nothing. The acceptance requires the diff be **reviewed line
+by line**, each changed entry confirmed to correspond to an intended change in
+`d3d4c633`/`d4b0e834`. If an entry does not, you have found a second, real defect.
+
+---
+
+## SA157 — Fix the SA117 scope-tool test that asserts the interpreter's exit code
+
+`Band A · Tier 2 · W2 · merge #6 · deps: none · blocks SA124`
+
+### The mental model
+
+This is the purest example of a **false green** in the repository, and worth internalising
+as a pattern rather than a one-off.
+
+A test asserts an exit code. Two entirely different mechanisms produce that same code:
+
+| Exit 2 from | Means |
+|---|---|
+| `argparse` | "the tool correctly rejected a bad argument" ← what the test intends |
+| CPython | "can't open file: no such file" ← what actually happens |
+
+The collision is **invisible** precisely because argparse chose 2 to match the shell
+convention. The test is not weak; it is measuring nothing at all.
+
+### The concrete defect
+
+`scripts/test_check_sa117_scope.py:596-617`:
+
+```python
+subprocess.run(["python", "scripts/check_sa117_scope.py", ...], cwd=version_fixture["root"])
+# asserts returncode == 2
+```
+
+The fixture root (`:85-96`) contains no `scripts/` subdirectory. The relative path never
+resolves. The interpreter exits 2 before the tool is ever loaded.
+
+The test passes today, would pass if `check_sa117_scope.py` were deleted, and would pass if
+the tool **accepted the argument it is supposed to reject**.
+
+Note this is not a house convention gone wrong: the same file uses `sys.executable`
+correctly in three other places, including the sibling at `:619-631`. It is one
+inconsistency in one file.
+
+### Why this must precede SA124
+
+Roadmap SA124 names this exact file as where its new acceptance criterion lands. Fix this
+first, or SA124's divergence test gets written beside — and most plausibly copied from — a
+guaranteed false-green, inside a suite nothing executes. Three defects compounding.
+
+### Implementation shape
+
+Copy the sibling at `:619-631` verbatim in shape:
+
+```python
+script = pathlib.Path(__file__).with_name("check_sa117_scope.py")
+result = subprocess.run([sys.executable, str(script), ...], ...)
+```
+
+Then add the part that makes the test un-fool-able: **assert a distinguishing signal
+alongside the exit code** — `"unrecognized arguments"` in stderr, or that the evidence file
+was not written. An interpreter-level failure produces neither.
+
+### Proof obligation
+
+Delete or rename `check_sa117_scope.py`, confirm the test turns **red**, revert. That is
+the demonstration that the test now measures the tool. Also
+`grep 'subprocess.run(\["python"' scripts/test_*.py` must return zero hits — this class
+should not be able to recur silently.
+
+---
+
+## SA159 — Route repo-source execution through the project interpreter
+
+`Band A · Tier 2 · W1 · merge #5 · deps: SA137 (same file) · blocks SA155, SA134`
+
+### The mental model
+
+`python3` on `PATH` is **whatever the machine happens to have**. The project interpreter is
+**the one the project declares**. Confusing them is fine right up until the repository uses
+syntax the PATH interpreter cannot parse — and then the failure is a `SyntaxError` from a
+file you did not think you were running, with no message naming the real cause.
+
+`ruff.toml:8-11` states the invariant **verbatim**:
+
+> *"Anything that executes repo sources must therefore use the project interpreter
+> (`sys.executable` / the venv), never a bare `python` off PATH"*
+
+So this is not a judgement call. The rule is written down and three sites violate it.
+
+### The concrete defect
+
+| Site | Code | Runs |
+|---|---|---|
+| `scripts/version_tool.sh:11`, used at `:28` | `PYTHON="${PYTHON:-python3}"` | the authoritative module-discovery shim |
+| `scripts/lint_frontend.sh:57` | `python3 render_j2_template.py` | a repo source |
+| `scripts/lint_frontend.sh:173` | `python3 render_j2_template.py` | a repo source |
+
+All three work today. **By luck, not by contract**: both targets happen to parse under
+3.12. The repository floor is 3.14, and ruff is configured to emit PEP 758 syntax that
+nothing below 3.14 can parse.
+
+The day `ruff format` collapses a two-type `except` in `module_discovery.py`,
+`version_tool.sh check` dies with a `SyntaxError` from a shim. The version gate — the thing
+that tells you your release is consistent — fails in a way that names neither the
+interpreter nor the version.
+
+`scripts/_python_requirement.sh` already exists and already probes candidate interpreters.
+Neither script sources it. The solution is in the tree, unused.
+
+### Implementation shape
+
+Resolve the project interpreter (`poetry run python`, `$REPO_ROOT/.venv/bin/python`, or the
+`_python_requirement.sh` probe) and **fail loudly with the required version** when none is
+found. Taking whatever `python3` is on `PATH` as a fallback is the exact behaviour being
+removed — do not reintroduce it as an "if all else fails" branch.
+
+Then make the class self-policing: a pre-commit or CI rule rejecting `python3 <repo>.py` in
+`scripts/*.sh` and `["python",` as an executor of a repo source in `scripts/test_*.py`.
+That second pattern is SA157's defect, so the two tickets close each other's recurrence.
+
+`scripts/check_ci_locally.sh:62-70` selects `python3` the same way but feeds it only a
+stdlib heredoc — genuinely adjacent, not a violation. Bring it into the seam or document it
+as deliberately excluded. Do not leave it unaddressed, because the next reader will
+re-litigate it.
+
+### Verification
+
+Put a 3.12 interpreter first on `PATH`, then run `scripts/version_tool.sh check` and
+`scripts/lint_frontend.sh`. Both must still succeed. That is the whole point.
+
+### Why W1 rather than W2
+
+`scripts/version_tool.sh` is SA137's file. Two worktrees editing it concurrently is a
+merge conflict on a shell script that gates the release. SA137 merges first (#2), SA159
+follows (#5) in the same worktree.
+
+---
+
+## SA155 — Give the gate layer a gate of its own
+
+`Band A · Tier 1 · W2 · merge #7 · deps: SA156, SA157, SA158, SA159`
+
+### The mental model
+
+Every piece of first-party code in this repository has an **owning execution context** —
+something that runs it and fails if it breaks. `TEST_DIRS` in `Makefile:150` names them.
+
+`scripts/` is deliberately outside `TEST_DIRS` and outside `.coveragerc`. The reasoning is
+sound: gate helpers are not product code and should not be dragged into the product
+coverage metric.
+
+But the consequence was not noticed: **gate code is the only first-party code with no
+owning execution context** — while being the code every other gate's credibility rests on.
+
+> The gates check the product. Nothing checks the gates.
+
+### The concrete measurement
+
+- 14 `scripts/test_*.py` suites. **4 wired to a target. 10 wired to nothing.**
+- `git log -S` shows the orphans were **never** wired. This is not decay; the wiring never
+  existed, and the population grows by one with every new gate.
+- Executed under the project interpreter this pass: **959 passed, 74 failed**, across code
+  nothing runs.
+
+Those 74 are not mysterious. 72 are SA156. The other 2 are SA158 and SA157's false-green
+sits in the same population. This is why SA155 sits behind all four.
+
+### What is already closed — preserve it
+
+Hosted **job membership** is genuinely closed by `sync_ci_gate_jobs.py:314-320`. Do not
+disturb that; it is the working half.
+
+The gap is the **suites** and the **non-`ci.yml` contexts**. And note precisely why parity
+checking cannot find it: `check_gate_parity.py:2509-2511` **filters rather than asserts**.
+So parity proves *registered → present*, and never *present → registered*. A suite that
+exists but is registered nowhere is invisible to the very tool designed to catch that.
+
+### The option choice, already made
+
+- **Option 1 — take this.** One registered `check-gate-suites` target running
+  `pytest scripts/ --no-cov`, keeping `scripts/` out of the coverage metric. Minimal, and
+  it preserves the deliberate coverage decision.
+- **Option 2 — leave to SA123.** A per-gate `self_test` registry binding. Finer-grained,
+  but it bumps the registry schema, and SA123 is already doing registry work.
+- **Option 3 — explicitly out of scope.** Relocating the helpers into a first-party
+  package. It collides with SA124's in-flight `sa117_scope.json` edits.
+
+### The criterion that carries the ticket
+
+*"the gate is registered **green** — all 74 failures are resolved by the dependency tickets
+before registration, verified by a recorded pass/fail baseline."*
+
+Registering a red gate creates a **known-failing required check**, and a known-failing
+required check gets bypassed within a week and then ignored forever. That outcome is
+strictly worse than today, because today at least nobody believes the suites are covered.
+
+Record the baseline before and after. It is the evidence.
+
+### The loose ends to close while you are here
+
+Six `UNOWNED_JOB_IDS` entries need each to be justified in writing or registered. One is
+specifically named: `isolation-conformance` has **no Makefile target** and is invoked only
+from `ci.yml:634` — meaning a developer cannot run it locally by any documented route.
+Resolve that one explicitly rather than folding it into a blanket justification.
+
+---
+
+# Band B / W1 — Pins, interpreter, and dependency-spec authority
 
 ## SA137 — Add `quickscale_devtools` to version propagation
+
+`Band B · Tier 1 · W1 · merge #2 · deps: none · blocks SA159, SA134`
 
 ### The mental model
 
@@ -91,6 +490,8 @@ Also check whether devtools has a `__version__` in `src/quickscale_devtools/__in
 
 ## SA134 — Derive generated-project version assertions from authoritative pins
 
+`Band B · Tier 2 · W1 · merge #8 · deps: SA137, SA159`
+
 ### The mental model
 
 A generated QuickScale project pins runtimes: a Python version, a Django constraint, a PostgreSQL image tag, a Node image. Those pins have exactly one home:
@@ -138,7 +539,7 @@ The acceptance wording — *"retired-version negative controls remain and still 
 
 *"bumping a pin requires no test edit, demonstrated by a temporary bump that leaves the suite green"*. Literally do this: change `POSTGRES_VERSION` to `"19"`, run the suite, confirm green, revert. Record it as evidence. If anything fails, a literal survived.
 
-Note `quickscale_core/tests/docker-compose.test.yml` is a static YAML file, not Python — it cannot import `runtime_pins`. Decide whether it is in scope (it pins the *test harness* Postgres, arguably a different concern from the *generated project* Postgres) and say which, rather than leaving it ambiguous. This overlaps SA135, which owns the test harness's database; coordinating the answer with the Track 3 ticket is reasonable, but SA134 merges first, so state the decision and let SA135 honour it.
+Note `quickscale_core/tests/docker-compose.test.yml` is a static YAML file, not Python — it cannot import `runtime_pins`. Decide whether it is in scope (it pins the *test harness* Postgres, arguably a different concern from the *generated project* Postgres) and say which, rather than leaving it ambiguous. This overlaps SA135, which owns the test harness's database; coordinating the answer with the W3 ticket is reasonable, but SA134 merges first (#8 vs #13), so state the decision and let SA135 honour it.
 
 ### Depends on SA137 because
 
@@ -147,6 +548,8 @@ Both tickets are about "the version fact has one home". SA137 establishes the de
 ---
 
 ## SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam
+
+`Band B · Tier 2 · W1 · merge #11 · deps: SA134 · blocks SA118`
 
 ### The mental model
 
@@ -213,13 +616,18 @@ The staged-beside-install wheelhouse (case 2) is a judgement call: it is implici
 
 ### Audit bookkeeping
 
-`docs/others/tech-audit.md` currently reports **zero open findings**. The wheelhouse seam is listed under **"Live watch items"**, not as a finding. So the closeout retires a watch item; it does not close a numbered finding, and the severity table stays at zero. (The roadmap's acceptance line has been corrected to match.) While you are in that file, note its header still reads `Branch: v87` — a stale-doc drift worth a one-line fix.
+`docs/others/tech-audit.md` currently reports **zero open findings**. The wheelhouse seam is listed under **"Live watch items"**, not as a finding. So the closeout retires a watch item; it does not close a numbered finding, and the severity table stays at zero. (The roadmap's acceptance line has been corrected to match.) The header drift previously noted here — `Branch: v87` — was resolved by the 2026-08-21 regeneration and needs no action.
 
 ---
 
-# Track 2 — Gates and declared wiring
+# Band B / W2 — Gates and declared wiring
+
+Everything here merges **after** band A. SA124 in particular must not start before SA157
+lands, because SA157 owns the file SA124's acceptance criterion writes into.
 
 ## SA124 — Unify SA117 scope-tool path authority
+
+`Band B · Tier 1 · W2 · merge #10 · deps: SA155, SA157`
 
 ### The mental model
 
@@ -273,6 +681,8 @@ Both tickets edit `scripts/gate_registry.json` and the `Makefile` gate surface. 
 
 ## SA123 — Add dependency-vulnerability and security static-analysis gates
 
+`Band B · Tier 2 · W2 · merge #12 · deps: SA124`
+
 ### The mental model
 
 QuickScale's CI discipline is centralised in `scripts/gate_registry.json` — a declared list of every gating checkpoint, with each gate naming the **contexts** it must run in:
@@ -320,6 +730,8 @@ That second entry is effectively your rule list. Five named categories — treat
 ---
 
 ## SA118 — Project every declared manifest default into wiring
+
+`Band B · Tier 2 · W2 · merge #14 · deps: SA123, SA150`
 
 ### The mental model
 
@@ -383,11 +795,13 @@ Its `baseline_evidence` entries show the established convention — each past re
 
 ---
 
-# Track 3 — Service-backed lifecycle
+# Band B / W3 — Service-backed lifecycle
 
-Track 3 holds the **exclusive PostgreSQL/Docker slot** for the release. Only one of these legs may be active at a time across all worktrees, and Track 3 takes priority while a leg is running. All three tickets are about the same question: *who owns the lifecycle of a thing we create?*
+W3 holds the **exclusive PostgreSQL/Docker slot** for the release. Only one of these legs may be active at a time across all worktrees, and W3 takes scheduling priority while a leg is running — even though W2, not W3, is now the longest dependency chain. All three tickets ask the same question: *who owns the lifecycle of a thing we create?*
 
 ## SA151 — Recreate module migrations as clean initial schemas
+
+`Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot`
 
 ### The mental model
 
@@ -438,6 +852,8 @@ The no-migration-history policy goes in `docs/technical/decisions.md`. Without i
 ---
 
 ## SA142 — Reuse and clean E2E Docker images
+
+`Band B · Tier 1 · W3 · merge #9 · deps: SA151 · Docker slot`
 
 ### The mental model
 
@@ -505,6 +921,8 @@ Sequencing on the exclusive service slot, not a code dependency. SA151 should ho
 ---
 
 ## SA135 — Give test suites an owned PostgreSQL lifecycle
+
+`Band B · Tier 2 · W3 · merge #13 · deps: SA142 · PostgreSQL + Docker slot · **carries SA163**`
 
 ### The mental model
 
@@ -577,13 +995,514 @@ SA135 will provision a containerised PostgreSQL, so it should adopt whatever ima
 
 ---
 
+## SA163 — Derive the CI PostgreSQL environment from one authoritative source
+
+`Band B · Tier 2 · W3 · merge #13 — **executes inside SA135**, not as a separate pass`
+
+### The mental model
+
+The gate registry answers *which* gates run in *which* contexts. It does **not** answer
+*what environment those gates require*. That second question is answered nowhere
+declaratively — it is hand-replicated as shell.
+
+### The census
+
+Fourteen stations state the same environment:
+
+| Thing | Copies | Where |
+|---|---|---|
+| PGDG PG18 install | 4 | `ci.yml:92-107`, `ci.yml:408-427`, `publish.yml:161-187`, `e2e.yml:74-91` |
+| PG18 verification | 4, **divergent** | three check `command -v` *and* `--version \| grep "(PostgreSQL) 18"`; `e2e.yml:92` checks only `test -x` |
+| `createdb` lists | 4 | across the same workflows |
+| grant loops | 4 | ditto |
+| `QS_*_DB_USER` blocks | 5 | ditto |
+| the whole thing **as a Python literal** | 1 | `scripts/test_gate_parity.py:1125-1180` transcribes the shell verbatim |
+
+That fourteenth station is the tell: a parity test that *transcribes* what it checks is not
+an independent oracle — it is a fifteenth copy wearing a test's clothes.
+
+### The live question this ticket must settle
+
+`nightly-bypassrls.yml:81-82` installs plain `postgresql-client` — Ubuntu 16.x, **no
+PGDG** — while creating `test_quickscale_backups` and setting `QS_BACKUPS_DB_USER`. That
+runs against `ci.yml:93-95`'s own statement that the backups DR engine enforces a
+PostgreSQL 18 `pg_dump`/`pg_restore` contract which 16.x fails.
+
+Determine whether `make test-bypassrls` actually reaches a `pg_dump`/`pg_restore` path. If
+it does, this is a **live defect**, not a cosmetic divergence, and it gets fixed here.
+
+### Two divergences that are correct — do not "fix" them
+
+Both were verified this audit pass. Refactoring blindly will break them:
+
+1. The 6-entry `QS_*_DB_USER` block at `ci.yml:627-632` is **exactly** `orgs` plus
+   `RLS_MODULES` from `test_isolation_conformance.sh:141`. It is derived, not truncated.
+2. The isolation job's 11-database list **omits `backups`** because that job runs no
+   backups tests.
+
+Document both as deliberate in the refactor, or the next reader will "unify" them away.
+
+### The option choice, already made
+
+**Option 1**: one `scripts/provision_ci_postgres.sh`, four callers, module list derived
+from the discovery shim exactly as `check_sa117_scope.py:48` already does. Option 2 (an
+`environment` block in the gate registry) only if SA123's registry work lands cleanly
+first, since both bump the registry schema.
+
+### Why inside SA135
+
+SA135's allowlist already spans `scripts/test_integration.sh`,
+`scripts/provision_test_roles.sh`, the `Makefile`, and the documented DB precondition.
+SA163 is a second pass over the same files with the same exclusive slot. Two tickets, one
+change. It inherits SA135's PostgreSQL + Docker slot.
+
+### Non-negotiable invariants across the refactor
+
+`QUICKSCALE_ALLOW_BYPASSRLS: "0"` at `ci.yml:626` and the restricted-role isolation
+connection must survive **unchanged**. These are the same RLS-meaningfulness guarantees
+SA135's role contract protects; losing them here loses them everywhere.
+
+---
+
+# Band C — Bounded independent fixes
+
+None of these blocks anything. Each has a small, well-understood blast radius. They exist
+as **slack filler**: when a worktree finishes a band-B leg and its next leg is waiting on
+another worktree, it takes one of these rather than idling or — much worse — widening the
+ticket it just finished.
+
+**Band C may slip past the release. None may displace a band-A or band-B leg.**
+
+## SA160 — Share one correct CSRF-token helper in the React theme
+
+`Band C · Tier 2 · W3 · merge #17`
+
+### The mental model
+
+Django's CSRF protection needs the SPA to read the `csrftoken` cookie and echo it in an
+`X-CSRFToken` header. `document.cookie` is a single flat string, and **cookie names are not
+unique in it** — the same name can appear more than once at different domain scopes.
+
+Any parser that assumes uniqueness is a latent bug waiting on a deployment topology.
+
+### The concrete defect
+
+Eleven identical lines appear twice — `themes/showcase_react/src/hooks/useApi.ts:20-28` and
+`src/components/forms/FormRenderer.tsx:206-211`. Both split `document.cookie` on
+`"; csrftoken="` and accept the result **only when it yields exactly two parts**.
+
+Two `csrftoken` cookies yield three parts. So:
+
+```
+getCsrfToken() → ''
+   → buildRequestHeaders (:89-94) skips X-CSRFToken
+      → Django rejects every POST/PUT/PATCH/DELETE with 403
+```
+
+GETs keep working. **The app looks alive and merely refuses to save**, and no error names
+the cause.
+
+### Why the trigger is ordinary, not exotic
+
+An `app.example.com` deployment alongside a `.example.com` cookie. That is the outcome of
+setting or changing `CSRF_COOKIE_DOMAIN`, of a sibling Django app on another subdomain, or
+of a stale apex-scoped cookie in one user's browser. This is the internet-facing generated
+project — deployment reality #3.
+
+It **fails closed**: availability, not a security hole. That is why it is Tier 2 and not
+higher. But there is no shared helper, no fetch interceptor, and no template-injected
+token, so **no layer-up guard exists** — every call site is on its own.
+
+### Implementation shape
+
+One helper in `src/lib/`, following Django's own documented `getCookie`: split on `'; '`,
+**match the name exactly**, `decodeURIComponent` the value. Iterate; never count segments.
+Both call sites import it, and **no third variant remains** — the duplication is half the
+finding.
+
+A `vitest` table test over `'csrftoken=A; csrftoken=B'`, `'sessionid=x; csrftoken=A'`,
+`'csrftoken=A'`, `''` — first three non-empty. The first case is the one that is red today.
+
+Note the tech audit records "no `src/lib/http` seam" as a structural smell; this ticket
+creates that seam. Place the helper accordingly.
+
+---
+
+## SA161 — Remove the dead `get_client_ip` definitions from generated settings
+
+`Band C · Tier 3 · W3 · merge #16`
+
+### The mental model — the Django fact that makes this dead code
+
+`django.conf.settings` copies **only uppercase names** off the settings module. A
+lowercase function defined in `settings/base.py` is not reachable as
+`django.conf.settings.get_client_ip`. It never was.
+
+### The concrete defect
+
+`templates/project_name/settings/base.py.j2:61` and `settings/production.py.j2:123` both
+define a module-level `get_client_ip(request)`. The production copy **rebinds** it under a
+comment claiming the rebind exists *"so that production defaults … are actually in effect
+at request time"*.
+
+That comment is the actual defect. The code is merely dead; the comment asserts a mechanism
+that does not exist, and a future reader will trust it. Grep across all templates returns
+only the two definitions — nothing calls either.
+
+The live implementation is `quickscale_modules_orgs.current_org.get_client_ip`, which reads
+the **uppercase** `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT` settings dynamically and is
+correct.
+
+### Implementation shape
+
+Delete both, or leave each as a comment pointing at the orgs helper. **Either way remove the
+misleading behavioural comment at `production.py.j2:119-122`** — that is the part that must
+not survive.
+
+Keep unchanged: the uppercase settings themselves, and the `REST_FRAMEWORK["NUM_PROXIES"]`
+recomputation. Both are live.
+
+Assert with a test that proxy-aware client-IP resolution is unchanged — this touches
+security-relevant settings, and "it was dead code" is a claim that deserves proof.
+
+### Emission parity
+
+This edits generated-project templates, so the SA90 emission-parity fixture needs a
+rebaseline with per-file rationale — the same treatment described under SA118. Sequenced
+after SA135 on W3 so the fixture edits stay serialized within the worktree.
+
+---
+
+## SA160 / SA161 sequencing note
+
+Both are W3 and both touch `quickscale_core/tests/fixtures/sa90_emission_manifests.json`,
+as do SA142 (merge #9) and SA118 (merge #14, W2). SA118 is the one that crosses worktrees.
+Each rebaseline **appends** its own `baseline_evidence` entry; none may replace a prior
+one. The sync-before-merge-back procedure has to preserve every entry.
+
+---
+
+## SA162 — Fix the deprecated bool inversion in the CSRF AST gate
+
+`Band C · Tier 3 · W1 · merge #15`
+
+### The concrete defect
+
+`scripts/check_csrf_exempt_gate.py:271` uses `~val != 0` where `val` may be a `bool`. That
+raises `DeprecationWarning` on 3.12+ and is **removed in Python 3.16** — verified under
+`-W error::DeprecationWarning` on 3.14.6.
+
+Reachable only when analysed source contains a literal `~True`/`~False`, so the cost is
+future breakage, not present miscomputation. Hence Tier 3.
+
+### The correction to carry — read this before touching the line
+
+The arch audit's suggested fix is **`not val`, and it is wrong. Do not apply it.**
+
+The function evaluates the truthiness of a *bitwise invert in analysed source*:
+
+| Expression | Value | Truthy? |
+|---|---|---|
+| `~True` | `-2` | **yes** |
+| `not True` | `False` | **no** |
+
+Substituting `not val` would make the CSRF gate **misjudge every `~<constant>` operand it
+sees** — turning a dormant deprecation into a live correctness bug in a security gate.
+
+The correct fix is `~int(val) != 0`, which preserves the semantics exactly.
+
+This is worth noting as a pattern: an audit's *finding* and an audit's *suggested fix* carry
+different levels of verification. The finding here was correct; the fix was not.
+
+### Acceptance shape
+
+Pin the semantics with a test asserting the gate's verdict on analysed source containing
+both `~True` and `~False`, so nobody can make this substitution later. Run the gate under
+`-W error::DeprecationWarning`. Record the correction in the arch audit when retiring the
+red flag — the wrong fix should not outlive the finding.
+
+---
+
+## SA165 — Discharge the tech-audit watch items that carry an action
+
+`Band C · Tier 3 · W1 · merge #18`
+
+### The mental model
+
+The tech audit's *Notes* hold thirteen items. Most are **accepted trade-offs** or are owned
+elsewhere — `SA150` owns the local-wheelhouse seam, `SA137` owns the devtools version
+drift, and integration-branch CI, generator lock generation, the DB-free healthcheck, the
+CRM count fallbacks, and non-durable atomic state writes are each recorded as **deliberate
+and explicitly out of this ticket's scope**.
+
+Do not re-litigate those. Four items carry a concrete action; this ticket is exactly those
+four.
+
+### 1. `flush_empty_consolidated_sections` swallows a corrupt state file
+
+`quickscale_core/src/quickscale_core/schema/state_schema.py:386-388` returns silently on
+`yaml.YAMLError, OSError`, skipping the explicit `modules: {}` / `managed_files: []`
+markers that downstream readers use to distinguish *"M2 has spoken"* from *pre-M2 state*.
+
+The trigger is narrow — the file was just written successfully by `save()` — but this is
+precisely the shape the Fail-Hard Principle names (`decisions.md:634`, `:716-732`), and
+`tech-audit.md` is the declared SSOT for that class. Same family as SA150, one layer over.
+
+**Raise or report. A regression test must assert the raise, not a log line.**
+
+### 2. The isolation-gate skip allowlist matches on message, not identity
+
+`scripts/test_isolation_conformance.sh:184` keys on
+`message.startswith('got empty parameter set')`. That silences an empty parameter set on
+**any** of the eleven parametrized tests in `test_tenant_table_conformance.py` — not only
+the two `PENDING_REMEDIATION` ones its own comment describes.
+
+A message prefix is not an identity. Narrowing it to the two test names costs one line.
+Prove it: deliberately empty the ENROLLED set and confirm the gate turns **red**.
+
+### 3. `_HOST_DEPENDENT_PATHS` is a new hand-maintained exception station
+
+`be5cf024` added `frozenset({".env"})` to the SA90 emission byte-parity gate
+(`quickscale_core/tests/test_generator/test_generator.py:1023`). The justification is sound
+and the `755`/`644` mode normalization correctly removes a umask dependency.
+
+But this is an **exception list on the repository's strictest gate**. The monotonicity rule
+to write down: a second entry deserves scrutiny, a third deserves a derivation. Add the
+per-entry rationale and that escalation note — or derive it now.
+
+### 4. Generated local-development credentials are predictable by construction
+
+`generator.py:507-508` derives `runtime_db_role = f"{package_name}_app"` and
+`runtime_db_password = f"{role}_password"` into `db/init.sql`, `docker-compose.yml`, and
+`.env.example` — none of which `.gitignore.j2` excludes.
+
+**Safe as shipped**: no published DB port, local dev only, production supplies
+`RUNTIME_DATABASE_URL` from the environment. The gap is that it is undocumented. State
+explicitly in `OPERATIONS.md` that these credentials must not survive into any shared
+environment. Documentation only — do not change the derivation.
+
+---
+
+## SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items
+
+`Band C · Tier 3 · W1 · merge #19 · deps: SA151`
+
+### The mental model
+
+A watch item is a bet: *"this is not a problem yet, and here is the trigger that would make
+it one."* A watch item whose trigger **cannot be evaluated** has stopped being a bet and
+become debt — it costs a read every audit pass and can never fire.
+
+Five items are carried. Three are simply not fired and need no work. Two carry explicit
+actions, and one is a naming question that becomes load-bearing on a specific trigger.
+
+### 1. The SA92 migration-squash tuple — the trigger cannot be evaluated
+
+An exhaustive search for `squash` returns only `git subtree --squash` in
+`git_utils.py:302-345`, which is unrelated. The string `SA92` appears **nowhere in the
+tree** except the audit's own prior line.
+
+The audit's instruction is explicit: **re-anchor against SA151** — which deletes and
+regenerates every module migration, making it the natural anchor — **or retire it. Do not
+carry it a third pass unevaluated.**
+
+This is the same lost-identifier pattern SA124 records for advisory `SA117E1-REV-004`. Two
+instances in one release is a pattern worth naming: an identifier referenced only by the
+document that carries it has no home.
+
+### 2. Privileged-command pair — values agree, claimed authority does not
+
+`production.py.j2:185` and
+`quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:36` both hold
+`frozenset({"migrate", "createcachetable"})`. The values are **verified equal**.
+
+But the `apps.py` docstring calls itself *"the single source of truth for which commands are
+privileged"* while the template holds an independent copy. The defect is the **claim**, not
+the value.
+
+Make the claim true — either the template reads the runtime frozenset, or the docstring
+stops claiming sole authority — **with a test asserting the two cannot diverge.** A
+governance artifact that says "single source of truth" beside a second copy is worse than
+silence, because it stops the next reader from checking.
+
+### 3. `trigger_inputs` has drifted from its name
+
+`check_gate_parity.py:2652-2690` uses the field as a **bidirectional partition of
+`e2e.yml`'s path allowlist**, not as *"what changes should trigger this gate"*. That is why
+`check-core-compat`'s trigger reads `quickscale_modules/backups/**`.
+
+**Not a defect** — the check it performs is real and exact. It is a name that lies about a
+correct mechanism. It becomes load-bearing the moment a gate is ever *skipped* on the basis
+of `trigger_inputs`, because then the name's meaning and the field's meaning diverge in
+production.
+
+Rename it, or record the actual semantics plus that promotion trigger in the docstring and
+schema description.
+
+### And restate the three that are not fired
+
+Module universe in environment lists, frontend runtime module keys, and the now-absorbed
+watch half of Finding 13. Keep their triggers intact — restating is the work, not removing.
+
+---
+
+## SA166 — Require a testimony trail for behavioural commits
+
+`Band C · Tier 3 · W2 · merge #20 · deps: SA155, SA118`
+
+### The mental model
+
+Every other ticket in this release makes a *machine* tell the truth. This one makes a
+*commit* tell the truth.
+
+### The evidence
+
+`d3d4c633` and `d4b0e834` were both titled **"v0.87.0: QuickScale 0.87.0"** while in fact
+changing hosted and publish provisioning. `d3d4c633` also left a repository conformance test
+red — that is TA66, which is SA158, which is merge #4 of this release.
+
+Both audits independently flagged the same shape: **a release-shaped message carrying a CI
+topology change**. It was read closely only because the arch audit's delta-classification
+step treats unlabeled-behavioural commits as read-at-full-depth. Absent that convention, it
+would have shipped unexamined — and it did ship a red test.
+
+### Why it is Tier 3 and sits behind SA155
+
+The audit records this as **maintainer-process risk**, not a source finding. And a process
+gate is worth very little while the gate layer it would run in is itself unexecuted — which
+is exactly the SA155 problem. Fix the layer, then add to it.
+
+### The design constraint that decides whether this succeeds
+
+*"false-positive cost is measured on the existing history and the rule is narrowed until it
+is quiet on legitimate release commits."*
+
+A noisy process gate gets a bypass flag, and a bypass flag gets used by default. Measure the
+rule against real history **before** turning it on. If it fires on legitimate release
+commits, narrow it — do not add an override.
+
+Scope: a change touching `.github/workflows/`, `scripts/gate_registry.json`, or the
+provisioning stations requires a roadmap ticket reference or a `CHANGELOG.md` entry,
+enforced mechanically. Registered in `scripts/gate_registry.json`, passing
+`scripts/check_gate_parity.py`. Prove it with a deliberately introduced untitled workflow
+change, reverted before merge.
+
+---
+
+# Post-v88 — recorded, not scheduled
+
+These three are in the roadmap so the findings are not lost. **Listing a sub-item here does
+not authorize implementing it**, and none may be pulled into a v88 ticket.
+
+## SA152 — Refresh the beta-migration maintainer targets
+
+`Post-v88 · Tier 3 · deps: SA151`
+
+The 2026-08-21 audit found the **mechanics current**: the Makefile flag surface (`DONOR`,
+`RECIPIENT`, `DRY_RUN`, `CONTINUE`, `REPORT`) matches `build_argument_parser()`, every
+command in `VERIFICATION_COMMAND_SPECS` still exists, and the file-ownership taxonomy is in
+sync and enforced by 7 passing conformance tests. So this is not a rot ticket. Four residual
+gaps:
+
+- **The SA151 collision — the reason this is deps-blocked.** The workflow's verification
+  stack runs `quickscale manage migrate` against a recipient that may carry an existing
+  database. SA151 makes a **fresh database the only upgrade path**, invalidating the
+  in-place workflow's implicit assumption. Resolve *after* SA151 merges, not before.
+- **No end-to-end exercise.** The targets appear in no CI workflow and no
+  `scripts/gate_registry.json` entry. Coverage is unit-level taxonomy conformance only, so
+  breakage surfaces first for a maintainer **mid-migration** — the worst possible moment.
+- **Silent skip in the conformance gate.** `_template_emitted_paths()` calls
+  `pytest.skip()` when the template tree is not found, so a path-resolution regression turns
+  the ownership gate **green instead of red**. Same silent-fallback family as SA150 and
+  SA165.
+- **Stale doc provenance.** `beta-site-migration.md` is headed *"shipped in v0.81.0"*
+  against `VERSION` 0.87.0, and describes the tool as *"backed by Python scripts under
+  `scripts/`"* when `scripts/beta_migrate.py` is an eight-line wrapper over
+  `quickscale_devtools`.
+
+## SA153 — Close the property-portal basics gap in `listings`
+
+`Post-v88 · Tier 2 · deps: none`
+
+**The highest-value post-release work**, driven by the planned `buenosairesproperties.com`
+migration. The framing that matters: the gap is **not module existence**. `listings` ships a
+deliberately generic `AbstractListing` plus a concrete `Listing`, and `blog` is
+substantially complete. The gap is **property-vertical depth and public presentation**, and
+every sub-item is a *basic* — a real-estate portal cannot launch without it.
+
+The structural problem underneath most of the sub-items: the documented extension answer is
+**subclassing `AbstractListing`**, but `views.py`, `urls.py`, `admin.py`, and `ListingFilter`
+are all bound to the **concrete** `Listing`. So subclassing today yields a model and an admin
+base but **no working public views, URLs, or filters** — the Tier 2 abstract-model contract
+in [module-extension.md](module-extension.md) is half-delivered. Fixing that unlocks
+attributes, filtering, and most of the rest at once.
+
+Two project constraints bind every sub-item:
+
+- **Every new child table carries its own `organization_id` column** with its own RLS policy
+  — the locked Option C child-table policy in [decisions.md](decisions.md). No parent-join
+  RLS, including for `ListingImage`.
+- RLS-boundary coverage must match the existing `test_rls_boundary.py` pattern.
+
+Sub-items: image galleries, property attributes, attribute filtering + keyword search
+(the module README currently **claims** search that does not exist), multi-currency (a
+hardcoded `$` against a single-currency `DecimalField`), i18n (`USE_I18N = True` with no
+`LocaleMiddleware`, no locale dirs, no marked strings), themed public presentation,
+listing-linked lead capture into `crm`, SEO (no sitemaps, no `robots.txt`, no Open Graph
+anywhere in the tree), and a public JSON read API.
+
+## SA154 — Property-portal optional capabilities
+
+`Post-v88 · Tier 3 · deps: SA153`
+
+An **inventory, not schedulable work**. Deliberately held behind SA153 so the basics land
+first and none of these widens that ticket. Map/geocoding, saved searches and match alerts,
+agent/office profiles, portal syndication feeds, virtual tours, featured placement tied to
+the `billing` credits ledger, blog↔listing cross-linking, and PostgreSQL `SearchVector`
+full-text search.
+
+Discharged only when every sub-item has been promoted to its own ticket with its own
+acceptance criteria, or explicitly dropped with a written rationale.
+
+---
+
 ## Reading order
 
-If you are coming to this cold, read in this order — each builds the model for the next:
+### If you are executing
 
-1. **SA137** — the smallest, clearest instance of duplicated authority; the whole release's pattern in one file.
-2. **SA150** — the clearest instance of silent fallback; four lines of code, precisely diagnosable.
-3. **SA134** — duplicated authority plus the tautology trap, which is where judgement starts mattering.
-4. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
-5. **SA151, SA135** — the two service-lifecycle tickets, both carrying real correctness risk (dropped RLS policies; bypassed RLS roles).
-6. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context about existing conventions (scope allowlist, gate registry, emission-parity fixture).
+Follow the merge order in the roadmap. It is the answer.
+
+### If you are coming to this cold and want the model
+
+Each step builds the one after it:
+
+1. **SA157** — the purest false green. Two mechanisms, one exit code. Ten lines. Once you
+   see it, you see the whole band-A argument.
+2. **SA156** — the same shape at repository scale: one stale string, 72 test failures, and
+   an execution rule nobody could have satisfied.
+3. **SA155** — the structural version. Not "a test is wrong" but "an entire category of code
+   has no owner."
+4. **SA137** — the smallest, clearest instance of duplicated authority; the release's other
+   half in one file.
+5. **SA150** — the clearest instance of silent fallback; four lines of code, precisely
+   diagnosable.
+6. **SA134** — duplicated authority plus the tautology trap, which is where judgement starts
+   mattering.
+7. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
+8. **SA151, SA135** — the two service-lifecycle tickets, both carrying real correctness risk
+   (dropped RLS policies; bypassed RLS roles).
+9. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
+   about existing conventions (scope allowlist, gate registry, emission-parity fixture).
+10. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
+
+### The three traps this release keeps setting
+
+Worth holding as a set, because each appears in more than one ticket:
+
+- **The tautology trap** (SA134). A test that reads the authoritative value and asserts the
+  authoritative value passes for any value, including nonsense. Derive *wiring* assertions;
+  keep *negative controls* literal.
+- **The wrong-fix trap** (SA162, and SA155's Option 3). An audit's finding and an audit's
+  suggested fix carry different verification. `not val` would have broken the CSRF gate.
+- **The green-by-absence trap** (SA157, SA155, SA135, SA152, SA165). Skipping, filtering,
+  and unresolvable paths all produce green. Every one of them must be made to produce red.
