@@ -487,6 +487,15 @@ class TestUpdateWithTempRepo:
             },
         )
 
+        # Maintainer-only devtools is a top-level parity member but is not a
+        # published package or a runtime version surface.
+        self._write_pyproject(
+            root / "quickscale_devtools" / "pyproject.toml",
+            "quickscale-devtools",
+            self.VERSION_BEFORE,
+            deps={},
+        )
+
         # _version.py files
         self._write_version_py(
             root / "quickscale_core" / "src" / "quickscale_core" / "_version.py",
@@ -652,6 +661,7 @@ class TestUpdateWithTempRepo:
             "quickscale_core/pyproject.toml",
             "quickscale_cli/pyproject.toml",
             "quickscale/pyproject.toml",
+            "quickscale_devtools/pyproject.toml",
             # _version.py files
             "quickscale_core/src/quickscale_core/_version.py",
             "quickscale_cli/src/quickscale_cli/_version.py",
@@ -715,8 +725,8 @@ class TestUpdateWithTempRepo:
         """
         expected: set[str] = set()
 
-        # 3 package pyproject.toml files
-        for pkg in ["quickscale_core", "quickscale_cli", "quickscale"]:
+        # 4 top-level quickscale*/pyproject.toml files
+        for pkg in ["quickscale_core", "quickscale_cli", "quickscale", "quickscale_devtools"]:
             expected.add(f"{pkg}/pyproject.toml")
 
         # 2 _version.py files
@@ -753,6 +763,45 @@ class TestUpdateWithTempRepo:
     # ------------------------------------------------------------------
     # Tests
     # ------------------------------------------------------------------
+
+    def test_check_fails_and_names_divergent_devtools(self, repo: Path) -> None:
+        """A devtools pin drift is reported by the top-level parity check."""
+        devtools_pyproject = repo / "quickscale_devtools" / "pyproject.toml"
+        devtools_pyproject.write_text(
+            devtools_pyproject.read_text().replace(
+                f'version = "{self.VERSION_BEFORE}"',
+                f'version = "{self.VERSION_AFTER}"',
+            )
+        )
+
+        result = subprocess.run(
+            ["bash", "scripts/version_tool.sh", "check"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert "quickscale_devtools/pyproject.toml" in result.stdout
+
+    def test_check_discovers_new_top_level_package_without_inventory_edit(self, repo: Path) -> None:
+        """Any new direct-child quickscale*/pyproject.toml joins parity."""
+        self._write_pyproject(
+            repo / "quickscale_extras" / "pyproject.toml",
+            "quickscale-extras",
+            self.VERSION_AFTER,
+            deps={},
+        )
+
+        result = subprocess.run(
+            ["bash", "scripts/version_tool.sh", "check"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert "quickscale_extras/pyproject.toml" in result.stdout
 
     def test_thirteenth_real_module_is_picked_up_by_update(self, repo: Path) -> None:
         """The consumer follows the shim when the authoritative count advances."""

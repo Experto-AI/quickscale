@@ -28,7 +28,7 @@
     {"path": "quickscale_core/src/quickscale_core/__init__.py", "phase": "4-implement", "notes": "Core init — SA117 version pin surface."},
     {"path": "quickscale_cli/src/quickscale_cli/__init__.py", "phase": "4-implement", "notes": "CLI init — SA117 version pin surface."},
     {"path": "quickscale/src/quickscale/__init__.py", "phase": "4-implement", "notes": "quickscale init — SA117 version pin surface."},
-    {"path": "quickscale_devtools/src/quickscale_devtools/__init__.py", "phase": "4-implement", "notes": "Devtools init — SA117 version pin surface."},
+    {"path": "quickscale_devtools/src/quickscale_devtools/__init__.py", "phase": "4-implement", "notes": "Devtools init — reviewed exclusion: no runtime __version__; pyproject metadata is its only version pin."},
     {"path": "quickscale_modules/analytics/pyproject.toml", "phase": "5-implement", "notes": "Module pyproject — version lockstep."},
     {"path": "quickscale_modules/auth/pyproject.toml", "phase": "5-implement", "notes": "Module pyproject — version lockstep."},
     {"path": "quickscale_modules/backups/pyproject.toml", "phase": "5-implement", "notes": "Module pyproject — version lockstep."},
