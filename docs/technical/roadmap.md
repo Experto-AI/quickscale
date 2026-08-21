@@ -9,13 +9,14 @@ This is the current task planner. It contains open planned work only. Completed 
 
 ### Execution rules
 
-- Work develops in three worktrees (**W1** pins/interpreter, **W2** gate layer + wiring, **W3** service lifecycle) and merges into the clean `v88` integration branch. Never implement directly on the integration branch.
+- Work develops in four worktrees (**W1** pins/interpreter, **W2** gate layer + declared wiring, **W3** service lifecycle, **W4** module-wiring migration) and merges into the clean `v88` integration branch. Never implement directly on the integration branch. **W4 was opened 2026-08-21** when the whole SA167 family was pulled into the release; it exists because SA167b/SA167d touch files (`entry_point.py`, the nine `adapter.py` targets, `module_config.py`) that no W1 or W3 ticket touches, so running them in an existing lane would have serialized them behind unrelated work for no reason.
 - One reviewed child runs at a time per worktree. Umbrellas are acceptance-only; their children own implementation.
 - Start from a clean worktree after merging the integration branch. Before merge-back, sync the integration branch into the worktree, resolve there, run the ticket's verification, review the exact tip, then merge that tip.
 - Every handoff declares its file allowlist, commands, expected exits/artifacts, rollback, and focused validation. Scope findings are ticketed rather than fixed in place.
 - Leave `make quality` no worse than found. Do not raise a complexity ceiling or reintroduce file-line ceilings. The rule is measurable again (SA156, closed): the default monotonicity path resolves durable `main` and `make quality` emits fresh reports. The known baseline is one pre-existing complexity regression at `development_commands.py::up`.
 - Shared closeout conflict surfaces are `CHANGELOG.md`, `docs/technical/roadmap.md`, and `docs/technical/decisions.md` when policy changes. `docs/others/arch-audit.md` and `docs/others/tech-audit.md` join that surface only when a ticket changes or closes a live audit finding. The sync-before-merge-back procedure above must preserve every concurrent entry, resolve these files in the worktree, rerun the ticket's checks, and leave no unmerged files before the exact tip is reviewed and merged.
 - PostgreSQL/Docker work is serialized across worktrees. **W3 holds the exclusive PostgreSQL/Docker slot** and takes scheduling priority whenever one of its legs is active, even though W2 — not W3 — is the longest dependency chain this release.
+- **W4 may not touch `scripts/gate_registry.json` or any `module.yml`.** Both are W2-owned surfaces (SA167a and SA167c are on W2 for exactly this reason). W4's only cross-worktree edge is `entry_point.py`, one-way: SA167a merges at #8 before SA167b starts.
 - A ticket whose deliverable is Git ref state cannot be delegated to a file-editing worker. Route it to a maintainer session with ref authority and push credentials.
 
 ---
@@ -46,7 +47,7 @@ Applying it produces three ranked bands:
 | Band | Rule | Tickets |
 |---|---|---|
 | **A — Restore enforcement** | The gate layer reports green while not running, or runs red on HEAD. Nothing downstream can be trusted until this is fixed. | SA157, SA158, SA159, SA155 *(SA156 done)* |
-| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA151→SA142→SA135(+SA163); SA137→SA134→SA150; then SA124→SA123→SA167a→SA118 |
+| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA151→SA142→SA135(+SA163); SA137→SA134→SA150; then SA167a→SA124→SA123→SA118→SA167c, with SA167b→SA167d in parallel on W4 |
 | **C — Bounded independent fixes** | No dependants, small blast radius. Absorbed as slack filler by whichever worktree finishes a band-B leg early. | SA160, SA161, SA162, SA164, SA165, SA166 |
 
 **What changed from the first plan and why:**
@@ -66,14 +67,26 @@ Applying it produces three ranked bands:
   SA157, which now merges at #4 with no predecessor.
 - **SA157 was promoted ahead of SA124** because SA124's acceptance criterion lands in
   `scripts/test_check_sa117_scope.py`, the exact file carrying a guaranteed false-green.
-- **SA167a was pulled into v88 ahead of SA118 (decision 2026-08-21).** Same ordering rule
-  as band A, one level down: five modules declare their Django apps as Python literals
+- **The whole SA167 family is in v88 (decision 2026-08-21).** The ordering argument is
+  band A's, one level down: five modules declare their Django apps as Python literals
   inside core, which is precisely the "default reachable only through imperative code"
-  that SA118's acceptance forbids. SA118 could neither satisfy that criterion nor widen
-  into the literals without breaking its own scope bound. Declaring them in their own
-  manifests first costs one serialized leg on the critical path and lets SA118 land
-  against a single authority. The rest of the wiring standardization (SA167b/c/d) stays
-  post-v88 — only the piece SA118 actually needs was pulled forward.
+  that SA118's acceptance forbids — SA118 could neither satisfy that criterion nor widen
+  into the literals without breaking its own scope bound. That made **SA167a** a
+  prerequisite rather than follow-on work, and once the declaration lands there is no
+  reason to ship the release with four of the five wiring surfaces still divergent.
+  Placement is driven by files, not preference:
+  - **SA167a** is on W2 at **merge #8** — the earliest defensible slot. It has no
+    dependencies, but it is deliberately *not* placed ahead of band A: its acceptance
+    rests on "emission parity unchanged" and "`make quality` no worse than found", and
+    neither claim is verifiable until the gate layer tells the truth (SA155, #7).
+    Landing it at #8 rather than #14 unblocks SA167b/SA167c six positions earlier.
+  - **SA167c** must be on W2 because it registers a gate, and
+    `scripts/gate_registry.json` is a W2-only surface. It also rewrites every
+    `module.yml`, so it merges after SA118.
+  - **SA167b** and **SA167d** touch files no other v88 ticket touches, so they got a
+    **new lane, W4**, and run parallel to W2's second half instead of extending it.
+  **Cost, stated plainly:** the critical path grows from six legs to eight. SA167b and
+  SA167d are free (parallel); SA167a and SA167c are not.
 - **SA163 does not get its own slot.** It executes inside SA135, whose allowlist already
   covers the same provisioning files.
 - **The nine "v88 tickets" and the audit tickets are one queue.** Keeping them in separate
@@ -83,19 +96,26 @@ Applying it produces three ranked bands:
 ### Dependency graph and critical path
 
 ```text
-v88 — three worktrees, twenty open tickets (SA156 closed), one merge queue
+v88 — four worktrees, twenty-three open tickets (SA156 closed), one merge queue
 
-W2 (gate layer ─► gates & declared wiring)   ★ CRITICAL PATH — 6 serialized legs
-  SA157 ─► SA155 ─► SA124 ─► SA123 ─► SA167a ─► SA118 ─► SA166
-  false-   register  one path  dep+sec  apps into  declared  testimony
-  green    suites    authority gates    manifests  defaults  trail
-                                        (5 modules)
-              ▲   ▲       ▲                            ▲
-              │   │       │                            │
-   SA158 (W1)─┘   │       │                            │
-   SA159 (W1)─────┘       │                            │
-   SA157 also blocks SA124┘        SA150 (W1) merges first ┘
+W2 (gate layer ─► gates & declared wiring)   ★ CRITICAL PATH — 8 serialized legs
+  SA157 ─► SA155 ─► SA167a ─► SA124 ─► SA123 ─► SA118 ─► SA167c ─► SA166
+  false-   register  apps into  one path  dep+sec  declared  retire    testimony
+  green    suites    manifests  authority gates    defaults  django_   trail
+                     (5 mods)                                apps+gate
+              ▲   ▲     │           ▲                ▲
+              │   │     │           │                │
+   SA158 (W1)─┘   │     │           │                │
+   SA159 (W1)─────┘     │           │   SA150 (W1) merges first
+   SA157 also blocks SA124 ─────────┘
    (SA156 closed — was the fifth input to SA155)
+                        └──────────────► unblocks W4 (SA167b) at #8
+
+W4 (module-wiring migration — NEW lane)      2 legs, fully parallel
+  SA167b ──► SA167d
+  relocate 9  drain CLI
+  adapters    wiring
+  (~1,139 LOC out of entry_point.py)
 
 W1 (pins & interpreter authority)            5 light legs + slack fillers
   SA137 ──► SA159 ──► SA158 ──► SA134 ──► SA150 ──► [SA162, SA165, SA164]
@@ -110,16 +130,18 @@ W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   3 heavy legs
   migrations identity
 ```
 
-**Longest open chain:** W2, `SA157 → SA155 → SA124 → SA123 → SA167a → SA118`, six legs.
-This is the release's critical path. W1's five legs are all light (script/test edits);
-W2's last four are the release's implementation work, so W2 sets the date — and SA167a's
-insertion moved that date out by one leg, deliberately.
+**Longest open chain:** W2, `SA157 → SA155 → SA167a → SA124 → SA123 → SA118 → SA167c`,
+seven legs before the SA166 filler, eight with it. This is the release's critical path.
+W1's legs are all light (script/test edits); W2's back half is the release's
+implementation work, so W2 sets the date — and the SA167 pull-in moved that date out by
+two legs (SA167a, SA167c), deliberately. SA167b and SA167d cost nothing: W4 runs them
+against W2's second half.
 
 **Second chain:** W3, `SA151 → SA142 → SA135`, three legs, each service-backed and
 serialized on the exclusive slot. Longest *wall-clock* chain despite fewer legs; it keeps
 scheduling priority whenever one of its legs is active.
 
-**Cross-worktree edges — four:**
+**Cross-worktree edges — five:**
 
 0. `SA158` (W1) → `SA155` (W2). Created by the rebalance. SA155 must register **green**;
    SA158 is one of the tickets resolving the 74 failures.
@@ -127,10 +149,12 @@ scheduling priority whenever one of its legs is active.
    tickets resolving the 74 failures.
 2. `SA150` (W1) → `SA118` (W2). Manifest version-spec handling: SA118 must project
    defaults over SA150's fail-hard seam, not over the current silent fallback.
-3. `SA151` (W3) → `SA152` (post-v88). Recorded, not scheduled this release.
+3. `SA167a` (W2, #8) → `SA167b` (W4, #14). Shared `entry_point.py`, one-way. This is
+   W4's only cross-worktree surface; W4 is otherwise fully isolated.
+4. `SA151` (W3) → `SA152` (post-v88). Recorded, not scheduled this release.
 
-**Parallelism result:** W3 carries slack against W2; W1 now absorbs SA158 and carries
-less. Band-C tickets are the sanctioned way to spend what remains. The unavailable
+**Parallelism result:** W3 carries slack against W2; W1 absorbs SA158; W4 exists to keep
+SA167b/SA167d off the critical path entirely. Band-C tickets are the sanctioned way to spend what remains. The unavailable
 rebalance is still the same one: nothing may be pulled forward from W3, because the
 PostgreSQL/Docker slot is exclusive. SA157 cannot leave W2 (its file is SA124's file),
 and SA166 cannot leave W2 (`gate_registry.json`).
@@ -149,24 +173,30 @@ exact reviewed tip.
 | 5 | **SA159** | A | 2 | W1 | SA137 | no |
 | 6 | **SA158** | A | 2 | W1 | SA159 | no |
 | 7 | **SA155** | A | 1 | W2 | SA157, SA158, SA159 | no |
-| 8 | **SA134** | B | 2 | W1 | SA159 | no |
-| 9 | **SA142** | B | 1 | W3 | SA151 | **yes** — Docker |
-| 10 | **SA124** | B | 1 | W2 | SA155, SA157 | no |
-| 11 | **SA150** | B | 2 | W1 | SA134 | no |
-| 12 | **SA123** | B | 2 | W2 | SA124 | no |
-| 13 | **SA135** + **SA163** | B | 2 | W3 | SA142 | **yes** — PostgreSQL + Docker |
-| 14 | **SA167a** | B | 1 | W2 | SA123 | no |
-| 15 | **SA118** | B | 2 | W2 | SA123, **SA150**, **SA167a** | no |
-| 16 | **SA162** | C | 3 | W1 | SA150 | no |
-| 17 | **SA161** | C | 3 | W3 | SA135 | no |
-| 18 | **SA160** | C | 2 | W3 | SA161 | no |
-| 19 | **SA165** | C | 3 | W1 | SA162 | no |
-| 20 | **SA164** | C | 3 | W1 | SA165 | no |
-| 21 | **SA166** | C | 3 | W2 | SA155, SA118 | no |
+| 8 | **SA167a** | B | 1 | W2 | SA155 | no |
+| 9 | **SA134** | B | 2 | W1 | SA159 | no |
+| 10 | **SA142** | B | 1 | W3 | SA151 | **yes** — Docker |
+| 11 | **SA124** | B | 1 | W2 | SA155, SA157 | no |
+| 12 | **SA150** | B | 2 | W1 | SA134 | no |
+| 13 | **SA123** | B | 2 | W2 | SA124 | no |
+| 14 | **SA167b** | B | 2 | **W4** | **SA167a** | no |
+| 15 | **SA135** + **SA163** | B | 2 | W3 | SA142 | **yes** — PostgreSQL + Docker |
+| 16 | **SA118** | B | 2 | W2 | SA123, **SA150**, **SA167a** | no |
+| 17 | **SA162** | C | 3 | W1 | SA150 | no |
+| 18 | **SA167d** | B | 3 | **W4** | **SA167b** | no |
+| 19 | **SA161** | C | 3 | W3 | SA135 | no |
+| 20 | **SA160** | C | 2 | W3 | SA161 | no |
+| 21 | **SA167c** | B | 2 | W2 | **SA167a**, **SA118** | no |
+| 22 | **SA165** | C | 3 | W1 | SA162 | no |
+| 23 | **SA164** | C | 3 | W1 | SA165 | no |
+| 24 | **SA166** | C | 3 | W2 | SA155, SA118, SA167c | no |
 
-Merge #1 (SA156) is closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Positions 1–13 are unchanged; SA167a was inserted at #14 on 2026-08-21, shifting SA118 and band C down one.
+Merge #1 (SA156) is closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Positions
+were renumbered on 2026-08-21 when the SA167 family was pulled into the release: SA167a
+moved to #8 (earliest slot after band A), SA167b/SA167d opened W4, and SA167c takes #21
+after SA118. Positions 1–7 are unchanged.
 
-Band-C positions (16–21) are *earliest-eligible*, not commitments. Any of them may slip
+Band-C positions (17, 19, 20, 22, 23, 24) are *earliest-eligible*, not commitments. Any of them may slip
 past the release without blocking it; none may displace a band-A or band-B leg.
 
 ### Shared conflict surfaces
@@ -185,7 +215,10 @@ Additional per-ticket surfaces:
 | SA124 | `scripts/gate_registry.json`, `Makefile`, `scripts/sa117_scope.json`, `scripts/test_check_sa117_scope.py` | gate + path authority |
 | SA134 | — | test-side literals only |
 | SA137 | `VERSION`, `scripts/version_tool.sh`, `Makefile` | propagation set |
-| SA167a | `quickscale_core/.../manifest/entry_point.py`, `quickscale_modules/{auth,backups,notifications,orgs,storage}/module.yml` | app declarations move into manifests; **shares module manifests with SA118, merges first** |
+| SA167a | `quickscale_core/.../manifest/entry_point.py`, `quickscale_modules/{auth,backups,notifications,orgs,storage}/module.yml` | app declarations move into manifests; **shares module manifests with SA118 and SA167c, merges first**; shares `entry_point.py` with SA167b (W4), merges first |
+| SA167b | `quickscale_core/.../manifest/entry_point.py`, every `quickscale_modules/*/adapter.py`, `docs/technical/implementation_contract.md` | adapter relocation; **W4's only cross-worktree surface is `entry_point.py`, inherited one-way from SA167a** |
+| SA167c | every `quickscale_modules/*/module.yml`, `quickscale_core/.../manifest/{schema,loader}.py`, `scripts/gate_registry.json`, `Makefile`, CI workflow, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py` | retires the inert key and registers the declaration gate; **registry membership is why this is W2** |
+| SA167d | `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md` | CLI wiring drain; touched by no other v88 ticket |
 | SA118 | module manifests, wiring emission baselines | manifest projection; inherits SA167a's five manifests |
 | SA142 | `scripts/test_e2e.sh`, E2E fixtures, **SA90 emission-parity fixture** | image/container identity |
 | SA135 + SA163 | `scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, `scripts/provision_ci_postgres.sh` (new), all four `.github/workflows/`, `scripts/test_gate_parity.py`, `Makefile`, `docs/technical/validation_policy.md`, `docs/others/arch-audit.md` | changes the documented DB precondition and the CI environment |
@@ -199,10 +232,15 @@ Additional per-ticket surfaces:
 
 - `scripts/gate_registry.json` — SA155, SA124, SA123, SA166. All four are on W2 and
   serialized by the merge order, so the registry never crosses worktrees. Preserve that.
-- `quickscale_modules/*/module.yml` — SA167a (#14) then SA118 (#15), in that order, same
-  worktree (W2). SA167a adds the `apps` projection to five manifests; SA118 projects the
-  remaining declared defaults over them. Keeping both on W2 is what stops the module
-  manifests from becoming a fourth cross-worktree surface.
+- `quickscale_modules/*/module.yml` — SA167a (#8), SA118 (#16), SA167c (#21), in that
+  order, **all on W2**. SA167a adds the `apps` projection to five manifests; SA118
+  projects the remaining declared defaults over them; SA167c retires `django_apps:`
+  across all twelve. Keeping all three on W2 is what stops the module manifests from
+  becoming a cross-worktree surface, and is why SA167c could not go to W4.
+- `quickscale_core/.../manifest/entry_point.py` — SA167a (W2, #8) then SA167b (W4, #14).
+  This is **W4's only cross-worktree surface** and it is one-way: SA167b starts from an
+  integration branch that already carries SA167a, and its relocation must preserve the
+  manifest-read behaviour SA167a introduced rather than reinstating any literal.
 - `scripts/test_check_sa117_scope.py` — SA157 then SA124, in that order, same worktree (W2).
 - `scripts/test_gate_parity.py` — SA158 (W1, merge #6) then SA135+SA163 (W3, merge #13).
   The rebalance moved SA158 off W2 but this surface already crossed worktrees; the merge
@@ -246,15 +284,32 @@ Conceptual background, mental models, and implementation notes for **every** tic
   Add blocking dependency and focused security scanners with reviewed suppressions; register every new gate through the authoritative gate registry.
   **Acceptance:** a dependency-vulnerability scanner and a focused security static-analysis scanner run as blocking gates; both are registered in `scripts/gate_registry.json` and pass `scripts/check_gate_parity.py`; every suppression carries a written rationale and an owner; the gates fail on a deliberately introduced known-vulnerable pin and on a deliberately introduced flagged pattern, both reverted before merge; `make quality` is no worse than found.
 
-- [ ] **SA167a — Move the five hand-written app declarations into their manifests.** `Band B · Tier 1 · W2 · merge #14 · deps: SA123 (worktree ordering) · blocks SA118`
+- [ ] **SA167a — Move the five hand-written app declarations into their manifests.** `Band B · Tier 1 · W2 · merge #8 · deps: SA155 (worktree ordering; see note) · blocks SA118, SA167b, SA167c`
   Prerequisite of SA118, not follow-on work. `auth`, `backups`, `notifications`, `orgs`, and `storage` carry their `INSTALLED_APPS` contribution as a Python literal inside a core-side adapter block in `quickscale_core/src/quickscale_core/manifest/entry_point.py` (e.g. `expression={"value": ["quickscale_modules_backups"]}` at `:680`), not in their own `module.yml`. Those are **defaults reachable only through imperative code** — the exact condition SA118's acceptance criterion forbids, so SA118 cannot satisfy it while they stand, and may not widen into them.
-  Scope is deliberately narrow: **declaration only, no relocation.** Add a `derivation.wiring_projections` entry with `wiring_field: apps` to each of the five manifests; change core to read it. Adapters stay in `entry_point.py` — moving them is SA167b, post-v88. The other four core-side modules (analytics, blog, listings, forms) already read `apps` from their manifests and are untouched.
+  Scope is deliberately narrow: **declaration only, no relocation.** Add a `derivation.wiring_projections` entry with `wiring_field: apps` to each of the five manifests; change core to read it. Adapters stay in `entry_point.py` — moving them is SA167b (#14, W4). The other four core-side modules (analytics, blog, listings, forms) already read `apps` from their manifests and are untouched.
   **Acceptance:** each of the five manifests declares its Django apps in its own `derivation.wiring_projections` `apps` entry; no `apps` value is a Python literal in `entry_point.py` for any module; the resolved `spec.apps` for all twelve modules is byte-identical before and after, recorded as a before/after table; generator emission parity is **unchanged** — no rebaseline, which is what proves the change is behaviour-preserving; a generated project with all modules boots with an identical `MODULE_INSTALLED_APPS`; `make quality` is no worse than found.
-  **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_modules/{auth,backups,notifications,orgs,storage}/module.yml`. **Ordering:** must merge before SA118, which rebaselines emission parity over the same manifests.
+  **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_modules/{auth,backups,notifications,orgs,storage}/module.yml`. **Ordering:** must merge before SA118 (#16) and SA167c (#21), which both rewrite the same manifests, and before SA167b (#14, W4), which relocates the adapter blocks this ticket makes manifest-reading.
+  **Why #8 and not earlier:** SA167a has no ticket dependencies and could run first, but its acceptance rests on unchanged emission parity and `make quality` no worse than found — neither is verifiable until the gate layer reports the truth. It therefore sits immediately after SA155 (#7), the earliest slot where its own evidence means anything.
 
-- [ ] **SA118 — Project every declared manifest default into wiring.** `Band B · Tier 2 · W2 · merge #15 · deps: SA123, SA150, SA167a · last band-B merge`
+- [ ] **SA118 — Project every declared manifest default into wiring.** `Band B · Tier 2 · W2 · merge #16 · deps: SA123, SA150, SA167a · blocks SA167c`
   Materialize authoritative declared defaults without widening into the full imperative-to-declarative migration; rebaseline emission parity with per-file rationale.
   **Acceptance:** every default declared in a module manifest is projected into generated wiring, with no default reachable only through imperative code (the five app-declaration literals are cleared by SA167a first); the imperative-to-declarative migration is *not* attempted — out-of-scope seams are ticketed, not converted; emission parity is rebaselined with a per-file rationale for each changed output; a generated project boots and its module wiring reflects the declared defaults; manifest version-spec handling uses the fail-hard seam from SA150.
+
+- [ ] **SA167b — Relocate the nine core-side adapters into their modules.** `Band B · Tier 2 · W4 · merge #14 · deps: SA167a (shares entry_point.py, merges first) · blocks SA167d`
+  With app declarations already in the manifests (SA167a, #8), what remains is relocation. `analytics, auth, backups, blog, forms, listings, notifications, orgs, storage` still register core-side at import time from per-module blocks in `quickscale_core/src/quickscale_core/manifest/entry_point.py` — about 1,139 lines across nine blocks, ranging from 57 (forms) to 265 (notifications). `billing`, `crm`, and `social` already ship module-owned adapters and collapse to a 2–7 line pointer comment each; that is the shape all twelve should end in, leaving `entry_point.py` at roughly 350 lines of discovery machinery.
+  Do it as **one ticket, not one per module**: all nine delete from the same file, so per-module tickets would serialize anyway while adding nine-way contention on `entry_point.py` and splitting one logical change nine ways.
+  **Acceptance:** every shipped module owns its adapter at `quickscale_modules/<name>/src/quickscale_modules_<name>/adapter.py` exposing `get_manifest_adapter()`; `MANAGED_ADAPTER_ORIGINS` covers the full inventory; no per-module block remains in `entry_point.py`, which retains only generic helpers, the registry, and the public entry point; generator emission parity is unchanged, proving the relocation is behaviour-preserving; the tree conforms to [decisions.md §Module Wiring Authority](decisions.md#module-wiring-authority).
+  **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/entry_point.py`, every `quickscale_modules/*/adapter.py`, `docs/technical/implementation_contract.md`.
+
+- [ ] **SA167c — Retire `django_apps:` and gate the app declaration.** `Band B · Tier 2 · W2 · merge #21 · deps: SA167a, SA118 (shared manifests) · closes the SA167 family`
+  `django_apps:` is declared in eleven manifests and parsed by `manifest/loader.py:597` into `ModuleManifest.django_apps`, where **no production code path reads it**. It is inert declarative surface that reads as authoritative — the trap that made `social` look declared when it was not. One test helper does consume it (`quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py:53`) and silently falls back to a guessed path when it is absent, which is why `social` passed that gate too; that fallback is owned by SA164.
+  **Acceptance:** `django_apps:` is either derived from the `apps` wiring projection or removed from all manifests, `ModuleManifest`, and the loader, with no key parsed-but-unread remaining; a conformance gate fails when a module ships models or a migration without declaring at least one Django app, registered in `scripts/gate_registry.json` and passing `scripts/check_gate_parity.py`; the gate is proved by deleting a module's app declaration and observing red, reverted before merge; `test_sa92_migration_squash_guardrail.py` no longer depends on the retired key.
+  **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/{schema,loader}.py`, every `quickscale_modules/*/module.yml`, `scripts/gate_registry.json`, `Makefile`, CI workflow, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`.
+
+- [ ] **SA167d — Drain per-module wiring logic out of the CLI.** `Band B · Tier 3 · W4 · merge #18 · deps: SA167b · last W4 leg`
+  `quickscale_cli/src/quickscale_cli/commands/module_config.py` is 2,154 lines carrying a `configure_<name>_module()` / `apply_<name>_configuration()` pair per module — a fifth place the same wiring facts are expressed. Plan-time interactive prompts that collect **desired configuration** are legitimate and stay; anything deciding what a module *wires* belongs in the module.
+  **Acceptance:** no function in `module_config.py` decides a module's apps, middleware, settings keys, or URL includes — those come from the module's manifest through its adapter; the remaining surface is desired-configuration collection only, and that boundary is stated in the module's docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist) is retired once the deviation it names is gone.
+  **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`.
 
 - [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · blocks SA142, SA152 · PARTIAL CHECKPOINT 2026-08-21`
   QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models.
@@ -422,22 +477,6 @@ Not assigned to a v88 track. Listed here so the finding is not lost.
   **Acceptance:** the in-place workflow's database precondition is reconciled with the SA151 no-migration-history policy and the resolution is stated in the playbook; a cheap non-mutating smoke gate exercises both targets against a generated donor/recipient pair (`DRY_RUN=1` for fresh-first, checkpoint-only for in-place) and is registered in `scripts/gate_registry.json` with `scripts/check_gate_parity.py` passing; `_template_emitted_paths()` fails loudly instead of skipping when the template tree is missing, with a regression test asserting the raise; the playbook's version and implementation-location claims match the tree; `make quality` is no worse than found.
 
   **Shared conflict surface:** `docs/planning/beta-site-migration.md`, `scripts/gate_registry.json`, `Makefile`, CI workflow, `docs/others/tech-audit.md`.
-
-- [ ] **SA167b — Relocate the nine core-side adapters into their modules.** `Post-v88 · Tier 2 · deps: SA167a`
-  With app declarations already in the manifests (SA167a), what remains is relocation. `analytics, auth, backups, blog, forms, listings, notifications, orgs, storage` still register core-side at import time from per-module blocks in `quickscale_core/src/quickscale_core/manifest/entry_point.py` — about 1,139 lines across nine blocks, ranging from 57 (forms) to 265 (notifications). `billing`, `crm`, and `social` already ship module-owned adapters and collapse to a 2–7 line pointer comment each; that is the shape all twelve should end in, leaving `entry_point.py` at roughly 350 lines of discovery machinery.
-  Do it as **one ticket, not one per module**: all nine delete from the same file, so per-module tickets would serialize anyway while adding nine-way contention on `entry_point.py` and splitting one logical change nine ways.
-  **Acceptance:** every shipped module owns its adapter at `quickscale_modules/<name>/src/quickscale_modules_<name>/adapter.py` exposing `get_manifest_adapter()`; `MANAGED_ADAPTER_ORIGINS` covers the full inventory; no per-module block remains in `entry_point.py`, which retains only generic helpers, the registry, and the public entry point; generator emission parity is unchanged, proving the relocation is behaviour-preserving; the tree conforms to [decisions.md §Module Wiring Authority](decisions.md#module-wiring-authority).
-  **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/entry_point.py`, every `quickscale_modules/*/adapter.py`, `docs/technical/implementation_contract.md`.
-
-- [ ] **SA167c — Retire `django_apps:` and gate the app declaration.** `Post-v88 · Tier 2 · deps: SA167a · cheapest protection in the set`
-  `django_apps:` is declared in eleven manifests and parsed by `manifest/loader.py:597` into `ModuleManifest.django_apps`, where **no production code path reads it**. It is inert declarative surface that reads as authoritative — the trap that made `social` look declared when it was not. One test helper does consume it (`quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py:53`) and silently falls back to a guessed path when it is absent, which is why `social` passed that gate too; that fallback is owned by SA164.
-  **Acceptance:** `django_apps:` is either derived from the `apps` wiring projection or removed from all manifests, `ModuleManifest`, and the loader, with no key parsed-but-unread remaining; a conformance gate fails when a module ships models or a migration without declaring at least one Django app, registered in `scripts/gate_registry.json` and passing `scripts/check_gate_parity.py`; the gate is proved by deleting a module's app declaration and observing red, reverted before merge; `test_sa92_migration_squash_guardrail.py` no longer depends on the retired key.
-  **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/{schema,loader}.py`, every `quickscale_modules/*/module.yml`, `scripts/gate_registry.json`, `Makefile`, CI workflow, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`.
-
-- [ ] **SA167d — Drain per-module wiring logic out of the CLI.** `Post-v88 · Tier 3 · deps: SA167b · largest, least urgent`
-  `quickscale_cli/src/quickscale_cli/commands/module_config.py` is 2,154 lines carrying a `configure_<name>_module()` / `apply_<name>_configuration()` pair per module — a fifth place the same wiring facts are expressed. Plan-time interactive prompts that collect **desired configuration** are legitimate and stay; anything deciding what a module *wires* belongs in the module.
-  **Acceptance:** no function in `module_config.py` decides a module's apps, middleware, settings keys, or URL includes — those come from the module's manifest through its adapter; the remaining surface is desired-configuration collection only, and that boundary is stated in the module's docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist) is retired once the deviation it names is gone.
-  **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`.
 
 - [ ] **SA153 — Close the property-portal basics gap in `listings`.** `Post-v88 · Tier 2 · deps: none · highest-value post-release work`
   Audit driven by the planned `buenosairesproperties.com` migration (2026-08-21). The `listings` module ships a deliberately generic `AbstractListing` plus a concrete `Listing`, and `blog` is substantially complete, so the gap is not module existence — it is property-vertical depth and public presentation. Every sub-item below is a *basic*: a real-estate portal cannot launch without it. The umbrella is acceptance-only; each sub-item owns its own implementation and may be split into a child ticket.

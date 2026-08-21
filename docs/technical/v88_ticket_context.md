@@ -490,7 +490,7 @@ Also check whether devtools has a `__version__` in `src/quickscale_devtools/__in
 
 ## SA134 — Derive generated-project version assertions from authoritative pins
 
-`Band B · Tier 2 · W1 · merge #8 · deps: SA137, SA159`
+`Band B · Tier 2 · W1 · merge #9 · deps: SA137, SA159`
 
 ### The mental model
 
@@ -549,7 +549,7 @@ Both tickets are about "the version fact has one home". SA137 establishes the de
 
 ## SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam
 
-`Band B · Tier 2 · W1 · merge #11 · deps: SA134 · blocks SA118`
+`Band B · Tier 2 · W1 · merge #12 · deps: SA134 · blocks SA118`
 
 ### The mental model
 
@@ -627,7 +627,7 @@ lands, because SA157 owns the file SA124's acceptance criterion writes into.
 
 ## SA124 — Unify SA117 scope-tool path authority
 
-`Band B · Tier 1 · W2 · merge #10 · deps: SA155, SA157`
+`Band B · Tier 1 · W2 · merge #11 · deps: SA155, SA157`
 
 ### The mental model
 
@@ -681,7 +681,7 @@ Both tickets edit `scripts/gate_registry.json` and the `Makefile` gate surface. 
 
 ## SA123 — Add dependency-vulnerability and security static-analysis gates
 
-`Band B · Tier 2 · W2 · merge #12 · deps: SA124`
+`Band B · Tier 2 · W2 · merge #13 · deps: SA124`
 
 ### The mental model
 
@@ -731,7 +731,7 @@ That second entry is effectively your rule list. Five named categories — treat
 
 ## SA118 — Project every declared manifest default into wiring
 
-`Band B · Tier 2 · W2 · merge #15 · deps: SA123, SA150, SA167a`
+`Band B · Tier 2 · W2 · merge #16 · deps: SA123, SA150, SA167a`
 
 ### The mental model
 
@@ -853,7 +853,7 @@ The no-migration-history policy goes in `docs/technical/decisions.md`. Without i
 
 ## SA142 — Reuse and clean E2E Docker images
 
-`Band B · Tier 1 · W3 · merge #9 · deps: SA151 · Docker slot`
+`Band B · Tier 1 · W3 · merge #10 · deps: SA151 · Docker slot`
 
 ### The mental model
 
@@ -922,7 +922,7 @@ Sequencing on the exclusive service slot, not a code dependency. SA151 should ho
 
 ## SA135 — Give test suites an owned PostgreSQL lifecycle
 
-`Band B · Tier 2 · W3 · merge #13 · deps: SA142 · PostgreSQL + Docker slot · **carries SA163**`
+`Band B · Tier 2 · W3 · merge #15 · deps: SA142 · PostgreSQL + Docker slot · **carries SA163**`
 
 ### The mental model
 
@@ -997,7 +997,7 @@ SA135 will provision a containerised PostgreSQL, so it should adopt whatever ima
 
 ## SA163 — Derive the CI PostgreSQL environment from one authoritative source
 
-`Band B · Tier 2 · W3 · merge #13 — **executes inside SA135**, not as a separate pass`
+`Band B · Tier 2 · W3 · merge #15 — **executes inside SA135**, not as a separate pass`
 
 ### The mental model
 
@@ -1075,7 +1075,7 @@ ticket it just finished.
 
 ## SA160 — Share one correct CSRF-token helper in the React theme
 
-`Band C · Tier 2 · W3 · merge #18`
+`Band C · Tier 2 · W3 · merge #20`
 
 ### The mental model
 
@@ -1130,7 +1130,7 @@ creates that seam. Place the helper accordingly.
 
 ## SA161 — Remove the dead `get_client_ip` definitions from generated settings
 
-`Band C · Tier 3 · W3 · merge #17`
+`Band C · Tier 3 · W3 · merge #19`
 
 ### The mental model — the Django fact that makes this dead code
 
@@ -1184,7 +1184,7 @@ one. The sync-before-merge-back procedure has to preserve every entry.
 
 ## SA162 — Fix the deprecated bool inversion in the CSRF AST gate
 
-`Band C · Tier 3 · W1 · merge #16`
+`Band C · Tier 3 · W1 · merge #17`
 
 ### The concrete defect
 
@@ -1225,7 +1225,7 @@ red flag — the wrong fix should not outlive the finding.
 
 ## SA165 — Discharge the tech-audit watch items that carry an action
 
-`Band C · Tier 3 · W1 · merge #19`
+`Band C · Tier 3 · W1 · merge #22`
 
 ### The mental model
 
@@ -1285,7 +1285,7 @@ environment. Documentation only — do not change the derivation.
 
 ## SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items
 
-`Band C · Tier 3 · W1 · merge #20 · deps: SA151`
+`Band C · Tier 3 · W1 · merge #23 · deps: SA151`
 
 ### The mental model
 
@@ -1348,7 +1348,7 @@ watch half of Finding 13. Keep their triggers intact — restating is the work, 
 
 ## SA166 — Require a testimony trail for behavioural commits
 
-`Band C · Tier 3 · W2 · merge #21 · deps: SA155, SA118`
+`Band C · Tier 3 · W2 · merge #24 · deps: SA155, SA118, SA167c`
 
 ### The mental model
 
@@ -1506,3 +1506,34 @@ Worth holding as a set, because each appears in more than one ticket:
   suggested fix carry different verification. `not val` would have broken the CSRF gate.
 - **The green-by-absence trap** (SA157, SA155, SA135, SA152, SA165). Skipping, filtering,
   and unresolvable paths all produce green. Every one of them must be made to produce red.
+
+
+---
+
+## SA167a / SA167b / SA167c / SA167d — module wiring standardization
+
+`Band B · W2 (#8, #21) and W4 (#14, #18)`
+
+**The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
+Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.
+On top is one QuickScale-specific thing: the *adapter*, which is the machine-readable
+form of the install instructions a normal Django library writes in its README.
+Django assumes a human reads "add this to `INSTALLED_APPS`" and types it; `quickscale
+apply` generates the project, so that instruction has to be data.
+
+**What went wrong.** That one fact — which Django apps a module contributes — ended up
+expressed in five places: a wiring projection in six manifests, a Python literal inside
+core for five more, nothing at all for `social`, an inert `django_apps:` key in eleven
+manifests that no code reads, and a per-module function pair in the CLI. When a fact
+lives in five places, no one can tell which is the answer, and `social` shipped models
+and a migration that no generated project ever installed.
+
+**The rule** is now written in
+[decisions.md §Module Wiring Authority](./decisions.md#module-wiring-authority): every
+module owns its adapter, and declares its apps once, in its own `module.yml`. These four
+tickets make the tree match it — `a` declares, `b` relocates, `c` retires the inert key
+and adds the gate that keeps it true, `d` drains the CLI.
+
+**Why the split is by phase and not by module.** All nine core-side blocks live in one
+1,508-line file. Nine per-module tickets would serialize on that file anyway while adding
+nine-way contention and splitting one logical change nine ways.
