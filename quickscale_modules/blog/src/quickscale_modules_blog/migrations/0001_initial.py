@@ -1,11 +1,4 @@
-"""Initial migration for the QuickScale Blog module.
-
-Collapsed SA92 migration: final-schema 0001 with Category, Tag, AuthorProfile,
-BlogMediaAsset, and Post models.  NOT NULL/PROTECT organization FK via
-tenant_org_fk, all_objects base manager, dual-manager contract, indexes,
-per-org uniqueness constraints, and FORCE RLS policy installation with
-NULLIF guard refresh.
-"""
+"""Initial migration for the QuickScale Blog module."""
 
 from __future__ import annotations
 
@@ -14,10 +7,9 @@ from typing import Any
 import django.db.models.deletion
 import django.db.models.manager
 import markdownx.models
+import quickscale_modules_blog.models
 from django.conf import settings
 from django.db import migrations, models
-
-import quickscale_modules_blog.models
 
 from quickscale_modules_orgs.tenancy import apply_force_rls, revert_force_rls
 
@@ -54,92 +46,6 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name="Category",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("name", models.CharField(max_length=100)),
-                ("slug", models.SlugField(blank=True, max_length=100)),
-                ("description", models.TextField(blank=True)),
-                (
-                    "organization",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.PROTECT,
-                        related_name="blog_categories",
-                        to="quickscale_modules_orgs.organization",
-                    ),
-                ),
-            ],
-            options={
-                "verbose_name_plural": "Categories",
-                "ordering": ["name"],
-                "base_manager_name": "all_objects",
-                "constraints": [
-                    models.UniqueConstraint(
-                        fields=("name", "organization"),
-                        name="blog_category_name_organization_unique",
-                    ),
-                    models.UniqueConstraint(
-                        fields=("slug", "organization"),
-                        name="blog_category_slug_organization_unique",
-                    ),
-                ],
-            },
-            managers=[
-                ("objects", django.db.models.manager.Manager()),
-                ("all_objects", django.db.models.manager.Manager()),
-            ],
-        ),
-        migrations.CreateModel(
-            name="Tag",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("name", models.CharField(max_length=50)),
-                ("slug", models.SlugField(blank=True)),
-                (
-                    "organization",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.PROTECT,
-                        related_name="blog_tags",
-                        to="quickscale_modules_orgs.organization",
-                    ),
-                ),
-            ],
-            options={
-                "ordering": ["name"],
-                "base_manager_name": "all_objects",
-                "constraints": [
-                    models.UniqueConstraint(
-                        fields=("name", "organization"),
-                        name="blog_tag_name_organization_unique",
-                    ),
-                    models.UniqueConstraint(
-                        fields=("slug", "organization"),
-                        name="blog_tag_slug_organization_unique",
-                    ),
-                ],
-            },
-            managers=[
-                ("objects", django.db.models.manager.Manager()),
-                ("all_objects", django.db.models.manager.Manager()),
-            ],
-        ),
-        migrations.CreateModel(
             name="AuthorProfile",
             fields=[
                 (
@@ -170,9 +76,7 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            options={
-                "ordering": ["user__username"],
-            },
+            options={"ordering": ["user__username"]},
         ),
         migrations.CreateModel(
             name="BlogMediaAsset",
@@ -236,10 +140,70 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
+            options={"ordering": ["-created_at"], "base_manager_name": "all_objects"},
+            managers=[
+                ("objects", django.db.models.manager.Manager()),
+                ("all_objects", django.db.models.manager.Manager()),
+            ],
+        ),
+        migrations.CreateModel(
+            name="Category",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=100)),
+                ("slug", models.SlugField(blank=True, max_length=100)),
+                ("description", models.TextField(blank=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="blog_categories",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
+            ],
             options={
-                "ordering": ["-created_at"],
+                "verbose_name_plural": "Categories",
+                "ordering": ["name"],
                 "base_manager_name": "all_objects",
             },
+            managers=[
+                ("objects", django.db.models.manager.Manager()),
+                ("all_objects", django.db.models.manager.Manager()),
+            ],
+        ),
+        migrations.CreateModel(
+            name="Tag",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=50)),
+                ("slug", models.SlugField(blank=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="blog_tags",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
+            ],
+            options={"ordering": ["name"], "base_manager_name": "all_objects"},
             managers=[
                 ("objects", django.db.models.manager.Manager()),
                 ("all_objects", django.db.models.manager.Manager()),
@@ -341,29 +305,61 @@ class Migration(migrations.Migration):
             options={
                 "ordering": ["-published_date", "-created_at"],
                 "base_manager_name": "all_objects",
-                "indexes": [
-                    models.Index(
-                        fields=["-published_date"],
-                        name="quickscale__publish_446271_idx",
-                    ),
-                    models.Index(
-                        fields=["status"], name="quickscale__status_e0e305_idx"
-                    ),
-                    models.Index(fields=["slug"], name="quickscale__slug_9a53ab_idx"),
-                ],
-                "constraints": [
-                    models.UniqueConstraint(
-                        fields=("slug", "organization"),
-                        name="blog_post_slug_organization_unique",
-                    ),
-                ],
             },
             managers=[
                 ("objects", django.db.models.manager.Manager()),
                 ("all_objects", django.db.models.manager.Manager()),
             ],
         ),
-        # Install FORCE RLS on all blog tables with current NULLIF-guarded template.
+        migrations.AddConstraint(
+            model_name="category",
+            constraint=models.UniqueConstraint(
+                fields=("name", "organization"),
+                name="blog_category_name_organization_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="category",
+            constraint=models.UniqueConstraint(
+                fields=("slug", "organization"),
+                name="blog_category_slug_organization_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="tag",
+            constraint=models.UniqueConstraint(
+                fields=("name", "organization"),
+                name="blog_tag_name_organization_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="tag",
+            constraint=models.UniqueConstraint(
+                fields=("slug", "organization"),
+                name="blog_tag_slug_organization_unique",
+            ),
+        ),
+        migrations.AddIndex(
+            model_name="post",
+            index=models.Index(
+                fields=["-published_date"], name="quickscale__publish_446271_idx"
+            ),
+        ),
+        migrations.AddIndex(
+            model_name="post",
+            index=models.Index(fields=["status"], name="quickscale__status_e0e305_idx"),
+        ),
+        migrations.AddIndex(
+            model_name="post",
+            index=models.Index(fields=["slug"], name="quickscale__slug_9a53ab_idx"),
+        ),
+        migrations.AddConstraint(
+            model_name="post",
+            constraint=models.UniqueConstraint(
+                fields=("slug", "organization"),
+                name="blog_post_slug_organization_unique",
+            ),
+        ),
         migrations.RunPython(
             code=_forward_rls,
             reverse_code=migrations.RunPython.noop,
