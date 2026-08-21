@@ -12,8 +12,9 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers **all twenty-five v88 ticket entries** (twenty-four merge positions because
-SA163 executes inside SA135) plus the three post-v88 entries. Sections are ordered by
+It covers **all twenty-five v88 ticket entries** across twenty-four merge positions
+(twenty-one open positions carrying twenty-two open entries, plus closed SA156, SA137,
+and SA157; SA163 executes inside SA135) plus the three post-v88 entries. Sections are ordered by
 merge band (A → B → C), which is also the order in which the work becomes safe to do.
 
 ---
@@ -103,8 +104,9 @@ claims about tickets.**
 
 # Band A — Make the gate layer tell the truth
 
-Five tickets, four of them independent and small, one integrating. W2 owns four; W1 owns
-SA159 because it edits `scripts/version_tool.sh`, which is SA137's file.
+Band A contains five tickets: SA156 and SA157 are closed, SA158 and SA159 are the
+independent W1 legs, and SA155 is the integrating W2 leg. W1 owns SA159 because it edits
+`scripts/version_tool.sh`, which is SA137's file; SA158 is likewise isolated on W1.
 
 ## SA156 — Make the quality gate's fallback base ref resolve
 
@@ -135,8 +137,10 @@ but the fallback resolves the bare name only — so it misses the `origin/v87` t
 survives. Two independent bugs stacked, either of which alone would have hidden the other.
 
 Nothing in the `Makefile`, `scripts/`, or any workflow sets `QUALITY_BASELINE_BASE_REF`, so
-a local `make quality` hits the fallback every time. It exits 2, and
-`scripts/check_quality.sh:123` then deletes the previous report before any analyzer runs.
+a local `make quality` hits the fallback every time. The monotonicity helper exits 2,
+`scripts/check_quality.sh:123` maps that failure to script exit 1 and deletes the previous
+report before any analyzer runs, and GNU Make surfaces the failed recipe as `make quality`
+exit 2.
 The failure mode is therefore *worse than no gate*: you lose the artifact that would have
 told you the gate did not run.
 
@@ -228,7 +232,7 @@ by line**, each changed entry confirmed to correspond to an intended change in
 
 ## SA157 — Fix the SA117 scope-tool test that asserts the interpreter's exit code
 
-`Band A · Tier 2 · W2 · merge #4 · deps: none · blocks SA124`
+`Band A · Tier 2 · W2 · merge #4 · deps: none · blocks SA124 · **CLOSED** — retained for concepts only; closure detail in [CHANGELOG.md](../../CHANGELOG.md)`
 
 ### The mental model
 
@@ -361,7 +365,7 @@ follows (#5) in the same worktree.
 
 ## SA155 — Give the gate layer a gate of its own
 
-`Band A · Tier 1 · W2 · merge #7 · deps: SA157, SA158, SA159 (SA156 closed)`
+`Band A · Tier 1 · W2 · merge #7 · deps: SA158, SA159 (SA156 and SA157 closed)`
 
 ### The mental model
 
@@ -540,7 +544,7 @@ The acceptance wording — *"retired-version negative controls remain and still 
 
 *"bumping a pin requires no test edit, demonstrated by a temporary bump that leaves the suite green"*. Literally do this: change `POSTGRES_VERSION` to `"19"`, run the suite, confirm green, revert. Record it as evidence. If anything fails, a literal survived.
 
-Note `quickscale_core/tests/docker-compose.test.yml` is a static YAML file, not Python — it cannot import `runtime_pins`. Decide whether it is in scope (it pins the *test harness* Postgres, arguably a different concern from the *generated project* Postgres) and say which, rather than leaving it ambiguous. This overlaps SA135, which owns the test harness's database; coordinating the answer with the W3 ticket is reasonable, but SA134 merges first (#8 vs #13), so state the decision and let SA135 honour it.
+Note `quickscale_core/tests/docker-compose.test.yml` is a static YAML file, not Python — it cannot import `runtime_pins`. Decide whether it is in scope (it pins the *test harness* Postgres, arguably a different concern from the *generated project* Postgres) and say which, rather than leaving it ambiguous. This overlaps SA135, which owns the test harness's database; coordinating the answer with the W3 ticket is reasonable, but SA134 merges first (#9 vs #15), so state the decision and let SA135 honour it.
 
 ### Depends on SA137 because
 
@@ -1177,7 +1181,7 @@ after SA135 on W3 so the fixture edits stay serialized within the worktree.
 ## SA160 / SA161 sequencing note
 
 Both are W3 and both touch `quickscale_core/tests/fixtures/sa90_emission_manifests.json`,
-as do SA142 (merge #9) and SA118 (merge #14, W2). SA118 is the one that crosses worktrees.
+as do SA142 (merge #10) and SA118 (merge #16, W2). SA118 is the one that crosses worktrees.
 Each rebaseline **appends** its own `baseline_evidence` entry; none may replace a prior
 one. The sync-before-merge-back procedure has to preserve every entry.
 
@@ -1360,7 +1364,7 @@ Every other ticket in this release makes a *machine* tell the truth. This one ma
 
 `d3d4c633` and `d4b0e834` were both titled **"v0.87.0: QuickScale 0.87.0"** while in fact
 changing hosted and publish provisioning. `d3d4c633` also left a repository conformance test
-red — that is TA66, which is SA158, which is merge #4 of this release.
+red — that is TA66, which is SA158, which is merge #6 of this release.
 
 Both audits independently flagged the same shape: **a release-shaped message carrying a CI
 topology change**. It was read closely only because the arch audit's delta-classification

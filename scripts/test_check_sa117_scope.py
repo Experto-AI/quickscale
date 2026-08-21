@@ -598,8 +598,8 @@ class TestEvidenceAndEntrypoint:
     ) -> None:
         result = subprocess.run(
             [
-                "python",
-                "scripts/check_sa117_scope.py",
+                sys.executable,
+                str(pathlib.Path(__file__).with_name("check_sa117_scope.py")),
                 "lock-diff",
                 "--baseline-ref",
                 "HEAD",
@@ -615,6 +615,8 @@ class TestEvidenceAndEntrypoint:
             text=True,
         )
         assert result.returncode == 2
+        assert "candidate must be the repository-root poetry.lock" in result.stderr
+        assert not (tmp_path / "evidence.json").exists()
 
     def test_legacy_lock_candidate_spelling_is_rejected(
         self, version_fixture: dict[str, pathlib.Path | str], tmp_path: pathlib.Path
@@ -623,7 +625,7 @@ class TestEvidenceAndEntrypoint:
         output = tmp_path / "legacy-evidence.json"
         result = subprocess.run(
             [
-                "python",
+                sys.executable,
                 str(script),
                 "lock",
                 "--candidate",

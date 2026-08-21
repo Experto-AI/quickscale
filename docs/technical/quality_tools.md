@@ -162,9 +162,11 @@ Compact machine-readable summary of the baseline gate result:
 - **1:** Warning regressions found, the baseline file could not be loaded, or the baseline monotonicity gate failed (policy violation or prerequisite error)
 - **2:** Critical regressions found
 
-> **Note:** When the baseline monotonicity gate (SA121) fails, `make quality`
-> exits 1 regardless of whether the helper reported exit 1 or exit 2.  The
-> helper's detailed exit code is preserved in the diagnostic output.
+> **Note:** The baseline monotonicity helper uses exit 1 for a policy violation
+> and exit 2 for a prerequisite or schema error. `scripts/check_quality.sh`
+> maps either helper failure to its own exit 1. When that script is run through
+> GNU Make, `make quality` reports the failed recipe as process exit 2; this
+> outer GNU Make status is distinct from the helper/script status.
 
 ## Integration with Existing Tools
 
@@ -423,7 +425,9 @@ Canonical source labels:
 - ``main`` — unexpected handler error
 
 The helper prints a single `ERROR:` line to stderr (no Python traceback) and
-exits 2.  The shell script maps exit 2 to `make quality` exit 1.
+exits 2.  The shell script maps either helper failure (exit 1 or exit 2) to
+its own exit 1. When invoked by GNU Make, the failed recipe is surfaced as
+`make quality` exit 2.
 
 ### Canonical Diagnostic Record
 
@@ -480,11 +484,17 @@ When the helper exits non-zero (exit 1 or exit 2), ``check_quality.sh``:
 
 Integrated into `make quality`:
 
-| Helper exit | `make quality` exit | Behavior |
-|-------------|-------------------|----------|
-| 0 (pass) | Normal exit (0/1/2) | Proceeds with full analysis; monotonicity verdict added to reports |
-| 1 (violation) | 1 | Prints diagnostic summary, preserves policy artifact, clears stale success reports, aborts without running analyzers |
-| 2 (error) | 1 | Same as exit 1 — prerequisite failure (missing ref, bad baseline, git error) |
+| Helper exit | `check_quality.sh` exit | `make quality` exit | Behavior |
+|-------------|------------------------|-------------------|----------|
+| 0 (pass) | Proceeds | Normal analyzer result | Proceeds with full analysis; monotonicity verdict added to reports |
+| 1 (violation) | 1 | 2 (failed recipe) | Prints diagnostic summary, preserves policy artifact, clears stale success reports, aborts without running analyzers |
+| 2 (error) | 1 | 2 (failed recipe) | Same cleanup/abort behavior — prerequisite failure (missing ref, bad baseline, git error) |
+
+The current accepted no-worse-than-found baseline is an exit-2 `make quality`
+result when the only regression is
+`quickscale_cli/src/quickscale_cli/commands/development_commands.py::up` C901
+complexity 15 versus allowed 14. The helper/script exit-1 detail and the GNU
+Make exit-2 wrapper status must both be retained in validation evidence.
 
 When the gate passes, the verdict and merge-base metadata are included in the
 generated reports:
