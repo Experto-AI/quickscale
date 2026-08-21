@@ -1,36 +1,15 @@
-"""Initial migration for the QuickScale Billing module.
-
-Collapsed SA92 migration: final-schema 0001 with Plan, CreditBalance,
-CreditTransaction, Subscription, and WebhookEvent models.  Includes all
-partial unique constraints for stripe idempotency, populated-value
-conditions, current-subscription uniqueness, and FORCE RLS with NULLIF
-guard refresh on tenant-scoped tables (CreditBalance, CreditTransaction,
-Subscription).  Plan and WebhookEvent are system-wide (no RLS).
-"""
+"""Initial migration for the QuickScale Billing module."""
 
 from __future__ import annotations
 
 from typing import Any
 
 import django.db.models.deletion
+import django.db.models.manager
 from django.conf import settings
 from django.db import migrations, models
 
-import django.db.models.manager
-from quickscale_modules_billing.models import (
-    current_subscription_status_q,
-    populated_value_q,
-)
 from quickscale_modules_orgs.tenancy import apply_force_rls, revert_force_rls
-
-CURRENT_SUBSCRIPTION_STATUSES = (
-    "incomplete",
-    "trialing",
-    "active",
-    "past_due",
-    "unpaid",
-    "paused",
-)
 
 BILLING_CREDIT_BALANCE_RLS_POLICY = "billing_credit_balance_org_isolation"
 BILLING_CREDIT_TRANSACTION_RLS_POLICY = "billing_credit_transaction_org_isolation"
@@ -94,9 +73,7 @@ class Migration(migrations.Migration):
                 ("features", models.JSONField(blank=True, default=list)),
                 ("is_active", models.BooleanField(default=True)),
             ],
-            options={
-                "ordering": ["name"],
-            },
+            options={"ordering": ["name"]},
         ),
         migrations.CreateModel(
             name="CreditBalance",
@@ -131,13 +108,40 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            options={
-                "base_manager_name": "all_objects",
-            },
+            options={"base_manager_name": "all_objects"},
             managers=[
                 ("objects", django.db.models.manager.Manager()),
                 ("all_objects", django.db.models.manager.Manager()),
             ],
+        ),
+        migrations.CreateModel(
+            name="WebhookEvent",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("stripe_event_id", models.CharField(db_index=True, max_length=255)),
+                ("event_type", models.CharField(max_length=100)),
+                ("payload", models.JSONField(blank=True, default=dict)),
+                ("processed", models.BooleanField(default=False)),
+                ("processing_error", models.TextField(blank=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+            ],
+            options={
+                "ordering": ["-created_at"],
+                "constraints": [
+                    models.UniqueConstraint(
+                        fields=("stripe_event_id",),
+                        name="quickscale_billing_unique_stripe_event_id",
+                    )
+                ],
+            },
         ),
         migrations.CreateModel(
             name="CreditTransaction",
@@ -190,7 +194,6 @@ class Migration(migrations.Migration):
                 (
                     "organization",
                     models.ForeignKey(
-                        db_index=True,
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="credit_transactions",
                         to="quickscale_modules_orgs.organization",
@@ -200,6 +203,16 @@ class Migration(migrations.Migration):
             options={
                 "ordering": ["-created_at"],
                 "base_manager_name": "all_objects",
+                "constraints": [
+                    models.UniqueConstraint(
+                        condition=models.Q(
+                            ("stripe_event_id__isnull", False),
+                            models.Q(("stripe_event_id", ""), _negated=True),
+                        ),
+                        fields=("stripe_event_id", "transaction_type"),
+                        name="quickscale_billing_unique_stripe_event_id_per_type",
+                    )
+                ],
             },
             managers=[
                 ("objects", django.db.models.manager.Manager()),
@@ -250,18 +263,11 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("checkout_expires_at", models.DateTimeField(blank=True, null=True)),
-                (
-                    "current_period_start",
-                    models.DateTimeField(blank=True, null=True),
-                ),
-                (
-                    "current_period_end",
-                    models.DateTimeField(blank=True, null=True),
-                ),
+                ("current_period_start", models.DateTimeField(blank=True, null=True)),
+                ("current_period_end", models.DateTimeField(blank=True, null=True)),
                 (
                     "organization",
                     models.ForeignKey(
-                        db_index=True,
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="subscriptions",
                         to="quickscale_modules_orgs.organization",
@@ -289,84 +295,47 @@ class Migration(migrations.Migration):
             options={
                 "ordering": ["-id"],
                 "base_manager_name": "all_objects",
+                "constraints": [
+                    models.UniqueConstraint(
+                        condition=models.Q(
+                            ("stripe_subscription_id__isnull", False),
+                            models.Q(("stripe_subscription_id", ""), _negated=True),
+                        ),
+                        fields=("stripe_subscription_id",),
+                        name="quickscale_billing_unique_stripe_subscription_id_when_populated",
+                    ),
+                    models.UniqueConstraint(
+                        condition=models.Q(
+                            ("stripe_checkout_session_id__isnull", False),
+                            models.Q(("stripe_checkout_session_id", ""), _negated=True),
+                        ),
+                        fields=("stripe_checkout_session_id",),
+                        name="quickscale_billing_unique_stripe_checkout_session_id_present",
+                    ),
+                    models.UniqueConstraint(
+                        condition=models.Q(
+                            (
+                                "status__in",
+                                (
+                                    "incomplete",
+                                    "trialing",
+                                    "active",
+                                    "past_due",
+                                    "unpaid",
+                                    "paused",
+                                ),
+                            )
+                        ),
+                        fields=("organization",),
+                        name="quickscale_billing_unique_current_subscription_per_organization",
+                    ),
+                ],
             },
             managers=[
                 ("objects", django.db.models.manager.Manager()),
                 ("all_objects", django.db.models.manager.Manager()),
             ],
         ),
-        migrations.CreateModel(
-            name="WebhookEvent",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("stripe_event_id", models.CharField(db_index=True, max_length=255)),
-                ("event_type", models.CharField(max_length=100)),
-                ("payload", models.JSONField(blank=True, default=dict)),
-                ("processed", models.BooleanField(default=False)),
-                ("processing_error", models.TextField(blank=True)),
-                ("created_at", models.DateTimeField(auto_now_add=True)),
-            ],
-            options={
-                "ordering": ["-created_at"],
-            },
-        ),
-        # Subscription constraints
-        migrations.AddConstraint(
-            model_name="subscription",
-            constraint=models.UniqueConstraint(
-                condition=models.Q(
-                    ("stripe_subscription_id__isnull", False),
-                    models.Q(("stripe_subscription_id", ""), _negated=True),
-                ),
-                fields=("stripe_subscription_id",),
-                name="quickscale_billing_unique_stripe_subscription_id_when_populated",
-            ),
-        ),
-        migrations.AddConstraint(
-            model_name="subscription",
-            constraint=models.UniqueConstraint(
-                condition=models.Q(
-                    ("stripe_checkout_session_id__isnull", False),
-                    models.Q(("stripe_checkout_session_id", ""), _negated=True),
-                ),
-                fields=("stripe_checkout_session_id",),
-                name="quickscale_billing_unique_stripe_checkout_session_id_present",
-            ),
-        ),
-        migrations.AddConstraint(
-            model_name="subscription",
-            constraint=models.UniqueConstraint(
-                condition=current_subscription_status_q(),
-                fields=("organization",),
-                name="quickscale_billing_unique_current_subscription_per_organization",
-            ),
-        ),
-        # CreditTransaction constraint: stripe_event_id + transaction_type
-        migrations.AddConstraint(
-            model_name="credittransaction",
-            constraint=models.UniqueConstraint(
-                fields=["stripe_event_id", "transaction_type"],
-                condition=populated_value_q("stripe_event_id"),
-                name="quickscale_billing_unique_stripe_event_id_per_type",
-            ),
-        ),
-        # WebhookEvent constraint
-        migrations.AddConstraint(
-            model_name="webhookevent",
-            constraint=models.UniqueConstraint(
-                fields=("stripe_event_id",),
-                name="quickscale_billing_unique_stripe_event_id",
-            ),
-        ),
-        # Install FORCE RLS on tenant-scoped billing tables with current NULLIF-guarded template.
         migrations.RunPython(
             code=_forward_rls,
             reverse_code=migrations.RunPython.noop,
