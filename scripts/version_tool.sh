@@ -11,7 +11,11 @@ VERSION_FILE="$ROOT/VERSION"
 PYTHON="${PYTHON:-python3}"
 MODULE_DISCOVERY_SHIM="$ROOT/quickscale_core/src/quickscale_core/contracts/module_discovery.py"
 
-PYPROJECTS=("$ROOT/quickscale_core/pyproject.toml" "$ROOT/quickscale_cli/pyproject.toml" "$ROOT/quickscale/pyproject.toml")
+# Every direct-child quickscale*/pyproject.toml is a top-level parity member.
+# nullglob keeps a missing match from becoming a literal path.
+shopt -s nullglob
+PYPROJECTS=("$ROOT"/quickscale*/pyproject.toml)
+shopt -u nullglob
 PACKAGES=("$ROOT/quickscale_core/src/quickscale_core" "$ROOT/quickscale_cli/src/quickscale_cli")
 
 MODULE_NAMES=()
@@ -338,7 +342,7 @@ cmd_update() {
   local version; version=$(read_version)
   echo "Updating all files to version ${version}..."
 
-  # Update pyproject.toml files (core, cli, quickscale)
+  # Update every derived top-level quickscale*/pyproject.toml member.
   for p in "${PYPROJECTS[@]}"; do
     update_pyproject "$p" "$version" || true
     update_internal_dependencies "$version" "$p" || true

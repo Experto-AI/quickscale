@@ -12,8 +12,9 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers **all twenty v88 tickets** plus the three post-v88 entries. Sections are ordered
-by merge band (A → B → C), which is also the order in which the work becomes safe to do.
+It covers **all twenty-five v88 ticket entries** (twenty-four merge positions because
+SA163 executes inside SA135) plus the three post-v88 entries. Sections are ordered by
+merge band (A → B → C), which is also the order in which the work becomes safe to do.
 
 ---
 
@@ -293,7 +294,7 @@ should not be able to recur silently.
 
 ## SA159 — Route repo-source execution through the project interpreter
 
-`Band A · Tier 2 · W1 · merge #5 · deps: SA137 (same file) · blocks SA155, SA134`
+`Band A · Tier 2 · W1 · merge #5 · deps: SA137 (closed; same file) · blocks SA155, SA134`
 
 ### The mental model
 
@@ -429,9 +430,9 @@ Resolve that one explicitly rather than folding it into a blanket justification.
 
 # Band B / W1 — Pins, interpreter, and dependency-spec authority
 
-## SA137 — Add `quickscale_devtools` to version propagation
+## SA137 — Add `quickscale_devtools` to version propagation (closed)
 
-`Band B · Tier 1 · W1 · merge #2 · deps: none · blocks SA159, SA134`
+`Band B · Tier 1 · W1 · merge #2 · **CLOSED** — retained for concepts only; closure detail in [CHANGELOG.md](../../CHANGELOG.md)`
 
 ### The mental model
 
@@ -439,25 +440,25 @@ QuickScale ships several Python packages out of one repository: `quickscale`, `q
 
 Think of `VERSION` as the single clock, and `version_tool.sh` as the mechanism that moves every hand on every dial. `check` asks "do all the dials agree with the clock?"; `update` sets them.
 
-### The concrete defect
+### The former defect
 
-Look at the top of `scripts/version_tool.sh`:
+Before SA137, the top of `scripts/version_tool.sh` contained:
 
 ```bash
 PYPROJECTS=("$ROOT/quickscale_core/pyproject.toml" "$ROOT/quickscale_cli/pyproject.toml" "$ROOT/quickscale/pyproject.toml")
 PACKAGES=("$ROOT/quickscale_core/src/quickscale_core" "$ROOT/quickscale_cli/src/quickscale_cli")
 ```
 
-`quickscale_devtools` is in neither list. The modules *are* handled well — `_load_module_inventory()` shells out to the authoritative discovery shim (`quickscale_core/src/quickscale_core/contracts/module_discovery.py --list-modules`) and derives the twelve module paths, so adding a module needs no edit here. But the four top-level packages are a **hardcoded array**, and devtools was never added to it.
+`quickscale_devtools` was in neither list. The modules were handled well — `_load_module_inventory()` shells out to the authoritative discovery shim (`quickscale_core/src/quickscale_core/contracts/module_discovery.py --list-modules`) and derives the twelve module paths, so adding a module needs no edit there. But the top-level packages were a **hardcoded array**, and devtools had never been added to it.
 
-The drift is already real and observable today:
+The drift was real and observable before the correction:
 
 ```
 VERSION                                 → 0.87.0
 quickscale_devtools/pyproject.toml:34   → version = "0.86.0"
 ```
 
-Devtools is a release behind, and `make version-check` passes anyway, because it never looks.
+Devtools was a release behind, and `make version-check` passed anyway because it never looked.
 
 ### Why it matters (and why it is only Tier 1, not urgent)
 
@@ -465,18 +466,18 @@ Devtools is deliberately **maintainer-only**. Its own `pyproject.toml` header st
 
 Hold this distinction clearly, because it is the most likely way to get this ticket wrong:
 
-- **Version *parity*** — devtools should carry the repository version. **This is what SA137 fixes.**
+- **Version *parity*** — devtools should carry the repository version. **This is what SA137 fixed.**
 - **Version *publication*** — devtools should be uploaded to PyPI. **This is explicitly NOT SA137.** Adding devtools to the publish package list would break the documented maintainer contract and require `PATH_DEPENDENCY_REWRITES` changes.
 
 If a reviewer sees devtools appear in a publish list, the ticket has overreached.
 
 ### Implementation shape
 
-The weak fix is to append devtools to the two arrays. The acceptance criterion "the propagation set is derived, not a second hand-maintained list" rejects that: it recreates the same class of bug for the *next* package. Prefer discovering top-level packages the way modules are already discovered — a directory scan for `quickscale*/pyproject.toml` at the repository root, or a single declared inventory that both `version_tool.sh` and the publish scripts read, with publication remaining a separate flag on each entry.
+The rejected weak fix was to append devtools to the two arrays. The accepted correction derives every direct-child `quickscale*/pyproject.toml` at the repository root, so a future top-level package joins parity without an inventory edit. Publication remains a separate, explicit inventory.
 
 Note that `scripts/sa117_scope.json` **already lists** `quickscale_devtools/pyproject.toml` and `quickscale_devtools/src/quickscale_devtools/__init__.py` as `SA117 version pin surface` entries. The allowlist expected devtools to be in the lockstep set; the tool never caught up. That is your strongest evidence that this is a genuine omission and not a deliberate exclusion.
 
-Also check whether devtools has a `__version__` in `src/quickscale_devtools/__init__.py` — a grep found none, so decide deliberately whether `update` should write one (matching the module pattern) or whether the `[project] version` alone is the pin surface. Whichever you choose, the scope file's phase-4 entry should match reality afterwards.
+Devtools has no `__version__` in `src/quickscale_devtools/__init__.py`; SA137 deliberately kept `[project] version` as its only version pin. The scope file's phase-4 entry records that reviewed runtime-version exclusion rather than claiming the init module is a pin.
 
 ### Files
 
@@ -490,7 +491,7 @@ Also check whether devtools has a `__version__` in `src/quickscale_devtools/__in
 
 ## SA134 — Derive generated-project version assertions from authoritative pins
 
-`Band B · Tier 2 · W1 · merge #9 · deps: SA137, SA159`
+`Band B · Tier 2 · W1 · merge #9 · deps: SA159 (SA137 closed)`
 
 ### The mental model
 
@@ -1230,8 +1231,8 @@ red flag — the wrong fix should not outlive the finding.
 ### The mental model
 
 The tech audit's *Notes* hold thirteen items. Most are **accepted trade-offs** or are owned
-elsewhere — `SA150` owns the local-wheelhouse seam, `SA137` owns the devtools version
-drift, and integration-branch CI, generator lock generation, the DB-free healthcheck, the
+elsewhere — `SA150` owns the local-wheelhouse seam, while integration-branch CI,
+generator lock generation, the DB-free healthcheck, the
 CRM count fallbacks, and non-durable atomic state writes are each recorded as **deliberate
 and explicitly out of this ticket's scope**.
 

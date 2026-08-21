@@ -37,8 +37,7 @@ Check that everything is consistent:
 ### 4. Commit, tag, push
 
 ```bash
-git add VERSION quickscale_core/pyproject.toml quickscale_cli/pyproject.toml \
-  quickscale/pyproject.toml \
+git add VERSION quickscale*/pyproject.toml \
   quickscale_core/src/quickscale_core/_version.py \
   quickscale_cli/src/quickscale_cli/_version.py
 git commit -m "v$(cat VERSION)"
