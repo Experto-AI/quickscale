@@ -1,7 +1,7 @@
 # QuickScale Development Roadmap
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap** (Open Work)
-> **Related docs**: [Decisions](decisions.md) | [Changelog](../../CHANGELOG.md) | [Validation Policy](validation_policy.md) | [Release Summary Template](release_summary_template.md)
+> **Related docs**: [Decisions](decisions.md) | [Changelog](../../CHANGELOG.md) | [Validation Policy](validation_policy.md) | [v88 Ticket Context](v88_ticket_context.md) | [Release Summary Template](release_summary_template.md)
 
 ## Purpose
 
@@ -9,7 +9,7 @@ This is the current task planner. It contains open planned work only. Completed 
 
 ### Execution rules
 
-- Work develops in three worktrees and merges into the clean v88 integration branch, which `V88-KICKOFF` creates. Never implement directly on the integration branch.
+- Work develops in three worktrees and merges into the clean `v88` integration branch (created by `V88-KICKOFF`). Never implement directly on the integration branch.
 - One reviewed child runs at a time per track. Umbrellas are acceptance-only; their children own implementation.
 - Start from a clean worktree after merging the integration branch. Before merge-back, sync the integration branch into the worktree, resolve there, run the ticket's verification, review the exact tip, then merge that tip.
 - Every handoff declares its file allowlist, commands, expected exits/artifacts, rollback, and focused validation. Scope findings are ticketed rather than fixed in place.
@@ -22,95 +22,142 @@ This is the current task planner. It contains open planned work only. Completed 
 
 ## v88 release plan
 
+### Prioritization decision (recorded 2026-08-21)
+
+**Choice: neither.** Architectural Findings 2 (deletion-cleanup coordination), 4 (organization purge ordering), and 7 (generated-file ownership) stay behind their growth triggers. No `teams` domain work and no third generated-project updater is scheduled for v88. This is consistent with the standing decision that `teams` is not planned, and it keeps v88 free of speculative architecture. The nine backlog tickets are planned on their own merits below.
+
+Consequence for the gated findings: they remain live in [arch-audit.md](../others/arch-audit.md) and are **not** closed by any v88 ticket. A v88 ticket may not widen into them; if implementation work discovers a trigger has actually fired, that is a scope finding and gets its own ticket rather than an in-place fix.
+
+`V88-KICKOFF` is closed by this section together with the dependency graph, acceptance criteria, and track/merge-order assignment that follow.
+
 ### Dependency graph and critical path
 
 ```text
-v88 planning — critical path
-V88-KICKOFF: create v88 branch ──► prioritization choice ──► dependency graph + acceptance criteria ──► track/merge-order assignment
-                                                                                                        └─► nine implementation tickets become executable
+v88 implementation — three tracks, nine tickets
 
-Track 1 — unassigned until V88-KICKOFF ──────────────────────► kickoff join
-Track 2 — unassigned until V88-KICKOFF ──────────────────────► kickoff join
-Track 3 — unassigned until V88-KICKOFF ──────────────────────► kickoff join
+Track 1 (pins & dependency-spec authority)
+  SA137 ──► SA134 ──► SA150
+  devtools in      derive generated-    fail-hard the
+  version prop.    project assertions   wheelhouse seam
+                   from authoritative
+                   pins
+
+Track 2 (gates & declared wiring)
+  SA124 ──► SA123 ──► SA118
+  one scope-tool    dependency +        project declared
+  path authority    security gates      manifest defaults
+                    via gate registry   into wiring
+                                          ▲
+                              SA150 merges first ──┘  (manifest-spec coordination)
+
+Track 3 (service-backed — exclusive PostgreSQL/Docker slot)
+  SA151 ──► SA142 ──► SA135
+  clean initial     stable E2E image    owned PostgreSQL
+  migrations        identity            lifecycle for suites
 ```
 
-**Longest open chain:** `V88-KICKOFF` alone. Its hard upstream blocker (`SA96-PUBLISH`) cleared when v0.87.0 published, so the ticket is now startable and nothing else can begin until it assigns tracks.
+**Longest open chain:** Track 3, `SA151 → SA142 → SA135`, three serialized service-backed legs. Track 3 holds the exclusive PostgreSQL/Docker slot for the whole release and therefore has priority whenever one of its legs is active.
 
-**Parallelism result:** no rebalancing is available. All three tracks are idle by construction — `V88-KICKOFF` is the single ticket that assigns them, and the nine implementation tickets are deliberately not pre-bound to a track because kickoff owns that decision. Pulling any of them forward would create an unreviewed dependency graph rather than accelerate anything. The exclusive PostgreSQL/Docker slot is free.
+**Inter-track edges:** exactly one — `SA150` must merge before `SA118`, because both touch module-manifest version-spec handling and `SA118` must project defaults over the fail-hard seam `SA150` establishes, not over the current silent fallback. No other cross-track edge exists; Tracks 1 and 2 are otherwise independent.
 
-**Deferred-task allocation check:** `SA151`, `SA123`, `SA124`, `SA134`, `SA137`, `SA118`, `SA142`, `SA135`, and `SA150` each depend on `V88-KICKOFF` for an accepted dependency graph, acceptance criteria, execution track, and merge order. Their track stays `v88 backlog` until kickoff completes.
+**Parallelism result:** three tracks run concurrently at 3/3/3. Track 3 is the critical path. Tracks 1 and 2 have slack; if either finishes early, the available rebalance is to pull nothing forward from Track 3 (the PostgreSQL/Docker slot is exclusive) and instead take the next Track 3 ticket's *non-service* preparation only if it can be verified without the slot.
 
-### Track readiness
+### Track assignment and merge order
 
-A track is truly green only when start, finish, and merge are all yes.
-
-| Track (next ticket) | Can start | Can finish | Can merge | Truly green | Critical-path role |
+| # | Ticket | Tier | Track | Merges after | Service slot |
 |---|---|---|---|---|---|
-| **v88 kickoff — V88-KICKOFF** | **yes** — upstream blocker `SA96-PUBLISH` closed on 2026-08-20 | **no** — blocked by the v88 prioritization choice (user-decision-clearable) | **yes** — no cross-track merge-order gate; it creates the branch others merge into | **no** — pending the prioritization decision | Critical path; head |
-| **Track 1 — unassigned** | **no** — blocker `V88-KICKOFF` assigns the ticket | **n/a** — no ticket assigned | **n/a** | **n/a** | Idle until kickoff |
-| **Track 2 — unassigned** | **no** — blocker `V88-KICKOFF` assigns the ticket | **n/a** — no ticket assigned | **n/a** | **n/a** | Idle until kickoff |
-| **Track 3 — unassigned** | **no** — blocker `V88-KICKOFF` assigns the ticket | **n/a** — no ticket assigned | **n/a** | **n/a** | Idle until kickoff |
+| 1 | **SA137** | 1 | Track 1 | — | no |
+| 2 | **SA124** | 1 | Track 2 | — | no |
+| 3 | **SA151** | 1 | Track 3 | — | **yes** — PostgreSQL |
+| 4 | **SA134** | 2 | Track 1 | SA137 | no |
+| 5 | **SA142** | 1 | Track 3 | SA151 | **yes** — Docker |
+| 6 | **SA123** | 2 | Track 2 | SA124 | no |
+| 7 | **SA150** | 2 | Track 1 | SA134 | no |
+| 8 | **SA135** | 2 | Track 3 | SA142 | **yes** — PostgreSQL + Docker |
+| 9 | **SA118** | 2 | Track 2 | SA123, **SA150** | no |
 
-**Truly-green open tickets:** none. `V88-KICKOFF` can start today, but cannot finish until the maintainer records the prioritization choice below. No off-path filler ticket is assigned.
+Within a track, one reviewed child runs at a time. Merge order is the table order; a ticket syncs the integration branch into its worktree, resolves there, reruns its own verification, and only then merges its exact reviewed tip.
 
-### Open-ticket readiness
+### Shared conflict surfaces
 
-“User-decision-clearable” means the maintainer can clear the state. A hard dependency is cleared only by the named upstream ticket or accepted evidence.
+Standing surface for every ticket: `CHANGELOG.md`, `docs/technical/roadmap.md`. Additional per-ticket surfaces:
 
-| Ticket (track) | Can start | Can finish on its track | Can merge | Role |
-|---|---|---|---|---|
-| **V88-KICKOFF (kickoff)** | **yes** — no open dependency | **no** — the prioritization choice is user-decision-clearable | **yes** — no cross-track merge-order gate | Critical path; head |
-| **Nine backlog tickets** | **no** — hard blocker `V88-KICKOFF` | **no** — hard blocker `V88-KICKOFF` | **no** — merge order is assigned by kickoff | Post-kickoff implementation |
+| Ticket | Additional shared surface | Why |
+|---|---|---|
+| SA151 | `docs/technical/decisions.md` | records the no-migration-history policy |
+| SA123 | `scripts/gate_registry.json`, `Makefile`, CI workflow | new blocking gates |
+| SA124 | `scripts/gate_registry.json`, `Makefile`, `scripts/sa117_scope.json` | gate + path authority |
+| SA134 | — | test-side literals only |
+| SA137 | `VERSION`, `scripts/version_tool.sh`, `Makefile` | propagation set |
+| SA118 | module manifests, wiring emission baselines | manifest projection |
+| SA142 | `scripts/test_e2e.sh`, E2E fixtures | image/container identity |
+| SA135 | `scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, `Makefile`, `docs/technical/validation_policy.md` | changes the documented DB precondition |
+| SA150 | `docs/others/tech-audit.md` (closes a live finding), new `docs/technical/` seam doc | fail-hard + documentation |
 
-### Maintainer decision and unblock paths
-
-**v0.87.0 is published.** The core tag `0.87.0` is on the remote and peels to the reviewed tip `d3d4c633`; `quickscale`, `quickscale-cli`, and `quickscale-core` are all live on PyPI at `0.87.0`; the tag-triggered `publish.yml` run `32408845804` succeeded; and the GitHub release links the prepared note. `SA96-PUBLISH` is closed — see [CHANGELOG.md](../../CHANGELOG.md).
-
-**One decision is outstanding: the v88 prioritization choice.** Context: two live architectural findings are deliberately parked behind growth triggers — deletion-cleanup coordination and organization purge ordering both fire when a new tenant domain (`teams`) arrives, and generated-file ownership fires when a third generated-project updater arrives.
-
-- **Choose `teams` first:** promotes architectural Findings 2 and 4 together. **Pros:** validates deletion and purge boundaries against real domain growth and lets their coupled design happen once. **Cons:** largest coherent scope; should not be split across tracks.
-- **Choose a third generated-project updater first:** promotes Finding 7. **Pros:** removes the hand-maintained ownership taxonomy before another consumer depends on it. **Cons:** requires an ownership-metadata migration and advances no domain feature.
-- **Choose neither:** leaves all three findings behind their gates and plans the nine backlog tickets on their own merits. **Pros:** avoids speculative architecture. **Cons:** retains the manual seams until a real trigger appears.
-- **Recommendation:** choose neither until product work fires a trigger; this fits the standing decision that `teams` is not planned. The choice unblocks `V88-KICKOFF` **can finish**.
-
-### Alternative unblock routes
-
-- **`V88-KICKOFF`:** head of the critical path with no open dependency. Only the prioritization choice is user-decision-clearable; everything else in the ticket is assistant-executable once that choice is recorded.
-- **Nine backlog tickets:** blocked only by kickoff. No route bypasses it, because the blocker is the absence of an accepted dependency graph and track assignment, not a technical precondition.
-
-**Actionable hard-dependency sequence:**
-
-1. Record the v88 prioritization choice, then run `V88-KICKOFF`: create the v88 integration branch, derive the dependency graph and acceptance criteria, and assign tracks and merge order.
-2. On `V88-KICKOFF` close, the nine backlog tickets become executable on their assigned tracks.
+`docs/others/arch-audit.md` is **not** on any v88 ticket's surface: the "neither" decision closes no architectural finding this release.
 
 ---
 
 ## v88 backlog track
 
-These nine tasks are not executable until kickoff assigns them. Their planning track is **v88 backlog**; `V88-KICKOFF` assigns their executable Track 1/2/3 slots, so they are deliberately not pre-bound here.
+`V88-KICKOFF` is closed. Each ticket below carries its assigned track, merge position, and acceptance criteria.
+Conceptual background and implementation context for all nine tickets live in [v88_ticket_context.md](v88_ticket_context.md); this roadmap remains authoritative for scope, tracks, and merge order.
 
-- [ ] **V88-KICKOFF — Open v88 planning and assign executable tracks.** `Tier 1 · Track: kickoff · deps: none open`
-  Create the v88 integration branch; record the `teams`/third-updater/neither prioritization choice; derive the dependency graph and acceptance criteria; and assign execution tracks, shared conflict surfaces, and merge order before implementation starts.
+- [x] **V88-KICKOFF — Open v88 planning and assign executable tracks.** `Tier 1 · Track: kickoff · CLOSED 2026-08-21`
+  v88 integration branch created; prioritization choice recorded as **neither**; dependency graph, acceptance criteria, tracks, shared conflict surfaces, and merge order assigned above.
 
-- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Tier 1 · Track: v88 backlog · deps: V88-KICKOFF`
-  QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models. Verification: a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; existing databases are out of scope by policy — the documented upgrade path is a fresh database. Record the no-migration-history policy in [decisions.md](decisions.md).
-
-- [ ] **SA123 — Add dependency-vulnerability and security static-analysis gates.** `Tier 2 · Track: v88 backlog · deps: V88-KICKOFF`
-  Add blocking dependency and focused security scanners with reviewed suppressions; register every new gate through the authoritative gate registry.
-- [ ] **SA124 — Unify SA117 scope-tool path authority.** `Tier 1 · Track: v88 backlog · deps: V88-KICKOFF`
-  Make the CLI, `--help`, Make target, and `scripts/sa117_scope.json` derive one required-path set; carry advisory `SA117E1-REV-004`.
-- [ ] **SA134 — Derive generated-project version assertions from authoritative pins.** `Tier 2 · Track: v88 backlog · deps: V88-KICKOFF`
-  Remove repeated runtime/dependency literals while retaining meaningful retired-version negative controls.
-- [ ] **SA137 — Add `quickscale_devtools` to version propagation.** `Tier 1 · Track: v88 backlog · deps: V88-KICKOFF`
+- [ ] **SA137 — Add `quickscale_devtools` to version propagation.** `Tier 1 · Track 1 · merge #1 · deps: none`
   Make version check/bump discover and update devtools with the other workspace packages.
-- [ ] **SA118 — Project every declared manifest default into wiring.** `Tier 2 · Track: v88 backlog · deps: V88-KICKOFF`
+  **Acceptance:** `scripts/version_tool.sh check` fails when `quickscale_devtools/pyproject.toml` diverges from `VERSION`; `make version-check` passes with devtools included; `scripts/version_tool.sh update` mutates devtools in the same pass as the other versioned packages; the propagation set is derived, not a second hand-maintained list; `scripts/test_version_tool.py` gains contract coverage for the devtools member and for the failure case.
+
+- [ ] **SA134 — Derive generated-project version assertions from authoritative pins.** `Tier 2 · Track 1 · merge #4 · deps: SA137`
+  Remove repeated runtime/dependency literals while retaining meaningful retired-version negative controls.
+  **Acceptance:** no test asserts a runtime or dependency version as a bare literal where an authoritative pin exists; assertions read the pin source directly; retired-version negative controls remain and still fail when a retired version is reintroduced; bumping a pin requires no test edit, demonstrated by a temporary bump that leaves the suite green.
+
+- [ ] **SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam.** `Tier 2 · Track 1 · merge #7 · deps: SA134`
+  Carried forward as non-blocking observations from the installed-wheel lifecycle review: the seam is referenced only by production code and its own E2E with no `docs/technical/` description, and `_resolve_local_wheel_dependency()` silently falls back to the manifest version spec when the wheelhouse is set but matches no wheel.
+  **Acceptance:** the seam has a `docs/technical/` description covering purpose, accepted values, and failure modes; `_resolve_local_wheel_dependency()` in `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py` raises a named, actionable error when `QUICKSCALE_LOCAL_WHEELHOUSE` is set but no wheel matches, instead of returning the manifest spec; a regression test asserts the raise (not a log); the unset-wheelhouse path is unchanged and still resolves from the manifest; the tech-audit **live watch item** is retired with evidence (no numbered finding is open — the severity table stays at zero).
+
+- [ ] **SA124 — Unify SA117 scope-tool path authority.** `Tier 1 · Track 2 · merge #2 · deps: none`
+  Make the CLI, `--help`, Make target, and `scripts/sa117_scope.json` derive one required-path set; carry advisory `SA117E1-REV-004`.
+  **Acceptance:** exactly one definition of the required-path set exists; CLI behavior, `--help` text, the Make target, and `scripts/sa117_scope.json` all read it; a test fails if any consumer is added without going through that source; advisory `SA117E1-REV-004` is addressed or explicitly re-carried with rationale; `scripts/test_check_sa117_scope.py` covers the divergence failure.
+
+- [ ] **SA123 — Add dependency-vulnerability and security static-analysis gates.** `Tier 2 · Track 2 · merge #6 · deps: SA124`
+  Add blocking dependency and focused security scanners with reviewed suppressions; register every new gate through the authoritative gate registry.
+  **Acceptance:** a dependency-vulnerability scanner and a focused security static-analysis scanner run as blocking gates; both are registered in `scripts/gate_registry.json` and pass `scripts/check_gate_parity.py`; every suppression carries a written rationale and an owner; the gates fail on a deliberately introduced known-vulnerable pin and on a deliberately introduced flagged pattern, both reverted before merge; `make quality` is no worse than found.
+
+- [ ] **SA118 — Project every declared manifest default into wiring.** `Tier 2 · Track 2 · merge #9 · deps: SA123, SA150`
   Materialize authoritative declared defaults without widening into the full imperative-to-declarative migration; rebaseline emission parity with per-file rationale.
-- [ ] **SA142 — Reuse and clean E2E Docker images.** `Tier 1 · Track: v88 backlog · deps: V88-KICKOFF`
+  **Acceptance:** every default declared in a module manifest is projected into generated wiring, with no default reachable only through imperative code; the imperative-to-declarative migration is *not* attempted — out-of-scope seams are ticketed, not converted; emission parity is rebaselined with a per-file rationale for each changed output; a generated project boots and its module wiring reflects the declared defaults; manifest version-spec handling uses the fail-hard seam from SA150.
+
+- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Tier 1 · Track 3 · merge #3 · deps: none · PostgreSQL slot`
+  QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models.
+  **Acceptance:** exactly one `0001_initial` per module with models, and no other migration files; a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; `make test-integration` passes; existing databases are out of scope by policy — the documented upgrade path is a fresh database; the no-migration-history policy is recorded in [decisions.md](decisions.md).
+
+- [ ] **SA142 — Reuse and clean E2E Docker images.** `Tier 1 · Track 3 · merge #5 · deps: SA151 · Docker slot`
   Separate stable image identity from per-run container/port/volume identity, reclaim variable images under normal cleanup, and preserve `--no-cleanup` diagnostics.
-- [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Tier 2 · Track: v88 backlog · deps: V88-KICKOFF`
+  **Acceptance:** image identity is stable across runs and is reused rather than rebuilt when inputs are unchanged; container, port, and volume identity remain per-run; a normal `make test-e2e` run leaves no variable images behind, verified by an image listing before and after; `--no-cleanup` still preserves containers and logs for diagnosis; a second consecutive run is measurably faster than a cold run.
+
+- [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Tier 2 · Track 3 · merge #8 · deps: SA142 · PostgreSQL + Docker slot`
   Provision and tear down the server used by repository gates; replace the current out-of-band host assumption while retaining an asserted unavailability negative control.
-- [ ] **SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam.** `Tier 2 · Track: v88 backlog · deps: V88-KICKOFF`
-  Carried forward as non-blocking observations from the installed-wheel lifecycle review: the seam is referenced only by production code and its own E2E with no `docs/technical/` description, and `_resolve_local_wheel_dependency()` silently falls back to the manifest version spec when the wheelhouse is set but matches no wheel. Document the seam and announce the miss instead of falling back.
+  **Acceptance:** the integration gate provisions its own PostgreSQL 18 server and tears it down, with no reliance on a pre-existing host server; the `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract is preserved; the asserted-unavailability negative control still fails loudly when the server cannot be provisioned, rather than skipping; `make test-integration` passes on a machine with no PostgreSQL running; [validation_policy.md](validation_policy.md) is updated to drop the out-of-band host precondition; image identity follows the SA142 convention.
+
+---
+
+## Unscheduled backlog (post-v88)
+
+Not assigned to a v88 track. Listed here so the finding is not lost.
+
+- [ ] **SA152 — Refresh the beta-migration maintainer targets for the current release.** `Tier 3 · Track: unscheduled · deps: SA151`
+  Audit of `make beta-migrate-fresh` / `make beta-migrate-in-place` (2026-08-21) found the mechanics current: the Makefile flag surface (`DONOR`, `RECIPIENT`, `DRY_RUN`, `CONTINUE`, `REPORT`) matches `build_argument_parser()` in `quickscale_devtools/src/quickscale_devtools/beta_migration.py`; every command in `VERIFICATION_COMMAND_SPECS` still exists on the CLI; and the file-ownership taxonomy is in sync with the emitted `showcase_react` template set, enforced by `quickscale_cli/tests/test_beta_migration_ownership_conformance.py` (7 passing, including forward and reverse staleness checks). The residual gaps are these:
+  - **SA151 collision.** The workflow's verification stack runs `quickscale manage migrate` against a recipient that may carry an existing database. SA151 deletes all module migration history and documents a fresh database as the only upgrade path, which invalidates the in-place workflow's implicit assumption. This must be resolved after SA151 merges, not before.
+  - **No end-to-end exercise.** The targets appear in no CI workflow and no entry in `scripts/gate_registry.json`. Coverage is unit-level taxonomy conformance only; a `DRY_RUN=1` / checkpoint-only path is never run against a real donor/recipient pair, so breakage surfaces first for a maintainer mid-migration.
+  - **Silent skip in the conformance gate.** `_template_emitted_paths()` calls `pytest.skip()` when the template tree is not found, so a path-resolution regression turns the ownership gate green instead of red. This is the silent-fallback pattern tracked in [tech-audit.md](../others/tech-audit.md).
+  - **Stale doc provenance.** [beta-site-migration.md](../planning/beta-site-migration.md) is headed "shipped in v0.81.0" against a `VERSION` of 0.87.0, and describes the tool as "backed by Python scripts under `scripts/`" when `scripts/beta_migrate.py` is an eight-line wrapper over `quickscale_devtools`.
+
+  **Acceptance:** the in-place workflow's database precondition is reconciled with the SA151 no-migration-history policy and the resolution is stated in the playbook; a cheap non-mutating smoke gate exercises both targets against a generated donor/recipient pair (`DRY_RUN=1` for fresh-first, checkpoint-only for in-place) and is registered in `scripts/gate_registry.json` with `scripts/check_gate_parity.py` passing; `_template_emitted_paths()` fails loudly instead of skipping when the template tree is missing, with a regression test asserting the raise; the playbook's version and implementation-location claims match the tree; `make quality` is no worse than found.
+
+  **Shared conflict surface:** `docs/planning/beta-site-migration.md`, `scripts/gate_registry.json`, `Makefile`, CI workflow, `docs/others/tech-audit.md`.
 
 ---
 
@@ -121,3 +168,4 @@ These nine tasks are not executable until kickoff assigns them. Their planning t
 - [Technical audit — live defect posture](../others/tech-audit.md)
 - [Decisions — policy authority](decisions.md)
 - [Validation policy — command authority](validation_policy.md)
+- [v88 ticket context — concepts and implementation notes](v88_ticket_context.md)
