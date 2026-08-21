@@ -182,9 +182,18 @@ Every module README should include a required section using this taxonomy:
 ## Building a Module (Authoring Checklist) {#building-a-module-authoring-checklist}
 
 Mechanics for creating a new `quickscale_modules/<name>` package. The *rules* this
-checklist serves — concrete models, initial migrations, PostgreSQL-only test settings,
-coverage minimums, and the service-style exception — are authoritative in
-[decisions.md § Module Implementation Requirements](./decisions.md#module-implementation-checklist).
+checklist serves are authoritative elsewhere and this document does not restate them:
+
+- **What a module must be** — concrete models, initial migrations, PostgreSQL-only test
+  settings, coverage minimums, and the service-style exception:
+  [decisions.md §Module Implementation Requirements](./decisions.md#module-implementation-checklist).
+- **What a module may own, and what core and the CLI may not** — the app/wiring split,
+  single app-declaration authority, and the no-fallback rule:
+  [decisions.md §Module Wiring Authority](./decisions.md#module-wiring-authority).
+
+**The short version:** a module is a standard Django app that additionally declares its
+own wiring in its own `module.yml` and executes it through its own `adapter.py`. You do
+not edit `quickscale_core` or `quickscale_cli` to add a module.
 
 **1. Package Structure:**
 - [ ] `quickscale_modules/<name>/pyproject.toml` — Package config (see template below)
@@ -269,22 +278,61 @@ disable_error_code = var-annotated
 - [ ] `admin.py` — Admin registration for concrete models or operational surfaces (required only when the module ships an admin surface)
 - [ ] `migrations/0001_initial.py` — **Initial migration for concrete models** (not required for explicitly approved service-style/integration-only modules)
 - [ ] `migrations/__init__.py` — Migrations package init (only when migrations exist)
+- [ ] `adapter.py` — **Required.** Exposes `get_manifest_adapter()`, which core's
+  `refresh_managed_adapters()` discovers by importing
+  `quickscale_modules_<name>.adapter`. Prefer delegating to
+  `build_generic_manifest_spec()` so wiring is read from `module.yml` rather than
+  written in Python. Hand-build a `ResolverResult` only when the module needs a custom
+  post-hook — and even then, source `apps` from the manifest, never as a literal.
+  A missing or unimportable adapter raises `ImproperlyConfigured`; there is no fallback.
+
+**2.1. module.yml Wiring Block:**
+
+`module.yml` is where the module declares what it contributes to the generated project.
+The `apps` projection is what puts the module into `INSTALLED_APPS` — a module that ships
+models or a migration and does not declare one is a defect, and a conformance gate fails
+on it.
+
+```yaml
+# Django apps this module contributes to INSTALLED_APPS.
+# This block is the single authority; do not duplicate it in core or the CLI.
+derivation:
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value:
+          - quickscale_modules_<name>      # the module's own app label
+          # plus any third-party apps it requires, e.g. rest_framework
+      description: "<name> Django app label"
+```
 
 **3. Templates (if applicable):**
 - [ ] `templates/quickscale_modules_<name>/` — Zero-style semantic HTML templates
 - [ ] Templates must work immediately after embed (no user customization required)
 
-**4. CLI Integration (quickscale_cli):**
-- [ ] `AVAILABLE_MODULES` in `module_commands.py` is discovery-derived (`get_discovered_module_names()`) — no manual list edit needed; just ensure the module is discoverable (correct manifest/package layout)
-- [ ] Create `configure_<name>_module()` function for interactive prompts
-- [ ] Create `apply_<name>_configuration()` function to:
-  - [ ] Add dependencies to project's `pyproject.toml`
-  - [ ] Add module to `INSTALLED_APPS` in settings.py
-  - [ ] Add module-specific settings
-  - [ ] Add module URLs to project's `urls.py`
-- [ ] Add module to `MODULE_CONFIGURATORS` dictionary
-- [ ] Update embed command docstring with module description
-- [ ] Add module-specific "Next steps" instructions in embed output
+**4. Discovery and CLI Integration (quickscale_cli):**
+
+Adding a module requires **no edit to `quickscale_core` or `quickscale_cli`.** If you find
+yourself editing either to register a module, the module's own declaration is incomplete.
+
+- [ ] `AVAILABLE_MODULES` in `module_commands.py` is discovery-derived
+      (`get_discovered_module_names()`) — no manual list edit; just ensure the module is
+      discoverable (correct `module.yml` and package layout)
+- [ ] Confirm the module resolves end to end: `refresh_managed_adapters()` registers it,
+      and its adapter returns a `ModuleWiringSpec` whose `apps` matches the manifest
+- [ ] Interactive plan-time prompts, when the module needs them, live in
+      `quickscale_cli/.../commands/module_config.py`. These collect **desired
+      configuration only** — they must not decide what the module wires
+
+> **Superseded.** Earlier revisions of this checklist instructed authors to write
+> `configure_<name>_module()` / `apply_<name>_configuration()` pairs, add the module to a
+> `MODULE_CONFIGURATORS` dictionary, edit `INSTALLED_APPS` in the generated `settings.py`
+> directly, and update the `embed` command's docstring. That flow described the
+> pre-plan/apply `embed` command, removed in **v0.72.0**; `MODULE_CONFIGURATORS` no longer
+> exists. Wiring is declared in `module.yml` and executed by the module's `adapter.py`.
+> The per-module `apply_<name>_configuration()` functions still present in
+> `module_config.py` are a deviation owned by **`SA167`**, not a pattern to copy.
 
 **5. Template Integration (showcase_react theme):**
 - [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure

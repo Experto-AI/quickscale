@@ -62,7 +62,7 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 - `module.yml` is the **required** source for module identity, installed-version tracking, and configuration contract. The CLI adapter files (`*_manifest.py`) do not carry per-module config normalization/validation/derivation; all callers resolve module configuration through the shared resolver in `quickscale_core.manifest.resolver`.
 - Mutable options are applied through the documented plan/apply flow; immutable options remain embed-time contract and must not be rewritten silently.
 - Module discovery is now manifest-backed: the authoritative shipped-module inventory comes from scanning `quickscale_modules/*/module.yml` via `module_discovery.py`. Known placeholder directories (e.g. `teams`) that lack a `module.yml` are excluded from discovery and fail closed. The static `MODULE_CATALOG` is supplemented but callers should prefer `get_discovered_module_entries()` for the authoritative list.
-- Manifest adapters use a hybrid discovery contract: module-owned adapters in ``quickscale_modules/{name}/adapter.py`` are primary for monorepo contexts, while core compatibility fallback adapters remain for bundled/installed fallback. See [Manifest Adapter Architecture](#manifest-adapter-architecture).
+- Manifest adapters are module-owned. Each module ships its own ``adapter.py`` and declares its wiring in its own ``module.yml``; core discovers and executes adapters but holds no per-module wiring. There is no fallback adapter path. See [Manifest Adapter Architecture](#manifest-adapter-architecture) and [decisions.md §Module Wiring Authority](./decisions.md#module-wiring-authority).
 - Generated projects remain standalone even when modules are embedded.
 - When manifest behavior changes, keep the shipped contract here aligned with the detailed module implementation docs.
 
@@ -222,37 +222,58 @@ class OrderProcessor:
 
 ### Manifest Adapter Architecture
 
-Manifest adapters follow a **hybrid discovery contract**:
+A **manifest adapter** is the machine-readable form of the install instructions a
+normal Django app puts in its README. Django expects a human to read *"add this to
+`INSTALLED_APPS`"* and type it; `quickscale apply` generates the project instead, so
+the instruction must be data. The adapter is that data, plus the function that
+projects it into a `ModuleWiringSpec`.
 
-1. **Module-owned adapters** are the primary path for monorepo and embedded
-   ``modules/<name>`` contexts. Each module package (``quickscale_modules/{name}/``)
-   may ship an ``adapter.py`` that exposes a ``get_manifest_adapter()`` sentinel
-   function. Core's :func:`refresh_managed_adapters` discovers these via
-   ``quickscale_modules_{name}.adapter`` imports during registry refresh.
+Policy authority for what a module may and may not own is
+[decisions.md §Module Wiring Authority](./decisions.md#module-wiring-authority). This
+section describes the mechanism only.
 
-2. **Core compatibility fallback adapters** live in
-   ``quickscale_core.manifest.entry_point`` and are used when the module-owned
-   adapter is not importable (bundled/installed contexts where only manifest
-   ``yml`` files are shipped in the ``quickscale_core`` package, not module
-   Python source).
+**Discovery contract — single path, fail-hard:**
 
-3. **Origin tracking:** :data:`MANAGED_ADAPTER_ORIGINS` tracks which registry
-   entries are system-managed. Custom entries added by end users survive
-   refresh unchanged. Call ``refresh_managed_adapters()`` after
-   :func:`set_modules_base_path()` to keep the registry consistent.
+1. **Module-owned adapters are the only adapter path.** Each module package ships
+   ``quickscale_modules/{name}/src/quickscale_modules_{name}/adapter.py`` exposing a
+   ``get_manifest_adapter()`` sentinel. Core's :func:`refresh_managed_adapters`
+   discovers it by importing ``quickscale_modules_{name}.adapter`` during registry
+   refresh.
+
+2. **No fallback.** When a managed module's ``module.yml`` is present at the active
+   base path but its adapter is not importable, :func:`refresh_managed_adapters`
+   raises :class:`ImproperlyConfigured`. Bundled-without-module-source is not a
+   supported wiring context. This is guard **G4** of
+   [decisions.md §AF7](./decisions.md#bundled-module-inventory-and-source-required-paths-af7)
+   and a direct expression of the
+   [Fail-Hard Principle](./decisions.md#fail-hard-principle). Bundled manifests under
+   ``quickscale_core/data/manifests/`` are inventory metadata for discovery only —
+   they are never a second source of wiring.
+
+3. **Origin tracking:** :data:`MANAGED_ADAPTER_ORIGINS` tracks which registry entries
+   are system-managed. Custom entries added by end users survive refresh unchanged.
+   Call ``refresh_managed_adapters()`` after :func:`set_modules_base_path()` to keep
+   the registry consistent.
 
 4. **Refresh coordination:** :func:`~quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring`
-   calls ``refresh_managed_adapters()`` after changing and restoring the modules
-   base path, ensuring the correct adapter set is active for each context.
+   calls ``refresh_managed_adapters()`` after changing and restoring the modules base
+   path, ensuring the correct adapter set is active for each context.
 
-Managed adapters: social, billing, CRM. The remaining modules
-(analytics, blog, listings, forms, backups, notifications, auth, orgs,
-storage) are registered at import time in ``entry_point.py``.
+5. **App declaration:** an adapter sources ``spec.apps`` from its own module's
+   ``derivation.wiring_projections`` entry with ``wiring_field: apps``. Routing
+   through :func:`build_generic_manifest_spec` does this automatically; a hand-built
+   ``ResolverResult`` (permitted only when the module needs a custom post-hook) must
+   still read the manifest rather than carry a Python literal.
 
-> **Known limitation.** The bundled/installed core fallback adapters for social,
-> billing, and CRM are too thin and do not preserve parity with the module-owned
-> implementations, and bundled-context regression coverage is missing. Treat the
-> fallback path as not-at-parity.
+**Current state versus this contract.** Three modules (social, billing, CRM) are
+module-owned today. The remaining nine (analytics, blog, listings, forms, backups,
+notifications, auth, orgs, storage) still register at import time from per-module
+blocks inside ``entry_point.py``, and five of those carry their app list as a Python
+literal in core. Those blocks are a **deviation pending migration under `SA167`**,
+not a supported second path: the "compatibility fallback for bundled/installed
+contexts" rationale previously recorded here was retired by the AF7 fail-hard
+decision, which removed the context it described.
+
 
 #### Module Derivation Schema Types
 

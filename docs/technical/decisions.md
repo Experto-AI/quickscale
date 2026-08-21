@@ -386,6 +386,76 @@ Type reference:
 [implementation_contract.md §Manifest Adapter Architecture](./implementation_contract.md#manifest-adapter-architecture).
 
 
+### Module Wiring Authority {#module-wiring-authority}
+
+**Rule:** A QuickScale module is a **standard Django app** plus **one declarative
+wiring block in its own `module.yml`**. The module owns both. Neither
+`quickscale_core` nor `quickscale_cli` may hold per-module wiring knowledge.
+
+**Why this section exists.** Django's own answer to "how does an app get into
+`INSTALLED_APPS`" is a paragraph in a README that a human reads and types.
+QuickScale generates the project instead, so that instruction must exist as data a
+program reads. That machine-readable instruction is the **adapter**. It is the only
+QuickScale-specific concept in module wiring — everything else about a module is
+ordinary Django.
+
+**The two layers, kept separate:**
+
+| Layer | What it is | Standard? |
+|---|---|---|
+| **The Django app** | `apps.py` with an `AppConfig`, concrete models, `0001_initial`, optional `admin.py`/`urls.py`/`views.py` | Ordinary Django. No QuickScale divergence. |
+| **The wiring** | `derivation.wiring_projections` in the module's `module.yml`, executed by the module's own `adapter.py` | QuickScale-specific, because Django never automated this step. |
+
+**Constraints:**
+
+- ✅ Every module MUST be a standard Django app: `apps.py` declaring an `AppConfig`
+  with explicit `name` and `label`, plus concrete models and a `0001_initial`
+  migration for domain modules (see
+  [§Module Implementation Requirements](#module-implementation-checklist) for the
+  service-style exception)
+- ✅ Every module MUST own its adapter at
+  `quickscale_modules/<name>/src/quickscale_modules_<name>/adapter.py`, exposing the
+  `get_manifest_adapter()` sentinel that `refresh_managed_adapters()` discovers
+- ✅ Every module MUST declare the Django apps it contributes **exactly once**, in the
+  `derivation.wiring_projections` entry with `wiring_field: apps` in **its own**
+  `module.yml`. That block is the sole authority for `INSTALLED_APPS` membership
+- ✅ A module that ships models or a migration MUST declare at least one Django app.
+  This is enforced by a conformance gate, not by review
+- ✅ Adapters SHOULD route through `build_generic_manifest_spec()` so `apps` is read
+  from the manifest. A hand-built `ResolverResult` is permitted only for a
+  module needing a custom post-hook, and MUST still source `apps` from the manifest —
+  never as a Python literal in the adapter
+- ❌ **No per-module wiring blocks in `quickscale_core`.** Core discovers and executes
+  adapters; it does not contain them, and does not enumerate its modules
+- ❌ **No per-module wiring logic in `quickscale_cli`.** The CLI collects desired
+  configuration; it does not decide what a module wires
+- ❌ **No compatibility-fallback adapters, and no bundled/installed fallback wiring
+  path.** A managed module whose manifest is present but whose adapter is not
+  importable raises `ImproperlyConfigured` — see
+  [§Bundled Module Inventory and Source-Required Paths (AF7)](#bundled-module-inventory-and-source-required-paths-af7)
+  guard **G4** and the [§Fail-Hard Principle](#fail-hard-principle). Bundled manifests
+  are inventory metadata, never a second wiring authority
+- ❌ **No parsed-but-unread declarative surface.** A key accepted by the manifest
+  loader MUST be projected into wiring by a live code path, or MUST be removed from
+  the schema. A key that looks authoritative and is inert is a false-green
+
+**Tie-breaker:** When two places state which apps a module contributes, the module's
+own `module.yml` wins and the other copy is deleted, not reconciled.
+
+**Known deviations at time of writing (2026-08-21), all owned by `SA167`:** nine
+modules still register core-side in `quickscale_core/.../manifest/entry_point.py`;
+five of those carry their app list as a Python literal in core rather than in their
+manifest; the top-level `django_apps:` manifest key is parsed by
+`manifest/loader.py` and read by no production code path; and `social` declares no
+apps at all (owned by `SA151`). This section states the target rule, not the
+current state.
+
+Type reference:
+[implementation_contract.md §Manifest Adapter Architecture](./implementation_contract.md#manifest-adapter-architecture).
+Authoring mechanics:
+[module-extension.md §Building a Module](./module-extension.md#building-a-module-authoring-checklist).
+
+
 ### Module Implementation Requirements {#module-implementation-checklist}
 
 **Rule:** Every QuickScale module must be complete, embeddable, and usable
@@ -1374,7 +1444,9 @@ gate exit-status inputs. The retained baseline sections are `dead_code`,
 - ❌ DI frameworks or service registries (direct imports in production)
 - ❌ Custom abstract provider interfaces or app-defined multi-provider contracts (use Django's email path plus `django-anymail` for the approved provider rather than building a generic provider layer)
 - ❌ Custom database table naming (use Django's `app_label` default)
-- ❌ Core fallback adapters, compat shims, or silent degradation paths — see §fail-hard-principle
+- ❌ Core fallback adapters, compat shims, or silent degradation paths — see §[Fail-Hard Principle](#fail-hard-principle). This includes any "compatibility fallback" wiring path for bundled/installed contexts: an unimportable managed adapter raises, it does not degrade (AF7 **G4**)
+- ❌ Per-module wiring knowledge inside `quickscale_core` or `quickscale_cli` — a module declares its own wiring in its own `module.yml` and executes it through its own `adapter.py`; see §[Module Wiring Authority](#module-wiring-authority)
+- ❌ Manifest keys that the loader parses but no live code path projects into wiring — derive the key or delete it from the schema
 - ❌ Ad hoc or undocumented module HTTP APIs beyond the documented module-owned routes and webhooks QuickScale wires today
 - ❌ Tight coupling themes to modules
 
