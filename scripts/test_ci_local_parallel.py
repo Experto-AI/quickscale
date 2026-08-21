@@ -366,13 +366,10 @@ def test_parallel_isolated_failure_is_attributed_to_its_gate(
     assert "database-dependent stages will not run" in result.stdout
     assert "[10/" not in result.stdout
 
-    other_labels = {
-        "Linting",
-        "Type Checks",
-        "Manifest Sync Gate",
-    } - {failure_label}
-    for other_label in other_labels:
-        assert f"{other_label} (exit 1)" not in result.stdout
+    attribution_lines = [
+        line.strip() for line in result.stdout.splitlines() if line.startswith("  ✗ ")
+    ]
+    assert attribution_lines == [f"✗ {failure_label} (exit 1)"]
 
 
 def test_serial_opt_out_has_no_overlap_and_stops_before_db_stages(tmp_path: Path) -> None:
