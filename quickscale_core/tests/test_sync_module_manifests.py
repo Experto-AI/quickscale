@@ -148,7 +148,26 @@ class TestCheckOrphanSnapshot:
     """Snapshot without source module must fail."""
 
     def test_orphan_snapshot(self, tmp_path: Path) -> None:
+        """A directory with ``module.yml`` remains a genuine orphan."""
         _create_snapshot(tmp_path, "orphan_mod")
+        assert _check_manifest_sync(tmp_path) == 2
+
+    def test_generated_cache_directory_is_ignored(self, tmp_path: Path) -> None:
+        """A generated cache directory without ``module.yml`` is not a snapshot."""
+        _create_source_module(tmp_path, "mod_a")
+        _create_snapshot(tmp_path, "mod_a")
+        cache_dir = tmp_path / MANIFESTS_DATA_RELATIVE / "__pycache__"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "module.cpython-314.pyc").write_bytes(b"generated cache")
+
+        assert _check_manifest_sync(tmp_path) == 0
+
+    def test_real_orphan_snapshot_still_fails(self, tmp_path: Path) -> None:
+        """A snapshot-shaped orphan remains a configuration error."""
+        orphan_dir = tmp_path / MANIFESTS_DATA_RELATIVE / "orphan_mod"
+        orphan_dir.mkdir(parents=True)
+        (orphan_dir / MODULE_YML).write_text("name: orphan\n")
+
         assert _check_manifest_sync(tmp_path) == 2
 
     def test_orphan_and_missing_snapshot(self, tmp_path: Path) -> None:
