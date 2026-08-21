@@ -57,6 +57,15 @@ contract_vintage:
   manual_adoption_steps:
     - "Public `/social` and `/social/embeds` pages are fresh-generation-only. Existing projects and non-React themes must manually adopt equivalent public pages. See `docs/technical/decisions.md` §Themes for the current scaffolding policy."
 
+derivation:
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value:
+          - quickscale_modules_social
+      description: "Social Django app label"
+
 managed_files:
   social_init:
     renderer: social.managed_init

@@ -2278,17 +2278,16 @@ class TestSocialModuleConfig:
         capsys,
     ):
         project = _make_project(tmp_path)
+        config = {
+            "layout_variant": "grid",
+            "provider_allowlist": ["Twitter", "YouTube"],
+            "cache_ttl_seconds": 600,
+            "links_per_page": 18,
+            "embeds_per_page": 9,
+        }
 
-        apply_social_configuration(
-            project,
-            {
-                "layout_variant": "grid",
-                "provider_allowlist": ["Twitter", "YouTube"],
-                "cache_ttl_seconds": 600,
-                "links_per_page": 18,
-                "embeds_per_page": 9,
-            },
-        )
+        apply_social_configuration(project, config)
+        apply_social_configuration(project, config)
 
         managed_settings = (
             project / "myproject" / "settings" / "modules.py"
@@ -2305,7 +2304,14 @@ class TestSocialModuleConfig:
         ).read_text()
         output = capsys.readouterr().out
 
-        assert "quickscale_modules_social" not in managed_settings
+        refresh_managed_adapters()
+        social_spec = build_manifest_wiring_spec(
+            "social",
+            config,
+            project_package="myproject",
+        )
+        assert len(social_spec.apps) == 1
+        assert managed_settings.count(repr(social_spec.apps[0])) == 1
         assert "QUICKSCALE_SOCIAL_LINK_TREE_PATH" in managed_settings
         assert "QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH" in managed_settings
         assert "myproject.quickscale_managed.social_urls" in managed_urls

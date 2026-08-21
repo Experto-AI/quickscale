@@ -20,6 +20,7 @@ from unittest.mock import patch
 
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_core.manifest.entry_point import MANIFEST_ADAPTER_REGISTRY
+from quickscale_core.manifest.loader import load_manifest_from_path
 
 
 def _write_minimal_project(
@@ -90,7 +91,41 @@ class TestRegenerateManagedWiringManifestPath:
         assert managed_urls.exists(), "Managed social_urls.py not written"
         assert managed_views.exists(), "Managed social_views.py not written"
 
+        settings_modules = project / "myapp" / "settings" / "modules.py"
+        content = settings_modules.read_text()
         views_content = managed_views.read_text()
+
+        social_manifest_path = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_modules"
+            / "social"
+            / "module.yml"
+        )
+        social_manifest = load_manifest_from_path(social_manifest_path)
+        app_projections = [
+            projection
+            for projection in social_manifest.wiring_projections
+            if projection.get("wiring_field") == "apps"
+        ]
+        assert len(app_projections) == 1
+        app_projection = app_projections[0]
+        assert app_projection.get("derivation_type") == "static"
+        expression = app_projection.get("expression")
+        assert isinstance(expression, dict)
+        social_apps = expression.get("value")
+        assert (
+            isinstance(social_apps, list)
+            and len(social_apps) == 1
+            and isinstance(social_apps[0], str)
+            and bool(social_apps[0].strip())
+        )
+        social_app = social_apps[0]
+        rendered_apps = content.split(
+            "MODULE_INSTALLED_APPS: list[str] = ",
+            1,
+        )[1].split("\n\n", 1)[0]
+        assert rendered_apps.count(repr(social_app)) == 1
+
         # The resolver normalises "Twitter" -> "x"; check for either form.
         assert "x" in views_content or "youtube" in views_content.lower()
 
