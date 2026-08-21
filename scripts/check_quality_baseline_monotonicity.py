@@ -29,6 +29,7 @@ import re as _re
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -45,6 +46,23 @@ _SOURCE_CURRENT = "current_baseline"
 _SOURCE_WAIVER = "waiver_ledger"
 _SOURCE_GIT = "git"
 _SOURCE_MAIN = "main"
+_DEFAULT_BASE_REF = "main"
+
+
+class BaseRefResolutionError(RuntimeError):
+    """Structured base-ref resolution error carrying the selected identity."""
+
+    def __init__(self, ref: str, message: str) -> None:
+        self.ref = ref
+        super().__init__(message)
+
+
+@dataclass(frozen=True)
+class BaseRefSelection:
+    """Carry the reported base-ref identity and the locally resolved Git ref."""
+
+    identity: str
+    resolved_ref: str
 
 
 class SchemaValidationError(RuntimeError):
@@ -267,7 +285,50 @@ def _git_show(commit: str, path: str) -> str | None:
         raise
 
 
-def _resolve_merge_base(base_ref: str | None) -> str:
+def _probe_branch_ref(branch_ref: str) -> str | None:
+    """Return the first locally resolvable ``origin/<ref>`` or ``<ref>``."""
+    for candidate in (f"origin/{branch_ref}", branch_ref):
+        try:
+            _git(["rev-parse", "--verify", candidate])
+            return candidate
+        except RuntimeError:
+            continue
+    return None
+
+
+def _select_base_ref(base_ref: str | None) -> BaseRefSelection:
+    """Select and resolve the effective base ref without indirect explicit refs."""
+    if base_ref:
+        return BaseRefSelection(identity=base_ref, resolved_ref=base_ref)
+
+    quality_ref = os.environ.get("QUALITY_BASELINE_BASE_REF", "").strip()
+    if quality_ref:
+        return BaseRefSelection(identity=quality_ref, resolved_ref=quality_ref)
+
+    github_ref = os.environ.get("GITHUB_BASE_REF", "").strip()
+    if github_ref:
+        resolved = _probe_branch_ref(github_ref)
+        if resolved is None:
+            raise BaseRefResolutionError(
+                github_ref,
+                f"GITHUB_BASE_REF={github_ref} is set but neither "
+                f"origin/{github_ref} nor {github_ref} resolves locally",
+            )
+        return BaseRefSelection(identity=resolved, resolved_ref=resolved)
+
+    resolved = _probe_branch_ref(_DEFAULT_BASE_REF)
+    if resolved is None:
+        raise BaseRefResolutionError(
+            _DEFAULT_BASE_REF,
+            f"default base ref {_DEFAULT_BASE_REF!r} is unavailable: neither "
+            f"origin/{_DEFAULT_BASE_REF} nor {_DEFAULT_BASE_REF} resolves locally; "
+            "provide --base-ref REF or set QUALITY_BASELINE_BASE_REF to a "
+            "resolvable ref",
+        )
+    return BaseRefSelection(identity=_DEFAULT_BASE_REF, resolved_ref=resolved)
+
+
+def _resolve_merge_base(selection: BaseRefSelection | str | None) -> str:
     """
     Resolve the merge-base commit hash using the precedence chain.
 
@@ -275,38 +336,16 @@ def _resolve_merge_base(base_ref: str | None) -> str:
         1. ``--base-ref`` CLI argument
         2. ``QUALITY_BASELINE_BASE_REF`` env var
         3. ``GITHUB_BASE_REF`` env var (origin/ then local)
-        4. ``v87`` tag fallback
+        4. durable ``main`` branch fallback (origin/ then local)
 
     Returns the full commit hash of the merge base.
     """
-    ref: str | None = None
-
-    if base_ref:
-        ref = base_ref
-    elif os.environ.get("QUALITY_BASELINE_BASE_REF"):
-        ref = os.environ["QUALITY_BASELINE_BASE_REF"].strip()
-    elif os.environ.get("GITHUB_BASE_REF"):
-        github_ref = os.environ["GITHUB_BASE_REF"].strip()
-        # Try origin/<branch> first, then local <branch>
-        for candidate in (f"origin/{github_ref}", github_ref):
-            try:
-                _git(["rev-parse", "--verify", candidate])
-                ref = candidate
-                break
-            except RuntimeError:
-                continue
-        if not ref:
-            raise RuntimeError(
-                f"GITHUB_BASE_REF={github_ref} is set but neither "
-                f"origin/{github_ref} nor {github_ref} resolves locally"
-            )
-
-    if not ref:
-        # Fallback to v87 tag
-        ref = "v87"
+    selected = selection
+    if not isinstance(selected, BaseRefSelection):
+        selected = _select_base_ref(selected)
 
     # Resolve to a commit hash
-    ref_commit = _git(["rev-parse", "--verify", ref])
+    ref_commit = _git(["rev-parse", "--verify", selected.resolved_ref])
 
     # Compute merge base with HEAD
     merge_base = _git(["merge-base", ref_commit, "HEAD"])
@@ -1293,7 +1332,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--base-ref",
-        help="Override the merge-base reference (e.g. v87, main, HEAD~5)",
+        help="Override the merge-base reference (e.g. main, release-tag, HEAD~5)",
         default=None,
     )
     return parser.parse_args(argv)
@@ -1385,18 +1424,20 @@ def _main_impl(argv: list[str] | None = None) -> tuple[int, dict[str, Any] | Non
     warnings: list[str] = []
 
     # ---- Resolve merge base ------------------------------------------------
-    # Determine the effective base ref for reporting (resolve before use for
-    # accurate error paths)
-    effective_ref: str | None = args.base_ref
-    if not effective_ref:
-        effective_ref = os.environ.get("QUALITY_BASELINE_BASE_REF")
-    if not effective_ref:
-        effective_ref = os.environ.get("GITHUB_BASE_REF")
-    if not effective_ref:
-        effective_ref = "v87"
-
+    effective_ref = _DEFAULT_BASE_REF
     try:
-        merge_base = _resolve_merge_base(args.base_ref)
+        selected_ref = _select_base_ref(args.base_ref)
+        effective_ref = selected_ref.identity
+        merge_base = _resolve_merge_base(selected_ref)
+    except BaseRefResolutionError as exc:
+        effective_ref = exc.ref
+        _write_error_output(
+            source=_SOURCE_GIT,
+            path=effective_ref,
+            message=f"Merge-base resolution failed: {exc}",
+            code="MERGE_BASE_ERROR",
+        )
+        return 2, None
     except RuntimeError as exc:
         _write_error_output(
             source=_SOURCE_GIT,

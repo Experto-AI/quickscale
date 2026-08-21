@@ -58,7 +58,6 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| `quality-gate-base-ref-deleted-branch` (TA63) | **S2** | Operability / oracle violation | Quality gate's fallback base ref is a branch that no longer exists — `make quality` aborts on every run | Small | High | new |
 | `sa117-scope-cli-test-false-green` (TA64) | **S3** | Tests — lies | A gate test asserts an exit code the interpreter produces, not the tool — green even if the tool is deleted | Trivial ⚡ | High | new |
 | `gate-parity-publish-oracle-stale` (TA66) | **S3** | Tests — gaps | `test_gate_parity` literal `publish.yml` oracle not updated by `d3d4c633`; red on HEAD | Trivial ⚡ | High | new (arch red flag, verified) |
 | `spa-csrf-token-duplicate-cookie` (TA67) | **S3** | Correctness (frontend) | `getCsrfToken` returns `''` whenever two `csrftoken` cookies are present — every SPA write 403s | Trivial ⚡ | High | new |
@@ -66,15 +65,15 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 | `generated-settings-dead-client-ip` (TA68) | S4 | Dead code (generated output) | Two `get_client_ip` definitions in generated settings are unreachable | Trivial | High | new |
 | `csrf-gate-bool-invert-deprecated` (TA69) | S4 | Dependencies / runtime | `~<bool>` in the CSRF AST gate is removed in Python 3.16 | Trivial | High | new (arch red flag, verified + corrected) |
 
-**Counts:** S1 **0** · S2 **1** · S3 **4** · S4 **2** · **Total 7**. Quick wins (⚡ Trivial-effort S3): TA64, TA66, TA67.
+**Counts:** S1 **0** · S2 **0** · S3 **4** · S4 **2** · **Total 6**. Quick wins (⚡ Trivial-effort S3): TA64, TA66, TA67.
 
 ---
 
-## Findings
+## Closed findings
 
-### TA63 — The quality gate's fallback base ref is a branch that no longer exists
+### TA63 — Retired: the quality gate's fallback base ref now resolves
 
-**ID:** `quality-gate-base-ref-deleted-branch`
+**ID:** `quality-gate-base-ref-deleted-branch` · **Closed 2026-08-21**
 
 **Severity:** **S2.** Impact: the repository's monotonic quality gate — the enforcement for "complexity maxima never ratchet upward", backed by a structured waiver ledger — cannot run at all, and its failure aborts the whole `make quality` run before any analyzer executes. Reachability: **every invocation, right now**, with **zero unverified preconditions** — verified by direct execution. It falsifies a live watch item carried by the prior pass of this very document (*"monotonicity is enforced and `make quality` reports `total_regressions: 0`"*) and the arch audit's enforcement-census row (*"Complexity maxima never ratchet upward | Gated"*). Not S1: it fails loud, consistent with the fail-hard principle, so nothing silently degrades.
 
@@ -116,13 +115,17 @@ Written artifact: `{"schema_version": 1, "verdict": "error", "error": {"code": "
 
 **Verification:** `env -u QUALITY_BASELINE_BASE_REF -u GITHUB_BASE_REF poetry run python scripts/check_quality_baseline_monotonicity.py` exits 0 and reports a real `merge_base`; `pytest scripts/test_quality_baseline_monotonicity.py` drops from 72 failures to 0; `make quality` completes and re-emits `quality_report.json`. Add a regression test that the fallback ref resolves in a repo checked out on a branch whose name is not the fallback.
 
-**Deliberate?** None found. The comment says "Fallback to v87 tag" and no `v87` tag was ever created — the literal appears to have been written against a branch that then followed the normal release lifecycle.
+**Closure evidence:** SA156 now uses the durable `main` identity and probes `origin/main` before local `main` for the default path. The focused suite passes with semantic default-ref fixtures, the no-override helper exits 0 with a real merge base, and `make quality` re-emits fresh report artifacts with matching monotonicity metadata. The broader gate currently exits 1 on the unrelated pre-existing complexity regression at `quickscale_cli/src/quickscale_cli/commands/development_commands.py::up` (15 versus allowed 14), while the monotonicity gate itself passes. A hermetic non-`main` checkout covers origin-first/local-second probing and the missing-default exit-2 remediation contract.
 
-**Age:** `git log -S '"v87"'` places the literal in the SA121 gate's introduction; it has been correct for exactly as long as the `v87` branch existed and became wrong when the branch was retired for `v88`.
+**Deliberate?** None found. The former fallback comment named a retired release ref; the implementation and tests now bind to the long-lived branch identity.
+
+**Age:** The stale release-ref literal entered with the SA121 gate and became invalid when that release branch was retired. The historical defect and its falsification remain recorded here for audit traceability.
 
 **Chain (§3.9):** Combines with the arch audit's **Finding 12 `gate-suites-unexecuted`**. Because `scripts/test_quality_baseline_monotonicity.py` is in no execution context, the 72 failures this defect causes produced no signal, and because the gate is local-only and aborts loudly, the maintainer's most likely reading of a failed `make quality` is "environment problem" rather than "the gate is off". Net combined effect: **the monotonicity invariant has been unenforced for the whole of the `v88` branch while two live audit documents recorded it as enforced.** Ranked by that combined severity. It is also arch Finding 12's blocking prerequisite: its recommended first step is *"triage the 74 failures it surfaces before registering it, so the gate is registered green rather than registered red"* — TA63 is 72 of those 74.
 
 ---
+
+## Findings
 
 ### TA64 — A gate test asserts an exit code the interpreter produces, not the tool
 
@@ -287,8 +290,8 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 | Subsystem | What was read | Verdict |
 |---|---|---|
 | Commit delta `e40762a0..HEAD` | all 12 files, production and test hunks, in full | Clean — no finding. The two test changes are correct narrowings; see *Clean sweeps* and *Notes* |
-| `scripts/` quality-baseline gate | `check_quality_baseline_monotonicity.py` merge-base + `main`; `check_quality.sh` ordering and failure path | **TA63** |
-| `scripts/` gate conformance suites | executed all 14 (74F/1126P); read the 3 failing tests and their fixtures | **TA64, TA66**; the remaining 72 failures resolve to TA63 |
+| `scripts/` quality-baseline gate | `check_quality_baseline_monotonicity.py` merge-base + `main`; `check_quality.sh` ordering and failure path | **Closed by SA156 (TA63)** |
+| `scripts/` gate conformance suites | executed all 14 (74F/1126P); read the 3 failing tests and their fixtures | **TA64, TA66**; the former 72 quality-baseline failures are closed by SA156 |
 | `scripts/` shell interpreter selection | `version_tool.sh`, `lint_frontend.sh`, `check_ci_locally.sh`, `_python_requirement.sh` | **TA65** |
 | Generated settings templates | `base.py.j2`, `production.py.j2` in full | **TA68**; production hardening otherwise clean |
 | Generated project scaffold | `.env.j2`, `.env.example.j2`, `docker-compose.yml.j2`, `db/init.sql.j2`, `urls.py.j2`, `views.py.j2`, `railway.json.j2` | Clean — see *Notes* for the dev-credential and healthcheck watch items |
@@ -323,7 +326,7 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 
 *(candidate inputs for the companion `deep-architectural-audit` — not findings here)*
 
-- **A gate's base ref is a per-release branch name, hard-coded in the gate.** TA63's contained fix is a one-line change, but the shape recurs: a governance tool is pinned to an artifact of the release *process* with nothing tying the two lifecycles together. Every release that retires a branch silently disarms it. The structural question is who owns "the ref this release is measured against" — today, nobody.
+- **A gate's base ref was a per-release branch name, hard-coded in the gate.** TA63 is closed by SA156, but the structural lesson remains: a governance tool pinned to an artifact of the release *process* has nothing tying the two lifecycles together. The durable `main` identity and origin/local probe now own the default path.
 - **Frontend helpers are copied rather than shared.** TA67 is one function in two files; the theme has no `src/lib/http` seam, so the next call site that needs a CSRF token will produce a third copy. The contained fix does not create the seam.
 - **Interpreter selection is per-script rather than per-repository.** TA65 spans three shell scripts, each choosing an interpreter with its own idiom (`${PYTHON:-python3}`, bare `python3`, a four-branch `REGISTRY_PYTHON` probe) while `scripts/_python_requirement.sh` exists and is not used by any of them.
 
@@ -333,13 +336,13 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 
 | Gap | Would have caught | Recommendation |
 |---|---|---|
-| No check that a gate's default refs actually resolve | **TA63** | A boot-time assertion in `check_quality_baseline_monotonicity.py` that the resolved ref exists, plus a test that runs the gate on a branch not named by the fallback |
+| ~~No check that a gate's default refs actually resolve~~ | **TA63** | **Closed by SA156:** durable `main` fallback, origin/local probing, actionable startup error, and hermetic non-`main` regression coverage |
 | No grep gate on interpreter selection | **TA65, TA64** | A pre-commit/CI rule rejecting `python3 <path>.py` in `scripts/*.sh` and `["python",` in `scripts/test_*.py` when the argument is a repo source; the invariant is already written in `ruff.toml` and merely unenforced |
 | Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The theme has an eslint config — a `no-duplicate-imports`-style rule will not catch copied functions; the shared-helper fix is the real prevention |
 | No dependency-vulnerability scanner | — | **Carried from the prior pass.** Roadmap **SA123** owns this for v88. Confirmed still absent: `pip-audit`, `safety`, `bandit`, `semgrep` are all missing from `.venv` |
 | No focused security static analysis | — | **Carried.** SA123. Rules for subprocess shell use, unsafe deserialization, TLS disabling, Django raw/`mark_safe` sinks, and committed credentials. This pass verified all five classes by hand and found them clean, which is exactly the check worth automating so it stays clean |
 | No gate requires a changelog/ticket trail for behavioural commits | **TA66** | **Carried.** `d3d4c633` shipped a CI-topology change under a release-shaped message and left a conformance test red. Remains maintainer-process risk rather than a source finding |
-| `scripts/` suites are in no execution context | TA63's 72 failures, TA64, TA66 | Owned by arch **Finding 12** (`gate-suites-unexecuted`). Not duplicated as a finding here; note that TA63/TA64/TA66 must be fixed *before* that gate is registered, or it registers red |
+| `scripts/` suites are in no execution context | TA64, TA66 | Owned by arch **Finding 12** (`gate-suites-unexecuted`). Not duplicated as a finding here; TA64 and TA66 must be fixed *before* that gate is registered, or it registers red |
 
 ---
 
@@ -350,7 +353,7 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 - **Integration-branch CI** — hosted CI does not run on pushes to the release branch (`ci.yml` triggers on `main`/`develop` and PRs to `main`). Accepted solo-maintainer workflow choice. *Unchanged.*
 - **Local-wheelhouse seam** — `QUICKSCALE_LOCAL_WHEELHOUSE` is undocumented in `docs/technical/` and falls back to the manifest version spec when set but unmatched. Roadmap **SA150** owns it. *Unchanged.*
 - **Generator lock generation** — missing Poetry, timeout, or nonzero lock generation warns and lets generation finish by explicit usability policy; downstream apply/install stays fail-loud. Deliberate. *Unchanged.*
-- **Quality baseline** — ~~*"monotonicity is enforced and `make quality` reports `total_regressions: 0`"*~~ — **falsified this pass. Promoted to TA63.** See the reconciliation log.
+ - **Quality baseline** — the prior watch claim that *"monotonicity is enforced and `make quality` reports `total_regressions: 0`"* was **falsified and promoted to TA63**, then **closed by SA156** after the no-override helper passed and a real `make quality` run re-emitted fresh reports. The broader run still reports the unrelated `development_commands.py::up` complexity regression. See the reconciliation log for both the falsification and closure evidence.
 
 **New this pass:**
 
@@ -368,7 +371,7 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 ## Reconciliation log
 
 - 2026-08-21 — **TA1–TA62**: closure detail, later structural-cause closure, and superseded cross-reference notes remain archived in [CHANGELOG.md](../../CHANGELOG.md) and version control, as recorded by the prior pass. No prior ID was reopened this pass; none was re-verified in code, because the prior document carried none forward as open.
-- 2026-08-21 — Prior watch item *quality baseline*: **regressed → promoted to TA63**. The prior pass recorded "monotonicity is enforced and `make quality` reports `total_regressions: 0`". Verified false by execution: the gate exits 2 with `MERGE_BASE_ERROR` and `make quality` aborts before any analyzer runs. Root cause is a hard-coded `v87` fallback ref against a branch retired for `v88`.
+- 2026-08-21 — Prior watch item *quality baseline*: **regressed → promoted to TA63 → closed by SA156**. The prior pass recorded "monotonicity is enforced and `make quality` reports `total_regressions: 0`". It was falsified by execution: the gate exited 2 with `MERGE_BASE_ERROR` and `make quality` aborted before any analyzer ran. SA156 replaced the retired release-ref fallback with durable `main`, proved origin/local probing and missing-default remediation in hermetic tests, and verified a real `make quality` run with fresh reports. The current broader gate run remains red on the unrelated pre-existing `development_commands.py::up` complexity regression.
 - 2026-08-21 — Prior watch items *integration-branch CI*, *local-wheelhouse seam*, *generator lock generation*: **still-open, accepted / owned**. Re-verified at their anchors; carried forward unchanged in *Notes*. Not re-argued — no severity context changed.
 - 2026-08-21 — Prior tooling gaps *dependency vulnerabilities*, *security static analysis*, *production-change testimony*: **still-open**. Absence of `pip-audit`/`safety`/`bandit`/`semgrep` re-verified in `.venv`. SA123 owns the first two.
 - 2026-08-21 — **Arch-audit red-flag hand-off, all six adjudicated** (§2f.1 — leads, not pre-approved findings): *red `test_gate_parity` oracle* → **promoted, TA66** (reproduced). *`test_check_sa117_scope.py:640` interpreter-bound* → **promoted as part of TA64/TA65**, and the investigation found a second, worse defect at `:601` the red flag did not name — a test that passes on the interpreter's exit code. *72 quality-baseline failures, "needs triage"* → **triaged: not environment sensitivity — TA63**, the same hard-coded ref, reproduced from a clean environment. *`quickscale_devtools` version drift* → **not promoted**; owned by SA137, recorded in *Notes*. *Deprecated bool inversion in the CSRF gate* → **promoted as TA69**, with the red flag's suggested fix (`not val`) corrected — it would change the gate's semantics. *`tech-audit.md` header reads `Branch: v87`* → **resolved** by this regeneration.

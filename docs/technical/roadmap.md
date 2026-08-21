@@ -13,7 +13,7 @@ This is the current task planner. It contains open planned work only. Completed 
 - One reviewed child runs at a time per worktree. Umbrellas are acceptance-only; their children own implementation.
 - Start from a clean worktree after merging the integration branch. Before merge-back, sync the integration branch into the worktree, resolve there, run the ticket's verification, review the exact tip, then merge that tip.
 - Every handoff declares its file allowlist, commands, expected exits/artifacts, rollback, and focused validation. Scope findings are ticketed rather than fixed in place.
-- Leave `make quality` no worse than found. Do not raise a complexity ceiling or reintroduce file-line ceilings. **Until SA156 (merge #1) lands, this rule is unmeasurable** — the monotonicity gate exits `MERGE_BASE_ERROR` and `scripts/check_quality.sh` deletes the prior report before any analyzer runs. Tickets merging before SA156 must record the limitation rather than claim the check passed.
+- Leave `make quality` no worse than found. Do not raise a complexity ceiling or reintroduce file-line ceilings. **SA156 (merge #1) restores this rule's measurability**: the default monotonicity path resolves durable `main`, and `make quality` now emits fresh reports after a passing helper check.
 - Shared closeout conflict surfaces are `CHANGELOG.md`, `docs/technical/roadmap.md`, and `docs/technical/decisions.md` when policy changes. `docs/others/arch-audit.md` and `docs/others/tech-audit.md` join that surface only when a ticket changes or closes a live audit finding. The sync-before-merge-back procedure above must preserve every concurrent entry, resolve these files in the worktree, rerun the ticket's checks, and leave no unmerged files before the exact tip is reviewed and merged.
 - PostgreSQL/Docker work is serialized across worktrees. **W3 holds the exclusive PostgreSQL/Docker slot** and takes scheduling priority whenever one of its legs is active, even though W2 — not W3 — is the longest dependency chain this release.
 - A ticket whose deliverable is Git ref state cannot be delegated to a file-editing worker. Route it to a maintainer session with ref authority and push credentials.
@@ -55,11 +55,12 @@ Applying it produces three ranked bands:
   is now five serialized legs against W3's three. W3 keeps the exclusive
   PostgreSQL/Docker slot and therefore keeps scheduling priority *while a leg is
   active*, but it is no longer the longest chain and no longer sets the release date.
-- **SA156 is merge #1.** `scripts/check_quality_baseline_monotonicity.py:305-306,:1395-1396`
-  falls back to `ref = "v87"`, a branch retired for `v88` that never existed as a tag.
-  The gate exits `MERGE_BASE_ERROR`, and `scripts/check_quality.sh:123` then deletes the
-  previous report before any analyzer runs — so *"leave `make quality` no worse than
-  found"*, an execution rule every ticket here inherits, is currently unmeasurable.
+- **SA156 is merge #1 and is now closed.** The former per-release fallback and its
+  origin/local asymmetry are replaced by durable `main` selection with shared
+  `origin/main` → `main` probing. The helper passes, and the real `make quality` run
+  re-emits fresh reports with matching verdict/base-ref/merge-base metadata; the
+  broader gate remains red on the unrelated pre-existing complexity regression at
+  `quickscale_cli/src/quickscale_cli/commands/development_commands.py::up`.
 - **SA157 was promoted ahead of SA124** because SA124's acceptance criterion lands in
   `scripts/test_check_sa117_scope.py`, the exact file carrying a guaranteed false-green.
 - **SA163 does not get its own slot.** It executes inside SA135, whose allowlist already
@@ -153,7 +154,7 @@ Additional per-ticket surfaces:
 
 | Ticket | Additional shared surface | Why |
 |---|---|---|
-| SA156 | `scripts/check_quality_baseline_monotonicity.py`, `scripts/check_quality.sh`, `scripts/test_quality_baseline_monotonicity.py`, `docs/others/tech-audit.md` | base-ref resolution + the 101 `v87` literals |
+| SA156 | `scripts/check_quality_baseline_monotonicity.py`, `scripts/test_quality_baseline_monotonicity.py`, `docs/technical/quality_tools.md`, `docs/others/tech-audit.md` | base-ref resolution, semantic fallback fixtures, and closure evidence; `scripts/check_quality.sh` is verified unchanged |
 | SA155 | `Makefile`, `scripts/gate_registry.json`, `scripts/sync_ci_gate_jobs.py`, `.github/workflows/ci.yml`, `scripts/check_ci_locally.sh`, `docs/others/arch-audit.md` | new registered gate + hosted job |
 | SA158 | `scripts/test_gate_parity.py`, both audit docs | parity oracle |
 | SA157 | `scripts/test_check_sa117_scope.py`, `docs/others/tech-audit.md` | **also SA124's file** |
@@ -252,8 +253,8 @@ or `docs/others/tech-audit.md` onto its shared conflict surface per the executio
 ### Why band A comes first
 
 ```text
-SA156 (TA63, quality-gate base ref)     72 of the 74 failures, and the reason
-   │                                    `make quality` currently emits nothing
+SA156 (TA63, quality-gate base ref)     72 of the 74 historical failures, and the reason
+   │                                    `make quality` emitted nothing before closure
    ├── SA158 (TA66, publish oracle)     red on HEAD, repo-vs-repo
    ├── SA157 (TA64, false-green)        also SA124's target file
    └── SA159 (TA65, bare python)        also SA137's target file
@@ -273,10 +274,10 @@ The failure this ordering prevents: SA124 and SA123 ship acceptance criteria exp
 gates, written into a suite that nothing executes, beside a test that passes when the tool
 under test is deleted, on a branch where the quality baseline has not been enforced once.
 
-- [ ] **SA156 — Make the quality gate's fallback base ref resolve.** `Band A · Tier 1 · W2 · merge #1 · deps: none · blocks SA155 and every "no worse than found" claim`
-  Closes tech-audit **TA63** (`quality-gate-base-ref-deleted-branch`, **S2**, the only S2 open). `scripts/check_quality_baseline_monotonicity.py:305-306` and `:1395-1396` end the merge-base precedence chain in a hard-coded `ref = "v87"`. That branch was retired for `v88` and never existed as a tag, and unlike the `GITHUB_BASE_REF` branch above it the fallback resolves the bare name only, so it misses the surviving `origin/v87`. With neither `QUALITY_BASELINE_BASE_REF` nor `GITHUB_BASE_REF` set — and nothing in the `Makefile`, `scripts/`, or any workflow sets the former — the gate exits 2 with `MERGE_BASE_ERROR`, and `scripts/check_quality.sh:123` then deletes the previous run's report artifacts before any analyzer runs. The monotonicity invariant has therefore been unenforced for the whole `v88` branch while both audit documents recorded it as enforced. This is also 72 of the 74 failures in `scripts/test_quality_baseline_monotonicity.py`, which the arch audit had recorded as unexplained environment sensitivity.
-  **Acceptance:** `env -u QUALITY_BASELINE_BASE_REF -u GITHUB_BASE_REF poetry run python scripts/check_quality_baseline_monotonicity.py` exits 0 and reports a real `merge_base`; the fallback resolves through the same `origin/<ref>` → `<ref>` probe the `GITHUB_BASE_REF` branch already uses and names a long-lived ref rather than a per-release branch, or is derived from `VERSION`/`git tag`; an unresolvable fallback is a startup-validated error whose message names the fix; `pytest scripts/test_quality_baseline_monotonicity.py` drops from 72 failures to 0, with the ~101 `v87` literals in that suite moved to the same derived ref; `make quality` completes and re-emits `quality_report.json`; a regression test runs the gate on a branch not named by the fallback; the tech-audit finding is retired with evidence and the prior watch item's falsification is recorded.
-  **Shared conflict surface:** `scripts/check_quality_baseline_monotonicity.py`, `scripts/check_quality.sh`, `scripts/test_quality_baseline_monotonicity.py`, `docs/others/tech-audit.md`.
+- [x] **SA156 — Make the quality gate's fallback base ref resolve.** `Band A · Tier 1 · W2 · merge #1 · deps: none · blocks SA155 and every "no worse than found" claim · CLOSED 2026-08-21`
+  Closes tech-audit **TA63** (`quality-gate-base-ref-deleted-branch`, formerly **S2**). The fallback now uses the durable `_DEFAULT_BASE_REF = "main"` identity and one shared `origin/<ref>` → `<ref>` probe for both `GITHUB_BASE_REF` and the no-override path. Explicit CLI and `QUALITY_BASELINE_BASE_REF` refs retain direct resolution and precedence. The helper's exit, stream, schema, policy-artifact, wrapper, and report contracts are unchanged; an unavailable default produces an actionable exit-2 `MERGE_BASE_ERROR` naming both candidates and the explicit-ref remedies.
+  **Evidence:** Focused Ruff check/format and pytest pass; the focused suite contains zero stale release-literal occurrences; no-override helper execution exits 0 with `base_ref == "main"` and a real merge-base containing `scripts/quality_baseline.json`; hermetic non-`main` tests prove origin-first/local-second fallback and exact missing-default streams/artifact; env-cleared `make quality` re-emits all four fresh artifacts and preserves parity across policy/report/status/Markdown, but exits 1 for the unrelated pre-existing complexity regression at `quickscale_cli/src/quickscale_cli/commands/development_commands.py::up`; post-documentation focused pytest and closure assertions pass.
+  **Shared conflict surface:** `scripts/check_quality_baseline_monotonicity.py`, `scripts/test_quality_baseline_monotonicity.py`, `docs/technical/quality_tools.md`, `docs/others/tech-audit.md`, `docs/technical/roadmap.md`. `scripts/check_quality.sh` and `Makefile` were verified unchanged.
 
 - [ ] **SA155 — Give the gate layer a gate of its own.** `Band A · Tier 1 · W2 · merge #7 · deps: SA156, SA157, SA158, SA159 · blocks SA124, SA123, SA166`
   Closes arch-audit **Finding 12** (`gate-suites-unexecuted`, rank 1, horizon `now`). Gate implementations and their conformance suites live in `scripts/`, deliberately outside `TEST_DIRS` (`Makefile:150`) and outside `.coveragerc` — so gate code is the only first-party code with no owning execution context, while being the code every other gate's credibility rests on. Of 14 `scripts/test_*.py` suites, **4 are wired to a target and 10 are wired to nothing**; `git log -S` shows the orphans were never wired, and the population grows one per new gate. Executed under the project interpreter this pass: **959 passed, 74 failed** across code nothing runs. Hosted *job membership* is genuinely closed by `sync_ci_gate_jobs.py:314-320` and must be preserved — the gap is the suites and the non-`ci.yml` contexts, since `check_gate_parity.py:2509-2511` filters rather than asserts, so parity proves *registered → present* and never *present → registered*.

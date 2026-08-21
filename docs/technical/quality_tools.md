@@ -215,10 +215,10 @@ in Git.  Any increase requires a matching structured waiver in
 
 ```bash
 # Run standalone (used by make quality internally)
-QUALITY_BASELINE_BASE_REF=v87 poetry run python scripts/check_quality_baseline_monotonicity.py
+QUALITY_BASELINE_BASE_REF=main poetry run python scripts/check_quality_baseline_monotonicity.py
 
 # Or with an explicit ref
-poetry run python scripts/check_quality_baseline_monotonicity.py --base-ref v87
+poetry run python scripts/check_quality_baseline_monotonicity.py --base-ref main
 ```
 
 ### Comparison Scope
@@ -300,16 +300,19 @@ The merge-base is resolved in this order (first match wins):
 2. `QUALITY_BASELINE_BASE_REF` environment variable — local CI / ad-hoc
 3. `GITHUB_BASE_REF` environment variable — GitHub Actions PR context (tries
    `origin/<branch>` first, then local `<branch>`)
-4. Local `v87` tag — fallback for local development
+4. Durable `main` branch — fallback for local development (tries
+   `origin/main` first, then local `main`)
 
 ### Required History
 
-The helper reads the base baseline from the local Git object store.  The
-repository must have the necessary history and tags (v87) available.  There
-is **no automatic fetch** and **no fallback** to `HEAD^` — if the merge-base
-commit does not contain `scripts/quality_baseline.json`, the gate fails with
-exit 2.  A missing *waiver* file is tolerated and treated as an empty ledger
-(initial-rollout allowance only).
+The helper reads the base baseline from the local Git object store. The
+repository must have the necessary history and either `origin/main` or local
+`main` available for the default path. There is **no automatic fetch** and
+**no fallback** to `HEAD^` — if neither default candidate resolves, or if the
+merge-base commit does not contain `scripts/quality_baseline.json`, the gate
+fails with exit 2 and names `--base-ref` and `QUALITY_BASELINE_BASE_REF` as
+remediation. A missing *waiver* file is tolerated and treated as an empty
+ledger (initial-rollout allowance only).
 
 `QUALITY_BASELINE_FILE` may override the current-baseline file path, but the
 merge-base side of the comparison always reads the canonical

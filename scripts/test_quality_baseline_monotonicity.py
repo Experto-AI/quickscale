@@ -22,7 +22,7 @@ Test matrix (CR-003..006)
 * Unknown waiver schema version (subprocess)
 * Non-dict waiver ledger rejection (subprocess)
 * Bool schema version in waiver ledger (subprocess)
-* Base ref precedence — CLI > QUALITY > GITHUB > v87 (real subprocess)
+* Base ref precedence — CLI > QUALITY > GITHUB > durable default (real subprocess)
 * GitHub origin/branch resolution precedence
 * Unresolvable explicit/GitHub ref — exit 2
 * Missing baseline file — exit 2
@@ -139,6 +139,7 @@ def _create_isolated_repo(
 
 # Alias for readability
 _check = monotonicity_mod
+DEFAULT_BASE_REF = _check._DEFAULT_BASE_REF
 
 
 def _canonical_record(
@@ -253,8 +254,8 @@ def known_anchors() -> set[str]:
 
 
 @pytest.fixture
-def v87_baseline() -> dict[str, Any]:
-    """Return the baseline as it existed at v87 (before the three SA114 increases)."""
+def baseline_snapshot() -> dict[str, Any]:
+    """Return the pre-increase baseline snapshot used by comparison tests."""
     return {
         "schema_version": 1,
         "dead_code": {
@@ -369,18 +370,18 @@ def _build_duplication_indexes(allowed_blocks: int) -> dict[str, int]:
 class TestCompareIndexes:
     """Unified index-based comparison."""
 
-    def test_no_change_passes(self, v87_baseline: dict) -> None:
+    def test_no_change_passes(self, baseline_snapshot: dict) -> None:
         """Same baseline produces no violations."""
-        old_idx = _check._validate_baseline_structure(v87_baseline, "old")
-        new_idx = _check._validate_baseline_structure(v87_baseline, "new")
+        old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
+        new_idx = _check._validate_baseline_structure(baseline_snapshot, "new")
         results = _check._compare_indexes(old_idx, new_idx)
         assert len(results) == 0
 
     def test_sa114_increases_detected(
-        self, v87_baseline: dict, current_baseline_with_increases: dict
+        self, baseline_snapshot: dict, current_baseline_with_increases: dict
     ) -> None:
         """All SA114 increases are caught via index comparison."""
-        old_idx = _check._validate_baseline_structure(v87_baseline, "old")
+        old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
         new_idx = _check._validate_baseline_structure(current_baseline_with_increases, "new")
         results = _check._compare_indexes(old_idx, new_idx)
         # SA125-DEC-001 retired the line-ceiling surface, so the historical
@@ -410,11 +411,11 @@ class TestCompareIndexes:
             f"_validate_modules_section expected (11, 12), got {key_values[expected_keys[2]]}"
         )
 
-    def test_new_message_increases(self, v87_baseline: dict) -> None:
+    def test_new_message_increases(self, baseline_snapshot: dict) -> None:
         """A new dead-code message (old=0, new=1) is a violation."""
-        new = json.loads(json.dumps(v87_baseline))
+        new = json.loads(json.dumps(baseline_snapshot))
         new["dead_code"]["allowed_messages"].append("new/file.py: unused var 'x'")
-        old_idx = _check._validate_baseline_structure(v87_baseline, "old")
+        old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
         new_idx = _check._validate_baseline_structure(new, "new")
         results = _check._compare_indexes(old_idx, new_idx)
         # One new dead-code violation (multiplicity increased from 0 to 1)
@@ -430,28 +431,28 @@ class TestCompareIndexes:
         assert r["section"] == "dead_code"
         assert r["error_code"] == "DC-MULT"
 
-    def test_reduced_passes(self, v87_baseline: dict) -> None:
+    def test_reduced_passes(self, baseline_snapshot: dict) -> None:
         """Decreased values are not violations."""
-        new = json.loads(json.dumps(v87_baseline))
+        new = json.loads(json.dumps(baseline_snapshot))
         key = (
             "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section"
         )
         new["complexity"]["allowed_functions"][key]["max_complexity"] = 10
-        old_idx = _check._validate_baseline_structure(v87_baseline, "old")
+        old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
         new_idx = _check._validate_baseline_structure(new, "new")
         results = _check._compare_indexes(old_idx, new_idx)
         assert len(results) == 0
 
-    def test_new_key_is_violation(self, v87_baseline: dict) -> None:
+    def test_new_key_is_violation(self, baseline_snapshot: dict) -> None:
         """A new key (old missing = 0, new > 0) is a violation."""
-        new = json.loads(json.dumps(v87_baseline))
+        new = json.loads(json.dumps(baseline_snapshot))
         new["complexity"]["allowed_functions"]["new.py::func"] = {
             "file": "new.py",
             "max_complexity": 5,
             "symbol": "func",
             "type": "function",
         }
-        old_idx = _check._validate_baseline_structure(v87_baseline, "old")
+        old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
         new_idx = _check._validate_baseline_structure(new, "new")
         results = _check._compare_indexes(old_idx, new_idx)
         complexity_increases = [r for r in results if r["section"] == "complexity"]
@@ -459,11 +460,11 @@ class TestCompareIndexes:
         r = next(r for r in complexity_increases if r["old_value"] == 0)
         assert r["new_value"] == 5
 
-    def test_removed_key_passes(self, v87_baseline: dict) -> None:
+    def test_removed_key_passes(self, baseline_snapshot: dict) -> None:
         """Removing a key is never a violation."""
-        new = json.loads(json.dumps(v87_baseline))
+        new = json.loads(json.dumps(baseline_snapshot))
         new["complexity"]["allowed_functions"] = {}
-        old_idx = _check._validate_baseline_structure(v87_baseline, "old")
+        old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
         new_idx = _check._validate_baseline_structure(new, "new")
         results = _check._compare_indexes(old_idx, new_idx)
         assert results == [], "Removing every key must never be a violation"
@@ -1028,7 +1029,7 @@ class TestOutputStructure:
         """The output dict contains all required metadata keys."""
         output = _check._build_output(
             merge_base="abc123",
-            base_ref="v87",
+            base_ref=DEFAULT_BASE_REF,
             violations=[],
             unresolved=[],
             waiver_evaluations=[],
@@ -1049,7 +1050,7 @@ class TestOutputStructure:
         ]
         output = _check._build_output(
             merge_base="h",
-            base_ref="v87",
+            base_ref=DEFAULT_BASE_REF,
             violations=violations,
             unresolved=violations,
             waiver_evaluations=[],
@@ -1143,9 +1144,9 @@ class TestLoadWaivers:
 class TestValidateBaselineStructure:
     """Strict schema validation for baseline structure."""
 
-    def test_valid_baseline_returns_indexes(self, v87_baseline: dict) -> None:
+    def test_valid_baseline_returns_indexes(self, baseline_snapshot: dict) -> None:
         """A valid baseline returns ceiling indexes with expected keys."""
-        indexes = _check._validate_baseline_structure(v87_baseline, "test")
+        indexes = _check._validate_baseline_structure(baseline_snapshot, "test")
         assert indexes == {
             (
                 "dead_code:allowed_messages:quickscale_cli/src/quickscale_cli/commands/"
@@ -1435,7 +1436,7 @@ class TestErrorEnvelope:
                 sys.executable,
                 str(_SCRIPT_DIR / "check_quality_baseline_monotonicity.py"),
                 "--base-ref",
-                "v87",
+                DEFAULT_BASE_REF,
             ],
             capture_output=True,
             text=True,
@@ -1470,7 +1471,7 @@ class TestErrorEnvelope:
                 sys.executable,
                 str(_SCRIPT_DIR / "check_quality_baseline_monotonicity.py"),
                 "--base-ref",
-                "v87",
+                DEFAULT_BASE_REF,
             ],
             capture_output=True,
             text=True,
@@ -1764,6 +1765,101 @@ class TestStateMachine:
 
 
 # ---------------------------------------------------------------------------
+# Base-ref resolution tests
+# ---------------------------------------------------------------------------
+
+
+class TestBaseRefResolution:
+    """Exercise branch probing in a temporary repository."""
+
+    def _probe_repo(self, tmp_path: Path) -> tuple[Path, str, str]:
+        repo = tmp_path / "probe-repo"
+        repo.mkdir()
+        _git_init(repo)
+        (repo / "baseline.txt").write_text("baseline\n", encoding="utf-8")
+        initial = _git_commit_all(repo, "initial baseline")
+        (repo / "feature.txt").write_text("feature\n", encoding="utf-8")
+        current = _git_commit_all(repo, "feature commit")
+        subprocess.run(["git", "branch", "-M", "feature"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "update-ref", "refs/heads/main", initial],
+            cwd=repo,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "update-ref", "refs/remotes/origin/main", current],
+            cwd=repo,
+            check=True,
+        )
+        return repo, initial, current
+
+    def test_default_probe_prefers_origin_then_local(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A non-main checkout prefers origin/main, then falls back to main."""
+        repo, initial, current = self._probe_repo(tmp_path)
+        monkeypatch.setattr(_check, "_REPO_ROOT", repo)
+        monkeypatch.delenv("QUALITY_BASELINE_BASE_REF", raising=False)
+        monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+
+        selected = _check._select_base_ref(None)
+        assert selected.identity == DEFAULT_BASE_REF
+        assert selected.resolved_ref == "origin/main"
+        assert _check._resolve_merge_base(selected) == current
+
+        subprocess.run(
+            ["git", "update-ref", "-d", "refs/remotes/origin/main"],
+            cwd=repo,
+            check=True,
+        )
+        selected = _check._select_base_ref(None)
+        assert selected.identity == DEFAULT_BASE_REF
+        assert selected.resolved_ref == "main"
+        assert _check._resolve_merge_base(selected) == initial
+
+    def test_missing_default_has_exact_error_contract(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Missing default candidates fail with actionable exit-2 output."""
+        repo = tmp_path / "missing-default-repo"
+        repo.mkdir()
+        _git_init(repo)
+        (repo / "baseline.txt").write_text("baseline\n", encoding="utf-8")
+        _git_commit_all(repo, "feature-only baseline")
+        subprocess.run(["git", "branch", "-M", "feature"], cwd=repo, check=True)
+
+        output_dir = repo / ".quickscale"
+        output_file = output_dir / "quality_baseline_policy.json"
+        monkeypatch.setattr(_check, "_REPO_ROOT", repo)
+        monkeypatch.setattr(_check, "_OUTPUT_DIR", output_dir)
+        monkeypatch.setattr(_check, "_OUTPUT_FILE", output_file)
+        monkeypatch.delenv("QUALITY_BASELINE_BASE_REF", raising=False)
+        monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+
+        assert _check.main([]) == 2
+        captured = capsys.readouterr()
+        expected_message = (
+            "Merge-base resolution failed: default base ref 'main' is unavailable: "
+            "neither origin/main nor main resolves locally; provide --base-ref REF "
+            "or set QUALITY_BASELINE_BASE_REF to a resolvable ref"
+        )
+        assert captured.out == ""
+        assert captured.err == f"ERROR: {expected_message}\n"
+        assert "Traceback" not in captured.err
+        assert json.loads(output_file.read_text(encoding="utf-8")) == {
+            "schema_version": 1,
+            "verdict": "error",
+            "error": {
+                "code": "MERGE_BASE_ERROR",
+                "source": "git",
+                "path": DEFAULT_BASE_REF,
+                "message": expected_message,
+            },
+            "diagnostics": [],
+        }
+
+
+# ---------------------------------------------------------------------------
 # Shell integration tests
 # ---------------------------------------------------------------------------
 
@@ -1808,14 +1904,14 @@ class TestShellIntegration:
     # Exit code contract
     # ------------------------------------------------------------------
 
-    def test_helper_exit_0_with_v87(self) -> None:
+    def test_helper_exit_0_with_default_base_ref(self) -> None:
         """
-        The helper exits 0 when run with ``--base-ref v87``.
+        The helper exits 0 when run with the documented default base ref.
 
         Phase 1 verified that the current baseline has no diff against the
-        merge-base of v87, so the gate should pass cleanly.
+        merge-base of the default base ref, so the gate should pass cleanly.
         """
-        result = self._run_helper(extra_args=["--base-ref", "v87"])
+        result = self._run_helper(extra_args=["--base-ref", DEFAULT_BASE_REF])
         assert result.returncode == 0, (
             f"Expected exit 0, got {result.returncode}\n"
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
@@ -1842,7 +1938,7 @@ class TestShellIntegration:
     def test_helper_exit_2_missing_baseline_file(self) -> None:
         """A missing ``QUALITY_BASELINE_FILE`` produces exit 2."""
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": "/tmp/nonexistent-baseline-test-99999.json"},
         )
         assert result.returncode == 2, (
@@ -1859,7 +1955,7 @@ class TestShellIntegration:
         pf = self._policy_file()
         pf.unlink(missing_ok=True)
 
-        result = self._run_helper(extra_args=["--base-ref", "v87"])
+        result = self._run_helper(extra_args=["--base-ref", DEFAULT_BASE_REF])
         assert result.returncode == 0
 
         assert pf.exists(), "Policy file should exist after successful run"
@@ -1867,9 +1963,10 @@ class TestShellIntegration:
         assert data.get("schema_version") == 1
         assert "timestamp" in data
         assert "merge_base" in data
-        # With the current complete baseline and v87 merge-base, no violations exist
+        # With the current complete baseline and default merge-base, no violations exist
         assert data.get("verdict") == "pass", (
-            f"Expected verdict 'pass' with current baseline vs v87, got {data.get('verdict')}"
+            "Expected verdict 'pass' with current baseline vs default ref, "
+            f"got {data.get('verdict')}"
         )
         assert "summary" in data
         assert "violations" in data
@@ -1891,7 +1988,7 @@ class TestShellIntegration:
 
     def test_policy_file_deterministic_keys(self) -> None:
         """Policy file keys are stable across runs."""
-        result = self._run_helper(extra_args=["--base-ref", "v87"])
+        result = self._run_helper(extra_args=["--base-ref", DEFAULT_BASE_REF])
         assert result.returncode == 0
 
         data = json.loads(self._policy_file().read_text())
@@ -1921,14 +2018,14 @@ class TestShellIntegration:
         CLI ``--base-ref`` takes precedence over ``QUALITY_BASELINE_BASE_REF``.
 
         Set QUALITY_BASELINE_BASE_REF to a nonexistent ref and provide a valid
-        CLI ``--base-ref v87`` — the helper should exit 0 because CLI wins.
+        CLI ``--base-ref <default>`` — the helper should exit 0 because CLI wins.
         """
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_BASE_REF": "nonexistent-ref-opencode-test-99999"},
         )
         assert result.returncode == 0, (
-            f"Expected exit 0 (CLI --base-ref v87 overrides env), "
+            f"Expected exit 0 (CLI --base-ref default overrides env), "
             f"got {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
 
@@ -1936,58 +2033,38 @@ class TestShellIntegration:
         """
         ``QUALITY_BASELINE_BASE_REF`` takes precedence over ``GITHUB_BASE_REF``.
 
-        Set QUALITY_BASELINE_BASE_REF=v87 (valid) and GITHUB_BASE_REF to a
+        Set QUALITY_BASELINE_BASE_REF to the default ref and GITHUB_BASE_REF to a
         nonexistent branch — the helper should exit 0 because QUALITY wins.
         """
         result = self._run_helper(
             extra_args=[],
             env={
-                "QUALITY_BASELINE_BASE_REF": "v87",
+                "QUALITY_BASELINE_BASE_REF": DEFAULT_BASE_REF,
                 "GITHUB_BASE_REF": "nonexistent-branch-opencode-test-99999",
             },
         )
         assert result.returncode == 0, (
-            f"Expected exit 0 (QUALITY_BASELINE_BASE_REF=v87 overrides GITHUB_BASE_REF), "
+            f"Expected exit 0 (QUALITY_BASELINE_BASE_REF overrides GITHUB_BASE_REF), "
             f"got {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
 
     def test_base_ref_github_origin_first(self) -> None:
         """``GITHUB_BASE_REF`` resolves origin/<branch> first before local <branch>."""
-        # Use GITHUB_BASE_REF=v87 — origin/v87 should resolve and the helper
-        # uses that ref.  Verify the merge-base commit is from origin/v87,
-        # confirming origin resolution ran before local v87.
+        # Use GITHUB_BASE_REF=main — origin/main should resolve and the helper
+        # uses that ref.  Verify origin resolution runs before local main.
         result = self._run_helper(
             extra_args=[],
-            env={"GITHUB_BASE_REF": "v87"},
+            env={"GITHUB_BASE_REF": DEFAULT_BASE_REF},
         )
-        # origin/v87 contains SA114 base values (11, 1596, 605) while the
-        # current baseline contains SA114 increases (12, 1608, 611), so
-        # unwaived violations are detected → exit 1 deterministically.
-        assert result.returncode == 1, (
-            f"Expected exit 1 (origin/v87 baseline < current), "
+        assert result.returncode == 0, (
+            f"Expected exit 0 (origin/main resolves before local main), "
             f"got {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
-        # Verify the exact unwaived canonical record from origin/v87.
-        _assert_exact_stdout_records(
-            result,
-            [
-                _canonical_record(
-                    error_code="CC-RISE",
-                    section="complexity",
-                    canonical_key=(
-                        "complexity:quickscale_core/src/quickscale_core/schema/"
-                        "config_schema.py::_validate_modules_section"
-                    ),
-                    old_value=11,
-                    new_value=12,
-                    waiver_file=str(_REPO_ROOT / "scripts" / "quality_waivers.json"),
-                    decision_ref="<required: add waiver or revert increase>",
-                )
-            ],
-        )
+        policy = json.loads(self._policy_file().read_text(encoding="utf-8"))
+        assert policy["base_ref"] == "origin/main"
 
-    def test_base_ref_default_v87(self) -> None:
-        """With no env overrides, the default ``v87`` tag is used and the gate passes."""
+    def test_base_ref_default_main(self) -> None:
+        """With no env overrides, the durable main fallback is used and the gate passes."""
         result = self._run_helper(
             extra_args=[],
             env={
@@ -1996,7 +2073,7 @@ class TestShellIntegration:
             },
         )
         assert result.returncode == 0, (
-            f"Expected exit 0 (default v87 tag fallback), "
+            f"Expected exit 0 (default main branch fallback), "
             f"got {result.returncode}\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
 
@@ -2046,7 +2123,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -2108,7 +2185,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -2176,7 +2253,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -2244,7 +2321,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -2326,7 +2403,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -2383,7 +2460,7 @@ class TestShellIntegration:
         temp = tmp_path / "baseline_not_dict.json"
         temp.write_text("[]", encoding="utf-8")
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": str(temp)},
         )
         assert result.returncode == 2
@@ -2402,7 +2479,7 @@ class TestShellIntegration:
             encoding="utf-8",
         )
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_WAIVERS_FILE": str(temp_waivers)},
         )
         assert result.returncode == 2
@@ -2418,7 +2495,7 @@ class TestShellIntegration:
         temp_waivers = tmp_path / "waivers_not_dict.json"
         temp_waivers.write_text("[]", encoding="utf-8")
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_WAIVERS_FILE": str(temp_waivers)},
         )
         assert result.returncode == 2
@@ -2437,7 +2514,7 @@ class TestShellIntegration:
             encoding="utf-8",
         )
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_WAIVERS_FILE": str(temp_waivers)},
         )
         assert result.returncode == 2
@@ -2456,7 +2533,7 @@ class TestShellIntegration:
             encoding="utf-8",
         )
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_WAIVERS_FILE": str(temp_waivers)},
         )
         assert result.returncode == 2
@@ -2750,7 +2827,7 @@ class TestShellIntegration:
         temp_baseline.write_text(json.dumps(baseline_data), encoding="utf-8")
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": str(temp_baseline)},
         )
         assert result.returncode == 2, (
@@ -2780,7 +2857,7 @@ class TestShellIntegration:
         temp = tmp_path / "baseline_tab_msg.json"
         temp.write_text(json.dumps(data), encoding="utf-8")
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": str(temp)},
         )
         assert result.returncode == 2
@@ -2816,7 +2893,7 @@ class TestShellIntegration:
         temp = tmp_path / "baseline_del_symbol.json"
         temp.write_text(json.dumps(data), encoding="utf-8")
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": str(temp)},
         )
         assert result.returncode == 2
@@ -2866,7 +2943,7 @@ class TestShellIntegration:
             encoding="utf-8",
         )
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -2925,7 +3002,7 @@ class TestShellIntegration:
             encoding="utf-8",
         )
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -2988,7 +3065,7 @@ class TestShellIntegration:
             encoding="utf-8",
         )
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -3120,7 +3197,7 @@ class TestShellIntegration:
             encoding="utf-8",
         )
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -3216,7 +3293,7 @@ class TestShellIntegration:
             # datetime.now(UTC).date(), so today's waiver stays active
             env = os.environ.copy()
             env["TZ"] = "Pacific/Kiritimati"
-            env["QUALITY_BASELINE_BASE_REF"] = "v87"
+            env["QUALITY_BASELINE_BASE_REF"] = DEFAULT_BASE_REF
             env["QUALITY_BASELINE_FILE"] = str(temp_baseline)
             env["QUALITY_WAIVERS_FILE"] = str(temp_waivers)
 
@@ -3243,9 +3320,9 @@ class TestShellIntegration:
 
     def test_helper_exit_1_unwaived_increases(self, tmp_path: Path) -> None:
         """A baseline with increased values and no waivers exits 1."""
-        # Create a modified baseline with higher values than v87 allows.
+        # Create a modified baseline with higher values than the default allows.
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
-        # Inject an extra complexity increase v87 has no record of
+        # Inject an extra complexity increase the default baseline has no record of
         current["complexity"]["allowed_functions"]["new_file.py::new_function"] = {
             "file": "new_file.py",
             "max_complexity": 5,
@@ -3256,7 +3333,7 @@ class TestShellIntegration:
         temp_baseline.write_text(json.dumps(current), encoding="utf-8")
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": str(temp_baseline)},
         )
         # CR-005/006: stdout contains canonical JSON records sorted by
@@ -3287,7 +3364,7 @@ class TestShellIntegration:
         temp_baseline.write_text("[]", encoding="utf-8")  # list, not dict
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": str(temp_baseline)},
         )
         assert result.returncode == 2, (
@@ -3317,7 +3394,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": str(temp_baseline)},
         )
         assert result.returncode == 2, (
@@ -3347,7 +3424,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": str(temp_baseline)},
         )
         assert result.returncode == 2, (
@@ -3374,7 +3451,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_WAIVERS_FILE": str(temp_waivers)},
         )
         assert result.returncode == 2, (
@@ -3454,7 +3531,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -3534,7 +3611,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -3597,7 +3674,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -3618,12 +3695,12 @@ class TestShellIntegration:
         """
         A valid baseline with no increases plus an orphan waiver exits 1.
 
-        Creates a baseline identical to v87 (no increases), adds an orphan
+        Creates a baseline identical to the baseline snapshot (no increases), adds an orphan
         waiver whose entry_key matches no detected increase, then asserts
         exit 1, canonical orphan diagnostic, no traceback, and a stable
         policy artifact.
         """
-        # Build a baseline with exactly v87's values (no increases)
+        # Build a baseline with exactly the baseline snapshot's values (no increases)
         baseline = {
             "schema_version": 1,
             "dead_code": {
@@ -3689,7 +3766,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -3746,7 +3823,7 @@ class TestShellIntegration:
         The key is present in both old and new with the same value, so there
         is no violation and the waiver is orphan — exit 1.
         """
-        # Baseline where ALL values match v87 (unchanged)
+        # Baseline where ALL values match the baseline snapshot (unchanged)
         baseline = {
             "schema_version": 1,
             "dead_code": {"allowed_messages": []},
@@ -3781,7 +3858,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -3813,7 +3890,7 @@ class TestShellIntegration:
 
         A decrease is never a violation, so the waiver is orphan — exit 1.
         """
-        # Baseline where complexity value is LOWER than v87 (11→10)
+        # Baseline where complexity value is LOWER than the baseline snapshot (11→10)
         baseline = {
             "schema_version": 1,
             "dead_code": {"allowed_messages": []},
@@ -3821,7 +3898,7 @@ class TestShellIntegration:
                 "allowed_functions": {
                     "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section": {  # noqa: E501
                         "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
-                        "max_complexity": 10,  # lower than v87's 11
+                        "max_complexity": 10,  # lower than the baseline snapshot's 11
                         "symbol": "_validate_modules_section",
                         "type": "function",
                     },
@@ -3858,7 +3935,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -3970,7 +4047,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -4463,7 +4540,7 @@ class TestShellIntegration:
         temp_baseline = tmp_path / "baseline_abs_path.json"
         temp_baseline.write_text(json.dumps(data), encoding="utf-8")
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": str(temp_baseline)},
         )
         assert result.returncode == 2, f"Expected exit 2 for absolute path, got {result.returncode}"
@@ -4502,7 +4579,7 @@ class TestShellIntegration:
         temp_baseline = tmp_path / "baseline_backslash.json"
         temp_baseline.write_text(json.dumps(data), encoding="utf-8")
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": str(temp_baseline)},
         )
         assert result.returncode == 2, (
@@ -4556,7 +4633,7 @@ class TestShellIntegration:
         )
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
                 "QUALITY_WAIVERS_FILE": str(temp_waivers),
@@ -4614,7 +4691,7 @@ class TestShellIntegration:
         temp_baseline.write_text(json.dumps(baseline), encoding="utf-8")
 
         result = self._run_helper(
-            extra_args=["--base-ref", "v87"],
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
             env={"QUALITY_BASELINE_FILE": str(temp_baseline)},
         )
         assert result.returncode == 1, (
@@ -4872,7 +4949,7 @@ class TestShellSubprocess:
                 stub_dir=poetry_stub,
                 extra_env={
                     "QUALITY_BASELINE_FILE": str(temp_baseline),
-                    "QUALITY_BASELINE_BASE_REF": "v87",
+                    "QUALITY_BASELINE_BASE_REF": DEFAULT_BASE_REF,
                 },
             )
 
@@ -4963,7 +5040,7 @@ class TestShellSubprocess:
                 stub_dir=poetry_stub,
                 extra_env={
                     "QUALITY_BASELINE_FILE": str(temp_baseline),
-                    "QUALITY_BASELINE_BASE_REF": "v87",
+                    "QUALITY_BASELINE_BASE_REF": DEFAULT_BASE_REF,
                 },
             )
 
@@ -5029,14 +5106,14 @@ class TestShellSubprocess:
         """
         try:
             # Run with the actual checked-in baseline (no violations against
-            # v87 merge-base) and stub analyzers returning empty results.
+            # default merge-base) and stub analyzers returning empty results.
             # The find stub prevents native find/wc large-file analysis
             # from consuming live repository file sizes.
             result = self._run_shell(
                 stub_dir=poetry_stub,
                 find_stub_dir=find_stub,
                 extra_env={
-                    "QUALITY_BASELINE_BASE_REF": "v87",
+                    "QUALITY_BASELINE_BASE_REF": DEFAULT_BASE_REF,
                 },
             )
 
@@ -5161,7 +5238,7 @@ class TestShellSubprocess:
         that ``violations`` omits.
         """
         try:
-            # Baseline with NO increases against v87 merge-base
+            # Baseline with NO increases against the default merge-base
             baseline = {
                 "schema_version": 1,
                 "dead_code": {"allowed_messages": []},
@@ -5201,7 +5278,7 @@ class TestShellSubprocess:
                 extra_env={
                     "QUALITY_BASELINE_FILE": str(temp_baseline),
                     "QUALITY_WAIVERS_FILE": str(temp_waivers),
-                    "QUALITY_BASELINE_BASE_REF": "v87",
+                    "QUALITY_BASELINE_BASE_REF": DEFAULT_BASE_REF,
                 },
             )
             # Orphan blocks the gate → exit 1
@@ -5264,7 +5341,7 @@ class TestShellSubprocess:
             result = self._run_shell(
                 stub_dir=poetry_stub,
                 find_stub_dir=find_stub,
-                extra_env={"QUALITY_BASELINE_BASE_REF": "v87"},
+                extra_env={"QUALITY_BASELINE_BASE_REF": DEFAULT_BASE_REF},
             )
             # Monotonicity gate must have passed; exit 0 with stubbed
             # analyzers and current complete baseline.
@@ -5340,7 +5417,7 @@ class TestShellSubprocess:
         """
         Shell produces NONEMPTY diagnostics on controlled success.
 
-        Uses a temp baseline with three values higher than the v87 merge-base
+        Uses a temp baseline with three values higher than the default merge-base
         and matching active waivers.  Helper exits 0 with nonempty diagnostics.
         The shell continues to produce reports with nonempty diagnostics in
         policy/report/status/Markdown.  The find stub isolates large-file
@@ -5426,7 +5503,7 @@ class TestShellSubprocess:
                 extra_env={
                     "QUALITY_BASELINE_FILE": str(temp_baseline),
                     "QUALITY_WAIVERS_FILE": str(temp_waivers),
-                    "QUALITY_BASELINE_BASE_REF": "v87",
+                    "QUALITY_BASELINE_BASE_REF": DEFAULT_BASE_REF,
                 },
             )
 
