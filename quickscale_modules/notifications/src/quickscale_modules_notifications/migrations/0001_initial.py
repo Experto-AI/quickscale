@@ -1,11 +1,4 @@
-"""Initial migration for the QuickScale Notifications module.
-
-Collapsed SA92 migration: final-schema 0001 with NotificationSettings,
-NotificationMessage, NotificationDelivery, and NotificationDeliveryEvent
-models.  The notifications module is a system-wide service with no
-tenant-scoped models.
-"""
-
+import django.db.models.deletion
 from django.db import migrations, models
 
 
@@ -150,14 +143,6 @@ class Migration(migrations.Migration):
                 ("failed_at", models.DateTimeField(blank=True, null=True)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
-                (
-                    "message",
-                    models.ForeignKey(
-                        on_delete=models.deletion.CASCADE,
-                        related_name="deliveries",
-                        to="quickscale_modules_notifications.notificationmessage",
-                    ),
-                ),
             ],
             options={
                 "verbose_name": "Notification delivery",
@@ -188,7 +173,7 @@ class Migration(migrations.Migration):
                 (
                     "delivery",
                     models.ForeignKey(
-                        on_delete=models.deletion.CASCADE,
+                        on_delete=django.db.models.deletion.CASCADE,
                         related_name="events",
                         to="quickscale_modules_notifications.notificationdelivery",
                     ),
@@ -199,6 +184,15 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Notification delivery events",
                 "ordering": ["received_at"],
             },
+        ),
+        migrations.AddField(
+            model_name="notificationdelivery",
+            name="message",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="deliveries",
+                to="quickscale_modules_notifications.notificationmessage",
+            ),
         ),
         migrations.AddConstraint(
             model_name="notificationdelivery",
