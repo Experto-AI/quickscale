@@ -1,10 +1,4 @@
-"""Initial migration for the QuickScale CRM module.
-
-Collapsed SA92 migration: final-schema 0001 with all 7 CRM models.  The
-private constructors below only remove repetition from the generated schema;
-the historical operations, callable identities, SQL, and payloads remain
-unchanged.
-"""
+"""Initial CRM schema with tenant composite-FK and FORCE-RLS contracts."""
 
 from __future__ import annotations
 
@@ -14,7 +8,6 @@ import django.db.models.deletion
 import django.db.models.manager
 from django.conf import settings
 from django.db import migrations, models
-from django.db.models import Q
 
 from quickscale_modules_orgs.tenancy import (
     apply_force_rls,
@@ -56,47 +49,6 @@ CRM_CONTACTNOTE_CONTACT_ORG_FK = "crm_contactnote_contact_org_fk"
 CRM_DEALNOTE_DEAL_ORG_FK = "crm_dealnote_deal_org_fk"
 
 
-def _id() -> tuple[str, Any]:
-    return "id", models.BigAutoField(
-        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
-    )
-
-
-def _org() -> tuple[str, Any]:
-    return "organization", models.ForeignKey(
-        on_delete=django.db.models.deletion.PROTECT,
-        related_name="%(app_label)s_%(class)s_set",
-        to="quickscale_modules_orgs.organization",
-    )
-
-
-def _fk(to: str, on_delete: Any, **kwargs: Any) -> Any:
-    return models.ForeignKey(on_delete=on_delete, to=to, **kwargs)
-
-
-def _model(
-    name: str, fields: list[tuple[str, Any]], ordering: list[str], **options: Any
-) -> migrations.CreateModel:
-    return migrations.CreateModel(
-        name=name,
-        fields=[_id(), *fields],
-        options={"ordering": ordering, "base_manager_name": "all_objects", **options},
-        managers=[
-            ("objects", django.db.models.manager.Manager()),
-            ("all_objects", django.db.models.manager.Manager()),
-        ],
-    )
-
-
-def _unique(
-    model_name: str, fields: tuple[str, ...], name: str, **kwargs: Any
-) -> migrations.AddConstraint:
-    return migrations.AddConstraint(
-        model_name=model_name,
-        constraint=models.UniqueConstraint(fields=fields, name=name, **kwargs),
-    )
-
-
 def _add_composite_fk(
     schema_editor: Any,
     child_table: str,
@@ -115,7 +67,7 @@ def _add_composite_fk(
 
 
 def _forward_note_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
-    """Add composite child FKs (parent unique constraints already exist) and enable FORCE RLS."""
+    """Add composite child FKs and enable FORCE RLS for CRM tables."""
     del apps
     _add_composite_fk(
         schema_editor,
@@ -136,7 +88,7 @@ def _forward_note_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
 
 
 def _reverse_note_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
-    """Reverse: drop composite FKs (RLS managed separately)."""
+    """Reverse the CRM composite FKs."""
     del apps
     remove_composite_child_fk(
         schema_editor,
@@ -151,7 +103,7 @@ def _reverse_note_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
 
 
 def _forward_refresh_rls_nullif(apps: Any, schema_editor: Any) -> None:
-    """Drop stale policies then re-create from the NULLIF-guarded template."""
+    """Re-create CRM policies from the NULLIF-guarded template."""
     del apps
     targets = _CRM_CORE_RLS_TARGETS + _CRM_NOTE_RLS_TARGETS
     revert_force_rls(schema_editor, targets)
@@ -160,36 +112,25 @@ def _forward_refresh_rls_nullif(apps: Any, schema_editor: Any) -> None:
 
 class Migration(migrations.Migration):
     initial = True
+
     dependencies = [
         ("quickscale_modules_orgs", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
+
     operations = [
-        _model(
-            "Tag",
-            [
-                ("name", models.CharField(max_length=50)),
-                ("created_at", models.DateTimeField(auto_now_add=True)),
-                _org(),
-            ],
-            ["name"],
-        ),
-        _model(
-            "Company",
-            [
-                ("name", models.CharField(max_length=200)),
-                ("industry", models.CharField(blank=True, max_length=100)),
-                ("website", models.URLField(blank=True)),
-                ("created_at", models.DateTimeField(auto_now_add=True)),
-                ("updated_at", models.DateTimeField(auto_now=True)),
-                _org(),
-            ],
-            ["name"],
-            verbose_name_plural="Companies",
-        ),
-        _model(
-            "Stage",
-            [
+        migrations.CreateModel(
+            name="Stage",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("name", models.CharField(max_length=100)),
                 ("order", models.PositiveIntegerField(default=0)),
                 (
@@ -202,13 +143,74 @@ class Migration(migrations.Migration):
                         null=True,
                     ),
                 ),
-                _org(),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_set",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
             ],
-            ["order", "name"],
+            options={
+                "ordering": ["order", "name"],
+                "abstract": False,
+                "base_manager_name": "all_objects",
+            },
+            managers=[
+                ("objects", django.db.models.manager.Manager()),
+                ("all_objects", django.db.models.manager.Manager()),
+            ],
         ),
-        _model(
-            "Contact",
-            [
+        migrations.CreateModel(
+            name="Company",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=200)),
+                ("industry", models.CharField(blank=True, max_length=100)),
+                ("website", models.URLField(blank=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_set",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name_plural": "Companies",
+                "ordering": ["name"],
+                "abstract": False,
+                "base_manager_name": "all_objects",
+            },
+            managers=[
+                ("objects", django.db.models.manager.Manager()),
+                ("all_objects", django.db.models.manager.Manager()),
+            ],
+        ),
+        migrations.CreateModel(
+            name="Contact",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("first_name", models.CharField(max_length=100)),
                 ("last_name", models.CharField(max_length=100)),
                 ("email", models.EmailField(max_length=254)),
@@ -243,27 +245,93 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "company",
-                    _fk(
-                        "quickscale_modules_crm.company",
-                        django.db.models.deletion.CASCADE,
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
                         related_name="contacts",
+                        to="quickscale_modules_crm.company",
                     ),
                 ),
-                _org(),
                 (
-                    "tags",
-                    models.ManyToManyField(
-                        blank=True,
-                        related_name="contacts",
-                        to="quickscale_modules_crm.tag",
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_set",
+                        to="quickscale_modules_orgs.organization",
                     ),
                 ),
             ],
-            ["last_name", "first_name"],
+            options={
+                "ordering": ["last_name", "first_name"],
+                "abstract": False,
+                "base_manager_name": "all_objects",
+            },
+            managers=[
+                ("objects", django.db.models.manager.Manager()),
+                ("all_objects", django.db.models.manager.Manager()),
+            ],
         ),
-        _model(
-            "Deal",
-            [
+        migrations.CreateModel(
+            name="ContactNote",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("text", models.TextField()),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "contact",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="notes",
+                        to="quickscale_modules_crm.contact",
+                    ),
+                ),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_set",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["-created_at"],
+                "abstract": False,
+                "base_manager_name": "all_objects",
+            },
+            managers=[
+                ("objects", django.db.models.manager.Manager()),
+                ("all_objects", django.db.models.manager.Manager()),
+            ],
+        ),
+        migrations.CreateModel(
+            name="Deal",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("title", models.CharField(max_length=200)),
                 (
                     "amount",
@@ -286,120 +354,190 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "contact",
-                    _fk(
-                        "quickscale_modules_crm.contact",
-                        django.db.models.deletion.CASCADE,
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
                         related_name="deals",
+                        to="quickscale_modules_crm.contact",
                     ),
                 ),
                 (
                     "owner",
-                    _fk(
-                        settings.AUTH_USER_MODEL,
-                        django.db.models.deletion.SET_NULL,
+                    models.ForeignKey(
                         blank=True,
                         null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
                         related_name="owned_deals",
+                        to=settings.AUTH_USER_MODEL,
                     ),
                 ),
                 (
                     "stage",
-                    _fk(
-                        "quickscale_modules_crm.stage",
-                        django.db.models.deletion.PROTECT,
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
                         related_name="deals",
+                        to="quickscale_modules_crm.stage",
                     ),
                 ),
-                _org(),
                 (
-                    "tags",
-                    models.ManyToManyField(
-                        blank=True,
-                        related_name="deals",
-                        to="quickscale_modules_crm.tag",
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_set",
+                        to="quickscale_modules_orgs.organization",
                     ),
                 ),
             ],
-            ["-created_at"],
-        ),
-        _model(
-            "ContactNote",
-            [
-                ("text", models.TextField()),
-                ("created_at", models.DateTimeField(auto_now_add=True)),
-                (
-                    "contact",
-                    _fk(
-                        "quickscale_modules_crm.contact",
-                        django.db.models.deletion.CASCADE,
-                        related_name="notes",
-                    ),
-                ),
-                (
-                    "created_by",
-                    _fk(
-                        settings.AUTH_USER_MODEL,
-                        django.db.models.deletion.SET_NULL,
-                        blank=True,
-                        null=True,
-                    ),
-                ),
-                _org(),
+            options={
+                "ordering": ["-created_at"],
+                "abstract": False,
+                "base_manager_name": "all_objects",
+            },
+            managers=[
+                ("objects", django.db.models.manager.Manager()),
+                ("all_objects", django.db.models.manager.Manager()),
             ],
-            ["-created_at"],
         ),
-        _model(
-            "DealNote",
-            [
+        migrations.CreateModel(
+            name="DealNote",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("text", models.TextField()),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 (
                     "created_by",
-                    _fk(
-                        settings.AUTH_USER_MODEL,
-                        django.db.models.deletion.SET_NULL,
+                    models.ForeignKey(
                         blank=True,
                         null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to=settings.AUTH_USER_MODEL,
                     ),
                 ),
                 (
                     "deal",
-                    _fk(
-                        "quickscale_modules_crm.deal",
-                        django.db.models.deletion.CASCADE,
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
                         related_name="notes",
+                        to="quickscale_modules_crm.deal",
                     ),
                 ),
-                _org(),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_set",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
             ],
-            ["-created_at"],
+            options={
+                "ordering": ["-created_at"],
+                "abstract": False,
+                "base_manager_name": "all_objects",
+            },
+            managers=[
+                ("objects", django.db.models.manager.Manager()),
+                ("all_objects", django.db.models.manager.Manager()),
+            ],
         ),
-        _unique(
-            "tag",
-            ("name",),
-            "crm_tag_name_unique_null_org",
-            condition=Q(organization__isnull=True),
+        migrations.CreateModel(
+            name="Tag",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=50)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_set",
+                        to="quickscale_modules_orgs.organization",
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["name"],
+                "abstract": False,
+                "base_manager_name": "all_objects",
+            },
+            managers=[
+                ("objects", django.db.models.manager.Manager()),
+                ("all_objects", django.db.models.manager.Manager()),
+            ],
         ),
-        _unique(
-            "tag",
-            ("name", "organization"),
-            "crm_tag_name_organization_unique",
-            condition=Q(organization__isnull=False),
+        migrations.AddField(
+            model_name="deal",
+            name="tags",
+            field=models.ManyToManyField(
+                blank=True, related_name="deals", to="quickscale_modules_crm.tag"
+            ),
         ),
-        _unique(
-            "stage",
-            ("terminal_semantic",),
-            "crm_stage_terminal_semantic_unique_null_org",
-            condition=Q(organization__isnull=True),
+        migrations.AddField(
+            model_name="contact",
+            name="tags",
+            field=models.ManyToManyField(
+                blank=True, related_name="contacts", to="quickscale_modules_crm.tag"
+            ),
         ),
-        _unique(
-            "stage",
-            ("terminal_semantic", "organization"),
-            "crm_stage_terminal_semantic_organization_unique",
-            condition=Q(organization__isnull=False),
+        migrations.AddConstraint(
+            model_name="stage",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("organization__isnull", True)),
+                fields=("terminal_semantic",),
+                name="crm_stage_terminal_semantic_unique_null_org",
+            ),
         ),
-        _unique("contact", ("id", "organization"), CRM_CONTACT_ID_ORG_UNIQUE),
-        _unique("deal", ("id", "organization"), CRM_DEAL_ID_ORG_UNIQUE),
+        migrations.AddConstraint(
+            model_name="stage",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("organization__isnull", False)),
+                fields=("terminal_semantic", "organization"),
+                name="crm_stage_terminal_semantic_organization_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="tag",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("organization__isnull", True)),
+                fields=("name",),
+                name="crm_tag_name_unique_null_org",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="tag",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("organization__isnull", False)),
+                fields=("name", "organization"),
+                name="crm_tag_name_organization_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="deal",
+            constraint=models.UniqueConstraint(
+                fields=("id", "organization"), name="crm_deal_id_org_unique"
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="contact",
+            constraint=models.UniqueConstraint(
+                fields=("id", "organization"), name="crm_contact_id_org_unique"
+            ),
+        ),
         migrations.RunPython(
             code=_forward_note_composite_fks_and_rls,
             reverse_code=_reverse_note_composite_fks_and_rls,
