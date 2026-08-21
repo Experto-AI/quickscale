@@ -107,7 +107,7 @@ SA159 because it edits `scripts/version_tool.sh`, which is SA137's file.
 
 ## SA156 — Make the quality gate's fallback base ref resolve
 
-`Band A · Tier 1 · W2 · merge #1 · deps: none`
+`Band A · Tier 1 · W2 · merge #1 · **CLOSED** — retained for concepts only; closure detail in [CHANGELOG.md](../../CHANGELOG.md)`
 
 ### The mental model
 
@@ -176,7 +176,7 @@ is the case the current code gets wrong.
 
 ## SA158 — Regenerate the stale `publish.yml` parity oracle
 
-`Band A · Tier 2 · W2 · merge #4 · deps: none`
+`Band A · Tier 2 · W1 · merge #6 · deps: none (sequenced after SA159 in W1)`
 
 ### The mental model
 
@@ -227,7 +227,7 @@ by line**, each changed entry confirmed to correspond to an intended change in
 
 ## SA157 — Fix the SA117 scope-tool test that asserts the interpreter's exit code
 
-`Band A · Tier 2 · W2 · merge #6 · deps: none · blocks SA124`
+`Band A · Tier 2 · W2 · merge #4 · deps: none · blocks SA124`
 
 ### The mental model
 
@@ -360,7 +360,7 @@ follows (#5) in the same worktree.
 
 ## SA155 — Give the gate layer a gate of its own
 
-`Band A · Tier 1 · W2 · merge #7 · deps: SA156, SA157, SA158, SA159`
+`Band A · Tier 1 · W2 · merge #7 · deps: SA157, SA158, SA159 (SA156 closed)`
 
 ### The mental model
 

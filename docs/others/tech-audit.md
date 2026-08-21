@@ -69,62 +69,6 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 ---
 
-## Closed findings
-
-### TA63 — Retired: the quality gate's fallback base ref now resolves
-
-**ID:** `quality-gate-base-ref-deleted-branch` · **Closed 2026-08-21**
-
-**Severity:** **S2.** Impact: the repository's monotonic quality gate — the enforcement for "complexity maxima never ratchet upward", backed by a structured waiver ledger — cannot run at all, and its failure aborts the whole `make quality` run before any analyzer executes. Reachability: **every invocation, right now**, with **zero unverified preconditions** — verified by direct execution. It falsifies a live watch item carried by the prior pass of this very document (*"monotonicity is enforced and `make quality` reports `total_regressions: 0`"*) and the arch audit's enforcement-census row (*"Complexity maxima never ratchet upward | Gated"*). Not S1: it fails loud, consistent with the fail-hard principle, so nothing silently degrades.
-
-**Deployment reality:** #1, the maintainer workstation. This gate appears in **no** hosted workflow — `make quality` → `scripts/check_quality.sh` is its only entry point, and `scripts/check_ci_locally.sh` does not invoke it.
-
-**Category:** §4.VI Error handling and operability (config read so a stale value surfaces only at run time), compounded by an oracle violation.
-
-**Confidence:** High — verified by executing the gate itself.
-
-**Location:** `scripts/check_quality_baseline_monotonicity.py:305-306` and `:1395-1396`; consumed at `scripts/check_quality.sh:121` and `:1212`.
-
-**Defect:** The merge-base precedence chain ends in a hard-coded `ref = "v87"`. `v87` was the previous release branch; it has been deleted locally and never existed as a tag (`git tag` holds 88 tags, none named `v87`). Unlike the `GITHUB_BASE_REF` branch immediately above it — which tries `origin/<ref>` before `<ref>` — the fallback resolves the bare name only, so it does not find the surviving `origin/v87`.
-
-**Failure scenario:** On branch `v88`, with neither `QUALITY_BASELINE_BASE_REF` nor `GITHUB_BASE_REF` set (nothing in the `Makefile`, `scripts/`, or any workflow sets the former; GitHub sets the latter only on `pull_request` events), a maintainer runs `make quality`. `_resolve_merge_base(None)` falls through to `ref = "v87"`, `git rev-parse --verify v87` fails, and the gate writes `{"verdict": "error", "code": "MERGE_BASE_ERROR"}` and exits 2. `check_quality.sh:123` then **deletes the previous run's report artifacts** (`rm -f "$JSON_OUTPUT" "$MD_OUTPUT" "$STATUS_OUTPUT"`) and exits 1 — so a failure with an environmental cause destroys the last known-good quality report, and no analyzer (dead code, complexity, large files, duplication) ever runs. The same literal is the root cause of **72 of the 74 failures** in `scripts/test_quality_baseline_monotonicity.py`, which the arch audit recorded as unexplained "environment sensitivity"; they are not environment sensitivity, they are this defect reproduced in the fixtures.
-
-**Evidence:**
-
-```python
-# scripts/check_quality_baseline_monotonicity.py:304-306
-    if not ref:
-        # Fallback to v87 tag
-        ref = "v87"
-```
-
-Empirical check #2, from a clean environment:
-
-```
-$ env -u QUALITY_BASELINE_BASE_REF -u GITHUB_BASE_REF \
-    .venv/bin/python scripts/check_quality_baseline_monotonicity.py
-ERROR: Merge-base resolution failed: git rev-parse --verify v87 failed: fatal: Needed a single revision
-EXIT=2
-```
-
-Written artifact: `{"schema_version": 1, "verdict": "error", "error": {"code": "MERGE_BASE_ERROR", "source": "git", "path": "v87", ...}}`. Empirical check #3: `git rev-parse --verify v87` → `rc=1`; `git rev-parse --verify origin/v87` → `667396cc…`. Grep confirms **no** definition of `QUALITY_BASELINE_BASE_REF` anywhere in `Makefile`, `scripts/`, or `.github/workflows/`. First failing test in the suite: `test_helper_exit_0_with_v87` (`scripts/test_quality_baseline_monotonicity.py:1819`).
-
-**Refutation:** Searched for a compensating layer at every level and found none. `Makefile:1160-1161` (`quality: @scripts/check_quality.sh`) passes no ref and sets no env var; `scripts/check_ci_locally.sh` never calls the quality gate at all; `ci.yml` has no quality job (so the working `GITHUB_BASE_REF` path is only reachable on PR events for a gate that no workflow runs); `git blame`/`log` show no removed wiring. The strongest counter-argument is that a maintainer who knows the tool can export `QUALITY_BASELINE_BASE_REF` and get a correct run — true, and it is why this is S2 rather than S1, but an undocumented mandatory env var with no default that resolves is exactly the fail-late shape §4.VI names, and the prior audit's own watch item shows the maintainer believed the gate was running.
-
-**Fix:** Replace the terminal fallback with one that resolves. Minimum: apply the same `origin/<ref>` → `<ref>` probe the `GITHUB_BASE_REF` branch already uses, and change the literal to the long-lived integration branch (`main`) rather than a per-release branch name. Better, and what stops the recurrence: derive the fallback rather than hard-code it — resolve the most recent release tag from `VERSION`/`git tag`, or make an unresolvable fallback name a startup-validated error with the fix in its message. Update the ~101 `v87` references in `scripts/test_quality_baseline_monotonicity.py` to the same derived ref in the same change. **Effort:** Small.
-
-**Verification:** `env -u QUALITY_BASELINE_BASE_REF -u GITHUB_BASE_REF poetry run python scripts/check_quality_baseline_monotonicity.py` exits 0 and reports a real `merge_base`; `pytest scripts/test_quality_baseline_monotonicity.py` drops from 72 failures to 0; `make quality` completes and re-emits `quality_report.json`. Add a regression test that the fallback ref resolves in a repo checked out on a branch whose name is not the fallback.
-
-**Closure evidence:** SA156 now uses the durable `main` identity and probes `origin/main` before local `main` for the default path. The focused suite passes with semantic default-ref fixtures, the no-override helper exits 0 with a real merge base, and `make quality` re-emits fresh report artifacts with matching monotonicity metadata. The broader gate currently exits 1 on the unrelated pre-existing complexity regression at `quickscale_cli/src/quickscale_cli/commands/development_commands.py::up` (15 versus allowed 14), while the monotonicity gate itself passes. A hermetic non-`main` checkout covers origin-first/local-second probing and the missing-default exit-2 remediation contract.
-
-**Deliberate?** None found. The former fallback comment named a retired release ref; the implementation and tests now bind to the long-lived branch identity.
-
-**Age:** The stale release-ref literal entered with the SA121 gate and became invalid when that release branch was retired. The historical defect and its falsification remain recorded here for audit traceability.
-
-**Chain (§3.9):** Combines with the arch audit's **Finding 12 `gate-suites-unexecuted`**. Because `scripts/test_quality_baseline_monotonicity.py` is in no execution context, the 72 failures this defect causes produced no signal, and because the gate is local-only and aborts loudly, the maintainer's most likely reading of a failed `make quality` is "environment problem" rather than "the gate is off". Net combined effect: **the monotonicity invariant has been unenforced for the whole of the `v88` branch while two live audit documents recorded it as enforced.** Ranked by that combined severity. It is also arch Finding 12's blocking prerequisite: its recommended first step is *"triage the 74 failures it surfaces before registering it, so the gate is registered green rather than registered red"* — TA63 is 72 of those 74.
-
----
-
 ## Findings
 
 ### TA64 — A gate test asserts an exit code the interpreter produces, not the tool
@@ -371,7 +315,7 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 ## Reconciliation log
 
 - 2026-08-21 — **TA1–TA62**: closure detail, later structural-cause closure, and superseded cross-reference notes remain archived in [CHANGELOG.md](../../CHANGELOG.md) and version control, as recorded by the prior pass. No prior ID was reopened this pass; none was re-verified in code, because the prior document carried none forward as open.
-- 2026-08-21 — Prior watch item *quality baseline*: **regressed → promoted to TA63 → closed by SA156**. The prior pass recorded "monotonicity is enforced and `make quality` reports `total_regressions: 0`". It was falsified by execution: the gate exited 2 with `MERGE_BASE_ERROR` and `make quality` aborted before any analyzer ran. SA156 replaced the retired release-ref fallback with durable `main`, proved origin/local probing and missing-default remediation in hermetic tests, and verified a real `make quality` run with fresh reports. The current broader gate run remains red on the unrelated pre-existing `development_commands.py::up` complexity regression.
+- 2026-08-21 — Prior watch item *quality baseline*: **regressed → promoted to TA63 → closed by SA156**. The prior pass recorded "monotonicity is enforced and `make quality` reports `total_regressions: 0`". It was falsified by execution: the gate exited 2 with `MERGE_BASE_ERROR` and `make quality` aborted before any analyzer ran. SA156 replaced the retired release-ref fallback with durable `main`, proved origin/local probing and missing-default remediation in hermetic tests, and verified a real `make quality` run with fresh reports. The current broader gate run remains red on the unrelated pre-existing `development_commands.py::up` complexity regression. **Full TA63 defect and closure detail is archived in [CHANGELOG.md](../../CHANGELOG.md); no closed-findings section is carried here.**
 - 2026-08-21 — Prior watch items *integration-branch CI*, *local-wheelhouse seam*, *generator lock generation*: **still-open, accepted / owned**. Re-verified at their anchors; carried forward unchanged in *Notes*. Not re-argued — no severity context changed.
 - 2026-08-21 — Prior tooling gaps *dependency vulnerabilities*, *security static analysis*, *production-change testimony*: **still-open**. Absence of `pip-audit`/`safety`/`bandit`/`semgrep` re-verified in `.venv`. SA123 owns the first two.
 - 2026-08-21 — **Arch-audit red-flag hand-off, all six adjudicated** (§2f.1 — leads, not pre-approved findings): *red `test_gate_parity` oracle* → **promoted, TA66** (reproduced). *`test_check_sa117_scope.py:640` interpreter-bound* → **promoted as part of TA64/TA65**, and the investigation found a second, worse defect at `:601` the red flag did not name — a test that passes on the interpreter's exit code. *72 quality-baseline failures, "needs triage"* → **triaged: not environment sensitivity — TA63**, the same hard-coded ref, reproduced from a clean environment. *`quickscale_devtools` version drift* → **not promoted**; owned by SA137, recorded in *Notes*. *Deprecated bool inversion in the CSRF gate* → **promoted as TA69**, with the red flag's suggested fix (`not val`) corrected — it would change the gate's semantics. *`tech-audit.md` header reads `Branch: v87`* → **resolved** by this regeneration.
