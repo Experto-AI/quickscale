@@ -68,6 +68,11 @@ def _find_orphan_snapshots(
     for entry in sorted(manifests_root.iterdir()):
         if not entry.is_dir():
             continue
+        # Only directories containing a manifest represent snapshots.  Build
+        # and interpreter caches (for example ``__pycache__``) may be created
+        # underneath the data directory but are not module snapshots.
+        if not (entry / MODULE_YML).is_file():
+            continue
         mod_name = entry.name
         source_yml = modules_root / mod_name / MODULE_YML
         if not source_yml.is_file():
