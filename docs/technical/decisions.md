@@ -442,13 +442,16 @@ ordinary Django.
 **Tie-breaker:** When two places state which apps a module contributes, the module's
 own `module.yml` wins and the other copy is deleted, not reconciled.
 
-**Known deviations at time of writing (2026-08-21), all owned by `SA167`:** nine
-modules still register core-side in `quickscale_core/.../manifest/entry_point.py`;
-five of those carry their app list as a Python literal in core rather than in their
-manifest; the top-level `django_apps:` manifest key is parsed by
-`manifest/loader.py` and read by no production code path; and `social` declares no
-apps at all (owned by `SA151`). This section states the target rule, not the
-current state.
+**Known deviations at time of writing (2026-08-21).** This section states the target
+rule, not the current state. Each deviation has an owner:
+
+| Deviation | Owner |
+|---|---|
+| Five modules (auth, backups, notifications, orgs, storage) carry their app list as a Python literal in core, not in their manifest | **SA167a** — in v88, merge #14 |
+| Nine modules still register core-side in `quickscale_core/.../manifest/entry_point.py` | **SA167b** — post-v88 |
+| `django_apps:` is parsed by `manifest/loader.py` and read by no production code path; no gate requires a model-bearing module to declare an app | **SA167c** — post-v88 |
+| `quickscale_cli/.../commands/module_config.py` holds per-module wiring logic | **SA167d** — post-v88 |
+| `social` declares no apps at all | **SA151** — in v88, merge #3 |
 
 Type reference:
 [implementation_contract.md §Manifest Adapter Architecture](./implementation_contract.md#manifest-adapter-architecture).

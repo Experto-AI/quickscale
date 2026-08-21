@@ -332,7 +332,7 @@ yourself editing either to register a module, the module's own declaration is in
 > pre-plan/apply `embed` command, removed in **v0.72.0**; `MODULE_CONFIGURATORS` no longer
 > exists. Wiring is declared in `module.yml` and executed by the module's `adapter.py`.
 > The per-module `apply_<name>_configuration()` functions still present in
-> `module_config.py` are a deviation owned by **`SA167`**, not a pattern to copy.
+> `module_config.py` are a deviation owned by **`SA167d`**, not a pattern to copy.
 
 **5. Template Integration (showcase_react theme):**
 - [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure

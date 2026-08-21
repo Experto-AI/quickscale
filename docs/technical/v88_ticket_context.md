@@ -731,7 +731,7 @@ That second entry is effectively your rule list. Five named categories — treat
 
 ## SA118 — Project every declared manifest default into wiring
 
-`Band B · Tier 2 · W2 · merge #14 · deps: SA123, SA150`
+`Band B · Tier 2 · W2 · merge #15 · deps: SA123, SA150, SA167a`
 
 ### The mental model
 
@@ -1075,7 +1075,7 @@ ticket it just finished.
 
 ## SA160 — Share one correct CSRF-token helper in the React theme
 
-`Band C · Tier 2 · W3 · merge #17`
+`Band C · Tier 2 · W3 · merge #18`
 
 ### The mental model
 
@@ -1130,7 +1130,7 @@ creates that seam. Place the helper accordingly.
 
 ## SA161 — Remove the dead `get_client_ip` definitions from generated settings
 
-`Band C · Tier 3 · W3 · merge #16`
+`Band C · Tier 3 · W3 · merge #17`
 
 ### The mental model — the Django fact that makes this dead code
 
@@ -1184,7 +1184,7 @@ one. The sync-before-merge-back procedure has to preserve every entry.
 
 ## SA162 — Fix the deprecated bool inversion in the CSRF AST gate
 
-`Band C · Tier 3 · W1 · merge #15`
+`Band C · Tier 3 · W1 · merge #16`
 
 ### The concrete defect
 
@@ -1225,7 +1225,7 @@ red flag — the wrong fix should not outlive the finding.
 
 ## SA165 — Discharge the tech-audit watch items that carry an action
 
-`Band C · Tier 3 · W1 · merge #18`
+`Band C · Tier 3 · W1 · merge #19`
 
 ### The mental model
 
@@ -1285,7 +1285,7 @@ environment. Documentation only — do not change the derivation.
 
 ## SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items
 
-`Band C · Tier 3 · W1 · merge #19 · deps: SA151`
+`Band C · Tier 3 · W1 · merge #20 · deps: SA151`
 
 ### The mental model
 
@@ -1348,7 +1348,7 @@ watch half of Finding 13. Keep their triggers intact — restating is the work, 
 
 ## SA166 — Require a testimony trail for behavioural commits
 
-`Band C · Tier 3 · W2 · merge #20 · deps: SA155, SA118`
+`Band C · Tier 3 · W2 · merge #21 · deps: SA155, SA118`
 
 ### The mental model
 
