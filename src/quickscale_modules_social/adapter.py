@@ -93,10 +93,11 @@ def _social_manifest_adapter(
         "QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH": SOCIAL_INTEGRATION_EMBEDS_PATH,
     }
 
-    # Load the manifest-declared managed_files contract so the assembler
+    # Load the manifest-declared wiring and managed_files contracts so the assembler
     # populates spec.managed_files with output_path -> renderer_id mappings
     # sourced from module.yml rather than hardcoding paths in this adapter.
     social_manifest = load_social_manifest()
+    apps = _social_manifest_apps(social_manifest)
     managed_file_declarations = tuple(social_manifest.managed_files.values())
 
     result = ResolverResult(
@@ -104,7 +105,7 @@ def _social_manifest_adapter(
         defaults={},
         resolved=resolved,
         derived_settings=derived_settings,
-        apps=(),
+        apps=apps,
         middleware=(),
         url_includes=(
             (
@@ -153,6 +154,50 @@ def _social_manifest_adapter(
         )
 
     return assemble_wiring_spec(result, post_hook=_social_managed_files_hook)
+
+
+def _social_manifest_apps(social_manifest: Any) -> tuple[str, ...]:
+    """Return the sole validated static apps projection from the social manifest.
+
+    The social adapter remains hand-built for its managed-file rendering, but
+    the manifest owns the Django app declaration.  Fail closed when that
+    contract is missing or malformed rather than allowing a second Python-side
+    declaration to drift from ``module.yml``.
+    """
+    raw_projections = getattr(social_manifest, "wiring_projections", None)
+    projections = (
+        [
+            projection
+            for projection in raw_projections
+            if isinstance(projection, dict) and projection.get("wiring_field") == "apps"
+        ]
+        if isinstance(raw_projections, list)
+        else []
+    )
+
+    error_prefix = "Invalid social manifest apps projection"
+    if len(projections) != 1:
+        raise ValueError(
+            f"{error_prefix}: expected exactly one projection, found {len(projections)}"
+        )
+
+    projection = projections[0]
+    if projection.get("derivation_type") != "static":
+        raise ValueError(f"{error_prefix}: projection must be static")
+
+    expression = projection.get("expression")
+    apps = expression.get("value") if isinstance(expression, dict) else None
+    if (
+        not isinstance(apps, list)
+        or not apps
+        or any(not isinstance(app, str) or not app.strip() for app in apps)
+    ):
+        raise ValueError(
+            f"{error_prefix}: static expression.value must be a non-empty list "
+            "of non-empty strings"
+        )
+
+    return tuple(apps)
 
 
 def get_manifest_adapter() -> Any:

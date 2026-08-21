@@ -9,6 +9,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
@@ -19,6 +20,38 @@ from quickscale_modules_social.adapter import (
     _social_manifest_adapter,
     get_manifest_adapter,
 )
+
+
+def _social_options() -> dict[str, Any]:
+    """Return the focused adapter options used by manifest mocks."""
+    return {
+        "provider_allowlist": ["youtube"],
+        "link_tree_enabled": True,
+        "layout_variant": "list",
+        "embeds_enabled": True,
+        "cache_ttl_seconds": 300,
+        "links_per_page": 24,
+        "embeds_per_page": 12,
+    }
+
+
+def _static_apps_projection(apps: list[Any] | None = None) -> dict[str, Any]:
+    """Build a realistic static apps projection for adapter test manifests."""
+    return {
+        "wiring_field": "apps",
+        "derivation_type": "static",
+        "expression": {
+            "value": ["quickscale_modules_social"] if apps is None else apps
+        },
+    }
+
+
+def _mock_social_manifest(*, wiring_projections: list[dict[str, Any]]) -> MagicMock:
+    """Build a mocked manifest with the fields consumed by the adapter."""
+    return MagicMock(
+        managed_files=PropertyMock(return_value={}),
+        wiring_projections=wiring_projections,
+    )
 
 
 class TestGetManifestAdapter:
@@ -92,6 +125,80 @@ class TestSocialManifestAdapterProjectPackage:
             _social_manifest_adapter({})
 
 
+class TestSocialManifestAdapterApps:
+    """Django apps must be sourced from one valid manifest projection."""
+
+    def test_actual_manifest_provides_social_app(self) -> None:
+        """The canonical manifest supplies the social Django app label."""
+        result = _social_manifest_adapter({}, project_package="myapp")
+
+        assert result.apps == ("quickscale_modules_social",)
+
+    @patch("quickscale_modules_social.adapter.assemble_wiring_spec")
+    @patch("quickscale_modules_social.adapter.load_social_manifest")
+    @patch("quickscale_modules_social.adapter.resolve_social_module_options")
+    def test_synthetic_manifest_app_propagates(
+        self,
+        mock_resolve: MagicMock,
+        mock_load: MagicMock,
+        mock_assemble: MagicMock,
+    ) -> None:
+        """A changed manifest app value reaches ResolverResult without adapter edits."""
+        mock_resolve.return_value = _social_options()
+        mock_load.return_value = _mock_social_manifest(
+            wiring_projections=[_static_apps_projection(["synthetic_social_app"])]
+        )
+        mock_assemble.return_value = ModuleWiringSpec()
+
+        _social_manifest_adapter({}, project_package="myapp")
+
+        resolver_result = mock_assemble.call_args[0][0]
+        assert resolver_result.apps == ("synthetic_social_app",)
+
+    @pytest.mark.parametrize(
+        "wiring_projections",
+        [
+            pytest.param([], id="missing"),
+            pytest.param(
+                [
+                    _static_apps_projection(["social_one"]),
+                    _static_apps_projection(["social_two"]),
+                ],
+                id="duplicate",
+            ),
+            pytest.param(
+                [
+                    {
+                        "wiring_field": "apps",
+                        "derivation_type": "direct",
+                        "expression": {"option": "app"},
+                    }
+                ],
+                id="non-static",
+            ),
+            pytest.param([_static_apps_projection([])], id="empty"),
+            pytest.param([_static_apps_projection([""])], id="blank-string"),
+            pytest.param([_static_apps_projection(["social", 7])], id="non-string"),
+        ],
+    )
+    @patch("quickscale_modules_social.adapter.load_social_manifest")
+    @patch("quickscale_modules_social.adapter.resolve_social_module_options")
+    def test_malformed_apps_projection_fails_loudly(
+        self,
+        mock_resolve: MagicMock,
+        mock_load: MagicMock,
+        wiring_projections: list[dict[str, Any]],
+    ) -> None:
+        """Missing or malformed social apps projections must fail closed."""
+        mock_resolve.return_value = _social_options()
+        mock_load.return_value = _mock_social_manifest(
+            wiring_projections=wiring_projections
+        )
+
+        with pytest.raises(ValueError, match="social manifest apps projection"):
+            _social_manifest_adapter({}, project_package="myapp")
+
+
 class TestSocialManifestAdapterEmbedFiltering:
     """Embed-provider filtering from the provider allowlist."""
 
@@ -121,6 +228,7 @@ class TestSocialManifestAdapterEmbedFiltering:
         }
         mock_load.return_value = MagicMock(
             managed_files=PropertyMock(return_value={}),
+            wiring_projections=[_static_apps_projection()],
         )
         mock_assemble.return_value = ModuleWiringSpec()
 
@@ -171,6 +279,7 @@ class TestSocialManifestAdapterEmbedFiltering:
         }
         mock_load.return_value = MagicMock(
             managed_files=PropertyMock(return_value={}),
+            wiring_projections=[_static_apps_projection()],
         )
         mock_assemble.return_value = ModuleWiringSpec()
         mock_supports_embeds.return_value = False
@@ -221,6 +330,7 @@ class TestSocialManifestAdapterRendererIdReplacement:
         }
         mock_load.return_value = MagicMock(
             managed_files=PropertyMock(return_value={}),
+            wiring_projections=[_static_apps_projection()],
         )
 
         mock_render_init.return_value = "# init content"
@@ -286,6 +396,7 @@ class TestSocialManifestAdapterRendererIdReplacement:
         }
         mock_load.return_value = MagicMock(
             managed_files=PropertyMock(return_value={}),
+            wiring_projections=[_static_apps_projection()],
         )
 
         def assemble_side_effect(result, *, post_hook):
