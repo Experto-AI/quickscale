@@ -347,6 +347,34 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
     assert "CALL typecheck typecheck -- --core --cli --modules --devtools" in calls
 
 
+@pytest.mark.parametrize(
+    ("failure", "failure_label"),
+    [
+        ("lint", "Linting"),
+        ("typecheck", "Type Checks"),
+        ("check-manifest-sync", "Manifest Sync Gate"),
+    ],
+)
+def test_parallel_isolated_failure_is_attributed_to_its_gate(
+    tmp_path: Path, failure: str, failure_label: str
+) -> None:
+    """Each injected static failure keeps its own declaration-order attribution."""
+    result = _run_ci(tmp_path, failures=failure)
+
+    assert result.returncode != 0
+    assert f"{failure_label} (exit 1)" in result.stdout
+    assert "database-dependent stages will not run" in result.stdout
+    assert "[10/" not in result.stdout
+
+    other_labels = {
+        "Linting",
+        "Type Checks",
+        "Manifest Sync Gate",
+    } - {failure_label}
+    for other_label in other_labels:
+        assert f"{other_label} (exit 1)" not in result.stdout
+
+
 def test_serial_opt_out_has_no_overlap_and_stops_before_db_stages(tmp_path: Path) -> None:
     """QS_CI_PARALLEL=0 retains serial short-circuit behaviour."""
     result = _run_ci(tmp_path, parallel="0", failures="check-manifest-sync")
