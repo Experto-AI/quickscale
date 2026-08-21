@@ -1512,7 +1512,7 @@ Worth holding as a set, because each appears in more than one ticket:
 
 ## SA167a / SA167b / SA167c / SA167d — module wiring standardization
 
-`Band B · W2 (#8, #21) and W4 (#14, #18)`
+`Band B · W2 (#8, #21) and W1 (#14, #18)`
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.
