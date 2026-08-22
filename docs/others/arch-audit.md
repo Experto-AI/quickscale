@@ -272,9 +272,9 @@ Findings 12 and 13 are independent in mechanism but share the v88 Track 2/3 file
 
 ## Red flags (current open items)
 
-The former SA156 and SA157 red flags are closed. Their pre-closure evidence remains above and in this reconciliation log as historical audit context; it is not current status.
+The former SA156, SA157 and TA66/SA158 red flags are closed; their evidence is archived in [CHANGELOG.md](../../CHANGELOG.md). Pre-closure detail that remains above and in the reconciliation log is historical audit context, not current status. **One red flag is open.**
 
-- **TA66 — retired by SA158 (2026-08-22).** The former red `scripts/test_gate_parity.py:1090` oracle now passes with 24 current `publish.yml` run blocks. The line-by-line review confirmed the two `d3d4c633` PGDG additions and replacement of the old client-install lines, plus the pre-existing `fe850506` `verify-published` block; no `d4b0e834` publish change exists. Repository-content only — no environment dependence.
+- **`make check` is red on HEAD at a stale test assertion (SA168).** `quickscale_cli/tests/test_manifest_entry_point_integration.py:167` asserts `spec.apps == ()` for `social`, but SA151 phase P1 deliberately made social's manifest own its app projection, so the resolved value is `('quickscale_modules_social',)`. The source is correct and the test is stale; three recursive `make check` assertions in `scripts/test_gate_parity.py` fail with it. This blocks Finding 12's remediation (SA155), which must register the gate suites **green**. Tracked as roadmap **SA168** (W2, merge #6b). Measured 2026-08-22: `poetry run pytest scripts/ --no-cov -q` reports 3 failed / 1204 passed / 1 skipped, and all three failures are these recursive `make check` assertions — so this single stale assertion is the whole remaining red surface of Finding 12's suite population under the project interpreter.
 - **Deprecated bool inversion in a security gate (TA69).** `scripts/check_csrf_exempt_gate.py:271` uses `~val != 0` on a bool; Python removes this in 3.16. The current tech-audit remains authoritative for this open finding and identifies the semantics-preserving correction as `~int(val) != 0`; `not val` would change the gate's verdict.
 
 ## Reconciliation log
