@@ -32,6 +32,20 @@ _NUMBERED_MIGRATION_PATTERN = re.compile(r"^\d{4}_.+\.py$")
 _MISSING = object()
 _AMBIGUOUS = object()
 _NON_LITERAL = object()
+_INDIRECT_REBINDING_NAMES = frozenset(
+    {
+        "__delattr__",
+        "__setattr__",
+        "delattr",
+        "eval",
+        "exec",
+        "getattr",
+        "globals",
+        "locals",
+        "setattr",
+        "vars",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -84,6 +98,38 @@ def _read_initial_flag(migration_path: Path) -> object:
         return _AMBIGUOUS
 
     migration_class = migration_classes[0]
+    if migration_class.decorator_list or migration_class.keywords:
+        return _AMBIGUOUS
+
+    migration_bindings = [
+        (node, alias)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+        if (alias.asname or alias.name.split(".", 1)[0]) == "migrations"
+    ]
+    if len(migration_bindings) != 1:
+        return _AMBIGUOUS
+    import_node, imported_name = migration_bindings[0]
+    if not (
+        isinstance(import_node, ast.ImportFrom)
+        and import_node in tree.body
+        and import_node.level == 0
+        and import_node.module == "django.db"
+        and imported_name.name == "migrations"
+        and imported_name.asname is None
+        and tree.body.index(import_node) < tree.body.index(migration_class)
+    ):
+        return _AMBIGUOUS
+    if not (
+        len(migration_class.bases) == 1
+        and isinstance(migration_class.bases[0], ast.Attribute)
+        and isinstance(migration_class.bases[0].value, ast.Name)
+        and migration_class.bases[0].value.id == "migrations"
+        and migration_class.bases[0].attr == "Migration"
+    ):
+        return _AMBIGUOUS
+
     assignments: list[ast.expr] = []
     accepted_store_ids: set[int] = set()
     for node in migration_class.body:
@@ -110,35 +156,49 @@ def _read_initial_flag(migration_path: Path) -> object:
                 accepted_store_ids
             ):
                 return _AMBIGUOUS
-        elif isinstance(node, ast.Name) and node.id == "Migration":
+        elif isinstance(node, ast.Name) and node.id == "migrations":
             if isinstance(node.ctx, (ast.Store, ast.Del)):
                 return _AMBIGUOUS
-        elif isinstance(node, ast.Attribute) and node.attr == "initial":
-            if isinstance(node.ctx, (ast.Store, ast.Del)):
+        elif isinstance(node, ast.Name):
+            if node.id == "Migration" or node.id in _INDIRECT_REBINDING_NAMES:
                 return _AMBIGUOUS
-        elif isinstance(node, ast.ExceptHandler) and node.name == "initial":
-            return _AMBIGUOUS
-        elif isinstance(node, (ast.Global, ast.Nonlocal)) and "initial" in node.names:
-            return _AMBIGUOUS
-        elif isinstance(node, ast.arg) and node.arg == "initial":
-            return _AMBIGUOUS
-        elif isinstance(node, ast.alias) and (
-            node.name == "initial" or node.asname == "initial"
+        elif isinstance(node, ast.Attribute):
+            if (
+                node.attr in {"initial", "Migration"}
+                and isinstance(node.ctx, (ast.Store, ast.Del))
+            ) or node.attr in _INDIRECT_REBINDING_NAMES:
+                return _AMBIGUOUS
+        elif isinstance(node, ast.Subscript) and isinstance(
+            node.ctx, (ast.Store, ast.Del)
         ):
             return _AMBIGUOUS
-        elif isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name == "initial":
-                return _AMBIGUOUS
-        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == "initial":
+        elif isinstance(node, ast.ExceptHandler) and node.name in {
+            "initial",
+            "migrations",
+        }:
             return _AMBIGUOUS
-        elif isinstance(node, ast.Call):
-            called_name = None
-            if isinstance(node.func, ast.Name):
-                called_name = node.func.id
-            elif isinstance(node.func, ast.Attribute):
-                called_name = node.func.attr
-            if called_name in {"setattr", "delattr", "exec", "eval"}:
+        elif isinstance(node, (ast.Global, ast.Nonlocal)) and any(
+            name in {"initial", "migrations"} for name in node.names
+        ):
+            return _AMBIGUOUS
+        elif isinstance(node, ast.arg) and node.arg in {"initial", "migrations"}:
+            return _AMBIGUOUS
+        elif isinstance(node, ast.alias):
+            if (
+                node.name in {"initial", "Migration"}
+                or node.asname in {"initial", "Migration"}
+                or node.name in _INDIRECT_REBINDING_NAMES
+                or node.asname in _INDIRECT_REBINDING_NAMES
+            ):
                 return _AMBIGUOUS
+        elif isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name in {"initial", "migrations"}:
+                return _AMBIGUOUS
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name in {
+            "initial",
+            "migrations",
+        }:
+            return _AMBIGUOUS
 
     if not assignments:
         return _MISSING
@@ -585,11 +645,80 @@ def test_nested_class_initial_rebinding_canary(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    "class_replacement",
+    [
+        "@(lambda cls: cls)\nclass Migration(migrations.Migration):",
+        "class Migration(migrations.Migration, object):",
+        "class Migration(migrations.Migration, metaclass=type):",
+    ],
+)
+def test_noncanonical_migration_class_forms_fail_closed(
+    tmp_path: Path, class_replacement: str
+) -> None:
+    """Decorated, multi-base, and metaclass forms must not false-green."""
+    inventory = _bind_module_inventory()
+    module_name = inventory.model_modules[0]
+    module_path = _copy_module_tree(tmp_path, inventory, module_name)
+    initial_path = (
+        module_path
+        / "src"
+        / f"quickscale_modules_{module_name}"
+        / "migrations"
+        / _INITIAL_MIGRATION_FILENAME
+    )
+    content = initial_path.read_text()
+    canonical_class = "class Migration(migrations.Migration):"
+    assert canonical_class in content
+    initial_path.write_text(content.replace(canonical_class, class_replacement, 1))
+
+    _assert_canary_detected(module_name, module_path, "wrong-initial-flag")
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement"),
+    [
+        (
+            "from django.db import migrations, models",
+            "from django.db import models\nfrom types import SimpleNamespace as migrations",
+        ),
+        (
+            "class Migration(migrations.Migration):",
+            "migrations = object\n\nclass Migration(migrations.Migration):",
+        ),
+    ],
+)
+def test_noncanonical_migration_base_bindings_fail_closed(
+    tmp_path: Path, original: str, replacement: str
+) -> None:
+    """Spoofed or rebound migration-base names must not false-green."""
+    inventory = _bind_module_inventory()
+    module_name = inventory.model_modules[0]
+    module_path = _copy_module_tree(tmp_path, inventory, module_name)
+    initial_path = (
+        module_path
+        / "src"
+        / f"quickscale_modules_{module_name}"
+        / "migrations"
+        / _INITIAL_MIGRATION_FILENAME
+    )
+    content = initial_path.read_text()
+    assert original in content
+    initial_path.write_text(content.replace(original, replacement, 1))
+
+    _assert_canary_detected(module_name, module_path, "wrong-initial-flag")
+
+
+@pytest.mark.parametrize(
     "rebind",
     [
         "for initial in ():\n    pass",
         "def mutate():\n    initial = False",
         "setattr(Migration, 'initial', False)",
+        "mutator = setattr\nmutator(Migration, 'initial', False)",
+        "type.__setattr__(Migration, 'initial', False)",
+        "mutator = getattr(type, '__setattr__')\nmutator(Migration, 'initial', False)",
+        "Migration = object",
+        "globals()['Migration'] = object",
     ],
 )
 def test_other_initial_write_forms_fail_closed(tmp_path: Path, rebind: str) -> None:
