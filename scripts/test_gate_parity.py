@@ -1084,7 +1084,7 @@ class TestParserPrecision:
             "csrf-exempt-gate": ("poetry install --with dev\n", "make check-csrf-exempt\n"),
         }
 
-    def test_all_twenty_one_publish_run_values_are_structural(self) -> None:
+    def test_all_twenty_four_publish_run_values_are_structural(self) -> None:
         """Every current publish run block matches the literal ordered oracle."""
         values = _extract_publish_run_values(PUBLISH_YML)
         assert values == [
@@ -1123,8 +1123,31 @@ class TestParserPrecision:
             ("test", "make typecheck -- --core --cli --modules --devtools\n"),
             (
                 "test",
-                "sudo apt-get update -qq\n"
-                "sudo apt-get install -y -qq --no-install-recommends postgresql-client\n"
+                "sudo apt-get update\n"
+                "sudo apt-get install -y ca-certificates curl\n"
+                'distro_codename="$(\n'
+                "  . /etc/os-release\n"
+                '  echo "$VERSION_CODENAME"\n'
+                ')"\n'
+                "sudo install -d /usr/share/postgresql-common/pgdg\n"
+                "sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \\\n"
+                "  -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc\n"
+                'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] '
+                'http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \\\n'
+                "  | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null\n"
+                "sudo apt-get update\n"
+                "sudo apt-get install -y postgresql-client-18\n"
+                'echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"\n',
+            ),
+            (
+                "test",
+                'test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"\n'
+                'test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"\n'
+                '/usr/lib/postgresql/18/bin/pg_dump --version | grep -F "(PostgreSQL) 18"\n'
+                '/usr/lib/postgresql/18/bin/pg_restore --version | grep -F "(PostgreSQL) 18"\n',
+            ),
+            (
+                "test",
                 "for db in \\\n"
                 "  test_quickscale_smoke \\\n"
                 "  test_quickscale_analytics \\\n"
@@ -1233,6 +1256,11 @@ class TestParserPrecision:
                 "done\n"
                 "\n"
                 'ls -la "$BUILD_DIR"\n',
+            ),
+            (
+                "verify-published",
+                'python scripts/check_release_published.py --repo-root "$GITHUB_WORKSPACE" '
+                "--retries 5 --retry-delay 30\n",
             ),
             (
                 "create-release",
