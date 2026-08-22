@@ -174,7 +174,7 @@ scheduling priority whenever one of its legs is active.
 4. `SA151` (W3, #3) → `SA152` (post-v88). The beta-migration workflow must reconcile the
    clean-break database policy only after SA151 closes.
 
-**Parallelism result (re-checked 2026-08-22, second pass):** all three lanes have an executable next
+**Parallelism result (re-checked 2026-08-22, third pass):** all three lanes have an executable next
 action and none is idle, so there is no track to rebalance *into*. W2 is the longest lane at
 eight open legs and cannot be shortened: SA155, SA124, SA123, SA166 and SA164 all own
 `scripts/gate_registry.json`, which by standing invariant never crosses worktrees; SA167a,
@@ -187,16 +187,16 @@ gate's `_HOST_DEPENDENT_PATHS`, both of which W3's SA163/SA161/SA160 legs read o
 **No track moves are proposed this pass.** Band-C tickets remain the sanctioned way to spend
 lane slack in place.
 
-### Track readiness (assessed 2026-08-22, re-verified after the SA151 retained checkpoint)
+### Track readiness (assessed 2026-08-22, third pass)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W1** | SA134 (#9, **P1 checkpoint retained — converged and synchronized**) | **yes** — every prerequisite is merged; the maintainer accepted this partial checkpoint for merge-back | **yes** — the five test-side assertion surfaces are W1-owned and the P1 delta is converged; ticket closure remains pending | **yes** — the retained P1 code checkpoint was synchronized to v88 `c26b62d07d5c6a73041df2b2380ddbadcbae0a96`, and this roadmap merge incorporates v88 `0aeb5f3f6a8272b194ed3c818d617e35fabcfa95`; #9 has no unsatisfied dependency | **partial but merge-safe — off the critical path** |
+| **W1** | SA134 (#9, **P1 checkpoint retained — converged and synchronized**) | **yes** — every prerequisite is merged; the maintainer accepted this partial checkpoint for merge-back | **yes** — the five test-side assertion surfaces are W1-owned and the P1 delta is converged; ticket closure remains pending | **yes** — the retained P1 checkpoint is synchronized with `v88`; #9 has no unsatisfied dependency | **partial but merge-safe — off the critical path** |
 | **W2** | SA155 (#7, **partial planning checkpoint retained**) | **yes** — every prerequisite is merged; no product decision is open | **yes, after orchestration recovery** — the documented `scripts/` baseline is green (1,213 passed), but implementation did not start because two Adaptive implementer handoffs failed before mutation | **yes** — #7 has no unsatisfied dependency | **administratively paused — next critical-path leg** |
-| **W3** | SA151 (#3, **partial checkpoint retained — terminal findings open**) | **yes** — the checkpoint is merged by maintainer direction and no product decision blocks the mandatory corrections | **yes** — the remaining guard and documentation corrections are W3-owned or explicitly coupled | **yes for the checkpoint; no for closure** — merge #3 retains useful work without satisfying dependants | **partial but merge-safe — off the critical path** (second chain) |
+| **W3** | SA151 (#3, **partial checkpoint retained — terminal findings open**) | **yes** — the checkpoint is merged and no product decision blocks F-006/F-007/F-008 | **yes** — the remaining guard and documentation corrections are W3-owned or explicitly coupled | **yes for the checkpoint; no for closure** — merge #3 retains useful work without satisfying dependants | **partial but merge-safe — off the critical path** (second chain) |
 
 **Blocked next-after tickets, and what clears each:**
 
@@ -206,26 +206,24 @@ are yes.
 | SA167a (#8) | can merge — no | SA155 (#7) | **Decided 2026-08-22 — the gate stays.** This was the one decision-clearable blocker; the maintainer declined to lift it. Implementation may begin today (`deps: none`); only the *merge* waits, because its acceptance evidence — unchanged emission parity, `make quality` no worse than found — is meaningless until SA155 makes the gate layer truthful. Starting it early is sanctioned; merging it early is not. |
 | SA164 (#25) | can start · can finish — no | SA166 (#24), SA151 (#3) | No — W2 ordering and SA151's terminal migration-baseline findings must both clear. |
 
-**Recommended concurrency right now:** W1 retains and merges the synchronized SA134 P1
-checkpoint at #9, W2 retains the SA155 planning checkpoint until a fresh Adaptive
-implementation session can consume its plan carrier, and W3 retains the SA151 partial checkpoint
-until a fresh session closes its terminal findings. After merge-back, resume **SA134 only** for the
-quantified consumer sweep, temporary probes, broad Make gates, CHANGELOG/roadmap closeout,
-convergence, and terminal attestation; do not begin SA150. Concurrent SA151/SA155 checkpoint
-and quality-baseline history is preserved intact. All three next-track choices are dependency-
-and decision-clear; W2's pause is orchestration-only, not a product or repository dependency.
-The maintainer decided to retain/merge SA134's partial checkpoint, and no product decision is
-required to resume with the corrected focused command using `--no-cov` and the concrete
-`TestDevOpsTemplateRendering` node. A maintainer decision is needed only if a future closeout
-insists that the focused behavioral command itself own repository-wide coverage instead of
-pairing with broad Make coverage. For SA151, the maintainer decision to merge the partial
-checkpoint while keeping the ticket open is settled. No product decision is needed for the
-three blocking corrections; one advisory decision remains: fix F-009's docs-hub count during
-SA151 closeout or explicitly defer it with rationale. SA151 continues to block SA142, SA164,
-and SA152. The two decisions recorded under "Gate-suite execution decision" remain settled.
-Resuming SA155 needs a fresh Adaptive session
-after merging the then-current `v88`, with working plan-envelope propagation and a newly
-resolved plan authority.
+**Recommended concurrency right now:** all three lanes hold a retained partial checkpoint and
+each resumes independently.
+
+- **W1 — resume SA134 only.** Rerun the quantified consumer sweep and the temporary pin probes,
+  run `make check -- --core` and `make quality`, close the ticket, then take convergence and
+  terminal attestation. Do not begin SA150.
+- **W2 — resume SA155 in a fresh Adaptive session.** Require a clean `wt-track2`, merge the
+  then-current `v88`, rediscover changed seams, and create a fresh plan authority rather than
+  reusing the session-scoped carrier from the checkpoint. This is the next critical-path leg.
+- **W3 — resume SA151 closure.** Correct F-006, F-007, and F-008, adjudicate F-009, then rerun
+  the proofs listed in its closure plan. Only a clean terminal result unblocks SA142, SA164,
+  and SA152.
+
+**Open maintainer decisions: one, advisory.** Fix SA151's F-009 docs-hub count drift during the
+same continuation, or defer it explicitly with rationale. Every other blocker in this plan is a
+hard upstream dependency that only the upstream work can clear; no product decision is
+outstanding anywhere in v88. The gate-suite execution choice and SA167a's #8 position are both
+settled above.
 
 ### Merge order
 
@@ -336,39 +334,17 @@ Conceptual background, mental models, and implementation notes for **every** tic
    Remove repeated runtime/dependency literals while retaining meaningful retired-version negative controls.
    **Acceptance:** no test asserts a runtime or dependency version as a bare literal where an authoritative pin exists; assertions read the pin source directly; retired-version negative controls remain and still fail when a retired version is reintroduced; bumping a pin requires no test edit, demonstrated by a temporary bump that leaves the suite green.
 
-   **P1 checkpoint disposition (retained; converged and synchronized 2026-08-22).** SA134
-   remains open and unchecked: the maintainer decided to retain and merge this partial
-   checkpoint rather than claim ticket closure. The five runtime-pin consumers were derived
-   and reconciled as follows: `test_e2e_full_workflow.py` consumes Python, PostgreSQL, and
-   Django CI pins for generated CI assertions; `test_generator/test_production_settings_database_url.py`
-   consumes the Django constraint and CI-matrix pins in its rendering context;
-   `test_generator/test_templates.py` consumes all generated-project runtime pins and retains
-   the separate module-Django expected value and mismatch/negative drift controls;
-   `test_integration.py` consumes the PostgreSQL pin for generated CI assertions; and
-   `test_react_theme_integration.py` consumes the PostgreSQL pin for the generated Dockerfile.
-   The negative/separate controls remain intentional: retired-version assertions stay
-   negative, module-Django parity remains separately expressed, and mismatch probes still
-   verify drift detection rather than mirroring the pin value.
+   **Checkpoint state:** the P1 delta derived five test consumers from authoritative pins and is
+   archived in [CHANGELOG.md](../../CHANGELOG.md). SA134 remains open and unchecked; the merge-back
+   artifact is the checkpoint, not closure. SA150 must not start before SA134 closes.
 
-   Convergence evidence records the F-001 coherence fix, focused 236-pass evidence, a green
-   PostgreSQL-19 temporary probe, an expected-red Python-3.13 temporary probe, explicit byte restoration
-   of the original files, and the P1 code checkpoint's pre-merge synchronization to v88
-   `c26b62d07d5c6a73041df2b2380ddbadcbae0a96`. This roadmap merge incorporates the v88 SA155
-   checkpoint at `0aeb5f3f6a8272b194ed3c818d617e35fabcfa95`. No `CHANGELOG.md` closure,
-   completed ticket closeout, or SA134 completion claim is made here. SA150 remains blocked
-   and must not start before SA134 closes.
-
-   **Decision status:** the maintainer decision to retain/merge this partial checkpoint is
-   recorded above. No product decision is required to resume with the corrected focused
-   command using `--no-cov` and the concrete `TestDevOpsTemplateRendering` node. A maintainer
-   decision is needed only if future closeout insists that the focused behavioral command
-   itself own repository-wide coverage rather than pairing it with broad Make coverage.
+   **Decisions:** none open. Resume with the focused command using `--no-cov` and the concrete
+   `TestDevOpsTemplateRendering` node.
 
    **Pending closure plan — SA134 only:** rerun the quantified consumer sweep and temporary
    probes; run `make check -- --core` and `make quality`; update `CHANGELOG.md`; mark this
    roadmap entry complete and remove its open-work body; then take convergence and terminal
-   attestation. Do not begin SA150. The current checkpoint is the merge-back artifact, not
-   SA134 closure.
+   attestation. Do not begin SA150.
 
 - [ ] **SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam.** `Band B · Tier 2 · W1 · merge #12 · deps: SA134 · blocks SA118`
   Carried forward as non-blocking observations from the installed-wheel lifecycle review: the seam is referenced only by production code and its own E2E with no `docs/technical/` description, and `_resolve_local_wheel_dependency()` silently falls back to the manifest version spec when the wheelhouse is set but matches no wheel.
@@ -413,18 +389,7 @@ Conceptual background, mental models, and implementation notes for **every** tic
   QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models.
   **Acceptance:** exactly one `0001_initial` per module with models, and no other migration files; a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; `make test-integration` passes; existing databases are out of scope by policy — the documented upgrade path is a fresh database; the no-migration-history policy is recorded in [decisions.md](decisions.md).
 
-  **Completed checkpoint work (2026-08-22).** The source-derived topology guard now binds all twelve
-  shipped AppConfigs, ten model-bearing modules, two service-style modules, and the `teams`
-  placeholder without executing migration source; its full canary matrix passes 32 tests.
-  The non-skippable P2B node generated and installed an all-module standalone project, applied
-  every clean initial migration to an empty PostgreSQL 18 database under a restricted role,
-  reported no pending migrations, proved embedded-source/runtime/recorder parity, and passed
-  1 test with 0 skips before deleting its database and role. Broad evidence passed
-  `make test-integration` (2,471 tests), `make test-bypassrls` (80 tests), type checking, and
-  serial E2E (Core 36, CLI 36; 0 skips). The only quality result is the accepted two-warning,
-  zero-critical baseline with monotonicity passing. The clean-break policy and exact validation
-  commands are now recorded in their authoritative documents. This evidence is retained, but
-  terminal attestation found the checkpoint insufficient for ticket closure.
+  **Checkpoint state:** the P2B/P3 evidence landed and is archived in [CHANGELOG.md](../../CHANGELOG.md); terminal attestation judged it insufficient for closure, so the ticket stays open and SA142/SA164/SA152 stay blocked.
 
   **Pending/blocking findings — found after settlement and intentionally retained for a fresh
   continuation:**
@@ -499,15 +464,8 @@ gates, written into a suite that nothing executes.
   **Acceptance:** a `check-gate-suites` target runs the `scripts/` suites with coverage disabled and is registered in `scripts/gate_registry.json` with `required_contexts` covering at least `local-serial`, `local-parallel`, and `hosted`; `scripts/sync_ci_gate_jobs.py` generates its hosted job and `scripts/check_gate_parity.py` passes; the gate is registered **green** — the historical 74-failure baseline is fully resolved by the dependency tickets before registration, verified by a recorded pass/fail baseline; `scripts/` remains absent from `.coveragerc` and the `--cov-fail-under=90` product metric is unchanged; the `sync_ci_gate_jobs.py` job-set closure is preserved intact; the six `UNOWNED_JOB_IDS` entries are each justified in writing or registered, with `isolation-conformance` — which has no Makefile target and is invoked only from `ci.yml:634` — resolved explicitly; arch Finding 12 is retired with evidence.
   **Shared conflict surface:** `Makefile`, `scripts/gate_registry.json`, `scripts/sync_ci_gate_jobs.py`, `.github/workflows/ci.yml`, `scripts/check_ci_locally.sh`, `docs/others/arch-audit.md`.
 
-  **Checkpoint disposition (2026-08-22):** prerequisites and both previously open decisions
-  were verified resolved; `wt-track2` was clean and synchronized with `v88`; the existing
-  Poetry environment was verified (Python 3.14.6); read-only discovery mapped the Make,
-  registry, local runner, CI generator, parity, coverage, audit, and test surfaces; and a
-  self-reviewed two-phase implementation plan was produced. No product, gate, CI, test, or
-  audit file changed. Two fresh `Adaptive-implement` handoffs failed before mutation because
-  the implementers could not consume the supplied session/plan carrier; the permitted retry
-  budget ended, so this checkpoint deliberately preserves planning evidence without claiming
-  implementation or validation.
+  **Checkpoint state:** planning only — discovery and a self-reviewed two-phase plan were produced
+  and are archived in [CHANGELOG.md](../../CHANGELOG.md); no product, gate, CI, test, or audit file changed.
 
   **Blocking state:** the blocker is orchestration-only. Repository dependencies are complete,
   the gate-suite execution choice remains Option 1, and the #8 ordering decision remains
