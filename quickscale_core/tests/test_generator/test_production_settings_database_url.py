@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from quickscale_core.generator.runtime_pins import (
+    DJANGO_CI_MATRIX_VERSION,
+    DJANGO_CONSTRAINT,
     POSTGRES_DOCKER_TAG,
     POSTGRES_VERSION,
     PYTHON_CONSTRAINT,
@@ -25,8 +27,8 @@ def prod_test_context() -> dict[str, str]:
         "python_docker_tag": PYTHON_DOCKER_TAG,
         "postgres_version": POSTGRES_VERSION,
         "postgres_docker_tag": POSTGRES_DOCKER_TAG,
-        "django_constraint": ">=6.0.7,<6.1.0",
-        "django_ci_version": "6.0",
+        "django_constraint": DJANGO_CONSTRAINT,
+        "django_ci_version": DJANGO_CI_MATRIX_VERSION,
         "runtime_db_role": "testproject_app",
         "runtime_db_password": "testproject_app_password",
     }

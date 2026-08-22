@@ -27,6 +27,11 @@ from pathlib import Path
 import pytest
 
 from quickscale_cli.utils.docker_utils import get_docker_compose_command
+from quickscale_core.generator.runtime_pins import (
+    DJANGO_CI_MATRIX_VERSION,
+    POSTGRES_VERSION,
+    PYTHON_VERSION,
+)
 from quickscale_core.utils.poetry_env import build_isolated_poetry_env
 
 
@@ -1026,17 +1031,20 @@ class TestFullE2EWorkflow:
 
         ci_content = ci_file.read_text()
         assert "runs-on: ubuntu-24.04" in ci_content
-        assert 'python-version: ["3.14"]' in ci_content
+        assert f'python-version: ["{PYTHON_VERSION}"]' in ci_content
         assert "apt.postgresql.org" in ci_content
         assert "apt.postgresql.org.asc" in ci_content
-        assert "postgresql-client-18" in ci_content
-        assert 'echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"' in ci_content
+        assert f"postgresql-client-{POSTGRES_VERSION}" in ci_content
         assert (
-            'test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"'
+            f'echo "/usr/lib/postgresql/{POSTGRES_VERSION}/bin" >> "$GITHUB_PATH"'
             in ci_content
         )
         assert (
-            'test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"'
+            f'test "$(command -v pg_dump)" = "/usr/lib/postgresql/{POSTGRES_VERSION}/bin/pg_dump"'
+            in ci_content
+        )
+        assert (
+            f'test "$(command -v pg_restore)" = "/usr/lib/postgresql/{POSTGRES_VERSION}/bin/pg_restore"'
             in ci_content
         )
         assert "pg_dump --version" in ci_content
@@ -1046,8 +1054,8 @@ class TestFullE2EWorkflow:
         assert "file: ./coverage.xml" not in ci_content
         assert "version: 11.0.9" in ci_content
         assert (
-            "if: matrix.python-version == '3.14' && matrix.django-version == '6.0'"
-            in ci_content
+            f"if: matrix.python-version == '{PYTHON_VERSION}' && "
+            f"matrix.django-version == '{DJANGO_CI_MATRIX_VERSION}'" in ci_content
         )
         assert "3.13" not in ci_content
         assert "10.28.2" not in ci_content

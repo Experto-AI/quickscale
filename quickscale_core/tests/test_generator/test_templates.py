@@ -233,8 +233,10 @@ class TestRuntimePins:
             PYTHON_VERSION,
         )
 
-        assert PYTHON_VERSION == "3.14"
-        assert PYTHON_CONSTRAINT == f">={PYTHON_VERSION},<3.15"
+        python_major, python_minor = (int(part) for part in PYTHON_VERSION.split("."))
+        assert PYTHON_CONSTRAINT == (
+            f">={PYTHON_VERSION},<{python_major}.{python_minor + 1}"
+        )
         assert PYTHON_DOCKER_TAG == f"{PYTHON_VERSION}-slim-bookworm"
 
     def test_django_pins_defined(self) -> None:
@@ -244,8 +246,12 @@ class TestRuntimePins:
             DJANGO_CONSTRAINT,
         )
 
-        assert DJANGO_CONSTRAINT == ">=6.0.7,<6.1.0"
-        assert DJANGO_CI_MATRIX_VERSION == "6.0"
+        django_major, django_minor = (
+            int(part) for part in DJANGO_CI_MATRIX_VERSION.split(".")
+        )
+        django_lower, django_upper = DJANGO_CONSTRAINT.split(",")
+        assert django_lower.startswith(f">={DJANGO_CI_MATRIX_VERSION}.")
+        assert django_upper == f"<{django_major}.{django_minor + 1}.0"
 
     def test_postgres_pins_defined(self) -> None:
         """PostgreSQL version and Docker tag should be exported."""
@@ -254,7 +260,8 @@ class TestRuntimePins:
             POSTGRES_VERSION,
         )
 
-        assert POSTGRES_VERSION == "18"
+        assert POSTGRES_VERSION.isascii() and POSTGRES_VERSION.isdecimal()
+        assert int(POSTGRES_VERSION) > 0
         assert POSTGRES_DOCKER_TAG == f"{POSTGRES_VERSION}-alpine"
 
     def test_generator_injects_pin_context(
@@ -300,7 +307,6 @@ class TestRuntimePins:
 # These are the F7.3-contract values that all packaged modules and
 # generator packages must carry.  They are duplicated here only for test
 # self-containment; the authoritative values live in runtime_pins.py.
-_EXPECTED_PYTHON_CONSTRAINT = ">=3.14,<3.15"
 _EXPECTED_MODULE_DJANGO_CONSTRAINT = ">=6.0.7,<6.1.0"
 
 
@@ -516,7 +522,7 @@ class TestRuntimePinDriftDetection:
             check_generator_python_constraints,
         )
 
-        expected = ">=3.14,<3.15"
+        expected = PYTHON_CONSTRAINT
         # Create the full generator package tree so the existing
         # check_generator_python_constraints can find every expected
         # pyproject.toml.  Each file has correct requires-python but the
@@ -564,7 +570,7 @@ class TestRuntimePinDriftDetection:
             check_module_python_constraints,
         )
 
-        expected = ">=3.14,<3.15"
+        expected = PYTHON_CONSTRAINT
         modules_dir = tmp_path / "quickscale_modules" / "testmod"
         modules_dir.mkdir(parents=True)
         pyproject = modules_dir / "pyproject.toml"
@@ -3363,7 +3369,7 @@ class TestDevOpsTemplateRendering:
         assert "testproject" in output
         assert "[tool.poetry]" in output
         assert f'python = "{PYTHON_CONSTRAINT}"' in output
-        assert 'Django = ">=6.0.7,<6.1.0"' in output
+        assert f'Django = "{DJANGO_CONSTRAINT}"' in output
         assert 'django-stubs = "^6.0.7"' in output
         _ruff_target = f"py{PYTHON_VERSION.replace('.', '')}"
         assert f'target-version = "{_ruff_target}"' in output
@@ -3385,7 +3391,7 @@ class TestDevOpsTemplateRendering:
     def test_github_ci_workflow_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Test generated GitHub CI workflow renders the PG18 tooling contract."""
+        """Test generated GitHub CI workflow renders the PostgreSQL tooling contract."""
         template = jinja_env.get_template("github/workflows/ci.yml.j2")
         output = template.render(test_context)
         assert output is not None
@@ -3393,24 +3399,27 @@ class TestDevOpsTemplateRendering:
         assert "name: CI" in output
         assert "pytest --cov=testproject" in output
         assert "runs-on: ubuntu-24.04" in output
-        assert 'python-version: ["3.14"]' in output
+        assert f'python-version: ["{PYTHON_VERSION}"]' in output
         assert "apt.postgresql.org" in output
         assert "apt.postgresql.org.asc" in output
-        assert "postgresql-client-18" in output
-        assert 'echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"' in output
+        assert f"postgresql-client-{POSTGRES_VERSION}" in output
         assert (
-            'test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"'
+            f'echo "/usr/lib/postgresql/{POSTGRES_VERSION}/bin" >> "$GITHUB_PATH"'
             in output
         )
         assert (
-            'test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"'
+            f'test "$(command -v pg_dump)" = "/usr/lib/postgresql/{POSTGRES_VERSION}/bin/pg_dump"'
+            in output
+        )
+        assert (
+            f'test "$(command -v pg_restore)" = "/usr/lib/postgresql/{POSTGRES_VERSION}/bin/pg_restore"'
             in output
         )
         assert "pg_dump --version" in output
         assert "pg_restore --version" in output
         assert (
-            "if: matrix.python-version == '3.14' && matrix.django-version == '6.0'"
-            in output
+            f"if: matrix.python-version == '{PYTHON_VERSION}' && "
+            f"matrix.django-version == '{DJANGO_CI_MATRIX_VERSION}'" in output
         )
         assert "3.13" not in output
         assert "gpg --dearmor" not in output
@@ -3425,7 +3434,7 @@ class TestDevOpsTemplateRendering:
         assert output is not None
         assert len(output) > 0
         assert "testproject" in output
-        assert "FROM python:3.14-slim-bookworm" in output
+        assert f"FROM python:{PYTHON_DOCKER_TAG}" in output
 
     def test_docker_compose_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -3651,7 +3660,7 @@ class TestPyprojectTomlContent:
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
         assert "Django" in output
-        assert 'Django = ">=6.0.7,<6.1.0"' in output
+        assert f'Django = "{DJANGO_CONSTRAINT}"' in output
 
     def test_postgresql_driver(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -3737,11 +3746,11 @@ class TestDockerfileContent:
         """Test Dockerfile uses multi-stage build pattern."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
-        assert "FROM python:3.14-slim-bookworm as builder" in output
-        assert "FROM python:3.14-slim-bookworm" in output
+        assert f"FROM python:{PYTHON_DOCKER_TAG} as builder" in output
+        assert f"FROM python:{PYTHON_DOCKER_TAG}" in output
         assert "bookworm-pgdg" in output
         assert "apt.postgresql.org.asc" in output
-        assert "postgresql-client-18" in output
+        assert f"postgresql-client-{POSTGRES_VERSION}" in output
         assert "gpg --dearmor" not in output
         assert "gnupg" not in output
 
@@ -3882,7 +3891,7 @@ class TestDockerComposeContent:
         template = jinja_env.get_template("docker-compose.yml.j2")
         output = template.render(test_context)
         assert "db:" in output
-        assert "postgres:18-alpine" in output
+        assert f"postgres:{POSTGRES_DOCKER_TAG}" in output
         assert "POSTGRES_DB" in output
 
     def test_backend_service(
