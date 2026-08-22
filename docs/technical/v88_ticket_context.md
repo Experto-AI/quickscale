@@ -12,8 +12,9 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers **all twenty-five v88 ticket entries** (twenty-four merge positions because
-SA163 executes inside SA135) plus the three post-v88 entries. Sections are ordered by
+It covers **all twenty-five v88 ticket entries** across twenty-four merge positions
+(twenty-one open positions carrying twenty-two open entries, plus closed SA156, SA137,
+and SA157; SA163 executes inside SA135) plus the three post-v88 entries. Sections are ordered by
 merge band (A → B → C), which is also the order in which the work becomes safe to do.
 
 ---
@@ -58,7 +59,7 @@ failure modes; auditing the gate layer found a fifth sitting underneath all of t
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | 10 of 14 `scripts/test_*.py` suites wired to nothing; the quality gate's base ref points at a deleted branch; a test that passes when its tool is deleted | SA156, SA155, SA157, SA158, SA159, SA162 |
+| **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | Historically: 10 of 14 `scripts/test_*.py` suites wired to nothing; the quality gate's base ref pointed at a deleted branch; a test passed when its tool was deleted | SA156, SA155, SA157, SA158, SA159, SA162 |
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | devtools version pinned by hand; Python/Postgres versions retyped in tests; the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA137, SA134, SA124, SA118, SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | wheelhouse set but no wheel matches → returns the manifest spec; a corrupt state file returns silently; a skip where a failure belongs | SA150, SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; migration history accretes; dead code nobody deletes | SA151, SA142, SA135, SA161 |
@@ -76,13 +77,13 @@ The worktree grouping follows it directly:
 
 Read these four facts together:
 
-1. `scripts/check_quality_baseline_monotonicity.py:305-306` and `:1395-1396` fall back to
-   `ref = "v87"`. That branch was retired for `v88` and never existed as a tag.
-2. When the fallback fails, the gate exits 2 with `MERGE_BASE_ERROR`, and
+1. Before SA156, `scripts/check_quality_baseline_monotonicity.py:305-306` and `:1395-1396`
+   fell back to `ref = "v87"`. That branch was retired for `v88` and never existed as a tag.
+2. When that former fallback failed, the gate exited 2 with `MERGE_BASE_ERROR`, and
    `scripts/check_quality.sh:123` deletes the previous run's report *before* any analyzer
    runs. So `make quality` produces nothing.
-3. Of 14 `scripts/test_*.py` suites, **10 are wired to no target at all**. Run under the
-   project interpreter, they produce **959 passed, 74 failed**.
+3. In the pre-closure run, 14 `scripts/test_*.py` suites had **10 wired to no target at all**;
+   under the project interpreter they produced **959 passed, 74 failed**.
 4. `scripts/test_check_sa117_scope.py:596-617` asserts `returncode == 2` from a subprocess
    whose script path never resolves. CPython exits 2 on `can't open file`. The test would
    pass if the tool were deleted.
@@ -90,8 +91,8 @@ Read these four facts together:
 Now read the execution rule every ticket in this release inherits: *"Leave `make quality`
 no worse than found."*
 
-That rule has been unverifiable for the entire `v88` branch, and both audit documents
-recorded the invariant as enforced. Meanwhile SA124's headline acceptance criterion —
+Before SA156 closed it, that rule was unverifiable for the `v88` branch even though both audit
+documents recorded the invariant as enforced. Meanwhile SA124's headline acceptance criterion —
 *"`scripts/test_check_sa117_scope.py` covers the divergence failure"* — would have been
 written into an unexecuted suite, beside a guaranteed false-green, most plausibly by
 copying it.
@@ -103,8 +104,9 @@ claims about tickets.**
 
 # Band A — Make the gate layer tell the truth
 
-Five tickets, four of them independent and small, one integrating. W2 owns four; W1 owns
-SA159 because it edits `scripts/version_tool.sh`, which is SA137's file.
+Band A contains five tickets: SA156 and SA157 are closed, SA158 and SA159 are the
+independent W1 legs, and SA155 is the integrating W2 leg. W1 owns SA159 because it edits
+`scripts/version_tool.sh`, which is SA137's file; SA158 is likewise isolated on W1.
 
 ## SA156 — Make the quality gate's fallback base ref resolve
 
@@ -135,8 +137,10 @@ but the fallback resolves the bare name only — so it misses the `origin/v87` t
 survives. Two independent bugs stacked, either of which alone would have hidden the other.
 
 Nothing in the `Makefile`, `scripts/`, or any workflow sets `QUALITY_BASELINE_BASE_REF`, so
-a local `make quality` hits the fallback every time. It exits 2, and
-`scripts/check_quality.sh:123` then deletes the previous report before any analyzer runs.
+a local `make quality` hits the fallback every time. The monotonicity helper exits 2,
+`scripts/check_quality.sh:123` maps that failure to script exit 1 and deletes the previous
+report before any analyzer runs, and GNU Make surfaces the failed recipe as `make quality`
+exit 2.
 The failure mode is therefore *worse than no gate*: you lose the artifact that would have
 told you the gate did not run.
 
@@ -228,7 +232,7 @@ by line**, each changed entry confirmed to correspond to an intended change in
 
 ## SA157 — Fix the SA117 scope-tool test that asserts the interpreter's exit code
 
-`Band A · Tier 2 · W2 · merge #4 · deps: none · blocks SA124`
+`Band A · Tier 2 · W2 · merge #4 · deps: none · blocks SA124 · **CLOSED** — retained for concepts only; closure detail in [CHANGELOG.md](../../CHANGELOG.md)`
 
 ### The mental model
 
@@ -361,7 +365,7 @@ follows (#5) in the same worktree.
 
 ## SA155 — Give the gate layer a gate of its own
 
-`Band A · Tier 1 · W2 · merge #7 · deps: SA157, SA158, SA159 (SA156 closed)`
+`Band A · Tier 1 · W2 · merge #7 · deps: SA158, SA159 (SA156 and SA157 closed)`
 
 ### The mental model
 
@@ -382,11 +386,14 @@ owning execution context** — while being the code every other gate's credibili
 - 14 `scripts/test_*.py` suites. **4 wired to a target. 10 wired to nothing.**
 - `git log -S` shows the orphans were **never** wired. This is not decay; the wiring never
   existed, and the population grows by one with every new gate.
-- Executed under the project interpreter this pass: **959 passed, 74 failed**, across code
-  nothing runs.
+- Historical pre-closure execution under the project interpreter: **959 passed, 74 failed**,
+  across code nothing ran. This is retained as evidence for the finding's origin, not as the
+  current SA156/SA157 status.
 
-Those 74 are not mysterious. 72 are SA156. The other 2 are SA158 and SA157's false-green
-sits in the same population. This is why SA155 sits behind all four.
+The historical 74-failure baseline included 72 failures caused by SA156; the remaining two
+were SA158 and the SA157 false-green in the same population. SA156 and SA157 are now closed,
+while SA155 remains behind the still-open gate-layer work. This is why the historical baseline
+still matters to SA155's acceptance without presenting those closures as live failures.
 
 ### What is already closed — preserve it
 
@@ -540,7 +547,7 @@ The acceptance wording — *"retired-version negative controls remain and still 
 
 *"bumping a pin requires no test edit, demonstrated by a temporary bump that leaves the suite green"*. Literally do this: change `POSTGRES_VERSION` to `"19"`, run the suite, confirm green, revert. Record it as evidence. If anything fails, a literal survived.
 
-Note `quickscale_core/tests/docker-compose.test.yml` is a static YAML file, not Python — it cannot import `runtime_pins`. Decide whether it is in scope (it pins the *test harness* Postgres, arguably a different concern from the *generated project* Postgres) and say which, rather than leaving it ambiguous. This overlaps SA135, which owns the test harness's database; coordinating the answer with the W3 ticket is reasonable, but SA134 merges first (#8 vs #13), so state the decision and let SA135 honour it.
+Note `quickscale_core/tests/docker-compose.test.yml` is a static YAML file, not Python — it cannot import `runtime_pins`. Decide whether it is in scope (it pins the *test harness* Postgres, arguably a different concern from the *generated project* Postgres) and say which, rather than leaving it ambiguous. This overlaps SA135, which owns the test harness's database; coordinating the answer with the W3 ticket is reasonable, but SA134 merges first (#9 vs #15), so state the decision and let SA135 honour it.
 
 ### Depends on SA137 because
 
@@ -617,7 +624,11 @@ The staged-beside-install wheelhouse (case 2) is a judgement call: it is implici
 
 ### Audit bookkeeping
 
-`docs/others/tech-audit.md` currently reports **zero open findings**. The wheelhouse seam is listed under **"Live watch items"**, not as a finding. So the closeout retires a watch item; it does not close a numbered finding, and the severity table stays at zero. (The roadmap's acceptance line has been corrected to match.) The header drift previously noted here — `Branch: v87` — was resolved by the 2026-08-21 regeneration and needs no action.
+`docs/others/tech-audit.md` currently carries **five open findings** in its summary (S3: three;
+S4: two). The wheelhouse seam is listed under **"Live watch items"**, not as a finding. So the
+closeout retires a watch item; it does not close a numbered finding, and the severity table
+remains at five. The current audit header is `Branch: v88`; the previously noted header drift
+is historical and needs no action.
 
 ---
 
@@ -1177,7 +1188,7 @@ after SA135 on W3 so the fixture edits stay serialized within the worktree.
 ## SA160 / SA161 sequencing note
 
 Both are W3 and both touch `quickscale_core/tests/fixtures/sa90_emission_manifests.json`,
-as do SA142 (merge #9) and SA118 (merge #14, W2). SA118 is the one that crosses worktrees.
+as do SA142 (merge #10) and SA118 (merge #16, W2). SA118 is the one that crosses worktrees.
 Each rebaseline **appends** its own `baseline_evidence` entry; none may replace a prior
 one. The sync-before-merge-back procedure has to preserve every entry.
 
@@ -1360,7 +1371,7 @@ Every other ticket in this release makes a *machine* tell the truth. This one ma
 
 `d3d4c633` and `d4b0e834` were both titled **"v0.87.0: QuickScale 0.87.0"** while in fact
 changing hosted and publish provisioning. `d3d4c633` also left a repository conformance test
-red — that is TA66, which is SA158, which is merge #4 of this release.
+red — that is TA66, which is SA158, which is merge #6 of this release.
 
 Both audits independently flagged the same shape: **a release-shaped message carrying a CI
 topology change**. It was read closely only because the arch audit's delta-classification
@@ -1479,8 +1490,8 @@ Each step builds the one after it:
 
 1. **SA157** — the purest false green. Two mechanisms, one exit code. Ten lines. Once you
    see it, you see the whole band-A argument.
-2. **SA156** — the same shape at repository scale: one stale string, 72 test failures, and
-   an execution rule nobody could have satisfied.
+2. **SA156** — the same shape at repository scale: one stale string, a historical 72-test
+   failure cluster, and an execution rule nobody could have satisfied.
 3. **SA155** — the structural version. Not "a test is wrong" but "an entire category of code
    has no owner."
 4. **SA137** — the smallest, clearest instance of duplicated authority; the release's other
