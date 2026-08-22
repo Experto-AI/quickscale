@@ -1,6 +1,6 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Audit snapshot:** 2026-08-22 · **Prior pass:** 2026-07-26 (reconciled 2026-08-21 at `412d8d20`) · **Branch:** `v88` · **HEAD:** `412d8d20`
+> **Audit snapshot:** 2026-08-22 · **Prior pass:** 2026-07-26 (reconciled 2026-08-21 at `412d8d20`) · **Branch:** `v88` · **Findings last reconciled at:** `0132e0ea`
 
 ## Orientation summary
 
@@ -121,7 +121,7 @@ function getCsrfToken(): string {
 |---|---|---|
 | Commit delta `e40762a0..HEAD` | all 12 files, production and test hunks, in full | Clean — no finding. The two test changes are correct narrowings; see *Clean sweeps* and *Notes* |
 | `scripts/` quality-baseline gate | `check_quality_baseline_monotonicity.py` merge-base + `main`; `check_quality.sh` ordering and failure path | **Closed by SA156 (TA63)** |
-| `scripts/` gate conformance suites | executed all 14 (74F/1126P); read the 3 failing tests and their fixtures | **Arch Finding 12** remains open; the former TA66 oracle failure, the historical quality-baseline failures, and the SA117 false-green are all closed (see [CHANGELOG.md](../../CHANGELOG.md)) |
+| `scripts/` gate conformance suites | executed all 14 — 74F/1126P at audit time, **1,213 passed** on the current tip after the closure passes; read the failing tests and their fixtures | **Arch Finding 12** remains open: the population is green but still has no owning execution context. The former TA66 oracle failure, the historical quality-baseline failures, and the SA117 false-green are all closed (see [CHANGELOG.md](../../CHANGELOG.md)) |
 | `scripts/` shell interpreter selection | `version_tool.sh`, `lint_frontend.sh`, `check_ci_locally.sh`, `_python_requirement.sh` | **Closed by SA159** — repository-source calls use the validated project interpreter; `check_ci_locally.sh` is documented adjacent because its heredoc is stdlib-only |
 | Generated settings templates | `base.py.j2`, `production.py.j2` in full | **TA68**; production hardening otherwise clean |
 | Generated project scaffold | `.env.j2`, `.env.example.j2`, `docker-compose.yml.j2`, `db/init.sql.j2`, `urls.py.j2`, `views.py.j2`, `railway.json.j2` | Clean — see *Notes* for the dev-credential and healthcheck watch items |

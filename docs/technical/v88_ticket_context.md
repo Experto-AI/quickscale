@@ -12,10 +12,11 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers **all twenty-five v88 ticket entries** across twenty-four merge positions
-(twenty-one open positions carrying twenty-two open entries, plus closed SA156, SA137,
-and SA157; SA163 executes inside SA135) plus the three post-v88 entries. Sections are ordered by
-merge band (A → B → C), which is also the order in which the work becomes safe to do.
+It covers the **twenty open v88 ticket entries** across nineteen open merge positions
+(SA163 executes inside SA135) plus the three post-v88 entries. Closed tickets are not
+described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
+Sections are ordered by merge band (A → B → C), which is also the order in which the work
+becomes safe to do.
 
 ---
 
@@ -36,18 +37,17 @@ The whole release is one principle with five failure modes. Every ticket is a le
  doesn't run  written in    is missing   the thing     only in a
  or lies      2+ places     so guess     we created    human's head
       │          │            │            │              │
-   SA156      SA137         SA150        SA151          SA123
-   SA155      SA134         SA165a       SA142          SA166
-   SA157      SA124         SA152c       SA135          SA123
-   SA158      SA118           │          SA161            │
-   SA159      SA163         (state       SA160          (dep-vuln +
-   SA162      SA164a          file)      (dead/dup       security
-     │        SA160             │         code)          scanners)
-  (base ref,  SA161                                        │
-   suites,      │                                       SA166
-   oracles,   (paths, pins,                            (testimony
-   false-     manifests, CI                             trail)
-   greens)    env, cookies)
+   SA155      SA134         SA150        SA151          SA123
+   SA162      SA124         SA165        SA142          SA166
+     │        SA118           │          SA135            │
+  (unwired    SA163         (wheelhouse  SA161         (dep-vuln +
+   suites,    SA164          fallback,   SA160          security
+   deprecated SA160          state       (dead/dup       scanners,
+   gate code) SA161          file)        code)          testimony
+                │                                        trail)
+             (paths, pins,
+              manifests, CI
+              env, cookies)
 ```
 
 **The one sentence:** *Every fact should have exactly one home, and every consumer should
@@ -59,8 +59,8 @@ failure modes; auditing the gate layer found a fifth sitting underneath all of t
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | Historically: 10 of 14 `scripts/test_*.py` suites wired to nothing; the quality gate's base ref pointed at a deleted branch; a test passed when its tool was deleted | SA156, SA155, SA157, SA158, SA159, SA162 |
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | devtools version pinned by hand; Python/Postgres versions retyped in tests; the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA137, SA134, SA124, SA118, SA163, SA160, SA164 |
+| **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | 10 of 14 `scripts/test_*.py` suites are still wired to no target; a gate uses a bool inversion Python 3.16 removes | SA155, SA162 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | Python/Postgres versions retyped in tests; the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA134, SA124, SA118, SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | wheelhouse set but no wheel matches → returns the manifest spec; a corrupt state file returns silently; a skip where a failure belongs | SA150, SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; migration history accretes; dead code nobody deletes | SA151, SA142, SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
@@ -75,27 +75,17 @@ The worktree grouping follows it directly:
 
 ## Why band A goes first (the argument in one page)
 
-Read these four facts together:
-
-1. Before SA156, `scripts/check_quality_baseline_monotonicity.py:305-306` and `:1395-1396`
-   fell back to `ref = "v87"`. That branch was retired for `v88` and never existed as a tag.
-2. When that former fallback failed, the gate exited 2 with `MERGE_BASE_ERROR`, and
-   `scripts/check_quality.sh:123` deletes the previous run's report *before* any analyzer
-   runs. So `make quality` produces nothing.
-3. In the pre-closure run, 14 `scripts/test_*.py` suites had **10 wired to no target at all**;
-   under the project interpreter they produced **959 passed, 74 failed**.
-4. `scripts/test_check_sa117_scope.py:596-617` asserts `returncode == 2` from a subprocess
-   whose script path never resolves. CPython exits 2 on `can't open file`. The test would
-   pass if the tool were deleted.
+Of the 14 `scripts/test_*.py` conformance suites, **10 are wired to no target at all**.
+They are the suites that prove the gate layer — scope allowlist, gate registry, parity,
+quality baseline — behaves as declared. Repeated repair passes (archived in
+[CHANGELOG.md](../../CHANGELOG.md)) have made that population green, but green is not the
+point: nothing *runs* it, so nothing will notice the next time it goes red.
 
 Now read the execution rule every ticket in this release inherits: *"Leave `make quality`
-no worse than found."*
-
-Before SA156 closed it, that rule was unverifiable for the `v88` branch even though both audit
-documents recorded the invariant as enforced. Meanwhile SA124's headline acceptance criterion —
-*"`scripts/test_check_sa117_scope.py` covers the divergence failure"* — would have been
-written into an unexecuted suite, beside a guaranteed false-green, most plausibly by
-copying it.
+no worse than found."* That rule, and every other ticket's acceptance criteria, are
+discharged by gates in this population. SA124's headline criterion —
+*"`scripts/test_check_sa117_scope.py` covers the divergence failure"* — lands in a suite
+nothing executes unless SA155 lands first. So do SA123's new gates.
 
 **Band A is not tidying. It is the difference between shipping tickets and shipping
 claims about tickets.**
@@ -104,268 +94,12 @@ claims about tickets.**
 
 # Band A — Make the gate layer tell the truth
 
-Band A contains five tickets: SA156 and SA157 are closed, SA158 and SA159 are the
-independent W1 legs, and SA155 is the integrating W2 leg. W1 owns SA159 because it edits
-`scripts/version_tool.sh`, which is SA137's file; SA158 is likewise isolated on W1.
-
-## SA156 — Make the quality gate's fallback base ref resolve
-
-`Band A · Tier 1 · W2 · merge #1 · **CLOSED** — retained for concepts only; closure detail in [CHANGELOG.md](../../CHANGELOG.md)`
-
-### The mental model
-
-The quality gate enforces **monotonicity**: quality metrics may not get worse than they
-were at the merge base. That requires knowing what the merge base *is*, so the gate walks a
-precedence chain to find a reference:
-
-```
-QUALITY_BASELINE_BASE_REF  (explicit override)
-   ↓ unset
-GITHUB_BASE_REF            (hosted PR target — probes origin/<ref> then <ref>)
-   ↓ unset
-"v87"                      (hard-coded fallback — probes the bare name only)
-```
-
-Every link but the last is fine. The last one names a **per-release branch**, which is
-exactly the kind of thing that stops existing when the release it names is over.
-
-### The concrete defect
-
-`v87` was retired for `v88` and never tagged. Note the second asymmetry, which is the
-subtler half: the `GITHUB_BASE_REF` branch above probes `origin/<ref>` *and then* `<ref>`,
-but the fallback resolves the bare name only — so it misses the `origin/v87` that still
-survives. Two independent bugs stacked, either of which alone would have hidden the other.
-
-Nothing in the `Makefile`, `scripts/`, or any workflow sets `QUALITY_BASELINE_BASE_REF`, so
-a local `make quality` hits the fallback every time. The monotonicity helper exits 2,
-`scripts/check_quality.sh:123` maps that failure to script exit 1 and deletes the previous
-report before any analyzer runs, and GNU Make surfaces the failed recipe as `make quality`
-exit 2.
-The failure mode is therefore *worse than no gate*: you lose the artifact that would have
-told you the gate did not run.
-
-This is also **72 of the 74 failures** in `scripts/test_quality_baseline_monotonicity.py`,
-which the arch audit had previously written off as unexplained environment sensitivity.
-That prior explanation is falsified and the falsification must be recorded.
-
-### Implementation shape
-
-Two things to fix, and do not fix only the first:
-
-1. **Resolution** — the fallback must use the same `origin/<ref>` → `<ref>` probe the
-   `GITHUB_BASE_REF` branch already implements. Factor the probe into one function and call
-   it from both sites; two probe implementations is the same duplicated-authority shape the
-   rest of the release is about.
-2. **Identity** — the fallback must name something durable: a long-lived ref (`main`), or a
-   ref derived from `VERSION`/`git tag`. Never the current or previous release branch.
-
-Then make it self-reporting: an unresolvable fallback should be a **startup-validated
-error whose message names the fix**, not a generic `MERGE_BASE_ERROR` at analysis time.
-
-The ~101 `v87` literals in the test suite move to the same derived ref — that count is
-itself evidence of how far one hardcoded string spread.
-
-### Verification
-
-```bash
-env -u QUALITY_BASELINE_BASE_REF -u GITHUB_BASE_REF \
-    poetry run python scripts/check_quality_baseline_monotonicity.py   # exit 0, real merge_base
-pytest scripts/test_quality_baseline_monotonicity.py                   # 72 failures → 0
-make quality                                                           # re-emits quality_report.json
-```
-
-Plus a regression test that runs the gate on a branch **not** named by the fallback — that
-is the case the current code gets wrong.
-
----
-
-## SA158 — Regenerate the stale `publish.yml` parity oracle
-
-`Band A · Tier 2 · W1 · merge #6 · deps: none (sequenced after SA159 in W1)`
-
-### The mental model
-
-`scripts/test_gate_parity.py` proves the CI topology matches what the gate registry
-declares. Some of those proofs are **literal oracles**: a hardcoded copy of the expected
-content, compared against the real file. An oracle is a deliberate trade — you accept
-maintenance cost in exchange for catching *any* drift, including drift a structural
-assertion would wave through.
-
-That trade only pays if the oracle is maintained.
-
-### The concrete defect
-
-`test_all_twenty_one_publish_run_values_are_structural` (`:1090`) compares `publish.yml`'s
-ordered `run:` blocks against a literal oracle. Commit `d3d4c633` added two steps and
-removed two `apt-get` lines and never touched the oracle.
-
-The test is **red on HEAD**. Repository content versus repository content — no environment
-dependence, no flakiness, no excuse.
-
-### Why it is band A rather than a chore
-
-A red test is not a failure signal; it is a **destroyed** failure signal. The next real
-parity drift in `publish.yml` lands on an already-red test and is indistinguishable from
-this one. And SA155 must register the gate suites **green** — a red test in the suite is a
-direct blocker.
-
-### The broader question this ticket must answer
-
-The arch audit's change-cost probe named five more count-pinned literal oracles: `:1064`,
-`:958`, and the four `all_five_conformance_gates` assertions at `:803`, `:809`, `:815`,
-`:847`. Every one is the same bet. Decide per oracle:
-
-- **Derive it** — read the real file and assert structure. Cheap to maintain, weaker.
-- **Restate structurally** — assert the *properties* the oracle was protecting rather than
-  exact text.
-- **Re-carry it deliberately** — with a written rationale saying why exactness is worth the
-  maintenance. This is a legitimate answer; silence is not.
-
-### The review discipline
-
-Regenerating an oracle is trivially easy and trivially wrong: `regenerate && commit` makes
-the test green while proving nothing. The acceptance requires the diff be **reviewed line
-by line**, each changed entry confirmed to correspond to an intended change in
-`d3d4c633`/`d4b0e834`. If an entry does not, you have found a second, real defect.
-
----
-
-## SA157 — Fix the SA117 scope-tool test that asserts the interpreter's exit code
-
-`Band A · Tier 2 · W2 · merge #4 · deps: none · blocks SA124 · **CLOSED** — retained for concepts only; closure detail in [CHANGELOG.md](../../CHANGELOG.md)`
-
-### The mental model
-
-This is the purest example of a **false green** in the repository, and worth internalising
-as a pattern rather than a one-off.
-
-A test asserts an exit code. Two entirely different mechanisms produce that same code:
-
-| Exit 2 from | Means |
-|---|---|
-| `argparse` | "the tool correctly rejected a bad argument" ← what the test intends |
-| CPython | "can't open file: no such file" ← what actually happens |
-
-The collision is **invisible** precisely because argparse chose 2 to match the shell
-convention. The test is not weak; it is measuring nothing at all.
-
-### The concrete defect
-
-`scripts/test_check_sa117_scope.py:596-617`:
-
-```python
-subprocess.run(["python", "scripts/check_sa117_scope.py", ...], cwd=version_fixture["root"])
-# asserts returncode == 2
-```
-
-The fixture root (`:85-96`) contains no `scripts/` subdirectory. The relative path never
-resolves. The interpreter exits 2 before the tool is ever loaded.
-
-The test passes today, would pass if `check_sa117_scope.py` were deleted, and would pass if
-the tool **accepted the argument it is supposed to reject**.
-
-Note this is not a house convention gone wrong: the same file uses `sys.executable`
-correctly in three other places, including the sibling at `:619-631`. It is one
-inconsistency in one file.
-
-### Why this must precede SA124
-
-Roadmap SA124 names this exact file as where its new acceptance criterion lands. Fix this
-first, or SA124's divergence test gets written beside — and most plausibly copied from — a
-guaranteed false-green, inside a suite nothing executes. Three defects compounding.
-
-### Implementation shape
-
-Copy the sibling at `:619-631` verbatim in shape:
-
-```python
-script = pathlib.Path(__file__).with_name("check_sa117_scope.py")
-result = subprocess.run([sys.executable, str(script), ...], ...)
-```
-
-Then add the part that makes the test un-fool-able: **assert a distinguishing signal
-alongside the exit code** — `"unrecognized arguments"` in stderr, or that the evidence file
-was not written. An interpreter-level failure produces neither.
-
-### Proof obligation
-
-Delete or rename `check_sa117_scope.py`, confirm the test turns **red**, revert. That is
-the demonstration that the test now measures the tool. Also
-`grep 'subprocess.run(\["python"' scripts/test_*.py` must return zero hits — this class
-should not be able to recur silently.
-
----
-
-## SA159 — Route repo-source execution through the project interpreter
-
-`Band A · Tier 2 · W1 · merge #5 · deps: SA137 (closed; same file) · blocks SA155, SA134`
-
-### The mental model
-
-`python3` on `PATH` is **whatever the machine happens to have**. The project interpreter is
-**the one the project declares**. Confusing them is fine right up until the repository uses
-syntax the PATH interpreter cannot parse — and then the failure is a `SyntaxError` from a
-file you did not think you were running, with no message naming the real cause.
-
-`ruff.toml:8-11` states the invariant **verbatim**:
-
-> *"Anything that executes repo sources must therefore use the project interpreter
-> (`sys.executable` / the venv), never a bare `python` off PATH"*
-
-So this is not a judgement call. The rule is written down and three sites violate it.
-
-### The concrete defect
-
-| Site | Code | Runs |
-|---|---|---|
-| `scripts/version_tool.sh:11`, used at `:28` | `PYTHON="${PYTHON:-python3}"` | the authoritative module-discovery shim |
-| `scripts/lint_frontend.sh:57` | `python3 render_j2_template.py` | a repo source |
-| `scripts/lint_frontend.sh:173` | `python3 render_j2_template.py` | a repo source |
-
-All three work today. **By luck, not by contract**: both targets happen to parse under
-3.12. The repository floor is 3.14, and ruff is configured to emit PEP 758 syntax that
-nothing below 3.14 can parse.
-
-The day `ruff format` collapses a two-type `except` in `module_discovery.py`,
-`version_tool.sh check` dies with a `SyntaxError` from a shim. The version gate — the thing
-that tells you your release is consistent — fails in a way that names neither the
-interpreter nor the version.
-
-`scripts/_python_requirement.sh` already exists and already probes candidate interpreters.
-Neither script sources it. The solution is in the tree, unused.
-
-### Implementation shape
-
-Resolve the project interpreter (`poetry run python`, `$REPO_ROOT/.venv/bin/python`, or the
-`_python_requirement.sh` probe) and **fail loudly with the required version** when none is
-found. Taking whatever `python3` is on `PATH` as a fallback is the exact behaviour being
-removed — do not reintroduce it as an "if all else fails" branch.
-
-Then make the class self-policing: a pre-commit or CI rule rejecting `python3 <repo>.py` in
-`scripts/*.sh` and `["python",` as an executor of a repo source in `scripts/test_*.py`.
-That second pattern is SA157's defect, so the two tickets close each other's recurrence.
-
-`scripts/check_ci_locally.sh:62-70` selects `python3` the same way but feeds it only a
-stdlib heredoc — genuinely adjacent, not a violation. Bring it into the seam or document it
-as deliberately excluded. Do not leave it unaddressed, because the next reader will
-re-litigate it.
-
-### Verification
-
-Put a 3.12 interpreter first on `PATH`, then run `scripts/version_tool.sh check` and
-`scripts/lint_frontend.sh`. Both must still succeed. That is the whole point.
-
-### Why W1 rather than W2
-
-`scripts/version_tool.sh` is SA137's file. Two worktrees editing it concurrently is a
-merge conflict on a shell script that gates the release. SA137 merges first (#2), SA159
-follows (#5) in the same worktree.
-
----
+Band A is now a single ticket: **SA155**, the integrating W2 leg. Its four former
+band-A siblings are closed; see [CHANGELOG.md](../../CHANGELOG.md).
 
 ## SA155 — Give the gate layer a gate of its own
 
-`Band A · Tier 1 · W2 · merge #7 · deps: SA158, SA159 (SA156 and SA157 closed)`
+`Band A · Tier 1 · W2 · merge #7 · deps: none — every prerequisite is merged`
 
 ### The mental model
 
@@ -386,14 +120,14 @@ owning execution context** — while being the code every other gate's credibili
 - 14 `scripts/test_*.py` suites. **4 wired to a target. 10 wired to nothing.**
 - `git log -S` shows the orphans were **never** wired. This is not decay; the wiring never
   existed, and the population grows by one with every new gate.
-- Historical pre-closure execution under the project interpreter: **959 passed, 74 failed**,
-  across code nothing ran. This is retained as evidence for the finding's origin, not as the
-  current SA156/SA157 status.
+- Historical pre-repair execution under the project interpreter: **959 passed, 74 failed**,
+  across code nothing ran. Every one of those failures has since been repaired by a separate
+  ticket, and the population now reports **1,213 passed** under the project interpreter.
 
-The historical 74-failure baseline included 72 failures caused by SA156; the remaining two
-were SA158 and the SA157 false-green in the same population. SA156 and SA157 are now closed,
-while SA155 remains behind the still-open gate-layer work. This is why the historical baseline
-still matters to SA155's acceptance without presenting those closures as live failures.
+That history is the argument, not a live failure list: the suites went red, stayed red for
+an entire branch, and were found by an audit rather than by a gate. SA155 must therefore
+register them **green** and keep them that way — the acceptance bar is an owning execution
+context, not a passing run.
 
 ### What is already closed — preserve it
 
@@ -437,68 +171,9 @@ Resolve that one explicitly rather than folding it into a blanket justification.
 
 # Band B / W1 — Pins, interpreter, and dependency-spec authority
 
-## SA137 — Add `quickscale_devtools` to version propagation (closed)
-
-`Band B · Tier 1 · W1 · merge #2 · **CLOSED** — retained for concepts only; closure detail in [CHANGELOG.md](../../CHANGELOG.md)`
-
-### The mental model
-
-QuickScale ships several Python packages out of one repository: `quickscale`, `quickscale_core`, `quickscale_cli`, `quickscale_devtools`, and twelve `quickscale_modules/*`. The repository holds **one** version number in the root `VERSION` file, and `scripts/version_tool.sh` is the machine that pushes that number into every place a version is written.
-
-Think of `VERSION` as the single clock, and `version_tool.sh` as the mechanism that moves every hand on every dial. `check` asks "do all the dials agree with the clock?"; `update` sets them.
-
-### The former defect
-
-Before SA137, the top of `scripts/version_tool.sh` contained:
-
-```bash
-PYPROJECTS=("$ROOT/quickscale_core/pyproject.toml" "$ROOT/quickscale_cli/pyproject.toml" "$ROOT/quickscale/pyproject.toml")
-PACKAGES=("$ROOT/quickscale_core/src/quickscale_core" "$ROOT/quickscale_cli/src/quickscale_cli")
-```
-
-`quickscale_devtools` was in neither list. The modules were handled well — `_load_module_inventory()` shells out to the authoritative discovery shim (`quickscale_core/src/quickscale_core/contracts/module_discovery.py --list-modules`) and derives the twelve module paths, so adding a module needs no edit there. But the top-level packages were a **hardcoded array**, and devtools had never been added to it.
-
-The drift was real and observable before the correction:
-
-```
-VERSION                                 → 0.87.0
-quickscale_devtools/pyproject.toml:34   → version = "0.86.0"
-```
-
-Devtools was a release behind, and `make version-check` passed anyway because it never looked.
-
-### Why it matters (and why it is only Tier 1, not urgent)
-
-Devtools is deliberately **maintainer-only**. Its own `pyproject.toml` header states it is intentionally absent from `PACKAGES` in `scripts/publish.sh` and `DEFAULT_PACKAGES` in `scripts/prepare_publish.py`. So a stale version does not ship to a user.
-
-Hold this distinction clearly, because it is the most likely way to get this ticket wrong:
-
-- **Version *parity*** — devtools should carry the repository version. **This is what SA137 fixed.**
-- **Version *publication*** — devtools should be uploaded to PyPI. **This is explicitly NOT SA137.** Adding devtools to the publish package list would break the documented maintainer contract and require `PATH_DEPENDENCY_REWRITES` changes.
-
-If a reviewer sees devtools appear in a publish list, the ticket has overreached.
-
-### Implementation shape
-
-The rejected weak fix was to append devtools to the two arrays. The accepted correction derives every direct-child `quickscale*/pyproject.toml` at the repository root, so a future top-level package joins parity without an inventory edit. Publication remains a separate, explicit inventory.
-
-Note that `scripts/sa117_scope.json` **already lists** `quickscale_devtools/pyproject.toml` and `quickscale_devtools/src/quickscale_devtools/__init__.py` as `SA117 version pin surface` entries. The allowlist expected devtools to be in the lockstep set; the tool never caught up. That is your strongest evidence that this is a genuine omission and not a deliberate exclusion.
-
-Devtools has no `__version__` in `src/quickscale_devtools/__init__.py`; SA137 deliberately kept `[project] version` as its only version pin. The scope file's phase-4 entry records that reviewed runtime-version exclusion rather than claiming the init module is a pin.
-
-### Files
-
-`scripts/version_tool.sh`, `quickscale_devtools/pyproject.toml`, `scripts/test_version_tool.py`, possibly `quickscale_devtools/src/quickscale_devtools/__init__.py`. Shared surface: `VERSION`, `Makefile`.
-
-### Verification
-
-`make version-check` (must now fail before the fix and pass after the devtools bump); `scripts/version_tool.sh update` followed by a clean `check`; new contract tests in `scripts/test_version_tool.py`. Note that `test_version_tool.py` copies the real script into a synthetic repository (`shutil.copy2` at line ~450) — your new discovery logic must work inside that hermetic fixture, so avoid depending on anything outside the copied tree.
-
----
-
 ## SA134 — Derive generated-project version assertions from authoritative pins
 
-`Band B · Tier 2 · W1 · merge #9 · deps: SA159 (SA137 closed)`
+`Band B · Tier 2 · W1 · merge #9 · deps: none — every prerequisite is merged`
 
 ### The mental model
 
@@ -549,9 +224,12 @@ The acceptance wording — *"retired-version negative controls remain and still 
 
 Note `quickscale_core/tests/docker-compose.test.yml` is a static YAML file, not Python — it cannot import `runtime_pins`. Decide whether it is in scope (it pins the *test harness* Postgres, arguably a different concern from the *generated project* Postgres) and say which, rather than leaving it ambiguous. This overlaps SA135, which owns the test harness's database; coordinating the answer with the W3 ticket is reasonable, but SA134 merges first (#9 vs #15), so state the decision and let SA135 honour it.
 
-### Depends on SA137 because
+### The convention it inherits
 
-Both tickets are about "the version fact has one home". SA137 establishes the derived-inventory pattern for repository package versions; SA134 applies the same discipline to runtime pins in tests. Sequencing them avoids two people inventing two different conventions for "read the authoritative value" in the same release.
+`scripts/version_tool.sh` already derives the repository's package-version inventory rather
+than re-listing it (closed work; see [CHANGELOG.md](../../CHANGELOG.md)). SA134 applies the
+same discipline to runtime pins asserted in tests — read the authoritative value, do not
+retype it.
 
 ---
 
@@ -634,12 +312,13 @@ is historical and needs no action.
 
 # Band B / W2 — Gates and declared wiring
 
-Everything here merges **after** band A. SA124 in particular must not start before SA157
-lands, because SA157 owns the file SA124's acceptance criterion writes into.
+Everything here merges **after** band A. SA124 in particular must not start before SA155
+lands, because its acceptance criterion is written into a suite SA155 gives an execution
+context.
 
 ## SA124 — Unify SA117 scope-tool path authority
 
-`Band B · Tier 1 · W2 · merge #11 · deps: SA155, SA157`
+`Band B · Tier 1 · W2 · merge #11 · deps: SA155`
 
 ### The mental model
 
@@ -778,7 +457,7 @@ You have already seen a concrete example of the second pattern in SA150's file:
 backend = str((module_options or {}).get("backend", "local")).strip().lower()
 ```
 
-That `"local"` is `storage.backend`'s manifest default, retyped in `module_dependency_sync.py`. Change the manifest and this code keeps the old default. Same class of bug as SA137 and SA134, one layer up.
+That `"local"` is `storage.backend`'s manifest default, retyped in `module_dependency_sync.py`. Change the manifest and this code keeps the old default. Same class of bug as SA134, one layer up.
 
 ### The scope boundary — this is the important part
 
@@ -1371,7 +1050,7 @@ Every other ticket in this release makes a *machine* tell the truth. This one ma
 
 `d3d4c633` and `d4b0e834` were both titled **"v0.87.0: QuickScale 0.87.0"** while in fact
 changing hosted and publish provisioning. `d3d4c633` also left a repository conformance test
-red — that is TA66, which is SA158, which is merge #6 of this release.
+red — a stale publish-parity oracle, since repaired and closed.
 
 Both audits independently flagged the same shape: **a release-shaped message carrying a CI
 topology change**. It was read closely only because the arch audit's delta-classification
@@ -1488,24 +1167,18 @@ Follow the merge order in the roadmap. It is the answer.
 
 Each step builds the one after it:
 
-1. **SA157** — the purest false green. Two mechanisms, one exit code. Ten lines. Once you
-   see it, you see the whole band-A argument.
-2. **SA156** — the same shape at repository scale: one stale string, a historical 72-test
-   failure cluster, and an execution rule nobody could have satisfied.
-3. **SA155** — the structural version. Not "a test is wrong" but "an entire category of code
-   has no owner."
-4. **SA137** — the smallest, clearest instance of duplicated authority; the release's other
-   half in one file.
-5. **SA150** — the clearest instance of silent fallback; four lines of code, precisely
+1. **SA155** — the structural version of every band-A defect this release already closed.
+   Not "a test is wrong" but "an entire category of code has no owner."
+2. **SA150** — the clearest instance of silent fallback; four lines of code, precisely
    diagnosable.
-6. **SA134** — duplicated authority plus the tautology trap, which is where judgement starts
+3. **SA134** — duplicated authority plus the tautology trap, which is where judgement starts
    mattering.
-7. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
-8. **SA151, SA135** — the two service-lifecycle tickets, both carrying real correctness risk
+4. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
+5. **SA151, SA135** — the two service-lifecycle tickets, both carrying real correctness risk
    (dropped RLS policies; bypassed RLS roles).
-9. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
+6. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
    about existing conventions (scope allowlist, gate registry, emission-parity fixture).
-10. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
+7. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
 
 ### The three traps this release keeps setting
 
@@ -1516,7 +1189,7 @@ Worth holding as a set, because each appears in more than one ticket:
   keep *negative controls* literal.
 - **The wrong-fix trap** (SA162, and SA155's Option 3). An audit's finding and an audit's
   suggested fix carry different verification. `not val` would have broken the CSRF gate.
-- **The green-by-absence trap** (SA157, SA155, SA135, SA152, SA165). Skipping, filtering,
+- **The green-by-absence trap** (SA155, SA135, SA152, SA165). Skipping, filtering,
   and unresolvable paths all produce green. Every one of them must be made to produce red.
 
 

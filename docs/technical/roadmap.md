@@ -14,7 +14,7 @@ This is the current task planner. It holds **open** work only. Completed tickets
 - Start from a clean worktree after merging the integration branch. Before merge-back, sync the integration branch into the worktree, resolve there, run the ticket's verification, review the exact tip, then merge that tip.
 - Every handoff declares its file allowlist, commands, expected exits/artifacts, rollback, and focused validation. Scope findings are ticketed rather than fixed in place.
 - Leave `make quality` no worse than found. Do not raise a complexity ceiling or reintroduce file-line ceilings. The rule is measurable again (SA156, closed): the default monotonicity path resolves durable `main` and `make quality` emits fresh reports. The current baseline is two warning regressions: the pre-existing `development_commands.py::up` complexity regression (15 versus allowed 14) and the newly observed `social/.../adapter.py::_social_manifest_apps` regression (13 above threshold); critical regressions remain 0 and monotonicity passes.
-- Shared closeout conflict surfaces are `CHANGELOG.md`, `docs/technical/roadmap.md`, and `docs/technical/decisions.md` when policy changes. `docs/others/arch-audit.md` and `docs/others/tech-audit.md` join that surface only when a ticket changes or closes a live audit finding. The sync-before-merge-back procedure above must preserve every concurrent entry, resolve these files in the worktree, rerun the ticket's checks, and leave no unmerged files before the exact tip is reviewed and merged.
+- Shared closeout conflict surfaces are `CHANGELOG.md`, `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md` when a ticket's concepts change, and `docs/technical/decisions.md` when policy changes. `docs/others/arch-audit.md` and `docs/others/tech-audit.md` join that surface only when a ticket changes or closes a live audit finding. The sync-before-merge-back procedure above must preserve every concurrent entry, resolve these files in the worktree, rerun the ticket's checks, and leave no unmerged files before the exact tip is reviewed and merged.
 - PostgreSQL/Docker work is serialized across worktrees. **W3 holds the exclusive PostgreSQL/Docker slot** and takes scheduling priority whenever one of its legs is active, even though W2 — not W3 — is the longest dependency chain this release.
 - **W1's wiring legs (SA167b, SA167d) may not touch `scripts/gate_registry.json` or any `module.yml`.** Both are W2-owned surfaces — SA167a and SA167c are on W2 for exactly that reason. The wiring legs' only cross-worktree edge is `entry_point.py`, one-way: SA167a merges at #8 before SA167b starts.
 - A ticket whose deliverable is Git ref state cannot be delegated to a file-editing worker. Route it to a maintainer session with ref authority and push credentials.
@@ -53,9 +53,8 @@ Starting SA167a early remains sanctioned; merging it early does not.
 
 ### Priority model (revised 2026-08-21)
 
-The first plan ranked the nine implementation tickets on their own merits, and the
-audit-derived backlog was appended afterwards. Reconciling the two changes the
-answer, because four audit tickets are **prerequisites**, not follow-on work:
+Four audit-derived tickets are **prerequisites**, not follow-on work, so the implementation
+queue and the audit backlog are ranked together:
 
 > **Ordering rule.** A ticket that makes a gate *tell the truth* outranks a ticket that
 > makes the product *better*, because every other ticket's acceptance criteria are
@@ -70,7 +69,7 @@ Applying it produces three ranked bands:
 | **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA151→SA142→SA135(+SA163); SA134→SA150→SA167b→SA167d; then SA155→SA167a→SA124→SA123→SA118→SA167c |
 | **C — Bounded independent fixes** | No dependants, small blast radius. Absorbed as slack filler by whichever worktree finishes a band-B leg early. | SA160, SA161, SA162, SA164, SA165, SA166 |
 
-**What changed from the first plan and why:**
+**Standing consequences of that rule:**
 
 - **The critical path is on the gate track, not the service track.** W2's band-A/B spine
   (`SA155 → SA167a → SA124 → SA123 → SA118 → SA167c`) is six serialized merge legs behind
@@ -116,9 +115,8 @@ Applying it produces three ranked bands:
   SA167d are free (parallel on W1); SA167a and SA167c are not.
 - **SA163 does not get its own slot.** It executes inside SA135, whose allowlist already
   covers the same provisioning files.
-- **The nine "v88 tickets" and the audit tickets are one queue.** Keeping them in separate
-  sections with separate numbering is what hid the prerequisite relationship for a full
-  planning pass.
+- **The implementation tickets and the audit tickets are one queue.** The merge-order table
+  is the single authority; the two backlog sections below are presentation, not scope.
 
 ### Dependency graph and critical path
 
@@ -177,7 +175,7 @@ scheduling priority whenever one of its legs is active.
    tail; it constrains nothing upstream.
 4. `SA151` (W3) → `SA152` (post-v88). Recorded, not scheduled this release.
 
-**Parallelism result (re-checked 2026-08-22):** all three lanes have an executable next
+**Parallelism result (re-checked 2026-08-22, second pass):** all three lanes have an executable next
 action and none is idle, so there is no track to rebalance *into*. W2 is the longest lane at
 eight open legs and cannot be shortened: SA155, SA124, SA123, SA166 and SA164 all own
 `scripts/gate_registry.json`, which by standing invariant never crosses worktrees; SA167a,
@@ -190,16 +188,16 @@ gate's `_HOST_DEPENDENT_PATHS`, both of which W3's SA163/SA161/SA160 legs read o
 **No track moves are proposed this pass.** Band-C tickets remain the sanctioned way to spend
 lane slack in place.
 
-### Track readiness (assessed 2026-08-22)
+### Track readiness (assessed 2026-08-22, re-verified after the SA151 P2A probe)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W1** | SA134 (#9) | **yes** — its prerequisite is merged; no open decision | **yes** — its assertion surfaces are W1-owned | **yes** — merge #9's dependency is satisfied | **truly green — next W1 leg** |
-| **W2** | SA155 (#7) | **yes** — both prerequisites are merged; no open decision | **yes** — the gate suite is green under the project interpreter | **yes** — both merge prerequisites are satisfied | **truly green — next critical-path leg** |
-| **W3** | SA151 (#3, **partial checkpoint retained**) | **yes** — resume with the three recorded P2A guard findings; no new decision gate | **yes** — P2A hardening and P2B/P3 are W3-owned; the exclusive slot remains assigned | **yes** — the maintainer accepted the partial checkpoint for merge at #3, without closing the ticket | **partial but startable — off the critical path** (second chain) |
+| **W1** | SA134 (#9, **in progress** — uncommitted test-side edits in the worktree) | **yes** — every prerequisite is merged; no open decision | **yes** — its assertion surfaces are W1-owned test files | **yes** — merge #9 has no unsatisfied dependency | **truly green — off the critical path** |
+| **W2** | SA155 (#7, **in progress**) | **yes** — every prerequisite is merged; no open decision | **yes** — the `scripts/` population is green (1,213 passed) under the project interpreter, so the target can register green on arrival | **yes** — #7 has no unsatisfied dependency | **truly green — next critical-path leg** |
+| **W3** | SA151 (#3, **partial checkpoint retained**) | **yes** — resume with AFR-001/002/003, each re-verified false-green by direct probe; no new decision gate | **yes** — P2A hardening and P2B/P3 are W3-owned; the exclusive slot remains assigned | **yes** — the maintainer accepted the partial checkpoint for merge at #3 without closing the ticket | **partial but startable — off the critical path** (second chain) |
 
 **Blocked next-after tickets, and what clears each:**
 
@@ -209,7 +207,7 @@ are yes.
 | SA167a (#8) | can merge — no | SA155 (#7) | **Decided 2026-08-22 — the gate stays.** This was the one decision-clearable blocker; the maintainer declined to lift it. Implementation may begin today (`deps: none`); only the *merge* waits, because its acceptance evidence — unchanged emission parity, `make quality` no worse than found — is meaningless until SA155 makes the gate layer truthful. Starting it early is sanctioned; merging it early is not. |
 | SA164 (#25) | can start · can finish — no | SA151 (#3) | No — hard dependency. Its SA92 parity backstop must be re-anchored onto SA151's regenerated migrations, which do not exist in final form until SA151 closes. |
 
-**Recommended concurrency right now:** W1 starts SA134, W2 starts SA155, and W3 first
+**Recommended concurrency right now:** W1 continues SA134, W2 continues SA155, and W3 first
 closes SA151's three P2A guard findings, then continues P2B and P3. All three next-track
 choices are dependency- and decision-clear.
 **No maintainer decision is outstanding anywhere in this plan** — the two that were open on
@@ -256,7 +254,7 @@ past the release without blocking it; none may displace a band-A or band-B leg.
 
 ### Shared conflict surfaces
 
-Standing surface for every ticket: `CHANGELOG.md`, `docs/technical/roadmap.md`.
+Standing surface for every ticket: `CHANGELOG.md`, `docs/technical/roadmap.md`, and `docs/technical/v88_ticket_context.md` when the ticket's concept notes change.
 Additional per-ticket surfaces:
 
 | Ticket | Additional shared surface | Why |
@@ -327,7 +325,7 @@ Conceptual background, mental models, and implementation notes for **every** tic
 
 - [ ] **SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam.** `Band B · Tier 2 · W1 · merge #12 · deps: SA134 · blocks SA118`
   Carried forward as non-blocking observations from the installed-wheel lifecycle review: the seam is referenced only by production code and its own E2E with no `docs/technical/` description, and `_resolve_local_wheel_dependency()` silently falls back to the manifest version spec when the wheelhouse is set but matches no wheel.
-  **Acceptance:** the seam has a `docs/technical/` description covering purpose, accepted values, and failure modes; `_resolve_local_wheel_dependency()` in `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py` raises a named, actionable error when `QUICKSCALE_LOCAL_WHEELHOUSE` is set but no wheel matches, instead of returning the manifest spec; a regression test asserts the raise (not a log); the unset-wheelhouse path is unchanged and still resolves from the manifest; the tech-audit **live watch item** is retired with evidence without changing the current four-finding severity table (S3: two; S4: two), because no numbered finding is closed by this ticket.
+  **Acceptance:** the seam has a `docs/technical/` description covering purpose, accepted values, and failure modes; `_resolve_local_wheel_dependency()` in `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py` raises a named, actionable error when `QUICKSCALE_LOCAL_WHEELHOUSE` is set but no wheel matches, instead of returning the manifest spec; a regression test asserts the raise (not a log); the unset-wheelhouse path is unchanged and still resolves from the manifest; the tech-audit **live watch item** is retired with evidence without changing the current three-finding severity table (S3: one; S4: two), because no numbered finding is closed by this ticket.
 
 - [ ] **SA124 — Unify SA117 scope-tool path authority.** `Band B · Tier 1 · W2 · merge #11 · deps: SA155 · blocks SA123`
   Make the CLI, `--help`, Make target, and `scripts/sa117_scope.json` derive one required-path set; carry advisory `SA117E1-REV-004`.
@@ -368,62 +366,53 @@ Conceptual background, mental models, and implementation notes for **every** tic
   QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models.
   **Acceptance:** exactly one `0001_initial` per module with models, and no other migration files; a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; `make test-integration` passes; existing databases are out of scope by policy — the documented upgrade path is a fresh database; the no-migration-history policy is recorded in [decisions.md](decisions.md).
 
-  **Checkpoint disposition (2026-08-22):** the reviewed P1 partial implementation is merged
-  into `v88`. All ten modules are regenerated to a single `0001_initial` with schema parity,
-  dry-run, integration, BYPASSRLS, and quality evidence recorded in
-  [CHANGELOG.md](../../CHANGELOG.md); phase P1 (social's manifest-owned app projection) is
-  complete and convergence-reviewed. P2A adds a source-derived guard for the twelve shipped
-  AppConfigs, the ten currently model-bearing migration packages, the two current service-style
-  modules, and the `teams` placeholder. The guard uses static AST inspection without executing
-  migration source, and its focused semantic command
-  (`poetry run pytest quickscale_core/tests/test_module_migration_topology.py -q --tb=short
-  -o addopts= --no-cov`) passes all twenty-three tests. The earlier literal focused command remains
-  historical red evidence: its seven test bodies passed, but package-default full-core
-  coverage was 28.48% against 90%, so it exited 1; that failure was not accepted and no
-  coverage policy was weakened. Convergence closed its in-pass findings, but terminal
-  attestation found the three false-green paths listed below. The maintainer directed that
-  these partial improvements be retained and merged as a checkpoint, not represented as P2A
-  closure. SA151 stays **open** and SA142/SA152 stay blocked.
+  **Checkpoint disposition (retained; re-verified 2026-08-22).** P1 is merged and
+  convergence-reviewed: ten modules carry exactly one regenerated `0001_initial`, with schema,
+  dry-run, integration, BYPASSRLS, and quality evidence archived in
+  [CHANGELOG.md](../../CHANGELOG.md). P2A's source-derived topology guard
+  (`quickscale_core/tests/test_module_migration_topology.py`) is implemented and hardened:
+  it binds the twelve shipped AppConfigs, the ten model-bearing migration packages, the two
+  service-style modules, and the `teams` placeholder by static AST reading, never by executing
+  migration source, and twenty-three focused tests pass. The maintainer directed that this be
+  merged as a **checkpoint**, not represented as P2A closure. SA151 stays **open**; SA142 and
+  SA152 stay blocked.
 
-  **What is done at this retained checkpoint:**
-  - P1 remains merged with the schema, dry-run, integration, BYPASSRLS, and quality evidence
-    recorded in the changelog.
-  - The P2A guard and twenty-three focused regression tests are implemented; they enforce the
-    current twelve-module/ten-migration topology and reject the covered direct, nested,
-    post-class, reflective, spoofed-base, and ambiguous mutation cases without importing or
-    executing migration source.
-  - The worktree was synchronized with `v88`, the shared roadmap/changelog content was
-    reconciled, the focused suite passed, and `make check QUIET=1 SECTIONS="core"` passed.
+  **Pending before P2A can be called complete — all three re-verified false-green on the
+  current tip by direct probe, no diagnostic emitted:**
+  - **AFR-001 (major, blocking):** module-global attribute rebinding
+    (`sys.modules[__name__].migrations = ...`) is not rejected. The guard's
+    `_INDIRECT_REBINDING_NAMES` covers `globals`/`setattr`/`getattr`/`vars`/`exec` and the
+    reflective `type.__setattr__` forms, but not a `sys.modules` subscript-attribute write,
+    so a spoofed non-Django `migrations.Migration` base still reads as canonical. Add the
+    rejection and a no-execution canary.
+  - **AFR-002 (major, blocking):** model discovery tests only `models.py`
+    (`_migration_topology_diagnostics`). A module whose models live in an importable
+    `models/` package is silently classified service-style and its **missing** migration
+    package goes unreported. Classify both forms as model-bearing, reject an ambiguous dual
+    representation, and add a package-form missing-migration canary.
+  - **AFR-003 (moderate, blocking):** duplicate AppConfig classes do fail closed — the
+    identity collapses to `None` and trips the inventory completeness assertion — but later
+    or indirect rebinding of `name`/`label` after the class body is unmodelled and passes,
+    and neither form carries a canary. Require exactly one effective direct literal binding
+    of each and add duplicate-name, duplicate-label, and post-class-rebind canaries.
 
-  **Pending / blocking before P2A can be called complete:**
-  - **AFR-001 (major, blocking):** reject module-global attribute rebinding such as
-    `sys.modules[__name__].migrations = ...`, which can make the syntactically canonical
-    `migrations.Migration` base resolve to a non-Django class; add a no-execution canary.
-  - **AFR-002 (major, blocking):** classify both `models.py` and an importable `models/`
-    package as model-bearing, reject ambiguous dual representations, and add a package-form
-    missing-migration canary.
-  - **AFR-003 (moderate, blocking):** require exactly one effective direct literal AppConfig
-    `name` and `label` binding, reject later/indirect rebinding, and add duplicate-name and
-    duplicate-label canaries.
-
-  **Decision status needed to continue cleanly:** no new maintainer decision is required.
-  Existing fail-closed and no-source-execution policy determines all three corrections. A new
-  decision is needed only if a future implementation proposes allowing dynamic migration-base,
-  model-discovery, or AppConfig identity forms instead of rejecting them conservatively.
+  **Decision status:** no maintainer decision is required. Existing fail-closed and
+  no-source-execution policy determines all three corrections. A decision would be needed only
+  if a future implementation proposed *allowing* dynamic migration-base, model-discovery, or
+  AppConfig identity forms instead of rejecting them.
 
   **Remaining work — the only thing that closes this ticket:**
-  - **P2A hardening** — close AFR-001, AFR-002, and AFR-003; rerun the focused topology suite,
-    the core check, convergence, and terminal attestation before claiming P2A complete.
-  - **P2B** — the non-skippable generated empty-PostgreSQL install/migrate proof; P2A's
-    current partial guardrail is retained but must be hardened first.
-  - **P3** — record the no-migration-history policy in [decisions.md](decisions.md), close out
-    the changelog/roadmap entries, run the broad terminal gates, and take terminal attestation.
+  - **P2A hardening** — close AFR-001, AFR-002, and AFR-003; rerun the focused topology suite
+    and `make check QUIET=1 SECTIONS="core"`, then take convergence and terminal attestation.
+  - **P2B** — the non-skippable generated empty-PostgreSQL install/migrate proof.
+  - **P3** — record the no-migration-history policy in [decisions.md](decisions.md), run the
+    broad terminal gates, and take terminal attestation.
 
-  **Pending plan:** start from this retained P1/P2A partial checkpoint; close the three P2A
-  findings and obtain clean convergence/attestation; then implement P2B and rerun the ten dry
-  checks, generated empty-PostgreSQL migration, restricted and BYPASSRLS suites, aggregate
-  schema/security/seed parity, integration, and quality; finally perform P3. Do not begin
-  SA142 or SA152 before SA151 closes.
+  **Note on the focused command.** Run the topology suite as
+  `poetry run pytest quickscale_core/tests/test_module_migration_topology.py -q --tb=short
+  -o addopts= --no-cov`. Without `-o addopts=`, the package-default full-core coverage gate
+  measures ~28% against 90% and exits 1 even when every test body passes; that is a harness
+  artifact, not a result, and no coverage threshold may be weakened to avoid it.
 
 - [ ] **SA142 — Reuse and clean E2E Docker images.** `Band B · Tier 1 · W3 · merge #10 · deps: SA151 · Docker slot · blocks SA135`
   Separate stable image identity from per-run container/port/volume identity, reclaim variable images under normal cleanup, and preserve `--no-cleanup` diagnostics.
