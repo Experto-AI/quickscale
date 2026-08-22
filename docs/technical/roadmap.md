@@ -194,7 +194,7 @@ are yes.
 |---|---|---|---|---|---|
 | **W1** | SA159 (#5) | **yes** — no decision, no plan gate | **yes** — all four acceptance surfaces are W1-owned | **yes** — #5 has no open predecessor | **truly green — on the critical path** (feeds SA155) |
 | **W2** | SA168 (#6b) | **yes** — `deps: none`, one stale assertion, no decision or plan gate | **yes** — the assertion and its manifest source are both W2-scoped and touched by no other ticket | **yes** — #6b has no open predecessor and runs concurrently with #5 | **truly green — feeds the critical path** (unblocks SA155 jointly with SA159) |
-| **W3** | SA151 (#3, partial) | **yes** — P1 merged, P2/P3 plan is written | **yes** — P2/P3 are W3-owned; the exclusive slot is held | **yes** — #3 is first in the queue | **truly green — off the critical path** (second chain) |
+| **W3** | SA151 (#3, partial) | **yes** — P1 merged, P2A reviewed, P2B/P3 plan is written | **yes** — P2B/P3 are W3-owned; the exclusive slot is held | **yes** — #3 is first in the queue | **truly green — off the critical path** (second chain) |
 
 **Blocked next-after tickets, and what clears each:**
 
@@ -207,7 +207,7 @@ are yes.
 | SA164 (#25) | can start · can finish — no | SA151 (#3) | No — hard dependency. Its SA92 parity backstop must be re-anchored onto SA151's regenerated migrations, which do not exist in final form until SA151 closes. |
 
 **Recommended concurrency right now:** W1 runs SA159, W2 runs SA168, and W3 continues
-SA151 P2. Three truly-green legs with no shared files; two of the three feed the critical
+SA151 P2B. Three truly-green legs with no shared files; two of the three feed the critical
 path, and the third is the second chain.
 
 ### Merge order
@@ -365,24 +365,31 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Acceptance:** no function in `module_config.py` decides a module's apps, middleware, settings keys, or URL includes — those come from the module's manifest through its adapter; the remaining surface is desired-configuration collection only, and that boundary is stated in the module's docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist) is retired once the deviation it names is gone.
   **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`.
 
-- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · blocks SA142, SA152 · PARTIAL CHECKPOINT 2026-08-21`
+- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · blocks SA142, SA152 · P2A PARTIAL CHECKPOINT 2026-08-22`
   QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models.
   **Acceptance:** exactly one `0001_initial` per module with models, and no other migration files; a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; `make test-integration` passes; existing databases are out of scope by policy — the documented upgrade path is a fresh database; the no-migration-history policy is recorded in [decisions.md](decisions.md).
 
-  **Checkpoint disposition (2026-08-21):** the reviewed partial implementation is merged into
-  `v88`. All ten modules are regenerated to a single `0001_initial` with schema parity,
+  **Checkpoint disposition (2026-08-22):** the reviewed P1 partial implementation is merged
+  into `v88`. All ten modules are regenerated to a single `0001_initial` with schema parity,
   dry-run, integration, BYPASSRLS, and quality evidence recorded in
   [CHANGELOG.md](../../CHANGELOG.md); phase P1 (social's manifest-owned app projection) is
-  complete and convergence-reviewed. SA151 stays **open** and SA142/SA152 stay blocked until
-  the two unreached phases pass.
+  complete and convergence-reviewed. P2A now adds a convergence-reviewed, source-derived
+  guard for the twelve shipped AppConfigs, the ten model-bearing migration packages, the two
+  service-style modules, and the `teams` placeholder. Its focused semantic command
+  (`poetry run pytest quickscale_core/tests/test_module_migration_topology.py -q --tb=short
+  -o addopts= --no-cov`) passes all eight tests. The earlier literal focused command remains
+  historical red evidence: its seven test bodies passed, but package-default full-core
+  coverage was 28.48% against 90%, so it exited 1; that failure was not accepted and no
+  coverage policy was weakened. SA151 stays **open** and SA142/SA152 stay blocked because
+  P2B and P3 have not been reached.
 
   **Remaining work — the only thing that closes this ticket:**
-  - **P2** — the exact-ten migration topology guardrail, plus a non-skippable generated
-    empty-PostgreSQL install/migrate proof.
+  - **P2B** — the non-skippable generated empty-PostgreSQL install/migrate proof; P2A's
+    exact-ten topology guardrail is complete at this checkpoint.
   - **P3** — record the no-migration-history policy in [decisions.md](decisions.md), close out
     the changelog/roadmap entries, run the broad terminal gates, and take terminal attestation.
 
-  **Plan:** start from the reviewed P1 checkpoint; implement P2; rerun the ten dry checks,
+  **Plan:** start from the reviewed P1/P2A checkpoint; implement P2B; rerun the ten dry checks,
   generated empty-PostgreSQL migration, restricted and BYPASSRLS suites, aggregate
   schema/security/seed parity, integration, and quality; then perform P3. Do not begin SA142
   or SA152 before SA151 closes.
