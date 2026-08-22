@@ -872,13 +872,25 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - **`tenant_excluded` marker precedence:** in `is_tenant_model()` (`orgs/tenancy.py`), an explicit `tenant_excluded = "reason"` marker on a model takes precedence over manager/base-class detection (`TenantManager`/`TenantModel` inheritance) — a model marked excluded is never classified as tenant-scoped even if it also inherits tenant machinery.
 - **Intentional CASCADE exception:** `OrganizationInvitation.invited_by` remains `on_delete=CASCADE` because a pending invitation is an action attributed to its sender—if the sender's account is deleted, the invitation has no meaningful sender identity and dissolving it along with the sender is the correct behavior. This is a narrow, documented exception to the general SET_NULL/PROTECT rule for user-FKs in tenant-scoped models. Every other user-FK in `quickscale_modules_*` is SET_NULL or PROTECT (enforced by a conformance test in the orgs cross-module test harness).
 - **Last-owner `pre_delete` backstop refusal mechanism:** the orgs `pre_delete` receiver on the `User` model raises (does not silently return/no-op) when the deletion would orphan a shared organization's last owner, matching the [fail-hard principle](#fail-hard-principle) — a caller (admin bulk-delete, management command, a future GDPR erasure path) must see a loud failure rather than believe a refused delete succeeded.
-### Migration-Squash Decision {#migration-squash-decision}
+### Clean-Break Migration History {#migration-squash-decision}
 
-**Rule:** The project has no deployed database to preserve, so every module's migration history is a single final-schema `0001_initial` with `organization_id NOT NULL` from row zero. This is a fresh-only posture — there is no cross-org backfill migration class. The rules below are standing constraints for anyone adding or changing migrations.
+**Rule:** QuickScale is pre-1.0 and does not support in-place database upgrades
+between releases. The supported upgrade path is a fresh database, so every
+model-bearing shipped module carries one final-schema `0001_initial` and no
+incremental migration history. Service-style modules carry no migrations. This
+is a clean-break, fresh-only posture — there is no cross-release backfill or
+compatibility migration class. The rules below are standing constraints for
+anyone adding or changing migrations.
 
 **Standing rules:**
 
-1. **One `0001_initial` per module.** Each of the nine modules (orgs, auth, blog, crm, forms, listings, billing, social, notifications) carries its final model state in a single initial migration. Do not add backfill `RunPython` steps for `organization_id`; new tenant tables ship with `organization_id NOT NULL` from creation.
+1. **One `0001_initial` per model-bearing module.** The current ten are auth,
+   backups, billing, blog, crm, forms, listings, notifications, orgs, and social.
+   Each carries its final model state in a single initial migration with
+   `Migration.initial = True`; analytics and storage are service-style and carry
+   no migrations. Do not add `0002_*` history or cross-release backfill
+   `RunPython` steps. New tenant tables ship with `organization_id NOT NULL` from
+   creation.
 
 2. **Each tenant module installs its own RLS.** Every tenant module's `0001_initial` carries its own `RunPython(apply_force_rls, ...)` and is authoritative for its own FORCE-RLS policy. The orgs module installs no module-table policy (it runs before enrolled tables exist). `apply_force_rls`/`revert_force_rls` in `orgs/tenancy.py` are the only supported RLS-management entrypoints.
 

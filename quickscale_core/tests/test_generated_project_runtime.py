@@ -11,14 +11,18 @@ This test is marked ``@pytest.mark.e2e`` so it is excluded from
 Phase 14.3 of the roadmap (Finding 14 — generator-runtime test coverage).
 """
 
+import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any, Iterator
 
 import pytest
 
@@ -90,13 +94,39 @@ def _find_free_port() -> int:
     return port
 
 
-def _install_project_dependencies(project_path: Path) -> None:
+def _standalone_generated_env(
+    overrides: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Build a generated-project environment without maintainer provenance."""
+    environment = build_isolated_poetry_env()
+    for variable in (
+        "PYTHONPATH",
+        "MYPYPATH",
+        "PWD",
+        "OLDPWD",
+        "DJANGO_SETTINGS_MODULE",
+        "QUICKSCALE_PRIVILEGED_COMMAND",
+        "QUICKSCALE_ALLOW_BYPASSRLS",
+        "QUICKSCALE_LOCAL_WHEELHOUSE",
+    ):
+        environment.pop(variable, None)
+    if overrides:
+        environment.update(overrides)
+    return environment
+
+
+def _install_project_dependencies(
+    project_path: Path,
+    *,
+    strict: bool = False,
+) -> None:
     """Install dependencies in the generated project using poetry.
 
     Skips the test when PyPI is unreachable so CI does not fail on
-    transient network issues.
+    transient network issues unless ``strict`` is requested by the
+    standalone all-module runtime proof.
     """
-    poetry_env = build_isolated_poetry_env()
+    poetry_env = _standalone_generated_env() if strict else build_isolated_poetry_env()
     lock_result = subprocess.run(
         ["poetry", "lock"],
         cwd=project_path,
@@ -106,7 +136,11 @@ def _install_project_dependencies(project_path: Path) -> None:
         env=poetry_env,
     )
     lock_output = f"{lock_result.stdout}\n{lock_result.stderr}"
-    if lock_result.returncode != 0 and _is_poetry_network_failure(lock_output):
+    if (
+        not strict
+        and lock_result.returncode != 0
+        and _is_poetry_network_failure(lock_output)
+    ):
         pytest.skip("PyPI is unreachable in this environment")
     assert lock_result.returncode == 0, f"Poetry lock failed: {lock_result.stderr}"
 
@@ -119,7 +153,11 @@ def _install_project_dependencies(project_path: Path) -> None:
         env=poetry_env,
     )
     install_output = f"{install_result.stdout}\n{install_result.stderr}"
-    if install_result.returncode != 0 and _is_poetry_network_failure(install_output):
+    if (
+        not strict
+        and install_result.returncode != 0
+        and _is_poetry_network_failure(install_output)
+    ):
         pytest.skip("PyPI is unreachable in this environment")
     assert install_result.returncode == 0, (
         f"Poetry install failed: {install_result.stderr}"
@@ -267,24 +305,366 @@ def _create_test_database(postgres_url: str) -> None:
     conn.close()
 
 
-def _run_migrations(project_path: Path, project_name: str) -> None:
+def _postgres_connect_kwargs(
+    postgres_service: dict[str, Any],
+    *,
+    database: str,
+    user: str | None = None,
+    password: str | None = None,
+) -> dict[str, Any]:
+    """Return connection arguments for the pytest-docker PostgreSQL service."""
+    return {
+        "host": postgres_service["host"],
+        "port": postgres_service["port"],
+        "dbname": database,
+        "user": user if user is not None else postgres_service["user"],
+        "password": (
+            password if password is not None else postgres_service["password"]
+        ),
+    }
+
+
+def _quote_postgres_identifier(value: str) -> str:
+    """Quote a generated PostgreSQL identifier without accepting SQL syntax."""
+    return '"' + value.replace('"', '""') + '"'
+
+
+@contextmanager
+def _restricted_postgres_database(
+    postgres_service: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    """Create and deterministically clean up a restricted, owned database."""
+    import psycopg2  # type: ignore[import-untyped]
+
+    scope = os.environ.get("QS_E2E_CONTAINER_PREFIX", "qs-sa151-180655")
+    suffix = secrets.token_hex(8)
+    database = f"{scope.replace('-', '_')}_db_{suffix}"
+    role = f"{scope.replace('-', '_')}_role_{suffix}"
+    password = secrets.token_urlsafe(24)
+    admin_connection = None
+    restricted_connection = None
+    database_created = False
+    role_created = False
+    cleanup_evidence: dict[str, Any] = {
+        "database": database,
+        "role": role,
+        "database_absent": False,
+        "role_absent": False,
+    }
+
+    # The finally is deliberately established before either CREATE statement.
+    try:
+        admin_connection = psycopg2.connect(
+            **_postgres_connect_kwargs(postgres_service, database="postgres")
+        )
+        admin_connection.autocommit = True
+        with admin_connection.cursor() as cursor:
+            cursor.execute("SHOW server_version_num")
+            version_num = int(cursor.fetchone()[0])
+            assert version_num // 10000 == 18, (
+                f"Expected PostgreSQL 18, got server_version_num={version_num}"
+            )
+            cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (database,))
+            assert cursor.fetchone() is None, f"Database already exists: {database}"
+            cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,))
+            assert cursor.fetchone() is None, f"Role already exists: {role}"
+
+            cursor.execute(
+                f"CREATE ROLE {_quote_postgres_identifier(role)} LOGIN "
+                "NOSUPERUSER NOBYPASSRLS NOINHERIT PASSWORD %s",
+                (password,),
+            )
+            role_created = True
+            cursor.execute(
+                f"CREATE DATABASE {_quote_postgres_identifier(database)} "
+                f"OWNER {_quote_postgres_identifier(role)}"
+            )
+            database_created = True
+            cursor.execute(
+                "SELECT rolsuper, rolbypassrls, rolinherit, rolcanlogin "
+                "FROM pg_roles WHERE rolname = %s",
+                (role,),
+            )
+            role_flags = cursor.fetchone()
+            assert role_flags == (False, False, False, True), (
+                f"Restricted role flags are incorrect: {role_flags}"
+            )
+
+        restricted_connection = psycopg2.connect(
+            **_postgres_connect_kwargs(
+                postgres_service,
+                database=database,
+                user=role,
+                password=password,
+            )
+        )
+        restricted_connection.autocommit = True
+        with restricted_connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT table_schema, table_name "
+                "FROM information_schema.tables "
+                "WHERE table_schema NOT IN ('pg_catalog', 'information_schema')"
+            )
+            assert cursor.fetchall() == [], "Restricted database is not empty"
+            cursor.execute("SELECT to_regclass('public.django_migrations')")
+            assert cursor.fetchone()[0] is None, (
+                "django_migrations exists before the first generated migration"
+            )
+
+        yield {
+            "database": database,
+            "role": role,
+            "password": password,
+            "url": (
+                f"postgresql://{role}:{password}@{postgres_service['host']}"
+                f":{postgres_service['port']}/{database}"
+            ),
+            "postgres_major": 18,
+            "role_flags": role_flags,
+            "empty_before_migrate": True,
+            "cleanup_evidence": cleanup_evidence,
+        }
+    finally:
+        if restricted_connection is not None:
+            restricted_connection.close()
+        if admin_connection is not None:
+            admin_connection.autocommit = True
+            with admin_connection.cursor() as cursor:
+                if database_created:
+                    cursor.execute(
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                        "WHERE datname = %s AND pid <> pg_backend_pid()",
+                        (database,),
+                    )
+                    cursor.execute(
+                        f"DROP DATABASE {_quote_postgres_identifier(database)}"
+                    )
+                cursor.execute(
+                    "SELECT 1 FROM pg_database WHERE datname = %s", (database,)
+                )
+                cleanup_evidence["database_absent"] = cursor.fetchone() is None
+                assert cleanup_evidence["database_absent"], (
+                    f"Database cleanup failed: {database}"
+                )
+                if role_created:
+                    cursor.execute(f"DROP ROLE {_quote_postgres_identifier(role)}")
+                cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,))
+                cleanup_evidence["role_absent"] = cursor.fetchone() is None
+                assert cleanup_evidence["role_absent"], f"Role cleanup failed: {role}"
+            admin_connection.close()
+
+
+def _source_module_inventory() -> dict[str, Any]:
+    """Bind module names, roots, options, and source migration shape once."""
+    from quickscale_cli.commands.module_config import (
+        get_default_orgs_config,
+        get_module_configurator,
+    )
+    from quickscale_core.contracts.module_discovery import (
+        authoritative_module_names,
+        discover_shipped_module_paths,
+    )
+
+    names = tuple(authoritative_module_names())
+    roots = discover_shipped_module_paths()
+    assert set(names) == set(roots), "Authoritative names and roots diverged"
+    options: dict[str, dict[str, object]] = {}
+    for name in names:
+        configurator = get_module_configurator(name)
+        if name == "orgs":
+            options[name] = dict(get_default_orgs_config())
+        else:
+            assert configurator is not None, f"Missing configurator for {name}"
+            options[name] = dict(configurator.get_defaults())
+    assert set(options) == set(names), "Module options do not cover authoritative names"
+
+    model_modules: set[str] = set()
+    service_modules: set[str] = set()
+    initial_migrations: dict[str, str] = {}
+    for name in names:
+        root = roots[name]
+        models_file = root / "src" / f"quickscale_modules_{name}" / "models.py"
+        models_package = (
+            root / "src" / f"quickscale_modules_{name}" / "models" / "__init__.py"
+        )
+        assert not (models_file.exists() and models_package.exists()), (
+            f"Ambiguous models representation for {name}"
+        )
+        if models_file.exists() or models_package.exists():
+            model_modules.add(name)
+            migration = (
+                root
+                / "src"
+                / f"quickscale_modules_{name}"
+                / "migrations"
+                / "0001_initial.py"
+            )
+            assert migration.exists(), f"Missing source 0001_initial for {name}"
+            initial_migrations[name] = migration.relative_to(root).as_posix()
+        else:
+            service_modules.add(name)
+            migration_dir = root / "src" / f"quickscale_modules_{name}" / "migrations"
+            assert not migration_dir.exists(), f"Service module has migrations: {name}"
+
+    return {
+        "names": names,
+        "roots": roots,
+        "options": options,
+        "model_modules": model_modules,
+        "service_modules": service_modules,
+        "initial_migrations": initial_migrations,
+    }
+
+
+def _run_generated_json_probe(
+    project_path: Path,
+    project_name: str,
+    environment: dict[str, str],
+) -> dict[str, Any]:
+    """Collect runtime app, origin, loader, recorder, and path provenance."""
+    probe = """
+import json
+import pathlib
+import sys
+
+import django
+from django.apps import apps
+from django.db import connection
+from django.db.migrations.loader import MigrationLoader
+from django.db.migrations.recorder import MigrationRecorder
+
+django.setup()
+project_root = pathlib.Path.cwd().resolve()
+embedded_root = (project_root / "modules").resolve()
+
+def embedded_name(value):
+    if not value:
+        return None
+    path = pathlib.Path(value).resolve()
+    try:
+        relative = path.relative_to(embedded_root)
+    except ValueError:
+        return None
+    return relative.parts[0] if relative.parts else None
+
+app_configs = []
+for config in apps.get_app_configs():
+    origin = getattr(config.module, "__file__", None)
+    module_name = embedded_name(origin)
+    if module_name is None:
+        continue
+    model_origin = getattr(config.models_module, "__file__", None)
+    app_configs.append({
+        "module": module_name,
+        "name": config.name,
+        "label": config.label,
+        "origin": str(pathlib.Path(origin).resolve()) if origin else None,
+        "model_origin": str(pathlib.Path(model_origin).resolve()) if model_origin else None,
+    })
+
+loader = MigrationLoader(connection, ignore_no_migrations=False)
+recorder = MigrationRecorder(connection)
+disk = [
+    {"app": app, "name": name}
+    for app, name in sorted(loader.disk_migrations)
+    if any(item["label"] == app for item in app_configs)
+]
+applied = [
+    {"app": app, "name": name}
+    for app, name in sorted(recorder.applied_migrations())
+    if any(item["label"] == app for item in app_configs)
+]
+migration_files = []
+for path in sorted(embedded_root.glob("*/**/migrations/0001_initial.py")):
+    migration_files.append(str(path.relative_to(project_root)))
+
+with connection.cursor() as cursor:
+    cursor.execute(
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema = 'public' ORDER BY table_name"
+    )
+    public_tables = [row[0] for row in cursor.fetchall()]
+
+print(json.dumps({
+    "sys_path": sys.path,
+    "app_configs": app_configs,
+    "disk_migrations": disk,
+    "applied_migrations": applied,
+    "migration_files": migration_files,
+    "public_tables": public_tables,
+}, sort_keys=True))
+"""
+    result = subprocess.run(
+        ["poetry", "run", "python", "-c", probe],
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    assert result.returncode == 0, (
+        f"Generated runtime probe failed:\nstdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )
+    return json.loads(result.stdout)
+
+
+def test_install_project_dependencies_strict_network_failure_is_not_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Strict generated-project installation reports network failures."""
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr="Connection error: PyPI is unreachable",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(AssertionError, match="Poetry lock failed"):
+        _install_project_dependencies(tmp_path, strict=True)
+    assert calls == [["poetry", "lock"]]
+
+
+def _run_migrations(
+    project_path: Path,
+    project_name: str,
+    *,
+    environment: dict[str, str] | None = None,
+    privileged_command: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     """Run database migrations against the PostgreSQL test database.
 
     The test database must already exist (created by the ``per_test_db``
     fixture or equivalent).
     """
+    subprocess_env = (
+        dict(environment)
+        if environment is not None
+        else build_isolated_poetry_env(
+            {"DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_smoke"}
+        )
+    )
+    if environment is None:
+        subprocess_env["DJANGO_SETTINGS_MODULE"] = f"{project_name}.settings.test_smoke"
+    if privileged_command is not None:
+        subprocess_env["QUICKSCALE_PRIVILEGED_COMMAND"] = privileged_command
+
     result = subprocess.run(
         ["poetry", "run", "python", "manage.py", "migrate", "--noinput"],
         cwd=project_path,
         capture_output=True,
         text=True,
-        env=build_isolated_poetry_env(
-            {"DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_smoke"}
-        ),
+        env=subprocess_env,
     )
     assert result.returncode == 0, (
         f"Migrations failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
+    return result
 
 
 def _start_dev_server(
@@ -540,6 +920,192 @@ class TestGeneratedProjectRuntimeSmoke:
                 os.environ["QUICKSCALE_ALLOW_BYPASSRLS"] = _allow_bypass_rls
             else:
                 os.environ.pop("QUICKSCALE_ALLOW_BYPASSRLS", None)
+
+    @pytest.mark.e2e
+    def test_all_module_initial_migrations_apply_from_embedded_sources(
+        self,
+        tmp_path: Path,
+        postgres_service: dict[str, Any],
+    ) -> None:
+        """Every authoritative embedded module migrates from a clean PG18 DB."""
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_module_dependencies,
+        )
+        from quickscale_cli.utils.module_wiring_manager import (
+            regenerate_managed_wiring,
+        )
+        from quickscale_core.generator import ProjectGenerator
+
+        inventory = _source_module_inventory()
+        names = inventory["names"]
+        roots = inventory["roots"]
+        options = inventory["options"]
+        model_modules = inventory["model_modules"]
+        service_modules = inventory["service_modules"]
+
+        project_name = "runtime_all_modules"
+        project_path = tmp_path / project_name
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+        assert (project_path / "manage.py").exists()
+        assert (project_path / "pyproject.toml").exists()
+
+        for name in names:
+            embedded_path = project_path / "modules" / name
+            _copytree_for_generated_project_smoke(roots[name], embedded_path)
+            assert (embedded_path / "module.yml").exists(), (
+                f"{name} module manifest missing after embed"
+            )
+            assert (embedded_path / "pyproject.toml").exists(), (
+                f"{name} module pyproject.toml missing after embed"
+            )
+        assert {
+            path.name for path in (project_path / "modules").iterdir() if path.is_dir()
+        } == set(names)
+
+        self._write_quickscale_yml_with_modules(
+            project_path,
+            project_name,
+            "showcase_react",
+            options,
+        )
+        sync_result = sync_project_module_dependencies(project_path, options)
+        path_dependencies = {
+            dependency
+            for dependency in sync_result.added_path_dependencies
+            if "quickscale-module-" in dependency
+        }
+        assert len(path_dependencies) == len(names), (
+            f"Expected one path dependency per authoritative module: {path_dependencies}"
+        )
+        for name in names:
+            assert any(f"quickscale-module-{name}" in dep for dep in path_dependencies)
+
+        success, message = regenerate_managed_wiring(project_path)
+        assert success, f"regenerate_managed_wiring failed: {message}"
+
+        _install_project_dependencies(project_path, strict=True)
+        assert not any(
+            path.name == "wheelhouse" or "wheelhouse" in path.name
+            for path in project_path.rglob("*")
+        ), "Generated project unexpectedly materialized a local wheelhouse"
+
+        with _restricted_postgres_database(postgres_service) as database:
+            _write_postgres_test_settings(
+                project_path,
+                project_name,
+                database["url"],
+            )
+            migrate_environment = _standalone_generated_env(
+                {
+                    "DJANGO_SETTINGS_MODULE": (f"{project_name}.settings.test_smoke"),
+                    "QUICKSCALE_PRIVILEGED_COMMAND": "migrate",
+                    "DATABASE_URL": database["url"],
+                    "RUNTIME_DATABASE_URL": database["url"],
+                }
+            )
+            assert "QUICKSCALE_ALLOW_BYPASSRLS" not in migrate_environment
+            assert "QUICKSCALE_LOCAL_WHEELHOUSE" not in migrate_environment
+            assert str(REPO_ROOT) not in "\n".join(migrate_environment.values())
+            migration_result = _run_migrations(
+                project_path,
+                project_name,
+                environment=migrate_environment,
+            )
+            assert migration_result.returncode == 0
+            assert migrate_environment["QUICKSCALE_PRIVILEGED_COMMAND"] == "migrate"
+
+            makemigrations_environment = _standalone_generated_env(
+                {
+                    "DJANGO_SETTINGS_MODULE": (f"{project_name}.settings.test_smoke"),
+                    "DATABASE_URL": database["url"],
+                    "RUNTIME_DATABASE_URL": database["url"],
+                }
+            )
+            assert "QUICKSCALE_PRIVILEGED_COMMAND" not in makemigrations_environment
+            assert "QUICKSCALE_ALLOW_BYPASSRLS" not in makemigrations_environment
+            makemigrations_result = subprocess.run(
+                [
+                    "poetry",
+                    "run",
+                    "python",
+                    "manage.py",
+                    "makemigrations",
+                    "--check",
+                    "--dry-run",
+                ],
+                cwd=project_path,
+                capture_output=True,
+                text=True,
+                env=makemigrations_environment,
+            )
+            assert makemigrations_result.returncode == 0, (
+                "makemigrations reported pending changes:\n"
+                f"stdout: {makemigrations_result.stdout}\n"
+                f"stderr: {makemigrations_result.stderr}"
+            )
+
+            runtime = _run_generated_json_probe(
+                project_path,
+                project_name,
+                makemigrations_environment,
+            )
+            runtime_modules = {config["module"] for config in runtime["app_configs"]}
+            assert runtime_modules == set(names), (
+                f"Runtime app inventory differs from source: {runtime_modules}"
+            )
+            assert len(runtime["app_configs"]) == len(names)
+            assert all(
+                str(REPO_ROOT) not in path
+                for path in runtime["sys_path"]
+                if isinstance(path, str)
+            )
+            assert all(
+                str(REPO_ROOT) not in origin
+                for config in runtime["app_configs"]
+                for origin in (config["origin"], config["model_origin"])
+                if origin
+            )
+
+            runtime_model_modules = {
+                config["module"]
+                for config in runtime["app_configs"]
+                if config["model_origin"] is not None
+            }
+            assert runtime_model_modules == model_modules
+            assert set(runtime["migration_files"]) == {
+                f"modules/{name}/{inventory['initial_migrations'][name]}"
+                for name in model_modules
+            }
+            labels_by_module = {
+                config["module"]: config["label"] for config in runtime["app_configs"]
+            }
+            model_labels = {labels_by_module[name] for name in model_modules}
+            service_labels = {labels_by_module[name] for name in service_modules}
+            disk_migrations = {
+                (migration["app"], migration["name"])
+                for migration in runtime["disk_migrations"]
+            }
+            applied_migrations = {
+                (migration["app"], migration["name"])
+                for migration in runtime["applied_migrations"]
+            }
+            expected_migrations = {(label, "0001_initial") for label in model_labels}
+            assert disk_migrations == expected_migrations
+            assert applied_migrations == expected_migrations
+            assert all(
+                app not in service_labels for app, _migration_name in disk_migrations
+            )
+            assert len(runtime["applied_migrations"]) == len(
+                set(tuple(item.items()) for item in runtime["applied_migrations"])
+            )
+            assert "django_migrations" in runtime["public_tables"]
+
+        assert database["cleanup_evidence"] == {
+            "database": database["database"],
+            "role": database["role"],
+            "database_absent": True,
+            "role_absent": True,
+        }
 
     @pytest.mark.e2e
     def test_no_redis_createcachetable_succeeds(

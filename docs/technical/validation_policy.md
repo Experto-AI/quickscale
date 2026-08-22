@@ -116,6 +116,31 @@ This companion owns repository validation entrypoints, testing standards, covera
 
 **Usage:** See [user_manual.md](./user_manual.md#21-end-to-end-e2e-tests) for operator-facing run instructions.
 
+### Clean-Initial Migration Acceptance (SA151)
+
+The clean-break migration policy is guarded by two source-derived checks. Run
+the topology guard without the package-default full-core coverage addopts:
+
+```bash
+poetry run pytest quickscale_core/tests/test_module_migration_topology.py -q --tb=short -o addopts= --no-cov
+```
+
+Run the generated-project proof as an E2E node against the pytest-docker
+PostgreSQL 18 service:
+
+```bash
+poetry run pytest quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::test_all_module_initial_migrations_apply_from_embedded_sources -q --tb=short -o addopts= --no-cov
+```
+
+The second command is non-skippable: acceptance requires one pass and zero
+skips. It generates a standalone all-module project, installs its dependencies
+without a maintainer wheelhouse or source path, applies migrations once to an
+empty database owned by a `NOSUPERUSER NOBYPASSRLS NOINHERIT` login role,
+checks `makemigrations --check --dry-run`, verifies runtime migration origins
+and recorder parity, and proves database/role cleanup. Release closeout also
+runs `make test-integration`, `make test-bypassrls`, `make typecheck`, and the
+serial `make test-e2e` lanes.
+
 <a id="e2e-test-infrastructure"></a>
 <a id="13-e2e-test-infrastructure"></a>
 ## E2E Test Infrastructure

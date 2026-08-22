@@ -5,7 +5,7 @@
 
 ## Purpose
 
-This is the current task planner. It holds **open** work only. Completed tickets, closed findings, review history, and release evidence live in [CHANGELOG.md](../../CHANGELOG.md) and version control.
+This is the current task planner. It holds **open** work only. Completed tickets, closed findings, review history, and release evidence live in [CHANGELOG.md](../../CHANGELOG.md) and version control. SA151's checked row is retained only as the direct-user closeout marker for this convergence transaction.
 
 ### Execution rules
 
@@ -66,14 +66,14 @@ Applying it produces three ranked bands:
 | Band | Rule | Tickets |
 |---|---|---|
 | **A — Restore enforcement** | The gate layer reports green while not running, or runs red on HEAD. Nothing downstream can be trusted until this is fixed. | SA155 (prerequisites complete) |
-| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA151→SA142→SA135(+SA163); SA134→SA150→SA167b→SA167d; then SA155→SA167a→SA124→SA123→SA118→SA167c |
+| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA142→SA135(+SA163) after closed SA151; SA134→SA150→SA167b→SA167d; then SA155→SA167a→SA124→SA123→SA118→SA167c |
 | **C — Bounded independent fixes** | No dependants, small blast radius. Absorbed as slack filler by whichever worktree finishes a band-B leg early. | SA160, SA161, SA162, SA164, SA165, SA166 |
 
 **Standing consequences of that rule:**
 
 - **The critical path is on the gate track, not the service track.** W2's band-A/B spine
   (`SA155 → SA167a → SA124 → SA123 → SA118 → SA167c`) is six serialized merge legs behind
-  one W1 prerequisite, against W3's three. W3 keeps the exclusive PostgreSQL/Docker slot
+  one W1 prerequisite; W3's former SA151 prerequisite is now satisfied. W3 keeps the exclusive PostgreSQL/Docker slot
   and therefore keeps scheduling priority *while a leg is active*, but it is no longer the
   longest chain and no longer sets the release date.
 - **The `make quality` baseline is fixed.** `make quality` runs and reports the two
@@ -89,7 +89,7 @@ Applying it produces three ranked bands:
   `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`, which SA167c
   (W2) rewrites first. Keeping it on W2 preserves the "the registry never crosses
   worktrees" invariant; as band-C tail (#25) it adds nothing to the critical path. Its
-  `deps: SA151` (W3) edge is a content dependency on regenerated migrations.
+  former `deps: SA151` (W3) edge was a content dependency on regenerated migrations and is now satisfied.
 - **The whole SA167 family is in v88 (decision 2026-08-21).** The ordering argument is
   band A's, one level down: five modules declare their Django apps as Python literals
   inside core, which is precisely the "default reachable only through imperative code"
@@ -121,7 +121,7 @@ Applying it produces three ranked bands:
 ### Dependency graph and critical path
 
 ```text
-v88 — three worktrees, nineteen open merge positions carrying twenty open ticket entries, one merge queue
+v88 — three worktrees, eighteen open merge positions carrying nineteen open ticket entries, one merge queue
 
 W2 (gate layer ─► gates & declared wiring)   ★ CRITICAL PATH — 8 open legs, 6 on the path
   SA155 ─► SA167a ─► SA124 ─► SA123 ─► SA118 ─► SA167c ─► SA166 ─► SA164
@@ -131,7 +131,7 @@ W2 (gate layer ─► gates & declared wiring)   ★ CRITICAL PATH — 8 open le
      #7        #8         #11       #13      #16       #21       #24       #25
 
   inbound edge:   SA150 (W1, #12) ──► SA118 (#16)    fail-hard version-spec seam
-                  SA151 (W3, #3)  ──► SA164 (#25)    regenerated migrations to re-anchor
+                  SA151 (closed, #3) ──✓ SA164 (#25) content baseline settled
   outbound edge:  SA167a (#8)     ──► SA167b (W1, #14)   entry_point.py, one-way
 
 W1 (pins/interpreter + module-wiring migration)   6 open legs, mostly light
@@ -142,12 +142,10 @@ W1 (pins/interpreter + module-wiring migration)   6 open legs, mostly light
         SA167a (W2, #8) ┘   SA167b blocks ─┘
         one-way on entry_point.py
 
-W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   3 heavy legs (SA151 in progress)
-  SA151 ──► SA142 ──► SA135 + SA163 ──► [SA161, SA160]
-  clean     stable    owned PG lifecycle    emission-adjacent
-  initial   image     + derived CI env      fillers
-  migrations identity
-     └──────────────────────────────────► blocks SA164 (W2, #25)
+W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   2 heavy legs (SA151 closed)
+  SA142 ──► SA135 + SA163 ──► [SA161, SA160]
+  stable    owned PG lifecycle    emission-adjacent
+  image     + derived CI env      fillers
 ```
 
 **Longest open release chain — the critical path:** W2's
@@ -160,20 +158,18 @@ SA167b and SA167d cost nothing on the critical path: W1 runs them against W2's s
 level. If W1 becomes the binding lane in practice, the band-C fillers (SA162, SA165) are the
 ones to defer, never the wiring legs.
 
-**Second chain:** W3, `SA151 → SA142 → SA135`, three legs, each service-backed and
-serialized on the exclusive slot. Longest *wall-clock* chain despite fewer legs; it keeps
+**Second chain:** W3, `SA142 → SA135`, two open legs, each service-backed and
+serialized on the exclusive slot after SA151 closed. Longest *wall-clock* chain despite fewer legs; it keeps
 scheduling priority whenever one of its legs is active.
 
-**Cross-worktree dependency edges — four:**
+**Active cross-worktree dependency edges — two:**
 
 1. `SA150` (W1) → `SA118` (W2). Manifest version-spec handling: SA118 must project
    defaults over SA150's fail-hard seam, not over the current silent fallback.
 2. `SA167a` (W2, #8) → `SA167b` (W1, #14). Shared `entry_point.py`, one-way. This is the
    wiring legs' only cross-worktree surface; they are otherwise isolated.
-3. `SA151` (W3) → `SA164` (W2, #25). SA164 re-anchors the SA92 parity backstop onto
-   SA151's regenerated migrations, so it cannot be evaluated before SA151 closes. Band-C
-   tail; it constrains nothing upstream.
-4. `SA151` (W3) → `SA152` (post-v88). Recorded, not scheduled this release.
+The former `SA151 → SA164` and `SA151 → SA152` edges are satisfied by SA151's
+closure; SA164 remains ordered behind SA166 and SA152 remains post-v88 work.
 
 **Parallelism result (re-checked 2026-08-22, second pass):** all three lanes have an executable next
 action and none is idle, so there is no track to rebalance *into*. W2 is the longest lane at
@@ -181,14 +177,14 @@ eight open legs and cannot be shortened: SA155, SA124, SA123, SA166 and SA164 al
 `scripts/gate_registry.json`, which by standing invariant never crosses worktrees; SA167a,
 SA118 and SA167c all rewrite `quickscale_modules/*/module.yml` in that order. Nothing may be
 pulled forward from W3 because the PostgreSQL/Docker slot is exclusive. W1 (six legs) and W3
-(five legs) are both shorter than W2 but neither feeds the critical path, so moving filler
+(four open legs) are both shorter than W2 but neither feeds the critical path, so moving filler
 between them would buy no wall-clock time while creating merge hazards — SA165 in particular
 stays on W1 because it edits `scripts/test_isolation_conformance.sh` and the SA90 emission
 gate's `_HOST_DEPENDENT_PATHS`, both of which W3's SA163/SA161/SA160 legs read or rebaseline.
 **No track moves are proposed this pass.** Band-C tickets remain the sanctioned way to spend
 lane slack in place.
 
-### Track readiness (assessed 2026-08-22, re-verified after the SA151 P2A probe)
+### Track readiness (assessed 2026-08-22, re-verified after SA151 closure)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes.
@@ -197,25 +193,25 @@ are yes.
 |---|---|---|---|---|---|
 | **W1** | SA134 (#9, **in progress** — uncommitted test-side edits in the worktree) | **yes** — every prerequisite is merged; no open decision | **yes** — its assertion surfaces are W1-owned test files | **yes** — merge #9 has no unsatisfied dependency | **truly green — off the critical path** |
 | **W2** | SA155 (#7, **partial planning checkpoint retained**) | **yes** — every prerequisite is merged; no product decision is open | **yes, after orchestration recovery** — the documented `scripts/` baseline is green (1,213 passed), but implementation did not start because two Adaptive implementer handoffs failed before mutation | **yes** — #7 has no unsatisfied dependency | **administratively paused — next critical-path leg** |
-| **W3** | SA151 (#3, **partial checkpoint retained**) | **yes** — resume with AFR-001/002/003, each re-verified false-green by direct probe; no new decision gate | **yes** — P2A hardening and P2B/P3 are W3-owned; the exclusive slot remains assigned | **yes** — the maintainer accepted the partial checkpoint for merge at #3 without closing the ticket | **partial but startable — off the critical path** (second chain) |
+| **W3** | SA142 (#10) | **yes** — SA151 is closed with clean-initial topology and generated empty-database evidence | **yes** — Docker image lifecycle work is W3-owned; the exclusive slot remains assigned | **yes** — merge #10's sole dependency is satisfied | **truly green — off the critical path** (second chain) |
 
 **Blocked next-after tickets, and what clears each:**
 
 | Ticket | Blocked state | Blocking ticket | Clearable by a maintainer decision? |
 |---|---|---|---|
-| SA142 (#10) | can start — no | SA151 (#3) | No — hard dependency; SA142 rebuilds images over SA151's regenerated migrations. |
+| SA142 (#10) | can start — **yes** | none | SA151 is closed; the regenerated migrations are settled. |
 | SA167a (#8) | can merge — no | SA155 (#7) | **Decided 2026-08-22 — the gate stays.** This was the one decision-clearable blocker; the maintainer declined to lift it. Implementation may begin today (`deps: none`); only the *merge* waits, because its acceptance evidence — unchanged emission parity, `make quality` no worse than found — is meaningless until SA155 makes the gate layer truthful. Starting it early is sanctioned; merging it early is not. |
-| SA164 (#25) | can start · can finish — no | SA151 (#3) | No — hard dependency. Its SA92 parity backstop must be re-anchored onto SA151's regenerated migrations, which do not exist in final form until SA151 closes. |
+| SA164 (#25) | can start · can finish — no | SA166 (#24) | SA151's content dependency is satisfied; W2 worktree ordering still holds SA164 behind SA166. |
 
 **Recommended concurrency right now:** W1 continues SA134, W2 retains the SA155 planning
 checkpoint until a fresh Adaptive implementation session can consume its plan carrier, and W3
-first closes SA151's three P2A guard findings, then continues P2B and P3. All three next-track
+starts SA142 over SA151's settled clean-initial migration baseline. All three next-track
 choices remain dependency- and decision-clear; W2's pause is orchestration-only, not a product
 or repository dependency.
 **No maintainer decision is outstanding anywhere in this plan** — the two that were open on
 2026-08-22 (gate-suite execution intent, and whether SA167a may merge ahead of SA155) are
-both recorded above under "Gate-suite execution decision". Of the blocked rows above, SA142
-and SA164 are **hard dependencies** on SA151 that no decision can clear. Resuming SA155 needs
+both recorded above under "Gate-suite execution decision". The remaining blocked rows are held
+by current worktree ordering or orchestration state; SA151 no longer blocks SA142 or SA164. Resuming SA155 needs
 no new scope decision: it needs a fresh Adaptive session after merging the then-current `v88`,
 with working plan-envelope propagation and a newly resolved plan authority.
 
@@ -227,11 +223,11 @@ exact reviewed tip.
 
 | # | Ticket | Band | Tier | Worktree | Merges after | Service slot |
 |---|---|---|---|---|---|---|
-| 3 | **SA151** | B | 1 | W3 | — | **yes** — PostgreSQL |
+| 3 | **SA151 (closed)** | B | 1 | W3 | — | **yes** — PostgreSQL |
 | 7 | **SA155** | A | 1 | W2 | — (prerequisites merged) | no |
 | 8 | **SA167a** | B | 1 | W2 | SA155 | no |
 | 9 | **SA134** | B | 2 | W1 | — (prerequisite merged) | no |
-| 10 | **SA142** | B | 1 | W3 | SA151 | **yes** — Docker |
+| 10 | **SA142** | B | 1 | W3 | — (SA151 satisfied) | **yes** — Docker |
 | 11 | **SA124** | B | 1 | W2 | SA155 | no |
 | 12 | **SA150** | B | 2 | W1 | SA134 | no |
 | 13 | **SA123** | B | 2 | W2 | SA124 | no |
@@ -245,7 +241,7 @@ exact reviewed tip.
 | 21 | **SA167c** | B | 2 | W2 | **SA167a**, **SA118** | no |
 | 22 | **SA165** | C | 3 | W1 | SA162 | no |
 | 24 | **SA166** | C | 3 | W2 | SA155, SA118, SA167c | no |
-| 25 | **SA164** | C | 3 | W2 | SA166, **SA151** | no |
+| 25 | **SA164** | C | 3 | W2 | SA166; SA151 content dependency satisfied | no |
 
 Merges #1 (SA156), #2 (SA137), #4 (SA157), #5 (SA159), #6 (SA158), #6b (SA168), and #23
 (SA164's former W1 slot) are retired, not reused; the six closed tickets are archived in
@@ -303,8 +299,8 @@ Additional per-ticket surfaces:
 - `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py` — SA167c (#21)
   removes its dependence on the retired `django_apps:` key, then SA164 (#25) fixes its
   `_migdir()` fallback and re-anchors its parity backstop. Both are on W2 and merge in that
-  order, so this surface no longer crosses worktrees; SA164's SA151 dependency is a
-  *content* dependency on W3's regenerated migrations, not a file dependency.
+  order, so this surface no longer crosses worktrees; SA164's former SA151 dependency was a
+  *content* dependency on W3's regenerated migrations, not a file dependency, and is now satisfied.
 - `quickscale_core/tests/fixtures/sa90_emission_manifests.json` — SA142, SA118, SA161,
   SA160. SA118 is on W2 and the other three on W3, so this **does** cross worktrees. Each
   rebaseline appends its own `baseline_evidence` entry with per-file rationale; the
@@ -366,59 +362,23 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Acceptance:** no function in `module_config.py` decides a module's apps, middleware, settings keys, or URL includes — those come from the module's manifest through its adapter; the remaining surface is desired-configuration collection only, and that boundary is stated in the module's docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist) is retired once the deviation it names is gone.
   **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`.
 
-- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · blocks SA142, SA152 · P2A PARTIAL CHECKPOINT RETAINED 2026-08-22`
+- [x] **SA151 — Recreate module migrations as clean initial schemas.** `Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · closed 2026-08-22`
   QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models.
   **Acceptance:** exactly one `0001_initial` per module with models, and no other migration files; a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; `make test-integration` passes; existing databases are out of scope by policy — the documented upgrade path is a fresh database; the no-migration-history policy is recorded in [decisions.md](decisions.md).
 
-  **Checkpoint disposition (retained; re-verified 2026-08-22).** P1 is merged and
-  convergence-reviewed: ten modules carry exactly one regenerated `0001_initial`, with schema,
-  dry-run, integration, BYPASSRLS, and quality evidence archived in
-  [CHANGELOG.md](../../CHANGELOG.md). P2A's source-derived topology guard
-  (`quickscale_core/tests/test_module_migration_topology.py`) is implemented and hardened:
-  it binds the twelve shipped AppConfigs, the ten model-bearing migration packages, the two
-  service-style modules, and the `teams` placeholder by static AST reading, never by executing
-  migration source, and twenty-three focused tests pass. The maintainer directed that this be
-  merged as a **checkpoint**, not represented as P2A closure. SA151 stays **open**; SA142 and
-  SA152 stay blocked.
+  **Closure evidence (2026-08-22).** The source-derived topology guard now binds all twelve
+  shipped AppConfigs, ten model-bearing modules, two service-style modules, and the `teams`
+  placeholder without executing migration source; its full canary matrix passes 32 tests.
+  The non-skippable P2B node generated and installed an all-module standalone project, applied
+  every clean initial migration to an empty PostgreSQL 18 database under a restricted role,
+  reported no pending migrations, proved embedded-source/runtime/recorder parity, and passed
+  1 test with 0 skips before deleting its database and role. Broad evidence passed
+  `make test-integration` (2,471 tests), `make test-bypassrls` (80 tests), type checking, and
+  serial E2E (Core 36, CLI 36; 0 skips). The only quality result is the accepted two-warning,
+  zero-critical baseline with monotonicity passing. The clean-break policy and exact validation
+  commands are now recorded in their authoritative documents; SA142 and SA152 are unblocked.
 
-  **Pending before P2A can be called complete — all three re-verified false-green on the
-  current tip by direct probe, no diagnostic emitted:**
-  - **AFR-001 (major, blocking):** module-global attribute rebinding
-    (`sys.modules[__name__].migrations = ...`) is not rejected. The guard's
-    `_INDIRECT_REBINDING_NAMES` covers `globals`/`setattr`/`getattr`/`vars`/`exec` and the
-    reflective `type.__setattr__` forms, but not a `sys.modules` subscript-attribute write,
-    so a spoofed non-Django `migrations.Migration` base still reads as canonical. Add the
-    rejection and a no-execution canary.
-  - **AFR-002 (major, blocking):** model discovery tests only `models.py`
-    (`_migration_topology_diagnostics`). A module whose models live in an importable
-    `models/` package is silently classified service-style and its **missing** migration
-    package goes unreported. Classify both forms as model-bearing, reject an ambiguous dual
-    representation, and add a package-form missing-migration canary.
-  - **AFR-003 (moderate, blocking):** duplicate AppConfig classes do fail closed — the
-    identity collapses to `None` and trips the inventory completeness assertion — but later
-    or indirect rebinding of `name`/`label` after the class body is unmodelled and passes,
-    and neither form carries a canary. Require exactly one effective direct literal binding
-    of each and add duplicate-name, duplicate-label, and post-class-rebind canaries.
-
-  **Decision status:** no maintainer decision is required. Existing fail-closed and
-  no-source-execution policy determines all three corrections. A decision would be needed only
-  if a future implementation proposed *allowing* dynamic migration-base, model-discovery, or
-  AppConfig identity forms instead of rejecting them.
-
-  **Remaining work — the only thing that closes this ticket:**
-  - **P2A hardening** — close AFR-001, AFR-002, and AFR-003; rerun the focused topology suite
-    and `make check QUIET=1 SECTIONS="core"`, then take convergence and terminal attestation.
-  - **P2B** — the non-skippable generated empty-PostgreSQL install/migrate proof.
-  - **P3** — record the no-migration-history policy in [decisions.md](decisions.md), run the
-    broad terminal gates, and take terminal attestation.
-
-  **Note on the focused command.** Run the topology suite as
-  `poetry run pytest quickscale_core/tests/test_module_migration_topology.py -q --tb=short
-  -o addopts= --no-cov`. Without `-o addopts=`, the package-default full-core coverage gate
-  measures ~28% against 90% and exits 1 even when every test body passes; that is a harness
-  artifact, not a result, and no coverage threshold may be weakened to avoid it.
-
-- [ ] **SA142 — Reuse and clean E2E Docker images.** `Band B · Tier 1 · W3 · merge #10 · deps: SA151 · Docker slot · blocks SA135`
+- [ ] **SA142 — Reuse and clean E2E Docker images.** `Band B · Tier 1 · W3 · merge #10 · deps: none (SA151 closed) · Docker slot · blocks SA135`
   Separate stable image identity from per-run container/port/volume identity, reclaim variable images under normal cleanup, and preserve `--no-cleanup` diagnostics.
   **Acceptance:** image identity is stable across runs and is reused rather than rebuilt when inputs are unchanged; container, port, and volume identity remain per-run; a normal `make test-e2e` run leaves no variable images behind, verified by an image listing before and after; `--no-cleanup` still preserves containers and logs for diagnosis; a second consecutive run is measurably faster than a cold run.
 
@@ -516,7 +476,7 @@ gates, written into a suite that nothing executes.
   **Acceptance:** the PGDG install, `createdb` loop, and grant loop exist once and all four workflows call them; the module universe is derived from `contracts/module_discovery.py --list-modules` and fails hard when unavailable, with no hand-maintained module list among the provisioning stations; PG18 client verification is identical in all four contexts, including `e2e.yml`; the nightly PostgreSQL 16 client question is settled by determining whether `make test-bypassrls` reaches a `pg_dump`/`pg_restore` path — if it does, the divergence is a live defect and is fixed; the two deliberate divergences above are preserved and documented as deliberate; `test_gate_parity.py`'s transcribed shell literal is retired or derived; `QUICKSCALE_ALLOW_BYPASSRLS: "0"` at `ci.yml:626` and the restricted-role isolation connection survive the refactor unchanged; arch Finding 13 is retired with evidence.
   **Shared conflict surface:** all four `.github/workflows/`, `scripts/provision_ci_postgres.sh` (new), `scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, `scripts/test_gate_parity.py`, `Makefile`, `docs/others/arch-audit.md`. **Serialization:** inherits SA135's exclusive PostgreSQL + Docker slot.
 
-- [ ] **SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items.** `Band C · Tier 3 · W2 · merge #25 · deps: SA151 (re-anchors the SA92 item), SA166 (worktree ordering)`
+- [ ] **SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items.** `Band C · Tier 3 · W2 · merge #25 · deps: SA166 (worktree ordering); SA151 content dependency satisfied`
   The arch audit carries five watch items; three are simply not fired and need no work, but two carry explicit actions and one is a naming question that becomes load-bearing on a specific trigger.
   - **SA92 migration-squash discovery tuple — artifact located 2026-08-21, now evaluable.** The audit recorded this as unlocatable, but the artifact is `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py` — a bounded literal tripwire for cross-table `UPDATE … SET organization_id` DML in migrations. The prior search missed it because it grepped for `squash` in source rather than in test filenames. Two live observations: its `_migdir()` helper (`:53-59`) reads the **inert** `django_apps:` manifest key and then silently falls back to the conventional path when it is absent. P1 gave `social` a production `apps` wiring projection but intentionally did not add the inert key, so this helper still passes social only through that fallback — a silent fallback of exactly the class [tech-audit.md](../others/tech-audit.md) owns; and its authoritative backstop is a catalog/data parity gate anchored to `v87`, the retired release ref SA156 just removed from the quality gate. Re-anchor both against SA151's regenerated migrations.
   - **Privileged-command template/runtime pair — values verified equal, governance artifacts disagree.** `production.py.j2:185` and `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:36` both hold `frozenset({"migrate", "createcachetable"})`, but the `apps.py` docstring calls itself "the single source of truth for which commands are privileged" while the template holds an independent copy. The values agree; the claimed authority does not.
@@ -561,7 +521,7 @@ Recorded so the absence is a decision rather than an oversight.
 
 Not assigned to a v88 track. Listed here so the finding is not lost.
 
-- [ ] **SA152 — Refresh the beta-migration maintainer targets for the current release.** `Post-v88 · Tier 3 · deps: SA151`
+- [ ] **SA152 — Refresh the beta-migration maintainer targets for the current release.** `Post-v88 · Tier 3 · deps: none (SA151 satisfied)`
   Audit of `make beta-migrate-fresh` / `make beta-migrate-in-place` (2026-08-21) found the mechanics current: the Makefile flag surface (`DONOR`, `RECIPIENT`, `DRY_RUN`, `CONTINUE`, `REPORT`) matches `build_argument_parser()` in `quickscale_devtools/src/quickscale_devtools/beta_migration.py`; every command in `VERIFICATION_COMMAND_SPECS` still exists on the CLI; and the file-ownership taxonomy is in sync with the emitted `showcase_react` template set, enforced by `quickscale_cli/tests/test_beta_migration_ownership_conformance.py` (7 passing, including forward and reverse staleness checks). The residual gaps are these:
   - **SA151 collision.** The workflow's verification stack runs `quickscale manage migrate` against a recipient that may carry an existing database. SA151 deletes all module migration history and documents a fresh database as the only upgrade path, which invalidates the in-place workflow's implicit assumption. This must be resolved after SA151 merges, not before.
   - **No end-to-end exercise.** The targets appear in no CI workflow and no entry in `scripts/gate_registry.json`. Coverage is unit-level taxonomy conformance only; a `DRY_RUN=1` / checkpoint-only path is never run against a real donor/recipient pair, so breakage surfaces first for a maintainer mid-migration.
