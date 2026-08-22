@@ -70,23 +70,6 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 ## Findings
 
-### Closure — former SA117 scope-tool false-green (SA157)
-
-The test now invokes `check_sa117_scope.py` with `sys.executable` and resolves it from
-`pathlib.Path(__file__).with_name("check_sa117_scope.py")`. The candidate-root test
-asserts the tool's distinguishing error (`candidate must be the repository-root
-poetry.lock`) and absent evidence output; the legacy-spelling test retains its
-`unrecognized arguments` assertion and absent-output check.
-
-Closure evidence: the two affected nodes passed (`2 passed`); temporarily renaming
-`scripts/check_sa117_scope.py` made both nodes red with pytest exit **4** and a
-`check_sa117_scope` missing-module signal; the file was restored immediately without
-Git, and its SHA-256 was identical before and after
-(`c6c49725d995f67b2fb9fc1c4dfe2d36e5ba2c52b8d2045d77977eeeab46c94f`). A repository
-sweep found zero bare-`python` subprocess executors in `scripts/test_*.py`.
-
----
-
 ### TA66 — `test_gate_parity`'s `publish.yml` oracle is stale and red on HEAD
 
 **ID:** `gate-parity-publish-oracle-stale`
