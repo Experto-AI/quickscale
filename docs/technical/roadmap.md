@@ -195,8 +195,8 @@ are yes.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W1** | SA134 (#9, **P1 checkpoint retained — converged and synchronized**) | **yes** — every prerequisite is merged; the maintainer accepted this partial checkpoint for merge-back | **yes** — the five test-side assertion surfaces are W1-owned and the P1 delta is converged; ticket closure remains pending | **yes** — the worktree is synchronized to v88 `c26b62d07d5c6a73041df2b2380ddbadcbae0a96` and #9 has no unsatisfied dependency | **partial but merge-safe — off the critical path** |
-| **W2** | SA155 (#7, **in progress**) | **yes** — every prerequisite is merged; no open decision | **yes** — the `scripts/` population is green (1,213 passed) under the project interpreter, so the target can register green on arrival | **yes** — #7 has no unsatisfied dependency | **truly green — next critical-path leg** |
+| **W1** | SA134 (#9, **P1 checkpoint retained — converged and synchronized**) | **yes** — every prerequisite is merged; the maintainer accepted this partial checkpoint for merge-back | **yes** — the five test-side assertion surfaces are W1-owned and the P1 delta is converged; ticket closure remains pending | **yes** — the retained P1 code checkpoint was synchronized to v88 `c26b62d07d5c6a73041df2b2380ddbadcbae0a96`, and this roadmap merge incorporates v88 `0aeb5f3f6a8272b194ed3c818d617e35fabcfa95`; #9 has no unsatisfied dependency | **partial but merge-safe — off the critical path** |
+| **W2** | SA155 (#7, **partial planning checkpoint retained**) | **yes** — every prerequisite is merged; no product decision is open | **yes, after orchestration recovery** — the documented `scripts/` baseline is green (1,213 passed), but implementation did not start because two Adaptive implementer handoffs failed before mutation | **yes** — #7 has no unsatisfied dependency | **administratively paused — next critical-path leg** |
 | **W3** | SA151 (#3, **partial checkpoint retained**) | **yes** — resume with AFR-001/002/003, each re-verified false-green by direct probe; no new decision gate | **yes** — P2A hardening and P2B/P3 are W3-owned; the exclusive slot remains assigned | **yes** — the maintainer accepted the partial checkpoint for merge at #3 without closing the ticket | **partial but startable — off the critical path** (second chain) |
 
 **Blocked next-after tickets, and what clears each:**
@@ -208,18 +208,21 @@ are yes.
 | SA164 (#25) | can start · can finish — no | SA151 (#3) | No — hard dependency. Its SA92 parity backstop must be re-anchored onto SA151's regenerated migrations, which do not exist in final form until SA151 closes. |
 
 **Recommended concurrency right now:** W1 retains and merges the synchronized SA134 P1
-checkpoint at #9, W2 continues SA155, and W3 first closes SA151's three P2A guard findings,
-then continues P2B and P3. After merge-back, resume **SA134 only** for the quantified consumer
-sweep, temporary probes, broad Make gates, CHANGELOG/roadmap closeout, convergence, and
-terminal attestation; do not begin SA150. Concurrent SA151/SA155 checkpoint and quality-baseline
-text is preserved intact. W2 and W3's concurrent checkpoint entries remain unchanged. The
-current choices are dependency- and decision-clear: the maintainer decided to
-retain/merge SA134's partial checkpoint, and no product decision is required to resume with the
-corrected focused command using `--no-cov` and the concrete
+checkpoint at #9, W2 retains the SA155 planning checkpoint until a fresh Adaptive
+implementation session can consume its plan carrier, and W3 first closes SA151's three P2A
+guard findings, then continues P2B and P3. After merge-back, resume **SA134 only** for the
+quantified consumer sweep, temporary probes, broad Make gates, CHANGELOG/roadmap closeout,
+convergence, and terminal attestation; do not begin SA150. Concurrent SA151/SA155 checkpoint
+and quality-baseline text is preserved intact. All three next-track choices are dependency-
+and decision-clear; W2's pause is orchestration-only, not a product or repository dependency.
+The maintainer decided to retain/merge SA134's partial checkpoint, and no product decision is
+required to resume with the corrected focused command using `--no-cov` and the concrete
 `TestDevOpsTemplateRendering` node. A maintainer decision is needed only if a future closeout
 insists that the focused behavioral command itself own repository-wide coverage instead of
-pairing with broad Make coverage. SA142 and SA164 remain **hard dependencies** on SA151 that
-no decision can clear.
+pairing with broad Make coverage. No maintainer decision is outstanding elsewhere in this
+plan; SA142 and SA164 remain **hard dependencies** on SA151 that no decision can clear, and
+resuming SA155 needs a fresh Adaptive session with working plan-envelope propagation and a
+newly resolved plan authority.
 
 ### Merge order
 
@@ -345,10 +348,11 @@ Conceptual background, mental models, and implementation notes for **every** tic
 
    Convergence evidence records the F-001 coherence fix, focused 236-pass evidence, a green
    PostgreSQL-19 temporary probe, an expected-red Python-3.13 temporary probe, explicit byte restoration
-   of the original files, and current synchronization to v88
-   `c26b62d07d5c6a73041df2b2380ddbadcbae0a96`. No `CHANGELOG.md` closure, completed ticket
-   closeout, or SA134 completion claim is made here. SA150 remains blocked and must not start
-   before SA134 closes.
+   of the original files, and the P1 code checkpoint's pre-merge synchronization to v88
+   `c26b62d07d5c6a73041df2b2380ddbadcbae0a96`. This roadmap merge incorporates the v88 SA155
+   checkpoint at `0aeb5f3f6a8272b194ed3c818d617e35fabcfa95`. No `CHANGELOG.md` closure,
+   completed ticket closeout, or SA134 completion claim is made here. SA150 remains blocked
+   and must not start before SA134 closes.
 
    **Decision status:** the maintainer decision to retain/merge this partial checkpoint is
    recorded above. No product decision is required to resume with the corrected focused
@@ -491,11 +495,42 @@ SA163 (arch F13, CI environment) ──► rides inside SA135 (W3, merge #15)
 The failure this ordering prevents: SA124 and SA123 ship acceptance criteria expressed as
 gates, written into a suite that nothing executes.
 
-- [ ] **SA155 — Give the gate layer a gate of its own.** `Band A · Tier 1 · W2 · merge #7 · deps: none (SA159, SA168 merged) · blocks SA124, SA123, SA166`
-   Closes arch-audit **Finding 12** (`gate-suites-unexecuted`, rank 1, horizon `now`). Gate implementations and their conformance suites live in `scripts/`, deliberately outside `TEST_DIRS` (`Makefile:150`) and outside `.coveragerc` — so gate code is the only first-party code with no owning execution context, while being the code every other gate's credibility rests on. Of 14 `scripts/test_*.py` suites, **4 are wired to a target and 10 are wired to nothing**; `git log -S` shows the orphans were never wired, and the population grows one per new gate. The historical pre-closure run under the project interpreter produced **959 passed, 74 failed** across code nothing ran. **Current measured baseline (2026-08-22, post-sync):** `poetry run pytest scripts/ --no-cov -q` reports **1,213 passed**, with only SA162's two deprecation warnings outstanding — so the suite is green and registrable today. Hosted *job membership* is genuinely closed by `sync_ci_gate_jobs.py:314-320` and must be preserved — the gap is the suites and the non-`ci.yml` contexts, since `check_gate_parity.py:2509-2511` filters rather than asserts, so parity proves *registered → present* and never *present → registered*.
+- [ ] **SA155 — Give the gate layer a gate of its own.** `Band A · Tier 1 · W2 · merge #7 · deps: none (SA159, SA168 merged) · blocks SA124, SA123, SA166 · PARTIAL PLANNING CHECKPOINT 2026-08-22`
+   Closes arch-audit **Finding 12** (`gate-suites-unexecuted`, rank 1, horizon `now`). Gate implementations and their conformance suites live in `scripts/`, deliberately outside `TEST_DIRS` (`Makefile:150`) and outside `.coveragerc` — so gate code is the only first-party code with no owning execution context, while being the code every other gate's credibility rests on. Current topology discovery found **15** `scripts/test_*.py` suites: **4 are wired to a target and 11 are wired to nothing**. The prior 14-suite/10-unwired census remains historical evidence; `scripts/test_repo_source_interpreters.py` is the additional current suite and is covered automatically by the all-`scripts/` target. The historical pre-closure run under the project interpreter produced **959 passed, 74 failed** across code nothing ran. **Current measured baseline (2026-08-22, post-sync):** `poetry run pytest scripts/ --no-cov -q` reports **1,213 passed**, with only SA162's two deprecation warnings outstanding — so the suite is green and registrable today. Hosted *job membership* is genuinely closed by `sync_ci_gate_jobs.py:314-320` and must be preserved — the gap is the suites and the non-`ci.yml` contexts, since `check_gate_parity.py:2509-2511` filters rather than asserts, so parity proves *registered → present* and never *present → registered*.
   Take the audit's **Option 1** here — **ratified by the maintainer 2026-08-22**, see [Gate-suite execution decision](#gate-suite-execution-decision-recorded-2026-08-22) — (one registered `check-gate-suites` target running `pytest scripts/ --no-cov`, keeping `scripts/` out of the coverage metric) and leave **Option 2** (a per-gate `self_test` registry binding) to SA123's own acceptance work. Option 3 (relocating the helpers into a first-party package) is explicitly out of scope — it collides with SA124's in-flight `sa117_scope.json` edits.
   **Acceptance:** a `check-gate-suites` target runs the `scripts/` suites with coverage disabled and is registered in `scripts/gate_registry.json` with `required_contexts` covering at least `local-serial`, `local-parallel`, and `hosted`; `scripts/sync_ci_gate_jobs.py` generates its hosted job and `scripts/check_gate_parity.py` passes; the gate is registered **green** — the historical 74-failure baseline is fully resolved by the dependency tickets before registration, verified by a recorded pass/fail baseline; `scripts/` remains absent from `.coveragerc` and the `--cov-fail-under=90` product metric is unchanged; the `sync_ci_gate_jobs.py` job-set closure is preserved intact; the six `UNOWNED_JOB_IDS` entries are each justified in writing or registered, with `isolation-conformance` — which has no Makefile target and is invoked only from `ci.yml:634` — resolved explicitly; arch Finding 12 is retired with evidence.
   **Shared conflict surface:** `Makefile`, `scripts/gate_registry.json`, `scripts/sync_ci_gate_jobs.py`, `.github/workflows/ci.yml`, `scripts/check_ci_locally.sh`, `docs/others/arch-audit.md`.
+
+  **Checkpoint disposition (2026-08-22):** prerequisites and both previously open decisions
+  were verified resolved; `wt-track2` was clean and synchronized with `v88`; the existing
+  Poetry environment was verified (Python 3.14.6); read-only discovery mapped the Make,
+  registry, local runner, CI generator, parity, coverage, audit, and test surfaces; and a
+  self-reviewed two-phase implementation plan was produced. No product, gate, CI, test, or
+  audit file changed. Two fresh `Adaptive-implement` handoffs failed before mutation because
+  the implementers could not consume the supplied session/plan carrier; the permitted retry
+  budget ended, so this checkpoint deliberately preserves planning evidence without claiming
+  implementation or validation.
+
+  **Blocking state:** the blocker is orchestration-only. Repository dependencies are complete,
+  the gate-suite execution choice remains Option 1, and the #8 ordering decision remains
+  settled. No maintainer product decision is needed. Before a clean continuation, start a fresh
+  Adaptive session, require a clean `wt-track2`, merge the then-current `v88`, rediscover any
+  changed seams, and create a fresh plan authority rather than relying on the session-scoped
+  carrier from this checkpoint.
+
+  **Pending implementation plan — the only path that closes SA155:**
+  - **P1 — gate mechanics and proof.** Re-run and bind the 15-suite pre-edit baseline; add a
+    recursion-safe `check-gate-suites` Make target using `pytest scripts/ --no-cov`; register
+    local-serial, local-parallel, and hosted contexts; generate the hosted job and consumer
+    needs while preserving exact job-set closure; justify all six `UNOWNED_JOB_IDS`; expose
+    `isolation-conformance` through Make; add focused recursion, failure-propagation, local-runner,
+    generator, parity, and coverage-policy tests; then pass the focused checks, gate suite,
+    parity, generation check, and `make check`.
+  - **P2 — evidence-backed closeout.** Only after P1 is green, update the scripts/validation
+    references, retire arch Finding 12, archive the completed ticket in `CHANGELOG.md`, remove
+    SA155 from this open-work roadmap, recompute the queue and critical path, run the broad
+    project gates including the accepted `make quality` baseline, and take convergence plus
+    terminal attestation before merge-back.
 
 - [ ] **SA160 — Share one correct CSRF-token helper in the React theme.** `Band C · Tier 2 · W3 · merge #20 · deps: SA161 (emission-parity ordering)`
   Closes tech-audit **TA67** (`spa-csrf-token-duplicate-cookie`, S3) — the only finding in deployment reality #3, the internet-facing generated project. `themes/showcase_react/src/hooks/useApi.ts:20-28` and `src/components/forms/FormRenderer.tsx:206-211` carry the same eleven lines: the parser splits `document.cookie` on `"; csrftoken="` and accepts the result **only when it yields exactly two parts**. Two `csrftoken` cookies yield three, so `getCsrfToken()` returns `''`, `buildRequestHeaders` (`:89-94`) skips `X-CSRFToken`, and Django rejects every POST/PUT/PATCH/DELETE with 403. The triggering state is ordinary: an `app.example.com` deployment alongside a `.example.com` cookie, the outcome of setting or changing `CSRF_COOKIE_DOMAIN`, of a sibling Django app on another subdomain, or of a stale apex-scoped cookie. GETs keep working, so the app looks alive and merely refuses to save, and no error names the cause. Fails closed — availability, not a security hole. There is no shared CSRF helper, no fetch interceptor, and no template-injected token, so no layer-up guard exists.
