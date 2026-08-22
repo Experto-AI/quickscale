@@ -199,7 +199,7 @@ are yes.
 |---|---|---|---|---|---|
 | **W1** | SA134 (#9) | **yes** — its prerequisite is merged; no open decision | **yes** — its assertion surfaces are W1-owned | **yes** — merge #9's dependency is satisfied | **truly green — next W1 leg** |
 | **W2** | SA155 (#7) | **yes** — both prerequisites are merged; no open decision | **yes** — the gate suite is green under the project interpreter | **yes** — both merge prerequisites are satisfied | **truly green — next critical-path leg** |
-| **W3** | SA151 (#3, **in progress**) | **yes** — in flight; P1 merged, P2A complete, P2B/P3 planned but unreached | **yes** — P2B/P3 are W3-owned; the exclusive slot is held | **yes** — #3 is first in the queue | **truly green — off the critical path** (second chain) |
+| **W3** | SA151 (#3, **partial checkpoint retained**) | **yes** — resume with the three recorded P2A guard findings; no new decision gate | **yes** — P2A hardening and P2B/P3 are W3-owned; the exclusive slot remains assigned | **yes** — the maintainer accepted the partial checkpoint for merge at #3, without closing the ticket | **partial but startable — off the critical path** (second chain) |
 
 **Blocked next-after tickets, and what clears each:**
 
@@ -209,8 +209,9 @@ are yes.
 | SA167a (#8) | can merge — no | SA155 (#7) | **Decided 2026-08-22 — the gate stays.** This was the one decision-clearable blocker; the maintainer declined to lift it. Implementation may begin today (`deps: none`); only the *merge* waits, because its acceptance evidence — unchanged emission parity, `make quality` no worse than found — is meaningless until SA155 makes the gate layer truthful. Starting it early is sanctioned; merging it early is not. |
 | SA164 (#25) | can start · can finish — no | SA151 (#3) | No — hard dependency. Its SA92 parity backstop must be re-anchored onto SA151's regenerated migrations, which do not exist in final form until SA151 closes. |
 
-**Recommended concurrency right now:** W1 starts SA134, W2 starts SA155, and W3 continues
-SA151 P2B and then P3. All three next-track choices are dependency- and decision-clear.
+**Recommended concurrency right now:** W1 starts SA134, W2 starts SA155, and W3 first
+closes SA151's three P2A guard findings, then continues P2B and P3. All three next-track
+choices are dependency- and decision-clear.
 **No maintainer decision is outstanding anywhere in this plan** — the two that were open on
 2026-08-22 (gate-suite execution intent, and whether SA167a may merge ahead of SA155) are
 both recorded above under "Gate-suite execution decision". Of the blocked rows above, SA142
@@ -363,7 +364,7 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Acceptance:** no function in `module_config.py` decides a module's apps, middleware, settings keys, or URL includes — those come from the module's manifest through its adapter; the remaining surface is desired-configuration collection only, and that boundary is stated in the module's docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist) is retired once the deviation it names is gone.
   **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`.
 
-- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · blocks SA142, SA152 · P2A PARTIAL CHECKPOINT 2026-08-22`
+- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · blocks SA142, SA152 · P2A PARTIAL CHECKPOINT RETAINED 2026-08-22`
   QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models.
   **Acceptance:** exactly one `0001_initial` per module with models, and no other migration files; a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; `make test-integration` passes; existing databases are out of scope by policy — the documented upgrade path is a fresh database; the no-migration-history policy is recorded in [decisions.md](decisions.md).
 
@@ -371,29 +372,58 @@ Conceptual background, mental models, and implementation notes for **every** tic
   into `v88`. All ten modules are regenerated to a single `0001_initial` with schema parity,
   dry-run, integration, BYPASSRLS, and quality evidence recorded in
   [CHANGELOG.md](../../CHANGELOG.md); phase P1 (social's manifest-owned app projection) is
-  complete and convergence-reviewed. P2A now adds a convergence-reviewed, source-derived
-  guard for the twelve shipped AppConfigs, the ten model-bearing migration packages, the two
-  service-style modules, and the `teams` placeholder. The static AST guard accepts only one
-  direct literal `Migration.initial` assignment on the canonical
-  `django.db.migrations.Migration` base and rejects post-class, nested, indirect, or
-  otherwise ambiguous writes without executing migration source. Its focused semantic command
+  complete and convergence-reviewed. P2A adds a source-derived guard for the twelve shipped
+  AppConfigs, the ten currently model-bearing migration packages, the two current service-style
+  modules, and the `teams` placeholder. The guard uses static AST inspection without executing
+  migration source, and its focused semantic command
   (`poetry run pytest quickscale_core/tests/test_module_migration_topology.py -q --tb=short
   -o addopts= --no-cov`) passes all twenty-three tests. The earlier literal focused command remains
   historical red evidence: its seven test bodies passed, but package-default full-core
   coverage was 28.48% against 90%, so it exited 1; that failure was not accepted and no
-  coverage policy was weakened. SA151 stays **open** and SA142/SA152 stay blocked because
-  P2B and P3 have not been reached.
+  coverage policy was weakened. Convergence closed its in-pass findings, but terminal
+  attestation found the three false-green paths listed below. The maintainer directed that
+  these partial improvements be retained and merged as a checkpoint, not represented as P2A
+  closure. SA151 stays **open** and SA142/SA152 stay blocked.
+
+  **What is done at this retained checkpoint:**
+  - P1 remains merged with the schema, dry-run, integration, BYPASSRLS, and quality evidence
+    recorded in the changelog.
+  - The P2A guard and twenty-three focused regression tests are implemented; they enforce the
+    current twelve-module/ten-migration topology and reject the covered direct, nested,
+    post-class, reflective, spoofed-base, and ambiguous mutation cases without importing or
+    executing migration source.
+  - The worktree was synchronized with `v88`, the shared roadmap/changelog content was
+    reconciled, the focused suite passed, and `make check QUIET=1 SECTIONS="core"` passed.
+
+  **Pending / blocking before P2A can be called complete:**
+  - **AFR-001 (major, blocking):** reject module-global attribute rebinding such as
+    `sys.modules[__name__].migrations = ...`, which can make the syntactically canonical
+    `migrations.Migration` base resolve to a non-Django class; add a no-execution canary.
+  - **AFR-002 (major, blocking):** classify both `models.py` and an importable `models/`
+    package as model-bearing, reject ambiguous dual representations, and add a package-form
+    missing-migration canary.
+  - **AFR-003 (moderate, blocking):** require exactly one effective direct literal AppConfig
+    `name` and `label` binding, reject later/indirect rebinding, and add duplicate-name and
+    duplicate-label canaries.
+
+  **Decision status needed to continue cleanly:** no new maintainer decision is required.
+  Existing fail-closed and no-source-execution policy determines all three corrections. A new
+  decision is needed only if a future implementation proposes allowing dynamic migration-base,
+  model-discovery, or AppConfig identity forms instead of rejecting them conservatively.
 
   **Remaining work — the only thing that closes this ticket:**
+  - **P2A hardening** — close AFR-001, AFR-002, and AFR-003; rerun the focused topology suite,
+    the core check, convergence, and terminal attestation before claiming P2A complete.
   - **P2B** — the non-skippable generated empty-PostgreSQL install/migrate proof; P2A's
-    exact-ten topology guardrail is complete at this checkpoint.
+    current partial guardrail is retained but must be hardened first.
   - **P3** — record the no-migration-history policy in [decisions.md](decisions.md), close out
     the changelog/roadmap entries, run the broad terminal gates, and take terminal attestation.
 
-  **Plan:** start from the reviewed P1/P2A checkpoint; implement P2B; rerun the ten dry checks,
-  generated empty-PostgreSQL migration, restricted and BYPASSRLS suites, aggregate
-  schema/security/seed parity, integration, and quality; then perform P3. Do not begin SA142
-  or SA152 before SA151 closes.
+  **Pending plan:** start from this retained P1/P2A partial checkpoint; close the three P2A
+  findings and obtain clean convergence/attestation; then implement P2B and rerun the ten dry
+  checks, generated empty-PostgreSQL migration, restricted and BYPASSRLS suites, aggregate
+  schema/security/seed parity, integration, and quality; finally perform P3. Do not begin
+  SA142 or SA152 before SA151 closes.
 
 - [ ] **SA142 — Reuse and clean E2E Docker images.** `Band B · Tier 1 · W3 · merge #10 · deps: SA151 · Docker slot · blocks SA135`
   Separate stable image identity from per-run container/port/volume identity, reclaim variable images under normal cleanup, and preserve `--no-cleanup` diagnostics.
