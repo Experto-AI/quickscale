@@ -491,10 +491,13 @@ Integrated into `make quality`:
 | 2 (error) | 1 | 2 (failed recipe) | Same cleanup/abort behavior — prerequisite failure (missing ref, bad baseline, git error) |
 
 The current accepted no-worse-than-found baseline is an exit-2 `make quality`
-result when the only regression is
-`quickscale_cli/src/quickscale_cli/commands/development_commands.py::up` C901
-complexity 15 versus allowed 14. The helper/script exit-1 detail and the GNU
-Make exit-2 wrapper status must both be retained in validation evidence.
+result with exactly two warning regressions: C901 complexity 15 versus allowed
+14 for `quickscale_cli/src/quickscale_cli/commands/development_commands.py::up`,
+and complexity 13 for
+`quickscale_modules/social/src/quickscale_modules_social/adapter.py::_social_manifest_apps`.
+Critical regressions remain 0 and monotonicity passes. The helper/script exit-1
+detail and the GNU Make exit-2 wrapper status must both be retained in
+validation evidence.
 
 When the gate passes, the verdict and merge-base metadata are included in the
 generated reports:

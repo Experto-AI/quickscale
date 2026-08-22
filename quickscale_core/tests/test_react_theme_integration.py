@@ -16,6 +16,7 @@ import types
 import pytest
 
 from quickscale_core.generator import ProjectGenerator
+from quickscale_core.generator.runtime_pins import POSTGRES_VERSION
 
 
 @pytest.mark.integration
@@ -335,7 +336,7 @@ class TestReactThemeGeneration:
 
         # Should copy built assets
         assert "staticfiles" in dockerfile or "static" in dockerfile
-        assert "postgresql-client-18" in dockerfile
+        assert f"postgresql-client-{POSTGRES_VERSION}" in dockerfile
         assert "apt.postgresql.org" in dockerfile
         assert "apt.postgresql.org.asc" in dockerfile
         assert "gpg --dearmor" not in dockerfile

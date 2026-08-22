@@ -191,7 +191,7 @@ are yes.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W1** | SA134 (#9, **in progress** — uncommitted test-side edits in the worktree) | **yes** — every prerequisite is merged; no open decision | **yes** — its assertion surfaces are W1-owned test files | **yes** — merge #9 has no unsatisfied dependency | **truly green — off the critical path** |
+| **W1** | SA134 (#9, **P1 checkpoint retained — converged and synchronized**) | **yes** — every prerequisite is merged; the maintainer accepted this partial checkpoint for merge-back | **yes** — the five test-side assertion surfaces are W1-owned and the P1 delta is converged; ticket closure remains pending | **yes** — the retained P1 code checkpoint was synchronized to v88 `c26b62d07d5c6a73041df2b2380ddbadcbae0a96`, and this roadmap merge incorporates v88 `0aeb5f3f6a8272b194ed3c818d617e35fabcfa95`; #9 has no unsatisfied dependency | **partial but merge-safe — off the critical path** |
 | **W2** | SA155 (#7, **partial planning checkpoint retained**) | **yes** — every prerequisite is merged; no product decision is open | **yes, after orchestration recovery** — the documented `scripts/` baseline is green (1,213 passed), but implementation did not start because two Adaptive implementer handoffs failed before mutation | **yes** — #7 has no unsatisfied dependency | **administratively paused — next critical-path leg** |
 | **W3** | SA142 (#10) | **yes** — SA151 is closed with clean-initial topology and generated empty-database evidence | **yes** — Docker image lifecycle work is W3-owned; the exclusive slot remains assigned | **yes** — merge #10's sole dependency is satisfied | **truly green — off the critical path** (second chain) |
 
@@ -203,17 +203,23 @@ are yes.
 | SA167a (#8) | can merge — no | SA155 (#7) | **Decided 2026-08-22 — the gate stays.** This was the one decision-clearable blocker; the maintainer declined to lift it. Implementation may begin today (`deps: none`); only the *merge* waits, because its acceptance evidence — unchanged emission parity, `make quality` no worse than found — is meaningless until SA155 makes the gate layer truthful. Starting it early is sanctioned; merging it early is not. |
 | SA164 (#25) | can start · can finish — no | SA166 (#24) | SA151's content dependency is satisfied; W2 worktree ordering still holds SA164 behind SA166. |
 
-**Recommended concurrency right now:** W1 continues SA134, W2 retains the SA155 planning
-checkpoint until a fresh Adaptive implementation session can consume its plan carrier, and W3
-starts SA142 over SA151's settled clean-initial migration baseline. All three next-track
-choices remain dependency- and decision-clear; W2's pause is orchestration-only, not a product
-or repository dependency.
-**No maintainer decision is outstanding anywhere in this plan** — the two that were open on
-2026-08-22 (gate-suite execution intent, and whether SA167a may merge ahead of SA155) are
-both recorded above under "Gate-suite execution decision". The remaining blocked rows are held
-by current worktree ordering or orchestration state; SA151 no longer blocks SA142 or SA164. Resuming SA155 needs
-no new scope decision: it needs a fresh Adaptive session after merging the then-current `v88`,
-with working plan-envelope propagation and a newly resolved plan authority.
+**Recommended concurrency right now:** W1 retains and merges the synchronized SA134 P1
+checkpoint at #9, W2 retains the SA155 planning checkpoint until a fresh Adaptive
+implementation session can consume its plan carrier, and W3 starts SA142 over SA151's settled
+clean-initial migration baseline. After merge-back, resume **SA134 only** for the
+quantified consumer sweep, temporary probes, broad Make gates, CHANGELOG/roadmap closeout,
+convergence, and terminal attestation; do not begin SA150. Concurrent SA151/SA155 checkpoint
+and quality-baseline history is preserved intact. All three next-track choices are dependency-
+and decision-clear; W2's pause is orchestration-only, not a product or repository dependency.
+The maintainer decided to retain/merge SA134's partial checkpoint, and no product decision is
+required to resume with the corrected focused command using `--no-cov` and the concrete
+`TestDevOpsTemplateRendering` node. A maintainer decision is needed only if a future closeout
+insists that the focused behavioral command itself own repository-wide coverage instead of
+pairing with broad Make coverage. **No maintainer decision is outstanding elsewhere in this
+plan** — SA151 no longer blocks SA142 or SA164, and the two decisions recorded under
+"Gate-suite execution decision" remain settled. Resuming SA155 needs a fresh Adaptive session
+after merging the then-current `v88`, with working plan-envelope propagation and a newly
+resolved plan authority.
 
 ### Merge order
 
@@ -320,8 +326,42 @@ This section holds the implementation tickets; the [audit-derived backlog](#audi
 Conceptual background, mental models, and implementation notes for **every** ticket live in [v88_ticket_context.md](v88_ticket_context.md); this roadmap remains authoritative for scope, worktrees, and merge order.
 
 - [ ] **SA134 — Derive generated-project version assertions from authoritative pins.** `Band B · Tier 2 · W1 · merge #9 · deps: none (SA159 merged)`
-  Remove repeated runtime/dependency literals while retaining meaningful retired-version negative controls.
-  **Acceptance:** no test asserts a runtime or dependency version as a bare literal where an authoritative pin exists; assertions read the pin source directly; retired-version negative controls remain and still fail when a retired version is reintroduced; bumping a pin requires no test edit, demonstrated by a temporary bump that leaves the suite green.
+   Remove repeated runtime/dependency literals while retaining meaningful retired-version negative controls.
+   **Acceptance:** no test asserts a runtime or dependency version as a bare literal where an authoritative pin exists; assertions read the pin source directly; retired-version negative controls remain and still fail when a retired version is reintroduced; bumping a pin requires no test edit, demonstrated by a temporary bump that leaves the suite green.
+
+   **P1 checkpoint disposition (retained; converged and synchronized 2026-08-22).** SA134
+   remains open and unchecked: the maintainer decided to retain and merge this partial
+   checkpoint rather than claim ticket closure. The five runtime-pin consumers were derived
+   and reconciled as follows: `test_e2e_full_workflow.py` consumes Python, PostgreSQL, and
+   Django CI pins for generated CI assertions; `test_generator/test_production_settings_database_url.py`
+   consumes the Django constraint and CI-matrix pins in its rendering context;
+   `test_generator/test_templates.py` consumes all generated-project runtime pins and retains
+   the separate module-Django expected value and mismatch/negative drift controls;
+   `test_integration.py` consumes the PostgreSQL pin for generated CI assertions; and
+   `test_react_theme_integration.py` consumes the PostgreSQL pin for the generated Dockerfile.
+   The negative/separate controls remain intentional: retired-version assertions stay
+   negative, module-Django parity remains separately expressed, and mismatch probes still
+   verify drift detection rather than mirroring the pin value.
+
+   Convergence evidence records the F-001 coherence fix, focused 236-pass evidence, a green
+   PostgreSQL-19 temporary probe, an expected-red Python-3.13 temporary probe, explicit byte restoration
+   of the original files, and the P1 code checkpoint's pre-merge synchronization to v88
+   `c26b62d07d5c6a73041df2b2380ddbadcbae0a96`. This roadmap merge incorporates the v88 SA155
+   checkpoint at `0aeb5f3f6a8272b194ed3c818d617e35fabcfa95`. No `CHANGELOG.md` closure,
+   completed ticket closeout, or SA134 completion claim is made here. SA150 remains blocked
+   and must not start before SA134 closes.
+
+   **Decision status:** the maintainer decision to retain/merge this partial checkpoint is
+   recorded above. No product decision is required to resume with the corrected focused
+   command using `--no-cov` and the concrete `TestDevOpsTemplateRendering` node. A maintainer
+   decision is needed only if future closeout insists that the focused behavioral command
+   itself own repository-wide coverage rather than pairing it with broad Make coverage.
+
+   **Pending closure plan — SA134 only:** rerun the quantified consumer sweep and temporary
+   probes; run `make check -- --core` and `make quality`; update `CHANGELOG.md`; mark this
+   roadmap entry complete and remove its open-work body; then take convergence and terminal
+   attestation. Do not begin SA150. The current checkpoint is the merge-back artifact, not
+   SA134 closure.
 
 - [ ] **SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam.** `Band B · Tier 2 · W1 · merge #12 · deps: SA134 · blocks SA118`
   Carried forward as non-blocking observations from the installed-wheel lifecycle review: the seam is referenced only by production code and its own E2E with no `docs/technical/` description, and `_resolve_local_wheel_dependency()` silently falls back to the manifest version spec when the wheelhouse is set but matches no wheel.
