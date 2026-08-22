@@ -31,6 +31,26 @@ Consequence for the gated findings: they remain live in [arch-audit.md](../other
 
 The priority model, dependency graph, acceptance criteria, and worktree/merge-order assignment below are the authoritative plan. (v88 planning is closed; see [CHANGELOG.md](../../CHANGELOG.md).)
 
+### Gate-suite execution decision (recorded 2026-08-22)
+
+**Choice: the ten unwired `scripts/` suites should run in CI.** They are not maintainer
+scratch. This ratifies SA155's **Option 1** — one registered `check-gate-suites` target
+running `pytest scripts/ --no-cov`, with `scripts/` kept out of the coverage metric — and
+settles the arch audit's standing question on
+[Finding 12](../others/arch-audit.md) intent. What decided it: SA124 and SA123 both express
+their acceptance criteria *as gates written into these suites*, so treating the suites as
+optional would leave both tickets unenforceable on arrival.
+
+Consequence: Finding 12 keeps its full rank-1 weight rather than dropping to a watchlist
+item, SA155 stays band A at merge #7, and no SA155 scope change follows from the decision —
+the ticket as written is what was ratified.
+
+**SA167a stays at merge #8** (recorded 2026-08-22). The option to merge it ahead of SA155
+was considered and declined: its acceptance rests on unchanged emission parity and
+`make quality` no worse than found, and neither claim means anything until SA155 makes the
+gate layer truthful. One merge position is not worth trading a real correctness signal for.
+Starting SA167a early remains sanctioned; merging it early does not.
+
 ### Priority model (revised 2026-08-21)
 
 The first plan ranked the nine implementation tickets on their own merits, and the
@@ -186,15 +206,15 @@ are yes.
 | Ticket | Blocked state | Blocking ticket | Clearable by a maintainer decision? |
 |---|---|---|---|
 | SA142 (#10) | can start — no | SA151 (#3) | No — hard dependency; SA142 rebuilds images over SA151's regenerated migrations. |
-| SA167a (#8) | can merge — no | SA155 (#7) | **Yes — this one is a maintainer call.** Implementation may begin today (`deps: none`); only the *merge* waits, because its acceptance evidence — unchanged emission parity, `make quality` no worse than found — is meaningless until SA155 makes the gate layer truthful. Starting it early is sanctioned; merging it early is not. |
+| SA167a (#8) | can merge — no | SA155 (#7) | **Decided 2026-08-22 — the gate stays.** This was the one decision-clearable blocker; the maintainer declined to lift it. Implementation may begin today (`deps: none`); only the *merge* waits, because its acceptance evidence — unchanged emission parity, `make quality` no worse than found — is meaningless until SA155 makes the gate layer truthful. Starting it early is sanctioned; merging it early is not. |
 | SA164 (#25) | can start · can finish — no | SA151 (#3) | No — hard dependency. Its SA92 parity backstop must be re-anchored onto SA151's regenerated migrations, which do not exist in final form until SA151 closes. |
 
 **Recommended concurrency right now:** W1 starts SA134, W2 starts SA155, and W3 finishes
-SA151 P2 and runs P3. All three next-track choices are dependency- and decision-clear. Of the
-blocked rows above, SA142 and SA164 are **hard dependencies** on SA151 that no decision can
-clear; SA167a's merge gate is the one **decision-clearable** item — see
-[arch-audit.md](../others/arch-audit.md) open question on `scripts/` suite intent, which also
-settles SA155's scope.
+SA151 P2 and runs P3. All three next-track choices are dependency- and decision-clear.
+**No maintainer decision is outstanding anywhere in this plan** — the two that were open on
+2026-08-22 (gate-suite execution intent, and whether SA167a may merge ahead of SA155) are
+both recorded above under "Gate-suite execution decision". Of the blocked rows above, SA142
+and SA164 are **hard dependencies** on SA151 that no decision can clear.
 
 ### Merge order
 
@@ -321,7 +341,7 @@ Conceptual background, mental models, and implementation notes for **every** tic
   Scope is deliberately narrow: **declaration only, no relocation.** Add a `derivation.wiring_projections` entry with `wiring_field: apps` to each of the five manifests; change core to read it. Adapters stay in `entry_point.py` — moving them is SA167b (#14, W1). The other four core-side modules (analytics, blog, listings, forms) already read `apps` from their manifests and are untouched.
   **Acceptance:** each of the five manifests declares its Django apps in its own `derivation.wiring_projections` `apps` entry; no `apps` value is a Python literal in `entry_point.py` for any module; the resolved `spec.apps` for all twelve modules is byte-identical before and after, recorded as a before/after table; generator emission parity is **unchanged** — no rebaseline, which is what proves the change is behaviour-preserving; a generated project with all modules boots with an identical `MODULE_INSTALLED_APPS`; `make quality` is no worse than found.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_modules/{auth,backups,notifications,orgs,storage}/module.yml`. **Ordering:** must merge before SA118 (#16) and SA167c (#21), which both rewrite the same manifests, and before SA167b (#14, W1), which relocates the adapter blocks this ticket makes manifest-reading.
-  **Why #8 and not earlier:** SA167a has no ticket dependencies and could run first, but its acceptance rests on unchanged emission parity and `make quality` no worse than found — neither is verifiable until the gate layer reports the truth. It therefore sits immediately after SA155 (#7), the earliest slot where its own evidence means anything.
+  **Why #8 and not earlier:** SA167a has no ticket dependencies and could run first, but its acceptance rests on unchanged emission parity and `make quality` no worse than found — neither is verifiable until the gate layer reports the truth. It therefore sits immediately after SA155 (#7), the earliest slot where its own evidence means anything. Moving it ahead of SA155 was offered to the maintainer on 2026-08-22 and **declined**; #8 is a settled position, not a default.
 
 - [ ] **SA118 — Project every declared manifest default into wiring.** `Band B · Tier 2 · W2 · merge #16 · deps: SA123, SA150, SA167a · blocks SA167c`
   Materialize authoritative declared defaults without widening into the full imperative-to-declarative migration; rebaseline emission parity with per-file rationale.
@@ -405,7 +425,7 @@ gates, written into a suite that nothing executes.
 
 - [ ] **SA155 — Give the gate layer a gate of its own.** `Band A · Tier 1 · W2 · merge #7 · deps: none (SA159, SA168 merged) · blocks SA124, SA123, SA166`
    Closes arch-audit **Finding 12** (`gate-suites-unexecuted`, rank 1, horizon `now`). Gate implementations and their conformance suites live in `scripts/`, deliberately outside `TEST_DIRS` (`Makefile:150`) and outside `.coveragerc` — so gate code is the only first-party code with no owning execution context, while being the code every other gate's credibility rests on. Of 14 `scripts/test_*.py` suites, **4 are wired to a target and 10 are wired to nothing**; `git log -S` shows the orphans were never wired, and the population grows one per new gate. The historical pre-closure run under the project interpreter produced **959 passed, 74 failed** across code nothing ran. **Current measured baseline (2026-08-22, post-sync):** `poetry run pytest scripts/ --no-cov -q` reports **1,213 passed**, with only SA162's two deprecation warnings outstanding — so the suite is green and registrable today. Hosted *job membership* is genuinely closed by `sync_ci_gate_jobs.py:314-320` and must be preserved — the gap is the suites and the non-`ci.yml` contexts, since `check_gate_parity.py:2509-2511` filters rather than asserts, so parity proves *registered → present* and never *present → registered*.
-  Take the audit's **Option 1** here (one registered `check-gate-suites` target running `pytest scripts/ --no-cov`, keeping `scripts/` out of the coverage metric) and leave **Option 2** (a per-gate `self_test` registry binding) to SA123's own acceptance work. Option 3 (relocating the helpers into a first-party package) is explicitly out of scope — it collides with SA124's in-flight `sa117_scope.json` edits.
+  Take the audit's **Option 1** here — **ratified by the maintainer 2026-08-22**, see [Gate-suite execution decision](#gate-suite-execution-decision-recorded-2026-08-22) — (one registered `check-gate-suites` target running `pytest scripts/ --no-cov`, keeping `scripts/` out of the coverage metric) and leave **Option 2** (a per-gate `self_test` registry binding) to SA123's own acceptance work. Option 3 (relocating the helpers into a first-party package) is explicitly out of scope — it collides with SA124's in-flight `sa117_scope.json` edits.
   **Acceptance:** a `check-gate-suites` target runs the `scripts/` suites with coverage disabled and is registered in `scripts/gate_registry.json` with `required_contexts` covering at least `local-serial`, `local-parallel`, and `hosted`; `scripts/sync_ci_gate_jobs.py` generates its hosted job and `scripts/check_gate_parity.py` passes; the gate is registered **green** — the historical 74-failure baseline is fully resolved by the dependency tickets before registration, verified by a recorded pass/fail baseline; `scripts/` remains absent from `.coveragerc` and the `--cov-fail-under=90` product metric is unchanged; the `sync_ci_gate_jobs.py` job-set closure is preserved intact; the six `UNOWNED_JOB_IDS` entries are each justified in writing or registered, with `isolation-conformance` — which has no Makefile target and is invoked only from `ci.yml:634` — resolved explicitly; arch Finding 12 is retired with evidence.
   **Shared conflict surface:** `Makefile`, `scripts/gate_registry.json`, `scripts/sync_ci_gate_jobs.py`, `.github/workflows/ci.yml`, `scripts/check_ci_locally.sh`, `docs/others/arch-audit.md`.
 
