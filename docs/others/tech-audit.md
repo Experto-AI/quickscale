@@ -48,7 +48,6 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 | 1 | Ran the XSS pipeline (`escape` → `markdown[fenced_code,tables,toc]` → `sanitize_rendered_html`) against 15 crafted payloads in a REPL | **Refuted** a suspected stored-XSS finding — see *Clean sweeps* |
 | 2 | Ran `check_quality_baseline_monotonicity.py` with `env -u QUALITY_BASELINE_BASE_REF -u GITHUB_BASE_REF` | **Confirmed TA63** — exit 2, `MERGE_BASE_ERROR`. Artifact backed up and byte-restored |
 | 3 | `git rev-parse --verify v87` / `origin/v87` / `git tag \| grep v87` | Local branch and tag **absent**; `origin/v87` resolves. Confirms TA63's mechanism |
-| 4 | Ran `check_sa117_scope.py` and `module_discovery.py` and `render_j2_template.py` under system `python3` (3.12.3) before SA159 | Only `check_sa117_scope.py` breaks (PEP 758 `SyntaxError`); the other two work **by luck** — the pre-SA159 evidence for TA65's latent failure |
 | 5 | Ran `python3 scripts/check_sa117_scope.py` from a directory without `scripts/` | Interpreter exits **2** on "can't open file" — the former false-green mechanism; SA157's closure proof below now distinguishes tool output from interpreter failure |
 | 6 | `~True != 0` under `-W error::DeprecationWarning` on 3.14.6 | Raises; removal in 3.16. Confirms TA69 and **refutes** the arch audit's suggested fix |
 
@@ -59,11 +58,10 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
 | `spa-csrf-token-duplicate-cookie` (TA67) | **S3** | Correctness (frontend) | `getCsrfToken` returns `''` whenever two `csrftoken` cookies are present — every SPA write 403s | Trivial ⚡ | High | new |
-| `repo-sources-run-under-bare-python` (TA65) | **S3** | Oracle violation | Repo sources executed by bare `python3` off PATH in 3 shell sites, against a declared invariant | Small | High | **closed by SA159** |
 | `generated-settings-dead-client-ip` (TA68) | S4 | Dead code (generated output) | Two `get_client_ip` definitions in generated settings are unreachable | Trivial | High | new |
 | `csrf-gate-bool-invert-deprecated` (TA69) | S4 | Dependencies / runtime | `~<bool>` in the CSRF AST gate is removed in Python 3.16 | Trivial | High | new (arch red flag, verified + corrected) |
 
-**Counts:** S1 **0** · S2 **0** · S3 **1 open** · S4 **2** · **Total 3 open**. Quick win (⚡ Trivial-effort S3): TA67.
+**Counts:** S1 **0** · S2 **0** · S3 **1** · S4 **2** · **Total 3 open**. Quick win (⚡ Trivial-effort S3): TA67.
 
 ---
 
@@ -110,69 +108,6 @@ function getCsrfToken(): string {
 
 ---
 
-### TA65 — Repo sources are executed by a bare `python3` off PATH, against a declared invariant (closed by SA159)
-
-**Closure (2026-08-22):** SA159 added the shared `quickscale_project_python` resolver in
-`scripts/_python_requirement.sh` and routed `scripts/version_tool.sh` plus both
-`scripts/lint_frontend.sh` render sites through it. The resolver prefers the repository
-`.venv`, validates the declared minimum, can use Poetry's project environment, and fails
-loudly with the required Python version instead of falling through to PATH. The new
-`scripts/check_repo_source_interpreters.py` guard is wired into pre-commit and scans every
-`scripts/*.sh` and `scripts/test_*.py`: the three named bare shell consumers are now zero,
-and the test-side bare-Python repo-source consumer count is zero. The hostile-PATH proof
-keeps `/usr/bin/python3.12` first while the project interpreter remains selected.
-
-`scripts/check_ci_locally.sh` remains deliberately adjacent rather than part of the
-finding: its `python3` selection feeds only a stdlib JSON-loading heredoc and never
-executes a repository `.py` file. Closure evidence is recorded in the roadmap: focused
-interpreter-guard and version-tool tests passed, both hostile-PATH scripts exited 0, the
-broad suite matched its three-test SA168 accepted oracle, the pre-commit guard exited 0,
-and `make quality` matched the accepted two-warning/zero-critical result with a passing
-monotonicity gate. TA65 and arch red flag #2 are retired by SA159.
-
-**ID:** `repo-sources-run-under-bare-python`
-
-**Severity:** **S3.** Latent today and demonstrably fatal when it fires: the repository's floor is Python 3.14 and ruff is configured to *emit* PEP 758 syntax that nothing below 3.14 can parse, so any repo source these scripts execute becomes unparseable the moment it is reformatted. Reachability is high (these run in `make` targets and the frontend lint gate) but the failure requires the target file to acquire 3.14-only syntax — one precondition, so severity holds at S3 rather than S2. Deployment reality #1/#2. Violates the oracle invariant at `ruff.toml:8-11` verbatim.
-
-**Category:** §4.VI operability / oracle violation. **Confidence:** High — verified by executing each target under the system interpreter.
-
-**Locations (collapsed class, 3 sites):**
-
-- `scripts/version_tool.sh:11` — `PYTHON="${PYTHON:-python3}"`, used at `:28` to run `quickscale_core/src/quickscale_core/contracts/module_discovery.py`, the authoritative module-inventory shim for the whole version-propagation tool.
-- `scripts/lint_frontend.sh:57` and `:173` — `python3 "$SCRIPT_DIR/render_j2_template.py"`, the renderer the frontend lint gate depends on.
-
-**Defect and failure scenario:** On this machine `python3` is CPython **3.12.3** and `python` is 3.12 as well, while the project interpreter is 3.14.6. Empirical check #4: `module_discovery.py` and `render_j2_template.py` both run clean under 3.12 today — they contain no 3.14-only construct — so all three sites work **by luck**, not by contract. `check_sa117_scope.py`, which does contain PEP 758 `except OSError, subprocess.SubprocessError:` (`:1579`), dies under the same interpreter with `SyntaxError: multiple exception types must be parenthesized`. The day `ruff format` collapses a two-type `except` in `module_discovery.py`, `scripts/version_tool.sh check` stops working — and it fails with a `SyntaxError` from a shim, not a message naming the interpreter, so the diagnosis starts in the wrong place. `scripts/check_ci_locally.sh:62-70` selects `python3` the same way but feeds it only a stdlib heredoc, so it is adjacent to this class rather than in it.
-
-**Evidence:**
-
-```
-# ruff.toml:8-11
-# Anything that executes repo sources must therefore use the project
-# interpreter (sys.executable / the venv), never a bare ``python`` off PATH.
-```
-
-```bash
-# scripts/version_tool.sh:11,28
-PYTHON="${PYTHON:-python3}"
-  if ! output=$("$PYTHON" "$MODULE_DISCOVERY_SHIM" --list-modules); then
-```
-
-```
-$ python3 --version                                  → Python 3.12.3
-$ python3 …/contracts/module_discovery.py --list-modules → analytics auth backups …  (EXIT=0, by luck)
-$ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple exception types must be parenthesized
-```
-
-**Refutation (pre-SA159):** Checked whether a wrapper guaranteed the interpreter before these scripts ran — `_python_requirement.sh` existed and probed candidate interpreters, but neither `version_tool.sh` nor `lint_frontend.sh` sourced it. The `PYTHON` override made `version_tool.sh` overridable, not correct, and direct Make/frontend invocation left the bare PATH choice in charge. The genuine mitigating fact, preserved: the targets happened not to carry 3.14-only syntax, which is why this was latent rather than an outage.
-
-**Fix (implemented by SA159):** Route each site through the project interpreter. The shell scripts resolve once through `_python_requirement.sh`, preferring the repository `.venv`, then Poetry's project environment, and rejecting an invalid explicit path; they fail loudly with the required version rather than taking whatever `python3` is on PATH. **Effort:** Small.
-
-**Verification (implemented by SA159):** With a 3.12 interpreter first on PATH, `scripts/version_tool.sh check` and `scripts/lint_frontend.sh` select the project interpreter. The pre-commit guard rejects `python3 <path>.py` in `scripts/*.sh` and bare-Python repo-source subprocesses in `scripts/test_*.py`, making the class self-policing.
-
-**Deliberate?** The opposite: `ruff.toml` states the rule explicitly and gives the reason. The finding is retired by SA159; this section retains the original evidence and closure record.
-
----
-
 ### S4
 
 - **TA68 · `generated-settings-dead-client-ip`** · `…/templates/project_name/settings/base.py.j2:61` and `settings/production.py.j2:123` · Both files define a module-level `get_client_ip(request)`, and `production.py.j2` rebinds it with a comment claiming the rebind exists "so that production defaults … are actually in effect at request time". Neither is reachable in a generated project: Django's `Settings` copies only **uppercase** names off the settings module, so `django.conf.settings.get_client_ip` does not exist, and nothing in the generated tree imports either function (grep across all templates returns only the two definitions). The real consumer is `quickscale_modules_orgs.current_org.get_client_ip`, which reads the uppercase `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT` settings dynamically and is correct. · **Fix:** delete both definitions and keep the settings plus the `REST_FRAMEWORK["NUM_PROXIES"]` recomputation, or add a comment pointing at the orgs helper as the live implementation. The behavioural comment in `production.py.j2:119-122` is misleading as written and should go either way.
@@ -186,7 +121,7 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 |---|---|---|
 | Commit delta `e40762a0..HEAD` | all 12 files, production and test hunks, in full | Clean — no finding. The two test changes are correct narrowings; see *Clean sweeps* and *Notes* |
 | `scripts/` quality-baseline gate | `check_quality_baseline_monotonicity.py` merge-base + `main`; `check_quality.sh` ordering and failure path | **Closed by SA156 (TA63)** |
-| `scripts/` gate conformance suites | executed all 14 (74F/1126P); read the 3 failing tests and their fixtures | **Arch Finding 12** remains open; the former TA66 oracle failure is closed by SA158, the historical quality-baseline failures by SA156, and the SA117 false-green by SA157 |
+| `scripts/` gate conformance suites | executed all 14 (74F/1126P); read the 3 failing tests and their fixtures | **Arch Finding 12** remains open; the former TA66 oracle failure, the historical quality-baseline failures, and the SA117 false-green are all closed (see [CHANGELOG.md](../../CHANGELOG.md)) |
 | `scripts/` shell interpreter selection | `version_tool.sh`, `lint_frontend.sh`, `check_ci_locally.sh`, `_python_requirement.sh` | **Closed by SA159** — repository-source calls use the validated project interpreter; `check_ci_locally.sh` is documented adjacent because its heredoc is stdlib-only |
 | Generated settings templates | `base.py.j2`, `production.py.j2` in full | **TA68**; production hardening otherwise clean |
 | Generated project scaffold | `.env.j2`, `.env.example.j2`, `docker-compose.yml.j2`, `db/init.sql.j2`, `urls.py.j2`, `views.py.j2`, `railway.json.j2` | Clean — see *Notes* for the dev-credential and healthcheck watch items |
@@ -223,7 +158,6 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 
 - **A gate's base ref was a per-release branch name, hard-coded in the gate.** TA63 is closed by SA156, but the structural lesson remains: a governance tool pinned to an artifact of the release *process* has nothing tying the two lifecycles together. The durable `main` identity and origin/local probe now own the default path.
 - **Frontend helpers are copied rather than shared.** TA67 is one function in two files; the theme has no `src/lib/http` seam, so the next call site that needs a CSRF token will produce a third copy. The contained fix does not create the seam.
-- **Interpreter selection is per-script rather than per-repository (closed by SA159 for repo-source execution).** The version and frontend source consumers now share `_python_requirement.sh`; `check_ci_locally.sh` keeps its separate PATH probe only for a stdlib heredoc and is explicitly adjacent.
 
 ---
 
@@ -268,10 +202,10 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 - 2026-08-21 — Prior watch item *quality baseline*: **regressed → promoted to TA63 → closed by SA156**. The prior pass recorded "monotonicity is enforced and `make quality` reports `total_regressions: 0`". It was falsified by execution: the gate exited 2 with `MERGE_BASE_ERROR` and `make quality` aborted before any analyzer ran. SA156 replaced the retired release-ref fallback with durable `main`, proved origin/local probing and missing-default remediation in hermetic tests, and verified a real `make quality` run with fresh reports. The current broader run reports the unrelated pre-existing `development_commands.py::up` C901 complexity regression (15 versus allowed 14): `scripts/check_quality.sh` exits 1 and GNU Make reports `make quality` exit 2, exactly matching the authorized no-worse-than-found oracle. **Full TA63 defect and closure detail is archived in [CHANGELOG.md](../../CHANGELOG.md); no closed-findings section is carried here.**
 - 2026-08-21 — Prior watch items *integration-branch CI*, *local-wheelhouse seam*, *generator lock generation*: **still-open, accepted / owned**. Re-verified at their anchors; carried forward unchanged in *Notes*. Not re-argued — no severity context changed.
 - 2026-08-21 — Prior tooling gaps *dependency vulnerabilities*, *security static analysis*, *production-change testimony*: **still-open**. Absence of `pip-audit`/`safety`/`bandit`/`semgrep` re-verified in `.venv`. SA123 owns the first two.
-- 2026-08-21 — **Arch-audit red-flag hand-off, all six adjudicated** (§2f.1 — leads, not pre-approved findings): *red `test_gate_parity` oracle* → **promoted, TA66** (reproduced; closed by SA158 below). *`test_check_sa117_scope.py:640` interpreter-bound* → **covered by SA157 and TA65**, and the investigation found a second, worse defect at `:601` the red flag did not name — a test that passed on the interpreter's exit code; both are closed by the evidence above. *72 quality-baseline failures, "needs triage"* → **triaged: not environment sensitivity — TA63**, the same hard-coded ref, reproduced from a clean environment. *`quickscale_devtools` version drift* → **not promoted**; owned by SA137, whose closure and publication exclusion are recorded in [CHANGELOG.md](../../CHANGELOG.md) and the roadmap. *Deprecated bool inversion in the CSRF gate* → **promoted as TA69**, with the red flag's suggested fix (`not val`) corrected — it would change the gate's semantics. *`tech-audit.md` header reads `Branch: v87`* → **resolved** by this regeneration.
+- 2026-08-21 — **Arch-audit red-flag hand-off, all six adjudicated** (§2f.1 — leads, not pre-approved findings): *red `test_gate_parity` oracle* → **promoted, TA66** (reproduced; closed by SA158 below). *`test_check_sa117_scope.py:640` interpreter-bound* → **covered by SA157 and TA65 (both closed)**, and the investigation found a second, worse defect at `:601` the red flag did not name — a test that passed on the interpreter's exit code; both are closed by the evidence above. *72 quality-baseline failures, "needs triage"* → **triaged: not environment sensitivity — TA63**, the same hard-coded ref, reproduced from a clean environment. *`quickscale_devtools` version drift* → **not promoted**; owned by SA137, whose closure and publication exclusion are recorded in [CHANGELOG.md](../../CHANGELOG.md) and the roadmap. *Deprecated bool inversion in the CSRF gate* → **promoted as TA69**, with the red flag's suggested fix (`not val`) corrected — it would change the gate's semantics. *`tech-audit.md` header reads `Branch: v87`* → **resolved** by this regeneration.
 - 2026-08-21 — **Fix-regression pass (§3.6)** over the delta's three behavioural commits. `be5cf024`: the managed-adapter assertion relocation is a correct narrowing with its guard test updated in step; the SA90 `.env` exception is sound but is a new hand-maintained exception station, carried as a watch item. `d3d4c633`: the isolation-gate skip narrowing is correct (verified against the registry's construction), but the same commit left `test_gate_parity`'s oracle stale — TA66, now closed by SA158. `d4b0e834`/`d3d4c633` PGDG provisioning: no defect found in the added steps themselves; their four-way duplication is arch Finding 13's territory, not re-filed here.
 - 2026-08-21 — **Test-integrity diff (§3.7)**: no test was weakened in the delta. Assertions were not removed or inverted, no tolerance was widened, no `skip`/`xfail` was added, no mock replaced a real dependency. The two changes that *look* like weakenings (`_HOST_DEPENDENT_PATHS`, the empty-parameter-set allowlist) were each traced to the invariant they leave standing and cleared; both are carried as watch items rather than findings.
-- 2026-08-22 — **SA159 closed TA65 and arch red flag #2.** The three named repository-source shell consumers now resolve the validated project interpreter, and the new pre-commit guard inventories all `scripts/*.sh` and `scripts/test_*.py` execution sites. The hostile-PATH controls keep the project interpreter selected with system Python 3.12 first on `PATH`; the adjacent `check_ci_locally.sh` stdlib heredoc is documented as outside the repo-source finding.
+- 2026-08-22 — **TA65 (`repo-sources-run-under-bare-python`) and arch red flag #2 closed by SA159.** Defect detail, closure evidence, and the deliberate `check_ci_locally.sh` adjacency are archived in [CHANGELOG.md](../../CHANGELOG.md); no closed-finding section is carried here.
 - 2026-08-21 — **Chain pass (§3.9) ran** and produced two chains, both recorded on their lead findings: TA63 × arch Finding 12 (the monotonicity invariant has been unenforced for the whole `v88` branch with no signal, while two live audit documents recorded it as enforced) and the SA117 false-green × arch Finding 12 × roadmap SA124 (SA124's acceptance test lands in a suite nothing executes, beside a false-green pattern it was likely to be copied from). SA157 now closes the false-green leg. Pairing the remaining findings against each other and against the watch-item list produced no third chain.
 
 *Categories swept with no qualifying finding this pass: concurrency and TOCTOU, resources and I/O, performance, data handling and serialization, injection sinks of every kind, authentication and authorization, secrets handling, cryptographic use, multi-tenant isolation, CLI destructive-path safety, dependency and build hygiene, and the frontend, library/SDK, and infrastructure-as-code archetype lenses.*
