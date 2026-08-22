@@ -147,3 +147,47 @@ quickscale_python_major_minor() {
 
     "$python_bin" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'
 }
+
+quickscale_project_python() {
+    local root="$1"
+    local required_version
+    local candidate
+    local candidate_path
+    local poetry_python
+
+    required_version="$(quickscale_min_python_version "$root")" || return 1
+
+    if [[ -n "${PYTHON:-}" ]]; then
+        if [[ "$PYTHON" != */* ]]; then
+            echo "ERROR: PYTHON must name an explicit project interpreter path; refusing bare '$PYTHON'" >&2
+            return 1
+        fi
+        candidate_path="$(readlink -f "$PYTHON" 2>/dev/null || true)"
+        if [[ -n "$candidate_path" && -x "$candidate_path" ]] \
+            && quickscale_python_meets_minimum "$candidate_path" "$required_version"; then
+            printf '%s\n' "$candidate_path"
+            return 0
+        fi
+        echo "ERROR: PYTHON='$PYTHON' is unavailable or does not satisfy Python >= $required_version" >&2
+        return 1
+    fi
+
+    candidate="$root/.venv/bin/python"
+    if [[ -x "$candidate" ]] && quickscale_python_meets_minimum "$candidate" "$required_version"; then
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+
+    if command -v poetry >/dev/null 2>&1; then
+        poetry_python="$(cd "$root" && poetry run python -c 'import sys; print(sys.executable)' 2>/dev/null || true)"
+        if [[ -n "$poetry_python" ]] && [[ -x "$poetry_python" ]] \
+            && quickscale_python_meets_minimum "$poetry_python" "$required_version"; then
+            printf '%s\n' "$poetry_python"
+            return 0
+        fi
+    fi
+
+    echo "ERROR: QuickScale requires Python >= $required_version; project interpreter unavailable" >&2
+    echo "       Create $root/.venv with a compatible Python or run through Poetry." >&2
+    return 1
+}
