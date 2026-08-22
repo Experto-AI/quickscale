@@ -1,6 +1,6 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Audit snapshot:** 2026-08-21 · **Prior pass:** 2026-07-26 (reconciled 2026-08-20 at `e40762a0`) · **Branch:** `v88` · **HEAD:** `9dd49c1d`
+> **Audit snapshot:** 2026-08-22 · **Prior pass:** 2026-07-26 (reconciled 2026-08-21 at `412d8d20`) · **Branch:** `v88` · **HEAD:** `412d8d20`
 
 ## Orientation summary
 
@@ -58,37 +58,16 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| `gate-parity-publish-oracle-stale` (TA66) | **S3** | Tests — gaps | `test_gate_parity` literal `publish.yml` oracle not updated by `d3d4c633`; red on HEAD | Trivial ⚡ | High | new (arch red flag, verified) |
 | `spa-csrf-token-duplicate-cookie` (TA67) | **S3** | Correctness (frontend) | `getCsrfToken` returns `''` whenever two `csrftoken` cookies are present — every SPA write 403s | Trivial ⚡ | High | new |
 | `repo-sources-run-under-bare-python` (TA65) | **S3** | Oracle violation | Repo sources executed by bare `python3` off PATH in 3 shell sites, against a declared invariant | Small | High | new |
 | `generated-settings-dead-client-ip` (TA68) | S4 | Dead code (generated output) | Two `get_client_ip` definitions in generated settings are unreachable | Trivial | High | new |
 | `csrf-gate-bool-invert-deprecated` (TA69) | S4 | Dependencies / runtime | `~<bool>` in the CSRF AST gate is removed in Python 3.16 | Trivial | High | new (arch red flag, verified + corrected) |
 
-**Counts:** S1 **0** · S2 **0** · S3 **3** · S4 **2** · **Total 5**. Quick wins (⚡ Trivial-effort S3): TA66, TA67.
+**Counts:** S1 **0** · S2 **0** · S3 **2** · S4 **2** · **Total 4**. Quick win (⚡ Trivial-effort S3): TA67.
 
 ---
 
 ## Findings
-
-### TA66 — `test_gate_parity`'s `publish.yml` oracle is stale and red on HEAD
-
-**ID:** `gate-parity-publish-oracle-stale`
-
-**Severity:** **S3.** Repository content versus repository content, no environment dependence; reachability reduced one notch because the suite is unexecuted. Deployment reality #1/#2. Handed over as an arch-audit red flag; independently verified here.
-
-**Category:** §4.VIII Tests — gaps. **Confidence:** High — reproduced directly.
-
-**Location:** `scripts/test_gate_parity.py:1090`, `TestParserPrecision::test_all_twenty_one_publish_run_values_are_structural`.
-
-**Defect and failure scenario:** The test compares `publish.yml`'s ordered `run:` blocks against a literal oracle embedded in the test. `d3d4c633` added two steps to `publish.yml` (`Install PostgreSQL 18 client tooling`, `Verify PostgreSQL 18 client tooling`) and removed two `apt-get` lines from `Create test databases in PostgreSQL`; the oracle was never updated. The test is red on HEAD, so the *next* real parity drift in `publish.yml` lands on an already-red test and is indistinguishable from this one.
-
-**Evidence:** `pytest scripts/test_gate_parity.py -k test_all_twenty_one_publish_run_values_are_structural` → `1 failed, 231 deselected`, with `At index 15 diff: ('test', 'sudo apt-get update\nsudo apt-get install -y ca-certificates curl\ndistro_codename=…` — the PGDG block `d3d4c633` introduced.
-
-**Fix:** Regenerate the oracle from the current `publish.yml`, then review the diff line by line to confirm every changed entry corresponds to an intended change in `d3d4c633`/`d4b0e834`. Longer term, the test's name promises twenty-one values while the oracle is a hand-maintained literal — derive it, or assert structural properties rather than exact text. **Effort:** Trivial (regenerate) / Small (derive).
-
-**Deliberate?** None found — a release-shaped commit message carrying a CI-topology change, with no accompanying test update.
-
----
 
 ### TA67 — SPA CSRF token lookup returns empty whenever two `csrftoken` cookies exist
 
@@ -189,7 +168,7 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 |---|---|---|
 | Commit delta `e40762a0..HEAD` | all 12 files, production and test hunks, in full | Clean — no finding. The two test changes are correct narrowings; see *Clean sweeps* and *Notes* |
 | `scripts/` quality-baseline gate | `check_quality_baseline_monotonicity.py` merge-base + `main`; `check_quality.sh` ordering and failure path | **Closed by SA156 (TA63)** |
-| `scripts/` gate conformance suites | executed all 14 (74F/1126P); read the 3 failing tests and their fixtures | **TA66**; the former 72 quality-baseline failures are closed by SA156, and the SA117 false-green is closed by SA157 |
+| `scripts/` gate conformance suites | executed all 14 (74F/1126P); read the 3 failing tests and their fixtures | **Arch Finding 12** remains open; the former TA66 oracle failure is closed by SA158, the historical quality-baseline failures by SA156, and the SA117 false-green by SA157 |
 | `scripts/` shell interpreter selection | `version_tool.sh`, `lint_frontend.sh`, `check_ci_locally.sh`, `_python_requirement.sh` | **TA65** |
 | Generated settings templates | `base.py.j2`, `production.py.j2` in full | **TA68**; production hardening otherwise clean |
 | Generated project scaffold | `.env.j2`, `.env.example.j2`, `docker-compose.yml.j2`, `db/init.sql.j2`, `urls.py.j2`, `views.py.j2`, `railway.json.j2` | Clean — see *Notes* for the dev-credential and healthcheck watch items |
@@ -239,8 +218,8 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 | Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The theme has an eslint config — a `no-duplicate-imports`-style rule will not catch copied functions; the shared-helper fix is the real prevention |
 | No dependency-vulnerability scanner | — | **Carried from the prior pass.** Roadmap **SA123** owns this for v88. Confirmed still absent: `pip-audit`, `safety`, `bandit`, `semgrep` are all missing from `.venv` |
 | No focused security static analysis | — | **Carried.** SA123. Rules for subprocess shell use, unsafe deserialization, TLS disabling, Django raw/`mark_safe` sinks, and committed credentials. This pass verified all five classes by hand and found them clean, which is exactly the check worth automating so it stays clean |
-| No gate requires a changelog/ticket trail for behavioural commits | **TA66** | **Carried.** `d3d4c633` shipped a CI-topology change under a release-shaped message and left a conformance test red. Remains maintainer-process risk rather than a source finding |
-| `scripts/` suites are in no execution context | TA66 | Owned by arch **Finding 12** (`gate-suites-unexecuted`). Not duplicated as a finding here; TA66 must be fixed *before* that gate is registered, or it registers red |
+| No gate requires a changelog/ticket trail for behavioural commits | **SA166** | **Carried.** `d3d4c633` shipped a CI-topology change under a release-shaped message and left a conformance test red. Remains maintainer-process risk rather than a source finding |
+| `scripts/` suites are in no execution context | Arch Finding 12 | Owned by arch **Finding 12** (`gate-suites-unexecuted`). Not duplicated as a finding here; SA155 must still register the suite green |
 
 ---
 
@@ -251,7 +230,7 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 - **Integration-branch CI** — hosted CI does not run on pushes to the release branch (`ci.yml` triggers on `main`/`develop` and PRs to `main`). Accepted solo-maintainer workflow choice. *Unchanged.*
 - **Local-wheelhouse seam** — `QUICKSCALE_LOCAL_WHEELHOUSE` is undocumented in `docs/technical/` and falls back to the manifest version spec when set but unmatched. Roadmap **SA150** owns it. *Unchanged.*
 - **Generator lock generation** — missing Poetry, timeout, or nonzero lock generation warns and lets generation finish by explicit usability policy; downstream apply/install stays fail-loud. Deliberate. *Unchanged.*
-  - **Quality baseline** — the prior watch claim that *"monotonicity is enforced and `make quality` reports `total_regressions: 0`"* was **falsified and promoted to TA63**, then **closed by SA156** after the no-override helper passed and a real `make quality` run re-emitted fresh reports. The quality helper/script exits 1 for the sole unrelated `development_commands.py::up` C901 complexity regression (15 versus allowed 14), while GNU Make reports the failed recipe as `make quality` exit 2; that exact exit-2 result is the authorized no-worse-than-found baseline, not a SA157 blocker. See the reconciliation log for both the falsification and closure evidence.
+  - **Quality baseline** — the prior watch claim that *"monotonicity is enforced and `make quality` reports `total_regressions: 0`"* was **falsified and promoted to TA63**, then **closed by SA156** after the no-override helper passed and a real `make quality` run re-emitted fresh reports. The current pre-edit baseline has two warning regressions: `development_commands.py::up` complexity 15 versus baseline 14, plus `social/src/quickscale_modules_social/adapter.py::_social_manifest_apps` complexity 13 newly above threshold; critical regressions remain 0 and monotonicity passes. The helper exits 1 and GNU Make reports `make quality` exit 2; the exact two-signature result is the authorized no-worse-than-found baseline for SA158, not a blocker. See the reconciliation log for both the falsification and closure evidence.
 
 **New this pass:**
 
@@ -271,9 +250,10 @@ $ python3 scripts/check_sa117_scope.py --help        → SyntaxError: multiple e
 - 2026-08-21 — Prior watch item *quality baseline*: **regressed → promoted to TA63 → closed by SA156**. The prior pass recorded "monotonicity is enforced and `make quality` reports `total_regressions: 0`". It was falsified by execution: the gate exited 2 with `MERGE_BASE_ERROR` and `make quality` aborted before any analyzer ran. SA156 replaced the retired release-ref fallback with durable `main`, proved origin/local probing and missing-default remediation in hermetic tests, and verified a real `make quality` run with fresh reports. The current broader run reports the unrelated pre-existing `development_commands.py::up` C901 complexity regression (15 versus allowed 14): `scripts/check_quality.sh` exits 1 and GNU Make reports `make quality` exit 2, exactly matching the authorized no-worse-than-found oracle. **Full TA63 defect and closure detail is archived in [CHANGELOG.md](../../CHANGELOG.md); no closed-findings section is carried here.**
 - 2026-08-21 — Prior watch items *integration-branch CI*, *local-wheelhouse seam*, *generator lock generation*: **still-open, accepted / owned**. Re-verified at their anchors; carried forward unchanged in *Notes*. Not re-argued — no severity context changed.
 - 2026-08-21 — Prior tooling gaps *dependency vulnerabilities*, *security static analysis*, *production-change testimony*: **still-open**. Absence of `pip-audit`/`safety`/`bandit`/`semgrep` re-verified in `.venv`. SA123 owns the first two.
-- 2026-08-21 — **Arch-audit red-flag hand-off, all six adjudicated** (§2f.1 — leads, not pre-approved findings): *red `test_gate_parity` oracle* → **promoted, TA66** (reproduced). *`test_check_sa117_scope.py:640` interpreter-bound* → **covered by SA157 and TA65**, and the investigation found a second, worse defect at `:601` the red flag did not name — a test that passed on the interpreter's exit code; both are closed by the evidence above. *72 quality-baseline failures, "needs triage"* → **triaged: not environment sensitivity — TA63**, the same hard-coded ref, reproduced from a clean environment. *`quickscale_devtools` version drift* → **not promoted**; owned by SA137, whose closure and publication exclusion are recorded in [CHANGELOG.md](../../CHANGELOG.md) and the roadmap. *Deprecated bool inversion in the CSRF gate* → **promoted as TA69**, with the red flag's suggested fix (`not val`) corrected — it would change the gate's semantics. *`tech-audit.md` header reads `Branch: v87`* → **resolved** by this regeneration.
-- 2026-08-21 — **Fix-regression pass (§3.6)** over the delta's three behavioural commits. `be5cf024`: the managed-adapter assertion relocation is a correct narrowing with its guard test updated in step; the SA90 `.env` exception is sound but is a new hand-maintained exception station, carried as a watch item. `d3d4c633`: the isolation-gate skip narrowing is correct (verified against the registry's construction), but the same commit left `test_gate_parity`'s oracle stale — TA66. `d4b0e834`/`d3d4c633` PGDG provisioning: no defect found in the added steps themselves; their four-way duplication is arch Finding 13's territory, not re-filed here.
+- 2026-08-21 — **Arch-audit red-flag hand-off, all six adjudicated** (§2f.1 — leads, not pre-approved findings): *red `test_gate_parity` oracle* → **promoted, TA66** (reproduced; closed by SA158 below). *`test_check_sa117_scope.py:640` interpreter-bound* → **covered by SA157 and TA65**, and the investigation found a second, worse defect at `:601` the red flag did not name — a test that passed on the interpreter's exit code; both are closed by the evidence above. *72 quality-baseline failures, "needs triage"* → **triaged: not environment sensitivity — TA63**, the same hard-coded ref, reproduced from a clean environment. *`quickscale_devtools` version drift* → **not promoted**; owned by SA137, whose closure and publication exclusion are recorded in [CHANGELOG.md](../../CHANGELOG.md) and the roadmap. *Deprecated bool inversion in the CSRF gate* → **promoted as TA69**, with the red flag's suggested fix (`not val`) corrected — it would change the gate's semantics. *`tech-audit.md` header reads `Branch: v87`* → **resolved** by this regeneration.
+- 2026-08-21 — **Fix-regression pass (§3.6)** over the delta's three behavioural commits. `be5cf024`: the managed-adapter assertion relocation is a correct narrowing with its guard test updated in step; the SA90 `.env` exception is sound but is a new hand-maintained exception station, carried as a watch item. `d3d4c633`: the isolation-gate skip narrowing is correct (verified against the registry's construction), but the same commit left `test_gate_parity`'s oracle stale — TA66, now closed by SA158. `d4b0e834`/`d3d4c633` PGDG provisioning: no defect found in the added steps themselves; their four-way duplication is arch Finding 13's territory, not re-filed here.
 - 2026-08-21 — **Test-integrity diff (§3.7)**: no test was weakened in the delta. Assertions were not removed or inverted, no tolerance was widened, no `skip`/`xfail` was added, no mock replaced a real dependency. The two changes that *look* like weakenings (`_HOST_DEPENDENT_PATHS`, the empty-parameter-set allowlist) were each traced to the invariant they leave standing and cleared; both are carried as watch items rather than findings.
 - 2026-08-21 — **Chain pass (§3.9) ran** and produced two chains, both recorded on their lead findings: TA63 × arch Finding 12 (the monotonicity invariant has been unenforced for the whole `v88` branch with no signal, while two live audit documents recorded it as enforced) and the SA117 false-green × arch Finding 12 × roadmap SA124 (SA124's acceptance test lands in a suite nothing executes, beside a false-green pattern it was likely to be copied from). SA157 now closes the false-green leg. Pairing the remaining findings against each other and against the watch-item list produced no third chain.
+- 2026-08-22 — **SA158 closed TA66.** The 24-entry literal oracle in `TestParserPrecision::test_all_twenty_four_publish_run_values_are_structural` now matches the current `publish.yml`. The line-by-line provenance review found exactly the two intended `d3d4c633` insertions (PGDG install and PostgreSQL 18 verification), the intended replacement of the old client-install lines in the database-creation block, and the pre-existing `fe850506` `verify-published` run block that the old 21-entry oracle also omitted; no `d4b0e834` publish change exists. The four named count-pinned dispositions are explicitly re-carried: the ten hosted run values are exact setup/command contracts for five registry-bound jobs; the 33 E2E paths protect the complete ordered trigger projection; and each of the four all-five conformance assertions protects the five-gate registry contract for its execution context. The focused oracle test and `make check-gate-parity` pass. The broader parity suite remains blocked by three recursive `make check` assertions exposing the pre-existing `quickscale_cli/tests/test_manifest_entry_point_integration.py::TestSocialManifestEntryPoint::test_social_has_no_apps` mismatch (`('quickscale_modules_social',)` versus `()`); that source/test seam is outside SA158's allowlist and is not attributed to this oracle change. The pre-edit `make quality` baseline also exposed the two warning regressions recorded above (critical regressions 0, monotonicity pass); the accepted exact signatures remain unchanged.
 
 *Categories swept with no qualifying finding this pass: concurrency and TOCTOU, resources and I/O, performance, data handling and serialization, injection sinks of every kind, authentication and authorization, secrets handling, cryptographic use, multi-tenant isolation, CLI destructive-path safety, dependency and build hygiene, and the frontend, library/SDK, and infrastructure-as-code archetype lenses.*
