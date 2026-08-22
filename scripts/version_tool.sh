@@ -8,7 +8,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION_FILE="$ROOT/VERSION"
-PYTHON="${PYTHON:-python3}"
+# shellcheck source=./_python_requirement.sh
+source "$ROOT/scripts/_python_requirement.sh"
+PYTHON="$(quickscale_project_python "$ROOT")"
 MODULE_DISCOVERY_SHIM="$ROOT/quickscale_core/src/quickscale_core/contracts/module_discovery.py"
 
 # Every direct-child quickscale*/pyproject.toml is a top-level parity member.

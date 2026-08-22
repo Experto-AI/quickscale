@@ -16,6 +16,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: repo-source-interpreter
+        name: repository-source interpreter guard
+        entry: poetry run python scripts/check_repo_source_interpreters.py
+        language: system
+        files: ^scripts/.*\.(sh|py)$
+        pass_filenames: false
       - id: ruff-check
         name: ruff check (poetry)
         entry: poetry run ruff check --fix --force-exclude

@@ -34,6 +34,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Final
 
@@ -437,20 +438,24 @@ class TestUpdateWithTempRepo:
     # ------------------------------------------------------------------
 
     @pytest.fixture
-    def repo(self, tmp_path: Path) -> Path:  # noqa: ARG002
+    def repo(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:  # noqa: ARG002
         """Build a hermetic 12-module temp repository fixture."""
+        monkeypatch.setenv("PYTHON", sys.executable)
         return self._build_repo(tmp_path)
 
     def _build_repo(self, root: Path) -> Path:
         """Construct the fixture repository with 12 modules, docs, and Makefile."""
         # VERSION file
         root.joinpath("VERSION").write_text(f"{self.VERSION_BEFORE}\n")
+        self._write_pyproject(root / "pyproject.toml", "quickscale-monorepo", "0.0.0", deps={})
 
         # scripts/version_tool.sh — copy from real repo
         real_script = Path(__file__).resolve().parent / "version_tool.sh"
         scripts_dir = root / "scripts"
         scripts_dir.mkdir()
         shutil.copy2(str(real_script), str(scripts_dir / "version_tool.sh"))
+        real_python_requirement = Path(__file__).resolve().parent / "_python_requirement.sh"
+        shutil.copy2(str(real_python_requirement), str(scripts_dir / "_python_requirement.sh"))
 
         real_shim = (
             Path(__file__).resolve().parents[1]

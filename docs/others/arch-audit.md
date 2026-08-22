@@ -41,7 +41,7 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 | Rank | Finding | ID | Horizon | Confidence | Size | Problem in one line |
 |---:|---|---|---|---|---|---|
-| 1 | 12 | `gate-suites-unexecuted` | **now** / SA123, SA124 | High | M | The gates' own conformance suites live outside every test root, so the layer everything else trusts is itself unverified — and already red. |
+| 1 | 12 | `gate-suites-unexecuted` | **now** / SA123, SA124 | High | M | The gates' own conformance suites live outside every test root, so the layer everything else trusts is itself unverified. |
 | 2 | 13 | `ci-environment-hand-replicated` | **now** / SA135 | High | M | Each workflow hand-replicates the environment its gates need, so "same gate, same result" is a coincidence maintained by copy-paste. |
 | 3 | 7 | `generated-file-ownership-unmodeled` | 6–18 months / next updater consumer | High | M | Beta migration assigns upgrade behavior through a hand-authored taxonomy the generator does not own. |
 | 4 | 2 | `deletion-invariants-per-boundary-reimplementation` | deferred / second deletion boundary | High | S | Cross-domain cleanup is orchestrated by the account-delete view, not by a domain owner. |
@@ -240,7 +240,7 @@ Two apparent divergences are **deliberate and correct**, and this pass verified 
 13. `scripts/test_gate_parity.py` — the count-pinned literal oracles: `test_all_twenty_four_publish_run_values_are_structural` (1087), `test_all_ten_bound_hosted_run_values_match_current_source` (1064), `test_e2e_extracts_thirty_three_paths` (958, asserts `len(paths) == 33`), plus four `all_five_conformance_gates`-style assertions (803, 809, 815, 847).
 14. A suppression/allowlist file with per-entry rationale and owner.
 
-**Verdict: finding evidence, for both findings.** Fourteen stations for one gate, of which **eight are hand-maintained** (1–8, 10, 12–14 minus the generated ones) and the largest single block — station 13 — lives in a suite **no context runs**, and is *already red* before SA123 starts. The probe also produced the sharpest single fact in this audit: the mechanism that would catch a mistake at station 13 is the mechanism Finding 12 shows is switched off.
+**Verdict: finding evidence, for both findings.** Fourteen stations for one gate, of which **eight are hand-maintained** (1–8, 10, 12–14 minus the generated ones) and the largest single block — station 13 — lives in a suite **no context runs**. That suite was red when the probe ran, and SA168 later repaired its stale social-app assertions without changing the unexecuted-suite finding. The probe also produced the sharpest single fact in this audit: the mechanism that would catch a mistake at station 13 is the mechanism Finding 12 shows is switched off.
 
 **Counter-probe (exonerating):** the same dry-run for **adding a thirteenth module** sails through the manifest and scope seams — `_authoritative_module_names()` (`check_sa117_scope.py:48`) and `_load_module_inventory()` in `scripts/version_tool.sh` both shell out to the discovery shim and raise on failure, so module *identity* needs no edit. That derivation is real and is listed under sound decisions below. It is also the precise pattern Finding 13's thirteen environment stations fail to use, which is why the recommendation there is to reuse it rather than invent something.
 
@@ -272,9 +272,8 @@ Findings 12 and 13 are independent in mechanism but share the v88 Track 2/3 file
 
 ## Red flags (current open items)
 
-The former SA156, SA157 and TA66/SA158 red flags are closed; their evidence is archived in [CHANGELOG.md](../../CHANGELOG.md). Pre-closure detail that remains above and in the reconciliation log is historical audit context, not current status. **One red flag is open.**
+The former SA156, SA157, TA66/SA158, and SA168 red flags are closed; their evidence is archived in [CHANGELOG.md](../../CHANGELOG.md). Pre-closure detail that remains above and in the reconciliation log is historical audit context, not current status. **One red flag is open.**
 
-- **`make check` is red on HEAD at a stale test assertion (SA168).** `quickscale_cli/tests/test_manifest_entry_point_integration.py:167` asserts `spec.apps == ()` for `social`, but SA151 phase P1 deliberately made social's manifest own its app projection, so the resolved value is `('quickscale_modules_social',)`. The source is correct and the test is stale; three recursive `make check` assertions in `scripts/test_gate_parity.py` fail with it. This blocks Finding 12's remediation (SA155), which must register the gate suites **green**. Tracked as roadmap **SA168** (W2, merge #6b). Measured 2026-08-22: `poetry run pytest scripts/ --no-cov -q` reports 3 failed / 1204 passed / 1 skipped, and all three failures are these recursive `make check` assertions — so this single stale assertion is the whole remaining red surface of Finding 12's suite population under the project interpreter.
 - **Deprecated bool inversion in a security gate (TA69).** `scripts/check_csrf_exempt_gate.py:271` uses `~val != 0` on a bool; Python removes this in 3.16. The current tech-audit remains authoritative for this open finding and identifies the semantics-preserving correction as `~int(val) != 0`; `not val` would change the gate's verdict.
 
 ## Reconciliation log
@@ -289,6 +288,7 @@ The former SA156, SA157 and TA66/SA158 red flags are closed; their evidence is a
 - 2026-08-21 — Prior red flags: none were carried from the previous pass (the prior document recorded no Red flags section). The pre-closure entries for SA156 and SA157 are retained above as historical evidence; the current red-flag set was TA66 and TA69.
 - 2026-08-22 — Reconciliation after SA156, SA157, and SA158 closure: the quality-baseline, SA117 false-green, and stale-publish-oracle red flags are historical only. The current open red flag is TA69 (deprecated bool inversion), while Finding 12 remains a broader live architectural finding. The live tech-audit count is now S3: 2; S4: 2; total 4.
 - 2026-08-22 — SA158 also recorded the pre-edit `make quality` discrepancy: two warning regressions (`development_commands.py::up` 15 versus baseline 14 and `social/.../adapter.py::_social_manifest_apps` 13 newly above threshold), critical regressions 0, monotonicity pass. This is accepted baseline evidence, not an SA158 regression.
+- 2026-08-22 — SA168 repaired the stale CLI and core social-app assertions against the manifest-declared `('quickscale_modules_social',)` projection. Its closeout `make check` passed; the prior recursive parity failures are historical, while Finding 12 remains open until SA155 gives the gate suites an owning execution context. SA159 remains SA155's only open prerequisite.
 
 *Lenses scanned with no qualifying finding this pass: data/state model integrity, trust and authorization boundaries, concurrency and state isolation, security architecture, API and contract stability, observability, performance and scalability, and the library/CLI archetype lenses — the governance-layer scope (§2e) deliberately deprioritized re-walking these, and the prior pass's conclusions there were re-verified only at their anchors.*
 

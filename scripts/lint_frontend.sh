@@ -10,6 +10,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 THEME_DIR="$ROOT/quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react"
+# shellcheck source=./_python_requirement.sh
+source "$SCRIPT_DIR/_python_requirement.sh"
+PYTHON="$(quickscale_project_python "$ROOT")"
 
 echo "🔍 Running React theme lint checks..."
 echo ""
@@ -54,7 +57,7 @@ render_template() {
 	local src="$1"
 	local dest="$2"
 
-	python3 "$SCRIPT_DIR/render_j2_template.py" "$src" "$dest"
+	"$PYTHON" "$SCRIPT_DIR/render_j2_template.py" "$src" "$dest"
 }
 
 # Walk through theme directory and render all files
@@ -170,7 +173,7 @@ NO_SOCIAL_MODULES='["auth","blog","listings","crm","forms","storage","backups","
 render_template_no_social() {
 	local src="$1"
 	local dest="$2"
-	SELECTED_MODULES="$NO_SOCIAL_MODULES" python3 "$SCRIPT_DIR/render_j2_template.py" "$src" "$dest"
+	SELECTED_MODULES="$NO_SOCIAL_MODULES" "$PYTHON" "$SCRIPT_DIR/render_j2_template.py" "$src" "$dest"
 }
 
 # Walk through theme directory and render all files with no-social context

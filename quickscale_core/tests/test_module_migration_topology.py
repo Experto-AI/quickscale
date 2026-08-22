@@ -66,7 +66,12 @@ class TopologyDiagnostic:
 
 
 def _read_initial_flag(migration_path: Path) -> object:
-    """Read one literal ``Migration.initial`` without executing source code."""
+    """Read one literal ``Migration.initial`` without executing source code.
+
+    The accepted shape is intentionally narrow: one direct literal assignment
+    in the module's sole top-level ``Migration`` class.  Any other binding that
+    could change the value is treated as ambiguous rather than inferred away.
+    """
     tree = ast.parse(migration_path.read_text(), filename=str(migration_path))
     migration_classes = [
         node
@@ -78,13 +83,18 @@ def _read_initial_flag(migration_path: Path) -> object:
     if len(migration_classes) != 1:
         return _AMBIGUOUS
 
+    migration_class = migration_classes[0]
     assignments: list[ast.expr] = []
-    for node in migration_classes[0].body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "initial"
-            for target in node.targets
+    accepted_store_ids: set[int] = set()
+    for node in migration_class.body:
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == "initial"
         ):
             assignments.append(node.value)
+            accepted_store_ids.add(id(node.targets[0]))
         elif (
             isinstance(node, ast.AnnAssign)
             and isinstance(node.target, ast.Name)
@@ -92,13 +102,43 @@ def _read_initial_flag(migration_path: Path) -> object:
             and node.value is not None
         ):
             assignments.append(node.value)
-        elif isinstance(node, (ast.AugAssign, ast.Delete)) and any(
-            isinstance(target, ast.Name) and target.id == "initial"
-            for target in (
-                [node.target] if isinstance(node, ast.AugAssign) else node.targets
-            )
+            accepted_store_ids.add(id(node.target))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id == "initial":
+            if isinstance(node.ctx, (ast.Store, ast.Del)) and id(node) not in (
+                accepted_store_ids
+            ):
+                return _AMBIGUOUS
+        elif isinstance(node, ast.Name) and node.id == "Migration":
+            if isinstance(node.ctx, (ast.Store, ast.Del)):
+                return _AMBIGUOUS
+        elif isinstance(node, ast.Attribute) and node.attr == "initial":
+            if isinstance(node.ctx, (ast.Store, ast.Del)):
+                return _AMBIGUOUS
+        elif isinstance(node, ast.ExceptHandler) and node.name == "initial":
+            return _AMBIGUOUS
+        elif isinstance(node, (ast.Global, ast.Nonlocal)) and "initial" in node.names:
+            return _AMBIGUOUS
+        elif isinstance(node, ast.arg) and node.arg == "initial":
+            return _AMBIGUOUS
+        elif isinstance(node, ast.alias) and (
+            node.name == "initial" or node.asname == "initial"
         ):
             return _AMBIGUOUS
+        elif isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name == "initial":
+                return _AMBIGUOUS
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == "initial":
+            return _AMBIGUOUS
+        elif isinstance(node, ast.Call):
+            called_name = None
+            if isinstance(node.func, ast.Name):
+                called_name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                called_name = node.func.attr
+            if called_name in {"setattr", "delattr", "exec", "eval"}:
+                return _AMBIGUOUS
 
     if not assignments:
         return _MISSING
@@ -500,6 +540,73 @@ def test_non_literal_initial_flag_is_rejected_without_execution(
 
     _assert_canary_detected(module_name, module_path, "wrong-initial-flag")
     assert not side_effect_path.exists()
+
+
+def test_post_class_initial_rebinding_canary(tmp_path: Path) -> None:
+    """A post-class ``Migration.initial`` write must fail closed."""
+    inventory = _bind_module_inventory()
+    module_name = inventory.model_modules[0]
+    module_path = _copy_module_tree(tmp_path, inventory, module_name)
+    initial_path = (
+        module_path
+        / "src"
+        / f"quickscale_modules_{module_name}"
+        / "migrations"
+        / _INITIAL_MIGRATION_FILENAME
+    )
+    initial_path.write_text(initial_path.read_text() + "\nMigration.initial = False\n")
+
+    _assert_canary_detected(module_name, module_path, "wrong-initial-flag")
+
+
+def test_nested_class_initial_rebinding_canary(tmp_path: Path) -> None:
+    """A nested class-body ``initial`` write must fail closed."""
+    inventory = _bind_module_inventory()
+    module_name = inventory.model_modules[0]
+    module_path = _copy_module_tree(tmp_path, inventory, module_name)
+    initial_path = (
+        module_path
+        / "src"
+        / f"quickscale_modules_{module_name}"
+        / "migrations"
+        / _INITIAL_MIGRATION_FILENAME
+    )
+    content = initial_path.read_text()
+    assert "    initial = True" in content
+    initial_path.write_text(
+        content.replace(
+            "    initial = True",
+            "    initial = True\n\n    class NestedMigration:\n        initial = False",
+            1,
+        )
+    )
+
+    _assert_canary_detected(module_name, module_path, "wrong-initial-flag")
+
+
+@pytest.mark.parametrize(
+    "rebind",
+    [
+        "for initial in ():\n    pass",
+        "def mutate():\n    initial = False",
+        "setattr(Migration, 'initial', False)",
+    ],
+)
+def test_other_initial_write_forms_fail_closed(tmp_path: Path, rebind: str) -> None:
+    """Unmodelled direct and indirect AST writes must not false-green."""
+    inventory = _bind_module_inventory()
+    module_name = inventory.model_modules[0]
+    module_path = _copy_module_tree(tmp_path, inventory, module_name)
+    initial_path = (
+        module_path
+        / "src"
+        / f"quickscale_modules_{module_name}"
+        / "migrations"
+        / _INITIAL_MIGRATION_FILENAME
+    )
+    initial_path.write_text(initial_path.read_text() + f"\n{rebind}\n")
+
+    _assert_canary_detected(module_name, module_path, "wrong-initial-flag")
 
 
 def test_service_module_gaining_migrations_canary(tmp_path: Path) -> None:

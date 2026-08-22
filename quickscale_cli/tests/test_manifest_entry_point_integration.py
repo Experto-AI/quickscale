@@ -159,12 +159,13 @@ class TestSocialManifestEntryPoint:
         with pytest.raises(AttributeError):
             spec.apps = ()  # type: ignore[misc]
 
-    def test_social_has_no_apps(self) -> None:
-        """Social spec has no Django app labels (matching legacy)."""
+    def test_social_manifest_declared_app_projection(self) -> None:
+        """Social spec includes the app projection declared by module.yml."""
         spec = build_manifest_wiring_spec(
             "social", {}, project_package=self._PROJECT_PACKAGE
         )
-        assert spec.apps == ()
+        # Keep this value aligned with quickscale_modules/social/module.yml.
+        assert spec.apps == ("quickscale_modules_social",)
 
     def test_social_has_no_middleware(self) -> None:
         """Social spec has no middleware (matching legacy)."""
