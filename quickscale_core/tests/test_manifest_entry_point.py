@@ -729,7 +729,7 @@ class TestRegisteredAdapterPaths:
             pytest.skip("social adapter not registered (managed module not available)")
         spec = build_manifest_wiring_spec("social", {}, project_package="myproject")
         assert isinstance(spec, ModuleWiringSpec)
-        assert spec.apps == ()
+        assert spec.apps == ("quickscale_modules_social",)
         assert "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED" in spec.settings
         assert len(spec.managed_files) == 3
 
