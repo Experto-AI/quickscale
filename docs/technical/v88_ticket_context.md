@@ -445,9 +445,10 @@ apply those migrations to an empty database without guessing or silently skippin
 The checkpoint regenerated one `0001_initial.py` for each of the ten model-bearing modules and
 removed the stale `0002`–`0005` backups migrations. The source-derived topology guard covers all
 twelve shipped AppConfigs, the ten model-bearing modules, analytics/storage as service-style
-exceptions, and the non-shipped `teams` placeholder. Its 37 focused tests include fail-closed,
-no-execution canaries for migration-base, model-form, AppConfig class-alias, subscript, and
-nested-attribute identity drift. The generated-project proof independently checks every runtime
+exceptions, and the non-shipped `teams` placeholder. Its 41 focused tests include fail-closed,
+no-execution canaries for migration-base, model-form, AppConfig class-alias, subscript,
+nested-attribute identity drift, and spoofed, rebound, decorated, or multiple-base AppConfig
+provenance. The generated-project proof independently checks every runtime
 AppConfig `name` and `label` against `quickscale_modules_<module>`, derives expected migration labels
 from that oracle, installs all modules into a fresh PostgreSQL 18 database under a restricted
 `NOSUPERUSER NOBYPASSRLS NOINHERIT` role, and passed with 1 test and 0 skips. The retained broad

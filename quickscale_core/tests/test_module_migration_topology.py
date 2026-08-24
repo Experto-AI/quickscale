@@ -271,6 +271,76 @@ def _string_assignment(class_node: ast.ClassDef, attribute: str) -> str | None:
     return assignments[0]
 
 
+def _app_config_base_is_canonical(tree: ast.Module, candidate: ast.ClassDef) -> bool:
+    """Require one direct ``django.apps.AppConfig`` base without rebinding."""
+    if candidate.decorator_list or candidate.keywords:
+        return False
+    if not (
+        len(candidate.bases) == 1
+        and isinstance(candidate.bases[0], ast.Name)
+        and candidate.bases[0].id == "AppConfig"
+    ):
+        return False
+
+    imports = [
+        (node, alias)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+        if (alias.asname or alias.name.split(".", 1)[0]) == "AppConfig"
+    ]
+    if len(imports) != 1:
+        return False
+    import_node, imported_name = imports[0]
+    if not (
+        isinstance(import_node, ast.ImportFrom)
+        and import_node in tree.body
+        and import_node.level == 0
+        and import_node.module == "django.apps"
+        and imported_name.name == "AppConfig"
+        and imported_name.asname is None
+        and tree.body.index(import_node) < tree.body.index(candidate)
+    ):
+        return False
+
+    for ast_node in ast.walk(tree):
+        if (
+            isinstance(ast_node, ast.Name)
+            and ast_node.id == "AppConfig"
+            and isinstance(ast_node.ctx, (ast.Store, ast.Del))
+        ):
+            return False
+        if (
+            isinstance(ast_node, ast.Attribute)
+            and ast_node.attr == "AppConfig"
+            and isinstance(ast_node.ctx, (ast.Store, ast.Del))
+        ):
+            return False
+        if isinstance(ast_node, ast.alias):
+            bound_name = ast_node.asname or ast_node.name.split(".", 1)[0]
+            if bound_name == "AppConfig" and ast_node is not imported_name:
+                return False
+        if (
+            isinstance(ast_node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and ast_node.name == "AppConfig"
+        ):
+            return False
+        if isinstance(ast_node, ast.arg) and ast_node.arg == "AppConfig":
+            return False
+        if isinstance(ast_node, ast.ExceptHandler) and ast_node.name == "AppConfig":
+            return False
+        if isinstance(ast_node, (ast.Global, ast.Nonlocal)) and "AppConfig" in (
+            ast_node.names
+        ):
+            return False
+        if isinstance(ast_node, (ast.MatchAs, ast.MatchStar)) and (
+            ast_node.name == "AppConfig"
+        ):
+            return False
+
+    return True
+
+
 def _app_config_identity_writes_are_safe(
     tree: ast.Module, candidate: ast.ClassDef
 ) -> bool:
@@ -421,6 +491,9 @@ def _parse_app_config(apps_path: Path) -> ModuleAppConfigIdentity | None:
         return None
 
     candidate = candidate_classes[0]
+    if not _app_config_base_is_canonical(tree, candidate):
+        return None
+
     name = _string_assignment(candidate, "name")
     label = _string_assignment(candidate, "label")
     if name is None or label is None:
@@ -1212,6 +1285,49 @@ def test_app_config_identity_write_canaries_fail_without_execution(
             f"\nimport sys\nsys.modules[__name__].{class_name}.name = {side_effect}\n"
         )
     apps_path.write_text(apps_path.read_text() + suffix)
+
+    assert _parse_app_config(apps_path) is None
+    assert not marker_path.exists()
+
+
+@pytest.mark.parametrize(
+    "base_form",
+    [
+        "local-spoof",
+        "rebound-import",
+        "decorated-class",
+        "multiple-bases",
+    ],
+)
+def test_noncanonical_app_config_bases_fail_without_execution(
+    tmp_path: Path, base_form: str
+) -> None:
+    """Only the direct canonical Django AppConfig base may bind identity."""
+    inventory = _bind_module_inventory()
+    apps_path = _copy_apps_file(tmp_path, inventory)
+    class_name = _app_config_class_name(apps_path)
+    content = apps_path.read_text()
+    marker_path = tmp_path / "app-config-base-side-effect"
+    side_effect = f"__builtins__['open']({str(marker_path)!r}, 'w').write('executed')"
+
+    if base_form == "local-spoof":
+        replacement = f"class AppConfig:\n    marker = {side_effect}"
+        content = content.replace("from django.apps import AppConfig", replacement, 1)
+    elif base_form == "rebound-import":
+        replacement = f"from django.apps import AppConfig\nAppConfig = {side_effect}"
+        content = content.replace("from django.apps import AppConfig", replacement, 1)
+    elif base_form == "decorated-class":
+        canonical = f"class {class_name}(AppConfig):"
+        replacement = (
+            f"@({side_effect} or (lambda cls: cls))\nclass {class_name}(AppConfig):"
+        )
+        content = content.replace(canonical, replacement, 1)
+    else:
+        canonical = f"class {class_name}(AppConfig):"
+        replacement = f"class {class_name}(AppConfig, object):"
+        content = content.replace(canonical, replacement, 1)
+
+    apps_path.write_text(content)
 
     assert _parse_app_config(apps_path) is None
     assert not marker_path.exists()

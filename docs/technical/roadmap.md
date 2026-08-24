@@ -390,8 +390,9 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Acceptance:** exactly one `0001_initial` per module with models, and no other migration files; a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; `make test-integration` passes; existing databases are out of scope by policy — the documented upgrade path is a fresh database; the no-migration-history policy is recorded in [decisions.md](decisions.md).
 
   **Checkpoint state:** S1-S3 are settled and archived in [CHANGELOG.md](../../CHANGELOG.md).
-  S1 rejects AppConfig class-alias, subscript, and nested-attribute identity writes without
-  executing source; S2 compares generated runtime `name`/`label` identities and migration labels
+  S1 rejects AppConfig class-alias, subscript, and nested-attribute identity writes plus spoofed,
+  rebound, decorated, and multiple-base AppConfig provenance without executing source; S2 compares
+  generated runtime `name`/`label` identities and migration labels
   with an independent `quickscale_modules_<module>` oracle; S3 synchronizes the 15-suite/11-unwired
   census and current SA151/SA92 audit status. Concurrent SA134 closure leaves the live queue at
   19 entries across 18 positions. The ticket remains unchecked, and SA142/SA164/SA152 remain blocked.
