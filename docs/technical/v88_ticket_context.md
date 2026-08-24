@@ -12,7 +12,7 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers the **nineteen open v88 ticket entries** across eighteen open merge positions
+It covers the **twenty open v88 ticket entries** across nineteen open merge positions
 (SA163 executes inside SA135) plus the three post-v88 entries. Closed tickets are not
 described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
 Sections are ordered by merge band (A → B → C), which is also the order in which the work
@@ -59,7 +59,7 @@ failure modes; auditing the gate layer found a fifth sitting underneath all of t
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | 10 of 14 `scripts/test_*.py` suites are still wired to no target; a gate uses a bool inversion Python 3.16 removes | SA155, SA162 |
+| **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | The current census is 15 `scripts/test_*.py` suites: 4 wired to a target and 11 wired to no target, including `scripts/test_repo_source_interpreters.py`; a gate uses a bool inversion Python 3.16 removes | SA155, SA162 |
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | Python/Postgres versions retyped in tests; the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA134, SA124, SA118, SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | wheelhouse set but no wheel matches → returns the manifest spec; a corrupt state file returns silently; a skip where a failure belongs | SA150, SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA142, SA135, SA161 |
@@ -75,7 +75,7 @@ The worktree grouping follows it directly:
 
 ## Why band A goes first (the argument in one page)
 
-Of the 14 `scripts/test_*.py` conformance suites, **10 are wired to no target at all**.
+Of the 15 `scripts/test_*.py` conformance suites, **4 are wired to a target and 11 are wired to no target at all**, including `scripts/test_repo_source_interpreters.py`.
 They are the suites that prove the gate layer — scope allowlist, gate registry, parity,
 quality baseline — behaves as declared. Repeated repair passes (archived in
 [CHANGELOG.md](../../CHANGELOG.md)) have made that population green, but green is not the
@@ -117,7 +117,8 @@ owning execution context** — while being the code every other gate's credibili
 
 ### The concrete measurement
 
-- 14 `scripts/test_*.py` suites. **4 wired to a target. 10 wired to nothing.**
+- 15 `scripts/test_*.py` suites. **4 wired to a target. 11 wired to nothing**, including `scripts/test_repo_source_interpreters.py`.
+- **Historical predecessor census (2026-08-22):** 14 suites total, 4 wired, 10 unwired. This dated 14/10 measurement is retained as predecessor evidence only; it is not the current census.
 - `git log -S` shows the orphans were **never** wired. This is not decay; the wiring never
   existed, and the population grows by one with every new gate.
 - Historical pre-repair execution under the project interpreter: **959 passed, 74 failed**,
@@ -492,7 +493,7 @@ W3 holds the **exclusive PostgreSQL/Docker slot** for the release. Only one of t
 
 ## SA142 — Reuse and clean E2E Docker images
 
-`Band B · Tier 1 · W3 · merge #10 · deps: none (SA151 closed) · Docker slot`
+`Band B · Tier 1 · W3 · merge #10 · deps: SA151 (S4 BYPASSRLS prerequisite open) · Docker slot`
 
 ### The mental model
 
@@ -918,7 +919,7 @@ environment. Documentation only — do not change the derivation.
 
 ## SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items
 
-`Band C · Tier 3 · W2 · merge #25 · deps: SA166; SA151 content dependency satisfied`
+`Band C · Tier 3 · W2 · merge #25 · deps: SA166, SA151 (S4 BYPASSRLS prerequisite open)`
 
 ### The mental model
 
@@ -932,11 +933,14 @@ actions, and one is a naming question that becomes load-bearing on a specific tr
 ### 1. The SA92 migration-squash tuple — artifact found, re-anchor now available
 
 The artifact is
-`quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`. Its
-`_migdir()` helper reads the inert `django_apps:` manifest key and silently
-guesses a conventional path when absent, while its parity backstop still names
-the retired `v87` baseline. SA151's regenerated migrations are now settled, so
-SA164 can replace both stale authorities after SA166 without guessing.
+`quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`, a bounded
+literal tripwire for cross-table `UPDATE … SET organization_id` migration DML; it is
+not a schema-parity proof. Its `_migdir()` helper reads the inert `django_apps:`
+manifest key and silently guesses a conventional path when absent, while its parity
+backstop still names the retired `v87` baseline. SA151 has produced regenerated
+migrations, but terminal closure remains pending because S4's BYPASSRLS role lacks required
+table privileges, observed on `test_quickscale_forms.public.django_migrations`; SA164 owns
+the `_migdir()` helper correction and parity-backstop re-anchoring after SA151 closes.
 
 ### 2. Privileged-command pair — values agree, claimed authority does not
 
@@ -1024,7 +1028,7 @@ not authorize implementing it**, and none may be pulled into a v88 ticket.
 
 ## SA152 — Refresh the beta-migration maintainer targets
 
-`Post-v88 · Tier 3 · deps: none (SA151 closed)`
+`Post-v88 · Tier 3 · deps: SA151 (S4 BYPASSRLS prerequisite open)`
 
 The 2026-08-21 audit found the **mechanics current**: the Makefile flag surface (`DONOR`,
 `RECIPIENT`, `DRY_RUN`, `CONTINUE`, `REPORT`) matches `build_argument_parser()`, every
@@ -1032,10 +1036,12 @@ command in `VERIFICATION_COMMAND_SPECS` still exists, and the file-ownership tax
 sync and enforced by 7 passing conformance tests. So this is not a rot ticket. Four residual
 gaps:
 
-- **The SA151 collision — the policy now in force.** The workflow's verification
+- **The SA151 collision — implementation evidence exists, terminal closure is pending.** The workflow's verification
   stack runs `quickscale manage migrate` against a recipient that may carry an existing
-  database. SA151 makes a **fresh database the only upgrade path**, invalidating the
-  in-place workflow's implicit assumption. SA152 can now resolve that mismatch explicitly.
+  database. SA151's clean-break implementation makes a **fresh database the only upgrade
+  path**, invalidating the in-place workflow's implicit assumption; terminal SA151 closure
+  still awaits environment repair and a green S4 BYPASSRLS lane. SA152 can resolve that
+  mismatch only after the dependency closes.
 - **No end-to-end exercise.** The targets appear in no CI workflow and no
   `scripts/gate_registry.json` entry. Coverage is unit-level taxonomy conformance only, so
   breakage surfaces first for a maintainer **mid-migration** — the worst possible moment.
