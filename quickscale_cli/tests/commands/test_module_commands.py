@@ -24,6 +24,7 @@ from quickscale_cli.commands.module_commands import (
     _print_installation_error,
     _resolve_embedded_module_install_path,
     _sync_state_module_version,
+    _sync_module_dependencies,
     _update_single_module,
     _validate_git_environment,
     _validate_module_not_exists,
@@ -3172,6 +3173,32 @@ class TestUpdatePathDependencySync:
         captured = capsys.readouterr()
         assert result is False
         assert "Failed to sync dependency entries" in captured.err
+
+    def test_invalid_explicit_wheelhouse_is_reported_for_update_selection(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """Update's dependency adapter must propagate boundary validation errors."""
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", "")
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        )
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text(
+            'name: auth\nversion: "0.87.0"\ndependencies:\n  - django-allauth>=0.63.0\n'
+        )
+        (module_dir / "pyproject.toml").write_text(
+            '[project]\nname = "quickscale-module-auth"\n\n'
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+            'django-allauth = ">=65.14.1,<66.0.0"\n'
+        )
+
+        result = _sync_module_dependencies(tmp_path, {"auth": {}})
+
+        assert result is False
+        assert "QUICKSCALE_LOCAL_WHEELHOUSE must name an absolute wheelhouse" in (
+            capsys.readouterr().err
+        )
 
     def test_module_options_passed_into_dependency_sync(
         self,

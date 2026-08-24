@@ -76,6 +76,7 @@ from quickscale_cli.commands.apply_command import (
     _save_project_state,
     _sync_billing_env_example,
     _sync_project_module_dependencies_for_apply,
+    _sync_project_module_dependencies_for_apply_impl,
     _start_docker,
     _start_docker_impl,
     _sync_analytics_env_example,
@@ -2801,6 +2802,34 @@ class TestSyncProjectModuleDependenciesForApply:
         )
 
         assert result is False
+
+    def test_invalid_explicit_wheelhouse_is_reported_for_auth_only_selection(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """Apply's command-facing adapter must surface boundary validation failures."""
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", "")
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+        )
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text(
+            'name: auth\nversion: "0.87.0"\ndependencies:\n  - django-allauth>=0.63.0\n'
+        )
+        (module_dir / "pyproject.toml").write_text(
+            '[project]\nname = "quickscale-module-auth"\n\n'
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+            'django-allauth = ">=65.14.1,<66.0.0"\n'
+        )
+        qs_config = Mock()
+        qs_config.modules = {"auth": Mock(options={})}
+
+        result = _sync_project_module_dependencies_for_apply_impl(tmp_path, qs_config)
+
+        assert result is False
+        assert "QUICKSCALE_LOCAL_WHEELHOUSE must name an absolute wheelhouse" in (
+            capsys.readouterr().err
+        )
 
 
 # ============================================================================

@@ -218,13 +218,13 @@ def _resolve_local_wheel_dependency(
     project_path: Path,
     dependency_base: Path,
     dependency_name: str,
+    wheelhouse: Path | None,
 ) -> dict[str, str] | None:
     """Materialize and return an exact local wheel for installed acceptance."""
     normalized_name = re.sub(r"[-_.]+", "-", dependency_name).lower()
     if normalized_name not in _LOCAL_WHEEL_DISTRIBUTIONS:
         return None
 
-    wheelhouse = _resolve_wheelhouse_dir()
     if wheelhouse is None:
         return None
 
@@ -494,6 +494,7 @@ def _build_path_dependency_overrides(
     install_path: Path,
     manifest: Any,
     module_poetry_deps: Mapping[str, Any],
+    wheelhouse: Path | None = None,
 ) -> dict[str, Any]:
     """Build replacement values for unresolvable path dependencies."""
     overrides: dict[str, Any] = {}
@@ -506,6 +507,7 @@ def _build_path_dependency_overrides(
             project_path,
             install_path,
             dep_name,
+            wheelhouse,
         )
         if local_wheel is not None:
             overrides[dep_name] = local_wheel
@@ -543,6 +545,7 @@ def _rewrite_dependency_lines(raw_toml: str, overrides: Mapping[str, Any]) -> st
 def _patch_module_path_dependencies(
     project_path: Path,
     module_options_by_name: Mapping[str, Mapping[str, Any] | None],
+    wheelhouse: Path | None = None,
 ) -> None:
     """Replace unresolvable path deps in embedded module pyproject.toml files.
 
@@ -578,6 +581,7 @@ def _patch_module_path_dependencies(
             install_path,
             manifest,
             module_poetry_deps,
+            wheelhouse,
         )
         if overrides:
             _write_validated_toml(
@@ -696,6 +700,12 @@ def sync_project_module_dependencies(
     if not module_options_by_name:
         return ProjectDependencySyncResult()
 
+    # Validate an explicit wheelhouse at the dependency-sync boundary, before
+    # inspecting module dependencies.  This keeps malformed explicit input
+    # fail-hard even when the selected modules have only public dependencies,
+    # while preserving the intentional no-module no-op above.
+    wheelhouse = _resolve_wheelhouse_dir()
+
     pyproject_path = project_path / "pyproject.toml"
     project_pyproject = _load_toml_file(pyproject_path)
     project_dependencies = _load_poetry_dependencies(pyproject_path, project_pyproject)
@@ -755,6 +765,7 @@ def sync_project_module_dependencies(
                 project_path,
                 project_path,
                 dependency_name,
+                wheelhouse,
             )
 
             if dependency_name in existing_dependency_names:
@@ -814,7 +825,7 @@ def sync_project_module_dependencies(
     # when a module's pyproject.toml references a monorepo-local path
     # (e.g. quickscale-core = {path = "../../quickscale_core"}) that
     # doesn't exist in the generated project's isolated tree.
-    _patch_module_path_dependencies(project_path, module_options_by_name)
+    _patch_module_path_dependencies(project_path, module_options_by_name, wheelhouse)
 
     return ProjectDependencySyncResult(
         added_path_dependencies=sorted(pending_path_dependencies),

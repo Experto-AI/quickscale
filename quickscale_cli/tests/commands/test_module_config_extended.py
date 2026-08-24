@@ -614,6 +614,106 @@ class TestUnpublishedCoreWheelhouseRegression:
         assert wheel_name in project_pyproject
         assert wheel_name in module_pyproject
 
+    @pytest.mark.parametrize(
+        "wheelhouse_value",
+        ["", "relative/wheelhouse", "absolute-missing"],
+    )
+    def test_invalid_explicit_wheelhouse_fails_for_auth_only_selection(
+        self, tmp_path, monkeypatch, wheelhouse_value
+    ):
+        """Explicit wheelhouse validation must not depend on local-core lookup."""
+        explicit_value = (
+            str(tmp_path / "missing-wheelhouse")
+            if wheelhouse_value == "absolute-missing"
+            else wheelhouse_value
+        )
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", explicit_value)
+        project = _make_project(tmp_path)
+        _write_module_package(
+            project,
+            "auth",
+            manifest_content=(
+                "name: auth\n"
+                'version: "0.87.0"\n'
+                "dependencies:\n"
+                "  - django-allauth>=0.63.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-auth"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-allauth = ">=65.14.1,<66.0.0"\n'
+            ),
+        )
+
+        with pytest.raises(
+            DependencySyncError,
+            match=r"QUICKSCALE_LOCAL_WHEELHOUSE must name an absolute wheelhouse",
+        ):
+            sync_project_module_dependencies(project, {"auth": {}})
+
+    def test_valid_explicit_wheelhouse_is_resolved_once_for_public_and_local_deps(
+        self, tmp_path, monkeypatch
+    ):
+        """The boundary selection is reused by both dependency-sync lookups."""
+        wheelhouse = tmp_path / "acceptance-wheels"
+        wheelhouse.mkdir()
+        wheel_name = "quickscale_core-0.87.1-py3-none-any.whl"
+        (wheelhouse / wheel_name).write_bytes(b"wheel")
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", str(wheelhouse))
+        project = _make_project(tmp_path)
+        self._write_backups(project)
+
+        with patch(
+            "quickscale_cli.utils.module_dependency_sync._resolve_wheelhouse_dir",
+            return_value=wheelhouse,
+        ) as resolve_wheelhouse:
+            sync_project_module_dependencies(project, {"backups": {}})
+
+        resolve_wheelhouse.assert_called_once_with()
+
+    def test_valid_explicit_wheelhouse_preserves_auth_manifest_fallback(
+        self, tmp_path, monkeypatch
+    ):
+        """A valid override does not replace public auth dependency specs."""
+        wheelhouse = tmp_path / "acceptance-wheels"
+        wheelhouse.mkdir()
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", str(wheelhouse))
+        project = _make_project(tmp_path)
+        _write_module_package(
+            project,
+            "auth",
+            manifest_content=(
+                "name: auth\n"
+                'version: "0.87.0"\n'
+                "dependencies:\n"
+                "  - django-allauth>=0.63.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-auth"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-allauth = ">=65.14.1,<66.0.0"\n'
+            ),
+        )
+
+        sync_project_module_dependencies(project, {"auth": {}})
+
+        project_pyproject = (project / "pyproject.toml").read_text()
+        assert 'django-allauth = ">=65.14.1,<66.0.0"' in project_pyproject
+
+    def test_malformed_explicit_wheelhouse_is_ignored_for_no_module_noop(
+        self, tmp_path, monkeypatch
+    ):
+        """The intentional empty-selection no-op remains unchanged."""
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", "")
+
+        result = sync_project_module_dependencies(tmp_path, {})
+
+        assert result == ProjectDependencySyncResult()
+
     def test_empty_explicit_wheelhouse_is_rejected(self, tmp_path, monkeypatch):
         """A set-but-empty override is invalid rather than an implicit fallback."""
         monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", "")
