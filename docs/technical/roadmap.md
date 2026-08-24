@@ -196,7 +196,7 @@ are yes.
 |---|---|---|---|---|---|
 | **W1** | SA150 (#12) | **yes** — SA134 is complete and no remaining prerequisite blocks the ticket | **yes** — the W1-owned seam and documentation/test surfaces are available | **yes** — #12 has no unsatisfied dependency | **ready — off the critical path** |
 | **W2** | SA155 (#7, **partial planning checkpoint retained**) | **yes** — every prerequisite is merged; no product decision is open | **yes, after orchestration recovery** — the documented `scripts/` baseline is green (1,213 passed), but implementation did not start because two Adaptive implementer handoffs failed before mutation | **yes** — #7 has no unsatisfied dependency | **administratively paused — next critical-path leg** |
-| **W3** | SA151 (#3, **partial checkpoint retained — terminal findings open**) | **yes** — the checkpoint is merged and no product decision blocks F-006/F-007/F-008 | **yes** — the remaining guard and documentation corrections are W3-owned or explicitly coupled | **yes for the checkpoint; no for closure** — merge #3 retains useful work without satisfying dependants | **partial but merge-safe — off the critical path** (second chain) |
+| **W3** | SA151 (#3, **partial checkpoint retained — terminal findings open**) | **yes** — the checkpoint is merged and no product decision blocks F-006/F-008; F-007 is corrected | **yes** — the remaining guard and documentation corrections are W3-owned or explicitly coupled | **yes for the checkpoint; no for closure** — merge #3 retains useful work without satisfying dependants | **partial but merge-safe — off the critical path** (second chain) |
 
 **Blocked next-after tickets, and what clears each:**
 
@@ -214,7 +214,8 @@ resume from a retained partial checkpoint independently.
 - **W2 — resume SA155 in a fresh Adaptive session.** Require a clean `wt-track2`, merge the
   then-current `v88`, rediscover changed seams, and create a fresh plan authority rather than
   reusing the session-scoped carrier from the checkpoint. This is the next critical-path leg.
-- **W3 — resume SA151 closure.** Correct F-006, F-007, and F-008, adjudicate F-009, then rerun
+- **W3 — resume SA151 closure.** Correct F-006 and F-008, preserve the completed F-007 census
+  correction, adjudicate F-009, then rerun
   the proofs listed in its closure plan. Only a clean terminal result unblocks SA142, SA164,
   and SA152.
 
@@ -372,13 +373,13 @@ Conceptual background, mental models, and implementation notes for **every** tic
 
   **Checkpoint state:** the P2B/P3 evidence landed and is archived in [CHANGELOG.md](../../CHANGELOG.md); terminal attestation judged it insufficient for closure, so the ticket stays open and SA142/SA164/SA152 stay blocked.
 
-  **Pending/blocking findings — found after settlement and intentionally retained for a fresh
-  continuation:**
+  **Terminal finding ledger — found after settlement and retained with current dispositions:**
   - **F-006 (medium, blocking):** `_parse_app_config()` can false-green a class alias followed
     by an identity write (`Alias = Config; Alias.label = ...`), and the service-style runtime
     proof can derive its expected identity from the same mutated AppConfig.
-  - **F-007 (medium, blocking):** [v88_ticket_context.md](v88_ticket_context.md) still carries
-    SA155's obsolete 14-suite/10-unwired census instead of the current 15/11 census.
+  - **F-007 (medium, corrected prerequisite):** [v88_ticket_context.md](v88_ticket_context.md)
+    now carries SA155's current 15-suite/11-unwired census. This correction does not close SA151
+    while F-006 and F-008 remain open.
   - **F-008 (medium, blocking):** [arch-audit.md](../others/arch-audit.md) still describes
     SA151 regeneration and the SA92 artifact/re-anchoring work as future or unlocated.
   - **F-009 (low, advisory):** [docs/index.md](../index.md) carries stale fixed ticket/position
@@ -386,7 +387,7 @@ Conceptual background, mental models, and implementation notes for **every** tic
 
   **Decision status.** The maintainer directed that the partial improvements be committed and
   merged while SA151 remains open; this checkpoint therefore does not unblock SA142, SA164, or
-  SA152. F-006, F-007, and F-008 require correction and no product decision. Before final
+  SA152. F-006 and F-008 require correction and no product decision; F-007 is corrected. Before final
   closeout, decide only whether F-009 is fixed in the same continuation or explicitly deferred
   as advisory with rationale.
 
@@ -394,8 +395,9 @@ Conceptual background, mental models, and implementation notes for **every** tic
   1. Reject AppConfig class-alias, subscript, and attribute identity writes statically; add
      expected-red no-execution canaries including a service-style module; independently assert
      each runtime AppConfig `name` and `label` against `quickscale_modules_<module>`.
-  2. Synchronize SA155's 15/11 census in `v88_ticket_context.md`; reconcile the live SA151/SA92
-     statements in `arch-audit.md`; fix or explicitly defer the `docs/index.md` count advisory.
+  2. Preserve SA155's synchronized 15/11 census in `v88_ticket_context.md`; reconcile the live
+     SA151/SA92 statements in `arch-audit.md`; fix or explicitly defer the `docs/index.md` count
+     advisory.
   3. Rerun the focused topology and generated PostgreSQL proofs, `make check`, integration and
      E2E seams affected by the correction, and the accepted `make quality` baseline; then take
      convergence and terminal attestation. Only a clean terminal result may mark SA151 complete
@@ -485,7 +487,7 @@ gates, written into a suite that nothing executes.
   **Acceptance:** the expression is `~int(val) != 0` or equivalent; the gate runs clean under `-W error::DeprecationWarning`; a test pins the gate's verdict on analysed source containing `~True` and `~False` so the semantics cannot silently change; the arch-audit red flag is retired with the correction recorded, and the tech-audit finding is retired.
   **Shared conflict surface:** `scripts/check_csrf_exempt_gate.py`, `docs/others/tech-audit.md`, `docs/others/arch-audit.md`.
 
-- [ ] **SA163 — Derive the CI PostgreSQL environment from one authoritative source.** `Band B · Tier 2 · W3 · merge #15 — executes inside SA135, not as a separate pass`
+- [ ] **SA163 — Derive the CI PostgreSQL environment from one authoritative source.** `Band B · Tier 2 · W3 · merge #15 · deps: SA135 — executes inside SA135, not as a separate pass`
   Closes arch-audit **Finding 13** (`ci-environment-hand-replicated`, rank 2, horizon `now`). The gate registry declares *which* gates run in *which* contexts, but the environment those gates require is expressed nowhere declaratively and is hand-replicated as shell across **13 stations**: the PGDG PG18 install in four copies (`ci.yml:92-107`, `ci.yml:408-427`, `publish.yml:161-187`, `e2e.yml:74-91`), divergent PG18 verification (three check `command -v` *and* `--version | grep "(PostgreSQL) 18"`; `e2e.yml:92` checks only `test -x`), four `createdb` lists, four grant loops, five `QS_*_DB_USER` blocks, and a **14th** station where `scripts/test_gate_parity.py:1125-1180` transcribes the shell verbatim as a Python literal. `nightly-bypassrls.yml:81-82` installs plain `postgresql-client` — Ubuntu 16.x, no PGDG — while creating `test_quickscale_backups` and setting `QS_BACKUPS_DB_USER`, against `ci.yml:93-95`'s statement that the backups DR engine enforces a PostgreSQL 18 `pg_dump`/`pg_restore` contract that 16.x fails.
   Two apparent divergences are **deliberate and verified correct — do not "fix" them**: the 6-entry `QS_*_DB_USER` block at `ci.yml:627-632` is exactly `orgs` plus `RLS_MODULES` from `test_isolation_conformance.sh:141`, and the isolation job's 11-database list omits `backups` because that job runs no backups tests.
   Take **Option 1** (one `scripts/provision_ci_postgres.sh`, four callers, module list derived from the discovery shim exactly as `check_sa117_scope.py:48` already does). Do it **inside SA135**, whose allowlist already spans `scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, the `Makefile`, and the documented DB precondition — not as a separate pass over the same files. Option 2 (an `environment` block in the gate registry) only if SA123's registry work lands cleanly first, since both bump the registry schema.
