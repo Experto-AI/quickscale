@@ -207,7 +207,7 @@ track states below were re-tested for rebalance opportunities (none taken — se
 |---|---|---|---|---|---|
 | **W2** | SA167a (#8) | **yes** — the gate-layer prerequisite is complete | **yes** — the five manifest declaration surfaces are W2-owned | **yes** — #8 follows the completed and retired gate-layer leg | **ready — next critical-path leg** |
 | **W1** | SA167b (#17) | **no** — SA162 (#14) is complete, but SA167a's `entry_point.py` hand-off has not landed | **yes** — once released, the adapter relocation remains entirely W1-owned | **no** — #17 must follow SA167a | **dependency-blocked by SA167a** |
-| **W3** | SA151 (#3, **S4-A/S4-B done; S4-C/S4-D open**) | **yes** — the BYPASSRLS environment prerequisite was repaired and the gate passed on 2026-08-24; nothing waits on a decision, authorization, or plan gate | **yes** — only S4-C closeout validation and S4-D terminal records remain, and both are W3-owned; no other track's output is required | **yes** — #3 heads its own chain and merges after nothing | **truly green — restored to the second chain** |
+| **W3** | SA151 (#3, **S4-C software green; S4-D open**) | **yes** — every S4-C software command passed on 2026-08-24 and all twelve databases were restored; a refreshed plan must bind the current `make check` counts before S4-D | **yes** — count-oracle reconciliation and S4-D terminal records are W3-owned; no other track's output or maintainer decision is required | **yes** — #3 heads its own chain and merges after nothing | **ready — terminal-record continuation** |
 
 **Two tracks are truly green; W1 is dependency-blocked by SA167a.** Of the two executable
 next actions, only one is on the critical path:
@@ -238,8 +238,10 @@ next actions, only one is on the critical path:
   `entry_point.py` hand-off is the only remaining release condition for W1.
 - **W2 — start SA167a (#8).** Keep the five manifest declaration edits on W2 and preserve
   the completed gate-layer evidence while advancing the next critical-path leg.
-- **W3 — resume SA151 at S4-C.** S4-A and S4-B are done and green; the lane is executable
-  today. Run closeout validation, then S4-D terminal records, convergence, and attestation.
+- **W3 — resume SA151 from the retained S4-C checkpoint.** Every software command is green
+  and database ownership is restored. Refresh the execution plan so its `make check` oracle
+  binds the current green **2,806 Core / 2,117 CLI** collection rather than the stale
+  2,788/2,104 historical counts, then run S4-D terminal records, convergence, and attestation.
   Only that clean result unblocks SA142, SA164, and SA152.
 
 #### Open maintainer decisions
@@ -390,13 +392,26 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Acceptance:** no function in `module_config.py` decides a module's apps, middleware, settings keys, or URL includes — those come from the module's manifest through its adapter; the remaining surface is desired-configuration collection only, and that boundary is stated in the module's docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist) is retired once the deviation it names is gone.
   **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`.
 
-- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · S1-S3 RETAINED; S4-A/S4-B DONE 2026-08-24; S4-C/S4-D OPEN`
+- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · S1-S3 RETAINED; S4-A/S4-B DONE; S4-C SOFTWARE GREEN 2026-08-24; S4-D OPEN`
   QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models.
   **Acceptance:** exactly one `0001_initial` per module with models, and no other migration files; a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; `make test-integration` passes; existing databases are out of scope by policy — the documented upgrade path is a fresh database; the no-migration-history policy is recorded in [decisions.md](decisions.md).
 
   **Checkpoint state:** S1-S3 and S4-A/S4-B are settled; their evidence is archived in
-  [CHANGELOG.md](../../CHANGELOG.md). The ticket remains open at **S4-C/S4-D**, and
-  SA142/SA164/SA152 remain blocked until it closes.
+  [CHANGELOG.md](../../CHANGELOG.md). S4-C's software campaign is now green, but its Adaptive
+  handback remained partial because the execution plan hard-coded stale historical `make check`
+  counts. The unchanged current tree reports **2,806 Core passed / 1 skipped** and **2,117 CLI
+  passed**, rather than 2,788/2,104. This is an evidence-oracle mismatch, not a failing test or
+  product defect. S4-D was therefore not reached, the item stays unmarked, and SA142/SA164/SA152
+  remain blocked until terminal records, convergence, and attestation close the ticket.
+
+  **Retained S4-C evidence (2026-08-24):** topology **41 passed**; generated empty-PostgreSQL
+  proof **1 passed, 0 skipped**; restricted integration **2,471 passed, 86 skipped, 12 deselected,
+  94.41% mean coverage**; BYPASSRLS **80 passed, 0 errors, 0 skipped, 2,488 deselected**;
+  typecheck passed; serial E2E passed Core **36** and CLI **36** with 0 skips and cleanup;
+  `make check` passed with the current 2,806/2,117 collection above; `make quality` matched the
+  accepted GNU Make exit-2 oracle of exactly two warning regressions, zero critical regressions,
+  and monotonicity pass. Ownership was observed 12/12 under the BYPASSRLS role during that lane,
+  restored 12/12 to `quickscale_test_role`, and independently rechecked after all downstream gates.
 
   One live operating constraint survives from the S4-A repair and must be observed before
   every database-backed run on any lane:
@@ -434,16 +449,16 @@ Conceptual background, mental models, and implementation notes for **every** tic
   > per-lane database set or a provisioning step that owns the flip — is **SA163**'s
   > fourteenth-station work and an additional argument for **SA135**'s owned-lifecycle design.
 
-  **Remaining S4 continuation — what still closes SA151:**
-  1. **S4-C, closeout validation:** confirm the retained focused topology, generated PostgreSQL,
-     restricted integration, serial E2E, typecheck, `make check`, and exact accepted
-     `make quality` evidence still applies to the same settled delta; rerun only what changed or
-     what terminal policy requires. Note the restricted-integration leg was re-measured green
-     during the S4-A repair and may be reused if the delta has not moved.
-  2. **S4-D, terminal records:** run the quantified status sweep, archive terminal evidence in
-     `CHANGELOG.md`, remove this completed open-work body from the roadmap, unblock
-     SA142/SA164/SA152, and take convergence plus terminal attestation. Only that clean result
-     may mark SA151 complete.
+  **Remaining S4 continuation — reusable handoff plan:**
+  1. **S4-C evidence reconciliation:** obtain a fresh reviewed plan that binds `make check` counts
+     from the current command output rather than the stale historical literal. Reuse the retained
+     campaign only if the settled tree and required terminal policy are unchanged; otherwise rerun
+     the affected validation and preserve the pre-armed 12/12 database-restoration contract.
+  2. **S4-D, terminal records:** run the quantified status sweep; archive terminal evidence in
+     `CHANGELOG.md`; remove this completed open-work body from the roadmap; synchronize
+     `v88_ticket_context.md`, the docs hub, audit status, and the consistency canary; unblock
+     SA142/SA164/SA152; then take convergence and terminal attestation. Only that clean result may
+     mark SA151 complete.
 
 - [ ] **SA142 — Reuse and clean E2E Docker images.** `Band B · Tier 1 · W3 · merge #10 · deps: SA151 · Docker slot · blocks SA135`
   Separate stable image identity from per-run container/port/volume identity, reclaim variable images under normal cleanup, and preserve `--no-cleanup` diagnostics.
