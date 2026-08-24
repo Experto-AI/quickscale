@@ -468,6 +468,13 @@ def _source_module_inventory() -> dict[str, Any]:
     names = tuple(authoritative_module_names())
     roots = discover_shipped_module_paths()
     assert set(names) == set(roots), "Authoritative names and roots diverged"
+    expected_app_config_identities = {
+        name: {
+            "name": f"quickscale_modules_{name}",
+            "label": f"quickscale_modules_{name}",
+        }
+        for name in names
+    }
     options: dict[str, dict[str, object]] = {}
     for name in names:
         configurator = get_module_configurator(name)
@@ -509,6 +516,7 @@ def _source_module_inventory() -> dict[str, Any]:
     return {
         "names": names,
         "roots": roots,
+        "expected_app_config_identities": expected_app_config_identities,
         "options": options,
         "model_modules": model_modules,
         "service_modules": service_modules,
@@ -1049,11 +1057,20 @@ class TestGeneratedProjectRuntimeSmoke:
                 project_name,
                 makemigrations_environment,
             )
-            runtime_modules = {config["module"] for config in runtime["app_configs"]}
-            assert runtime_modules == set(names), (
-                f"Runtime app inventory differs from source: {runtime_modules}"
+            runtime_identities = {
+                config["module"]: {
+                    "name": config["name"],
+                    "label": config["label"],
+                }
+                for config in runtime["app_configs"]
+            }
+            assert len(runtime_identities) == len(runtime["app_configs"]), (
+                "Runtime app inventory contains duplicate module identities"
             )
-            assert len(runtime["app_configs"]) == len(names)
+            assert runtime_identities == inventory["expected_app_config_identities"], (
+                "Runtime AppConfig identities differ from the independent source contract"
+            )
+            assert len(runtime_identities) == len(names)
             assert all(
                 str(REPO_ROOT) not in path
                 for path in runtime["sys_path"]
@@ -1076,11 +1093,13 @@ class TestGeneratedProjectRuntimeSmoke:
                 f"modules/{name}/{inventory['initial_migrations'][name]}"
                 for name in model_modules
             }
-            labels_by_module = {
-                config["module"]: config["label"] for config in runtime["app_configs"]
+            expected_identities = inventory["expected_app_config_identities"]
+            model_labels = {
+                expected_identities[name]["label"] for name in model_modules
             }
-            model_labels = {labels_by_module[name] for name in model_modules}
-            service_labels = {labels_by_module[name] for name in service_modules}
+            service_labels = {
+                expected_identities[name]["label"] for name in service_modules
+            }
             disk_migrations = {
                 (migration["app"], migration["name"])
                 for migration in runtime["disk_migrations"]

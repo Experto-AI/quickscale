@@ -165,8 +165,6 @@ function getCsrfToken(): string {
 
 | Gap | Would have caught | Recommendation |
 |---|---|---|
-| ~~No check that a gate's default refs actually resolve~~ | **TA63** | **Closed by SA156:** durable `main` fallback, origin/local probing, actionable startup error, and hermetic non-`main` regression coverage |
-| ~~No grep gate on interpreter selection~~ | **Closed by SA159** | `scripts/check_repo_source_interpreters.py` is a pre-commit guard rejecting bare `python3 <path>.py` in `scripts/*.sh` and bare `python` repo-source subprocesses in `scripts/test_*.py` |
 | Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The theme has an eslint config — a `no-duplicate-imports`-style rule will not catch copied functions; the shared-helper fix is the real prevention |
 | No dependency-vulnerability scanner | — | **Carried from the prior pass.** Roadmap **SA123** owns this for v88. Confirmed still absent: `pip-audit`, `safety`, `bandit`, `semgrep` are all missing from `.venv` |
 | No focused security static analysis | — | **Carried.** SA123. Rules for subprocess shell use, unsafe deserialization, TLS disabling, Django raw/`mark_safe` sinks, and committed credentials. This pass verified all five classes by hand and found them clean, which is exactly the check worth automating so it stays clean |
