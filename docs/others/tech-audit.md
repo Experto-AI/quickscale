@@ -121,7 +121,7 @@ function getCsrfToken(): string {
 |---|---|---|
 | Commit delta `e40762a0..HEAD` | all 12 files, production and test hunks, in full | Clean — no finding. The two test changes are correct narrowings; see *Clean sweeps* and *Notes* |
 | `scripts/` quality-baseline gate | `check_quality_baseline_monotonicity.py` merge-base + `main`; `check_quality.sh` ordering and failure path | **Closed by SA156 (TA63)** |
-| `scripts/` gate conformance suites | executed all 14 — 74F/1126P at audit time, **1,213 passed** on the current tip after the closure passes; read the failing tests and their fixtures | **Arch Finding 12** remains open: the population is green but still has no owning execution context. The former TA66 oracle failure, the historical quality-baseline failures, and the SA117 false-green are all closed (see [CHANGELOG.md](../../CHANGELOG.md)) |
+| `scripts/` gate conformance suites | executed all 14 — 74F/1126P at audit time; the retained population is now **15 suites / 1,224 passed with two warnings** after the closure passes; read the failing tests and their fixtures | **Arch Finding 12 closed by SA155:** `check-gate-suites` is registered for local-serial, local-parallel, and hosted execution with cache and product coverage disabled. The former TA66 oracle failure, the historical quality-baseline failures, and the SA117 false-green are also closed (see [CHANGELOG.md](../../CHANGELOG.md)) |
 | `scripts/` shell interpreter selection | `version_tool.sh`, `lint_frontend.sh`, `check_ci_locally.sh`, `_python_requirement.sh` | **Closed by SA159** — repository-source calls use the validated project interpreter; `check_ci_locally.sh` is documented adjacent because its heredoc is stdlib-only |
 | Generated settings templates | `base.py.j2`, `production.py.j2` in full | **TA68**; production hardening otherwise clean |
 | Generated project scaffold | `.env.j2`, `.env.example.j2`, `docker-compose.yml.j2`, `db/init.sql.j2`, `urls.py.j2`, `views.py.j2`, `railway.json.j2` | Clean — see *Notes* for the dev-credential and healthcheck watch items |
@@ -171,7 +171,7 @@ function getCsrfToken(): string {
 | No dependency-vulnerability scanner | — | **Carried from the prior pass.** Roadmap **SA123** owns this for v88. Confirmed still absent: `pip-audit`, `safety`, `bandit`, `semgrep` are all missing from `.venv` |
 | No focused security static analysis | — | **Carried.** SA123. Rules for subprocess shell use, unsafe deserialization, TLS disabling, Django raw/`mark_safe` sinks, and committed credentials. This pass verified all five classes by hand and found them clean, which is exactly the check worth automating so it stays clean |
 | No gate requires a changelog/ticket trail for behavioural commits | **SA166** | **Carried.** `d3d4c633` shipped a CI-topology change under a release-shaped message and left a conformance test red. Remains maintainer-process risk rather than a source finding |
-| `scripts/` suites are in no execution context | Arch Finding 12 | Owned by arch **Finding 12** (`gate-suites-unexecuted`). Not duplicated as a finding here; SA155 must still register the suite green |
+| ~~`scripts/` suites are in no execution context~~ | Arch Finding 12 | **Closed by SA155:** the green suite population is registered through `check-gate-suites`; detailed evidence is retained in [CHANGELOG.md](../../CHANGELOG.md) |
 
 ---
 

@@ -4,6 +4,20 @@
 
 ## v88 development — 2026-08-21
 
+- **Gate-layer closure (2026-08-24).** The gate conformance layer now has an owned
+  `check-gate-suites` execution context covering all 15 retained `scripts/test_*.py`
+  suites, with cache and product coverage disabled. The registered gate covers
+  `local-serial`, `local-parallel`, and `hosted`; the generated CI workflow remains an
+  exact 12-job set comprising six registry-bound hosted gates and six explicitly justified
+  unowned jobs. `isolation-conformance` is Make-exposed but remains hosted-unowned because
+  it requires PostgreSQL and a restricted role. The scripts suite collected and passed
+  1,224 tests with two warnings; product sources, `.coveragerc`, and the 90% product
+  coverage threshold were unchanged. `docs/technical/validation_policy.md`,
+  `scripts/README.md`, `docs/technical/v88_ticket_context.md`, and
+  `docs/others/arch-audit.md` carry the synchronized command, topology, rationale, and
+  closure evidence. The roadmap's former gate-layer work is closed and its merge position
+  is retired rather than reused.
+
 - **v88 planning closed (`V88-KICKOFF`).** The v88 integration branch was created, the prioritization choice was recorded as **neither** (Architectural Findings 2, 4, and 7 stay behind their growth triggers; no `teams` work and no third generated-project updater in v88), and the release received a single ranked queue of twenty-five ticket entries across twenty-four merge positions, with a dependency graph, worktree assignment, merge order, and named shared conflict surfaces. The audit-derived tickets and the implementation tickets were merged into one queue, which exposed that four gate-layer tickets are prerequisites rather than follow-on work. The current queue has twenty open positions carrying twenty-one open ticket entries; SA156, SA137, SA157, SA158, and SA168 are closed, and SA163 shares SA135's position.
 - **SA137 — top-level version propagation closed.** `scripts/version_tool.sh` now derives every direct-child `quickscale*/pyproject.toml` parity member, including the maintainer-only `quickscale_devtools` pin, without adding it to publication or runtime-version surfaces. Real drift produced exit 2 naming `quickscale_devtools`; the update restored its pin to `0.87.0`, and the focused hermetic suite passed (46 tests), including a future direct-child package discovery control. The focused suite remains orphaned under SA155; no blocker.
 - **SA156 — quality-gate base ref resolves (closes tech-audit TA63).** The monotonicity gate's terminal fallback no longer names a retired per-release branch: it binds to the durable `main` identity and probes `origin/main` before local `main`, with the same probe used for the `GITHUB_BASE_REF` path. Explicit CLI and `QUALITY_BASELINE_BASE_REF` refs keep direct resolution and precedence; an unresolvable default exits 2 with an actionable `MERGE_BASE_ERROR` naming both candidates and the explicit-ref remedies. Exit, stream, schema, policy-artifact, wrapper, and report contracts are unchanged. Evidence: focused Ruff and pytest pass with zero stale release-literal occurrences; the no-override helper exits 0 with `base_ref == "main"` and a real merge base; hermetic non-`main` tests prove origin-first/local-second fallback and the missing-default streams/artifact; an env-cleared `make quality` re-emits all four fresh artifacts with matching verdict/base-ref/merge-base metadata. The broader `make quality` command exits 2 at GNU Make's process boundary because `scripts/check_quality.sh` exits 1 after reporting the unrelated pre-existing complexity regression at `quickscale_cli/src/quickscale_cli/commands/development_commands.py::up` (15 versus allowed 14); the monotonicity gate itself passes, and this is the authorized no-worse-than-found result. This also retires the historical claim that monotonicity was enforced across the `v88` branch — it was not, and the falsification is recorded here rather than in the live audit.

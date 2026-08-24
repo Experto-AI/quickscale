@@ -37,7 +37,7 @@ The whole release is one principle with five failure modes. Every ticket is a le
  doesn't run  written in    is missing   the thing     only in a
  or lies      2+ places     so guess     we created    human's head
       │          │            │            │              │
-   SA155      SA134         SA150          —            SA123
+              SA134         SA150          —            SA123
    SA162      SA124         SA165        SA142          SA166
      │        SA118           │          SA135            │
   (unwired    SA163         (wheelhouse  SA161         (dep-vuln +
@@ -59,8 +59,8 @@ failure modes; auditing the gate layer found a fifth sitting underneath all of t
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | 10 of 14 `scripts/test_*.py` suites are still wired to no target; a gate uses a bool inversion Python 3.16 removes | SA155, SA162 |
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | Python/Postgres versions retyped in tests; the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA134, SA124, SA118, SA163, SA160, SA164 |
+| **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | A gate uses a bool inversion Python 3.16 removes | SA162 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | Python/Postgres versions retyped in tests; the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 13 shell stations plus a transcribed oracle | SA134, SA124, SA118, SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | wheelhouse set but no wheel matches → returns the manifest spec; a corrupt state file returns silently; a skip where a failure belongs | SA150, SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA142, SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
@@ -75,97 +75,28 @@ The worktree grouping follows it directly:
 
 ## Why band A goes first (the argument in one page)
 
-Of the 14 `scripts/test_*.py` conformance suites, **10 are wired to no target at all**.
-They are the suites that prove the gate layer — scope allowlist, gate registry, parity,
-quality baseline — behaves as declared. Repeated repair passes (archived in
-[CHANGELOG.md](../../CHANGELOG.md)) have made that population green, but green is not the
-point: nothing *runs* it, so nothing will notice the next time it goes red.
+The `scripts/test_*.py` conformance population now has an owning registered execution
+context. Its closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md), so the
+scope allowlist, gate registry, parity, and quality-baseline suites run through the same
+declared gate layer they protect.
 
 Now read the execution rule every ticket in this release inherits: *"Leave `make quality`
 no worse than found."* That rule, and every other ticket's acceptance criteria, are
 discharged by gates in this population. SA124's headline criterion —
-*"`scripts/test_check_sa117_scope.py` covers the divergence failure"* — lands in a suite
-nothing executes unless SA155 lands first. So do SA123's new gates.
+*"`scripts/test_check_sa117_scope.py` covers the divergence failure"* — now lands in a suite
+with a declared execution context. SA123's future gates inherit that context.
 
 **Band A is not tidying. It is the difference between shipping tickets and shipping
 claims about tickets.**
 
 ---
 
-# Band A — Make the gate layer tell the truth
+## Band A — gate-layer closure
 
-Band A is now a single ticket: **SA155**, the integrating W2 leg. Its four former
-band-A siblings are closed; see [CHANGELOG.md](../../CHANGELOG.md).
-
-## SA155 — Give the gate layer a gate of its own
-
-`Band A · Tier 1 · W2 · merge #7 · deps: none — every prerequisite is merged`
-
-### The mental model
-
-Every piece of first-party code in this repository has an **owning execution context** —
-something that runs it and fails if it breaks. `TEST_DIRS` in `Makefile:150` names them.
-
-`scripts/` is deliberately outside `TEST_DIRS` and outside `.coveragerc`. The reasoning is
-sound: gate helpers are not product code and should not be dragged into the product
-coverage metric.
-
-But the consequence was not noticed: **gate code is the only first-party code with no
-owning execution context** — while being the code every other gate's credibility rests on.
-
-> The gates check the product. Nothing checks the gates.
-
-### The concrete measurement
-
-- 14 `scripts/test_*.py` suites. **4 wired to a target. 10 wired to nothing.**
-- `git log -S` shows the orphans were **never** wired. This is not decay; the wiring never
-  existed, and the population grows by one with every new gate.
-- Historical pre-repair execution under the project interpreter: **959 passed, 74 failed**,
-  across code nothing ran. Every one of those failures has since been repaired by a separate
-  ticket, and the population now reports **1,213 passed** under the project interpreter.
-
-That history is the argument, not a live failure list: the suites went red, stayed red for
-an entire branch, and were found by an audit rather than by a gate. SA155 must therefore
-register them **green** and keep them that way — the acceptance bar is an owning execution
-context, not a passing run.
-
-### What is already closed — preserve it
-
-Hosted **job membership** is genuinely closed by `sync_ci_gate_jobs.py:314-320`. Do not
-disturb that; it is the working half.
-
-The gap is the **suites** and the **non-`ci.yml` contexts**. And note precisely why parity
-checking cannot find it: `check_gate_parity.py:2509-2511` **filters rather than asserts**.
-So parity proves *registered → present*, and never *present → registered*. A suite that
-exists but is registered nowhere is invisible to the very tool designed to catch that.
-
-### The option choice, already made
-
-- **Option 1 — take this.** One registered `check-gate-suites` target running
-  `pytest scripts/ --no-cov`, keeping `scripts/` out of the coverage metric. Minimal, and
-  it preserves the deliberate coverage decision.
-- **Option 2 — leave to SA123.** A per-gate `self_test` registry binding. Finer-grained,
-  but it bumps the registry schema, and SA123 is already doing registry work.
-- **Option 3 — explicitly out of scope.** Relocating the helpers into a first-party
-  package. It collides with SA124's in-flight `sa117_scope.json` edits.
-
-### The criterion that carries the ticket
-
-*"the gate is registered **green** — all 74 failures are resolved by the dependency tickets
-before registration, verified by a recorded pass/fail baseline."*
-
-Registering a red gate creates a **known-failing required check**, and a known-failing
-required check gets bypassed within a week and then ignored forever. That outcome is
-strictly worse than today, because today at least nobody believes the suites are covered.
-
-Record the baseline before and after. It is the evidence.
-
-### The loose ends to close while you are here
-
-Six `UNOWNED_JOB_IDS` entries need each to be justified in writing or registered. One is
-specifically named: `isolation-conformance` has **no Makefile target** and is invoked only
-from `ci.yml:634` — meaning a developer cannot run it locally by any documented route.
-Resolve that one explicitly rather than folding it into a blanket justification.
+The gate-layer closure evidence, including the current scripts census, registry
+projection, hosted job closure, and isolation Make entrypoint, is archived in
+[CHANGELOG.md](../../CHANGELOG.md). The remaining W2 work starts after this completed
+band-A leg; SA124 and SA123 inherit the registered, green scripts execution context.
 
 ---
 
@@ -312,13 +243,12 @@ is historical and needs no action.
 
 # Band B / W2 — Gates and declared wiring
 
-Everything here merges **after** band A. SA124 in particular must not start before SA155
-lands, because its acceptance criterion is written into a suite SA155 gives an execution
-context.
+Everything here merges **after** the completed band-A gate-layer work. SA124's acceptance
+criterion is now written into a suite with a declared execution context.
 
 ## SA124 — Unify SA117 scope-tool path authority
 
-`Band B · Tier 1 · W2 · merge #11 · deps: SA155`
+`Band B · Tier 1 · W2 · merge #11 · deps: none — gate-layer closure complete`
 
 ### The mental model
 
@@ -492,7 +422,7 @@ W3 holds the **exclusive PostgreSQL/Docker slot** for the release. Only one of t
 
 ## SA142 — Reuse and clean E2E Docker images
 
-`Band B · Tier 1 · W3 · merge #10 · deps: none (SA151 closed) · Docker slot`
+`Band B · Tier 1 · W3 · merge #10 · deps: none (SA151 checkpoint retained) · Docker slot`
 
 ### The mental model
 
@@ -640,7 +570,7 @@ declaratively — it is hand-replicated as shell.
 
 ### The census
 
-Fourteen stations state the same environment:
+Thirteen stations state the same environment:
 
 | Thing | Copies | Where |
 |---|---|---|
@@ -918,7 +848,7 @@ environment. Documentation only — do not change the derivation.
 
 ## SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items
 
-`Band C · Tier 3 · W2 · merge #25 · deps: SA166; SA151 content dependency satisfied`
+`Band C · Tier 3 · W2 · merge #25 · deps: SA166; SA151 content dependency remains open`
 
 ### The mental model
 
@@ -976,7 +906,7 @@ watch half of Finding 13. Keep their triggers intact — restating is the work, 
 
 ## SA166 — Require a testimony trail for behavioural commits
 
-`Band C · Tier 3 · W2 · merge #24 · deps: SA155, SA118, SA167c`
+`Band C · Tier 3 · W2 · merge #24 · deps: SA118, SA167c`
 
 ### The mental model
 
@@ -994,11 +924,11 @@ topology change**. It was read closely only because the arch audit's delta-class
 step treats unlabeled-behavioural commits as read-at-full-depth. Absent that convention, it
 would have shipped unexamined — and it did ship a red test.
 
-### Why it is Tier 3 and sits behind SA155
+### Why it is Tier 3 and sits behind the gate-layer work
 
-The audit records this as **maintainer-process risk**, not a source finding. And a process
-gate is worth very little while the gate layer it would run in is itself unexecuted — which
-is exactly the SA155 problem. Fix the layer, then add to it.
+The audit records this as **maintainer-process risk**, not a source finding. The registered
+gate layer is now an executed context, so this ticket can add its process evidence without
+reopening the completed gate-suite work.
 
 ### The design constraint that decides whether this succeeds
 
@@ -1024,7 +954,7 @@ not authorize implementing it**, and none may be pulled into a v88 ticket.
 
 ## SA152 — Refresh the beta-migration maintainer targets
 
-`Post-v88 · Tier 3 · deps: none (SA151 closed)`
+`Post-v88 · Tier 3 · deps: none (SA151 checkpoint retained)`
 
 The 2026-08-21 audit found the **mechanics current**: the Makefile flag surface (`DONOR`,
 `RECIPIENT`, `DRY_RUN`, `CONTINUE`, `REPORT`) matches `build_argument_parser()`, every
@@ -1104,18 +1034,16 @@ Follow the merge order in the roadmap. It is the answer.
 
 Each step builds the one after it:
 
-1. **SA155** — the structural version of every band-A defect this release already closed.
-   Not "a test is wrong" but "an entire category of code has no owner."
-2. **SA150** — the clearest instance of silent fallback; four lines of code, precisely
+1. **SA150** — the clearest instance of silent fallback; four lines of code, precisely
    diagnosable.
-3. **SA134** — duplicated authority plus the tautology trap, which is where judgement starts
+2. **SA134** — duplicated authority plus the tautology trap, which is where judgement starts
    mattering.
-4. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
-5. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
+3. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
+4. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
    (bypassed RLS roles).
-6. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
+5. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
    about existing conventions (scope allowlist, gate registry, emission-parity fixture).
-7. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
+6. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
 
 ### The three traps this release keeps setting
 
@@ -1124,9 +1052,9 @@ Worth holding as a set, because each appears in more than one ticket:
 - **The tautology trap** (SA134). A test that reads the authoritative value and asserts the
   authoritative value passes for any value, including nonsense. Derive *wiring* assertions;
   keep *negative controls* literal.
-- **The wrong-fix trap** (SA162, and SA155's Option 3). An audit's finding and an audit's
+- **The wrong-fix trap** (SA162). An audit's finding and an audit's
   suggested fix carry different verification. `not val` would have broken the CSRF gate.
-- **The green-by-absence trap** (SA155, SA135, SA152, SA165). Skipping, filtering,
+- **The green-by-absence trap** (SA135, SA152, SA165). Skipping, filtering,
   and unresolvable paths all produce green. Every one of them must be made to produce red.
 
 

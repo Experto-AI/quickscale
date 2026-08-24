@@ -64,7 +64,8 @@
         version-check version-update bump-version \
         check-core-compat check-module-core-imports check-manifest-sync \
         check-org-context-primitives \
-         check-csrf-exempt check-gate-parity check-ci-gate-generation \
+         check-csrf-exempt check-gate-suites isolation-conformance \
+         check-gate-parity check-ci-gate-generation \
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
         sa117-capture sa117-verify sa117-authorize sa117-rollback \
         sa117-apply sa117-check-origin sa117-check-containers \
@@ -227,6 +228,8 @@ help:
 	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
+	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
+	@echo "  make isolation-conformance         - Run the PostgreSQL isolation-conformance suite"
 	@echo "  make check-gate-parity            - SA122a: verify declared gates match every execution context (exit 0 = parity, 1 = JSONL diffs)"
 	@echo "  make check-ci-gate-generation     - SA122b: verify registry-bound hosted CI jobs are generated and current"
 	@echo ""
@@ -875,6 +878,96 @@ check-org-context-primitives:
 # Exits 1 on any unprotected csrf_exempt usage.
 check-csrf-exempt:
 	@$(PYTHON) scripts/check_csrf_exempt_gate.py
+
+# Run every scripts/test_*.py suite without pytest cache artifacts or product
+# coverage.  ``make check`` reaches this target through the registry-derived
+# prerequisite list; the token/sentinel guard prevents those suites' own Make
+# checks from re-entering the aggregate target.  A nested invocation is
+# skipped only when its opaque token, sentinel contents, live process ancestry,
+# and kernel-observed Make recipe ownership all agree.  The EXIT trap is armed
+# before allocating the sentinel so
+# every allocation path cleans up, including signal exits.
+check-gate-suites:
+	@set -e; \
+	check_gate_sentinel=""; \
+	check_gate_cache_was_present=false; \
+	if [ -e .pytest_cache ]; then check_gate_cache_was_present=true; fi; \
+	check_gate_token="$${RANDOM}:$${RANDOM}:$$$$:$${PPID}:$${SECONDS}"; \
+	check_gate_cleanup() { \
+		check_gate_status=$$?; \
+		trap - EXIT; \
+		if [ -n "$$check_gate_sentinel" ]; then rm -f -- "$$check_gate_sentinel"; fi; \
+		if [ "$$check_gate_cache_was_present" = false ]; then rm -rf -- .pytest_cache || true; fi; \
+		exit "$$check_gate_status"; \
+	}; \
+	trap check_gate_cleanup EXIT; \
+	trap 'exit 129' HUP; \
+	trap 'exit 130' INT; \
+	trap 'exit 143' TERM; \
+	check_gate_is_live_ancestor() { \
+		check_gate_owner="$$1"; \
+		check_gate_current="$$$$"; \
+		while [ "$$check_gate_current" -gt 1 ]; do \
+			if [ "$$check_gate_current" = "$$check_gate_owner" ]; then return 0; fi; \
+			check_gate_parent=""; \
+			while read -r check_gate_field check_gate_value _check_gate_rest; do \
+				if [ "$$check_gate_field" = "PPid:" ]; then check_gate_parent="$$check_gate_value"; break; fi; \
+			done < "/proc/$$check_gate_current/status" 2>/dev/null || return 1; \
+			case "$$check_gate_parent" in ''|*[!0-9]*) return 1;; esac; \
+			if [ "$$check_gate_parent" = "$$check_gate_current" ]; then return 1; fi; \
+			check_gate_current="$$check_gate_parent"; \
+		done; \
+		return 1; \
+	}; \
+	check_gate_owner_is_make_recipe() { \
+		check_gate_owner="$$1"; \
+		check_gate_owner_parent=""; \
+		while read -r check_gate_field check_gate_value _check_gate_rest; do \
+			if [ "$$check_gate_field" = "PPid:" ]; then check_gate_owner_parent="$$check_gate_value"; break; fi; \
+		done < "/proc/$$check_gate_owner/status" 2>/dev/null || return 1; \
+		case "$$check_gate_owner_parent" in ''|*[!0-9]*) return 1;; esac; \
+		check_gate_owner_parent_comm=""; \
+		IFS= read -r check_gate_owner_parent_comm < "/proc/$$check_gate_owner_parent/comm" 2>/dev/null || return 1; \
+		case "$$check_gate_owner_parent_comm" in make|gmake) return 0;; *) return 1;; esac; \
+	}; \
+	check_gate_authorized=false; \
+	check_gate_inherited_token="$${QUICKSCALE_CHECK_GATE_SUITES_TOKEN:-}"; \
+	check_gate_inherited_sentinel="$${QUICKSCALE_CHECK_GATE_SUITES_SENTINEL:-}"; \
+	if [ -n "$$check_gate_inherited_token" ] && [ -n "$$check_gate_inherited_sentinel" ]; then \
+		check_gate_owner=""; \
+		check_gate_first=""; check_gate_second=""; check_gate_extra=""; \
+		if [ -f "$$check_gate_inherited_sentinel" ] && [ ! -L "$$check_gate_inherited_sentinel" ] && { \
+			IFS= read -r check_gate_first && \
+			IFS= read -r check_gate_second && \
+			! IFS= read -r check_gate_extra; \
+		} < "$$check_gate_inherited_sentinel"; then \
+			if [ "$$check_gate_first" = "$$check_gate_inherited_token" ]; then \
+				check_gate_owner="$$check_gate_second"; \
+				case "$$check_gate_owner" in ''|*[!0-9]*) ;; *) \
+					if [ "$$check_gate_owner" -gt 1 ] && \
+						check_gate_is_live_ancestor "$$check_gate_owner" && \
+						check_gate_owner_is_make_recipe "$$check_gate_owner"; then \
+						check_gate_authorized=true; \
+					fi; \
+				esac; \
+			fi; \
+		fi; \
+	fi; \
+	if [ "$$check_gate_authorized" = true ]; then \
+		unset QUICKSCALE_CHECK_GATE_SUITES_TOKEN QUICKSCALE_CHECK_GATE_SUITES_SENTINEL; \
+		exit 0; \
+	fi; \
+	unset QUICKSCALE_CHECK_GATE_SUITES_TOKEN QUICKSCALE_CHECK_GATE_SUITES_SENTINEL; \
+	check_gate_sentinel="$$(mktemp "$${TMPDIR:-/tmp}/quickscale-check-gate-suites.XXXXXX")"; \
+	printf '%s\n%s\n' "$$check_gate_token" "$$$$" > "$$check_gate_sentinel"; \
+	export QUICKSCALE_CHECK_GATE_SUITES_TOKEN="$$check_gate_token"; \
+	export QUICKSCALE_CHECK_GATE_SUITES_SENTINEL="$$check_gate_sentinel"; \
+	$(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
+
+# The isolation runner owns its full behavior and prerequisites.  Keep this
+# target as a thin Make delegation; hosted CI uses the same caller.
+isolation-conformance:
+	@scripts/test_isolation_conformance.sh
 
 # --- Gate Registry Parity Check (SA122a) ---
 

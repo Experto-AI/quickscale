@@ -75,6 +75,24 @@ from sync_ci_gate_jobs import (
     expected_workflow_text,
 )
 
+
+def test_markerless_bootstrap_without_catalog_owned_jobs_fails_cleanly() -> None:
+    """A markerless workflow with no hosted catalog job raises GeneratorError, not IndexError."""
+    gates = sync_ci_gate_jobs_module._parse_registry(sync_ci_gate_jobs_module.DEFAULT_REGISTRY)
+    lines = [
+        "name: CI\n",
+        "jobs:\n",
+        "  unrelated:\n",
+        "    name: Unrelated Job\n",
+    ]
+
+    with pytest.raises(
+        sync_ci_gate_jobs_module.GeneratorError,
+        match="no catalog-owned jobs were found",
+    ):
+        sync_ci_gate_jobs_module._bootstrap_job_markers(lines, gates)
+
+
 SCRIPT = Path(__file__).with_name("check_gate_parity.py")
 REPO_ROOT = SCRIPT.parents[1]
 CHECK_CI = REPO_ROOT / "scripts" / "check_ci_locally.sh"
@@ -822,6 +840,7 @@ class TestParserPrecision:
                 "manifest-sync-gate",
                 "org-context-primitives-gate",
                 "csrf-exempt-gate",
+                "check-gate-suites",
             }
         )
         assert expected_jobs.issubset(ci_jobs), (
@@ -1029,6 +1048,7 @@ class TestParserPrecision:
         """Hosted dependency edges are observed structurally and in order."""
         assert _extract_ci_needs(CI_YML) == {
             "backups-validation": (),
+            "check-gate-suites": (),
             "csrf-exempt-gate": (),
             "isolation-conformance": (
                 "backups-validation",
@@ -1036,6 +1056,7 @@ class TestParserPrecision:
                 "manifest-sync-gate",
                 "org-context-primitives-gate",
                 "csrf-exempt-gate",
+                "check-gate-suites",
             ),
             "lint-cli": (
                 "backups-validation",
@@ -1043,6 +1064,7 @@ class TestParserPrecision:
                 "manifest-sync-gate",
                 "org-context-primitives-gate",
                 "csrf-exempt-gate",
+                "check-gate-suites",
             ),
             "lint-frontend": (),
             "manifest-sync-gate": (),
@@ -1058,17 +1080,19 @@ class TestParserPrecision:
                 "manifest-sync-gate",
                 "org-context-primitives-gate",
                 "csrf-exempt-gate",
+                "check-gate-suites",
             ),
         }
 
-    def test_all_ten_bound_hosted_run_values_match_current_source(self) -> None:
-        """The five bound hosted jobs expose their ten exact run values."""
+    def test_all_twelve_bound_hosted_run_values_match_current_source(self) -> None:
+        """The six bound hosted jobs expose their twelve exact run values."""
         bound_jobs = {
             "module-core-compat",
             "module-core-import-linter",
             "manifest-sync-gate",
             "org-context-primitives-gate",
             "csrf-exempt-gate",
+            "check-gate-suites",
         }
         assert _extract_hosted_run_values(CI_YML, bound_jobs) == {
             "module-core-compat": ("poetry install --with dev\n", "make check-core-compat\n"),
@@ -1082,6 +1106,7 @@ class TestParserPrecision:
                 "make check-org-context-primitives\n",
             ),
             "csrf-exempt-gate": ("poetry install --with dev\n", "make check-csrf-exempt\n"),
+            "check-gate-suites": ("poetry install --with dev\n", "make check-gate-suites\n"),
         }
 
     def test_all_twenty_four_publish_run_values_are_structural(self) -> None:
@@ -2749,6 +2774,7 @@ class TestMakefileTargetParsing:
             "check-core-compat",
             "check-csrf-exempt",
             "check-gate-parity",
+            "check-gate-suites",
             "check-manifest-sync",
             "check-module-core-imports",
             "check-org-context-primitives",
@@ -3212,7 +3238,7 @@ class TestMakeRegistryDerivation:
         output = result.stdout + result.stderr
         assert (
             "make check-core-compat check-module-core-imports check-manifest-sync "
-            "check-org-context-primitives check-csrf-exempt check-gate-parity"
+            "check-org-context-primitives check-csrf-exempt check-gate-suites check-gate-parity"
         ) in output
 
     def test_local_non_check_gate_is_excluded_without_makefile_edit(self, tmp_path: Path) -> None:
@@ -3255,7 +3281,7 @@ class TestMakeRegistryDerivation:
         output = result.stdout + result.stderr
         assert (
             "make check-core-compat check-module-core-imports check-manifest-sync "
-            "check-org-context-primitives check-csrf-exempt"
+            "check-org-context-primitives check-csrf-exempt check-gate-suites"
         ) in output
         assert "make temporary-local-non-check" not in output
 
@@ -3297,7 +3323,7 @@ class TestHostedCiGateGeneration:
         workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
         registry = _parse_registry(DEFAULT_REGISTRY)
         jobs, needs, run_values = self._projection(workflow_text)
-        assert len(jobs) == 11
+        assert len(jobs) == 12
         assert needs["test"] == (
             "backups-validation",
             "module-manifest-contract",
@@ -3306,6 +3332,7 @@ class TestHostedCiGateGeneration:
             "manifest-sync-gate",
             "org-context-primitives-gate",
             "csrf-exempt-gate",
+            "check-gate-suites",
         )
         for consumer in ("isolation-conformance", "lint-cli"):
             assert needs[consumer] == (
@@ -3314,6 +3341,7 @@ class TestHostedCiGateGeneration:
                 "manifest-sync-gate",
                 "org-context-primitives-gate",
                 "csrf-exempt-gate",
+                "check-gate-suites",
             )
         assert run_values["module-core-compat"][-1] == "make check-core-compat\n"
         assert expected_workflow_text(workflow_text, registry) == workflow_text
@@ -3385,7 +3413,7 @@ class TestHostedCiGateGeneration:
         assert (
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, "
-            "csrf-exempt-gate]" in generated
+            "csrf-exempt-gate, check-gate-suites]" in generated
         )
         assert expected_workflow_text(generated, gates) == generated
 
@@ -3435,7 +3463,7 @@ class TestHostedCiGateGeneration:
         assert (
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, "
-            "csrf-exempt-gate]" in generated
+            "csrf-exempt-gate, check-gate-suites]" in generated
         )
         assert expected_workflow_text(generated, gates) == generated
 
@@ -3472,7 +3500,7 @@ class TestHostedCiGateGeneration:
         assert (
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, "
-            "csrf-exempt-gate]" in written
+            "csrf-exempt-gate, check-gate-suites]" in written
         )
 
         clean = subprocess.run(
@@ -3529,7 +3557,8 @@ class TestHostedCiGateGeneration:
         relocated = current.replace(begin, "", 1).replace(end, "", 1)
         needs_line = (
             "    needs: [backups-validation, module-manifest-contract, "
-            "manifest-sync-gate, org-context-primitives-gate, csrf-exempt-gate]\n"
+            "manifest-sync-gate, org-context-primitives-gate, csrf-exempt-gate, "
+            "check-gate-suites]\n"
         )
         relocated = relocated.replace(needs_line, begin + needs_line + end, 1)
         with pytest.raises(GeneratorError, match="not owned by its top-level job"):

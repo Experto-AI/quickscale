@@ -63,8 +63,26 @@ HOSTED_GATE_ORDER = (
     "check-manifest-sync",
     "check-org-context-primitives",
     "check-csrf-exempt",
+    "check-gate-suites",
 )
-UNOWNED_JOB_IDS = frozenset(
+UNOWNED_JOB_RATIONALES = {
+    "lint-frontend": "Frontend toolchain validation remains a separately owned hosted job.",
+    "backups-validation": (
+        "Hosted PostgreSQL 18 service and client validation remains a fail-fast job."
+    ),
+    "module-manifest-contract": (
+        "The ready-module contract is a separately owned hosted contract job."
+    ),
+    "test": (
+        "The hosted unit and integration test job retains its service-backed workflow ownership."
+    ),
+    "isolation-conformance": (
+        "Hosted-only service-backed isolation remains unowned pending later lifecycle work."
+    ),
+    "lint-cli": "CLI package linting remains a separately owned hosted package job.",
+}
+UNOWNED_JOB_IDS = frozenset(UNOWNED_JOB_RATIONALES)
+EXPECTED_UNOWNED_JOB_IDS = frozenset(
     {
         "lint-frontend",
         "backups-validation",
@@ -80,11 +98,13 @@ NEEDS_GATE_IDS = {
         "check-manifest-sync",
         "check-org-context-primitives",
         "check-csrf-exempt",
+        "check-gate-suites",
     ),
     "lint-cli": (
         "check-manifest-sync",
         "check-org-context-primitives",
         "check-csrf-exempt",
+        "check-gate-suites",
     ),
 }
 FIXED_NEEDS = ("backups-validation", "module-manifest-contract")
@@ -119,11 +139,27 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
         "CSRF-Exempt Gate (SA46)",
         "Verify every csrf_exempt callsite pairs with _enforce_csrf or signature verification",
     ),
+    "check-gate-suites": HostedJobSpec(
+        "Registered Script Gate Suites",
+        "Run registered scripts test suites",
+    ),
 }
 
 
 class GeneratorError(ValueError):
     """A deterministic malformed-input or invariant failure."""
+
+
+def _validate_unowned_job_rationales() -> None:
+    if frozenset(UNOWNED_JOB_RATIONALES) != EXPECTED_UNOWNED_JOB_IDS:
+        raise GeneratorError(
+            "unowned hosted-job rationale keys do not match the six-job exemption set"
+        )
+    if any(
+        not isinstance(reason, str) or not reason.strip()
+        for reason in UNOWNED_JOB_RATIONALES.values()
+    ):
+        raise GeneratorError("every unowned hosted job must have a nonempty rationale")
 
 
 class _DuplicateYamlKeyError(ValueError):
@@ -267,9 +303,11 @@ def _job_steps(job: dict[str, Any], job_id: str) -> list[dict[str, Any]]:
     return steps
 
 
-def _locate_hosted_jobs(jobs: dict[str, Any], label: str) -> dict[str, str]:
+def _locate_hosted_jobs(
+    jobs: dict[str, Any], label: str, *, allow_missing: bool = False
+) -> dict[str, str]:
     """
-    Locate the five hosted jobs by their static catalog display names.
+    Locate the six hosted jobs by their static catalog display names.
 
     Display metadata is helper-owned and static, so the generated job IDs may
     be stale before an edit: a registry ``ci_job`` (F-005) or Make-target
@@ -284,6 +322,8 @@ def _locate_hosted_jobs(jobs: dict[str, Any], label: str) -> dict[str, str]:
             for job_id, job in jobs.items()
             if isinstance(job, dict) and job.get("name") == spec.display_name
         ]
+        if not matches and allow_missing:
+            continue
         if len(matches) != 1:
             raise GeneratorError(f"{label}: expected exactly one job named {spec.display_name!r}")
         located[gate_id] = matches[0]
@@ -306,11 +346,12 @@ def _validate_workflow_projection(
     jobs = workflow.get("jobs")
     if not isinstance(jobs, dict):
         raise GeneratorError("ci.yml: jobs must be a mapping")
+    _validate_unowned_job_rationales()
     bindings = _registry_bindings(gates)
     if strict:
         hosted_locations = {gate_id: bindings[gate_id][0] for gate_id in HOSTED_GATE_ORDER}
     else:
-        hosted_locations = _locate_hosted_jobs(jobs, "ci.yml")
+        hosted_locations = _locate_hosted_jobs(jobs, "ci.yml", allow_missing=True)
     expected_job_ids = UNOWNED_JOB_IDS | set(hosted_locations.values())
     actual_job_ids = frozenset(jobs)
     if actual_job_ids != expected_job_ids:
@@ -320,7 +361,11 @@ def _validate_workflow_projection(
         )
 
     for gate_id in HOSTED_GATE_ORDER:
-        job_id = hosted_locations[gate_id]
+        job_id = hosted_locations.get(gate_id)
+        if job_id is None:
+            if strict:
+                raise GeneratorError(f"ci.yml: hosted job for {gate_id!r} is missing")
+            continue
         job = jobs.get(job_id)
         if not isinstance(job, dict):
             raise GeneratorError(f"ci.yml: jobs.{job_id} must be a mapping")
@@ -580,9 +625,9 @@ def _top_level_job_headers(lines: list[str]) -> list[tuple[int, str]]:
     return headers
 
 
-def _locate_hosted_job_headers(lines: list[str]) -> list[int]:
+def _locate_hosted_job_headers(lines: list[str], *, allow_missing: bool = False) -> list[int]:
     """
-    Locate the five hosted job header lines by their display names.
+    Locate the six hosted job header lines by their display names.
 
     Use static display metadata to find the (possibly stale) hosted job IDs;
     this permits a registry ``ci_job`` (F-005) or Make-target edit while
@@ -604,9 +649,13 @@ def _locate_hosted_job_headers(lines: list[str]) -> list[int]:
                 ]
             )
         ]
+        if not found and allow_missing:
+            continue
         if len(found) != 1:
             raise GeneratorError(f"hosted job bootstrap: expected one job named {expected_name!r}")
         starts.append(found[0])
+    if not starts:
+        return []
     headers_between = [position for position, _ in headers if starts[0] <= position <= starts[-1]]
     if starts != sorted(starts) or headers_between != starts:
         raise GeneratorError(
@@ -616,7 +665,9 @@ def _locate_hosted_job_headers(lines: list[str]) -> list[int]:
 
 
 def _bootstrap_job_markers(lines: list[str], gates: list[dict[str, Any]]) -> list[str]:
-    starts = _locate_hosted_job_headers(lines)
+    starts = _locate_hosted_job_headers(lines, allow_missing=True)
+    if not starts:
+        raise GeneratorError("hosted job bootstrap: no catalog-owned jobs were found")
     first = starts[0]
     last = starts[-1]
     next_header = next(
@@ -676,7 +727,7 @@ def _validate_marked_regions(lines: list[str], gates: list[dict[str, Any]]) -> N
     # The region's job IDs may be stale (registry ci_job rename, F-005);
     # display-name ownership keeps the marked-region checks independent of
     # generated job text while still requiring exactly the hosted jobs.
-    located_starts = _locate_hosted_job_headers(lines)
+    located_starts = _locate_hosted_job_headers(lines, allow_missing=True)
     located_by_index = {index: job_id for index, job_id in headers}
     located_ids = tuple(located_by_index[position] for position in located_starts)
     enclosed_jobs = tuple(job_id for index, job_id in headers if job_begin < index < job_end)

@@ -19,11 +19,15 @@ from __future__ import annotations
 import json
 import math
 import os
+import signal
 import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 from pathlib import Path
+
+import pytest
 
 from scripts.check_coverage_policy import check_policy
 
@@ -626,6 +630,7 @@ class TestMakefileGateTargetDerivation:
         "check-manifest-sync",
         "check-org-context-primitives",
         "check-csrf-exempt",
+        "check-gate-suites",
     )
 
     def _derive_targets(self, cwd: Path, *, registry: Path | None = None) -> str:
@@ -677,6 +682,273 @@ class TestMakefileGateTargetDerivation:
         assert from_root == from_tmp == from_tmp_with_absolute_override
 
 
+class TestRegisteredScriptGateTarget:
+    """Behavioural contracts for the cache-free aggregate scripts gate."""
+
+    MAKEFILE_PATH = Path(__file__).resolve().parents[1] / "Makefile"
+    REPO_ROOT = MAKEFILE_PATH.parent
+
+    def _write_fake_python(self, tmp_path: Path) -> tuple[Path, Path]:
+        """Create a fake Python runner that records the gate's exact argv."""
+        script = tmp_path / "fake_gate_python.py"
+        log = tmp_path / "gate-events.jsonl"
+        script.write_text(
+            textwrap.dedent(
+                f"""\
+                #!{sys.executable}
+                import json
+                import os
+                import signal
+                import subprocess
+                import sys
+                import time
+                from pathlib import Path
+
+                args = sys.argv[1:]
+                if "--print-check-targets" in args:
+                    print(
+                        "check-core-compat check-module-core-imports check-manifest-sync "
+                        "check-org-context-primitives check-csrf-exempt check-gate-suites"
+                    )
+                    raise SystemExit(0)
+                if args[:2] != ["-m", "pytest"]:
+                    raise SystemExit(f"unexpected fake Python argv: {{args!r}}")
+
+                event = {{
+                    "args": args,
+                    "pid": os.getpid(),
+                    "ppid": os.getppid(),
+                    "sentinel": os.environ.get("QUICKSCALE_CHECK_GATE_SUITES_SENTINEL", ""),
+                    "token": os.environ.get("QUICKSCALE_CHECK_GATE_SUITES_TOKEN", ""),
+                }}
+                with Path({str(log)!r}).open("a", encoding="utf-8") as stream:
+                    json.dump(event, stream)
+                    stream.write("\\n")
+
+                if os.environ.get("FAKE_GATE_RECURSE") == "1":
+                    nested_env = os.environ.copy()
+                    nested_env.pop("FAKE_GATE_RECURSE", None)
+                    nested = subprocess.run(
+                        [
+                            "make",
+                            "--no-print-directory",
+                            "-f",
+                            {str(self.MAKEFILE_PATH)!r},
+                            f"PYTHON={{sys.argv[0]}}",
+                            "check-gate-suites",
+                        ],
+                        cwd={str(self.REPO_ROOT)!r},
+                        env=nested_env,
+                        check=False,
+                    )
+                    raise SystemExit(nested.returncode)
+
+                if os.environ.get("FAKE_GATE_READY"):
+                    Path(os.environ["FAKE_GATE_READY"]).write_text("READY\\n", encoding="utf-8")
+                    def stop(signal_number, _frame):
+                        raise SystemExit(128 + signal_number)
+
+                    signal.signal(signal.SIGTERM, stop)
+                    signal.signal(signal.SIGINT, stop)
+                    signal.signal(signal.SIGHUP, stop)
+                    while True:
+                        time.sleep(1)
+
+                raise SystemExit(int(os.environ.get("FAKE_GATE_EXIT", "0")))
+                """
+            ),
+            encoding="utf-8",
+        )
+        script.chmod(0o755)
+        return script, log
+
+    def _run_gate(
+        self,
+        tmp_path: Path,
+        *,
+        fake_exit: int = 0,
+        recurse: bool = False,
+        extra_env: dict[str, str] | None = None,
+    ) -> tuple[subprocess.CompletedProcess[str], Path]:
+        fake_python, log = self._write_fake_python(tmp_path)
+        temp_dir = tmp_path / "tmp"
+        temp_dir.mkdir()
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "FAKE_GATE_EXIT": str(fake_exit),
+                "FAKE_GATE_RECURSE": "1" if recurse else "",
+                "TMPDIR": str(temp_dir),
+            }
+        )
+        environment.pop("QUICKSCALE_CHECK_GATE_SUITES_TOKEN", None)
+        environment.pop("QUICKSCALE_CHECK_GATE_SUITES_SENTINEL", None)
+        if extra_env:
+            environment.update(extra_env)
+        result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "-f",
+                str(self.MAKEFILE_PATH),
+                f"PYTHON={fake_python}",
+                "check-gate-suites",
+            ],
+            cwd=self.REPO_ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        return result, log
+
+    @staticmethod
+    def _events(log: Path) -> list[dict[str, str | list[str]]]:
+        if not log.exists():
+            return []
+        return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+
+    def test_exact_cache_free_argv_and_cleanup(self, tmp_path: Path) -> None:
+        """The target invokes pytest exactly once and removes its sentinel."""
+        coveragerc_before = (self.REPO_ROOT / ".coveragerc").read_bytes()
+        cache_path = self.REPO_ROOT / ".pytest_cache"
+        cache_existed_before = cache_path.exists()
+
+        result, log = self._run_gate(tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        events = self._events(log)
+        assert len(events) == 1
+        assert events[0]["args"] == [
+            "-m",
+            "pytest",
+            "scripts/",
+            "-p",
+            "no:cacheprovider",
+            "--no-cov",
+            "-q",
+        ]
+        assert "--cov" not in events[0]["args"]
+        sentinel = Path(str(events[0]["sentinel"]))
+        assert sentinel
+        assert not sentinel.exists()
+        assert cache_path.exists() == cache_existed_before
+        assert (self.REPO_ROOT / ".coveragerc").read_bytes() == coveragerc_before
+
+    def test_valid_live_ancestor_recursion_skips_nested_run(self, tmp_path: Path) -> None:
+        """Only the nested call inheriting the live outer guard is skipped."""
+        result, log = self._run_gate(tmp_path, recurse=True)
+
+        assert result.returncode == 0, result.stderr
+        assert len(self._events(log)) == 1
+        event = self._events(log)[0]
+        assert not Path(str(event["sentinel"])).exists()
+
+    @pytest.mark.parametrize("sentinel_content", [None, "wrong-token\\n999999999\\n", "bad\\n"])
+    def test_forged_or_stale_guard_runs_ordinarily(
+        self, tmp_path: Path, sentinel_content: str | None
+    ) -> None:
+        """Missing, malformed, and non-ancestor state cannot authorize a skip."""
+        sentinel = tmp_path / "inherited-sentinel"
+        if sentinel_content is not None:
+            sentinel.write_text(sentinel_content, encoding="utf-8")
+        result, log = self._run_gate(
+            tmp_path,
+            extra_env={
+                "QUICKSCALE_CHECK_GATE_SUITES_TOKEN": "wrong-token",
+                "QUICKSCALE_CHECK_GATE_SUITES_SENTINEL": str(sentinel),
+            },
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert len(self._events(log)) == 1
+        assert not Path(str(self._events(log)[0]["sentinel"])).exists()
+        if sentinel_content is not None:
+            assert sentinel.read_text(encoding="utf-8") == sentinel_content
+
+    def test_live_non_recipe_ancestor_guard_runs_ordinarily(self, tmp_path: Path) -> None:
+        """Caller-provided state cannot turn an ordinary invocation into a no-op."""
+        sentinel = tmp_path / "live-ancestor-sentinel"
+        sentinel.write_text(f"caller-token\n{os.getpid()}\n", encoding="utf-8")
+
+        result, log = self._run_gate(
+            tmp_path,
+            extra_env={
+                "QUICKSCALE_CHECK_GATE_SUITES_TOKEN": "caller-token",
+                "QUICKSCALE_CHECK_GATE_SUITES_SENTINEL": str(sentinel),
+            },
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert len(self._events(log)) == 1
+        assert sentinel.read_text(encoding="utf-8") == f"caller-token\n{os.getpid()}\n"
+
+    def test_failure_status_cleans_sentinel(self, tmp_path: Path) -> None:
+        """A failing pytest process is not swallowed and still cleans up."""
+        result, log = self._run_gate(tmp_path, fake_exit=37)
+
+        # GNU Make reports a failed recipe as exit 2 while the fake runner's
+        # exact nonzero status remains the shell recipe's failure source.
+        assert result.returncode == 2
+        event = self._events(log)[0]
+        assert not Path(str(event["sentinel"])).exists()
+
+    @pytest.mark.parametrize(
+        ("signum", "shell_exit"),
+        [(signal.SIGTERM, 143), (signal.SIGINT, 130), (signal.SIGHUP, 129)],
+        ids=["TERM", "INT", "HUP"],
+    )
+    def test_signal_status_cleans_sentinel(
+        self, tmp_path: Path, signum: signal.Signals, shell_exit: int
+    ) -> None:
+        """Synchronized TERM/INT/HUP exits cleanly through the armed trap."""
+        ready = tmp_path / "ready"
+        result_log: Path | None = None
+        fake_python, log = self._write_fake_python(tmp_path)
+        temp_dir = tmp_path / "tmp"
+        temp_dir.mkdir()
+        environment = os.environ.copy()
+        environment.update({"FAKE_GATE_READY": str(ready), "TMPDIR": str(temp_dir)})
+        environment.pop("QUICKSCALE_CHECK_GATE_SUITES_TOKEN", None)
+        environment.pop("QUICKSCALE_CHECK_GATE_SUITES_SENTINEL", None)
+        process = subprocess.Popen(
+            [
+                "make",
+                "--no-print-directory",
+                "-f",
+                str(self.MAKEFILE_PATH),
+                f"PYTHON={fake_python}",
+                "check-gate-suites",
+            ],
+            cwd=self.REPO_ROOT,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        try:
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline and not ready.exists():
+                time.sleep(0.05)
+            assert ready.exists(), "fake pytest did not reach the guarded lifecycle point"
+            events = self._events(log)
+            assert len(events) == 1
+            result_log = Path(str(events[0]["sentinel"]))
+            os.killpg(process.pid, signum)
+            stdout, stderr = process.communicate(timeout=10)
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+
+        assert process.returncode == -signum, (stdout, stderr)
+        assert f"Error {shell_exit}" in stderr
+        assert result_log is not None
+        assert not result_log.exists()
+
+
 class TestMakefileCoveragePipeline:
     """Bounded behavioural assertions for the ``make test-cov`` pipeline."""
 
@@ -717,7 +989,8 @@ class TestMakefileCoveragePipeline:
                         "check-module-core-imports "
                         "check-manifest-sync "
                         "check-org-context-primitives "
-                        "check-csrf-exempt"
+                        "check-csrf-exempt "
+                        "check-gate-suites"
                     )
                     raise SystemExit(0)
 
@@ -1182,7 +1455,8 @@ class TestCheckQuietSectionDispatch:
                         "check-module-core-imports "
                         "check-manifest-sync "
                         "check-org-context-primitives "
-                        "check-csrf-exempt"
+                        "check-csrf-exempt "
+                        "check-gate-suites"
                     )
                     raise SystemExit(0)
                 raise SystemExit(0)
@@ -2231,7 +2505,8 @@ class TestCheckNormalFrontendLint:
                         "check-module-core-imports "
                         "check-manifest-sync "
                         "check-org-context-primitives "
-                        "check-csrf-exempt"
+                        "check-csrf-exempt "
+                        "check-gate-suites"
                     )
                     raise SystemExit(0)
                 raise SystemExit(0)

@@ -24,6 +24,8 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make test-e2e` - End-to-end validation with PostgreSQL and browser automation.
 - `make ci-e2e` - CI-parity release-gate validation including E2E.
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
+- `make check-gate-suites` - Run every `scripts/test_*.py` suite with pytest's cache provider and product coverage disabled.
+- `make isolation-conformance` - Run the PostgreSQL isolation-conformance suites through the repository-owned runner.
 - `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). Each mutable split-branch update requires a freshly observed exact 40-hex remote SHA. The accepted SA145 exact-SHA contract forbids `ABSENT`; it is not a valid input.
 
 **Assistant guidance:**
@@ -32,6 +34,8 @@ This companion owns repository validation entrypoints, testing standards, covera
 - Use `make test` or targeted `make test-unit` invocations for shared test runs.
 - Use `make ci-e2e` for release-gate validation when the full hardening and release path needs E2E coverage.
 - Use `make version-check` when verifying repository package-version parity.
+- Use `make check-gate-suites` when validating the registry's complete `scripts/` conformance population; it is cache-free and does not contribute product coverage.
+- Use `make isolation-conformance` when PostgreSQL 18, its pre-created test databases, the restricted role, and Poetry dependencies are already available. The target is a thin delegation and does not provision a local database.
 - Do not invent or document nonexistent helper scripts such as `./scripts/test_all.sh`.
 
 <a id="testing-standards"></a>
@@ -68,6 +72,24 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `factory_boy`.
 - `pytest-cov`.
 - GitHub Actions CI.
+
+### Registered script-gate and isolation execution
+
+The registry-derived local and hosted conformance flow includes six registered hosted
+gates. `make check-gate-suites` is the owning execution context for all current
+`scripts/test_*.py` suites and invokes exactly:
+
+```text
+$(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
+```
+
+The scripts directory remains outside `.coveragerc`; the product coverage source list
+and `fail_under = 90` are unchanged. The hosted CI job set also contains six
+separately justified unowned jobs, for twelve jobs total. `isolation-conformance` is
+one of those hosted-unowned jobs: Make exposes the same runner for local verification,
+but local execution still requires the PostgreSQL 18 service, pre-created databases,
+restricted role, and Poetry environment described by `scripts/test_isolation_conformance.sh`.
+No local PostgreSQL provisioning is implied by this target or policy.
 
 **Generated Projects Include:**
 - a sample `pytest-django` test demonstrating patterns

@@ -288,6 +288,11 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ All csrf_exempt callsites are protected"
             LOCAL_GATE_FAILURE_LABEL="CSRF-Exempt Gate"
             ;;
+        check-gate-suites)
+            LOCAL_GATE_DESCRIPTION="Running registered scripts test suites..."
+            LOCAL_GATE_SUCCESS="✓ Registered scripts test suites passed"
+            LOCAL_GATE_FAILURE_LABEL="Registered Script Test Suites"
+            ;;
         *)
             LOCAL_GATE_DESCRIPTION="Running $target..."
             LOCAL_GATE_SUCCESS="✓ $target passed"
@@ -450,6 +455,11 @@ report_static_failure_banner() {
         csrf-exempt|check-csrf-exempt)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ CSRF-Exempt Gate Failed            ║"
+            echo "╚════════════════════════════════════════╝"
+            ;;
+        check-gate-suites)
+            echo "╔════════════════════════════════════════╗"
+            echo "║   ✗ Registered Script Suites Failed    ║"
             echo "╚════════════════════════════════════════╝"
             ;;
         typecheck)

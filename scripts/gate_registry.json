@@ -168,6 +168,22 @@
                 ".github/workflows/ci.yml",
                 ".github/workflows/e2e.yml"
             ]
+        },
+        {
+            "id": "check-gate-suites",
+            "description": "All scripts test suites run without pytest cache or product coverage",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted"
+            ],
+            "bindings": {
+                "make_target": "check-gate-suites",
+                "ci_job": "check-gate-suites",
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": []
         }
     ]
 }
