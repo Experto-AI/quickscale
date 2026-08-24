@@ -93,9 +93,6 @@ band-A leg; SA124 and SA123 inherit the registered, green scripts execution cont
 
 ---
 
-# Band B / W1 — Dependency-spec authority
-
-
 # Band B / W2 — Gates and declared wiring
 
 Everything here merges **after** the completed band-A gate-layer work. SA124's acceptance

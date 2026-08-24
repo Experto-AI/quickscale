@@ -5,11 +5,11 @@
 
 ## Purpose
 
-This is the current task planner. It holds **open** work plus the single concise checked SA155
-closure required for the current gate-layer completion record. Detailed completed-ticket,
-closed-finding, review, and release evidence lives in [CHANGELOG.md](../../CHANGELOG.md) and
-version control; the retained SA155 item is excluded from every open count, dependency graph,
-and active queue position below.
+This is the current task planner. It holds **open work only** (ratified 2026-08-24, Option A).
+Completed tickets, closed findings, review evidence, and release records are archived in
+[CHANGELOG.md](../../CHANGELOG.md) and version control, and are **removed** from this file
+rather than checked off. Every count, dependency graph, and queue position below therefore
+refers to open work.
 
 ### Execution rules
 
@@ -165,18 +165,17 @@ SA118 builds on it as settled tree state, not as a pending dependency.
 ready to start SA167a (#8); W3 resumes SA151 at S4-C after the BYPASSRLS environment repair; W1's head
 is SA162 (#14), which SA150's closure freed of its last ordering edge.
 
-**One track move this pass — SA162 and SA167b swap positions.** SA162 moves to **#14** and
-SA167b to **#17**. The test the move had to pass: SA162 is independent (`deps: none` once
-SA150's worktree-ordering edge retires, sole owner of `scripts/check_csrf_exempt_gate.py`, not
-part of the SA167 wiring change), its lane was otherwise gated behind another track, and it
-feeds nothing — but it gives W1 a merge that is not order-gated behind W2's critical path,
-which the previous ordering did not. SA167b stays behind it because its `entry_point.py`
-hand-off from SA167a (W2, #8) is a hard one-way edge. **Conflict surface named:**
-`scripts/check_csrf_exempt_gate.py` is touched by no other open ticket; SA162's only shared
-files are `docs/others/tech-audit.md` and `docs/others/arch-audit.md`, which are standing
-closeout surfaces already covered by the sync-before-merge-back procedure.
+**No track moves this pass.** Every open ticket already carries a worktree, and one candidate
+was examined and rejected on the ordering rule: moving **SA161 (#19) and SA160 (#20) from W3 to
+W1** would relieve W3 — the lane holding the exclusive PostgreSQL/Docker slot and the longest
+wall-clock chain — of two band-C tails that need neither PostgreSQL nor Docker, and W1 has idle
+capacity after SA165. It is rejected because **neither ticket is on or feeding the critical
+path**, so the move buys no release date; it would also spread
+`quickscale_core/tests/fixtures/sa90_emission_manifests.json` across three worktrees instead of
+two. Re-open the question only if W3 becomes binding, and move the pair together — SA160's
+`deps: SA161` is an emission-parity ordering edge on that shared fixture and must not be split.
 
-**No other track moves.** W2 remains the longest at seven open legs and is irreducible: SA124,
+**W2 is irreducible.** It remains the longest at seven open legs: SA124,
 SA123, SA166, and SA164 all own `scripts/gate_registry.json`, which by standing invariant
 never crosses worktrees, and SA167a, SA118, and SA167c must rewrite
 `quickscale_modules/*/module.yml` in that order on one lane. Nothing may be pulled forward from
@@ -185,8 +184,8 @@ scheduling priority. SA165 stays on W1 because it edits `scripts/test_isolation_
 and the SA90 emission gate's `_HOST_DEPENDENT_PATHS`, which W3's SA163/SA161/SA160 legs read or
 rebaseline.
 
-**New serialization constraint between lanes.** W3's database-backed legs and any W1/W2 run of
-`make check` / `make test-integration` now contend for the *ownership* of the twelve local test
+**Standing serialization constraint between lanes.** W3's database-backed legs and any W1/W2 run of
+`make check` / `make test-integration` contend for the *ownership* of the twelve local test
 databases, not just for the Docker slot — see SA151 **S4-A**. This is a local-cluster artifact
 that hosted CI does not have, and retiring it is **SA135**/**SA163** work.
 
@@ -195,10 +194,12 @@ all on W2. Shared closeout surfaces (`CHANGELOG.md`,
 `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`, and both audit docs)
 remain covered by the standing sync-before-merge-back procedure.
 
-### Track readiness (reconciled 2026-08-24)
+### Track readiness (reconciled 2026-08-24, sixth pass)
 
 Each track reports three independent states. A track is **truly green** only when all three
-are yes.
+are yes. No ticket and no audit finding closed since the previous pass, so no state below
+moved; this pass removed the archived SA155 record and SA151's archived closure narrative from
+the planner and re-tested the queue for rebalance opportunities (none taken — see above).
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
@@ -391,19 +392,12 @@ Conceptual background, mental models, and implementation notes for **every** tic
   QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models.
   **Acceptance:** exactly one `0001_initial` per module with models, and no other migration files; a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; `make test-integration` passes; existing databases are out of scope by policy — the documented upgrade path is a fresh database; the no-migration-history policy is recorded in [decisions.md](decisions.md).
 
-  **Checkpoint state:** S1-S3 are settled and archived in [CHANGELOG.md](../../CHANGELOG.md).
-  S1 rejects AppConfig class-alias, subscript, and nested-attribute identity writes plus spoofed,
-  rebound, decorated, and multiple-base AppConfig provenance without executing source; S2 compares
-  generated runtime `name`/`label` identities and migration labels
-  with an independent `quickscale_modules_<module>` oracle; S3 synchronizes the 15-suite/11-unwired
-  census and current SA151/SA92 audit status. The ticket remains unchecked, and
-  SA142/SA164/SA152 remain blocked.
+  **Checkpoint state:** S1-S3 and S4-A/S4-B are settled; their evidence is archived in
+  [CHANGELOG.md](../../CHANGELOG.md). The ticket remains open at **S4-C/S4-D**, and
+  SA142/SA164/SA152 remain blocked until it closes.
 
-  **S4-A/S4-B are closed (2026-08-24).** The environment prerequisite that stranded this lane
-  is discharged and `make test-bypassrls` exits 0 at 80 passed, 0 errors, 0 skipped, 2,488
-  deselected. Full cause and evidence are archived in [CHANGELOG.md](../../CHANGELOG.md). One
-  live operating constraint survives from that work and must be observed before every
-  database-backed run:
+  One live operating constraint survives from the S4-A repair and must be observed before
+  every database-backed run on any lane:
 
   > **⚠ The two database lanes cannot both hold the local cluster at once.** Both `make test-integration` and
   > `make test-bypassrls` use the *same* twelve databases and differ only by role, and each
@@ -471,27 +465,17 @@ authority; this section carries the finding detail.
 Every ticket here that closes or changes a live finding takes `docs/others/arch-audit.md`
 or `docs/others/tech-audit.md` onto its shared conflict surface per the execution rules.
 
-### Gate-layer closure
+### Sequencing of the audit-derived legs
 
 ```text
-        Gate-layer closure   completed · former #7
-              │
-              ▼
-      SA167a (#8) ──► SA124 (#11) ──► SA123 (#13) ──► SA118 (#16) ──► SA167c (#21)
-     the whole of W2's implementation work sits behind this
+W2 spine:  SA167a (#8) ──► SA124 (#11) ──► SA123 (#13) ──► SA118 (#16) ──► SA167c (#21)
+                                                            └─► SA166 (#24) ──► SA164 (#25)
 
 SA163 (arch F13, CI environment) ──► rides inside SA135 (W3, merge #15)
 ```
 
-- [x] **SA155 — Give the gate layer a gate of its own.** `Band A · Tier 1 · W2 · former merge #7 · complete; excluded from open counts and the active queue`
-
-The gate layer is closed and archived in [CHANGELOG.md](../../CHANGELOG.md). The retained
-evidence is 15 `scripts/test_*.py` suites with 1,225 collected and passed tests and two
-warnings; `check-gate-suites` is registered for local-serial, local-parallel, and hosted
-contexts with coverage disabled. The generated 12-job CI set remains exact: six registry-
-bound hosted gates plus six explicitly justified unowned jobs. `isolation-conformance` is
-Make-exposed but remains hosted-unowned because it requires PostgreSQL and a restricted role.
-The product coverage metric and `.coveragerc` remain unchanged.
+Band A is empty: the gate-layer prerequisite (former merge #7) is complete and archived in
+[CHANGELOG.md](../../CHANGELOG.md), and that position is retired rather than reused.
 
 - [ ] **SA160 — Share one correct CSRF-token helper in the React theme.** `Band C · Tier 2 · W3 · merge #20 · deps: SA161 (emission-parity ordering)`
   Closes tech-audit **TA67** (`spa-csrf-token-duplicate-cookie`, S3) — the only finding in deployment reality #3, the internet-facing generated project. `themes/showcase_react/src/hooks/useApi.ts:20-28` and `src/components/forms/FormRenderer.tsx:206-211` carry the same eleven lines: the parser splits `document.cookie` on `"; csrftoken="` and accepts the result **only when it yields exactly two parts**. Two `csrftoken` cookies yield three, so `getCsrfToken()` returns `''`, `buildRequestHeaders` (`:89-94`) skips `X-CSRFToken`, and Django rejects every POST/PUT/PATCH/DELETE with 403. The triggering state is ordinary: an `app.example.com` deployment alongside a `.example.com` cookie, the outcome of setting or changing `CSRF_COOKIE_DOMAIN`, of a sibling Django app on another subdomain, or of a stale apex-scoped cookie. GETs keep working, so the app looks alive and merely refuses to save, and no error names the cause. Fails closed — availability, not a security hole. There is no shared CSRF helper, no fetch interceptor, and no template-injected token, so no layer-up guard exists.

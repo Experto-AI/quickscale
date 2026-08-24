@@ -4,6 +4,33 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-24, sixth pass).** **No ticket closed and no
+  audit finding closed since the previous pass**, so nothing new was archived as completed
+  work. The pass discharged the ratified Option A policy against its last two exceptions:
+  the retained checked **SA155** item and its gate-layer evidence paragraph were removed from
+  `docs/technical/roadmap.md` — the closure record already lives in this changelog's
+  *Gate-layer closure (2026-08-24)* entry — and **SA151**'s archived S1-S3 and S4-A/S4-B
+  closure narrative was reduced to a live status line pointing here, retaining only the
+  still-live database-lane ownership constraint that must be observed before any
+  database-backed run. The roadmap Purpose now states plainly that the planner holds open work
+  only. The former band-A gate-layer diagram was replaced with the W2 sequencing spine, and the
+  prior pass's SA162/SA167b swap narrative was replaced by the current pass's rebalance test.
+  **Rebalance result: no track moves.** Every open ticket carries a worktree. One candidate was
+  examined and rejected: moving **SA161 (#19)** and **SA160 (#20)** from W3 to W1 would relieve
+  the lane holding the exclusive PostgreSQL/Docker slot of two band-C tails that need neither
+  resource, but neither ticket is on or feeding the critical path, so the move buys no release
+  date, and it would spread `quickscale_core/tests/fixtures/sa90_emission_manifests.json` across
+  three worktrees instead of two; the pair must also move together, since SA160's `deps: SA161`
+  is an emission-parity ordering edge on that fixture. **W2 remains irreducible** — SA124,
+  SA123, SA166, and SA164 own `scripts/gate_registry.json`, and SA167a, SA118, and SA167c must
+  rewrite `quickscale_modules/*/module.yml` in that order on one lane. The critical path is
+  unchanged at `SA167a → SA124 → SA123 → SA118 → SA167c`, five serialized W2 legs. **All three
+  tracks remain truly green** on can-start, can-finish, and can-merge: W2 at SA167a (#8, on the
+  critical path), W3 at SA151 S4-C (#3, off it), W1 at SA162 (#14, off it, filler). Every
+  remaining blocker — SA142, SA135+SA163, SA167b, SA164 — is a hard upstream dependency; **no
+  maintainer decision is open.** The open queue is unchanged at sixteen merge positions carrying
+  seventeen ticket entries.
+
 - **Gate-layer closure (2026-08-24).** The gate conformance layer now has an owned
   `check-gate-suites` execution context covering all 15 retained `scripts/test_*.py`
   suites, with cache and product coverage disabled. The registered gate covers
