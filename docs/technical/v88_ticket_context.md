@@ -528,7 +528,7 @@ Then add image reclamation to the cleanup path for the variable images that rema
 
 ### Watch out
 
-This edits a **generated-project template**, so it changes emitted output — the SA90 emission-parity fixture will need the same rebaseline-with-rationale treatment described under SA118. Two tickets touching that fixture in one release, on different tracks; the sync-before-merge-back procedure must preserve both entries.
+This edits a **generated-project template**, so it changes emitted output — the SA90 emission-parity fixture will need the same rebaseline-with-rationale treatment described under SA118. Four tickets touch that fixture in one release — SA142, SA118, SA161, and SA160 — across two tracks; each appends its own `baseline_evidence` entry, and the sync-before-merge-back procedure must preserve every prior one.
 
 ## SA135 — Give test suites an owned PostgreSQL lifecycle
 
