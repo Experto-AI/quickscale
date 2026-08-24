@@ -18,6 +18,7 @@ _STORAGE_CLOUD_BACKENDS = frozenset({"r2", "s3"})
 _STORAGE_CLOUD_DEPENDENCIES = frozenset({"boto3", "django-storages"})
 _STORAGE_CLOUD_EXTRA = "cloud"
 _LOCAL_WHEELHOUSE_ENV = "QUICKSCALE_LOCAL_WHEELHOUSE"
+_LOCAL_WHEEL_DISTRIBUTIONS = frozenset({"quickscale-core"})
 # Wheelhouse staged next to a locally installed CLI (scripts/install_global.sh).
 # A local (unpublished) build must resolve its own quickscale-core from these
 # wheels; without it every generated project pins a PyPI version that does not
@@ -158,8 +159,8 @@ def _resolve_wheelhouse_dir() -> Path | None:
     used, so a locally installed build resolves its own unpublished wheels
     instead of pinning a PyPI version that does not exist.
     """
-    wheelhouse_value = os.environ.get(_LOCAL_WHEELHOUSE_ENV)
-    if wheelhouse_value:
+    if _LOCAL_WHEELHOUSE_ENV in os.environ:
+        wheelhouse_value = os.environ[_LOCAL_WHEELHOUSE_ENV]
         wheelhouse = Path(wheelhouse_value)
         if not wheelhouse.is_absolute() or not wheelhouse.is_dir():
             raise DependencySyncError(
@@ -173,19 +174,73 @@ def _resolve_wheelhouse_dir() -> Path | None:
     return None
 
 
+def _find_local_wheel_candidates(
+    wheelhouse: Path,
+    normalized_name: str,
+) -> list[Path]:
+    """Return wheels whose distribution component matches a normalized name."""
+    return sorted(
+        candidate
+        for candidate in wheelhouse.iterdir()
+        if candidate.is_file()
+        and candidate.suffix.lower() == ".whl"
+        and re.sub(r"[-_.]+", "_", candidate.name.split("-", 1)[0]).lower()
+        == normalized_name
+    )
+
+
+def _raise_for_missing_explicit_wheel(
+    wheelhouse: Path,
+    dependency_name: str,
+    wheel_pattern: str,
+) -> None:
+    """Fail when an explicit wheelhouse lacks its requested local artifact."""
+    if _LOCAL_WHEELHOUSE_ENV not in os.environ:
+        return
+
+    available_wheels = sorted(
+        candidate.name
+        for candidate in wheelhouse.iterdir()
+        if candidate.is_file() and candidate.suffix.lower() == ".whl"
+    )
+    raise DependencySyncError(
+        f"{_LOCAL_WHEELHOUSE_ENV} requested local dependency "
+        f"{dependency_name}, but no matching wheel was found in "
+        f"{wheelhouse}; searched directory {wheelhouse} with pattern "
+        f"{wheel_pattern!r}. Available wheels: "
+        f"{available_wheels or '[none]'}. Build or copy a wheel matching "
+        f"{wheel_pattern!r}, or unset {_LOCAL_WHEELHOUSE_ENV} to use the "
+        "manifest version spec."
+    )
+
+
 def _resolve_local_wheel_dependency(
     project_path: Path,
     dependency_base: Path,
     dependency_name: str,
+    wheelhouse: Path | None,
 ) -> dict[str, str] | None:
     """Materialize and return an exact local wheel for installed acceptance."""
-    wheelhouse = _resolve_wheelhouse_dir()
+    normalized_name = re.sub(r"[-_.]+", "-", dependency_name).lower()
+    if normalized_name not in _LOCAL_WHEEL_DISTRIBUTIONS:
+        return None
+
     if wheelhouse is None:
         return None
 
-    normalized_name = dependency_name.replace("-", "_").lower()
-    candidates = sorted(wheelhouse.glob(f"{normalized_name}-*.whl"))
+    # Wheel distribution names use the PEP 503 spelling: runs of hyphens,
+    # underscores, and dots compare as one underscore, case-insensitively.
+    # Do the comparison against the filename's distribution component rather
+    # than relying on Path.glob's case-sensitive, hyphen-only matching.
+    normalized_name = re.sub(r"[-_.]+", "_", dependency_name).lower()
+    wheel_pattern = f"{normalized_name}-*.whl"
+    candidates = _find_local_wheel_candidates(wheelhouse, normalized_name)
     if not candidates:
+        _raise_for_missing_explicit_wheel(
+            wheelhouse,
+            dependency_name,
+            wheel_pattern,
+        )
         return None
     if len(candidates) != 1:
         raise DependencySyncError(
@@ -439,6 +494,7 @@ def _build_path_dependency_overrides(
     install_path: Path,
     manifest: Any,
     module_poetry_deps: Mapping[str, Any],
+    wheelhouse: Path | None = None,
 ) -> dict[str, Any]:
     """Build replacement values for unresolvable path dependencies."""
     overrides: dict[str, Any] = {}
@@ -451,6 +507,7 @@ def _build_path_dependency_overrides(
             project_path,
             install_path,
             dep_name,
+            wheelhouse,
         )
         if local_wheel is not None:
             overrides[dep_name] = local_wheel
@@ -488,6 +545,7 @@ def _rewrite_dependency_lines(raw_toml: str, overrides: Mapping[str, Any]) -> st
 def _patch_module_path_dependencies(
     project_path: Path,
     module_options_by_name: Mapping[str, Mapping[str, Any] | None],
+    wheelhouse: Path | None = None,
 ) -> None:
     """Replace unresolvable path deps in embedded module pyproject.toml files.
 
@@ -523,6 +581,7 @@ def _patch_module_path_dependencies(
             install_path,
             manifest,
             module_poetry_deps,
+            wheelhouse,
         )
         if overrides:
             _write_validated_toml(
@@ -641,6 +700,12 @@ def sync_project_module_dependencies(
     if not module_options_by_name:
         return ProjectDependencySyncResult()
 
+    # Validate an explicit wheelhouse at the dependency-sync boundary, before
+    # inspecting module dependencies.  This keeps malformed explicit input
+    # fail-hard even when the selected modules have only public dependencies,
+    # while preserving the intentional no-module no-op above.
+    wheelhouse = _resolve_wheelhouse_dir()
+
     pyproject_path = project_path / "pyproject.toml"
     project_pyproject = _load_toml_file(pyproject_path)
     project_dependencies = _load_poetry_dependencies(pyproject_path, project_pyproject)
@@ -700,6 +765,7 @@ def sync_project_module_dependencies(
                 project_path,
                 project_path,
                 dependency_name,
+                wheelhouse,
             )
 
             if dependency_name in existing_dependency_names:
@@ -759,7 +825,7 @@ def sync_project_module_dependencies(
     # when a module's pyproject.toml references a monorepo-local path
     # (e.g. quickscale-core = {path = "../../quickscale_core"}) that
     # doesn't exist in the generated project's isolated tree.
-    _patch_module_path_dependencies(project_path, module_options_by_name)
+    _patch_module_path_dependencies(project_path, module_options_by_name, wheelhouse)
 
     return ProjectDependencySyncResult(
         added_path_dependencies=sorted(pending_path_dependencies),

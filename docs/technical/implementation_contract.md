@@ -270,7 +270,7 @@ module-owned today. The remaining nine (analytics, blog, listings, forms, backup
 notifications, auth, orgs, storage) still register at import time from per-module
 blocks inside ``entry_point.py``, and five of those carry their app list as a Python
 literal in core. The five literals are cleared by **`SA167a`** (v88, merge #8) and the
-blocks relocated by **`SA167b`** (v88, merge #14); they are a **deviation pending migration**,
+blocks relocated by **`SA167b`** (v88, merge #17); they are a **deviation pending migration**,
 not a supported second path: the "compatibility fallback for bundled/installed
 contexts" rationale previously recorded here was retired by the AF7 fail-hard
 decision, which removed the context it described.

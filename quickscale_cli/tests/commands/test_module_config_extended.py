@@ -552,6 +552,233 @@ class TestUnpublishedCoreWheelhouseRegression:
         assert "quickscale_core-0.87.1-py3-none-any.whl" in project_pyproject
         assert "quickscale_core-0.87.0-py3-none-any.whl" not in project_pyproject
 
+    def test_explicit_wheelhouse_matches_normalized_distribution_name(
+        self, tmp_path, monkeypatch
+    ):
+        """Wheel matching follows normalized, case-insensitive distribution names."""
+        wheelhouse = tmp_path / "acceptance-wheels"
+        wheelhouse.mkdir()
+        wheel_name = "QUICKSCALE_CORE-0.87.1-1-py3-none-any.whl"
+        (wheelhouse / wheel_name).write_bytes(b"wheel")
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", str(wheelhouse))
+
+        project = _make_project(tmp_path)
+        self._write_backups(project)
+
+        sync_project_module_dependencies(project, {"backups": {}})
+
+        project_pyproject = (project / "pyproject.toml").read_text()
+        assert wheel_name in project_pyproject
+
+    def test_explicit_wheelhouse_preserves_public_manifest_dependencies(
+        self, tmp_path, monkeypatch
+    ):
+        """The local override applies only to the staged QuickScale distribution."""
+        wheelhouse = tmp_path / "acceptance-wheels"
+        wheelhouse.mkdir()
+        wheel_name = "quickscale_core-0.87.1-py3-none-any.whl"
+        (wheelhouse / wheel_name).write_bytes(b"wheel")
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", str(wheelhouse))
+
+        project = _make_project(tmp_path)
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                "name: backups\n"
+                'version: "0.87.0"\n'
+                "dependencies:\n"
+                "  - django-storages>=1.14.6\n"
+                "  - boto3>=1.43.58\n"
+                "  - quickscale-core>=0.87.0,<0.88.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-storages = ">=1.14.6"\n'
+                'boto3 = ">=1.43.58"\n'
+                'quickscale-core = {path = "../../quickscale_core", develop = true}\n'
+            ),
+        )
+
+        sync_project_module_dependencies(project, {"backups": {}})
+
+        project_pyproject = (project / "pyproject.toml").read_text()
+        module_pyproject = (
+            project / "modules" / "backups" / "pyproject.toml"
+        ).read_text()
+        assert 'django-storages = ">=1.14.6"' in project_pyproject
+        assert 'boto3 = ">=1.43.58"' in project_pyproject
+        assert wheel_name in project_pyproject
+        assert wheel_name in module_pyproject
+
+    @pytest.mark.parametrize(
+        "wheelhouse_value",
+        ["", "relative/wheelhouse", "absolute-missing"],
+    )
+    def test_invalid_explicit_wheelhouse_fails_for_auth_only_selection(
+        self, tmp_path, monkeypatch, wheelhouse_value
+    ):
+        """Explicit wheelhouse validation must not depend on local-core lookup."""
+        explicit_value = (
+            str(tmp_path / "missing-wheelhouse")
+            if wheelhouse_value == "absolute-missing"
+            else wheelhouse_value
+        )
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", explicit_value)
+        project = _make_project(tmp_path)
+        _write_module_package(
+            project,
+            "auth",
+            manifest_content=(
+                "name: auth\n"
+                'version: "0.87.0"\n'
+                "dependencies:\n"
+                "  - django-allauth>=0.63.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-auth"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-allauth = ">=65.14.1,<66.0.0"\n'
+            ),
+        )
+
+        with pytest.raises(
+            DependencySyncError,
+            match=r"QUICKSCALE_LOCAL_WHEELHOUSE must name an absolute wheelhouse",
+        ):
+            sync_project_module_dependencies(project, {"auth": {}})
+
+    def test_valid_explicit_wheelhouse_is_resolved_once_for_public_and_local_deps(
+        self, tmp_path, monkeypatch
+    ):
+        """The boundary selection is reused by both dependency-sync lookups."""
+        wheelhouse = tmp_path / "acceptance-wheels"
+        wheelhouse.mkdir()
+        wheel_name = "quickscale_core-0.87.1-py3-none-any.whl"
+        (wheelhouse / wheel_name).write_bytes(b"wheel")
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", str(wheelhouse))
+        project = _make_project(tmp_path)
+        self._write_backups(project)
+
+        with patch(
+            "quickscale_cli.utils.module_dependency_sync._resolve_wheelhouse_dir",
+            return_value=wheelhouse,
+        ) as resolve_wheelhouse:
+            sync_project_module_dependencies(project, {"backups": {}})
+
+        resolve_wheelhouse.assert_called_once_with()
+
+    def test_valid_explicit_wheelhouse_preserves_auth_manifest_fallback(
+        self, tmp_path, monkeypatch
+    ):
+        """A valid override does not replace public auth dependency specs."""
+        wheelhouse = tmp_path / "acceptance-wheels"
+        wheelhouse.mkdir()
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", str(wheelhouse))
+        project = _make_project(tmp_path)
+        _write_module_package(
+            project,
+            "auth",
+            manifest_content=(
+                "name: auth\n"
+                'version: "0.87.0"\n'
+                "dependencies:\n"
+                "  - django-allauth>=0.63.0\n"
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-auth"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'django-allauth = ">=65.14.1,<66.0.0"\n'
+            ),
+        )
+
+        sync_project_module_dependencies(project, {"auth": {}})
+
+        project_pyproject = (project / "pyproject.toml").read_text()
+        assert 'django-allauth = ">=65.14.1,<66.0.0"' in project_pyproject
+
+    def test_malformed_explicit_wheelhouse_is_ignored_for_no_module_noop(
+        self, tmp_path, monkeypatch
+    ):
+        """The intentional empty-selection no-op remains unchanged."""
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", "")
+
+        result = sync_project_module_dependencies(tmp_path, {})
+
+        assert result == ProjectDependencySyncResult()
+
+    def test_empty_explicit_wheelhouse_is_rejected(self, tmp_path, monkeypatch):
+        """A set-but-empty override is invalid rather than an implicit fallback."""
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", "")
+        project = _make_project(tmp_path)
+        self._write_backups(project)
+
+        with pytest.raises(
+            DependencySyncError,
+            match=r"QUICKSCALE_LOCAL_WHEELHOUSE must name an absolute wheelhouse",
+        ):
+            sync_project_module_dependencies(project, {"backups": {}})
+
+    def test_explicit_wheelhouse_without_matching_wheel_raises(
+        self, tmp_path, monkeypatch
+    ):
+        """An explicit wheelhouse must not silently fall back to PyPI."""
+        wheelhouse = tmp_path / "acceptance-wheels"
+        wheelhouse.mkdir()
+        (wheelhouse / "unrelated-1.0.0-py3-none-any.whl").write_bytes(b"wheel")
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", str(wheelhouse))
+
+        project = _make_project(tmp_path)
+        self._write_backups(project)
+
+        with pytest.raises(
+            DependencySyncError,
+            match=(
+                r"QUICKSCALE_LOCAL_WHEELHOUSE.*acceptance-wheels.*"
+                r"quickscale_core-\*\.whl.*unrelated-1\.0\.0"
+            ),
+        ):
+            sync_project_module_dependencies(project, {"backups": {}})
+
+    def test_explicit_unmatched_wheelhouse_raises_for_module_path_patch(
+        self, tmp_path, monkeypatch
+    ):
+        """The module-pyproject path-repair call path also fails hard."""
+        wheelhouse = tmp_path / "acceptance-wheels"
+        wheelhouse.mkdir()
+        (wheelhouse / "unrelated-0.86.0-py3-none-any.whl").write_bytes(b"wheel")
+        monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", str(wheelhouse))
+
+        project = _make_project(tmp_path)
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=('name: backups\nversion: "0.87.0"\ndependencies: []\n'),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'quickscale-core = {path = "../../quickscale_core", develop = true}\n'
+            ),
+        )
+
+        with pytest.raises(
+            DependencySyncError,
+            match=(
+                r"QUICKSCALE_LOCAL_WHEELHOUSE.*acceptance-wheels.*"
+                r"quickscale_core-\*\.whl.*unrelated-0\.86\.0"
+            ),
+        ):
+            sync_project_module_dependencies(project, {"backups": {}})
+
 
 # ============================================================================
 # _is_app_in_installed_apps / _filter_new_apps
