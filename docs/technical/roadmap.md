@@ -174,7 +174,7 @@ scheduling priority whenever one of its legs is active.
 4. `SA151` (W3, #3) → `SA152` (post-v88). The beta-migration workflow must reconcile the
    clean-break database policy only after SA151 closes.
 
-**Parallelism result (re-checked 2026-08-22, third pass):** all three lanes have an executable next
+**Parallelism result (re-checked 2026-08-24, fourth pass):** all three lanes have an executable next
 action and none is idle, so there is no track to rebalance *into*. W2 is the longest lane at
 eight open legs and cannot be shortened: SA155, SA124, SA123, SA166 and SA164 all own
 `scripts/gate_registry.json`, which by standing invariant never crosses worktrees; SA167a,
@@ -184,51 +184,39 @@ pulled forward from W3 because the PostgreSQL/Docker slot is exclusive. W1 (five
 between them would buy no wall-clock time while creating merge hazards — SA165 in particular
 stays on W1 because it edits `scripts/test_isolation_conformance.sh` and the SA90 emission
 gate's `_HOST_DEPENDENT_PATHS`, both of which W3's SA163/SA161/SA160 legs read or rebaseline.
-**No track moves are proposed this pass.** Band-C tickets remain the sanctioned way to spend
+**No track moves are proposed this pass — fourth consecutive pass.** Band-C tickets remain the sanctioned way to spend
 lane slack in place.
 
-### Track readiness (assessed 2026-08-22, third pass)
+### Track readiness (assessed 2026-08-24, fourth pass)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W1** | SA134 closeout follow-up (**partial checkpoint retained**) | **yes** — the pin-authority work is complete and the remaining work is a bounded documentation-invariant correction | **yes** — the context document and core consistency test are W1-owned | **yes for the checkpoint; no for clean closeout** — the maintainer authorized partial merge-back, but terminal attestation found one fail-open invariant gap | **partial but merge-safe by maintainer direction — off the critical path** |
-| **W2** | SA155 (#7, **partial planning checkpoint retained**) | **yes** — every prerequisite is merged; no product decision is open | **yes, after orchestration recovery** — the documented `scripts/` baseline is green (1,213 passed), but implementation did not start because two Adaptive implementer handoffs failed before mutation | **yes** — #7 has no unsatisfied dependency | **administratively paused — next critical-path leg** |
-| **W3** | SA151 (#3, **partial checkpoint retained — terminal findings open**) | **yes** — the checkpoint is merged and no product decision blocks F-006/F-008; F-007 is corrected | **yes** — the remaining guard and documentation corrections are W3-owned or explicitly coupled | **yes for the checkpoint; no for closure** — merge #3 retains useful work without satisfying dependants | **partial but merge-safe — off the critical path** (second chain) |
+| **W1** | SA150 (#12) | **yes** — `deps: none`, the lane is free after SA134 closed, and no decision, authorization, or plan gate stands in front of it | **yes** — every acceptance clause (the `docs/technical/` seam description, the `_resolve_local_wheel_dependency()` fail-hard raise, its regression test, and the tech-audit watch-item retirement) is W1-owned and needs no other track's output | **yes** — #12 merges after nothing; its prerequisite is already on the integration branch | **truly green — and on the critical path as SA118's feeder** |
+| **W2** | SA155 (#7, **in progress**) | **yes** — every prerequisite is merged and both planning decisions are ratified; nothing waits on an authorization or a plan gate | **yes** — the `scripts/` baseline is green (1,213 passed) and every acceptance clause is W2-owned (`Makefile`, `scripts/gate_registry.json`, `sync_ci_gate_jobs.py`, the hosted job, the focused tests) | **yes** — #7 has no unsatisfied dependency and heads the queue | **truly green — the critical-path head** |
+| **W3** | SA151 (#3, **in progress — terminal findings F-006/F-008 open**) | **yes** — the checkpoint is merged, both open findings are corrections rather than decisions, and no upstream ticket gates the work | **yes** — F-006 is a guard correction in W3-owned source and F-008 is a prose reconciliation in `arch-audit.md`; neither needs another track's output (`arch-audit.md` is a shared *conflict* surface, not a dependency) | **yes** — #3 heads the queue and is order-gated behind nothing | **truly green — second chain, not the critical path, but it unblocks SA142, SA164 and SA152** |
 
 **Blocked next-after tickets, and what clears each:**
 
 | Ticket | Blocked state | Blocking ticket | Clearable by a maintainer decision? |
 |---|---|---|---|
-| SA142 (#10) | can start — **no** | SA151 (#3) | No — hard dependency; SA151's retained checkpoint is not ticket closure. |
+| SA142 (#10) | can start — **no** | SA151 (#3) | No — hard dependency, clearable only by the upstream work. SA151's retained checkpoint is not ticket closure; F-006 and F-008 must close first. |
 | SA167a (#8) | can merge — no | SA155 (#7) | **Decided 2026-08-22 — the gate stays.** This was the one decision-clearable blocker; the maintainer declined to lift it. Implementation may begin today (`deps: none`); only the *merge* waits, because its acceptance evidence — unchanged emission parity, `make quality` no worse than found — is meaningless until SA155 makes the gate layer truthful. Starting it early is sanctioned; merging it early is not. |
 | SA164 (#25) | can start · can finish — no | SA166 (#24), SA151 (#3) | No — W2 ordering and SA151's terminal migration-baseline findings must both clear. |
 
-**Recommended concurrency right now:** all three lanes resume independently from retained partial
-checkpoints or their documented next action.
+**Recommended concurrency right now:** all three lanes are truly green and run independently.
+W2 and W3 are already in progress; W1 is free and starts its first leg.
 
-- **W1 — finish the retained SA134 closeout follow-up before SA150.** SA134's pin-authority
-  acceptance remains complete and is not reopened. The checkpoint keeps the restored SA151
-  partial/open context, corrected SA142/SA164/SA152 dependency statements, synchronized SA155
-  15/11 census, explicit umbrella/shared-position metadata, and the generalized roadmap/context
-  test. Its latest focused suite passed 11 tests, `make check -- --core` passed with 2,796 tests
-  and 1 skip, and `make quality` matched the accepted two-warning/zero-critical/monotonicity-pass
-  baseline. The maintainer directed that these partial improvements be committed and merged.
-  **Pending/blocking:** terminal attestation found that the invariant can false-green a candidate
-  roadmap ticket written with an alternate list marker or missing bold markup, and can miss a
-  dependency contradiction outside the selected ticket section or phrased as `has completed`.
-  This blocks clean closeout, not the maintainer-authorized partial checkpoint. The convergence
-  envelope-recovery block was adjudicated as procedural rather than a source or merge blocker.
-  **Decision status:** no product or sequencing decision is open for this continuation; the
-  maintainer has already chosen partial merge-back. **Pending closure plan:** (1) detect broad
-  ticket candidates independently of the accepted grammar and reject every noncanonical shape;
-  (2) scan dependency status across all current-context prose through an explicit status model or
-  structurally constrain where those claims may appear; (3) add expected-red canaries for alternate
-  and missing ticket syntax, global dependency contradictions, and `has completed`; (4) rerun the
-  focused invariant, `make check -- --core`, the accepted `make quality` baseline, convergence,
-  and terminal attestation. Only then begin SA150.
+- **W1 — start SA150 (#12).** SA134 is closed and archived in
+  [CHANGELOG.md](../../CHANGELOG.md); merge position #9 is retired, and the lane is free with no
+  retained checkpoint. SA150 is the lane's first leg and is executable today: `deps: none`, its
+  prerequisite is merged, and its files (`quickscale_cli/.../module_dependency_sync.py`, a new
+  `docs/technical/` seam doc, `docs/others/tech-audit.md`) are touched by no other open ticket.
+  It is **not** filler — SA118 (#16), on the critical path, must project manifest version specs
+  over SA150's fail-hard seam, so this is the one W1 leg that feeds the critical path. Do it
+  before the band-C fillers behind it.
 - **W2 — resume SA155 in a fresh Adaptive session.** Require a clean `wt-track2`, merge the
   then-current `v88`, rediscover changed seams, and create a fresh plan authority rather than
   reusing the session-scoped carrier from the checkpoint. This is the next critical-path leg.
@@ -237,10 +225,14 @@ checkpoints or their documented next action.
   the proofs listed in its closure plan. Only a clean terminal result unblocks SA142, SA164,
   and SA152.
 
-**Open maintainer decisions: one, advisory.** Fix SA151's F-009 docs-hub count drift during the
-same continuation, or defer it explicitly with rationale. Every other blocker in this plan is a
-hard upstream dependency that only the upstream work can clear; no product decision is
-outstanding anywhere in v88. The gate-suite execution choice and SA167a's #8 position are both
+**Open maintainer decisions: one, advisory.** SA151's F-009 — [docs/index.md](../index.md):18
+still describes the v88 context document as covering "twenty-five v88 ticket entries across
+twenty-four merge positions", the original planning totals, against the live nineteen open
+entries across eighteen open merge positions. Either fix the line during SA151's closure
+continuation or defer it explicitly with rationale. It is advisory: it gates none of the three
+states for any track and blocks no merge. Every other blocker in this plan is a hard upstream
+dependency that only the upstream work can clear; no product decision is outstanding anywhere
+in v88. The gate-suite execution choice and SA167a's #8 position are both
 settled above.
 
 ### Merge order
