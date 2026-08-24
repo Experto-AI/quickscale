@@ -90,3 +90,12 @@ dependencies:
 
 django_apps:
   - quickscale_modules_backups
+
+derivation:
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value:
+          - quickscale_modules_backups
+      description: "Backups Django app label"
