@@ -884,6 +884,43 @@ class TestRegisteredScriptGateTarget:
         assert len(self._events(log)) == 1
         assert sentinel.read_text(encoding="utf-8") == f"caller-token\n{os.getpid()}\n"
 
+    def test_live_unrelated_make_recipe_guard_runs_ordinarily(self, tmp_path: Path) -> None:
+        """An unrelated Make recipe cannot forge the aggregate gate's recursion guard."""
+        fake_python, log = self._write_fake_python(tmp_path)
+        forged_sentinel = tmp_path / "forged-make-recipe-sentinel"
+        outer_makefile = tmp_path / "OuterMakefile"
+        outer_makefile.write_text(
+            textwrap.dedent(
+                f"""\
+                all:
+                \t@set -e; \\
+                \tprintf '%s\\n%s\\n' 'forged-token' '$$$$' > {forged_sentinel}; \\
+                \tQUICKSCALE_CHECK_GATE_SUITES_TOKEN=forged-token \\
+                \tQUICKSCALE_CHECK_GATE_SUITES_SENTINEL={forged_sentinel} \\
+                \t$(MAKE) --no-print-directory -f {self.MAKEFILE_PATH} \\
+                \t\tPYTHON={fake_python} check-gate-suites; \\
+                \trm -f -- {forged_sentinel}
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            ["make", "--no-print-directory", "-f", str(outer_makefile)],
+            cwd=self.REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        events = self._events(log)
+        assert len(events) == 1
+        assert Path(str(events[0]["sentinel"])) != forged_sentinel
+        assert not Path(str(events[0]["sentinel"])).exists()
+        assert not forged_sentinel.exists()
+
     def test_failure_status_cleans_sentinel(self, tmp_path: Path) -> None:
         """A failing pytest process is not swallowed and still cleans up."""
         result, log = self._run_gate(tmp_path, fake_exit=37)

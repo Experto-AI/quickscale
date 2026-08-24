@@ -889,6 +889,7 @@ check-csrf-exempt:
 # every allocation path cleans up, including signal exits.
 check-gate-suites:
 	@set -e; \
+	check_gate_recipe_identity=quickscale-check-gate-suites-v1; \
 	check_gate_sentinel=""; \
 	check_gate_cache_was_present=false; \
 	if [ -e .pytest_cache ]; then check_gate_cache_was_present=true; fi; \
@@ -919,7 +920,7 @@ check-gate-suites:
 		done; \
 		return 1; \
 	}; \
-	check_gate_owner_is_make_recipe() { \
+	check_gate_owner_is_current_recipe() { \
 		check_gate_owner="$$1"; \
 		check_gate_owner_parent=""; \
 		while read -r check_gate_field check_gate_value _check_gate_rest; do \
@@ -928,7 +929,12 @@ check-gate-suites:
 		case "$$check_gate_owner_parent" in ''|*[!0-9]*) return 1;; esac; \
 		check_gate_owner_parent_comm=""; \
 		IFS= read -r check_gate_owner_parent_comm < "/proc/$$check_gate_owner_parent/comm" 2>/dev/null || return 1; \
-		case "$$check_gate_owner_parent_comm" in make|gmake) return 0;; *) return 1;; esac; \
+		case "$$check_gate_owner_parent_comm" in make|gmake) ;; *) return 1;; esac; \
+		check_gate_owner_cmdline="$$(tr '\000' ' ' < "/proc/$$check_gate_owner/cmdline" 2>/dev/null)" || return 1; \
+		case "$$check_gate_owner_cmdline" in \
+			*"check_gate_recipe_identity=quickscale-check-gate-suites-v1"*) return 0;; \
+			*) return 1;; \
+		esac; \
 	}; \
 	check_gate_authorized=false; \
 	check_gate_inherited_token="$${QUICKSCALE_CHECK_GATE_SUITES_TOKEN:-}"; \
@@ -946,7 +952,7 @@ check-gate-suites:
 				case "$$check_gate_owner" in ''|*[!0-9]*) ;; *) \
 					if [ "$$check_gate_owner" -gt 1 ] && \
 						check_gate_is_live_ancestor "$$check_gate_owner" && \
-						check_gate_owner_is_make_recipe "$$check_gate_owner"; then \
+						check_gate_owner_is_current_recipe "$$check_gate_owner"; then \
 						check_gate_authorized=true; \
 					fi; \
 				esac; \

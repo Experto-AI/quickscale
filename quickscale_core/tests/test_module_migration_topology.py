@@ -271,6 +271,206 @@ def _string_assignment(class_node: ast.ClassDef, attribute: str) -> str | None:
     return assignments[0]
 
 
+def _app_config_base_is_canonical(tree: ast.Module, candidate: ast.ClassDef) -> bool:
+    """Require one direct ``django.apps.AppConfig`` base without rebinding."""
+    if candidate.decorator_list or candidate.keywords:
+        return False
+    if not (
+        len(candidate.bases) == 1
+        and isinstance(candidate.bases[0], ast.Name)
+        and candidate.bases[0].id == "AppConfig"
+    ):
+        return False
+
+    imports = [
+        (node, alias)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+        if (alias.asname or alias.name.split(".", 1)[0]) == "AppConfig"
+    ]
+    if len(imports) != 1:
+        return False
+    import_node, imported_name = imports[0]
+    if not (
+        isinstance(import_node, ast.ImportFrom)
+        and import_node in tree.body
+        and import_node.level == 0
+        and import_node.module == "django.apps"
+        and imported_name.name == "AppConfig"
+        and imported_name.asname is None
+        and tree.body.index(import_node) < tree.body.index(candidate)
+    ):
+        return False
+
+    for ast_node in ast.walk(tree):
+        if (
+            isinstance(ast_node, ast.Name)
+            and ast_node.id == "AppConfig"
+            and isinstance(ast_node.ctx, (ast.Store, ast.Del))
+        ):
+            return False
+        if (
+            isinstance(ast_node, ast.Attribute)
+            and ast_node.attr == "AppConfig"
+            and isinstance(ast_node.ctx, (ast.Store, ast.Del))
+        ):
+            return False
+        if isinstance(ast_node, ast.alias):
+            bound_name = ast_node.asname or ast_node.name.split(".", 1)[0]
+            if bound_name == "AppConfig" and ast_node is not imported_name:
+                return False
+        if (
+            isinstance(ast_node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and ast_node.name == "AppConfig"
+        ):
+            return False
+        if isinstance(ast_node, ast.arg) and ast_node.arg == "AppConfig":
+            return False
+        if isinstance(ast_node, ast.ExceptHandler) and ast_node.name == "AppConfig":
+            return False
+        if isinstance(ast_node, (ast.Global, ast.Nonlocal)) and "AppConfig" in (
+            ast_node.names
+        ):
+            return False
+        if isinstance(ast_node, (ast.MatchAs, ast.MatchStar)) and (
+            ast_node.name == "AppConfig"
+        ):
+            return False
+
+    return True
+
+
+def _app_config_identity_writes_are_safe(
+    tree: ast.Module, candidate: ast.ClassDef
+) -> bool:
+    """Reject candidate aliases and namespaces that can mutate identity."""
+    candidate_name = candidate.name
+    bindings: list[tuple[str, str | None, int, int | None, bool]] = []
+    for ast_node in ast.walk(tree):
+        if isinstance(ast_node, ast.Assign):
+            for target in ast_node.targets:
+                if not isinstance(target, ast.Name):
+                    continue
+                bindings.append(
+                    (
+                        target.id,
+                        ast_node.value.id
+                        if isinstance(ast_node.value, ast.Name)
+                        else None,
+                        id(target),
+                        id(ast_node.value)
+                        if isinstance(ast_node.value, ast.Name)
+                        else None,
+                        len(ast_node.targets) == 1,
+                    )
+                )
+        elif isinstance(ast_node, ast.AnnAssign) and isinstance(
+            ast_node.target, ast.Name
+        ):
+            bindings.append(
+                (
+                    ast_node.target.id,
+                    ast_node.value.id if isinstance(ast_node.value, ast.Name) else None,
+                    id(ast_node.target),
+                    id(ast_node.value)
+                    if isinstance(ast_node.value, ast.Name)
+                    else None,
+                    True,
+                )
+            )
+        elif isinstance(ast_node, ast.NamedExpr) and isinstance(
+            ast_node.target, ast.Name
+        ):
+            bindings.append(
+                (
+                    ast_node.target.id,
+                    ast_node.value.id if isinstance(ast_node.value, ast.Name) else None,
+                    id(ast_node.target),
+                    id(ast_node.value)
+                    if isinstance(ast_node.value, ast.Name)
+                    else None,
+                    True,
+                )
+            )
+
+    candidate_names = {candidate_name}
+    changed = True
+    while changed:
+        changed = False
+        for target_name, source_name, _, _, _ in bindings:
+            if source_name in candidate_names and target_name not in candidate_names:
+                candidate_names.add(target_name)
+                changed = True
+
+    accepted_alias_store_ids: set[int] = set()
+    accepted_alias_source_ids: set[int] = set()
+    for alias_name in candidate_names - {candidate_name}:
+        alias_bindings = [binding for binding in bindings if binding[0] == alias_name]
+        valid_bindings = [
+            binding
+            for binding in alias_bindings
+            if binding[1] in candidate_names and binding[4]
+        ]
+        if len(valid_bindings) != 1 or len(alias_bindings) != 1:
+            return False
+        accepted_alias_store_ids.add(valid_bindings[0][2])
+        source_id = valid_bindings[0][3]
+        assert source_id is not None
+        accepted_alias_source_ids.add(source_id)
+
+    for ast_node in ast.walk(tree):
+        if (
+            isinstance(ast_node, ast.Name)
+            and isinstance(ast_node.ctx, ast.Load)
+            and ast_node.id in candidate_names
+            and id(ast_node) not in accepted_alias_source_ids
+        ):
+            return False
+        if isinstance(ast_node, ast.Name) and isinstance(
+            ast_node.ctx, (ast.Store, ast.Del)
+        ):
+            if ast_node.id == candidate_name or (
+                ast_node.id in candidate_names
+                and id(ast_node) not in accepted_alias_store_ids
+            ):
+                return False
+        if isinstance(ast_node, ast.alias):
+            bound_name = ast_node.asname or ast_node.name.split(".", 1)[0]
+            if bound_name in candidate_names:
+                return False
+        if (
+            isinstance(ast_node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and ast_node.name in candidate_names
+            and ast_node is not candidate
+        ):
+            return False
+        if isinstance(ast_node, ast.arg) and ast_node.arg in candidate_names:
+            return False
+        if isinstance(ast_node, ast.ExceptHandler) and ast_node.name in candidate_names:
+            return False
+        if isinstance(ast_node, (ast.Global, ast.Nonlocal)) and any(
+            name in candidate_names for name in ast_node.names
+        ):
+            return False
+        if isinstance(ast_node, (ast.MatchAs, ast.MatchStar)) and ast_node.name in {
+            *candidate_names,
+        }:
+            return False
+
+        if isinstance(ast_node, ast.Attribute) and isinstance(
+            ast_node.ctx, (ast.Store, ast.Del)
+        ):
+            if ast_node.attr in {"name", "label"}:
+                return False
+        if isinstance(ast_node, ast.Subscript) and isinstance(
+            ast_node.ctx, (ast.Store, ast.Del)
+        ):
+            return False
+
+    return True
+
+
 def _parse_app_config(apps_path: Path) -> ModuleAppConfigIdentity | None:
     """Bind the sole explicit AppConfig ``name`` and ``label`` assignments."""
     tree = ast.parse(apps_path.read_text(), filename=str(apps_path))
@@ -291,9 +491,15 @@ def _parse_app_config(apps_path: Path) -> ModuleAppConfigIdentity | None:
         return None
 
     candidate = candidate_classes[0]
+    if not _app_config_base_is_canonical(tree, candidate):
+        return None
+
     name = _string_assignment(candidate, "name")
     label = _string_assignment(candidate, "label")
     if name is None or label is None:
+        return None
+
+    if not _app_config_identity_writes_are_safe(tree, candidate):
         return None
 
     for ast_node in ast.walk(tree):
@@ -978,7 +1184,8 @@ def _app_config_class_name(apps_path: Path) -> str:
 
 def _copy_apps_file(tmp_path: Path, inventory: ModuleInventory) -> Path:
     """Copy one module's apps.py for parser-only AppConfig canaries."""
-    module_name = inventory.names[0]
+    module_name = "analytics"
+    assert module_name in inventory.service_modules
     source = _module_package_path(module_name, inventory.paths[module_name]) / "apps.py"
     apps_path = tmp_path / "apps.py"
     shutil.copyfile(source, apps_path)
@@ -1038,3 +1245,89 @@ def test_indirect_app_config_write_canaries(
     apps_path.write_text(apps_path.read_text() + suffix)
 
     assert _parse_app_config(apps_path) is None
+
+
+@pytest.mark.parametrize(
+    "identity_write",
+    [
+        "class-alias",
+        "destructured-alias",
+        "subscript",
+        "nested-attribute",
+        "module-attribute",
+    ],
+)
+def test_app_config_identity_write_canaries_fail_without_execution(
+    tmp_path: Path, identity_write: str
+) -> None:
+    """Candidate identity mutation families fail without importing source."""
+    inventory = _bind_module_inventory()
+    assert "analytics" in inventory.service_modules
+    apps_path = _copy_apps_file(tmp_path, inventory)
+    class_name = _app_config_class_name(apps_path)
+    marker_path = tmp_path / "app-config-identity-side-effect"
+    side_effect = f"__builtins__['open']({str(marker_path)!r}, 'w').write('executed')"
+    if identity_write == "class-alias":
+        suffix = f"\nConfigAlias = {class_name}\nConfigAlias.name = {side_effect}\n"
+    elif identity_write == "destructured-alias":
+        suffix = (
+            f"\nConfigAlias, = ({class_name},)\nConfigAlias.label = {side_effect}\n"
+        )
+    elif identity_write == "subscript":
+        suffix = f'\n{class_name}["label"] = {side_effect}\n'
+    elif identity_write == "nested-attribute":
+        suffix = (
+            f"\nConfigAlias = {class_name}\n"
+            f"ConfigAlias.metadata.label = {side_effect}\n"
+        )
+    else:
+        suffix = (
+            f"\nimport sys\nsys.modules[__name__].{class_name}.name = {side_effect}\n"
+        )
+    apps_path.write_text(apps_path.read_text() + suffix)
+
+    assert _parse_app_config(apps_path) is None
+    assert not marker_path.exists()
+
+
+@pytest.mark.parametrize(
+    "base_form",
+    [
+        "local-spoof",
+        "rebound-import",
+        "decorated-class",
+        "multiple-bases",
+    ],
+)
+def test_noncanonical_app_config_bases_fail_without_execution(
+    tmp_path: Path, base_form: str
+) -> None:
+    """Only the direct canonical Django AppConfig base may bind identity."""
+    inventory = _bind_module_inventory()
+    apps_path = _copy_apps_file(tmp_path, inventory)
+    class_name = _app_config_class_name(apps_path)
+    content = apps_path.read_text()
+    marker_path = tmp_path / "app-config-base-side-effect"
+    side_effect = f"__builtins__['open']({str(marker_path)!r}, 'w').write('executed')"
+
+    if base_form == "local-spoof":
+        replacement = f"class AppConfig:\n    marker = {side_effect}"
+        content = content.replace("from django.apps import AppConfig", replacement, 1)
+    elif base_form == "rebound-import":
+        replacement = f"from django.apps import AppConfig\nAppConfig = {side_effect}"
+        content = content.replace("from django.apps import AppConfig", replacement, 1)
+    elif base_form == "decorated-class":
+        canonical = f"class {class_name}(AppConfig):"
+        replacement = (
+            f"@({side_effect} or (lambda cls: cls))\nclass {class_name}(AppConfig):"
+        )
+        content = content.replace(canonical, replacement, 1)
+    else:
+        canonical = f"class {class_name}(AppConfig):"
+        replacement = f"class {class_name}(AppConfig, object):"
+        content = content.replace(canonical, replacement, 1)
+
+    apps_path.write_text(content)
+
+    assert _parse_app_config(apps_path) is None
+    assert not marker_path.exists()

@@ -818,20 +818,20 @@ class TestMalformedSources:
 class TestParserPrecision:
     """Extraction functions correctly identify gates in each source."""
 
-    def test_serial_extracts_all_five_conformance_gates(self) -> None:
-        """The serial path in check_ci_locally.sh has all 5 check gates."""
+    def test_serial_extracts_all_six_registered_conformance_gates(self) -> None:
+        """The serial path in check_ci_locally.sh has all six registered gates."""
         targets = _extract_check_ci_serial_gates(CHECK_CI)
         expected = set(_registry_local_gate_targets())
         assert targets == expected, f"Serial extraction returned {targets}, expected {expected}"
 
-    def test_parallel_extracts_all_five_conformance_gates(self) -> None:
-        """The parallel path in check_ci_locally.sh has all 5 check gates."""
+    def test_parallel_extracts_all_six_registered_conformance_gates(self) -> None:
+        """The parallel path in check_ci_locally.sh has all six registered gates."""
         targets = _extract_check_ci_parallel_gates(CHECK_CI)
         expected = set(_registry_local_gate_targets())
         assert targets == expected, f"Parallel extraction returned {targets}, expected {expected}"
 
-    def test_hosted_has_all_five_conformance_jobs(self) -> None:
-        """ci.yml job names include all 5 conformance gate jobs."""
+    def test_hosted_has_all_six_registered_conformance_jobs(self) -> None:
+        """ci.yml job names include all six registered conformance jobs."""
         ci_jobs = _extract_ci_job_names(CI_YML)
         expected_jobs: frozenset[str] = frozenset(
             {
@@ -873,7 +873,7 @@ class TestParserPrecision:
         """Serial extraction should not pick gates that only exist in parallel."""
         serial = _extract_check_ci_serial_gates(CHECK_CI)
         parallel = _extract_check_ci_parallel_gates(CHECK_CI)
-        # All 5 conformance gates are in both — verify this holds
+        # All six registered conformance gates are in both — verify this holds
         assert serial == parallel, (
             f"Serial and parallel extraction disagree: serial={serial}, parallel={parallel}"
         )
@@ -2799,13 +2799,14 @@ class TestYamlStructuralParsing:
     def test_ci_job_names_extracted(self) -> None:
         """ci.yml job names are extracted via structural YAML parsing."""
         jobs = _extract_ci_job_names(CI_YML)
-        # Should include the five conformance gate job names
+        # Should include the six registered conformance gate job names
         for job in (
             "module-core-compat",
             "module-core-import-linter",
             "manifest-sync-gate",
             "org-context-primitives-gate",
             "csrf-exempt-gate",
+            "check-gate-suites",
         ):
             assert job in jobs, f"Expected {job} in ci.yml jobs, got: {jobs}"
 
@@ -3169,8 +3170,8 @@ class TestIncludeFailHard:
 class TestRealCheckMembership:
     """The repository Makefile's check aggregation invariant (F-001)."""
 
-    def test_five_conformance_gates_are_check_members(self) -> None:
-        """All five conformance gates are reachable from the real check target."""
+    def test_standalone_conformance_gates_are_check_members(self) -> None:
+        """All five standalone conformance gates are reachable from the real check target."""
         members = _extract_check_members(REPO_ROOT / "Makefile")
         for target in CONFORMANCE_MAKE_TARGETS:
             assert target in members, f"Expected {target} in check members"
