@@ -18,6 +18,7 @@ _STORAGE_CLOUD_BACKENDS = frozenset({"r2", "s3"})
 _STORAGE_CLOUD_DEPENDENCIES = frozenset({"boto3", "django-storages"})
 _STORAGE_CLOUD_EXTRA = "cloud"
 _LOCAL_WHEELHOUSE_ENV = "QUICKSCALE_LOCAL_WHEELHOUSE"
+_LOCAL_WHEEL_DISTRIBUTIONS = frozenset({"quickscale-core"})
 # Wheelhouse staged next to a locally installed CLI (scripts/install_global.sh).
 # A local (unpublished) build must resolve its own quickscale-core from these
 # wheels; without it every generated project pins a PyPI version that does not
@@ -158,8 +159,8 @@ def _resolve_wheelhouse_dir() -> Path | None:
     used, so a locally installed build resolves its own unpublished wheels
     instead of pinning a PyPI version that does not exist.
     """
-    wheelhouse_value = os.environ.get(_LOCAL_WHEELHOUSE_ENV)
-    if wheelhouse_value:
+    if _LOCAL_WHEELHOUSE_ENV in os.environ:
+        wheelhouse_value = os.environ[_LOCAL_WHEELHOUSE_ENV]
         wheelhouse = Path(wheelhouse_value)
         if not wheelhouse.is_absolute() or not wheelhouse.is_dir():
             raise DependencySyncError(
@@ -173,19 +174,73 @@ def _resolve_wheelhouse_dir() -> Path | None:
     return None
 
 
+def _find_local_wheel_candidates(
+    wheelhouse: Path,
+    normalized_name: str,
+) -> list[Path]:
+    """Return wheels whose distribution component matches a normalized name."""
+    return sorted(
+        candidate
+        for candidate in wheelhouse.iterdir()
+        if candidate.is_file()
+        and candidate.suffix.lower() == ".whl"
+        and re.sub(r"[-_.]+", "_", candidate.name.split("-", 1)[0]).lower()
+        == normalized_name
+    )
+
+
+def _raise_for_missing_explicit_wheel(
+    wheelhouse: Path,
+    dependency_name: str,
+    wheel_pattern: str,
+) -> None:
+    """Fail when an explicit wheelhouse lacks its requested local artifact."""
+    if _LOCAL_WHEELHOUSE_ENV not in os.environ:
+        return
+
+    available_wheels = sorted(
+        candidate.name
+        for candidate in wheelhouse.iterdir()
+        if candidate.is_file() and candidate.suffix.lower() == ".whl"
+    )
+    raise DependencySyncError(
+        f"{_LOCAL_WHEELHOUSE_ENV} requested local dependency "
+        f"{dependency_name}, but no matching wheel was found in "
+        f"{wheelhouse}; searched directory {wheelhouse} with pattern "
+        f"{wheel_pattern!r}. Available wheels: "
+        f"{available_wheels or '[none]'}. Build or copy a wheel matching "
+        f"{wheel_pattern!r}, or unset {_LOCAL_WHEELHOUSE_ENV} to use the "
+        "manifest version spec."
+    )
+
+
 def _resolve_local_wheel_dependency(
     project_path: Path,
     dependency_base: Path,
     dependency_name: str,
 ) -> dict[str, str] | None:
     """Materialize and return an exact local wheel for installed acceptance."""
+    normalized_name = re.sub(r"[-_.]+", "-", dependency_name).lower()
+    if normalized_name not in _LOCAL_WHEEL_DISTRIBUTIONS:
+        return None
+
     wheelhouse = _resolve_wheelhouse_dir()
     if wheelhouse is None:
         return None
 
-    normalized_name = dependency_name.replace("-", "_").lower()
-    candidates = sorted(wheelhouse.glob(f"{normalized_name}-*.whl"))
+    # Wheel distribution names use the PEP 503 spelling: runs of hyphens,
+    # underscores, and dots compare as one underscore, case-insensitively.
+    # Do the comparison against the filename's distribution component rather
+    # than relying on Path.glob's case-sensitive, hyphen-only matching.
+    normalized_name = re.sub(r"[-_.]+", "_", dependency_name).lower()
+    wheel_pattern = f"{normalized_name}-*.whl"
+    candidates = _find_local_wheel_candidates(wheelhouse, normalized_name)
     if not candidates:
+        _raise_for_missing_explicit_wheel(
+            wheelhouse,
+            dependency_name,
+            wheel_pattern,
+        )
         return None
     if len(candidates) != 1:
         raise DependencySyncError(

@@ -1,7 +1,7 @@
 # v88 Ticket Context — Concepts and Implementation Notes
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **v88 Ticket Context**
-> **Related docs**: [Roadmap](roadmap.md) (authority for scope, bands, worktrees, merge order) | [Decisions](decisions.md) | [Validation Policy](validation_policy.md) | [Arch audit](../others/arch-audit.md) | [Tech audit](../others/tech-audit.md)
+> **Related docs**: [Roadmap](roadmap.md) (authority for scope, bands, worktrees, merge order) | [Decisions](decisions.md) | [Validation Policy](validation_policy.md) | [Local wheelhouse resolution](local-wheelhouse.md) | [Arch audit](../others/arch-audit.md) | [Tech audit](../others/tech-audit.md)
 
 ## What this document is
 
@@ -12,7 +12,7 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers the **nineteen open v88 ticket entries** across eighteen open merge positions
+It covers the **eighteen open v88 ticket entries** across seventeen open merge positions
 (SA163 executes inside SA135) plus the three post-v88 entries. Closed tickets are not
 described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
 Sections are ordered by merge band (A → B → C), which is also the order in which the work
@@ -37,7 +37,7 @@ The whole release is one principle with five failure modes. Every ticket is a le
  doesn't run  written in    is missing   the thing     only in a
  or lies      2+ places     so guess     we created    human's head
       │          │            │            │              │
-    SA155      SA124         SA150          —            SA123
+    SA155      SA124         SA165          —            SA123
    SA162      SA124         SA165        SA142          SA166
      │        SA118           │          SA135            │
   (unwired    SA163         (wheelhouse  SA161         (dep-vuln +
@@ -61,7 +61,7 @@ failure modes; auditing the gate layer found a fifth sitting underneath all of t
 |---|---|---|
 | **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | 11 of 15 `scripts/test_*.py` suites are still wired to no target; a gate uses a bool inversion Python 3.16 removes | SA155, SA162 |
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA124, SA118, SA163, SA160, SA164 |
-| **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | wheelhouse set but no wheel matches → returns the manifest spec; a corrupt state file returns silently; a skip where a failure belongs | SA150, SA165 |
+| **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | a corrupt state file returns silently; a skip where a failure belongs; an explicit wheelhouse now fails hard rather than selecting the manifest spec | SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA142, SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
 
@@ -171,82 +171,32 @@ Resolve that one explicitly rather than folding it into a blanket justification.
 
 # Band B / W1 — Dependency-spec authority
 
-## SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam
+## SA150 — Document and fail-hard the local wheelhouse seam
 
 `Band B · Tier 2 · W1 · merge #12 · deps: none · blocks SA118`
 
-### The mental model
+The local wheelhouse is an installed-CLI dependency-resolution seam, not a
+second package-version authority. `scripts/install_global.sh` stages the exact
+`quickscale-core` wheel beside the installed interpreter at
+`sys.prefix/quickscale_wheels`. The acceptance harness may override that
+location with `QUICKSCALE_LOCAL_WHEELHOUSE`.
 
-When QuickScale generates a project, that project needs to depend on `quickscale-core`. Normally the generated `pyproject.toml` says something like `quickscale-core = "^0.87.0"` — resolved from PyPI.
+There are two production consumers of the resolver in
+`quickscale_cli/utils/module_dependency_sync.py`:
 
-But during development and acceptance testing, the version you want does not exist on PyPI yet. So there is an escape hatch: a **wheelhouse**, a directory of locally built `.whl` files. When one is in play, the generated project should depend on an exact local wheel *file* instead of a PyPI version range.
+1. the project dependency loop, which adds or updates a generated project's
+   third-party dependency entry; and
+2. the embedded-module path-repair pass, which replaces an unavailable
+   monorepo-local path dependency in the module `pyproject.toml`.
 
-Two ways a wheelhouse is found (`_resolve_wheelhouse_dir()`, `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py:153`):
-
-1. `QUICKSCALE_LOCAL_WHEELHOUSE` env var — an explicit, deliberate override used by installed-wheel acceptance runs.
-2. A wheelhouse staged beside the running CLI install (`sys.prefix/<wheelhouse dirname>`) — implicit, for locally installed builds.
-
-### The concrete defect
-
-`_resolve_local_wheel_dependency()` at line ~175:
-
-```python
-wheelhouse = _resolve_wheelhouse_dir()
-if wheelhouse is None:
-    return None                      # (A) no wheelhouse at all — correct
-
-normalized_name = dependency_name.replace("-", "_").lower()
-candidates = sorted(wheelhouse.glob(f"{normalized_name}-*.whl"))
-if not candidates:
-    return None                      # (B) wheelhouse exists, no matching wheel
-if len(candidates) != 1:
-    raise DependencySyncError(...)   # (C) ambiguous — correctly fails hard
-```
-
-Returning `None` means "no local wheel applies, use the manifest version spec". That is right for **(A)** and wrong for **(B)**.
-
-The two cases are semantically opposite:
-
-- **(A)** You never asked for a wheelhouse. Falling back to PyPI is the correct, intended behaviour.
-- **(B)** You explicitly set `QUICKSCALE_LOCAL_WHEELHOUSE` — you *stated* you want local wheels — and the wheel isn't there. Something is broken: a build step didn't run, a name normalization mismatched, the wrong directory was exported. Falling back to `^0.87.0` from PyPI silently produces a project that installs a **different artifact than the one under test**.
-
-Note the asymmetry the code already contains: case **(C)**, two matching wheels, raises. Ambiguity fails hard; absence does not. That inconsistency is the tell.
-
-The failure is quiet and delayed: the acceptance run proceeds, installs a published wheel, and reports success on the wrong artifact — or fails much later at install time with an unrelated-looking error.
-
-### Why this is the second half of the ticket
-
-`_resolve_wheelhouse_dir()` **already** fails hard on a malformed env var:
-
-```python
-if not wheelhouse.is_absolute() or not wheelhouse.is_dir():
-    raise DependencySyncError(
-        f"{_LOCAL_WHEELHOUSE_ENV} must name an absolute wheelhouse directory"
-    )
-```
-
-So the seam has real, enforced contracts — absolute path, must exist, unambiguous wheels — that appear **nowhere in `docs/technical/`**. The only descriptions are code comments and the E2E test `quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py`. Someone hitting the error has to read the CLI source to learn the rules. That is the documentation half.
-
-### Implementation shape
-
-Distinguish (A) from (B). Give `_resolve_local_wheel_dependency()` enough information to know *why* there is no wheelhouse — either return a small result type from `_resolve_wheelhouse_dir()` carrying its provenance (explicit-env vs staged-beside-install vs none), or check the env var directly at the raise site. Raise `DependencySyncError` naming the env var, the directory searched, the glob pattern tried, and the wheels actually present — the last of these is what turns a five-minute debugging session into a five-second one.
-
-The staged-beside-install wheelhouse (case 2) is a judgement call: it is implicit, not requested, so an unmatched wheel there is arguably closer to (A). State your choice explicitly in the doc rather than leaving it to be rediscovered.
-
-### Guard rails
-
-- *"a regression test asserts the raise (not a log)"* — a `caplog` assertion does not satisfy this. The call must raise.
-- *"the unset-wheelhouse path is unchanged"* — the overwhelmingly common path is no wheelhouse at all. It must keep resolving from the manifest exactly as today. A regression here breaks ordinary project generation for every user.
-
-### Audit bookkeeping
-
-`docs/others/tech-audit.md` currently carries **five open findings** in its summary (S3: three;
-S4: two). The wheelhouse seam is listed under **"Live watch items"**, not as a finding. So the
-closeout retires a watch item; it does not close a numbered finding, and the severity table
-remains at five. The current audit header is `Branch: v88`; the previously noted header drift
-is historical and needs no action.
-
----
+Both consumers use the same normalized wheel-name match. An explicit
+`QUICKSCALE_LOCAL_WHEELHOUSE` with no matching wheel fails with
+`DependencySyncError` naming the variable, searched directory, attempted
+pattern, and available wheels. When the variable is unset, an absent or
+incomplete implicit `sys.prefix/quickscale_wheels` leaves the manifest's
+published version range authoritative. The complete selection and failure
+contract is [Local wheelhouse resolution](local-wheelhouse.md), and the
+production behavior is covered by focused tests for both call paths.
 
 # Band B / W2 — Gates and declared wiring
 
@@ -360,7 +310,7 @@ That second entry is effectively your rule list. Five named categories — treat
 
 ## SA118 — Project every declared manifest default into wiring
 
-`Band B · Tier 2 · W2 · merge #16 · deps: SA123, SA150, SA167a`
+`Band B · Tier 2 · W2 · merge #16 · deps: SA123, SA167a`
 
 ### The mental model
 
@@ -389,7 +339,7 @@ Every entry states four things: a type, a default, the Django setting it maps to
 
 So the declaration is rich and validated. The question SA118 asks is: **does the generated project's wiring actually reflect every declared default, or do some defaults exist only inside imperative Python that re-states them?**
 
-You have already seen a concrete example of the second pattern in SA150's file:
+The dependency synchronizer provides a concrete example of the second pattern:
 
 ```python
 backend = str((module_options or {}).get("backend", "local")).strip().lower()
@@ -420,7 +370,7 @@ Its `baseline_evidence` entries show the established convention — each past re
 
 ### Dependencies
 
-**SA123** — same track, sequencing only. **SA150** — real and cross-track: SA118 touches manifest version-spec handling, and it must sit on top of SA150's fail-hard seam rather than the current silent fallback. This is the single inter-track edge in the release; if the merge order slips, SA118 will build on behaviour that is about to change underneath it.
+**SA123** — same track, sequencing only. SA150 closed the fail-hard wheelhouse seam: SA118 now builds on its documented contract rather than the former silent fallback.
 
 ---
 
@@ -580,7 +530,7 @@ if not postgres_available():
     pytest.skip("PostgreSQL not available")
 ```
 
-That converts an infrastructure failure into a green build with silently zero integration coverage — the same silent-fallback family as SA150, one layer up. If provisioning fails, the gate must fail. There is an existing asserted-unavailability control; it must survive the rewrite.
+That converts an infrastructure failure into a green build with silently zero integration coverage — the same silent-fallback family as SA165, one layer up. If provisioning fails, the gate must fail. There is an existing asserted-unavailability control; it must survive the rewrite.
 
 ### Proof
 
@@ -789,7 +739,7 @@ one. The sync-before-merge-back procedure has to preserve every entry.
 
 ## SA162 — Fix the deprecated bool inversion in the CSRF AST gate
 
-`Band C · Tier 3 · W1 · merge #17 · deps: SA150 (worktree ordering)`
+`Band C · Tier 3 · W1 · merge #17 · deps: none`
 
 ### The concrete defect
 
@@ -830,12 +780,12 @@ red flag — the wrong fix should not outlive the finding.
 
 ## SA165 — Discharge the tech-audit watch items that carry an action
 
-`Band C · Tier 3 · W1 · merge #22 · deps: SA150 (owns an item excluded here)`
+`Band C · Tier 3 · W1 · merge #22 · deps: none`
 
 ### The mental model
 
 The tech audit's *Notes* hold thirteen items. Most are **accepted trade-offs** or are owned
-elsewhere — `SA150` owns the local-wheelhouse seam, while integration-branch CI,
+elsewhere — the local-wheelhouse seam is closed by SA150, while integration-branch CI,
 generator lock generation, the DB-free healthcheck, the
 CRM count fallbacks, and non-durable atomic state writes are each recorded as **deliberate
 and explicitly out of this ticket's scope**.
@@ -851,7 +801,7 @@ markers that downstream readers use to distinguish *"M2 has spoken"* from *pre-M
 
 The trigger is narrow — the file was just written successfully by `save()` — but this is
 precisely the shape the Fail-Hard Principle names (`decisions.md:634`, `:716-732`), and
-`tech-audit.md` is the declared SSOT for that class. Same family as SA150, one layer over.
+`tech-audit.md` is the declared SSOT for that class. Same family as SA165, one layer over.
 
 **Raise or report. A regression test must assert the raise, not a log line.**
 
@@ -1017,8 +967,7 @@ gaps:
   breakage surfaces first for a maintainer **mid-migration** — the worst possible moment.
 - **Silent skip in the conformance gate.** `_template_emitted_paths()` calls
   `pytest.skip()` when the template tree is not found, so a path-resolution regression turns
-  the ownership gate **green instead of red**. Same silent-fallback family as SA150 and
-  SA165.
+  the ownership gate **green instead of red**. Same silent-fallback family as SA165.
 - **Stale doc provenance.** `beta-site-migration.md` is headed *"shipped in v0.81.0"*
   against `VERSION` 0.87.0, and describes the tool as *"backed by Python scripts under
   `scripts/`"* when `scripts/beta_migrate.py` is an eight-line wrapper over
@@ -1082,10 +1031,8 @@ Each step builds the one after it:
 
 1. **SA155** — the structural version of every band-A defect this release already closed.
    Not "a test is wrong" but "an entire category of code has no owner."
-2. **SA150** — the clearest instance of silent fallback; four lines of code, precisely
-   diagnosable.
-3. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
-4. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
+2. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
+3. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
    (bypassed RLS roles).
 5. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
    about existing conventions (scope allowlist, gate registry, emission-parity fixture).
@@ -1117,7 +1064,7 @@ roadmap dependency without treating the shared heading as a single ticket:
 | Ticket | Merge position | Roadmap dependencies | Current status |
 |---|---:|---|---|
 | SA167a | #8 | SA155 | merge blocked by open SA155; implementation may start |
-| SA167b | #14 | SA167a, SA150 | blocked until both worktree-ordering dependencies are ready |
+| SA167b | #14 | SA167a | blocked until the shared `entry_point.py` prerequisite is ready |
 | SA167c | #21 | SA167a, SA118 | blocked until both shared-manifest dependencies are ready |
 | SA167d | #18 | SA167b, SA162 | blocked until both worktree-ordering dependencies are ready |
 
