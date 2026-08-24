@@ -185,7 +185,7 @@ pulled forward from W3 because the PostgreSQL/Docker slot is exclusive. W1 (five
 between them would buy no wall-clock time while creating merge hazards — SA165 in particular
 stays on W1 because it edits `scripts/test_isolation_conformance.sh` and the SA90 emission
 gate's `_HOST_DEPENDENT_PATHS`, both of which W3's SA163/SA161/SA160 legs read or rebaseline.
-**No track moves are proposed this pass.** Band-C tickets remain the sanctioned way to spend
+**No track moves are proposed this pass — fourth consecutive pass.** Band-C tickets remain the sanctioned way to spend
 lane slack in place.
 
 ### Track readiness (SA151 reconciled 2026-08-24; other lanes retain the 2026-08-22 assessment)
@@ -195,41 +195,29 @@ are yes.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W1** | SA134 closeout follow-up (**partial checkpoint retained**) | **yes** — the pin-authority work is complete and the remaining work is a bounded documentation-invariant correction | **yes** — the context document and core consistency test are W1-owned | **yes for the checkpoint; no for clean closeout** — the maintainer authorized partial merge-back, but terminal attestation found one fail-open invariant gap | **partial but merge-safe by maintainer direction — off the critical path** |
-| **W2** | SA155 (#7, **partial planning checkpoint retained**) | **yes** — every prerequisite is merged; no product decision is open | **yes, after orchestration recovery** — the documented `scripts/` baseline is green (1,213 passed), but implementation did not start because two Adaptive implementer handoffs failed before mutation | **yes** — #7 has no unsatisfied dependency | **administratively paused — next critical-path leg** |
+| **W1** | SA150 (#12) | **yes** — `deps: none`, the lane is free after SA134 closed, and no decision, authorization, or plan gate stands in front of it | **yes** — every acceptance clause (the `docs/technical/` seam description, the `_resolve_local_wheel_dependency()` fail-hard raise, its regression test, and the tech-audit watch-item retirement) is W1-owned and needs no other track's output | **yes** — #12 merges after nothing; its prerequisite is already on the integration branch | **truly green — and on the critical path as SA118's feeder** |
+| **W2** | SA155 (#7, **in progress**) | **yes** — every prerequisite is merged and both planning decisions are ratified; nothing waits on an authorization or a plan gate | **yes** — the `scripts/` baseline is green (1,213 passed) and every acceptance clause is W2-owned (`Makefile`, `scripts/gate_registry.json`, `sync_ci_gate_jobs.py`, the hosted job, the focused tests) | **yes** — #7 has no unsatisfied dependency and heads the queue | **truly green — the critical-path head** |
 | **W3** | SA151 (#3, **S1-S3 checkpoint retained — S4 environment prerequisite open**) | **no** — environment repair must precede the S4 rerun; source, runtime-oracle, and documentation corrections are settled and no product decision is open | **no** — `quickscale_bypassrls_test_role` still lacks required table privileges across the module-test database set, observed at `test_quickscale_forms.public.django_migrations` | **yes for the checkpoint; no for closure** — merge #3 retains useful work without satisfying dependants | **partial but merge-safe — off the critical path** (second chain) |
 
 **Blocked next-after tickets, and what clears each:**
 
 | Ticket | Blocked state | Blocking ticket | Clearable by a maintainer decision? |
 |---|---|---|---|
-| SA142 (#10) | can start — **no** | SA151 (#3) | No — hard dependency; SA151's retained checkpoint is not ticket closure. |
+| SA142 (#10) | can start — **no** | SA151 (#3) | No — hard dependency, clearable only by the upstream work. SA151's retained checkpoint is not ticket closure; the S4 BYPASSRLS prerequisite and terminal validation must close first. |
 | SA167a (#8) | can merge — no | SA155 (#7) | **Decided 2026-08-22 — the gate stays.** This was the one decision-clearable blocker; the maintainer declined to lift it. Implementation may begin today (`deps: none`); only the *merge* waits, because its acceptance evidence — unchanged emission parity, `make quality` no worse than found — is meaningless until SA155 makes the gate layer truthful. Starting it early is sanctioned; merging it early is not. |
 | SA164 (#25) | can start · can finish — no | SA166 (#24), SA151 (#3) | No — W2 ordering and SA151's S4 BYPASSRLS/terminal-validation blocker must both clear. |
 
 **Recommended concurrency right now:** W1 and W2 resume independently; W3 retains its S1-S3
 checkpoint and waits for authorized environment repair before S4.
 
-- **W1 — finish the retained SA134 closeout follow-up before SA150.** SA134's pin-authority
-  acceptance remains complete and is not reopened. The checkpoint keeps the restored SA151
-  partial/open context, corrected SA142/SA164/SA152 dependency statements, synchronized SA155
-  15/11 census, explicit umbrella/shared-position metadata, and the generalized roadmap/context
-  test. Its latest focused suite passed 11 tests, `make check -- --core` passed with 2,796 tests
-  and 1 skip, and `make quality` matched the accepted two-warning/zero-critical/monotonicity-pass
-  baseline. The maintainer directed that these partial improvements be committed and merged.
-  **Pending/blocking:** terminal attestation found that the invariant can false-green a candidate
-  roadmap ticket written with an alternate list marker or missing bold markup, and can miss a
-  dependency contradiction outside the selected ticket section or phrased as `has completed`.
-  This blocks clean closeout, not the maintainer-authorized partial checkpoint. The convergence
-  envelope-recovery block was adjudicated as procedural rather than a source or merge blocker.
-  **Decision status:** no product or sequencing decision is open for this continuation; the
-  maintainer has already chosen partial merge-back. **Pending closure plan:** (1) detect broad
-  ticket candidates independently of the accepted grammar and reject every noncanonical shape;
-  (2) scan dependency status across all current-context prose through an explicit status model or
-  structurally constrain where those claims may appear; (3) add expected-red canaries for alternate
-  and missing ticket syntax, global dependency contradictions, and `has completed`; (4) rerun the
-  focused invariant, `make check -- --core`, the accepted `make quality` baseline, convergence,
-  and terminal attestation. Only then begin SA150.
+- **W1 — start SA150 (#12).** SA134 is closed and archived in
+  [CHANGELOG.md](../../CHANGELOG.md); merge position #9 is retired, and the lane is free with no
+  retained checkpoint. SA150 is the lane's first leg and is executable today: `deps: none`, its
+  prerequisite is merged, and its files (`quickscale_cli/.../module_dependency_sync.py`, a new
+  `docs/technical/` seam doc, `docs/others/tech-audit.md`) are touched by no other open ticket.
+  It is **not** filler — SA118 (#16), on the critical path, must project manifest version specs
+  over SA150's fail-hard seam, so this is the one W1 leg that feeds the critical path. Do it
+  before the band-C fillers behind it.
 - **W2 — resume SA155 in a fresh Adaptive session.** Require a clean `wt-track2`, merge the
   then-current `v88`, rediscover changed seams, and create a fresh plan authority rather than
   reusing the session-scoped carrier from the checkpoint. This is the next critical-path leg.
