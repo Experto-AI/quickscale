@@ -57,3 +57,15 @@ required_modules:
 # Modules implied when this module is selected
 implies:
   - name: orgs
+
+derivation:
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value:
+          - django.contrib.sites
+          - quickscale_modules_auth
+          - allauth
+          - allauth.account
+      description: "Auth Django app labels"
