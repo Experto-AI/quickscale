@@ -69,3 +69,12 @@ dependencies:
 
 django_apps:
   - quickscale_modules_notifications
+
+derivation:
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value:
+          - quickscale_modules_notifications
+      description: "Notifications Django app label"

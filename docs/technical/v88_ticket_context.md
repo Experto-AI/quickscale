@@ -12,9 +12,10 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers the **seventeen open v88 ticket entries** across sixteen open merge positions
-(SA163 executes inside SA135) plus the three post-v88 entries. Closed tickets are not
-described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
+It covers the **sixteen open v88 ticket entries** across fifteen open merge positions
+(SA163 executes inside SA135) plus the three post-v88 entries. Closed tickets are not normally
+described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md). SA167a is
+the explicit exception: its umbrella row remains so downstream dependency state stays visible.
 Sections are ordered by merge band (A → B → C), which is also the order in which the work
 becomes safe to do.
 
@@ -961,9 +962,9 @@ roadmap dependency without treating the shared heading as a single ticket:
 
 | Ticket | Merge position | Roadmap dependencies | Current status |
 |---|---:|---|---|
-| SA167a | #8 | none | ready; completed gate-layer prerequisite supplies the validation context |
-| SA167b | #17 | SA167a, SA162 | blocked until both worktree-ordering dependencies are ready |
-| SA167c | #21 | SA167a, SA118 | blocked until both shared-manifest dependencies are ready |
+| SA167a | #8 | none | completed; checked handoff marker retained in the roadmap |
+| SA167b | #17 | SA167a, SA162 | SA167a satisfied; blocked only on SA162 |
+| SA167c | #21 | SA167a, SA118 | SA167a satisfied; blocked only on SA118 |
 | SA167d | #18 | SA167b, SA162 | blocked until both worktree-ordering dependencies are ready |
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary

@@ -31,3 +31,12 @@ middleware:
 settings:
   ACCOUNT_ADAPTER: quickscale_modules_orgs.adapters.OrgsAccountAdapter
   QUICKSCALE_MODE: solo
+
+derivation:
+  wiring_projections:
+    - wiring_field: apps
+      derivation_type: static
+      expression:
+        value:
+          - quickscale_modules_orgs
+      description: "Orgs Django app label"

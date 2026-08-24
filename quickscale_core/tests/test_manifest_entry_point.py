@@ -21,6 +21,7 @@ where both packages are on sys.path.
 
 from __future__ import annotations
 
+import ast
 import inspect
 import os
 from pathlib import Path
@@ -1635,3 +1636,88 @@ class TestNotificationsPostHookFailHard:
         ):
             with pytest.raises(KeyError, match="QUICKSCALE_NOTIFICATIONS_ENABLED"):
                 build_manifest_wiring_spec("notifications", {})
+
+
+_SA167A_MANIFEST_APPS: dict[str, tuple[str, ...]] = {
+    "auth": (
+        "django.contrib.sites",
+        "quickscale_modules_auth",
+        "allauth",
+        "allauth.account",
+    ),
+    "backups": ("quickscale_modules_backups",),
+    "notifications": ("quickscale_modules_notifications",),
+    "orgs": ("quickscale_modules_orgs",),
+    "storage": ("quickscale_modules_storage",),
+}
+
+
+class TestSA167aManifestOwnedApps:
+    """SA167a pins manifest ownership without changing resolved app wiring."""
+
+    @pytest.mark.parametrize("module_name", sorted(_SA167A_MANIFEST_APPS))
+    def test_manifest_declares_exact_app_projection(self, module_name: str) -> None:
+        """Each migrated module has one complete static apps projection."""
+        manifest = load_module_manifest(module_name)
+        projections = [
+            projection
+            for projection in manifest.wiring_projections
+            if projection.get("wiring_field") == "apps"
+        ]
+
+        assert len(projections) == 1
+        projection = projections[0]
+        assert projection.get("derivation_type") == "static"
+        expression = projection.get("expression")
+        assert isinstance(expression, dict)
+        assert expression.get("value") == list(_SA167A_MANIFEST_APPS[module_name])
+
+    def test_entry_point_has_no_apps_projection_literals(self) -> None:
+        """Core adapters consume manifest app projections rather than literals."""
+        source = Path(inspect.getfile(entry_point_module)).read_text()
+        tree = ast.parse(source)
+        app_projection_lines = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and (
+                (isinstance(node.func, ast.Name) and node.func.id == "WiringProjection")
+                or (
+                    isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "WiringProjection"
+                )
+            )
+            and any(
+                keyword.arg == "wiring_field"
+                and isinstance(keyword.value, ast.Constant)
+                and keyword.value.value == "apps"
+                for keyword in node.keywords
+            )
+        ]
+        assert not app_projection_lines, (
+            "entry_point.py still declares apps WiringProjection literals at lines "
+            f"{app_projection_lines}"
+        )
+
+
+_EXPECTED_CATALOG_APPS: dict[str, tuple[str, ...]] = {
+    "analytics": ("quickscale_modules_analytics",),
+    "auth": _SA167A_MANIFEST_APPS["auth"],
+    "backups": _SA167A_MANIFEST_APPS["backups"],
+    "billing": ("rest_framework", "quickscale_modules_billing"),
+    "blog": ("markdownx", "quickscale_modules_blog"),
+    "crm": ("rest_framework", "django_filters", "quickscale_modules_crm"),
+    "forms": ("rest_framework", "django_filters", "quickscale_modules_forms"),
+    "listings": ("django_filters", "markdownx", "quickscale_modules_listings"),
+    "notifications": _SA167A_MANIFEST_APPS["notifications"],
+    "orgs": _SA167A_MANIFEST_APPS["orgs"],
+    "social": ("quickscale_modules_social",),
+    "storage": _SA167A_MANIFEST_APPS["storage"],
+}
+
+
+@pytest.mark.parametrize("module_name", sorted(_EXPECTED_CATALOG_APPS))
+def test_sa167a_all_catalog_app_resolution_is_byte_identical(module_name: str) -> None:
+    """All twelve resolved app tuples remain the established contract."""
+    spec = build_manifest_wiring_spec(module_name, {}, project_package="myapp")
+    assert spec.apps == _EXPECTED_CATALOG_APPS[module_name]

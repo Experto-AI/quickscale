@@ -27,6 +27,7 @@ SECTION_RE = re.compile(r"^## (SA\d+[^\n]*)$", re.MULTILINE)
 UMBRELLA_TITLE = "SA167a / SA167b / SA167c / SA167d — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167b", "SA167c", "SA167d"})
 AUXILIARY_MULTI_TICKET_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
+RETAINED_CLOSED_TICKETS = frozenset({"SA167a"})
 
 # SA135 and SA163 share one merge position, but remain separately enumerable roadmap entries.
 SHARED_POSITION_GROUPS = (frozenset({"SA135", "SA163"}),)
@@ -65,6 +66,13 @@ def _merge_position(metadata: str, kind: str, ticket: str) -> int | None:
 
 def _roadmap_tickets(text: str) -> dict[str, TicketMetadata]:
     entry_matches = list(TICKET_ENTRY_RE.finditer(text))
+    entry_tickets = [match.group(1) for match in entry_matches]
+    duplicate_entries = sorted(
+        ticket for ticket, count in Counter(entry_tickets).items() if count > 1
+    )
+    if duplicate_entries:
+        raise AssertionError(f"duplicate roadmap ticket entry: {duplicate_entries}")
+
     unsupported = sorted(
         match.group(1)
         for match in entry_matches
@@ -75,6 +83,14 @@ def _roadmap_tickets(text: str) -> dict[str, TicketMetadata]:
     )
     if unsupported:
         raise AssertionError(f"unsupported roadmap ticket entry shape: {unsupported}")
+
+    closed_tickets = set(CLOSED_ENTRY_RE.findall(text))
+    if closed_tickets != set(RETAINED_CLOSED_TICKETS):
+        raise AssertionError(
+            "checked roadmap tickets do not match the retained completion marker: "
+            f"expected={sorted(RETAINED_CLOSED_TICKETS)}, "
+            f"actual={sorted(closed_tickets)}"
+        )
 
     open_entries = OPEN_ENTRY_RE.findall(text)
     duplicates = sorted(
@@ -105,9 +121,9 @@ def _roadmap_tickets(text: str) -> dict[str, TicketMetadata]:
         )
     open_tickets = set(tickets)
     unknown_dependencies = {
-        ticket: sorted(metadata.dependencies - open_tickets)
+        ticket: sorted(metadata.dependencies - open_tickets - closed_tickets)
         for ticket, metadata in tickets.items()
-        if metadata.dependencies - open_tickets
+        if metadata.dependencies - open_tickets - closed_tickets
     }
     if unknown_dependencies:
         raise AssertionError(
@@ -237,11 +253,13 @@ def _assert_consistent(roadmap_text: str, context_text: str) -> None:
     umbrella_section = _umbrella_section(context_text)
     context = _context_metadata(sections, umbrella_section)
 
-    if set(context) != set(roadmap):
+    closed_roadmap_tickets = set(CLOSED_ENTRY_RE.findall(roadmap_text))
+    context_tickets = set(context) - closed_roadmap_tickets
+    if context_tickets != set(roadmap):
         raise AssertionError(
             "roadmap/current-context ticket coverage drift: "
-            f"missing={sorted(set(roadmap) - set(context))}, "
-            f"unexpected={sorted(set(context) - set(roadmap))}"
+            f"missing={sorted(set(roadmap) - context_tickets)}, "
+            f"unexpected={sorted(context_tickets - set(roadmap))}"
         )
 
     expected_shared_groups = set(SHARED_POSITION_GROUPS)
@@ -266,6 +284,8 @@ def _assert_consistent(roadmap_text: str, context_text: str) -> None:
             )
 
         for dependency in expected.dependencies:
+            if dependency in closed_roadmap_tickets:
+                continue
             positive_closure = _positive_closure_claim(
                 status_sections[ticket], dependency
             )
@@ -307,14 +327,15 @@ def test_v88_unparseable_open_roadmap_ticket_is_expected_red_canary() -> None:
         _assert_consistent(mutated_roadmap, context)
 
 
-def test_v88_checked_roadmap_entry_is_excluded_from_open_context() -> None:
+def test_v88_unexpected_checked_roadmap_entry_is_expected_red_canary() -> None:
     roadmap, context = _load_documents()
     mutated_roadmap = (
         roadmap + "\n- [x] **SA997 — closed-ticket exclusion canary.** "
         "`Post-v88 · Tier 3 · deps: none`\n"
     )
 
-    _assert_consistent(mutated_roadmap, context)
+    with pytest.raises(AssertionError, match="checked roadmap tickets"):
+        _assert_consistent(mutated_roadmap, context)
 
 
 def test_v88_unsupported_roadmap_entry_shape_is_expected_red_canary() -> None:

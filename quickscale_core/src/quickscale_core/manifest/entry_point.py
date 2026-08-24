@@ -163,6 +163,15 @@ def build_generic_manifest_spec(
 _build_generic_manifest_spec = build_generic_manifest_spec
 
 
+def _build_manifest_wiring_schema(module_name: str) -> Any:
+    """Build the typed wiring schema declared by a module's manifest."""
+    manifest = load_module_manifest(module_name)
+    return build_schema_from_manifest(
+        manifest_name=module_name,
+        wiring_projections=manifest.wiring_projections,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Adapter registry + origin tracking
 # ---------------------------------------------------------------------------
@@ -610,7 +619,7 @@ def _backups_manifest_adapter(
     """
     Build a ModuleWiringSpec for the backups module via the manifest path.
 
-    Apps: ``("quickscale_modules_backups",)``.
+    Apps: declared by the backups manifest.
     Settings: QUICKSCALE_BACKUPS_* keys.
 
     The conditional private_remote env-var defaulting logic (the gnarly case
@@ -636,10 +645,6 @@ def _backups_manifest_adapter(
         default_backups_module_options,
     )
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
-    from quickscale_core.manifest.derivation import (  # noqa: PLC0415
-        ModuleDerivationSchema,
-        WiringProjection,
-    )
     from quickscale_core.manifest.resolver import (  # noqa: PLC0415
         ResolverResult,
         _project_all_wiring,
@@ -670,18 +675,7 @@ def _backups_manifest_adapter(
     if target_mode == "private_remote" and not secret_access_key_env_var:
         secret_access_key_env_var = DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
 
-    schema = ModuleDerivationSchema(
-        module_name="backups",
-        version="1",
-        module_wiring_projections=[
-            WiringProjection(
-                wiring_field="apps",
-                derivation_type="static",
-                expression={"value": ["quickscale_modules_backups"]},
-                description="Backups Django app label",
-            ),
-        ],
-    )
+    schema = _build_manifest_wiring_schema("backups")
 
     wiring = _project_all_wiring(schema, resolved)
 
@@ -748,7 +742,7 @@ def _notifications_manifest_adapter(
     """
     Build a ModuleWiringSpec for the notifications module via the manifest path.
 
-    Apps: ``("quickscale_modules_notifications",)`` with ``"anymail"`` prepended
+    Apps are declared by the notifications manifest, with ``"anymail"`` prepended
     when the runtime email backend is the live Resend backend.
     URL includes: ``[("", "quickscale_modules_notifications.urls")]``.
     Settings: QUICKSCALE_NOTIFICATIONS_* keys plus conditional EMAIL_BACKEND,
@@ -790,16 +784,12 @@ def _notifications_manifest_adapter(
     resolved = resolve_notifications_module_options(options)
     runtime_email_backend = notifications_runtime_email_backend(resolved)
 
+    manifest_schema = _build_manifest_wiring_schema("notifications")
     schema = ModuleDerivationSchema(
         module_name="notifications",
         version="1",
         module_wiring_projections=[
-            WiringProjection(
-                wiring_field="apps",
-                derivation_type="static",
-                expression={"value": ["quickscale_modules_notifications"]},
-                description="Notifications Django app label",
-            ),
+            *manifest_schema.module_wiring_projections,
             WiringProjection(
                 wiring_field="url_includes",
                 derivation_type="static",
@@ -1013,8 +1003,7 @@ def _auth_manifest_adapter(
     """
     Build a ModuleWiringSpec for the auth module via the manifest path.
 
-    Apps: ``("django.contrib.sites", "quickscale_modules_auth", "allauth",
-    "allauth.account")``.
+    Apps are declared by the auth manifest.
     Middleware: ``("allauth.account.middleware.AccountMiddleware",)``.
     URL includes: ``(("accounts/", "allauth.urls"),
     ("accounts/", "quickscale_modules_auth.urls"))``.
@@ -1085,23 +1074,12 @@ def _auth_manifest_adapter(
         "SESSION_COOKIE_AGE": int(resolved.get("session_cookie_age", 1209600)),
     }
 
+    manifest_schema = _build_manifest_wiring_schema("auth")
     schema = ModuleDerivationSchema(
         module_name="auth",
         version="1",
         module_wiring_projections=[
-            WiringProjection(
-                wiring_field="apps",
-                derivation_type="static",
-                expression={
-                    "value": [
-                        "django.contrib.sites",
-                        "quickscale_modules_auth",
-                        "allauth",
-                        "allauth.account",
-                    ]
-                },
-                description="Auth Django app labels",
-            ),
+            *manifest_schema.module_wiring_projections,
             WiringProjection(
                 wiring_field="middleware",
                 derivation_type="static",
@@ -1156,7 +1134,7 @@ def _orgs_manifest_adapter(
     """
     Build a ModuleWiringSpec for the orgs module via the manifest path.
 
-    Apps: ``("quickscale_modules_orgs",)``.
+    Apps are declared by the orgs manifest.
     Middleware: ``("quickscale_modules_orgs.middleware.TenantMiddleware",)``.
     Settings: ``ACCOUNT_ADAPTER`` and ``QUICKSCALE_MODE`` derived from
     resolved options.
@@ -1195,16 +1173,12 @@ def _orgs_manifest_adapter(
     validation_issues = validate_orgs_module_options(options)
     mode = str(resolved.get("mode", "solo")).strip().lower()
 
+    manifest_schema = _build_manifest_wiring_schema("orgs")
     schema = ModuleDerivationSchema(
         module_name="orgs",
         version="1",
         module_wiring_projections=[
-            WiringProjection(
-                wiring_field="apps",
-                derivation_type="static",
-                expression={"value": ["quickscale_modules_orgs"]},
-                description="Orgs Django app label",
-            ),
+            *manifest_schema.module_wiring_projections,
             WiringProjection(
                 wiring_field="middleware",
                 derivation_type="static",
@@ -1283,7 +1257,7 @@ def _storage_manifest_adapter(
     """
     Build a ModuleWiringSpec for the storage module via the manifest path.
 
-    Apps: ``("quickscale_modules_storage",)``.
+    Apps are declared by the storage manifest.
     Settings: ``QUICKSCALE_STORAGE_BACKEND``, ``QUICKSCALE_STORAGE_PUBLIC_BASE_URL``,
     ``MEDIA_URL``, ``QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED``, plus conditional
     ``STORAGES`` and ``AWS_*`` keys when backend is ``"s3"`` or ``"r2"``.
@@ -1307,7 +1281,6 @@ def _storage_manifest_adapter(
     from quickscale_core.manifest.assembler import assemble_wiring_spec  # noqa: PLC0415
     from quickscale_core.manifest.derivation import (  # noqa: PLC0415
         ModuleDerivationSchema,
-        WiringProjection,
     )
     from quickscale_core.manifest.resolver import (  # noqa: PLC0415
         ResolverResult,
@@ -1318,16 +1291,12 @@ def _storage_manifest_adapter(
     validation_issues = validate_storage_module_options(options)
     backend = str(resolved.get("backend", "local")).lower()
 
+    manifest_schema = _build_manifest_wiring_schema("storage")
     schema = ModuleDerivationSchema(
         module_name="storage",
         version="1",
         module_wiring_projections=[
-            WiringProjection(
-                wiring_field="apps",
-                derivation_type="static",
-                expression={"value": ["quickscale_modules_storage"]},
-                description="Storage Django app label",
-            ),
+            *manifest_schema.module_wiring_projections,
         ],
     )
 

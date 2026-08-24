@@ -4,6 +4,32 @@
 
 ## v88 development — 2026-08-21
 
+- **SA167a — five Django app declarations moved into module manifests (2026-08-24).**
+  The `auth`, `backups`, `notifications`, `orgs`, and `storage` manifests now carry
+  complete static `derivation.wiring_projections` app declarations, with their bundled
+  core snapshots byte-identical to source. Core adapters remain in `entry_point.py` as
+  required by SA167a, but read the manifest projections instead of app literals. The
+  resolved `spec.apps` contract was captured before and after with no change:
+  `analytics=[quickscale_modules_analytics]`,
+  `auth=[django.contrib.sites, quickscale_modules_auth, allauth, allauth.account]`,
+  `backups=[quickscale_modules_backups]`,
+  `billing=[rest_framework, quickscale_modules_billing]`,
+  `blog=[markdownx, quickscale_modules_blog]`,
+  `crm=[rest_framework, django_filters, quickscale_modules_crm]`,
+  `forms=[rest_framework, django_filters, quickscale_modules_forms]`,
+  `listings=[django_filters, markdownx, quickscale_modules_listings]`,
+  `notifications=[quickscale_modules_notifications]`,
+  `orgs=[quickscale_modules_orgs]`, `social=[quickscale_modules_social]`, and
+  `storage=[quickscale_modules_storage]`. Focused manifest/wiring/generator/manager/orgs
+  QA passed **290 tests with 1 existing skip**; the unchanged SA90 exact-manifest parity
+  suite remained green. A disposable all-module generated project regenerated
+  `MODULE_INSTALLED_APPS` exactly and imported its generated settings successfully; the
+  full Django `manage.py check` selector was not run because it requires an unavailable
+  PostgreSQL database, so the DB-free generated-settings import was the authorized
+  substitute. `make check-manifest-sync` and `make check` passed. `make quality` reproduced
+  the accepted exit-2 oracle: monotonicity passed, two warning regressions, and zero
+  critical regressions. No SA90 fixture or generated-output baseline changed.
+
 - **Roadmap cleanup and rebalance review (2026-08-24, sixth pass).** **No ticket closed and no
   audit finding closed since the previous pass**, so nothing new was archived as completed
   work. The pass discharged the ratified Option A policy against its last two exceptions:
