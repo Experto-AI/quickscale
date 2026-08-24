@@ -30,14 +30,14 @@ The whole release is one principle with five failure modes. Every ticket is a le
                               │
       ┌──────────┬────────────┼────────────┬──────────────┐
       │          │            │            │              │
-  UNEXECUTED  DUPLICATED   SILENT      UNOWNED       UNENFORCED
+   UNEXECUTED  DUPLICATED   SILENT      UNOWNED       UNENFORCED
   ENFORCEMENT  AUTHORITY   FALLBACK    LIFECYCLE       POLICY
       │          │            │            │              │
  the gate    the fact is   the answer   nobody owns   the rule is
  doesn't run  written in    is missing   the thing     only in a
  or lies      2+ places     so guess     we created    human's head
       │          │            │            │              │
-   SA155      SA134         SA150          —            SA123
+    SA155      SA124         SA150          —            SA123
    SA162      SA124         SA165        SA142          SA166
      │        SA118           │          SA135            │
   (unwired    SA163         (wheelhouse  SA161         (dep-vuln +
@@ -45,7 +45,7 @@ The whole release is one principle with five failure modes. Every ticket is a le
    deprecated SA160          state       (dead/dup       scanners,
    gate code) SA161          file)        code)          testimony
                 │                                        trail)
-             (paths, pins,
+             (paths,
               manifests, CI
               env, cookies)
 ```
@@ -60,7 +60,7 @@ failure modes; auditing the gate layer found a fifth sitting underneath all of t
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
 | **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | 10 of 14 `scripts/test_*.py` suites are still wired to no target; a gate uses a bool inversion Python 3.16 removes | SA155, SA162 |
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | Python/Postgres versions retyped in tests; the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA134, SA124, SA118, SA163, SA160, SA164 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA124, SA118, SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | wheelhouse set but no wheel matches → returns the manifest spec; a corrupt state file returns silently; a skip where a failure belongs | SA150, SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA142, SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
@@ -169,73 +169,11 @@ Resolve that one explicitly rather than folding it into a blanket justification.
 
 ---
 
-# Band B / W1 — Pins, interpreter, and dependency-spec authority
-
-## SA134 — Derive generated-project version assertions from authoritative pins
-
-`Band B · Tier 2 · W1 · merge #9 · deps: none — every prerequisite is merged`
-
-### The mental model
-
-A generated QuickScale project pins runtimes: a Python version, a Django constraint, a PostgreSQL image tag, a Node image. Those pins have exactly one home:
-
-`quickscale_core/src/quickscale_core/generator/runtime_pins.py`
-
-```python
-PYTHON_VERSION: str = "3.14"
-PYTHON_CONSTRAINT: str = f">={PYTHON_VERSION},<3.15"
-PYTHON_DOCKER_TAG: str = f"{PYTHON_VERSION}-slim-bookworm"
-DJANGO_CONSTRAINT: str = ">=6.0.7,<6.1.0"
-POSTGRES_VERSION: str = "18"
-POSTGRES_DOCKER_TAG: str = f"{POSTGRES_VERSION}-alpine"
-```
-
-The module's own docstring states the intent: *"All templates that reference a pin use the same value from this module, so a single change here propagates to every emitted file."* Templates honour that — `docker-compose.yml.j2` line 3 emits `postgres:{{ postgres_docker_tag }}`.
-
-**The tests do not.** They retype the literal.
-
-### The concrete defect
-
-Files carrying hardcoded `18-alpine`, `node:24`, or `python:3.14` include:
-
-- `quickscale_core/tests/test_generator/test_templates.py`
-- `quickscale_core/tests/generator/test_themes.py`
-- `quickscale_cli/tests/test_beta_migration.py`
-- `quickscale_cli/tests/utils/test_stale_compose_volumes.py`
-- `quickscale_cli/tests/utils/test_railway_utils.py`
-- `quickscale_core/tests/docker-compose.test.yml`
-
-So `runtime_pins.py` is a single source of truth for *production* and a **second, shadow source of truth for tests**. Bumping PostgreSQL to 19 changes one production line and then breaks a scatter of tests that assert the old value — and the failure message says "expected 18-alpine, got 19-alpine", which reads like a regression rather than "you forgot to update the mirror".
-
-### The subtlety that makes this Tier 2 rather than trivial
-
-A test that reads `POSTGRES_DOCKER_TAG` and asserts the template emits `POSTGRES_DOCKER_TAG` is **tautological** — it will pass no matter what the value is, including nonsense. You are trading a brittle test for a vacuous one if you are careless.
-
-The resolution is to be precise about what each assertion is *for*:
-
-- **"The pin reaches the emitted file"** — derive from `runtime_pins`. This is a wiring assertion; tautology is fine because the point is that the plumbing connects, not what flows through it.
-- **"We are not on a retired version"** — keep the literal. This is the *negative control* the acceptance criteria protect. A test asserting `"3.12" not in emitted_dockerfile` stays a literal deliberately, because its whole job is to name a specific bad value.
-
-The acceptance wording — *"retired-version negative controls remain and still fail when a retired version is reintroduced"* — exists exactly to stop a blanket find-and-replace from deleting them.
-
-### The proof obligation
-
-*"bumping a pin requires no test edit, demonstrated by a temporary bump that leaves the suite green"*. Literally do this: change `POSTGRES_VERSION` to `"19"`, run the suite, confirm green, revert. Record it as evidence. If anything fails, a literal survived.
-
-Note `quickscale_core/tests/docker-compose.test.yml` is a static YAML file, not Python — it cannot import `runtime_pins`. Decide whether it is in scope (it pins the *test harness* Postgres, arguably a different concern from the *generated project* Postgres) and say which, rather than leaving it ambiguous. This overlaps SA135, which owns the test harness's database; coordinating the answer with the W3 ticket is reasonable, but SA134 merges first (#9 vs #15), so state the decision and let SA135 honour it.
-
-### The convention it inherits
-
-`scripts/version_tool.sh` already derives the repository's package-version inventory rather
-than re-listing it (closed work; see [CHANGELOG.md](../../CHANGELOG.md)). SA134 applies the
-same discipline to runtime pins asserted in tests — read the authoritative value, do not
-retype it.
-
----
+# Band B / W1 — Dependency-spec authority
 
 ## SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam
 
-`Band B · Tier 2 · W1 · merge #12 · deps: SA134 · blocks SA118`
+`Band B · Tier 2 · W1 · merge #12 · deps: none · blocks SA118`
 
 ### The mental model
 
@@ -457,7 +395,7 @@ You have already seen a concrete example of the second pattern in SA150's file:
 backend = str((module_options or {}).get("backend", "local")).strip().lower()
 ```
 
-That `"local"` is `storage.backend`'s manifest default, retyped in `module_dependency_sync.py`. Change the manifest and this code keeps the old default. Same class of bug as SA134, one layer up.
+That `"local"` is `storage.backend`'s manifest default, retyped in `module_dependency_sync.py`. Change the manifest and this code keeps the old default. It is the same class of bug as the completed pin-authority work, one layer up.
 
 ### The scope boundary — this is the important part
 
@@ -1108,22 +1046,20 @@ Each step builds the one after it:
    Not "a test is wrong" but "an entire category of code has no owner."
 2. **SA150** — the clearest instance of silent fallback; four lines of code, precisely
    diagnosable.
-3. **SA134** — duplicated authority plus the tautology trap, which is where judgement starts
-   mattering.
-4. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
-5. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
+3. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
+4. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
    (bypassed RLS roles).
-6. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
+5. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
    about existing conventions (scope allowlist, gate registry, emission-parity fixture).
-7. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
+6. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
 
 ### The three traps this release keeps setting
 
 Worth holding as a set, because each appears in more than one ticket:
 
-- **The tautology trap** (SA134). A test that reads the authoritative value and asserts the
-  authoritative value passes for any value, including nonsense. Derive *wiring* assertions;
-  keep *negative controls* literal.
+- **The tautology trap**. A test that reads the authoritative value and asserts the authoritative
+  value passes for any value, including nonsense. Derive *wiring* assertions; keep *negative
+  controls* literal.
 - **The wrong-fix trap** (SA162, and SA155's Option 3). An audit's finding and an audit's
   suggested fix carry different verification. `not val` would have broken the CSRF gate.
 - **The green-by-absence trap** (SA155, SA135, SA152, SA165). Skipping, filtering,

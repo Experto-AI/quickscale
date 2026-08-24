@@ -9,7 +9,7 @@ This is the current task planner. It holds **open** work only. Completed tickets
 
 ### Execution rules
 
-- Work develops in three worktrees (**W1** pins/interpreter + module-wiring migration, **W2** gate layer + declared wiring, **W3** service lifecycle) and merges into the clean `v88` integration branch. Never implement directly on the integration branch. There are three worktrees and no more; a ticket that does not fit an existing lane is sequenced inside one, not given a new lane.
+- Work develops in three worktrees (**W1** dependency/interpreter + module-wiring migration, **W2** gate layer + declared wiring, **W3** service lifecycle) and merges into the clean `v88` integration branch. Never implement directly on the integration branch. There are three worktrees and no more; a ticket that does not fit an existing lane is sequenced inside one, not given a new lane.
 - One reviewed child runs at a time per worktree. Umbrellas are acceptance-only; their children own implementation.
 - Start from a clean worktree after merging the integration branch. Before merge-back, sync the integration branch into the worktree, resolve there, run the ticket's verification, review the exact tip, then merge that tip.
 - Every handoff declares its file allowlist, commands, expected exits/artifacts, rollback, and focused validation. Scope findings are ticketed rather than fixed in place.
@@ -66,7 +66,7 @@ Applying it produces three ranked bands:
 | Band | Rule | Tickets |
 |---|---|---|
 | **A — Restore enforcement** | The gate layer reports green while not running, or runs red on HEAD. Nothing downstream can be trusted until this is fixed. | SA155 (prerequisites complete) |
-| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA151→SA142→SA135(+SA163); SA134→SA150→SA167b→SA167d; then SA155→SA167a→SA124→SA123→SA118→SA167c |
+| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA151→SA142→SA135(+SA163); SA150→SA167b→SA167d; then SA155→SA167a→SA124→SA123→SA118→SA167c |
 | **C — Bounded independent fixes** | No dependants, small blast radius. Absorbed as slack filler by whichever worktree finishes a band-B leg early. | SA160, SA161, SA162, SA164, SA165, SA166 |
 
 **Standing consequences of that rule:**
@@ -122,7 +122,7 @@ Applying it produces three ranked bands:
 ### Dependency graph and critical path
 
 ```text
-v88 — three worktrees, nineteen open merge positions carrying twenty open ticket entries, one merge queue
+v88 — three worktrees, eighteen open merge positions carrying nineteen open ticket entries, one merge queue
 
 W2 (gate layer ─► gates & declared wiring)   ★ CRITICAL PATH — 8 open legs, 6 on the path
   SA155 ─► SA167a ─► SA124 ─► SA123 ─► SA118 ─► SA167c ─► SA166 ─► SA164
@@ -135,10 +135,10 @@ W2 (gate layer ─► gates & declared wiring)   ★ CRITICAL PATH — 8 open le
                   SA151 (partial, #3) ──► SA164 (#25) content baseline not terminally settled
   outbound edge:  SA167a (#8)     ──► SA167b (W1, #14)   entry_point.py, one-way
 
-W1 (pins/interpreter + module-wiring migration)   6 open legs, mostly light
-  SA134 ─► SA150 ─► SA167b ─► SA162 ─► SA167d ─► SA165
-  derive   fail-hard relocate  csrf     drain     watch
-  pins     wheelhse  9 adapters gate     CLI       items
+W1 (dependency/interpreter + module-wiring migration)   5 open legs, mostly light
+  SA150 ─► SA167b ─► SA162 ─► SA167d ─► SA165
+  fail-hard relocate  csrf     drain     watch
+  wheelhse  9 adapters gate     CLI       items
                         ▲                  ▲
         SA167a (W2, #8) ┘   SA167b blocks ─┘
         one-way on entry_point.py
@@ -155,7 +155,7 @@ prerequisite outside W2 is satisfied. SA166 (#24) and SA164 (#25) are band-C tai
 the chain, not on it. W2's back half is the release's implementation work, so W2 sets the
 date — and the SA167 pull-in moved that date out by two legs (SA167a, SA167c), deliberately.
 SA167b and SA167d cost nothing on the critical path: W1 runs them against W2's second half.
-**Load check:** W1 carries six open legs against the six-leg critical path, so the lanes are
+**Load check:** W1 carries five open legs against the six-leg critical path, so the lanes are
 level. If W1 becomes the binding lane in practice, the band-C fillers (SA162, SA165) are the
 ones to defer, never the wiring legs.
 
@@ -179,7 +179,7 @@ action and none is idle, so there is no track to rebalance *into*. W2 is the lon
 eight open legs and cannot be shortened: SA155, SA124, SA123, SA166 and SA164 all own
 `scripts/gate_registry.json`, which by standing invariant never crosses worktrees; SA167a,
 SA118 and SA167c all rewrite `quickscale_modules/*/module.yml` in that order. Nothing may be
-pulled forward from W3 because the PostgreSQL/Docker slot is exclusive. W1 (six legs) and W3
+pulled forward from W3 because the PostgreSQL/Docker slot is exclusive. W1 (five legs) and W3
 (five open positions) are both shorter than W2 but neither feeds the critical path, so moving filler
 between them would buy no wall-clock time while creating merge hazards — SA165 in particular
 stays on W1 because it edits `scripts/test_isolation_conformance.sh` and the SA90 emission
@@ -194,7 +194,7 @@ are yes.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W1** | SA134 (#9, **P1 checkpoint retained — converged and synchronized**) | **yes** — every prerequisite is merged; the maintainer accepted this partial checkpoint for merge-back | **yes** — the five test-side assertion surfaces are W1-owned and the P1 delta is converged; ticket closure remains pending | **yes** — the retained P1 checkpoint is synchronized with `v88`; #9 has no unsatisfied dependency | **partial but merge-safe — off the critical path** |
+| **W1** | SA150 (#12) | **yes** — SA134 is complete and no remaining prerequisite blocks the ticket | **yes** — the W1-owned seam and documentation/test surfaces are available | **yes** — #12 has no unsatisfied dependency | **ready — off the critical path** |
 | **W2** | SA155 (#7, **partial planning checkpoint retained**) | **yes** — every prerequisite is merged; no product decision is open | **yes, after orchestration recovery** — the documented `scripts/` baseline is green (1,213 passed), but implementation did not start because two Adaptive implementer handoffs failed before mutation | **yes** — #7 has no unsatisfied dependency | **administratively paused — next critical-path leg** |
 | **W3** | SA151 (#3, **partial checkpoint retained — terminal findings open**) | **yes** — the checkpoint is merged and no product decision blocks F-006/F-007/F-008 | **yes** — the remaining guard and documentation corrections are W3-owned or explicitly coupled | **yes for the checkpoint; no for closure** — merge #3 retains useful work without satisfying dependants | **partial but merge-safe — off the critical path** (second chain) |
 
@@ -206,12 +206,11 @@ are yes.
 | SA167a (#8) | can merge — no | SA155 (#7) | **Decided 2026-08-22 — the gate stays.** This was the one decision-clearable blocker; the maintainer declined to lift it. Implementation may begin today (`deps: none`); only the *merge* waits, because its acceptance evidence — unchanged emission parity, `make quality` no worse than found — is meaningless until SA155 makes the gate layer truthful. Starting it early is sanctioned; merging it early is not. |
 | SA164 (#25) | can start · can finish — no | SA166 (#24), SA151 (#3) | No — W2 ordering and SA151's terminal migration-baseline findings must both clear. |
 
-**Recommended concurrency right now:** all three lanes hold a retained partial checkpoint and
-each resumes independently.
+**Recommended concurrency right now:** W1 is ready to start its next ticket; W2 and W3 each
+resume from a retained partial checkpoint independently.
 
-- **W1 — resume SA134 only.** Rerun the quantified consumer sweep and the temporary pin probes,
-  run `make check -- --core` and `make quality`, close the ticket, then take convergence and
-  terminal attestation. Do not begin SA150.
+- **W1 — start SA150.** SA134 is complete; document and fail-hard the local wheelhouse seam,
+  then take the ticket's focused validation and closeout evidence.
 - **W2 — resume SA155 in a fresh Adaptive session.** Require a clean `wt-track2`, merge the
   then-current `v88`, rediscover changed seams, and create a fresh plan authority rather than
   reusing the session-scoped carrier from the checkpoint. This is the next critical-path leg.
@@ -236,10 +235,9 @@ exact reviewed tip.
 | 3 | **SA151 (partial checkpoint retained)** | B | 1 | W3 | — | **yes** — PostgreSQL |
 | 7 | **SA155** | A | 1 | W2 | — (prerequisites merged) | no |
 | 8 | **SA167a** | B | 1 | W2 | SA155 | no |
-| 9 | **SA134** | B | 2 | W1 | — (prerequisite merged) | no |
 | 10 | **SA142** | B | 1 | W3 | SA151 | **yes** — Docker |
 | 11 | **SA124** | B | 1 | W2 | SA155 | no |
-| 12 | **SA150** | B | 2 | W1 | SA134 | no |
+| 12 | **SA150** | B | 2 | W1 | — (prerequisite merged) | no |
 | 13 | **SA123** | B | 2 | W2 | SA124 | no |
 | 14 | **SA167b** | B | 2 | W1 | SA150, **SA167a** | no |
 | 15 | **SA135** + **SA163** | B | 2 | W3 | SA142 | **yes** — PostgreSQL + Docker |
@@ -253,8 +251,8 @@ exact reviewed tip.
 | 24 | **SA166** | C | 3 | W2 | SA155, SA118, SA167c | no |
 | 25 | **SA164** | C | 3 | W2 | SA166, **SA151** | no |
 
-Merges #1 (SA156), #2 (SA137), #4 (SA157), #5 (SA159), #6 (SA158), #6b (SA168), and #23
-(SA164's former W1 slot) are retired, not reused; the six closed tickets are archived in
+Merges #1 (SA156), #2 (SA137), #4 (SA157), #5 (SA159), #6 (SA158), #6b (SA168), #9
+(SA134), and #23 (SA164's former W1 slot) are retired, not reused; the seven closed tickets are archived in
 [CHANGELOG.md](../../CHANGELOG.md). Positions were renumbered on 2026-08-21 when the SA167
 family was pulled into the release: SA167a moved to #8 (earliest slot after band A),
 SA167b/SA167d sequence inside W1 at #14 and #18, and SA167c takes #21 after SA118.
@@ -273,7 +271,6 @@ Additional per-ticket surfaces:
 | SA151 | `docs/technical/decisions.md` | records the no-migration-history policy |
 | SA123 | `scripts/gate_registry.json`, `Makefile`, CI workflow | new blocking gates |
 | SA124 | `scripts/gate_registry.json`, `Makefile`, `scripts/sa117_scope.json`, `scripts/test_check_sa117_scope.py` | gate + path authority |
-| SA134 | — | test-side literals only |
 | SA167a | `quickscale_core/.../manifest/entry_point.py`, `quickscale_modules/{auth,backups,notifications,orgs,storage}/module.yml` | app declarations move into manifests; **shares module manifests with SA118 and SA167c, merges first**; shares `entry_point.py` with SA167b (W1), merges first |
 | SA167b | `quickscale_core/.../manifest/entry_point.py`, every `quickscale_modules/*/adapter.py`, `docs/technical/implementation_contract.md` | adapter relocation; **on W1, with `entry_point.py` inherited one-way from SA167a (W2, #8)** |
 | SA167c | every `quickscale_modules/*/module.yml`, `quickscale_core/.../manifest/{schema,loader}.py`, `scripts/gate_registry.json`, `Makefile`, CI workflow, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py` | retires the inert key and registers the declaration gate; **registry membership is why this is W2** |
@@ -330,23 +327,7 @@ This section holds the implementation tickets; the [audit-derived backlog](#audi
 
 Conceptual background, mental models, and implementation notes for **every** ticket live in [v88_ticket_context.md](v88_ticket_context.md); this roadmap remains authoritative for scope, worktrees, and merge order.
 
-- [ ] **SA134 — Derive generated-project version assertions from authoritative pins.** `Band B · Tier 2 · W1 · merge #9 · deps: none (SA159 merged)`
-   Remove repeated runtime/dependency literals while retaining meaningful retired-version negative controls.
-   **Acceptance:** no test asserts a runtime or dependency version as a bare literal where an authoritative pin exists; assertions read the pin source directly; retired-version negative controls remain and still fail when a retired version is reintroduced; bumping a pin requires no test edit, demonstrated by a temporary bump that leaves the suite green.
-
-   **Checkpoint state:** the P1 delta derived five test consumers from authoritative pins and is
-   archived in [CHANGELOG.md](../../CHANGELOG.md). SA134 remains open and unchecked; the merge-back
-   artifact is the checkpoint, not closure. SA150 must not start before SA134 closes.
-
-   **Decisions:** none open. Resume with the focused command using `--no-cov` and the concrete
-   `TestDevOpsTemplateRendering` node.
-
-   **Pending closure plan — SA134 only:** rerun the quantified consumer sweep and temporary
-   probes; run `make check -- --core` and `make quality`; update `CHANGELOG.md`; mark this
-   roadmap entry complete and remove its open-work body; then take convergence and terminal
-   attestation. Do not begin SA150.
-
-- [ ] **SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam.** `Band B · Tier 2 · W1 · merge #12 · deps: SA134 · blocks SA118`
+- [ ] **SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam.** `Band B · Tier 2 · W1 · merge #12 · deps: none · blocks SA118`
   Carried forward as non-blocking observations from the installed-wheel lifecycle review: the seam is referenced only by production code and its own E2E with no `docs/technical/` description, and `_resolve_local_wheel_dependency()` silently falls back to the manifest version spec when the wheelhouse is set but matches no wheel.
   **Acceptance:** the seam has a `docs/technical/` description covering purpose, accepted values, and failure modes; `_resolve_local_wheel_dependency()` in `quickscale_cli/src/quickscale_cli/utils/module_dependency_sync.py` raises a named, actionable error when `QUICKSCALE_LOCAL_WHEELHOUSE` is set but no wheel matches, instead of returning the manifest spec; a regression test asserts the raise (not a log); the unset-wheelhouse path is unchanged and still resolves from the manifest; the tech-audit **live watch item** is retired with evidence without changing the current three-finding severity table (S3: one; S4: two), because no numbered finding is closed by this ticket.
 
