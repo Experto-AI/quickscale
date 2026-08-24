@@ -241,10 +241,10 @@ The staged-beside-install wheelhouse (case 2) is a judgement call: it is implici
 
 ### Audit bookkeeping
 
-`docs/others/tech-audit.md` currently carries **five open findings** in its summary (S3: three;
+`docs/others/tech-audit.md` currently carries **three open findings** in its summary (S3: one;
 S4: two). The wheelhouse seam is listed under **"Live watch items"**, not as a finding. So the
 closeout retires a watch item; it does not close a numbered finding, and the severity table
-remains at five. The current audit header is `Branch: v88`; the previously noted header drift
+remains at three. The current audit header is `Branch: v88`; the previously noted header drift
 is historical and needs no action.
 
 ---
