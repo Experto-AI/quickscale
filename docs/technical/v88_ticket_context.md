@@ -12,7 +12,7 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers the **nineteen open v88 ticket entries** across eighteen open merge positions
+It covers the **eighteen open v88 ticket entries** across seventeen open merge positions
 (SA163 executes inside SA135) plus the three post-v88 entries. Closed tickets are not
 described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
 Sections are ordered by merge band (A → B → C), which is also the order in which the work
@@ -37,8 +37,8 @@ The whole release is one principle with five failure modes. Every ticket is a le
  doesn't run  written in    is missing   the thing     only in a
  or lies      2+ places     so guess     we created    human's head
       │          │            │            │              │
-    SA155      SA124         SA150          —            SA123
-   SA162      SA124         SA165        SA142          SA166
+    SA155      SA124         SA165          —            SA123
+   SA162      SA124         SA152        SA142          SA166
      │        SA118           │          SA135            │
   (unwired    SA163         (wheelhouse  SA161         (dep-vuln +
    suites,    SA164          fallback,   SA160          security
@@ -61,7 +61,7 @@ failure modes; auditing the gate layer found a fifth sitting underneath all of t
 |---|---|---|
 | **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | The current census is 15 `scripts/test_*.py` suites: 4 wired to a target and 11 wired to no target, including `scripts/test_repo_source_interpreters.py`; a gate uses a bool inversion Python 3.16 removes | SA155, SA162 |
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA124, SA118, SA163, SA160, SA164 |
-| **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | SA150's retained checkpoint stops the former explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA150, SA165 |
+| **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA142, SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
 
@@ -172,42 +172,6 @@ Resolve that one explicitly rather than folding it into a blanket justification.
 
 # Band B / W1 — Dependency-spec authority
 
-## SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam
-
-`Band B · Tier 2 · W1 · merge #12 · deps: none · blocks SA118`
-
-### Retained functional checkpoint (2026-08-24)
-
-The implementation and its evidence are complete and retained. Explicit
-`QUICKSCALE_LOCAL_WHEELHOUSE` values are validated once for every non-empty module selection;
-empty, relative, and nonexistent explicit paths fail with `DependencySyncError`; and an explicit
-directory missing the requested QuickScale wheel fails instead of silently selecting the
-published manifest range. Normalized wheel names, public third-party manifest dependencies,
-environment-over-implicit precedence, implicit unmatched fallback, and empty-selection no-op
-behaviour remain covered. The seam contract now lives in
-`docs/technical/local-wheelhouse.md`.
-
-Validation passed 14 direct tests, 3 apply-facing tests, 6 update-facing tests, and
-`make check -- --cli` with 2,117 tests. `make quality` reproduced exactly the accepted two
-warning regressions with zero critical regressions and monotonicity passing. Independent
-convergence and terminal functional attestation found no product blocker. The tech-audit watch
-item is retired without changing the live S3: one / S4: two / total three severity table.
-
-### Why the ticket is still open
-
-Only documentation ownership remains undecided. The roadmap currently promises to contain open
-work only, which means completed SA150 evidence belongs in `CHANGELOG.md` and the roadmap body
-should be removed. Keeping a checked completed body instead would change that policy and its
-counting rules. Until the maintainer explicitly chooses between those models, SA150 remains
-unmarked at merge position #12 and its formal dependency edge to SA118 remains open, even though
-the settled implementation is available for downstream integration.
-
-The recommended continuation is to keep the open-only model: archive final evidence in the
-changelog, remove SA150 from the roadmap and this active-ticket context, recompute queue and
-track-readiness claims, and then retire #12. If completed bodies are to remain instead, revise the
-roadmap purpose and all count/dependency conventions in the same documentation-only closeout.
-
----
 
 # Band B / W2 — Gates and declared wiring
 
@@ -321,7 +285,7 @@ That second entry is effectively your rule list. Five named categories — treat
 
 ## SA118 — Project every declared manifest default into wiring
 
-`Band B · Tier 2 · W2 · merge #16 · deps: SA123, SA150, SA167a`
+`Band B · Tier 2 · W2 · merge #16 · deps: SA123, SA167a`
 
 ### The mental model
 
@@ -350,7 +314,7 @@ Every entry states four things: a type, a default, the Django setting it maps to
 
 So the declaration is rich and validated. The question SA118 asks is: **does the generated project's wiring actually reflect every declared default, or do some defaults exist only inside imperative Python that re-states them?**
 
-You have already seen a concrete example of the second pattern in SA150's file:
+A concrete example of the second pattern lives in the closed SA150's file:
 
 ```python
 backend = str((module_options or {}).get("backend", "local")).strip().lower()
@@ -381,7 +345,7 @@ Its `baseline_evidence` entries show the established convention — each past re
 
 ### Dependencies
 
-**SA123** — same track, sequencing only. **SA150** — real and cross-track: SA118 touches manifest version-spec handling, and it must sit on top of SA150's now-implemented fail-hard seam. The product prerequisite is available after the checkpoint merges; only the roadmap's formal dependency remains open pending the documentation-ownership decision.
+**SA123** — same track, sequencing only. The former **SA150** edge is retired: SA118 touches manifest version-spec handling and sits on top of SA150's merged fail-hard seam, which is now settled tree state rather than a pending dependency.
 
 ---
 
@@ -545,7 +509,7 @@ if not postgres_available():
     pytest.skip("PostgreSQL not available")
 ```
 
-That converts an infrastructure failure into a green build with silently zero integration coverage — the same silent-fallback family as SA150, one layer up. If provisioning fails, the gate must fail. There is an existing asserted-unavailability control; it must survive the rewrite.
+That converts an infrastructure failure into a green build with silently zero integration coverage — the same silent-fallback family the closed SA150 addressed, one layer up. If provisioning fails, the gate must fail. There is an existing asserted-unavailability control; it must survive the rewrite.
 
 ### Proof
 
@@ -754,7 +718,7 @@ one. The sync-before-merge-back procedure has to preserve every entry.
 
 ## SA162 — Fix the deprecated bool inversion in the CSRF AST gate
 
-`Band C · Tier 3 · W1 · merge #17 · deps: SA150 (worktree ordering)`
+`Band C · Tier 3 · W1 · merge #14 · deps: none · W1's first merge, gated behind nothing`
 
 ### The concrete defect
 
@@ -795,12 +759,12 @@ red flag — the wrong fix should not outlive the finding.
 
 ## SA165 — Discharge the tech-audit watch items that carry an action
 
-`Band C · Tier 3 · W1 · merge #22 · deps: SA150 (owns an item excluded here)`
+`Band C · Tier 3 · W1 · merge #22 · deps: SA167d (worktree ordering)`
 
 ### The mental model
 
 The tech audit's *Notes* hold thirteen items. Most are **accepted trade-offs** or are owned
-elsewhere — `SA150` owns the local-wheelhouse seam, while integration-branch CI,
+elsewhere — the closed SA150 discharged the local-wheelhouse seam, while integration-branch CI,
 generator lock generation, the DB-free healthcheck, the
 CRM count fallbacks, and non-durable atomic state writes are each recorded as **deliberate
 and explicitly out of this ticket's scope**.
@@ -816,7 +780,7 @@ markers that downstream readers use to distinguish *"M2 has spoken"* from *pre-M
 
 The trigger is narrow — the file was just written successfully by `save()` — but this is
 precisely the shape the Fail-Hard Principle names (`decisions.md:634`, `:716-732`), and
-`tech-audit.md` is the declared SSOT for that class. Same family as SA150, one layer over.
+`tech-audit.md` is the declared SSOT for that class. Same family as the closed SA150, one layer over.
 
 **Raise or report. A regression test must assert the raise, not a log line.**
 
@@ -983,7 +947,7 @@ gaps:
   breakage surfaces first for a maintainer **mid-migration** — the worst possible moment.
 - **Silent skip in the conformance gate.** `_template_emitted_paths()` calls
   `pytest.skip()` when the template tree is not found, so a path-resolution regression turns
-  the ownership gate **green instead of red**. Same silent-fallback family as SA150 and
+  the ownership gate **green instead of red**. Same silent-fallback family as the closed SA150 and
   SA165.
 - **Stale doc provenance.** `beta-site-migration.md` is headed *"shipped in v0.81.0"*
   against `VERSION` 0.87.0, and describes the tool as *"backed by Python scripts under
@@ -1048,14 +1012,12 @@ Each step builds the one after it:
 
 1. **SA155** — the structural version of every band-A defect this release already closed.
    Not "a test is wrong" but "an entire category of code has no owner."
-2. **SA150** — the clearest instance of silent fallback; four lines of code, precisely
-   diagnosable.
-3. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
-4. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
+2. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
+3. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
    (bypassed RLS roles).
-5. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
+4. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
    about existing conventions (scope allowlist, gate registry, emission-parity fixture).
-6. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
+5. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
 
 ### The three traps this release keeps setting
 
@@ -1074,7 +1036,7 @@ Worth holding as a set, because each appears in more than one ticket:
 
 ## SA167a / SA167b / SA167c / SA167d — module wiring standardization
 
-`Band B · W2 (#8, #21) and W1 (#14, #18)`
+`Band B · W2 (#8, #21) and W1 (#17, #18)`
 
 The four roadmap entries share this one conceptual section. Their dependency rows remain explicit
 so the consistency gate can distinguish an umbrella entry from a missing ticket and compare each
@@ -1083,7 +1045,7 @@ roadmap dependency without treating the shared heading as a single ticket:
 | Ticket | Merge position | Roadmap dependencies | Current status |
 |---|---:|---|---|
 | SA167a | #8 | SA155 | merge blocked by open SA155; implementation may start |
-| SA167b | #14 | SA167a, SA150 | blocked until both worktree-ordering dependencies are ready |
+| SA167b | #17 | SA167a, SA162 | blocked until both worktree-ordering dependencies are ready |
 | SA167c | #21 | SA167a, SA118 | blocked until both shared-manifest dependencies are ready |
 | SA167d | #18 | SA167b, SA162 | blocked until both worktree-ordering dependencies are ready |
 
