@@ -4,6 +4,21 @@
 
 ## v88 development — 2026-08-21
 
+- **SA162 — deprecated bool inversion retired; TA69 and arch red flag #5 closed
+  (2026-08-24).** `scripts/check_csrf_exempt_gate.py` now evaluates analyzed
+  `~True`/`~False` operands with `~int(val) != 0`, preserving bitwise-invert truthiness
+  without Python's deprecated bool inversion; the rejected `not val` substitution remains
+  recorded as historical correction evidence because it would change the gate verdict.
+  Focused regression coverage passes all **266 tests**, including explicit analyzed-source
+  verdicts for both bool operands, and the gate runs clean under
+  `-W error::DeprecationWarning`. The tech audit now carries **S3: 1, S4: 1, total 2**
+  open findings, the architectural audit carries no open red flag, and the roadmap retains
+  the user-required checked SA162 completion record while excluding it from open counts.
+  The synchronized current queue is **sixteen open v88 ticket entries across fifteen open
+  merge positions**: W1's next ticket is SA167b (#17), blocked only by SA167a's
+  `entry_point.py` hand-off; W2 and W3 remain executable. The focused roadmap/context
+  consistency suite passes all **12 tests**.
+
 - **Roadmap cleanup and rebalance review (2026-08-24, sixth pass).** **No ticket closed and no
   audit finding closed since the previous pass**, so nothing new was archived as completed
   work. The pass discharged the ratified Option A policy against its last two exceptions:

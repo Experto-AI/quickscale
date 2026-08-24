@@ -268,7 +268,7 @@ def _literal_truthiness(node: ast.expr) -> bool | None:
             if isinstance(node.operand, ast.Constant):
                 val = node.operand.value
                 if isinstance(val, (int, bool)):
-                    return ~val != 0
+                    return ~int(val) != 0
             return None
 
         # Any other unary op (nested unary, non-constant operand, …)
