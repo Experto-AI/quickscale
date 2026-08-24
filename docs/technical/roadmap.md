@@ -194,7 +194,7 @@ are yes.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W1** | SA150 (#12) | **yes** — SA134 is complete and no remaining prerequisite blocks the ticket | **yes** — the W1-owned seam and documentation/test surfaces are available | **yes** — #12 has no unsatisfied dependency | **ready — off the critical path** |
+| **W1** | SA134 closeout follow-up (**partial checkpoint retained**) | **yes** — the pin-authority work is complete and the remaining work is a bounded documentation-invariant correction | **yes** — the context document and core consistency test are W1-owned | **yes for the checkpoint; no for clean closeout** — the maintainer authorized partial merge-back, but terminal attestation found one fail-open invariant gap | **partial but merge-safe by maintainer direction — off the critical path** |
 | **W2** | SA155 (#7, **partial planning checkpoint retained**) | **yes** — every prerequisite is merged; no product decision is open | **yes, after orchestration recovery** — the documented `scripts/` baseline is green (1,213 passed), but implementation did not start because two Adaptive implementer handoffs failed before mutation | **yes** — #7 has no unsatisfied dependency | **administratively paused — next critical-path leg** |
 | **W3** | SA151 (#3, **partial checkpoint retained — terminal findings open**) | **yes** — the checkpoint is merged and no product decision blocks F-006/F-008; F-007 is corrected | **yes** — the remaining guard and documentation corrections are W3-owned or explicitly coupled | **yes for the checkpoint; no for closure** — merge #3 retains useful work without satisfying dependants | **partial but merge-safe — off the critical path** (second chain) |
 
@@ -206,11 +206,29 @@ are yes.
 | SA167a (#8) | can merge — no | SA155 (#7) | **Decided 2026-08-22 — the gate stays.** This was the one decision-clearable blocker; the maintainer declined to lift it. Implementation may begin today (`deps: none`); only the *merge* waits, because its acceptance evidence — unchanged emission parity, `make quality` no worse than found — is meaningless until SA155 makes the gate layer truthful. Starting it early is sanctioned; merging it early is not. |
 | SA164 (#25) | can start · can finish — no | SA166 (#24), SA151 (#3) | No — W2 ordering and SA151's terminal migration-baseline findings must both clear. |
 
-**Recommended concurrency right now:** W1 is ready to start its next ticket; W2 and W3 each
-resume from a retained partial checkpoint independently.
+**Recommended concurrency right now:** all three lanes resume independently from retained partial
+checkpoints or their documented next action.
 
-- **W1 — start SA150.** SA134 is complete; document and fail-hard the local wheelhouse seam,
-  then take the ticket's focused validation and closeout evidence.
+- **W1 — finish the retained SA134 closeout follow-up before SA150.** SA134's pin-authority
+  acceptance remains complete and is not reopened. The checkpoint keeps the restored SA151
+  partial/open context, corrected SA142/SA164/SA152 dependency statements, synchronized SA155
+  15/11 census, explicit umbrella/shared-position metadata, and the generalized roadmap/context
+  test. Its latest focused suite passed 11 tests, `make check -- --core` passed with 2,796 tests
+  and 1 skip, and `make quality` matched the accepted two-warning/zero-critical/monotonicity-pass
+  baseline. The maintainer directed that these partial improvements be committed and merged.
+  **Pending/blocking:** terminal attestation found that the invariant can false-green a candidate
+  roadmap ticket written with an alternate list marker or missing bold markup, and can miss a
+  dependency contradiction outside the selected ticket section or phrased as `has completed`.
+  This blocks clean closeout, not the maintainer-authorized partial checkpoint. The convergence
+  envelope-recovery block was adjudicated as procedural rather than a source or merge blocker.
+  **Decision status:** no product or sequencing decision is open for this continuation; the
+  maintainer has already chosen partial merge-back. **Pending closure plan:** (1) detect broad
+  ticket candidates independently of the accepted grammar and reject every noncanonical shape;
+  (2) scan dependency status across all current-context prose through an explicit status model or
+  structurally constrain where those claims may appear; (3) add expected-red canaries for alternate
+  and missing ticket syntax, global dependency contradictions, and `has completed`; (4) rerun the
+  focused invariant, `make check -- --core`, the accepted `make quality` baseline, convergence,
+  and terminal attestation. Only then begin SA150.
 - **W2 — resume SA155 in a fresh Adaptive session.** Require a clean `wt-track2`, merge the
   then-current `v88`, rediscover changed seams, and create a fresh plan authority rather than
   reusing the session-scoped carrier from the checkpoint. This is the next critical-path leg.
