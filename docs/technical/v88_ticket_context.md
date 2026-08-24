@@ -12,7 +12,7 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers the **twenty open v88 ticket entries** across nineteen open merge positions
+It covers the **nineteen open v88 ticket entries** across eighteen open merge positions
 (SA163 executes inside SA135) plus the three post-v88 entries. Closed tickets are not
 described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
 Sections are ordered by merge band (A → B → C), which is also the order in which the work
@@ -30,14 +30,14 @@ The whole release is one principle with five failure modes. Every ticket is a le
                               │
       ┌──────────┬────────────┼────────────┬──────────────┐
       │          │            │            │              │
-  UNEXECUTED  DUPLICATED   SILENT      UNOWNED       UNENFORCED
+   UNEXECUTED  DUPLICATED   SILENT      UNOWNED       UNENFORCED
   ENFORCEMENT  AUTHORITY   FALLBACK    LIFECYCLE       POLICY
       │          │            │            │              │
  the gate    the fact is   the answer   nobody owns   the rule is
  doesn't run  written in    is missing   the thing     only in a
  or lies      2+ places     so guess     we created    human's head
       │          │            │            │              │
-   SA155      SA134         SA150          —            SA123
+    SA155      SA124         SA150          —            SA123
    SA162      SA124         SA165        SA142          SA166
      │        SA118           │          SA135            │
   (unwired    SA163         (wheelhouse  SA161         (dep-vuln +
@@ -45,7 +45,7 @@ The whole release is one principle with five failure modes. Every ticket is a le
    deprecated SA160          state       (dead/dup       scanners,
    gate code) SA161          file)        code)          testimony
                 │                                        trail)
-             (paths, pins,
+             (paths,
               manifests, CI
               env, cookies)
 ```
@@ -60,7 +60,7 @@ failure modes; auditing the gate layer found a fifth sitting underneath all of t
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
 | **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | The current census is 15 `scripts/test_*.py` suites: 4 wired to a target and 11 wired to no target, including `scripts/test_repo_source_interpreters.py`; a gate uses a bool inversion Python 3.16 removes | SA155, SA162 |
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | Python/Postgres versions retyped in tests; the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA134, SA124, SA118, SA163, SA160, SA164 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA124, SA118, SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | wheelhouse set but no wheel matches → returns the manifest spec; a corrupt state file returns silently; a skip where a failure belongs | SA150, SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA142, SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
@@ -170,73 +170,11 @@ Resolve that one explicitly rather than folding it into a blanket justification.
 
 ---
 
-# Band B / W1 — Pins, interpreter, and dependency-spec authority
-
-## SA134 — Derive generated-project version assertions from authoritative pins
-
-`Band B · Tier 2 · W1 · merge #9 · deps: none — every prerequisite is merged`
-
-### The mental model
-
-A generated QuickScale project pins runtimes: a Python version, a Django constraint, a PostgreSQL image tag, a Node image. Those pins have exactly one home:
-
-`quickscale_core/src/quickscale_core/generator/runtime_pins.py`
-
-```python
-PYTHON_VERSION: str = "3.14"
-PYTHON_CONSTRAINT: str = f">={PYTHON_VERSION},<3.15"
-PYTHON_DOCKER_TAG: str = f"{PYTHON_VERSION}-slim-bookworm"
-DJANGO_CONSTRAINT: str = ">=6.0.7,<6.1.0"
-POSTGRES_VERSION: str = "18"
-POSTGRES_DOCKER_TAG: str = f"{POSTGRES_VERSION}-alpine"
-```
-
-The module's own docstring states the intent: *"All templates that reference a pin use the same value from this module, so a single change here propagates to every emitted file."* Templates honour that — `docker-compose.yml.j2` line 3 emits `postgres:{{ postgres_docker_tag }}`.
-
-**The tests do not.** They retype the literal.
-
-### The concrete defect
-
-Files carrying hardcoded `18-alpine`, `node:24`, or `python:3.14` include:
-
-- `quickscale_core/tests/test_generator/test_templates.py`
-- `quickscale_core/tests/generator/test_themes.py`
-- `quickscale_cli/tests/test_beta_migration.py`
-- `quickscale_cli/tests/utils/test_stale_compose_volumes.py`
-- `quickscale_cli/tests/utils/test_railway_utils.py`
-- `quickscale_core/tests/docker-compose.test.yml`
-
-So `runtime_pins.py` is a single source of truth for *production* and a **second, shadow source of truth for tests**. Bumping PostgreSQL to 19 changes one production line and then breaks a scatter of tests that assert the old value — and the failure message says "expected 18-alpine, got 19-alpine", which reads like a regression rather than "you forgot to update the mirror".
-
-### The subtlety that makes this Tier 2 rather than trivial
-
-A test that reads `POSTGRES_DOCKER_TAG` and asserts the template emits `POSTGRES_DOCKER_TAG` is **tautological** — it will pass no matter what the value is, including nonsense. You are trading a brittle test for a vacuous one if you are careless.
-
-The resolution is to be precise about what each assertion is *for*:
-
-- **"The pin reaches the emitted file"** — derive from `runtime_pins`. This is a wiring assertion; tautology is fine because the point is that the plumbing connects, not what flows through it.
-- **"We are not on a retired version"** — keep the literal. This is the *negative control* the acceptance criteria protect. A test asserting `"3.12" not in emitted_dockerfile` stays a literal deliberately, because its whole job is to name a specific bad value.
-
-The acceptance wording — *"retired-version negative controls remain and still fail when a retired version is reintroduced"* — exists exactly to stop a blanket find-and-replace from deleting them.
-
-### The proof obligation
-
-*"bumping a pin requires no test edit, demonstrated by a temporary bump that leaves the suite green"*. Literally do this: change `POSTGRES_VERSION` to `"19"`, run the suite, confirm green, revert. Record it as evidence. If anything fails, a literal survived.
-
-Note `quickscale_core/tests/docker-compose.test.yml` is a static YAML file, not Python — it cannot import `runtime_pins`. Decide whether it is in scope (it pins the *test harness* Postgres, arguably a different concern from the *generated project* Postgres) and say which, rather than leaving it ambiguous. This overlaps SA135, which owns the test harness's database; coordinating the answer with the W3 ticket is reasonable, but SA134 merges first (#9 vs #15), so state the decision and let SA135 honour it.
-
-### The convention it inherits
-
-`scripts/version_tool.sh` already derives the repository's package-version inventory rather
-than re-listing it (closed work; see [CHANGELOG.md](../../CHANGELOG.md)). SA134 applies the
-same discipline to runtime pins asserted in tests — read the authoritative value, do not
-retype it.
-
----
+# Band B / W1 — Dependency-spec authority
 
 ## SA150 — Document and fail-hard the `QUICKSCALE_LOCAL_WHEELHOUSE` seam
 
-`Band B · Tier 2 · W1 · merge #12 · deps: SA134 · blocks SA118`
+`Band B · Tier 2 · W1 · merge #12 · deps: none · blocks SA118`
 
 ### The mental model
 
@@ -373,7 +311,7 @@ Both tickets edit `scripts/gate_registry.json` and the `Makefile` gate surface. 
 
 ## SA123 — Add dependency-vulnerability and security static-analysis gates
 
-`Band B · Tier 2 · W2 · merge #13 · deps: SA124`
+`Band B · Tier 2 · W2 · merge #13 · deps: SA124, SA155 (transitive prerequisite)`
 
 ### The mental model
 
@@ -458,7 +396,7 @@ You have already seen a concrete example of the second pattern in SA150's file:
 backend = str((module_options or {}).get("backend", "local")).strip().lower()
 ```
 
-That `"local"` is `storage.backend`'s manifest default, retyped in `module_dependency_sync.py`. Change the manifest and this code keeps the old default. Same class of bug as SA134, one layer up.
+That `"local"` is `storage.backend`'s manifest default, retyped in `module_dependency_sync.py`. Change the manifest and this code keeps the old default. It is the same class of bug as the completed pin-authority work, one layer up.
 
 ### The scope boundary — this is the important part
 
@@ -490,6 +428,43 @@ Its `baseline_evidence` entries show the established convention — each past re
 # Band B / W3 — Service-backed lifecycle
 
 W3 holds the **exclusive PostgreSQL/Docker slot** for the release. Only one of these legs may be active at a time across all worktrees, and W3 takes scheduling priority while a leg is running — even though W2, not W3, is now the longest dependency chain. The two remaining lifecycle tickets ask the same question: *who owns the lifecycle of a thing we create?*
+
+## SA151 — Recreate module migrations as clean initial schemas
+
+`Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · partial checkpoint retained`
+
+### The mental model
+
+QuickScale is pre-1.0 and deliberately does not promise backward-compatible database upgrades
+between releases. The migration history is therefore not a product artifact to preserve: each
+module should expose one clean, current `0001_initial` schema, and a new generated project should
+apply those migrations to an empty database without guessing or silently skipping a module.
+
+### What the retained checkpoint proves
+
+The checkpoint regenerated one `0001_initial.py` for each of the ten model-bearing modules and
+removed the stale `0002`–`0005` backups migrations. The source-derived topology guard covers all
+twelve shipped AppConfigs, the ten model-bearing modules, analytics/storage as service-style
+exceptions, and the non-shipped `teams` placeholder. Its 37 focused tests include fail-closed,
+no-execution canaries for migration-base, model-form, AppConfig class-alias, subscript, and
+nested-attribute identity drift. The generated-project proof independently checks every runtime
+AppConfig `name` and `label` against `quickscale_modules_<module>`, derives expected migration labels
+from that oracle, installs all modules into a fresh PostgreSQL 18 database under a restricted
+`NOSUPERUSER NOBYPASSRLS NOINHERIT` role, and passed with 1 test and 0 skips. The retained broad
+integration, type, E2E, `make check`, and accepted `make quality` evidence is archived in
+[CHANGELOG.md](../../CHANGELOG.md).
+
+### Why the ticket remains open
+
+That evidence is a retained **partial checkpoint**, not closure. The former F-006–F-009 guard,
+census, audit, and docs-hub findings are corrected. The current blocker is environmental:
+`make test-bypassrls` reached 48 passed and 32 setup errors because
+`quickscale_bypassrls_test_role` lacks required table privileges across the module-test database
+set, observed on `test_quickscale_forms.public.django_migrations`. The migration baseline is
+consequently **not terminally satisfied** for dependency purposes. SA142, SA164, and post-v88 SA152
+remain blocked until the role is re-provisioned or re-granted, the complete BYPASSRLS lane passes
+with zero setup errors and zero skips, and terminal validation records a clean result. A retained
+checkpoint is not ticket closure.
 
 ## SA142 — Reuse and clean E2E Docker images
 
@@ -631,7 +606,7 @@ SA135 will provision a containerised PostgreSQL, so it should adopt whatever ima
 
 ## SA163 — Derive the CI PostgreSQL environment from one authoritative source
 
-`Band B · Tier 2 · W3 · merge #15 — **executes inside SA135**, not as a separate pass`
+`Band B · Tier 2 · W3 · merge #15 · deps: SA135 — **executes inside SA135**, not as a separate pass`
 
 ### The mental model
 
@@ -709,7 +684,7 @@ ticket it just finished.
 
 ## SA160 — Share one correct CSRF-token helper in the React theme
 
-`Band C · Tier 2 · W3 · merge #20`
+`Band C · Tier 2 · W3 · merge #20 · deps: SA161 (worktree ordering)`
 
 ### The mental model
 
@@ -764,7 +739,7 @@ creates that seam. Place the helper accordingly.
 
 ## SA161 — Remove the dead `get_client_ip` definitions from generated settings
 
-`Band C · Tier 3 · W3 · merge #19`
+`Band C · Tier 3 · W3 · merge #19 · deps: SA135 (worktree ordering)`
 
 ### The mental model — the Django fact that makes this dead code
 
@@ -818,7 +793,7 @@ one. The sync-before-merge-back procedure has to preserve every entry.
 
 ## SA162 — Fix the deprecated bool inversion in the CSRF AST gate
 
-`Band C · Tier 3 · W1 · merge #17`
+`Band C · Tier 3 · W1 · merge #17 · deps: SA150 (worktree ordering)`
 
 ### The concrete defect
 
@@ -859,7 +834,7 @@ red flag — the wrong fix should not outlive the finding.
 
 ## SA165 — Discharge the tech-audit watch items that carry an action
 
-`Band C · Tier 3 · W1 · merge #22`
+`Band C · Tier 3 · W1 · merge #22 · deps: SA150 (owns an item excluded here)`
 
 ### The mental model
 
@@ -930,7 +905,7 @@ become debt — it costs a read every audit pass and can never fire.
 Five items are carried. Three are simply not fired and need no work. Two carry explicit
 actions, and one is a naming question that becomes load-bearing on a specific trigger.
 
-### 1. The SA92 migration-squash tuple — artifact found, re-anchor now available
+### 1. The SA92 migration-squash tuple — artifact found, re-anchor remains blocked
 
 The artifact is
 `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`, a bounded
@@ -1114,22 +1089,20 @@ Each step builds the one after it:
    Not "a test is wrong" but "an entire category of code has no owner."
 2. **SA150** — the clearest instance of silent fallback; four lines of code, precisely
    diagnosable.
-3. **SA134** — duplicated authority plus the tautology trap, which is where judgement starts
-   mattering.
-4. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
-5. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
+3. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
+4. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
    (bypassed RLS roles).
-6. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
+5. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
    about existing conventions (scope allowlist, gate registry, emission-parity fixture).
-7. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
+6. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
 
 ### The three traps this release keeps setting
 
 Worth holding as a set, because each appears in more than one ticket:
 
-- **The tautology trap** (SA134). A test that reads the authoritative value and asserts the
-  authoritative value passes for any value, including nonsense. Derive *wiring* assertions;
-  keep *negative controls* literal.
+- **The tautology trap**. A test that reads the authoritative value and asserts the authoritative
+  value passes for any value, including nonsense. Derive *wiring* assertions; keep *negative
+  controls* literal.
 - **The wrong-fix trap** (SA162, and SA155's Option 3). An audit's finding and an audit's
   suggested fix carry different verification. `not val` would have broken the CSRF gate.
 - **The green-by-absence trap** (SA155, SA135, SA152, SA165). Skipping, filtering,
@@ -1141,6 +1114,17 @@ Worth holding as a set, because each appears in more than one ticket:
 ## SA167a / SA167b / SA167c / SA167d — module wiring standardization
 
 `Band B · W2 (#8, #21) and W1 (#14, #18)`
+
+The four roadmap entries share this one conceptual section. Their dependency rows remain explicit
+so the consistency gate can distinguish an umbrella entry from a missing ticket and compare each
+roadmap dependency without treating the shared heading as a single ticket:
+
+| Ticket | Merge position | Roadmap dependencies | Current status |
+|---|---:|---|---|
+| SA167a | #8 | SA155 | merge blocked by open SA155; implementation may start |
+| SA167b | #14 | SA167a, SA150 | blocked until both worktree-ordering dependencies are ready |
+| SA167c | #21 | SA167a, SA118 | blocked until both shared-manifest dependencies are ready |
+| SA167d | #18 | SA167b, SA162 | blocked until both worktree-ordering dependencies are ready |
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.
