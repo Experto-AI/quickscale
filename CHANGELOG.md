@@ -29,6 +29,38 @@
   substitute. `make check-manifest-sync` and `make check` passed. `make quality` reproduced
   the accepted exit-2 oracle: monotonicity passed, two warning regressions, and zero
   critical regressions. No SA90 fixture or generated-output baseline changed.
+- **Roadmap cleanup and rebalance review (2026-08-25, eighth pass).** **No ticket closed and
+  no audit finding closed since the seventh pass**, so no new completion work entered the
+  archive. The pass retired SA162's roadmap entry — its closure evidence is the entry below and
+  merge position **#14 is retired and not reused** — while retaining the user-required checked
+  SA167a marker as the roadmap's sole completion record. Every SA162 reference in the
+  dependency diagram, merge-order table, shared-surface table, and track-readiness prose was
+  removed or restated as settled tree state. SA151's retained S4-C validation transcript was
+  archived here (next entry); the roadmap keeps only the one-line checkpoint state, the live
+  database-lane ownership constraint, and the two-step S4 continuation plan. The retired
+  `SA150 → SA118` edge note and the retired-merge-position enumeration were dropped as log
+  rather than plan. Rebalance was re-tested and **no track moves**: the only candidate,
+  moving **SA161 (#19) and SA160 (#20) from W3 to W1**, is rejected again — neither is on or
+  feeding the critical path, so the move buys no release date, and it would spread
+  `quickscale_core/tests/fixtures/sa90_emission_manifests.json` across three worktrees
+  because SA142 must stay on W3 for the Docker slot. The open queue is unchanged at **fifteen
+  open v88 ticket entries across fourteen open merge positions**; the critical path remains
+  W2's `SA167a → SA124 → SA123 → SA118 → SA167c`.
+
+- **SA151 S4-C validation transcript (2026-08-24, archived 2026-08-25).** The S4-C software
+  campaign ran green on the unchanged tree: topology **41 passed**; generated
+  empty-PostgreSQL proof **1 passed, 0 skipped**; restricted integration **2,471 passed, 86
+  skipped, 12 deselected, 94.41% mean coverage**; BYPASSRLS **80 passed, 0 errors, 0 skipped,
+  2,488 deselected**; typecheck passed; serial E2E passed Core **36** and CLI **36** with 0
+  skips and cleanup; `make check` passed at **2,806 Core passed / 1 skipped** and **2,117 CLI
+  passed**; `make quality` matched the accepted GNU Make exit-2 oracle of exactly two warning
+  regressions, zero critical regressions, and monotonicity pass. Database ownership was
+  observed 12/12 under the BYPASSRLS role during that lane, restored 12/12 to
+  `quickscale_test_role`, and independently rechecked after all downstream gates. The
+  Adaptive handback stayed partial only because the execution plan hard-coded the stale
+  historical 2,788/2,104 `make check` counts — an evidence-oracle mismatch, not a failing
+  test or product defect. S4-D was therefore not reached and **SA151 remains open**.
+
 - **SA162 — deprecated bool inversion retired; TA69 and arch red flag #5 closed
   (2026-08-24).** `scripts/check_csrf_exempt_gate.py` now evaluates analyzed
   `~True`/`~False` operands with `~int(val) != 0`, preserving bitwise-invert truthiness
@@ -38,10 +70,10 @@
   verdicts for both bool operands, and the gate runs clean under
   `-W error::DeprecationWarning`. The tech audit now carries **S3: 1, S4: 1, total 2**
   open findings, the architectural audit carries no open red flag, and the roadmap retains
-  the user-required checked SA162 completion record while excluding it from open counts.
-  The synchronized current queue is **sixteen open v88 ticket entries across fifteen open
-  merge positions**: W1's next ticket is SA167b (#17), blocked only by SA167a's
-  `entry_point.py` hand-off; W2 and W3 remain executable. The focused roadmap/context
+  the archived SA162 evidence and its retired #14 position; SA167a remains the sole retained
+  checked roadmap completion record. The synchronized current queue is **fifteen open v88
+  ticket entries across fourteen open merge positions**: W1's next ticket is SA167b (#17),
+  released by SA167a's `entry_point.py` hand-off; W2 and W3 remain executable. The focused roadmap/context
   consistency suite passes all **12 tests**.
 
 - **Roadmap cleanup and rebalance review (2026-08-24, sixth pass).** **No ticket closed and no
