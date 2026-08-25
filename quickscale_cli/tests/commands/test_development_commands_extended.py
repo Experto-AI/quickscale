@@ -23,7 +23,11 @@ from quickscale_cli.commands.development_commands import (
     shell,
     up,
 )
-from quickscale_cli.utils.docker_utils import DockerComposePluginRequiredError
+from quickscale_cli.utils.docker_utils import (
+    BackendImageIdentity,
+    BackendImageIdentityError,
+    DockerComposePluginRequiredError,
+)
 from quickscale_cli.utils.project_manager import ProjectConfigLoadError
 
 
@@ -163,6 +167,24 @@ class TestVerifierComposeProjectPropagation:
             "-d",
             "--build",
         ]
+
+    @patch("quickscale_cli.commands.development_commands.subprocess.run")
+    def test_compose_receives_a_copied_identity_environment(self, mock_run):
+        """Compose receives identity values without mutating its caller env."""
+        mock_run.return_value = Mock(returncode=0)
+        environment = {"PORT": "9000"}
+
+        _run_docker_compose_up(
+            ["docker", "compose"],
+            build=False,
+            no_cache=False,
+            environment=environment,
+        )
+
+        child_environment = mock_run.call_args.kwargs["env"]
+        assert child_environment == environment
+        assert child_environment is not environment
+        assert environment == {"PORT": "9000"}
 
     def test_generic_error(self):
         """Handle generic error output"""
@@ -739,6 +761,45 @@ class TestUpdateLastBuildTimestamp:
 
 class TestUpCommandExtended:
     """Extended tests for up command"""
+
+    def test_up_identity_failure_happens_before_compose(self):
+        """Malformed identity input prevents the Compose subprocess."""
+        runner = CliRunner()
+
+        with runner.isolated_filesystem():
+            with open("Dockerfile", "w") as dockerfile:
+                dockerfile.write("FROM python:3.14-slim\n")
+            with (
+                patch(
+                    "quickscale_cli.commands.development_commands.is_in_quickscale_project",
+                    return_value=True,
+                ),
+                patch(
+                    "quickscale_cli.commands.development_commands.is_docker_running",
+                    return_value=True,
+                ),
+                patch(
+                    "quickscale_cli.commands.development_commands.get_project_config",
+                    return_value=None,
+                ),
+                patch(
+                    "quickscale_cli.commands.development_commands.build_backend_image_identity",
+                    side_effect=BackendImageIdentityError("bad generated input"),
+                ),
+                patch(
+                    "quickscale_cli.commands.development_commands.subprocess.run"
+                ) as mock_run,
+            ):
+                result = runner.invoke(up)
+
+        assert result.exit_code == 1
+        assert "Backend image identity is invalid" in result.output
+        mock_run.assert_not_called()
+
+    def test_identity_helper_failure_type_is_not_silently_replaced(self):
+        """The focused test imports the typed identity result used by callers."""
+        identity = BackendImageIdentity("image", "digest", b"manifest")
+        assert identity.image_reference == identity.reference
 
     def test_up_aborts_when_quickscale_yml_is_invalid(self):
         """Development up should fail hard when strict config loading fails."""

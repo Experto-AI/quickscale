@@ -54,7 +54,7 @@ Applying it produces three ranked bands:
 | Band | Rule | Tickets |
 |---|---|---|
 | **A — Restore enforcement** | The gate layer reports green while not running, or runs red on HEAD. Nothing downstream can be trusted until this is fixed. | completed |
-| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA124 → SA123 → SA118 → SA167c (critical path); SA142 → SA135 (+ SA163); SA167b → SA167d |
+| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA124 → SA123 → SA118 → SA167c (critical path); SA135 (+ SA163); SA167b → SA167d |
 | **C — Bounded independent fixes** | No dependants, small blast radius. Absorbed as slack filler by whichever worktree finishes a band-B leg early. | SA160, SA161, SA164, SA165, SA166 |
 
 **Standing consequences of that rule:**
@@ -100,7 +100,7 @@ Applying it produces three ranked bands:
 ### Dependency graph and critical path
 
 ```text
-v88 — three worktrees, thirteen open merge positions carrying fourteen open ticket entries, one merge queue
+v88 — three worktrees, twelve open merge positions carrying thirteen open ticket entries, one merge queue
 
 W2 (gates & declared wiring)   ★ CRITICAL PATH — 6 open legs, 4 on the path
   SA124 ─► SA123 ─► SA118 ─► SA167c ─► SA166 ─► SA164
@@ -115,11 +115,11 @@ W1 (module-wiring migration + watch items)   3 open legs, mostly light, no cross
   9 adapters CLI       items
     #17       #18       #22
 
-W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   4 open positions: 2 heavy + 2 band-C
-  SA142 ──► SA135 + SA163 ──► [SA161, SA160]
-  stable    owned PG lifecycle    emission-adjacent
-  image     + derived CI env      fillers
-   #10            #15              #19, #20
+W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   3 open positions: 1 heavy + 2 band-C
+  SA135 + SA163 ──► [SA161, SA160]
+  owned PG lifecycle    emission-adjacent
+  + derived CI env      fillers
+        #15              #19, #20
 ```
 
 **Longest open release chain — the critical path:** W2's
@@ -127,13 +127,12 @@ W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   4 open positions: 
 prerequisite outside W2 is satisfied. SA166 (#24) and SA164 (#25) are band-C tails behind
 the chain, not on it. W2's back half is the release's implementation work, so W2 sets the
 date. SA167b and SA167d cost nothing on the critical path: W1 runs them against W2's second
-half. **Load check:** W1 carries three open legs and W3 four positions against the four-leg
+half. **Load check:** W1 carries three open legs and W3 three positions against the four-leg
 critical path. W3's two band-C tails do not gate release, so W2 remains the binding lane — see
 the irreducibility argument below.
 
-**Second chain:** W3, `SA142 → SA135`, two service-backed open legs followed by
-  emission-adjacent fillers and serialized on the exclusive slot whenever a service-backed
-  leg is active.
+**Second chain:** W3, `SA135` carrying `SA163`, one service-backed open leg followed by
+  emission-adjacent fillers and serialized on the exclusive slot while that leg is active.
 
 **Active cross-worktree dependency edges — none.** Every remaining dependency is intra-lane.
 The manifest-reading `entry_point.py`, the fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec
@@ -141,7 +140,7 @@ seam, and the regenerated migration baseline are all merged tree state that open
 on, not pending dependencies.
 
 **Parallelism result:** all three lanes have an executable implementation action today. W2 is
-ready to start SA124 (#11), W3 is released to start SA142 (#10), and W1's head is SA167b (#17),
+ready to start SA124 (#11), W3 is released to start SA135+SA163 (#15), and W1's head is SA167b (#17),
 which is now ungated and may start immediately.
 
 **No track moves this pass.** Every open ticket carries a worktree; none lacks one. One
@@ -153,9 +152,8 @@ slot of two band-C tails that need neither PostgreSQL nor Docker. It fails two o
   SA167c`, entirely on W2. Neither ticket appears on it or feeds it, so the move buys no
   release date — it is filler relocated, not a spine shortened.
 - **It creates a merge hazard.** `quickscale_core/tests/fixtures/sa90_emission_manifests.json`
-  is owned by SA142, SA118, SA161, SA160 — today W2 plus W3, two worktrees. SA142 cannot
-  follow the pair to W1 because it holds the Docker slot, so the move would spread one
-  rebaselined fixture across three lanes.
+  is still owned by SA118, SA161, and SA160 — today W2 plus W3, two worktrees. Moving the
+  pair to W1 would spread one rebaselined fixture across three lanes.
 
 Re-open the question only if W3 becomes the binding lane, and move the pair together — SA160's
 `deps: SA161` is an emission-parity ordering edge on that shared fixture and must not be split.
@@ -189,15 +187,15 @@ taken — see above).
 |---|---|---|---|---|---|
 | **W2** | SA124 (#11) | **yes** — no open prerequisite; the manifest declaration surfaces are settled tree state | **yes** — the SA124 scope-tool surfaces are W2-owned | **yes** — #11 is the queue head for W2 | **truly green — next critical-path leg** |
 | **W1** | SA167b (#17) | **yes** — ungated; the `entry_point.py` handoff is settled tree state | **yes** — the adapter relocation remains entirely W1-owned | **yes** — #17 is W1's queue head, gated by nothing | **truly green** |
-| **W3** | SA142 (#10) | **yes** — `deps: none` and the Docker lane is released | **yes** — the image lifecycle work remains entirely W3-owned | **yes** — #10 is W3's queue head | **truly green** |
+| **W3** | SA135 + SA163 (#15) | **yes** — `deps: none` and the PostgreSQL/Docker lane is released | **yes** — the owned PostgreSQL lifecycle and derived CI environment remain entirely W3-owned | **yes** — #15 is W3's queue head | **truly green** |
 
 **All three tracks are truly green.** Of the three executable next actions, only one is on the
 critical path:
 
 - **W2 / SA124 (#11) — truly green and on the critical path.** This is the next real
   release-date action; it heads the remaining spine.
-- **W3 / SA142 (#10) — truly green, off the critical path.** The Docker-backed second chain is
-  released. Closing SA142 will release SA135+SA163 (#15).
+- **W3 / SA135 + SA163 (#15) — truly green, off the critical path.** The stable image
+  lifecycle prerequisite is settled, so the owned PostgreSQL lifecycle may start.
 - **W1 / SA167b (#17) — truly green, off the critical path.** Its former `entry_point.py`
   prerequisite is merged tree state, so nothing gates it.
 
@@ -205,7 +203,6 @@ critical path:
 
 | Ticket | Blocked state | Blocking ticket | Clearable by a maintainer decision? |
 |---|---|---|---|
-| SA135 + SA163 (#15) | can start — **no** | SA142 (#10) | No — hard dependency behind SA142. |
 | SA164 (#25) | can start · can finish — no | SA166 (#24) | No — W2 ordering must clear. |
 
 **Recommended concurrency right now:**
@@ -213,8 +210,8 @@ critical path:
 - **W1 — start SA167b (#17).** Preserve the merged manifest-reading `entry_point.py`
   behaviour while relocating the nine adapters.
 - **W2 — start SA124 (#11).** The head of the critical path, gated by nothing.
-- **W3 — start SA142 (#10).** The Docker slot is free and the clean-break migration baseline is
-  settled tree state.
+- **W3 — start SA135 + SA163 (#15).** The PostgreSQL/Docker slot is free, the stable image
+  lifecycle is settled tree state, and no open ticket gates this leg.
 
 #### Open maintainer decisions
 
@@ -236,10 +233,9 @@ exact reviewed tip.
 
 | # | Ticket | Band | Tier | Worktree | Merges after | Service slot |
 |---|---|---|---|---|---|---|
-| 10 | **SA142** | B | 1 | W3 | — | **yes** — Docker |
 | 11 | **SA124** | B | 1 | W2 | — | no |
 | 13 | **SA123** | B | 2 | W2 | SA124 | no |
-| 15 | **SA135** + **SA163** | B | 2 | W3 | SA142 | **yes** — PostgreSQL + Docker |
+| 15 | **SA135** + **SA163** | B | 2 | W3 | — | **yes** — PostgreSQL + Docker |
 | 16 | **SA118** | B | 2 | W2 | SA123 | no |
 | 17 | **SA167b** | B | 2 | W1 | — | no |
 | 18 | **SA167d** | B | 3 | W1 | SA167b | no |
@@ -250,10 +246,10 @@ exact reviewed tip.
 | 24 | **SA166** | C | 3 | W2 | SA118, SA167c | no |
 | 25 | **SA164** | C | 3 | W2 | SA166 | no |
 
-Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #12, #14, and #23 are **retired and not
+Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #12, #14, and #23 are **retired and not
 reused**; the tickets that held them are closed and archived in
 [CHANGELOG.md](../../CHANGELOG.md). Gaps in the numbering are expected and carry no meaning.
-Positions #10, #11, and #17 are queue heads gated by nothing.
+Positions #11, #15, and #17 are queue heads gated by nothing.
 
 Band-C positions (19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. Any of them may slip
 past the release without blocking it; none may displace a band-A or band-B leg.
@@ -271,7 +267,6 @@ Additional per-ticket surfaces:
 | SA167c | every `quickscale_modules/*/module.yml`, `quickscale_core/.../manifest/{schema,loader}.py`, `scripts/gate_registry.json`, `Makefile`, CI workflow, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py` | retires the inert key and registers the declaration gate; **registry membership is why this is W2** |
 | SA167d | `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md` | CLI wiring drain; touched by no other v88 ticket |
 | SA118 | module manifests, wiring emission baselines | manifest projection over the merged app declarations |
-| SA142 | `scripts/test_e2e.sh`, E2E fixtures, **SA90 emission-parity fixture** | image/container identity |
 | SA135 + SA163 | `scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, `scripts/provision_ci_postgres.sh` (new), all four `.github/workflows/`, `scripts/test_gate_parity.py`, `Makefile`, `docs/technical/validation_policy.md`, `docs/others/arch-audit.md` | changes the documented DB precondition and the CI environment |
 | SA160, SA161 | generator templates + **SA90 emission-parity fixture**, `docs/others/tech-audit.md` | emitted output changes |
 | SA164 | `docs/others/arch-audit.md`, `scripts/gate_registry.json`, `scripts/check_gate_parity.py`, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`, `.../production.py.j2`, `quickscale_modules/orgs/.../apps.py` | watchlist discharge; **W2** — registry and the SA92 test are W2-owned surfaces, and it merges last |
@@ -300,8 +295,8 @@ Additional per-ticket surfaces:
   `_migdir()` fallback and re-anchors its parity backstop. Both are on W2 and merge in that
   order, so this surface no longer crosses worktrees; SA164's migration-baseline work is a
   content dependency on the regenerated migrations rather than a file dependency.
-- `quickscale_core/tests/fixtures/sa90_emission_manifests.json` — SA142, SA118, SA161,
-  SA160. SA118 is on W2 and the other three on W3, so this **does** cross worktrees. Each
+- `quickscale_core/tests/fixtures/sa90_emission_manifests.json` — SA118, SA161,
+  SA160. SA118 is on W2 and the other two on W3, so this **does** cross worktrees. Each
   rebaseline appends its own `baseline_evidence` entry with per-file rationale; the
   sync-before-merge-back procedure must preserve every prior entry.
 
@@ -349,13 +344,9 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Acceptance:** no function in `module_config.py` decides a module's apps, middleware, settings keys, or URL includes — those come from the module's manifest through its adapter; the remaining surface is desired-configuration collection only, and that boundary is stated in the module's docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist) is retired once the deviation it names is gone.
   **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`.
 
-- [ ] **SA142 — Reuse and clean E2E Docker images.** `Band B · Tier 1 · W3 · merge #10 · deps: none · Docker slot · blocks SA135`
-  Separate stable image identity from per-run container/port/volume identity, reclaim variable images under normal cleanup, and preserve `--no-cleanup` diagnostics.
-  **Acceptance:** image identity is stable across runs and is reused rather than rebuilt when inputs are unchanged; container, port, and volume identity remain per-run; a normal `make test-e2e` run leaves no variable images behind, verified by an image listing before and after; `--no-cleanup` still preserves containers and logs for diagnosis; a second consecutive run is measurably faster than a cold run.
-
-- [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Band B · Tier 2 · W3 · merge #15 · deps: SA142 · PostgreSQL + Docker slot · carries SA163`
+- [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Band B · Tier 2 · W3 · merge #15 · deps: none · PostgreSQL + Docker slot · carries SA163`
   Provision and tear down the server used by repository gates; replace the current out-of-band host assumption while retaining an asserted unavailability negative control.
-  **Acceptance:** the integration gate provisions its own PostgreSQL 18 server and tears it down, with no reliance on a pre-existing host server; the `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract is preserved; the asserted-unavailability negative control still fails loudly when the server cannot be provisioned, rather than skipping; `make test-integration` passes on a machine with no PostgreSQL running; [validation_policy.md](validation_policy.md) is updated to drop the out-of-band host precondition; image identity follows the SA142 convention.
+  **Acceptance:** the integration gate provisions its own PostgreSQL 18 server and tears it down, with no reliance on a pre-existing host server; the `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract is preserved; the asserted-unavailability negative control still fails loudly when the server cannot be provisioned, rather than skipping; `make test-integration` passes on a machine with no PostgreSQL running; [validation_policy.md](validation_policy.md) is updated to drop the out-of-band host precondition; image identity follows the settled content-addressed backend-image convention.
 
 ---
 

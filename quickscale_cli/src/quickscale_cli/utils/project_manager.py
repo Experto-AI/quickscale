@@ -1,10 +1,16 @@
 """Project state detection and management utilities."""
 
+import os
 from pathlib import Path
 from typing import Any
 
 from quickscale_core.schema.config_schema import QuickScaleConfig, validate_config
-from .docker_utils import find_docker_compose, get_running_containers
+from .docker_utils import (
+    RESOURCE_PREFIX_ENV_VAR,
+    find_docker_compose,
+    get_resource_prefix,
+    get_running_containers,
+)
 
 
 class ProjectConfigLoadError(ValueError):
@@ -54,31 +60,41 @@ def is_in_quickscale_project() -> bool:
     return find_docker_compose() is not None
 
 
-def get_backend_container_name() -> str:
-    """Get the name of the backend container (dynamically detected)."""
-    project_name = Path.cwd().name
+def _container_name_candidates(prefix: str, service: str) -> tuple[str, ...]:
+    """Return only complete, known Compose naming forms for one service."""
+    return (
+        f"{prefix}_{service}",
+        f"{prefix}-{service}-1",
+        f"{prefix}_{service}_1",
+    )
+
+
+def _get_service_container_name(service: str) -> str:
+    """Resolve one service without substring or cross-project matching."""
+    explicit_prefix = os.environ.get(RESOURCE_PREFIX_ENV_VAR)
+    prefix = get_resource_prefix()
     containers = get_running_containers()
 
-    # Try different naming patterns used by Docker Compose
-    # Examples: test59_backend, test59-backend-1, test59_backend_1
-    for container in containers:
-        if project_name in container and "backend" in container:
-            return container
+    candidates = _container_name_candidates(prefix, service)
+    for candidate in candidates:
+        if candidate in containers:
+            return candidate
 
-    # Fallback to common patterns if no running container found
-    return f"{project_name}-backend-1"
+    # An explicit run prefix is authoritative.  Do not fall back to a
+    # similarly named container from the ordinary project namespace.
+    if explicit_prefix is not None:
+        return candidates[0]
+
+    # Preserve the historical ordinary-project fallback and its hyphenated
+    # Compose form, while keeping the lookup itself exact.
+    return candidates[1]
+
+
+def get_backend_container_name() -> str:
+    """Get the exact backend container for the validated resource prefix."""
+    return _get_service_container_name("backend")
 
 
 def get_db_container_name() -> str:
-    """Get the name of the database container (dynamically detected)."""
-    project_name = Path.cwd().name
-    containers = get_running_containers()
-
-    # Try different naming patterns used by Docker Compose
-    # Examples: test59_db, test59-db-1, test59_db_1
-    for container in containers:
-        if project_name in container and "db" in container:
-            return container
-
-    # Fallback to common patterns if no running container found
-    return f"{project_name}-db-1"
+    """Get the exact database container for the validated resource prefix."""
+    return _get_service_container_name("db")

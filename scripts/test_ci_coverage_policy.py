@@ -36,6 +36,21 @@ from scripts.check_coverage_policy import check_policy
 # ---------------------------------------------------------------------------
 
 
+def _isolated_make_environment() -> dict[str, str]:
+    """Return an environment free of controls inherited from an outer Make."""
+    environment = os.environ.copy()
+    for key in (
+        "GNUMAKEFLAGS",
+        "MAKEFLAGS",
+        "MAKELEVEL",
+        "MAKEOVERRIDES",
+        "MFLAGS",
+        "QUIET",
+    ):
+        environment.pop(key, None)
+    return environment
+
+
 def _make_cov_json(
     files: dict,
     totals: dict | None = None,
@@ -651,6 +666,7 @@ class TestMakefileGateTargetDerivation:
         result = subprocess.run(
             command,
             cwd=cwd,
+            env=_isolated_make_environment(),
             capture_output=True,
             text=True,
             timeout=30,
@@ -773,7 +789,7 @@ class TestRegisteredScriptGateTarget:
         fake_python, log = self._write_fake_python(tmp_path)
         temp_dir = tmp_path / "tmp"
         temp_dir.mkdir()
-        environment = os.environ.copy()
+        environment = _isolated_make_environment()
         environment.update(
             {
                 "FAKE_GATE_EXIT": str(fake_exit),
@@ -908,6 +924,7 @@ class TestRegisteredScriptGateTarget:
         result = subprocess.run(
             ["make", "--no-print-directory", "-f", str(outer_makefile)],
             cwd=self.REPO_ROOT,
+            env=_isolated_make_environment(),
             capture_output=True,
             text=True,
             timeout=30,
@@ -945,7 +962,7 @@ class TestRegisteredScriptGateTarget:
         fake_python, log = self._write_fake_python(tmp_path)
         temp_dir = tmp_path / "tmp"
         temp_dir.mkdir()
-        environment = os.environ.copy()
+        environment = _isolated_make_environment()
         environment.update({"FAKE_GATE_READY": str(ready), "TMPDIR": str(temp_dir)})
         environment.pop("QUICKSCALE_CHECK_GATE_SUITES_TOKEN", None)
         environment.pop("QUICKSCALE_CHECK_GATE_SUITES_SENTINEL", None)
@@ -1116,7 +1133,7 @@ class TestMakefileCoveragePipeline:
         temp_dir = tmp_path / "system-tmp"
         temp_dir.mkdir()
 
-        env = os.environ.copy()
+        env = _isolated_make_environment()
         for key in ("REQUIRE_BACKUPS_COVERAGE", "PYTEST_XDIST_WORKERS"):
             env.pop(key, None)
         env.update(
@@ -1601,7 +1618,7 @@ class TestCheckQuietSectionDispatch:
         """
         fake_python, event_log = self._write_fake_python(tmp_path)
 
-        env = os.environ.copy()
+        env = _isolated_make_environment()
         for key in ("SECTIONS", "SECTION", "MODULE", "PYTEST_XDIST_WORKERS"):
             env.pop(key, None)
         env["FAKE_LOG"] = str(event_log)
@@ -2650,7 +2667,7 @@ class TestCheckNormalFrontendLint:
         """
         fake_python, event_log = self._write_fake_python(tmp_path)
 
-        env = os.environ.copy()
+        env = _isolated_make_environment()
         for key in ("SECTIONS", "SECTION", "MODULE", "PYTEST_XDIST_WORKERS"):
             env.pop(key, None)
         env["FAKE_LOG"] = str(event_log)

@@ -106,6 +106,15 @@ RUN echo "📦 Installing Python dependencies (INSTALL_DEV=$INSTALL_DEV)..." && 
 # Stage 2: Runtime - Create minimal production image
 FROM python:{{ python_docker_tag }}
 
+# Stable QuickScale image ownership metadata. The digest is supplied by the
+# CLI for generated-project builds and has a deterministic direct-Compose
+# fallback; neither value contains run, path, or secret data.
+ARG QUICKSCALE_BACKEND_IMAGE_DIGEST=direct-compose
+ARG QUICKSCALE_IMAGE_CONTRACT=sa142
+LABEL com.quickscale.owner="quickscale" \
+      com.quickscale.image-contract="${QUICKSCALE_IMAGE_CONTRACT}" \
+      com.quickscale.image-digest="${QUICKSCALE_BACKEND_IMAGE_DIGEST}"
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

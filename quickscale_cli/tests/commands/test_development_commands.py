@@ -174,16 +174,24 @@ class TestUpCommand:
                                 result = runner.invoke(up, ["--no-cache"])
 
                                 assert result.exit_code == 0
-                                # Verify --build and --no-cache were passed in compose call
+                                # Verify no-cache is a separate build command; Compose
+                                # does not accept --no-cache on its up subcommand.
                                 all_calls = [
                                     call.args[0] for call in mock_run.call_args_list
                                 ]
-                                assert any(
-                                    "--build" in call_args for call_args in all_calls
+                                no_cache_call = next(
+                                    call_args
+                                    for call_args in all_calls
+                                    if "--no-cache" in call_args
                                 )
-                                assert any(
-                                    "--no-cache" in call_args for call_args in all_calls
+                                up_call = next(
+                                    call_args
+                                    for call_args in all_calls
+                                    if "up" in call_args and "--build" in call_args
                                 )
+                                assert "build" in no_cache_call
+                                assert "up" not in no_cache_call
+                                assert "--no-cache" not in up_call
                                 assert any(
                                     "migrate" in call_args for call_args in all_calls
                                 )

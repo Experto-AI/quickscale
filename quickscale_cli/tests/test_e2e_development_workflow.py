@@ -14,7 +14,9 @@ Run with: pytest -m e2e
 Note: Requires Docker to be running
 """
 
+import json
 import os
+import re
 import socket
 import subprocess
 import time
@@ -37,6 +39,107 @@ from quickscale_core.generator import ProjectGenerator
 import quickscale_cli.commands.apply_command as _apply_mod
 
 _apply_mod._AF5_DESTRUCTIVE_CONFIRM_BYPASS = True
+
+
+def _retain_e2e_resources() -> bool:
+    """Return whether diagnostics intentionally retain Docker resources."""
+    return os.environ.get("QS_E2E_NO_CLEANUP", "0") == "1"
+
+
+def _stable_test_project_slug() -> str:
+    """Return stable generated-project input independent of run resources."""
+    return os.environ.get("QS_E2E_PROJECT_SLUG", "e2e_cli_test")
+
+
+def _worker_resource_scope() -> str:
+    """Derive a worker-specific resource scope without changing project inputs."""
+    base = os.environ.get(
+        "QS_E2E_RESOURCE_SCOPE",
+        os.environ.get("QS_E2E_CONTAINER_PREFIX", "e2e_cli_test"),
+    )
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker:
+        return f"{base}-{worker}"[:63]
+    return base
+
+
+def _cleanup_labelled_resources(scope: str) -> None:
+    """Fail-closed cleanup for one exact QuickScale owner/lifecycle/scope tuple."""
+    if re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,62}", scope) is None:
+        raise ValueError(f"invalid Docker resource scope: {scope!r}")
+    selectors = [
+        "--filter",
+        "label=com.quickscale.owner=quickscale",
+        "--filter",
+        "label=com.quickscale.lifecycle=e2e",
+        "--filter",
+        f"label=com.quickscale.scope={scope}",
+    ]
+    resources = {
+        "container": (
+            ["docker", "ps", "-aq", *selectors],
+            ["docker", "container", "inspect"],
+        ),
+        "volume": (
+            ["docker", "volume", "ls", "-q", *selectors],
+            ["docker", "volume", "inspect"],
+        ),
+        "network": (
+            ["docker", "network", "ls", "-q", *selectors],
+            ["docker", "network", "inspect"],
+        ),
+    }
+    selected: dict[str, list[str]] = {}
+    expected = {
+        "com.quickscale.owner": "quickscale",
+        "com.quickscale.lifecycle": "e2e",
+        "com.quickscale.scope": scope,
+    }
+    for resource_type, (list_argv, inspect_argv) in resources.items():
+        listed = subprocess.run(list_argv, capture_output=True, text=True, check=True)
+        ids = listed.stdout.split()
+        selected[resource_type] = ids
+        for resource_id in ids:
+            inspected = subprocess.run(
+                [
+                    *inspect_argv,
+                    "--format",
+                    "{{json .Config.Labels}}"
+                    if resource_type == "container"
+                    else "{{json .Labels}}",
+                    resource_id,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            labels = json.loads(inspected.stdout)
+            if any(labels.get(key) != value for key, value in expected.items()):
+                raise RuntimeError(f"refusing mismatched {resource_type} {resource_id}")
+    remove_argv = {
+        "container": ["docker", "rm", "-f"],
+        "volume": ["docker", "volume", "rm", "-f"],
+        "network": ["docker", "network", "rm"],
+    }
+    for resource_type in ("container", "volume", "network"):
+        if selected[resource_type]:
+            subprocess.run(
+                [*remove_argv[resource_type], *selected[resource_type]],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+    for resource_type, (list_argv, _inspect_argv) in resources.items():
+        leftovers = subprocess.run(
+            list_argv,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if leftovers.stdout.split():
+            raise RuntimeError(
+                f"labelled {resource_type} resources remain in scope {scope}"
+            )
 
 
 @pytest.mark.e2e
@@ -66,8 +169,8 @@ class TestDevelopmentCommandsE2E:
 
     @staticmethod
     def _container_prefix() -> str:
-        """Return the per-lane project/container prefix for this E2E run."""
-        return os.environ.get("QS_E2E_CONTAINER_PREFIX", "e2e_cli_test")
+        """Return the per-lane resource prefix for this E2E run."""
+        return _worker_resource_scope()
 
     def _backend_container_name(self) -> str:
         """Return the generated backend container name for this E2E lane."""
@@ -108,41 +211,27 @@ class TestDevelopmentCommandsE2E:
         print("--- End diagnostics ---\n", flush=True)
 
     @pytest.fixture(autouse=True)
-    def cleanup_before_test(self):
+    def cleanup_before_test(self, request: pytest.FixtureRequest):
         """Ensure this lane's containers are stopped before each test."""
+        if request.node.name.startswith("test_sa142"):
+            return
+        if _retain_e2e_resources():
+            return
         container_prefix = self._container_prefix()
         try:
-            container_ids = subprocess.run(
-                [
-                    "docker",
-                    "ps",
-                    "-a",
-                    "-q",
-                    "--filter",
-                    f"name={container_prefix}",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if container_ids.stdout.strip():
-                subprocess.run(
-                    ["docker", "rm", "-f", *container_ids.stdout.split()],
-                    capture_output=True,
-                    timeout=10,
-                )
+            _cleanup_labelled_resources(container_prefix)
             # Wait for Docker's proxy process to release ports
             wait_for_port_release(
                 int(os.environ.get("QS_E2E_APP_PORT", "8000")), timeout=5.0
             )
-        except Exception:
-            pass  # Best effort cleanup
+        except Exception as error:
+            raise RuntimeError(f"labelled pre-test cleanup failed: {error}") from error
 
     @pytest.fixture
     def test_project(self, tmp_path):
         """Generate a test project and return its path."""
         generator = ProjectGenerator(theme="showcase_react")
-        project_name = self._container_prefix()
+        project_name = _stable_test_project_slug()
         project_path = tmp_path / project_name
 
         generator.generate(project_name, project_path)
@@ -154,15 +243,12 @@ class TestDevelopmentCommandsE2E:
         yield project_path
 
         # Cleanup: ensure containers are stopped
+        if _retain_e2e_resources():
+            return
         try:
-            subprocess.run(
-                [*get_docker_compose_command(), "down", "-v"],
-                cwd=project_path,
-                capture_output=True,
-                timeout=30,
-            )
-        except Exception:
-            pass  # Best effort cleanup
+            _cleanup_labelled_resources(self._container_prefix())
+        except Exception as error:
+            raise RuntimeError(f"labelled fixture cleanup failed: {error}") from error
 
     @pytest.fixture
     def ensure_docker_running(self):
@@ -184,9 +270,30 @@ class TestDevelopmentCommandsE2E:
     def docker_env(self) -> dict[str, str]:
         """Provide isolated environment for Docker e2e commands"""
         return {
-            "PORT": os.environ.get("QS_E2E_APP_PORT", str(self._get_free_port())),
+            "PORT": (
+                os.environ.get("QS_E2E_APP_PORT")
+                if not os.environ.get("PYTEST_XDIST_WORKER")
+                else str(self._get_free_port())
+            )
+            or str(self._get_free_port()),
             "QS_E2E_CONTAINER_PREFIX": self._container_prefix(),
+            "QS_E2E_RESOURCE_SCOPE": self._container_prefix(),
+            "QUICKSCALE_RESOURCE_PREFIX": self._container_prefix(),
+            "QS_E2E_PROJECT_SLUG": _stable_test_project_slug(),
         }
+
+    def test_sa142_stable_project_inputs_and_retention_mode(self, monkeypatch):
+        """Synthetic SA142 proof separates project inputs from retained resources."""
+        monkeypatch.setenv("QS_E2E_PROJECT_SLUG", "stable-e2e-project")
+        monkeypatch.setenv("QS_E2E_RESOURCE_SCOPE", "run-scope")
+        monkeypatch.setenv("QS_E2E_NO_CLEANUP", "1")
+        assert _stable_test_project_slug() == "stable-e2e-project"
+        worker = os.environ.get("PYTEST_XDIST_WORKER")
+        expected_scope = f"run-scope-{worker}" if worker else "run-scope"
+        assert self._container_prefix() == expected_scope
+        assert _retain_e2e_resources()
+        monkeypatch.setenv("QS_E2E_NO_CLEANUP", "0")
+        assert not _retain_e2e_resources()
 
     def test_full_development_workflow(
         self, test_project, ensure_docker_running, docker_env
@@ -270,7 +377,13 @@ class TestDevelopmentCommandsE2E:
         runner = CliRunner()
         project_name = f"{self._container_prefix()}_apply_{int(time.time())}"
         port = self._get_free_port()
-        env = {"PORT": str(port)}
+        resource_scope = self._container_prefix()
+        env = {
+            "PORT": str(port),
+            "QS_E2E_CONTAINER_PREFIX": resource_scope,
+            "QS_E2E_RESOURCE_SCOPE": resource_scope,
+            "QUICKSCALE_RESOURCE_PREFIX": resource_scope,
+        }
 
         with runner.isolated_filesystem(temp_dir=tmp_path):
             # package(default) -> theme=1(showcase_react) -> modules(skip)
@@ -546,15 +659,14 @@ class TestDevelopmentCommandsIntegration:
         yield project_path
 
         # Cleanup
+        if _retain_e2e_resources():
+            return
         try:
-            subprocess.run(
-                [*get_docker_compose_command(), "down", "-v"],
-                cwd=project_path,
-                capture_output=True,
-                timeout=30,
-            )
-        except Exception:
-            pass
+            _cleanup_labelled_resources(_worker_resource_scope())
+        except Exception as error:
+            raise RuntimeError(
+                f"labelled integration cleanup failed: {error}"
+            ) from error
 
     def test_docker_compose_configuration_valid(self, generated_project):
         """Verify docker-compose.yml is valid and parseable."""

@@ -1,12 +1,22 @@
 """Tests for docker_utils module."""
 
+import re
+import os
 import subprocess
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
 from quickscale_cli.utils.docker_utils import (
+    BackendImageIdentity,
+    BackendImageIdentityError,
     DockerComposePluginRequiredError,
+    IMAGE_DIGEST_ENV_VAR,
+    IMAGE_REFERENCE_ENV_VAR,
+    RESOURCE_PREFIX_ENV_VAR,
+    build_backend_child_environment,
+    build_backend_image_identity,
     exec_in_container,
     find_docker_compose,
     get_container_status,
@@ -18,6 +28,139 @@ from quickscale_cli.utils.docker_utils import (
     is_port_available,
     wait_for_port_release,
 )
+
+
+def _write_image_inputs(root, *, lock: bytes | None = b"lock-v1") -> None:
+    """Create the minimal generated-project inputs for identity tests."""
+    (root / "Dockerfile").write_bytes(b"FROM python:3.14-slim\n")
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "generated-app"\nversion = "1.0.0"\n'
+        'requires-python = ">=3.14,<3.15"\n'
+    )
+    if lock is not None:
+        (root / "poetry.lock").write_bytes(lock)
+    modules = root / "modules" / "auth"
+    modules.mkdir(parents=True)
+    (modules / "pyproject.toml").write_text(
+        '[tool.poetry]\nname = "quickscale-module-auth"\nversion = "0.87.0"\n'
+    )
+
+
+class TestBackendImageIdentity:
+    """Tests for the canonical framed development image contract."""
+
+    def test_same_inputs_in_different_directories_are_stable(self, tmp_path):
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        first.mkdir()
+        second.mkdir()
+        _write_image_inputs(first)
+        _write_image_inputs(second)
+
+        first_identity = build_backend_image_identity(first)
+        second_identity = build_backend_image_identity(second)
+
+        assert first_identity == second_identity
+        assert re.fullmatch(
+            r"quickscale-backend:sha256-[0-9a-f]{64}", first_identity.reference
+        )
+        assert first_identity.digest in first_identity.reference
+
+    @pytest.mark.parametrize(
+        "filename", ["Dockerfile", "pyproject.toml", "poetry.lock"]
+    )
+    def test_each_authoritative_file_invalidates_identity(self, tmp_path, filename):
+        _write_image_inputs(tmp_path)
+        original = build_backend_image_identity(tmp_path)
+        path = tmp_path / filename
+        if filename == "pyproject.toml":
+            path.write_text(path.read_text().replace(">=3.14,<3.15", ">=3.14,<3.15.1"))
+        else:
+            path.write_bytes(path.read_bytes() + b"\nchanged\n")
+
+        changed = build_backend_image_identity(tmp_path)
+        assert changed.digest != original.digest
+
+    def test_embedded_package_metadata_invalidates_identity(self, tmp_path):
+        _write_image_inputs(tmp_path)
+        original = build_backend_image_identity(tmp_path)
+        module_metadata = tmp_path / "modules" / "auth" / "pyproject.toml"
+        module_metadata.write_text(
+            module_metadata.read_text().replace("0.87.0", "0.87.1")
+        )
+
+        assert build_backend_image_identity(tmp_path).digest != original.digest
+
+    def test_fixed_build_arguments_are_manifest_inputs(self, tmp_path):
+        _write_image_inputs(tmp_path)
+        default = build_backend_image_identity(tmp_path)
+        changed = build_backend_image_identity(
+            tmp_path,
+            build_args={"INSTALL_DEV": "false"},
+        )
+
+        assert changed.digest != default.digest
+
+    def test_missing_lock_uses_explicit_marker(self, tmp_path):
+        _write_image_inputs(tmp_path, lock=None)
+        missing = build_backend_image_identity(tmp_path)
+        (tmp_path / "poetry.lock").write_bytes(b"lock-v1")
+        present = build_backend_image_identity(tmp_path)
+
+        assert missing.digest != present.digest
+        assert b"<missing-poetry-lock>" in missing.manifest
+
+    def test_malformed_metadata_fails_before_any_compose_call(self, tmp_path):
+        _write_image_inputs(tmp_path)
+        (tmp_path / "pyproject.toml").write_text("not = [valid")
+        with pytest.raises(BackendImageIdentityError):
+            build_backend_image_identity(tmp_path)
+
+    def test_secret_and_run_environment_do_not_influence_identity(
+        self, tmp_path, monkeypatch
+    ):
+        _write_image_inputs(tmp_path)
+        first = build_backend_image_identity(tmp_path)
+        monkeypatch.setenv("PORT", "9123")
+        monkeypatch.setenv("DATABASE_URL", "postgresql://secret")
+        monkeypatch.setenv(RESOURCE_PREFIX_ENV_VAR, "run-worker-123")
+
+        assert build_backend_image_identity(tmp_path) == first
+
+    def test_child_environment_is_copied_without_parent_mutation(self, monkeypatch):
+        identity = BackendImageIdentity(
+            "quickscale-backend:sha256-" + "a" * 64, "a" * 64, b""
+        )
+        monkeypatch.setenv("PORT", "9000")
+        before = dict(os.environ)
+
+        child = build_backend_child_environment(
+            identity,
+            base_environment=before,
+            project_path=Path("project"),
+        )
+
+        assert child is not before
+        assert child[IMAGE_REFERENCE_ENV_VAR] == identity.reference
+        assert child[IMAGE_DIGEST_ENV_VAR] == identity.digest
+        assert child[RESOURCE_PREFIX_ENV_VAR] == "project"
+        assert dict(os.environ) == before
+
+    def test_child_environment_uses_explicit_prefix_from_supplied_base(self):
+        """A supplied child base is authoritative even when the parent differs."""
+        identity = BackendImageIdentity(
+            "quickscale-backend:sha256-" + "a" * 64,
+            "a" * 64,
+            b"",
+        )
+
+        child = build_backend_child_environment(
+            identity,
+            base_environment={RESOURCE_PREFIX_ENV_VAR: "base-scope"},
+            project_path=Path("project"),
+        )
+
+        assert child[RESOURCE_PREFIX_ENV_VAR] == "base-scope"
 
 
 class TestIsInteractive:

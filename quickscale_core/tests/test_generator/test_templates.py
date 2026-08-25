@@ -3764,6 +3764,21 @@ class TestDockerfileContent:
         assert "useradd" in output
         assert "USER django" in output
 
+    def test_final_image_has_fixed_quickscale_contract_labels(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """The runtime image must carry only fixed ownership and digest metadata."""
+        output = _render_template(jinja_env, "Dockerfile.j2", test_context)
+
+        assert "ARG QUICKSCALE_BACKEND_IMAGE_DIGEST=direct-compose" in output
+        assert "ARG QUICKSCALE_IMAGE_CONTRACT=sa142" in output
+        assert 'com.quickscale.owner="quickscale"' in output
+        assert 'com.quickscale.image-contract="${QUICKSCALE_IMAGE_CONTRACT}"' in output
+        assert (
+            'com.quickscale.image-digest="${QUICKSCALE_BACKEND_IMAGE_DIGEST}"' in output
+        )
+        assert "QUICKSCALE_RESOURCE_PREFIX" not in output
+
     def test_poetry_installation(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
@@ -3902,6 +3917,44 @@ class TestDockerComposeContent:
         output = template.render(test_context)
         assert "backend:" in output
         assert "build:" in output
+
+    def test_backend_image_and_build_contract_use_stable_defaults(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Compose should consume P1 values and use project-stable direct defaults."""
+        output = _render_template(jinja_env, "docker-compose.yml.j2", test_context)
+
+        assert (
+            'image: "${QUICKSCALE_BACKEND_IMAGE:-quickscale-backend:testproject}"'
+            in output
+        )
+        assert (
+            'QUICKSCALE_BACKEND_IMAGE_DIGEST: "${QUICKSCALE_BACKEND_IMAGE_DIGEST:-direct-compose}"'
+            in output
+        )
+        assert 'QUICKSCALE_IMAGE_CONTRACT: "sa142"' in output
+
+    def test_removable_resources_have_owner_lifecycle_scope_labels(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Every generated service, named volume, and default network is owned."""
+        output = _render_template(jinja_env, "docker-compose.yml.j2", test_context)
+
+        assert output.count('com.quickscale.owner: "quickscale"') == 7
+        assert output.count('com.quickscale.lifecycle: "e2e"') == 7
+        assert (
+            output.count(
+                'com.quickscale.scope: "${QUICKSCALE_RESOURCE_PREFIX:-testproject}"'
+            )
+            == 7
+        )
+        assert (
+            'container_name: "${QUICKSCALE_RESOURCE_PREFIX:-testproject}_db"' in output
+        )
+        assert (
+            'container_name: "${QUICKSCALE_RESOURCE_PREFIX:-testproject}_backend"'
+            in output
+        )
 
     def test_react_frontend_uses_non_root_safe_corepack_command(
         self, jinja_env: Environment, test_context: dict[str, str]

@@ -40,10 +40,10 @@ The open release work is one principle with four failure modes. Every ticket is 
         DUPLICATED      SILENT         UNOWNED       UNENFORCED
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
-          SA124         SA165           SA142          SA123
-          SA118         SA152           SA135          SA166
-          SA163           │             SA161            │
-          SA160       (state/tool      (images,       (dep-vuln +
+          SA124         SA165           SA135          SA123
+          SA118         SA152           SA161          SA166
+          SA163           │               │              │
+          SA160       (state/tool      (DB, dead      (dep-vuln +
           SA164        fallbacks)       DB, dead       security
             │                            code)          scanners,
          (paths, CI                                     testimony
@@ -62,7 +62,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 |---|---|---|
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA124, SA118, SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
-| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA142, SA135, SA161 |
+| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
@@ -241,68 +241,7 @@ Its `baseline_evidence` entries show the established convention — each past re
 
 # Service-backed lifecycle
 
-The two lifecycle tickets ask the same question: *who owns the lifecycle of a thing we create?*
-
-## SA142 — Reuse and clean E2E Docker images
-
-### The mental model
-
-Every Docker E2E run creates several kinds of object, and they have genuinely different natural lifetimes:
-
-| Object | Should be | Why |
-|---|---|---|
-| **Image** | *stable and shared* | An expensive build artifact; identical inputs → identical image. Rebuilding it per run is waste. |
-| **Container** | *per-run and disposable* | Carries run state; sharing one across parallel lanes causes interference. |
-| **Port** | *per-run* | Two lanes on one port collide. |
-| **Volume** | *per-run* | Carries database state that must not leak between runs. |
-
-`scripts/test_e2e.sh` gets three of these four right, and rigorously so. Look at lines 483-500:
-
-```bash
-lane_container_prefix="$(sanitize_scope "${lane_prefix_base}-${BASHPID}")"
-lane_compose_project="$(sanitize_scope "${lane_compose_base}-${BASHPID}")"
-export QS_E2E_CONTAINER_PREFIX="$lane_container_prefix"
-export COMPOSE_PROJECT_NAME="$lane_compose_project"
-```
-
-Per-lane, PID-scoped identity, with `cleanup_scoped_containers()` reclaiming by both the compose-project label and the name prefix, signal traps on TERM/INT/HUP, and a pre-cleanup pass before the run. This is careful code.
-
-### The concrete defect
-
-The image is the one that isn't handled — and the cause is a single missing line in `quickscale_core/src/quickscale_core/generator/templates/docker-compose.yml.j2`:
-
-```yaml
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        INSTALL_DEV: "true"
-    container_name: {{ project_name }}_backend
-```
-
-There is a `build:` stanza but **no `image:` key**. When Compose builds a service with no explicit image name, it derives one from the project name: `<compose_project>-backend`.
-
-And `COMPOSE_PROJECT_NAME` is exported as `${lane_compose_base}-${BASHPID}` — deliberately different every run.
-
-So image identity inherits container identity. Consequences:
-
-1. **No reuse.** Every run builds from scratch under a new name, even with byte-identical inputs. That is the "measurably faster second run" the acceptance asks for.
-2. **No reclamation.** Cleanup is `docker compose down -v --remove-orphans` plus container removal by label and name. `down` removes containers, networks, and volumes — **not images**. Nothing in the script ever runs `docker image rm` or `docker image prune`. Every run permanently leaks one image.
-
-Confirm the leak before starting: `docker images | grep backend | wc -l` on this machine, given the E2E history, is your baseline evidence.
-
-### Implementation shape
-
-Give the backend service an explicit `image:` whose tag derives from **build inputs**, not from run identity — the Dockerfile, the Python constraint, the lockfile, the installed module set. Content-addressing (a hash of those inputs) gives correct reuse *and* correct invalidation: change an input, get a new tag automatically; change nothing, hit the cache.
-
-Then add image reclamation to the cleanup path for the variable images that remain, filtered by a QuickScale-owned label so you never remove an unrelated user image. **A blanket `docker image prune -a` is unacceptable** — E2E runs on developer machines.
-
-`--no-cleanup` must still preserve everything needed for diagnosis. Its current output tells the user exactly how to clean up by hand (lines 513-516); extend that guidance to images rather than leaving a new class of leftover undocumented.
-
-### Watch out
-
-This edits a **generated-project template**, so it changes emitted output — the SA90 emission-parity fixture will need the same rebaseline-with-rationale treatment described under SA118. Four tickets touch that fixture in one release — SA142, SA118, SA161, and SA160 — and each appends its own `baseline_evidence` entry; the sync-before-merge-back procedure must preserve every prior one.
+The remaining lifecycle ticket asks: *who owns the lifecycle of a thing we create?*
 
 ## SA135 — Give test suites an owned PostgreSQL lifecycle
 

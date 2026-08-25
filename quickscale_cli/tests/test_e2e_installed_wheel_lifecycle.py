@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -23,6 +25,7 @@ pytestmark = pytest.mark.e2e
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROVISIONER = REPO_ROOT / "scripts" / "provision_installed_venv.sh"
+QUICKSCALE_REMOTE = "https://github.com/Experto-AI/quickscale.git"
 SHIPPED_MODULES = (
     "analytics",
     "auth",
@@ -40,11 +43,21 @@ SHIPPED_MODULES = (
 CONTAINER_SUFFIXES = ("backend", "db", "frontend")
 VOLUME_SUFFIXES = ("media_volume", "postgres_data", "static_volume")
 NETWORK_SUFFIX = "default"
+OWNER_LABEL = "com.quickscale.owner"
+LIFECYCLE_LABEL = "com.quickscale.lifecycle"
+SCOPE_LABEL = "com.quickscale.scope"
+IMAGE_CONTRACT_LABEL = "com.quickscale.image-contract"
+IMAGE_DIGEST_LABEL = "com.quickscale.image-digest"
 _T = TypeVar("_T")
 
 
 class LifecycleCleanupError(RuntimeError):
     """Raised when the lifecycle's exact-scope teardown does not succeed."""
+
+
+def _diagnostic_retention_enabled() -> bool:
+    """Return whether fixture teardown must retain resources for diagnosis."""
+    return os.environ.get("QS_E2E_NO_CLEANUP", "0") == "1"
 
 
 def _reap_process_group(process: subprocess.Popen[str]) -> None:
@@ -143,16 +156,12 @@ def _run_with_teardown(operation: Callable[[], _T], teardown: Callable[[], None]
 
 
 def _scoped_name() -> str:
-    """Return a Docker-safe project slug tied to this CLI lane and xdist worker."""
+    """Return stable project inputs; resources carry worker isolation separately."""
     lane = os.environ.get("QS_E2E_LANE", "cli")
     assert lane == "cli", (
         f"installed-wheel lifecycle belongs to the CLI lane, got {lane!r}"
     )
-    lane_scope = os.environ.get("QS_E2E_CONTAINER_PREFIX", "qs-e2e-cli")
-    worker = os.environ.get("PYTEST_XDIST_WORKER", "serial")
-    normalized_scope = re.sub(r"[^a-z0-9]+", "_", lane_scope.lower()).strip("_")
-    normalized_worker = re.sub(r"[^a-z0-9]+", "_", worker.lower()).strip("_")
-    return f"sa112d_{normalized_scope[:28]}_{normalized_worker[:8]}"
+    return "sa112d_cli"
 
 
 def _free_port() -> int:
@@ -163,7 +172,11 @@ def _free_port() -> int:
 
 
 def _installed_environment(
-    venv_dir: Path, wheelhouse: Path, project_slug: str, port: int
+    venv_dir: Path,
+    wheelhouse: Path,
+    project_slug: str,
+    port: int,
+    resource_prefix: str | None = None,
 ) -> dict[str, str]:
     """Build a source-free environment for installed CLI subprocesses."""
     env = os.environ.copy()
@@ -180,9 +193,110 @@ def _installed_environment(
     env["GIT_COMMITTER_NAME"] = "QuickScale E2E"
     env["GIT_COMMITTER_EMAIL"] = "quickscale-e2e@example.invalid"
     env["PORT"] = str(port)
-    env["COMPOSE_PROJECT_NAME"] = project_slug
-    env["QS_E2E_CONTAINER_PREFIX"] = project_slug
+    resource_prefix = resource_prefix or os.environ.get(
+        "QS_E2E_RESOURCE_SCOPE", project_slug
+    )
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker:
+        normalized_worker = re.sub(r"[^a-z0-9]+", "_", worker.lower()).strip("_")
+        resource_prefix = f"{resource_prefix}-{normalized_worker}"[:63]
+    env["COMPOSE_PROJECT_NAME"] = resource_prefix
+    env["QS_E2E_CONTAINER_PREFIX"] = resource_prefix
+    env["QUICKSCALE_RESOURCE_PREFIX"] = resource_prefix
+    env["QS_E2E_PROJECT_SLUG"] = project_slug
+    env["QS_E2E_NO_CLEANUP"] = os.environ.get("QS_E2E_NO_CLEANUP", "0")
     return env
+
+
+def _run_artifact_git(argv: list[str], cwd: Path) -> str:
+    """Run one bounded Git command while constructing the local artifact remote."""
+    result = _run_bounded(
+        ["git", *argv],
+        cwd=cwd,
+        env=os.environ.copy(),
+        timeout=120,
+    )
+    _require_success(result, f"current-module artifact Git {' '.join(argv)}")
+    return result.stdout.strip()
+
+
+def _ignore_module_build_artifacts(_directory: str, names: list[str]) -> list[str]:
+    """Exclude repository-local caches and build outputs from staged modules."""
+    ignored_names = {
+        ".coverage",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+        "__pycache__",
+        "build",
+        "dist",
+        "htmlcov",
+    }
+    return [
+        name
+        for name in names
+        if name in ignored_names
+        or name.startswith(".coverage.")
+        or name.endswith((".egg-info", ".pyc", ".pyo"))
+    ]
+
+
+def _stage_current_module_artifacts(output_dir: Path) -> tuple[Path, dict[str, str]]:
+    """Build a hermetic Git remote whose split refs contain current module bytes."""
+    artifact_repo = output_dir / "module-artifacts"
+    artifact_repo.mkdir(parents=True)
+    _run_artifact_git(["init", "--initial-branch=artifact-staging"], artifact_repo)
+    _run_artifact_git(["config", "user.name", "QuickScale E2E"], artifact_repo)
+    _run_artifact_git(
+        ["config", "user.email", "quickscale-e2e@example.invalid"], artifact_repo
+    )
+
+    split_refs: dict[str, str] = {}
+    for module_name in SHIPPED_MODULES:
+        for entry in artifact_repo.iterdir():
+            if entry.name == ".git":
+                continue
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+
+        shutil.copytree(
+            REPO_ROOT / "quickscale_modules" / module_name,
+            artifact_repo,
+            dirs_exist_ok=True,
+            ignore=_ignore_module_build_artifacts,
+        )
+        split_ref = f"e2e/current/{module_name}"
+        _run_artifact_git(["add", "-A"], artifact_repo)
+        _run_artifact_git(
+            ["commit", "--allow-empty", "-m", f"Stage current {module_name} module"],
+            artifact_repo,
+        )
+        _run_artifact_git(["branch", "--force", split_ref, "HEAD"], artifact_repo)
+        split_refs[module_name] = split_ref
+
+    assert tuple(split_refs) == SHIPPED_MODULES
+    return artifact_repo, split_refs
+
+
+def _redirect_quickscale_remote(
+    env: dict[str, str], artifact_repo: Path
+) -> dict[str, str]:
+    """Redirect only the canonical QuickScale remote to the local artifact repo."""
+    redirected = dict(env)
+    for key in list(redirected):
+        if key == "GIT_CONFIG_COUNT" or key.startswith(
+            ("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")
+        ):
+            redirected.pop(key, None)
+    redirected["GIT_CONFIG_COUNT"] = "2"
+    redirected["GIT_CONFIG_KEY_0"] = f"url.{artifact_repo.resolve().as_uri()}.insteadOf"
+    redirected["GIT_CONFIG_VALUE_0"] = QUICKSCALE_REMOTE
+    redirected["GIT_CONFIG_KEY_1"] = "protocol.file.allow"
+    redirected["GIT_CONFIG_VALUE_1"] = "always"
+    return redirected
 
 
 def _wait_for_live_http(port: int, timeout: float = 120.0) -> bytes:
@@ -201,59 +315,121 @@ def _wait_for_live_http(port: int, timeout: float = 120.0) -> bytes:
     raise TimeoutError(f"HTTP endpoint {url} did not become live: {last_error!r}")
 
 
-def _exact_docker_cleanup(project_slug: str, cwd: Path, env: dict[str, str]) -> None:
-    """Remove and verify only this test's exact Docker resource identities."""
-    containers = [f"{project_slug}_{suffix}" for suffix in CONTAINER_SUFFIXES]
-    volumes = [f"{project_slug}_{suffix}" for suffix in VOLUME_SUFFIXES]
-    network = f"{project_slug}_{NETWORK_SUFFIX}"
-    _run_bounded(
-        ["docker", "rm", "-f", *containers],
-        cwd=cwd,
-        env=env,
-        timeout=60,
-    )
-    _run_bounded(
-        ["docker", "volume", "rm", "-f", *volumes],
-        cwd=cwd,
-        env=env,
-        timeout=60,
-    )
-    _run_bounded(
-        ["docker", "network", "rm", network],
-        cwd=cwd,
-        env=env,
-        timeout=60,
-    )
+def _label_filters(scope: str) -> list[str]:
+    """Return the complete fixed owner/lifecycle/scope selector tuple."""
+    return [
+        "--filter",
+        f"label={OWNER_LABEL}=quickscale",
+        "--filter",
+        f"label={LIFECYCLE_LABEL}=e2e",
+        "--filter",
+        f"label={SCOPE_LABEL}={scope}",
+    ]
 
-    leftovers: list[str] = []
-    for resource in containers:
-        probe = _run_bounded(
-            ["docker", "container", "inspect", resource],
-            cwd=cwd,
-            env=env,
-            timeout=20,
+
+def _resource_ids(
+    resource_type: str, scope: str, cwd: Path, env: dict[str, str]
+) -> list[str]:
+    commands = {
+        "container": ["docker", "ps", "-aq"],
+        "volume": ["docker", "volume", "ls", "-q"],
+        "network": ["docker", "network", "ls", "-q"],
+    }
+    result = _run_bounded(
+        [*commands[resource_type], *_label_filters(scope)],
+        cwd=cwd,
+        env=env,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        raise LifecycleCleanupError(
+            f"cannot enumerate labelled {resource_type} resources: {result.stderr}"
         )
-        if probe.returncode == 0:
-            leftovers.append(f"container:{resource}")
-    for resource in volumes:
-        probe = _run_bounded(
-            ["docker", "volume", "inspect", resource],
-            cwd=cwd,
-            env=env,
-            timeout=20,
-        )
-        if probe.returncode == 0:
-            leftovers.append(f"volume:{resource}")
-    network_probe = _run_bounded(
-        ["docker", "network", "inspect", network],
+    return result.stdout.split()
+
+
+def _inspect_labels(
+    resource_type: str, resource_id: str, cwd: Path, env: dict[str, str]
+) -> dict[str, str]:
+    inspect_command = {
+        "container": ["docker", "container", "inspect"],
+        "volume": ["docker", "volume", "inspect"],
+        "network": ["docker", "network", "inspect"],
+    }[resource_type]
+    result = _run_bounded(
+        [
+            *inspect_command,
+            "--format",
+            "{{json .Config.Labels}}"
+            if resource_type == "container"
+            else "{{json .Labels}}",
+            resource_id,
+        ],
         cwd=cwd,
         env=env,
         timeout=20,
     )
-    if network_probe.returncode == 0:
-        leftovers.append(f"network:{network}")
-    if leftovers:
-        raise LifecycleCleanupError(f"exact-scope Docker resources remain: {leftovers}")
+    if result.returncode != 0:
+        raise LifecycleCleanupError(
+            f"cannot reinspect {resource_type} {resource_id}: {result.stderr}"
+        )
+    try:
+        labels = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise LifecycleCleanupError(
+            f"invalid labels for {resource_type} {resource_id}"
+        ) from error
+    if not isinstance(labels, dict):
+        raise LifecycleCleanupError(f"missing labels for {resource_type} {resource_id}")
+    return {str(key): str(value) for key, value in labels.items()}
+
+
+def _exact_docker_cleanup(scope: str, cwd: Path, env: dict[str, str]) -> None:
+    """Remove only fully re-inspected QuickScale resources in one scope."""
+    if re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,62}", scope) is None:
+        raise LifecycleCleanupError(f"invalid Docker resource scope: {scope!r}")
+    resource_ids = {
+        resource_type: _resource_ids(resource_type, scope, cwd, env)
+        for resource_type in ("container", "volume", "network")
+    }
+    expected = {OWNER_LABEL: "quickscale", LIFECYCLE_LABEL: "e2e", SCOPE_LABEL: scope}
+    for resource_type, ids in resource_ids.items():
+        for resource_id in ids:
+            labels = _inspect_labels(resource_type, resource_id, cwd, env)
+            if any(labels.get(key) != value for key, value in expected.items()):
+                raise LifecycleCleanupError(
+                    f"refusing mismatched {resource_type} {resource_id}: {labels}"
+                )
+
+    removal_commands = {
+        "container": ["docker", "rm", "-f"],
+        "volume": ["docker", "volume", "rm", "-f"],
+        "network": ["docker", "network", "rm"],
+    }
+    for resource_type in ("container", "volume", "network"):
+        ids = resource_ids[resource_type]
+        if not ids:
+            continue
+        result = _run_bounded(
+            [*removal_commands[resource_type], *ids],
+            cwd=cwd,
+            env=env,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise LifecycleCleanupError(
+                f"failed removing {resource_type} resources: {result.stderr}"
+            )
+
+    leftovers = {
+        resource_type: _resource_ids(resource_type, scope, cwd, env)
+        for resource_type in ("container", "volume", "network")
+    }
+    remaining = [
+        f"{resource_type}:{ids}" for resource_type, ids in leftovers.items() if ids
+    ]
+    if remaining:
+        raise LifecycleCleanupError(f"labelled Docker resources remain: {remaining}")
 
 
 def _assert_installed_imports(
@@ -305,7 +481,11 @@ def test_installed_wheel_plan_apply_up_all_modules(tmp_path: Path) -> None:
         work_dir = output_dir / "work"
         assert not work_dir.is_relative_to(REPO_ROOT)
         assert len(tuple(wheelhouse.glob("*.whl"))) == 3
-        env = _installed_environment(venv_dir, wheelhouse, project_slug, port)
+        artifact_repo, split_refs = _stage_current_module_artifacts(output_dir)
+        env = _redirect_quickscale_remote(
+            _installed_environment(venv_dir, wheelhouse, project_slug, port),
+            artifact_repo,
+        )
         runtime.update({"venv_dir": venv_dir, "work_dir": work_dir, "env": env})
         _assert_installed_imports(venv_dir, work_dir, env)
 
@@ -325,8 +505,13 @@ def test_installed_wheel_plan_apply_up_all_modules(tmp_path: Path) -> None:
         assert set(config["modules"]) == set(SHIPPED_MODULES)
         assert len(config["modules"]) == 12
 
+        apply_argv = [quickscale, "apply", "--no-docker"]
+        for module_name in SHIPPED_MODULES:
+            apply_argv.extend(
+                ["--split-ref", f"{module_name}={split_refs[module_name]}"]
+            )
         apply = _run_bounded(
-            [quickscale, "apply", "--no-docker"],
+            apply_argv,
             cwd=project_dir,
             env=env,
             timeout=1800,
@@ -360,7 +545,8 @@ def test_installed_wheel_plan_apply_up_all_modules(tmp_path: Path) -> None:
         venv_dir = runtime.get("venv_dir")
         teardown_error: BaseException | None = None
         if (
-            runtime.get("started")
+            not _diagnostic_retention_enabled()
+            and runtime.get("started")
             and isinstance(env, dict)
             and isinstance(venv_dir, Path)
             and project_dir.is_dir()
@@ -375,12 +561,40 @@ def test_installed_wheel_plan_apply_up_all_modules(tmp_path: Path) -> None:
                 teardown_error = subprocess.CalledProcessError(
                     down.returncode, down.args, output=down.stdout, stderr=down.stderr
                 )
-        if isinstance(env, dict) and isinstance(work_dir, Path):
-            _exact_docker_cleanup(project_slug, work_dir, env)
+        if (
+            not _diagnostic_retention_enabled()
+            and isinstance(env, dict)
+            and isinstance(work_dir, Path)
+        ):
+            resource_scope = str(env["QUICKSCALE_RESOURCE_PREFIX"])
+            _exact_docker_cleanup(resource_scope, work_dir, env)
         if teardown_error is not None:
             raise teardown_error
 
     _run_with_teardown(lifecycle, teardown)
+
+
+def test_sa142_installed_fixture_retention_toggle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No-cleanup skips both fixture down and exact final destruction."""
+    monkeypatch.setenv("QS_E2E_NO_CLEANUP", "1")
+    assert _diagnostic_retention_enabled()
+    monkeypatch.setenv("QS_E2E_NO_CLEANUP", "0")
+    assert not _diagnostic_retention_enabled()
+
+
+def test_sa142_worker_resources_do_not_change_project_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Worker resource suffixes isolate Docker without changing the slug."""
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    monkeypatch.setenv("QS_E2E_RESOURCE_SCOPE", "run-scope")
+    assert _scoped_name() == "sa112d_cli"
+    environment = _installed_environment(
+        Path("/venv"), Path("/wheels"), _scoped_name(), 8123
+    )
+    assert environment["QUICKSCALE_RESOURCE_PREFIX"] == "run-scope-gw0"
 
 
 class _SetupFailure(RuntimeError):
@@ -468,7 +682,63 @@ def test_bounded_timeout_reaps_descendant_after_group_leader_exits(
 def test_exact_cleanup_includes_compose_network(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Failure cleanup removes and verifies the exact Compose network too."""
+    """Label cleanup removes all resource kinds and rechecks their absence."""
+    calls: list[list[str]] = []
+    remaining = {"container": ["c1"], "volume": ["v1"], "network": ["n1"]}
+    labels = {
+        OWNER_LABEL: "quickscale",
+        LIFECYCLE_LABEL: "e2e",
+        SCOPE_LABEL: "sa112d_scope",
+    }
+
+    def fake_run_bounded(
+        argv: list[str],
+        *,
+        cwd: Path,
+        env: dict[str, str],
+        timeout: int,
+        input_text: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, env, timeout, input_text
+        calls.append(argv)
+        if argv[:3] == ["docker", "ps", "-aq"]:
+            output = "\n".join(remaining["container"])
+        elif argv[:4] == ["docker", "volume", "ls", "-q"]:
+            output = "\n".join(remaining["volume"])
+        elif argv[:4] == ["docker", "network", "ls", "-q"]:
+            output = "\n".join(remaining["network"])
+        elif argv[:3] == ["docker", "container", "inspect"]:
+            output = json.dumps(labels)
+        elif argv[:3] == ["docker", "volume", "inspect"]:
+            output = json.dumps(labels)
+        elif argv[:3] == ["docker", "network", "inspect"]:
+            output = json.dumps(labels)
+        elif argv[:3] == ["docker", "rm", "-f"]:
+            remaining["container"] = []
+            output = ""
+        elif argv[:4] == ["docker", "volume", "rm", "-f"]:
+            remaining["volume"] = []
+            output = ""
+        elif argv[:3] == ["docker", "network", "rm"]:
+            remaining["network"] = []
+            output = ""
+        else:
+            raise AssertionError(argv)
+        return subprocess.CompletedProcess(argv, 0, output, "")
+
+    monkeypatch.setattr(sys.modules[__name__], "_run_bounded", fake_run_bounded)
+
+    _exact_docker_cleanup("sa112d_scope", tmp_path, os.environ.copy())
+
+    assert ["docker", "rm", "-f", "c1"] in calls
+    assert ["docker", "volume", "rm", "-f", "v1"] in calls
+    assert ["docker", "network", "rm", "n1"] in calls
+
+
+def test_sa142_label_cleanup_collision_survives(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A same-name/unlabelled collision is never selected for removal."""
     calls: list[list[str]] = []
 
     def fake_run_bounded(
@@ -481,11 +751,29 @@ def test_exact_cleanup_includes_compose_network(
     ) -> subprocess.CompletedProcess[str]:
         del cwd, env, timeout, input_text
         calls.append(argv)
-        return subprocess.CompletedProcess(argv, 1, "", "not found")
+        if argv[:3] == ["docker", "ps", "-aq"]:
+            return subprocess.CompletedProcess(argv, 0, "owned\n", "")
+        if argv[:4] in (
+            ["docker", "volume", "ls", "-q"],
+            ["docker", "network", "ls", "-q"],
+        ):
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        if argv[:3] == ["docker", "container", "inspect"]:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                json.dumps(
+                    {
+                        OWNER_LABEL: "not-quickscale",
+                        LIFECYCLE_LABEL: "e2e",
+                        SCOPE_LABEL: "scope",
+                    }
+                ),
+                "",
+            )
+        return subprocess.CompletedProcess(argv, 0, "", "")
 
     monkeypatch.setattr(sys.modules[__name__], "_run_bounded", fake_run_bounded)
-
-    _exact_docker_cleanup("sa112d_scope", tmp_path, os.environ.copy())
-
-    assert ["docker", "network", "rm", "sa112d_scope_default"] in calls
-    assert ["docker", "network", "inspect", "sa112d_scope_default"] in calls
+    with pytest.raises(LifecycleCleanupError, match="refusing mismatched"):
+        _exact_docker_cleanup("scope", tmp_path, os.environ.copy())
+    assert not any(argv[:3] == ["docker", "rm", "-f"] for argv in calls)

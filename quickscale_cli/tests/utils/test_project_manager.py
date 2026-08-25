@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from quickscale_cli.utils.project_manager import (
     get_db_container_name,
     get_project_state,
@@ -127,3 +129,31 @@ class TestContainerNames:
                 ]
                 result = get_db_container_name()
                 assert result == "myproject_db_1"
+
+    def test_explicit_resource_prefix_uses_exact_backend_and_db_names(
+        self, monkeypatch
+    ):
+        """A run prefix cannot match a similarly named foreign container."""
+        monkeypatch.setenv("QUICKSCALE_RESOURCE_PREFIX", "run-a1")
+        with patch(
+            "quickscale_cli.utils.project_manager.get_running_containers",
+            return_value=["run-a1_backend_extra", "run-a1_db_other"],
+        ):
+            assert get_backend_container_name() == "run-a1_backend"
+            assert get_db_container_name() == "run-a1_db"
+
+        with patch(
+            "quickscale_cli.utils.project_manager.get_running_containers",
+            return_value=["run-a1_backend", "run-a1_db"],
+        ):
+            assert get_backend_container_name() == "run-a1_backend"
+            assert get_db_container_name() == "run-a1_db"
+
+    def test_invalid_resource_prefix_fails_closed(self, monkeypatch):
+        monkeypatch.setenv("QUICKSCALE_RESOURCE_PREFIX", "../foreign")
+        with patch(
+            "quickscale_cli.utils.project_manager.get_running_containers",
+            return_value=["foreign_backend"],
+        ):
+            with pytest.raises(ValueError, match="QUICKSCALE_RESOURCE_PREFIX"):
+                get_backend_container_name()

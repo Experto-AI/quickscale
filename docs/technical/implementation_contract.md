@@ -35,6 +35,13 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 - Generated projects stay standalone by default. Automatic settings inheritance from `quickscale_core` is not part of the default generated-project contract.
 - `quickscale.yml` remains the desired-state input, while `.quickscale/state.yml` is the sole authoritative applied-state store. Legacy `.quickscale/config.yml` is a compatibility input only (read-through imported when `state.yml` lacks consolidated sections; ignored when consolidated sections are present).
 
+### Docker image and resource identity
+
+- Generated projects give the backend image a stable content-addressed reference. QuickScale derives the full SHA-256 identity from the image-contract version, Dockerfile bytes, generated-project Python/package metadata, `poetry.lock` state, embedded module names and versions, and effective build arguments. Identical inputs therefore reuse `quickscale-backend:sha256-<digest>` across runs; changing a bound input produces a new reference.
+- Container, port, volume, network, and Compose-project identities remain run-scoped. Generated Docker resources carry `com.quickscale.owner`, `com.quickscale.lifecycle`, and `com.quickscale.scope` labels so repository E2E cleanup can select only the exact QuickScale-owned run.
+- The final backend image carries fixed owner, image-contract, and bound-digest labels. Cleanup inspects those labels and removes only matching untagged variable images; it never performs a repository- or machine-wide image prune. The E2E `--no-cleanup` mode preserves labelled resources and logs for diagnosis.
+- Direct `docker compose` use remains supported: when QuickScale has not injected a content identity, the generated Compose file uses its project-specific fallback image name and the Dockerfile records the `direct-compose` digest sentinel.
+
 <a id="planapply-architecture"></a>
 ## Plan/Apply Contract Summary
 
