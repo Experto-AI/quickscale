@@ -37,12 +37,24 @@
   SA142 cannot follow them off the Docker slot. The critical path is unchanged at
   `SA123 → SA118 → SA167c`, three serialized W2 legs. **W1 and W3 are truly green and in flight;
   both are off the critical path. W2 is blocked before implementation.**
-  **One maintainer decision is open** — SA123's `scripts/test_gate_parity.py` scope authority. It
-  was expanded from two options to three (narrow authority; split SA123 into local-then-hosted
-  with the hosted wiring moved to SA135+SA163; reverse the merge order) with pros, cons, and a
-  recorded recommendation of narrow authority, which unblocks W2's *can start* and *can finish* in
-  one step. Every other blocker (SA135+SA163 behind SA142, SA164 behind SA166) remains a hard
-  upstream dependency that only the upstream work can clear.
+  **The one open maintainer decision was taken the same day: SA123 coupled-test authority —
+  option 1, narrow authority.** SA123/W2 is authorized to update `scripts/test_gate_parity.py`
+  only for the hosted-job set, `needs` edges, run values, publish/E2E paths, and generator
+  expectations directly coupled to its two new scanner gates — concretely the 12→14 hosted-job and
+  6→8 `test`-barrier expectations. Generic parity-checker semantics, the 24-entry publish oracle,
+  and the transcribed provisioning shell literal are excluded; anything beyond the grant is a scope
+  finding with its own ticket. The two rejected alternatives are recorded for legibility: splitting
+  SA123 into local-then-hosted would have left both scanners non-blocking in hosted CI until #15
+  merged and grown the heaviest W3 leg, and reversing the merge order would have put the release
+  date behind the exclusive PostgreSQL/Docker slot. The accepted cost is that two lanes touch one
+  file this release; **SA135+SA163 (#15) owns the reconciliation** and must preserve SA123's
+  expectation lines when it later retires or derives the literal, with the contention
+  one-directional because #13 merges first. Consequently **G-001 is discharged and SA123
+  implementation is released at Phase A**, the `Open maintainer decisions` section became
+  `Recorded maintainer decisions`, and **all three tracks are now truly green on all three states,
+  with W2 / SA123 (#13) the only green action on the critical path**. Every remaining blocker
+  (SA135+SA163 behind SA142, SA164 behind SA166) is a hard upstream dependency that only the
+  upstream work can clear; **no maintainer decision is open.**
 
 - **SA124 — SA117 scope-tool authority unified and terminally closed (2026-08-25).**
   `scripts/sa117_scope.json` is the strict authority for the ordered allowlist, mode/profile
