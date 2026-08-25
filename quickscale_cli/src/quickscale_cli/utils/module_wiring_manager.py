@@ -13,6 +13,7 @@ from quickscale_core.contracts.module_discovery import (
     set_modules_base_path,
 )
 from quickscale_core.manifest.entry_point import (
+    MANAGED_ADAPTER_ORIGINS,
     MANIFEST_ADAPTER_REGISTRY,
     ManifestAdapterNotFound,
     build_manifest_wiring_spec,
@@ -266,11 +267,14 @@ def _restore_modules_context(
     prior_base_path: Path | None,
     prior_base_path_was_override: bool,
     prior_registry: Mapping[str, Any],
+    prior_origins: set[str],
 ) -> None:
-    """Restore the exact modules base and registry state from before regeneration."""
+    """Restore the exact modules base, registry, and origin ownership state."""
     set_modules_base_path(prior_base_path if prior_base_path_was_override else None)
     MANIFEST_ADAPTER_REGISTRY.clear()
     MANIFEST_ADAPTER_REGISTRY.update(prior_registry)
+    MANAGED_ADAPTER_ORIGINS.clear()
+    MANAGED_ADAPTER_ORIGINS.update(prior_origins)
 
 
 def regenerate_managed_wiring(
@@ -312,6 +316,7 @@ def regenerate_managed_wiring(
     prior_base_path: Path | None = None
     prior_base_path_was_override = False
     prior_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+    prior_origins = set(MANAGED_ADAPTER_ORIGINS)
     try:
         prior_base_path, prior_base_path_was_override = _get_prior_modules_base_path()
         error = _prepare_modules_base_path(project_path, prior_base_path)
@@ -330,4 +335,5 @@ def regenerate_managed_wiring(
             prior_base_path,
             prior_base_path_was_override,
             prior_registry,
+            prior_origins,
         )

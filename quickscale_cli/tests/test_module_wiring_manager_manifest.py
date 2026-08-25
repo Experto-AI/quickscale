@@ -21,7 +21,10 @@ from unittest.mock import patch
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_cli.utils import module_wiring_manager
 from quickscale_core.contracts.module_discovery import ImproperlyConfigured
-from quickscale_core.manifest.entry_point import MANIFEST_ADAPTER_REGISTRY
+from quickscale_core.manifest.entry_point import (
+    MANAGED_ADAPTER_ORIGINS,
+    MANIFEST_ADAPTER_REGISTRY,
+)
 from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.module_wiring import ModuleWiringSpec
 
@@ -334,12 +337,10 @@ class TestManifestAdapterRegistryCompleteness:
         called on certain regenerate_managed_wiring code paths.
         """
         from quickscale_core.manifest.entry_point import (
-            MANAGED_ADAPTER_ORIGINS,
             refresh_managed_adapters,
         )
 
-        if MANAGED_ADAPTER_ORIGINS:
-            refresh_managed_adapters()
+        refresh_managed_adapters()
 
     @pytest.mark.parametrize(
         "module_name",
@@ -494,10 +495,13 @@ class TestRegenerateManagedWiringAdapterFailure:
             ORIGINS.clear()
             ORIGINS.update(_orig_origins)
 
-    def test_failed_refresh_restores_exact_prior_registry(
+    def test_failed_refresh_restores_exact_prior_ownership_state(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A failed context switch cannot leak a partial embedded registry."""
+        """A failed context switch restores base, registry, and origin state."""
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts.module_discovery import ModuleResolutionSource
+
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
         (project / "modules" / "analytics").mkdir(parents=True)
@@ -506,17 +510,25 @@ class TestRegenerateManagedWiringAdapterFailure:
         )
 
         registry_identity = id(MANIFEST_ADAPTER_REGISTRY)
+        origins_identity = id(MANAGED_ADAPTER_ORIGINS)
         original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_override = _md._modules_base_path
+        monorepo_path = Path(__file__).resolve().parents[2] / "quickscale_modules"
 
         def custom_adapter(*args: object, **kwargs: object) -> ModuleWiringSpec:
             return ModuleWiringSpec()
 
+        _md._modules_base_path = monorepo_path
         MANIFEST_ADAPTER_REGISTRY["_test_restore_custom"] = custom_adapter
         expected_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        expected_origins = set(MANAGED_ADAPTER_ORIGINS)
 
         def _partially_mutate_then_fail() -> None:
             MANIFEST_ADAPTER_REGISTRY.pop("analytics", None)
             MANIFEST_ADAPTER_REGISTRY["_test_leaked"] = custom_adapter
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update({"analytics", "_test_leaked"})
             raise ImproperlyConfigured("simulated embedded refresh failure")
 
         monkeypatch.setattr(
@@ -533,9 +545,17 @@ class TestRegenerateManagedWiringAdapterFailure:
             assert "simulated embedded refresh failure" in message
             assert id(MANIFEST_ADAPTER_REGISTRY) == registry_identity
             assert MANIFEST_ADAPTER_REGISTRY == expected_registry
+            assert MANIFEST_ADAPTER_REGISTRY["_test_restore_custom"] is custom_adapter
+            assert id(MANAGED_ADAPTER_ORIGINS) == origins_identity
+            assert MANAGED_ADAPTER_ORIGINS == expected_origins
+            assert _md._modules_base_path == monorepo_path
+            assert _md.get_resolution_source() is ModuleResolutionSource.OVERRIDE
         finally:
+            _md._modules_base_path = original_override
             MANIFEST_ADAPTER_REGISTRY.clear()
             MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(original_origins)
 
 
 class TestRegenerateManagedWiringFailHard:
@@ -788,15 +808,27 @@ class TestRegenerateManagedWiringPriorBasePath:
     def test_monorepo_resolution_source_is_restored_after_success(
         self, tmp_path: Path
     ) -> None:
-        """A transient regeneration must not turn MONOREPO into OVERRIDE."""
+        """A successful context switch restores base and adapter ownership state."""
         from quickscale_core.contracts import module_discovery as _md
         from quickscale_core.contracts.module_discovery import ModuleResolutionSource
 
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        _write_complete_embedded_inventory(project)
         original_override = _md._modules_base_path
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        registry_identity = id(MANIFEST_ADAPTER_REGISTRY)
+        origins_identity = id(MANAGED_ADAPTER_ORIGINS)
+
+        def custom_adapter(*args: object, **kwargs: object) -> ModuleWiringSpec:
+            return ModuleWiringSpec()
+
         try:
             _md._modules_base_path = None
+            MANIFEST_ADAPTER_REGISTRY["_test_restore_custom"] = custom_adapter
+            expected_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+            expected_origins = set(MANAGED_ADAPTER_ORIGINS)
             assert _md.get_resolution_source() is ModuleResolutionSource.MONOREPO
 
             success, message = regenerate_managed_wiring(
@@ -806,8 +838,17 @@ class TestRegenerateManagedWiringPriorBasePath:
             assert success, message
             assert _md._modules_base_path is None
             assert _md.get_resolution_source() is ModuleResolutionSource.MONOREPO
+            assert id(MANIFEST_ADAPTER_REGISTRY) == registry_identity
+            assert MANIFEST_ADAPTER_REGISTRY == expected_registry
+            assert MANIFEST_ADAPTER_REGISTRY["_test_restore_custom"] is custom_adapter
+            assert id(MANAGED_ADAPTER_ORIGINS) == origins_identity
+            assert MANAGED_ADAPTER_ORIGINS == expected_origins
         finally:
             _md._modules_base_path = original_override
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(original_origins)
 
 
 class TestRegenerateManagedWiringVersionMismatch:
