@@ -13,6 +13,8 @@ import pytest
 ROOT = Path(__file__).parents[2]
 ROADMAP = ROOT / "docs/technical/roadmap.md"
 CONTEXT = ROOT / "docs/technical/v88_ticket_context.md"
+DOCS_INDEX = ROOT / "docs/index.md"
+ARCH_AUDIT = ROOT / "docs/others/arch-audit.md"
 TICKET_RE = re.compile(r"\bSA\d+[a-z]?\b")
 TICKET_ENTRY_RE = re.compile(
     r"^\s*-\s+\[[^\]]*\]\s+\*\*(SA\d+[a-z]?)\b[^\n]*$", re.MULTILINE
@@ -27,7 +29,7 @@ SECTION_RE = re.compile(r"^## (SA\d+[^\n]*)$", re.MULTILINE)
 UMBRELLA_TITLE = "SA167a / SA167b / SA167c / SA167d — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167b", "SA167c", "SA167d"})
 AUXILIARY_MULTI_TICKET_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
-RETAINED_CLOSED_TICKETS = frozenset({"SA162"})
+RETAINED_CLOSED_TICKETS = frozenset({"SA162", "SA167a"})
 
 # SA135 and SA163 share one merge position, but remain separately enumerable roadmap entries.
 SHARED_POSITION_GROUPS = (frozenset({"SA135", "SA163"}),)
@@ -443,3 +445,40 @@ def test_v88_shared_merge_position_drift_is_expected_red_canary() -> None:
         AssertionError, match="shared-position roadmap classification drift"
     ):
         _assert_consistent(mutated_roadmap, context)
+
+
+def test_current_open_queue_counts_match_all_consumers() -> None:
+    """Current queue prose must agree with the roadmap's open metadata."""
+    roadmap, context = _load_documents()
+    v88_tickets = {
+        ticket: metadata
+        for ticket, metadata in _roadmap_tickets(roadmap).items()
+        if metadata.kind == "v88"
+    }
+    entry_count = len(v88_tickets)
+    position_count = len({metadata.merge_position for metadata in v88_tickets.values()})
+    number_words = {14: "fourteen", 15: "fifteen"}
+    assert entry_count in number_words
+    assert position_count in number_words
+
+    entry_word = number_words[entry_count]
+    position_word = number_words[position_count]
+    consumer_phrase = (
+        f"{entry_word} open v88 ticket entries across "
+        f"{position_word} open merge positions"
+    )
+    for path, text in (
+        (CONTEXT, context),
+        (DOCS_INDEX, DOCS_INDEX.read_text()),
+        (ARCH_AUDIT, ARCH_AUDIT.read_text()),
+    ):
+        normalized = text.replace("**", "").lower()
+        assert consumer_phrase in normalized, (
+            f"{path.relative_to(ROOT)} does not report {consumer_phrase!r}"
+        )
+
+    roadmap_phrase = (
+        f"{position_word} open merge positions carrying "
+        f"{entry_word} open ticket entries"
+    )
+    assert roadmap_phrase in roadmap.replace("**", "").lower()

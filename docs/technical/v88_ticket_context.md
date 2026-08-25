@@ -12,7 +12,7 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers the **sixteen open v88 ticket entries** across fifteen open merge positions
+It covers the **fifteen open v88 ticket entries** across fourteen open merge positions
 (SA163 executes inside SA135) plus the three post-v88 entries. Closed tickets are not normally
 described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md). SA167a is
 the explicit exception: its umbrella row remains so downstream dependency state stays visible.
@@ -917,9 +917,9 @@ roadmap dependency without treating the shared heading as a single ticket:
 
 | Ticket | Merge position | Roadmap dependencies | Current status |
 |---|---:|---|---|
-| SA167a | #8 | none | implementation evidence recorded; roadmap marker pending the exact quality-gate oracle |
-| SA167b | #17 | SA167a | SA167a implementation handoff is present; roadmap marker pending the exact quality-gate oracle; ready for relocation |
-| SA167c | #21 | SA167a, SA118 | SA167a implementation handoff is present; roadmap marker pending the exact quality-gate oracle; blocked only on SA118 |
+| SA167a | #8 | none | complete; retained checked roadmap marker and accepted quality-gate oracle recorded |
+| SA167b | #17 | SA167a | SA167a implementation handoff is complete; ready for relocation |
+| SA167c | #21 | SA167a, SA118 | SA167a implementation handoff is complete; blocked only on SA118 |
 | SA167d | #18 | SA167b | blocked until SA167b lands |
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
@@ -933,7 +933,7 @@ apply` generates the project, so that instruction has to be data.
 competing representations at kickoff: a wiring projection in six manifests, a Python literal
 inside core for five more, nothing at all for `social`, an inert `django_apps:` key in eleven
 manifests that no code reads, and a per-module function pair in the CLI. SA167a's implementation
-is in place, with its roadmap marker pending the exact quality-gate oracle:
+and accepted root quality-gate oracle are recorded on the integration branch:
 all five former core literals now come from their own manifest projections, while the remaining
 nine core-side adapter blocks are the bounded SA167b relocation seam. When a fact
 lives in five places, no one can tell which is the answer, and `social` shipped models

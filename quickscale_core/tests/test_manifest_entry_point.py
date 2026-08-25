@@ -1680,16 +1680,37 @@ class _SA167aAppLiteralVisitor(ast.NodeVisitor):
                 continue
             self.visit(statement)
 
+    def _visit_function_signature(
+        self, node: ast.FunctionDef | ast.AsyncFunctionDef
+    ) -> None:
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        self.visit(node.args)
+        if node.returns is not None:
+            self.visit(node.returns)
+        for type_parameter in getattr(node, "type_params", ()):
+            self.visit(type_parameter)
+
     def visit_Module(self, node: ast.Module) -> None:
         self._visit_body(node.body)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_function_signature(node)
         self._visit_body(node.body)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_function_signature(node)
         self._visit_body(node.body)
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        for base in node.bases:
+            self.visit(base)
+        for keyword in node.keywords:
+            self.visit(keyword)
+        for type_parameter in getattr(node, "type_params", ()):
+            self.visit(type_parameter)
         self._visit_body(node.body)
 
     @classmethod
@@ -1801,6 +1822,25 @@ def _sa167a_expected_red_canary() -> ModuleWiringSpec:
         )
         with pytest.raises(AssertionError, match="SA167a app literals"):
             _assert_no_sa167a_app_literals(canary_source)
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            'def build(app="quickscale_modules_auth"):\n    return app\n',
+            '@register("quickscale_modules_auth")\ndef build():\n    pass\n',
+            'def build(app: Literal["quickscale_modules_auth"]):\n    pass\n',
+            'class Build(registry["quickscale_modules_auth"]):\n    pass\n',
+            'class Build(metaclass=resolve("quickscale_modules_auth")):\n    pass\n',
+        ],
+    )
+    def test_semantic_ownership_guard_checks_non_body_expressions(
+        self, source: str
+    ) -> None:
+        """Signature and class-header literals are executable ownership too."""
+        matches = _find_sa167a_app_literals(source)
+
+        assert len(matches) == 1
+        assert matches[0][1] == "quickscale_modules_auth"
 
 
 _EXPECTED_CATALOG_APPS: dict[str, tuple[str, ...]] = {
