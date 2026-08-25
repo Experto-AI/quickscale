@@ -49,6 +49,9 @@ from quickscale_core.manifest.entry_point import (
 )
 from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_modules_analytics.adapter import _analytics_post_hook
+from quickscale_modules_auth.adapter import (
+    get_manifest_adapter as get_auth_manifest_adapter,
+)
 from quickscale_modules_blog.adapter import _blog_post_hook
 from quickscale_modules_forms.adapter import _forms_post_hook
 from quickscale_modules_listings.adapter import _listings_post_hook
@@ -2046,3 +2049,53 @@ def test_sa167a_all_catalog_app_resolution_is_byte_identical(module_name: str) -
     """All twelve resolved app tuples remain the established contract."""
     spec = build_manifest_wiring_spec(module_name, {}, project_package="myapp")
     assert spec.apps == _EXPECTED_CATALOG_APPS[module_name]
+
+
+class TestSA167bRelocationParity:
+    """The module-owned auth sentinel remains identical to the core oracle."""
+
+    @staticmethod
+    def _invoke(adapter: Any, options: dict[str, Any]) -> tuple[str, Any]:
+        try:
+            return ("result", adapter(options))
+        except Exception as exc:  # noqa: BLE001 - parity includes exact errors.
+            return ("error", (type(exc), str(exc)))
+
+    def test_auth_module_adapter_matches_core(self) -> None:
+        """Compare old and new callables over normal, override, and error paths."""
+        core_adapter = entry_point_module._auth_manifest_adapter
+        module_adapter = get_auth_manifest_adapter()
+        matrix = [
+            {},
+            {"authentication_method": "email"},
+            {"authentication_method": "username"},
+            {"authentication_method": "both"},
+            {
+                "authentication_method": "both",
+                "registration_enabled": False,
+                "email_verification": "mandatory",
+                "session_cookie_age": 3600,
+            },
+            {"allow_registration": False},
+            {"social_providers": ["google"]},
+        ]
+
+        for options in matrix:
+            old_kind, old_value = self._invoke(core_adapter, dict(options))
+            new_kind, new_value = self._invoke(module_adapter, dict(options))
+            assert new_kind == old_kind, options
+            if old_kind == "result":
+                assert new_value == old_value, options
+            else:
+                assert new_value == old_value, options
+
+        # Repeated calls exercise state independence in both implementations.
+        repeated_options = (
+            {"authentication_method": "username"},
+            {},
+            {"authentication_method": "both"},
+        )
+        for options in repeated_options:
+            old_kind, old_value = self._invoke(core_adapter, dict(options))
+            new_kind, new_value = self._invoke(module_adapter, dict(options))
+            assert (new_kind, new_value) == (old_kind, old_value), options
