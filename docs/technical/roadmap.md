@@ -110,7 +110,8 @@ W2 (gates & declared wiring)   ★ CRITICAL PATH — 5 open legs, 3 on the path
 W1 (module-wiring migration + watch items)   3 open legs, mostly light, no cross-worktree gate
   SA167b ─► SA167d ─► SA165
   relocate   drain     watch
-  9 adapters CLI       items
+  3 pending  CLI       items
+  (6 landed)
     #17       #18       #22
 
 W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   4 open positions: 2 heavy + 2 band-C
@@ -186,7 +187,7 @@ taken — see above).
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
 | **W2** | SA123 (#13) | **yes** — SA124 is closed and its prerequisite surface is settled tree state | **yes** — the SA123 gate work remains entirely W2-owned | **yes** — #13 is the queue head for W2 | **truly green — next critical-path leg** |
-| **W1** | SA167b (#17) | **yes** — ungated; the `entry_point.py` handoff is settled tree state | **yes** — the adapter relocation remains entirely W1-owned | **yes** — #17 is W1's queue head, gated by nothing | **truly green** |
+| **W1** | SA167b P3 (#17) | **yes** — P1 is accepted and P2 implementation plus split suites are accepted; the exact P2 grouped command had a collection-only harness collision | **yes** — the remaining auth/orgs/storage relocation and later integration closeout remain W1-owned | **yes** — #17 remains W1's open queue head | **truly green — partial implementation reusable** |
 | **W3** | SA142 (#10) | **yes** — `deps: none` and the Docker lane is released | **yes** — the image lifecycle work remains entirely W3-owned | **yes** — #10 is W3's queue head | **truly green** |
 
 **All three tracks are truly green.** Of the three executable next actions, only one is on the
@@ -196,8 +197,8 @@ critical path:
   release-date action; it heads the remaining spine.
 - **W3 / SA142 (#10) — truly green, off the critical path.** The Docker-backed second chain is
   released. Closing SA142 will release SA135+SA163 (#15).
-- **W1 / SA167b (#17) — truly green, off the critical path.** Its former `entry_point.py`
-  prerequisite is merged tree state, so nothing gates it.
+- **W1 / SA167b P3 (#17) — truly green, off the critical path.** P1 and the P2
+  implementation are settled; continue from the reusable P3 handoff recorded on the ticket.
 
 **Blocked next-after tickets, and what clears each:**
 
@@ -208,8 +209,8 @@ critical path:
 
 **Recommended concurrency right now:**
 
-- **W1 — start SA167b (#17).** Preserve the merged manifest-reading `entry_point.py`
-  behaviour while relocating the nine adapters.
+- **W1 — continue SA167b at P3 (#17).** Preserve the accepted P1/P2 facade and
+  module-owned adapters while relocating auth, orgs, and storage.
 - **W2 — start SA123 (#13).** The head of the critical path, gated by nothing.
 - **W3 — start SA142 (#10).** The Docker slot is free and the clean-break migration baseline is
   settled tree state.
@@ -328,8 +329,10 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Acceptance:** every default declared in a module manifest is projected into generated wiring, with no default reachable only through imperative code (the five app-declaration literals are already cleared in the tree); the imperative-to-declarative migration is *not* attempted — out-of-scope seams are ticketed, not converted; emission parity is rebaselined with a per-file rationale for each changed output; a generated project boots and its module wiring reflects the declared defaults; manifest version-spec handling uses the merged fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` seam (SA150, closed; see [local-wheelhouse.md](local-wheelhouse.md)).
 
 - [ ] **SA167b — Relocate the nine core-side adapters into their modules.** `Band B · Tier 2 · W1 · merge #17 · deps: none · blocks SA167d`
-  With app declarations already manifest-owned in the tree, what remains is relocation. `analytics, auth, backups, blog, forms, listings, notifications, orgs, storage` still register core-side at import time from per-module blocks in `quickscale_core/src/quickscale_core/manifest/entry_point.py` — about 1,139 lines across nine blocks, ranging from 57 (forms) to 265 (notifications). `billing`, `crm`, and `social` already ship module-owned adapters and collapse to a 2–7 line pointer comment each; that is the shape all twelve should end in, leaving `entry_point.py` at roughly 350 lines of discovery machinery.
-  Do it as **one ticket, not one per module**: all nine delete from the same file, so per-module tickets would serialize anyway while adding nine-way contention on `entry_point.py` and splitting one logical change nine ways.
+  **Partial implementation checkpoint (2026-08-25; keep this ticket open):** P1 is accepted: analytics, blog, listings, and forms are module-owned, billing and CRM use the public lazy runtime facade, and the adapter/core/runtime/CLI plus import/lint/type checks passed. P2's backups and notifications implementation and split suites are accepted. Its original literal two-module pytest command failed during collection because both module trees resolved `tests.conftest`; no implementation assertion failed. Equivalent grouped coverage is established with `PYTEST_ADDOPTS='--noconftest --import-mode=importlib'` and `QUICKSCALE_ALLOW_BYPASSRLS=1`, without changing unrelated test-package layout.
+  Nine modules now ship module-owned adapters: analytics, backups, billing, blog, CRM, forms, listings, notifications, and social. Auth, orgs, and storage remain core-side in `quickscale_core/src/quickscale_core/manifest/entry_point.py`; SA167b is therefore incomplete and stays unchecked.
+  **Reusable pending handoff:** P3 relocates auth/orgs/storage and then proves `MANAGED_ADAPTER_ORIGINS` exactly equals the authoritative twelve-module inventory with fail-hard import/sentinel and registry identity/custom-entry coverage. P4 then runs the integration, generator parity, full repository gates, and documentation closeout. Do not mark SA167b complete before both phases and all acceptance evidence finish.
+  Keep it as **one ticket, not one per module**: all nine core-side blocks began in the same file, and the three remaining blocks still share it. Per-module tickets would serialize anyway while adding contention on `entry_point.py` and splitting one logical change nine ways.
   **Acceptance:** every shipped module owns its adapter at `quickscale_modules/<name>/src/quickscale_modules_<name>/adapter.py` exposing `get_manifest_adapter()`; `MANAGED_ADAPTER_ORIGINS` covers the full inventory; no per-module block remains in `entry_point.py`, which retains only generic helpers, the registry, and the public entry point; generator emission parity is unchanged, proving the relocation is behaviour-preserving; the tree conforms to [decisions.md §Module Wiring Authority](decisions.md#module-wiring-authority).
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/entry_point.py`, every `quickscale_modules/*/adapter.py`, `docs/technical/implementation_contract.md`.
 

@@ -451,7 +451,7 @@ The remaining deviations are scheduled inside v88; none is deferred.
 | Deviation | Owner |
 |---|---|
 | Five modules (auth, backups, notifications, orgs, storage) now declare their app lists in their own manifests; core reads those projections | **SA167a** — completed v88, merge #8 |
-| Nine modules still register core-side in `quickscale_core/.../manifest/entry_point.py` | **SA167b** — v88, merge #17 |
+| Nine modules (analytics, backups, billing, blog, CRM, forms, listings, notifications, and social) now own their adapters and consume the public `quickscale_core.runtime` facade or its `runtime.manifest` subfacade; only auth, orgs, and storage still register core-side in `quickscale_core/.../manifest/entry_point.py` | **SA167b** — v88, merge #17; partial implementation, with the remaining three relocations still open |
 | `quickscale_cli/.../commands/module_config.py` holds per-module wiring logic | **SA167d** — v88, merge #18 |
 | `django_apps:` is parsed by `manifest/loader.py` and read by no production code path; no gate requires a model-bearing module to declare an app | **SA167c** — v88, merge #21 |
 
@@ -1183,7 +1183,7 @@ behaviour or diagnostics to the current context.
 | **G1 — Source inventory** | ``discover_shipped_module_names()`` scans ``*/module.yml`` at the configured base path | Monorepo dev / runtime override | Returns empty list (no manifests found) |
 | **G2 — Bundled inventory** | ``discover_bundled_module_names()`` reads ``importlib.resources:quickscale_core/data/manifests/`` | Installed wheel / editable install | ``ImproperlyConfigured`` if manifests dir absent or empty |
 | **G3 — Source-required path** | ``get_modules_base_path()`` resolves the monorepo path or override | Any operation needing real module source trees | ``ImproperlyConfigured`` — no fallback to bundled (bundled manifests are not source trees) |
-| **G4 — Managed adapter import** | ``refresh_managed_adapters()`` imports ``quickscale_modules_{name}.adapter`` | Wiring-spec assembly for managed modules (billing, CRM, social) | ``ImproperlyConfigured`` if adapter package not importable |
+| **G4 — Managed adapter import** | ``refresh_managed_adapters()`` imports ``quickscale_modules_{name}.adapter`` | Wiring-spec assembly for the current managed modules (analytics, backups, billing, blog, CRM, forms, listings, notifications, and social) | ``ImproperlyConfigured`` if adapter package not importable |
 
 **Source-required operations (G3):** ``get_modules_base_path()``,
 ``discover_shipped_module_paths()``, ``load_module_manifest()``, and

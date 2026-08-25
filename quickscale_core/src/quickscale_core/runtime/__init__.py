@@ -114,9 +114,19 @@ __all__ = [
     "update_artifact_after_restore",
     # Module wiring spec (from manifest)
     "ModuleWiringSpec",
+    "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+    "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+    "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
+    "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
+    "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
     # Manifest/resolver types
     "ResolverResult",
     "assemble_wiring_spec",
+    "build_generic_manifest_spec",
+    "ManifestError",
+    "notifications_runtime_email_backend",
+    "resolve_backups_module_options",
+    "resolve_notifications_module_options",
     # Social-manifest path constants
     "SOCIAL_EMBEDS_PATH",
     "SOCIAL_INTEGRATION_BASE_PATH",

@@ -14,6 +14,13 @@ from __future__ import annotations
 # Module wiring spec
 # ---------------------------------------------------------------------------
 from quickscale_core.module_wiring import ModuleWiringSpec
+from quickscale_core.contracts.module_options import (
+    BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+    BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
+    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
+    NOTIFICATIONS_LIVE_EMAIL_BACKEND,
+)
 
 # ---------------------------------------------------------------------------
 # Social-manifest surface: path constants
@@ -28,12 +35,19 @@ from quickscale_core.contracts.module_options import (
 # ---------------------------------------------------------------------------
 # Social-manifest surface: resolver
 # ---------------------------------------------------------------------------
-from quickscale_core.contracts.resolvers import resolve_social_module_options
+from quickscale_core.contracts.resolvers import (
+    notifications_runtime_email_backend,
+    resolve_backups_module_options,
+    resolve_notifications_module_options,
+    resolve_social_module_options,
+)
 
 # ---------------------------------------------------------------------------
 # Manifest assembler and resolver
 # ---------------------------------------------------------------------------
 from quickscale_core.manifest.assembler import assemble_wiring_spec
+from quickscale_core.manifest.entry_point import build_generic_manifest_spec
+from quickscale_core.manifest.loader import ManifestError
 from quickscale_core.manifest.resolver import ResolverResult
 
 # ---------------------------------------------------------------------------
@@ -54,9 +68,19 @@ from quickscale_core.manifest.social_manifest import (
 __all__ = [
     # Module wiring spec
     "ModuleWiringSpec",
+    "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+    "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+    "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
+    "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
+    "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
     # Manifest/resolver types
     "ResolverResult",
     "assemble_wiring_spec",
+    "build_generic_manifest_spec",
+    "ManifestError",
+    "notifications_runtime_email_backend",
+    "resolve_backups_module_options",
+    "resolve_notifications_module_options",
     # Social-manifest path constants
     "SOCIAL_EMBEDS_PATH",
     "SOCIAL_INTEGRATION_BASE_PATH",

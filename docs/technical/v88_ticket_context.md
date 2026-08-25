@@ -735,8 +735,9 @@ competing representations at kickoff: a wiring projection in six manifests, a Py
 inside core for five more, nothing at all for `social`, an inert `django_apps:` key in eleven
 manifests that no code reads, and a per-module function pair in the CLI. SA167a's implementation
 and accepted root quality-gate oracle are recorded on the integration branch:
-all five former core literals now come from their own manifest projections, while the remaining
-nine core-side adapter blocks are the bounded SA167b relocation seam. When a fact
+all five former core literals now come from their own manifest projections. SA167b P1/P2 have
+since moved analytics, backups, blog, forms, listings, and notifications; auth, orgs, and storage
+are the three remaining core-side adapter blocks in the bounded relocation seam. When a fact
 lives in five places, no one can tell which is the answer, and `social` shipped models
 and a migration that no generated project ever installed.
 
@@ -746,6 +747,6 @@ module owns its adapter, and declares its apps once, in its own `module.yml`. Th
 tickets make the tree match it — `a` declares, `b` relocates, `c` retires the inert key
 and adds the gate that keeps it true, `d` drains the CLI.
 
-**Why the split is by phase and not by module.** All nine core-side blocks live in one
-1,508-line file. The phase boundary keeps one logical adapter migration understandable without
-turning it into nine separate conceptual sections.
+**Why the split is by phase and not by module.** All nine core-side blocks began in one
+1,508-line file; the three remaining blocks still share that file. The phase boundary keeps one
+logical adapter migration understandable without turning it into nine separate conceptual sections.

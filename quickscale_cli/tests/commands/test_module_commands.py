@@ -3786,7 +3786,7 @@ class TestApplyAllModulesManagedWiringAcceptance:
             (project / "modules" / mod / "module.yml").write_text(src_yml.read_text())
 
         # Set the modules base path to the embedded modules directory and
-        # refresh managed adapters (required for billing, crm, social).
+        # refresh the nine module-owned adapters for the embedded base path.
         from quickscale_core.contracts import module_discovery as _md
 
         original_base_path = _md._modules_base_path

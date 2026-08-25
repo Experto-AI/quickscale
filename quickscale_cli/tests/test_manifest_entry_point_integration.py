@@ -4,10 +4,9 @@ quickscale_core and quickscale_cli on the path.
 These tests verify the end-to-end path:
   build_manifest_wiring_spec('analytics', ...) -> ModuleWiringSpec
 
-The analytics adapter in entry_point.py delegates to analytics_manifest.py
-(in quickscale_cli) and the assembler (in quickscale_core), so these tests
-must run in the quickscale_cli test environment where both packages are
-importable.
+The analytics adapter is module-owned and routes through the public core
+runtime facade and manifest assembler. These tests run in the quickscale_cli
+test environment to exercise the combined core/CLI caller path.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ from quickscale_core.manifest import (
 )
 from quickscale_core.module_wiring import ModuleWiringSpec
 
-# SA44 Phase 1: managed adapters (social, billing, CRM) require explicit
+# SA44 Phase 1: managed adapters require explicit
 # refresh_managed_adapters() before use.
 refresh_managed_adapters()
 
@@ -626,5 +625,5 @@ class TestFormsManifestEntryPoint:
 # ``build_manifest_wiring_spec`` no longer calls ``_ensure_adapters_initialized``
 # or references ``_ADAPTERS_INITIALIZED``.  Managed adapters must be explicitly
 # registered via ``refresh_managed_adapters()`` before use.  The module-level
-# call above ensures billing, crm, and social are registered for all tests.
+# call above ensures the active managed adapters are registered for all tests.
 # ---------------------------------------------------------------------------
