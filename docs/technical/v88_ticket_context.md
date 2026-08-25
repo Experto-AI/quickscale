@@ -12,8 +12,15 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers the **fifteen open v88 ticket entries** across fourteen open merge positions
-(SA163 executes inside SA135) plus the three post-v88 entries. Closed tickets are not
+**This page deliberately carries no second set of schedulable classification rows.** Formal
+band, tier, worktree, merge-position, dependency, slot-ownership, and validation-station
+metadata live in the roadmap and only there. The conceptual notes here may explain why an
+ordering or resource relationship exists, but only the roadmap states its current scheduling
+value or status. The `scripts`-side enforcement checks section *coverage* (one context section
+per open roadmap ticket, with no orphans), rejects copied classification rows, and rejects
+prose claiming a roadmap-open dependency is closed.
+
+It covers every open v88 ticket entry plus the post-v88 entries. Closed tickets are not
 described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
 Sections are ordered by merge band (A → B → C), which is also the order in which the work
 becomes safe to do.
@@ -100,8 +107,6 @@ criterion is now written into a suite with a declared execution context.
 
 ## SA124 — Unify SA117 scope-tool path authority
 
-`Band B · Tier 1 · W2 · merge #11 · deps: SA167a`
-
 ### The mental model
 
 SA117 was a large, high-risk refactor around embedded-manifest and core version lockstep. To keep it controllable it was given a **scope guard**: an explicit allowlist of every file any SA117 phase may touch, in `scripts/sa117_scope.json` (~120 entries, each with a `path`, a `phase`, and `notes`). `scripts/check_sa117_scope.py` enforces it in several modes:
@@ -154,8 +159,6 @@ Both tickets edit `scripts/gate_registry.json` and the `Makefile` gate surface. 
 
 ## SA123 — Add dependency-vulnerability and security static-analysis gates
 
-`Band B · Tier 2 · W2 · merge #13 · deps: SA124`
-
 ### The mental model
 
 QuickScale's CI discipline is centralised in `scripts/gate_registry.json` — a declared list of every gating checkpoint, with each gate naming the **contexts** it must run in:
@@ -203,8 +206,6 @@ That second entry is effectively your rule list. Five named categories — treat
 ---
 
 ## SA118 — Project every declared manifest default into wiring
-
-`Band B · Tier 2 · W2 · merge #16 · deps: SA123, SA167a`
 
 ### The mental model
 
@@ -274,8 +275,6 @@ W3 holds the **exclusive PostgreSQL/Docker slot** for the release. Only one of t
 
 ## SA142 — Reuse and clean E2E Docker images
 
-`Band B · Tier 1 · W3 · merge #10 · deps: none · Docker slot`
-
 ### The mental model
 
 Every Docker E2E run creates several kinds of object, and they have genuinely different natural lifetimes:
@@ -336,8 +335,6 @@ Then add image reclamation to the cleanup path for the variable images that rema
 This edits a **generated-project template**, so it changes emitted output — the SA90 emission-parity fixture will need the same rebaseline-with-rationale treatment described under SA118. Four tickets touch that fixture in one release — SA142, SA118, SA161, and SA160 — across two tracks; each appends its own `baseline_evidence` entry, and the sync-before-merge-back procedure must preserve every prior one.
 
 ## SA135 — Give test suites an owned PostgreSQL lifecycle
-
-`Band B · Tier 2 · W3 · merge #15 · deps: SA142 · PostgreSQL + Docker slot · **carries SA163**`
 
 ### The mental model
 
@@ -411,8 +408,6 @@ SA135 will provision a containerised PostgreSQL, so it should adopt whatever ima
 ---
 
 ## SA163 — Derive the CI PostgreSQL environment from one authoritative source
-
-`Band B · Tier 2 · W3 · merge #15 · deps: SA135 — **executes inside SA135**, not as a separate pass`
 
 ### The mental model
 
@@ -490,8 +485,6 @@ ticket it just finished.
 
 ## SA160 — Share one correct CSRF-token helper in the React theme
 
-`Band C · Tier 2 · W3 · merge #20 · deps: SA161 (worktree ordering)`
-
 ### The mental model
 
 Django's CSRF protection needs the SPA to read the `csrftoken` cookie and echo it in an
@@ -545,8 +538,6 @@ creates that seam. Place the helper accordingly.
 
 ## SA161 — Remove the dead `get_client_ip` definitions from generated settings
 
-`Band C · Tier 3 · W3 · merge #19 · deps: SA135 (worktree ordering)`
-
 ### The mental model — the Django fact that makes this dead code
 
 `django.conf.settings` copies **only uppercase names** off the settings module. A
@@ -591,15 +582,13 @@ after SA135 on W3 so the fixture edits stay serialized within the worktree.
 ## SA160 / SA161 sequencing note
 
 Both are W3 and both touch `quickscale_core/tests/fixtures/sa90_emission_manifests.json`,
-as do SA142 (merge #10) and SA118 (merge #16, W2). SA118 is the one that crosses worktrees.
+as do SA142 and SA118. SA118 is the one that crosses worktrees.
 Each rebaseline **appends** its own `baseline_evidence` entry; none may replace a prior
 one. The sync-before-merge-back procedure has to preserve every entry.
 
 ---
 
 ## SA165 — Discharge the tech-audit watch items that carry an action
-
-`Band C · Tier 3 · W1 · merge #22 · deps: SA167d (worktree ordering)`
 
 ### The mental model
 
@@ -659,8 +648,6 @@ environment. Documentation only — do not change the derivation.
 
 ## SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items
 
-`Band C · Tier 3 · W2 · merge #25 · deps: SA166`
-
 ### The mental model
 
 A watch item is a bet: *"this is not a problem yet, and here is the trigger that would make
@@ -677,9 +664,9 @@ The artifact is
 literal tripwire for cross-table `UPDATE … SET organization_id` migration DML; it is
 not a schema-parity proof. Its `_migdir()` helper reads the inert `django_apps:`
 manifest key and silently guesses a conventional path when absent, while its parity
-backstop still names the retired `v87` baseline. The current regenerated migrations and discharged
-S4 BYPASSRLS prerequisite are settled; SA164 owns the `_migdir()` helper correction and
-parity-backstop re-anchoring.
+backstop still names the retired `v87` baseline. The current regenerated migrations and
+discharged S4 BYPASSRLS prerequisite are settled; SA164 owns the `_migdir()` helper
+correction and parity-backstop re-anchoring.
 
 ### 2. Privileged-command pair — values agree, claimed authority does not
 
@@ -718,8 +705,6 @@ watch half of Finding 13. Keep their triggers intact — restating is the work, 
 ---
 
 ## SA166 — Require a testimony trail for behavioural commits
-
-`Band C · Tier 3 · W2 · merge #24 · deps: SA118, SA167c`
 
 ### The mental model
 
@@ -767,18 +752,16 @@ not authorize implementing it**, and none may be pulled into a v88 ticket.
 
 ## SA152 — Refresh the beta-migration maintainer targets
 
-`Post-v88 · Tier 3 · deps: none`
-
 The 2026-08-21 audit found the **mechanics current**: the Makefile flag surface (`DONOR`,
 `RECIPIENT`, `DRY_RUN`, `CONTINUE`, `REPORT`) matches `build_argument_parser()`, every
 command in `VERIFICATION_COMMAND_SPECS` still exists, and the file-ownership taxonomy is in
 sync and enforced by 7 passing conformance tests. So this is not a rot ticket. Four residual
 gaps:
 
-  - **The SA151 collision is now a settled prerequisite.** The workflow's verification stack runs
-    `quickscale manage migrate` against a recipient that may carry an existing database. SA151's
-    clean-break implementation makes a **fresh database the only upgrade path**, invalidating the
-    in-place workflow's implicit assumption; SA152 must reconcile that mismatch in its own scope.
+- **The SA151 collision is now a settled prerequisite.** The workflow's verification stack runs
+  `quickscale manage migrate` against a recipient that may carry an existing database. SA151's
+  clean-break implementation makes a **fresh database the only upgrade path**, invalidating the
+  in-place workflow's implicit assumption; SA152 must reconcile that mismatch in its own scope.
 - **No end-to-end exercise.** The targets appear in no CI workflow and no
   `scripts/gate_registry.json` entry. Coverage is unit-level taxonomy conformance only, so
   breakage surfaces first for a maintainer **mid-migration** — the worst possible moment.
@@ -792,8 +775,6 @@ gaps:
   `quickscale_devtools`.
 
 ## SA153 — Close the property-portal basics gap in `listings`
-
-`Post-v88 · Tier 2 · deps: none`
 
 **The highest-value post-release work**, driven by the planned `buenosairesproperties.com`
 migration. The framing that matters: the gap is **not module existence**. `listings` ships a
@@ -823,8 +804,6 @@ listing-linked lead capture into `crm`, SEO (no sitemaps, no `robots.txt`, no Op
 anywhere in the tree), and a public JSON read API.
 
 ## SA154 — Property-portal optional capabilities
-
-`Post-v88 · Tier 3 · deps: SA153`
 
 An **inventory, not schedulable work**. Deliberately held behind SA153 so the basics land
 first and none of these widens that ticket. Map/geocoding, saved searches and match alerts,
@@ -869,18 +848,9 @@ Worth holding as a set, because each appears in more than one ticket:
 
 ## SA167a / SA167b / SA167c / SA167d — module wiring standardization
 
-`Band B · W2 (#8, #21) and W1 (#17, #18)`
-
-The four roadmap entries share this one conceptual section. Their dependency rows remain explicit
-so the consistency gate can distinguish an umbrella entry from a missing ticket and compare each
-roadmap dependency without treating the shared heading as a single ticket:
-
-| Ticket | Merge position | Roadmap dependencies | Current status |
-|---|---:|---|---|
-| SA167a | #8 | none | ready; completed gate-layer prerequisite supplies the validation context |
-| SA167b | #17 | SA167a | blocked until SA167a's `entry_point.py` hand-off lands |
-| SA167c | #21 | SA167a, SA118 | blocked until both shared-manifest dependencies are ready |
-| SA167d | #18 | SA167b | blocked until SA167b lands |
+The four roadmap entries share this one conceptual section; the heading names all four so the
+coverage gate can tell an umbrella section from a missing one. Their merge positions,
+dependencies, and readiness live in the [roadmap](roadmap.md), not here.
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.

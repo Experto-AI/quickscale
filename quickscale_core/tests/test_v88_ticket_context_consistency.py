@@ -1,4 +1,14 @@
-"""Keep the v88 open-ticket context synchronized with the roadmap."""
+"""Keep the v88 open-ticket context page covering the roadmap's open tickets.
+
+The roadmap is the sole home for formal schedulable classification rows — band, tier,
+worktree, merge position, dependencies, slot ownership, validation-station status. The
+context page may retain conceptual rationale for those relationships but not a second current
+classification. What remains checkable, and is checked here, is:
+
+* coverage — one context section per open roadmap ticket, and no orphan sections;
+* no copied roadmap classification row;
+* no prose in a context section claiming a roadmap-open dependency is already closed.
+"""
 
 from __future__ import annotations
 
@@ -27,13 +37,11 @@ OPEN_TICKET_RE = re.compile(
 )
 SECTION_RE = re.compile(r"^## (SA\d+[^\n]*)$", re.MULTILINE)
 
-UMBRELLA_TITLE = "SA167a / SA167b / SA167c / SA167d — module wiring standardization"
-UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167b", "SA167c", "SA167d"})
-AUXILIARY_MULTI_TICKET_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
+# Sections that mention several tickets without being any one ticket's home.
+AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
 
 # SA135 and SA163 share one merge position, but remain separately enumerable roadmap entries.
 SHARED_POSITION_GROUPS = (frozenset({"SA135", "SA163"}),)
-RETIRED_POSITIONS = frozenset({1, 2, 3, 4, 5, 6, 7, 9, 12, 14, 23})
 
 
 @dataclass(frozen=True)
@@ -107,6 +115,7 @@ def _roadmap_tickets(text: str) -> dict[str, TicketMetadata]:
             kind=kind,
             merge_position=_merge_position(metadata, kind, ticket),
         )
+
     open_tickets = set(tickets)
     unknown_dependencies = {
         ticket: sorted(metadata.dependencies - open_tickets)
@@ -120,91 +129,28 @@ def _roadmap_tickets(text: str) -> dict[str, TicketMetadata]:
     return tickets
 
 
-def _section_blocks(text: str) -> list[tuple[str, str]]:
-    matches = list(SECTION_RE.finditer(text))
-    return [
-        (
-            match.group(1),
-            text[
-                match.start() : (
-                    matches[index + 1].start()
-                    if index + 1 < len(matches)
-                    else len(text)
-                )
-            ],
-        )
-        for index, match in enumerate(matches)
-    ]
-
-
 def _context_sections(text: str) -> dict[str, str]:
+    """Map each ticket named in a context heading to that heading's section body."""
+    matches = list(SECTION_RE.finditer(text))
     sections: dict[str, str] = {}
-    for title, section in _section_blocks(text):
-        if title == UMBRELLA_TITLE or title in AUXILIARY_MULTI_TICKET_SECTIONS:
+    for index, match in enumerate(matches):
+        title = match.group(1)
+        if title in AUXILIARY_SECTIONS:
             continue
-        title_ticket = re.match(r"^(SA\d+[a-z]?)\b", title)
-        if not title_ticket:
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        body = text[match.start() : end]
+        # A heading may name several tickets when they share one conceptual section.
+        # Only the part before the em-dash names them; the prose half may cite others.
+        named = TICKET_RE.findall(title.split("—")[0])
+        if not named:
             raise AssertionError(f"unclassified current-context section: {title}")
-        ticket = title_ticket.group(1)
-        if ticket in sections:
-            raise AssertionError(f"duplicate current-context ticket section: {ticket}")
-        sections[ticket] = section
+        for ticket in named:
+            if ticket in sections:
+                raise AssertionError(
+                    f"duplicate current-context ticket section: {ticket}"
+                )
+            sections[ticket] = body
     return sections
-
-
-def _umbrella_section(text: str) -> str:
-    sections = [
-        section for title, section in _section_blocks(text) if title == UMBRELLA_TITLE
-    ]
-    if len(sections) != 1:
-        raise AssertionError(
-            f"expected exactly one current-context umbrella section, found {len(sections)}"
-        )
-    return sections[0]
-
-
-def _direct_context_metadata(ticket: str, section: str) -> TicketMetadata:
-    match = re.search(r"`((?:Band|Post-v88)[^`]*)`", section)
-    if not match:
-        raise AssertionError(
-            f"missing current-context classification metadata: {ticket}"
-        )
-    metadata = match.group(1)
-    if not re.search(r"\bdeps:\s*", metadata):
-        raise AssertionError(f"missing current-context dependency metadata: {ticket}")
-    kind = "post-v88" if "Post-v88" in metadata else "v88"
-    return TicketMetadata(
-        _dependencies(metadata), kind, _merge_position(metadata, kind, ticket)
-    )
-
-
-def _umbrella_metadata(section: str) -> dict[str, TicketMetadata]:
-    rows: dict[str, TicketMetadata] = {}
-    for ticket, merge_text, dependency_text in re.findall(
-        r"^\| (SA\d+[a-z]?) \| #(\d+) \| ([^|]+) \|", section, re.MULTILINE
-    ):
-        if ticket in rows:
-            raise AssertionError(f"duplicate umbrella classification row: {ticket}")
-        rows[ticket] = TicketMetadata(
-            frozenset(TICKET_RE.findall(dependency_text)), "v88", int(merge_text)
-        )
-    return rows
-
-
-def _context_metadata(
-    sections: dict[str, str], umbrella_section: str
-) -> dict[str, TicketMetadata]:
-    metadata: dict[str, TicketMetadata] = {}
-    for ticket, section in sections.items():
-        metadata[ticket] = _direct_context_metadata(ticket, section)
-    umbrella_rows = _umbrella_metadata(umbrella_section)
-    if set(umbrella_rows) != set(UMBRELLA_MEMBERS):
-        raise AssertionError(
-            "umbrella classification rows do not match the declared members: "
-            f"expected={sorted(UMBRELLA_MEMBERS)}, actual={sorted(umbrella_rows)}"
-        )
-    metadata.update(umbrella_rows)
-    return metadata
 
 
 def _shared_position_groups(
@@ -238,14 +184,12 @@ def _positive_closure_claim(section: str, dependency: str) -> re.Match[str] | No
 def _assert_consistent(roadmap_text: str, context_text: str) -> None:
     roadmap = _roadmap_tickets(roadmap_text)
     sections = _context_sections(context_text)
-    umbrella_section = _umbrella_section(context_text)
-    context = _context_metadata(sections, umbrella_section)
 
-    if set(context) != set(roadmap):
+    if set(sections) != set(roadmap):
         raise AssertionError(
             "roadmap/current-context ticket coverage drift: "
-            f"missing={sorted(set(roadmap) - set(context))}, "
-            f"unexpected={sorted(set(context) - set(roadmap))}"
+            f"missing={sorted(set(roadmap) - set(sections))}, "
+            f"unexpected={sorted(set(sections) - set(roadmap))}"
         )
 
     expected_shared_groups = set(SHARED_POSITION_GROUPS)
@@ -256,28 +200,18 @@ def _assert_consistent(roadmap_text: str, context_text: str) -> None:
             f"expected={sorted(map(sorted, expected_shared_groups))}, "
             f"actual={sorted(map(sorted, actual_shared_groups))}"
         )
-    if _shared_position_groups(context) != expected_shared_groups:
-        raise AssertionError("shared-position current-context classification drift")
 
-    status_sections = sections | {
-        ticket: umbrella_section for ticket in UMBRELLA_MEMBERS
-    }
-    for ticket, expected in roadmap.items():
-        if context[ticket] != expected:
-            raise AssertionError(
-                f"metadata drift for {ticket}: roadmap={expected}, "
-                f"current-context={context[ticket]}"
-            )
-
-        for dependency in expected.dependencies:
-            positive_closure = _positive_closure_claim(
-                status_sections[ticket], dependency
-            )
-            if positive_closure:
+    for ticket, metadata in roadmap.items():
+        for dependency in metadata.dependencies:
+            claim = _positive_closure_claim(sections[ticket], dependency)
+            if claim:
                 raise AssertionError(
                     f"{ticket} claims roadmap-open dependency {dependency} is closed: "
-                    f"{positive_closure.group(0)!r}"
+                    f"{claim.group(0)!r}"
                 )
+
+
+CLASSIFICATION_ROW_RE = re.compile(r"`(?:Band|Post-v88)[^`\n]*\bdeps:[^`\n]*`")
 
 
 def _load_documents() -> tuple[str, str]:
@@ -285,10 +219,7 @@ def _load_documents() -> tuple[str, str]:
 
 
 def _number_word(value: int) -> str:
-    words = {
-        14: "fourteen",
-        15: "fifteen",
-    }
+    words = {14: "fourteen", 15: "fifteen"}
     return words[value]
 
 
@@ -314,17 +245,23 @@ def _assert_current_status_consumers(
     assert "SA151" not in roadmap
     assert 3 not in positions
     assert re.search(r"Positions [^\n]*#3[^\n]*retired", roadmap_text)
+    assert not re.search(r"^## SA151\b", context_text, re.MULTILINE)
 
     assert v88["SA142"].dependencies == frozenset()
     assert v88["SA164"].dependencies == frozenset({"SA166"})
     assert roadmap["SA152"].dependencies == frozenset()
     assert v88["SA135"].dependencies == frozenset({"SA142"})
     assert v88["SA163"].dependencies == frozenset({"SA135"})
+    assert "use the same twelve databases" in roadmap_text
+    assert re.search(
+        r"own all twelve databases first.*?ownership must be restored",
+        roadmap_text,
+        re.DOTALL,
+    )
 
     entry_word = _number_word(len(v88))
     position_word = _number_word(len(positions))
     expected_phrases = {
-        context_text: rf"{entry_word} open v88 ticket entries(?:\*){{0,2}} across {position_word} open merge positions",
         docs_index_text: rf"{entry_word} open v88 ticket entries across {position_word} open merge positions",
         arch_audit_text: rf"{entry_word} open v88 ticket entries[^\n]*{position_word} open merge positions",
         roadmap_text: rf"{position_word} open merge positions carrying {entry_word} open ticket entries",
@@ -356,9 +293,25 @@ def test_v88_live_status_consumers_derive_current_counts_and_dependencies() -> N
     )
 
 
-def test_v88_current_context_matches_roadmap_open_tickets_and_dependencies() -> None:
+def test_v88_current_context_covers_roadmap_open_tickets() -> None:
     roadmap, context = _load_documents()
     _assert_consistent(roadmap, context)
+
+
+def test_v88_context_restates_no_roadmap_classification_rows() -> None:
+    _, context = _load_documents()
+    restated = CLASSIFICATION_ROW_RE.findall(context)
+    assert not restated, (
+        "current-context page restates roadmap classification metadata, which can drift: "
+        f"{restated}"
+    )
+
+
+def test_v88_classification_row_restatement_is_expected_red_canary() -> None:
+    _, context = _load_documents()
+    mutated = context + "\n`Band B · Tier 1 · W2 · merge #11 · deps: SA167a`\n"
+
+    assert CLASSIFICATION_ROW_RE.findall(mutated)
 
 
 def test_v88_missing_roadmap_open_ticket_is_expected_red_canary() -> None:
@@ -430,40 +383,9 @@ def test_v88_unknown_roadmap_dependency_is_expected_red_canary() -> None:
 
 def test_v88_unexpected_current_context_ticket_is_expected_red_canary() -> None:
     roadmap, context = _load_documents()
-    mutated_context = (
-        context + "\n## SA999 — unexpected expected-red canary\n\n"
-        "`Post-v88 · Tier 3 · deps: none`\n"
-    )
+    mutated_context = context + "\n## SA999 — unexpected expected-red canary\n\nbody\n"
 
     with pytest.raises(AssertionError, match="ticket coverage drift"):
-        _assert_consistent(roadmap, mutated_context)
-
-
-def test_v88_dependency_status_contradiction_is_expected_red_canary() -> None:
-    roadmap, context = _load_documents()
-    dependency_ticket = next(
-        ticket
-        for ticket, metadata in _roadmap_tickets(roadmap).items()
-        if metadata.dependencies
-    )
-    sections = _context_sections(context)
-    if dependency_ticket not in sections:
-        pytest.fail(
-            f"canary selected an umbrella ticket without a direct metadata row: {dependency_ticket}"
-        )
-
-    section = sections[dependency_ticket]
-    metadata = re.search(r"`[^`]*\bdeps:\s*[^`]+`", section)
-    assert metadata is not None
-    mutated_metadata = re.sub(
-        r"\bdeps:\s*[^·—`]+",
-        "deps: none (expected-red canary)",
-        metadata.group(0),
-        count=1,
-    )
-    mutated_context = context.replace(metadata.group(0), mutated_metadata, 1)
-
-    with pytest.raises(AssertionError, match="metadata drift"):
         _assert_consistent(roadmap, mutated_context)
 
 
@@ -475,17 +397,20 @@ def test_v88_positive_dependency_closure_claim_is_expected_red_canary() -> None:
         if metadata.dependencies
     )
     dependency = next(iter(_roadmap_tickets(roadmap)[dependency_ticket].dependencies))
-    sections = _context_sections(context)
-    section = sections[dependency_ticket]
-    mutated_context = context.replace(
-        section, section + f"\n{dependency} is closed.\n", 1
+    section = _context_sections(context)[dependency_ticket]
+    claim_templates = (
+        "{dependency} is closed.",
+        "{dependency}'s prerequisite is now settled.",
     )
+    for claim_template in claim_templates:
+        claim = claim_template.format(dependency=dependency)
+        mutated_context = context.replace(section, section + f"\n{claim}\n", 1)
 
-    with pytest.raises(
-        AssertionError,
-        match=rf"claims roadmap-open dependency {re.escape(dependency)}",
-    ):
-        _assert_consistent(roadmap, mutated_context)
+        with pytest.raises(
+            AssertionError,
+            match=rf"claims roadmap-open dependency {re.escape(dependency)}",
+        ):
+            _assert_consistent(roadmap, mutated_context)
 
 
 def test_v88_shared_merge_position_drift_is_expected_red_canary() -> None:
