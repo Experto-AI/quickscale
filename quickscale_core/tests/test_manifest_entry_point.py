@@ -421,16 +421,16 @@ class TestManifestAdapterRegistry:
         """MANIFEST_ADAPTER_REGISTRY is a dict."""
         assert isinstance(MANIFEST_ADAPTER_REGISTRY, dict)
 
-    def test_analytics_registered_at_import(self) -> None:
-        """Analytics adapter is registered when entry_point module loads."""
+    def test_analytics_registered_after_session_refresh(self) -> None:
+        """Analytics adapter is registered by the session refresh fixture."""
         assert "analytics" in MANIFEST_ADAPTER_REGISTRY
 
     def test_analytics_value_is_callable(self) -> None:
         """The analytics registry entry is callable."""
         assert callable(MANIFEST_ADAPTER_REGISTRY["analytics"])
 
-    def test_notifications_registered_at_import(self) -> None:
-        """Notifications adapter is registered when entry_point module loads."""
+    def test_notifications_registered_after_session_refresh(self) -> None:
+        """Notifications adapter is registered by the session refresh fixture."""
         assert "notifications" in MANIFEST_ADAPTER_REGISTRY
 
     def test_notifications_value_is_callable(self) -> None:
@@ -1019,6 +1019,90 @@ class TestRefreshManagedAdaptersFailure:
             MANIFEST_ADAPTER_REGISTRY.update(_orig_registry)
             MANAGED_ADAPTER_ORIGINS.clear()
             MANAGED_ADAPTER_ORIGINS.update(_orig_origins)
+
+    def test_failed_refresh_preserves_registry_content_and_identity(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A later managed import failure cannot partially commit earlier work."""
+        import importlib as _importlib_mod  # noqa: PLC0415
+
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            ImproperlyConfigured,
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        first_name = "_test_atomic_first"
+        failing_name = "_test_atomic_second"
+        failing_package = f"quickscale_modules_{failing_name}"
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_base = get_modules_base_path()
+        original_failing_package = sys.modules.get(failing_package)
+        registry_identity = id(MANIFEST_ADAPTER_REGISTRY)
+
+        def first_adapter(*args: object, **kwargs: object) -> ModuleWiringSpec:
+            return ModuleWiringSpec(apps=("new.first",))
+
+        def old_first_adapter(*args: object, **kwargs: object) -> ModuleWiringSpec:
+            return ModuleWiringSpec(apps=("old.first",))
+
+        def old_second_adapter(*args: object, **kwargs: object) -> ModuleWiringSpec:
+            return ModuleWiringSpec(apps=("old.second",))
+
+        def custom_adapter(*args: object, **kwargs: object) -> ModuleWiringSpec:
+            return ModuleWiringSpec(apps=("custom",))
+
+        first_module = ModuleType(f"quickscale_modules_{first_name}.adapter")
+        setattr(first_module, "get_manifest_adapter", lambda: first_adapter)
+        real_import = _importlib_mod.import_module
+
+        def _import_adapter(name: str, *args: object, **kwargs: object) -> object:
+            if name == f"quickscale_modules_{first_name}.adapter":
+                return first_module
+            if name == f"{failing_package}.adapter":
+                raise ImportError("later managed adapter failed")
+            return real_import(name, *args, **kwargs)
+
+        try:
+            modules_dir = tmp_path / "modules"
+            for module_name in (first_name, failing_name):
+                module_dir = modules_dir / module_name
+                module_dir.mkdir(parents=True)
+                (module_dir / "module.yml").write_text(
+                    f"version: '1'\nname: {module_name}\n"
+                )
+
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(
+                {
+                    first_name: old_first_adapter,
+                    failing_name: old_second_adapter,
+                    "_test_custom": custom_adapter,
+                }
+            )
+            expected_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update({first_name, failing_name})
+            set_modules_base_path(modules_dir)
+            sys.modules[failing_package] = ModuleType(failing_package)
+            monkeypatch.setattr(_importlib_mod, "import_module", _import_adapter)
+
+            with pytest.raises(ImproperlyConfigured, match="not importable"):
+                refresh_managed_adapters()
+
+            assert id(MANIFEST_ADAPTER_REGISTRY) == registry_identity
+            assert MANIFEST_ADAPTER_REGISTRY == expected_registry
+        finally:
+            set_modules_base_path(original_base)
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(original_origins)
+            if original_failing_package is None:
+                sys.modules.pop(failing_package, None)
+            else:
+                sys.modules[failing_package] = original_failing_package
 
 
 class TestSA146ManagedAdapterImportRetry:

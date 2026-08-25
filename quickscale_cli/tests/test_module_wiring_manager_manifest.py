@@ -19,8 +19,11 @@ import yaml
 from unittest.mock import patch
 
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
+from quickscale_cli.utils import module_wiring_manager
+from quickscale_core.contracts.module_discovery import ImproperlyConfigured
 from quickscale_core.manifest.entry_point import MANIFEST_ADAPTER_REGISTRY
 from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.module_wiring import ModuleWiringSpec
 
 
 def _write_minimal_project(
@@ -303,10 +306,9 @@ class TestManifestAdapterRegistryCompleteness:
     def _refresh_registry(self) -> None:
         """Refresh managed adapters before checking registry completeness.
 
-        Without this, the test is order-dependent: managed-module entries
-        (billing, crm, social) are only populated by
-        refresh_managed_adapters(), which previously was only called on
-        certain regenerate_managed_wiring code paths.
+        Without this, the test is order-dependent: managed-module entries are
+        populated by refresh_managed_adapters(), which previously was only
+        called on certain regenerate_managed_wiring code paths.
         """
         from quickscale_core.manifest.entry_point import (
             MANAGED_ADAPTER_ORIGINS,
@@ -314,10 +316,7 @@ class TestManifestAdapterRegistryCompleteness:
         )
 
         if MANAGED_ADAPTER_ORIGINS:
-            try:
-                refresh_managed_adapters()
-            except Exception:
-                pass  # Best-effort — may not have a modules base path
+            refresh_managed_adapters()
 
     @pytest.mark.parametrize(
         "module_name",
@@ -469,6 +468,49 @@ class TestRegenerateManagedWiringAdapterFailure:
             REGISTRY.update(_orig_registry)
             ORIGINS.clear()
             ORIGINS.update(_orig_origins)
+
+    def test_failed_refresh_restores_exact_prior_registry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failed context switch cannot leak a partial embedded registry."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            "version: '1'\nname: analytics\n"
+        )
+
+        registry_identity = id(MANIFEST_ADAPTER_REGISTRY)
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+
+        def custom_adapter(*args: object, **kwargs: object) -> ModuleWiringSpec:
+            return ModuleWiringSpec()
+
+        MANIFEST_ADAPTER_REGISTRY["_test_restore_custom"] = custom_adapter
+        expected_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+
+        def _partially_mutate_then_fail() -> None:
+            MANIFEST_ADAPTER_REGISTRY.pop("analytics", None)
+            MANIFEST_ADAPTER_REGISTRY["_test_leaked"] = custom_adapter
+            raise ImproperlyConfigured("simulated embedded refresh failure")
+
+        monkeypatch.setattr(
+            module_wiring_manager,
+            "refresh_managed_adapters",
+            _partially_mutate_then_fail,
+        )
+        try:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+
+            assert success is False
+            assert "simulated embedded refresh failure" in message
+            assert id(MANIFEST_ADAPTER_REGISTRY) == registry_identity
+            assert MANIFEST_ADAPTER_REGISTRY == expected_registry
+        finally:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
 
 
 class TestRegenerateManagedWiringFailHard:

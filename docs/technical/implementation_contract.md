@@ -97,7 +97,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 | `quickscale plan <project>` and `quickscale apply` | IN | Primary workflow. Terraform-style declarative configuration. Creates `quickscale.yml`, then executes it. |
 | Generate Django starter (manage.py, settings.py, urls.py, wsgi/asgi, templates, pyproject.toml) | IN | Starter uses `pyproject.toml` (Poetry). Generated projects include a `pyproject.toml` and `poetry.lock` by default; `requirements.txt` is not generated. |
 | `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in the current implementation (explicit `__init__.py`). |
-| `quickscale_core.runtime` public facade | IN | Additive pure re-export seam for module-facing core symbols (DR adapter surface, manifest/resolver types, social-manifest surface). Backups' deep `dr_engine` imports route through the facade; the facade carries the DR orchestration, primitives, recovery, and verification compatibility surface (backups-module-internal) via lazy `__getattr__` loading, while the public DR adapter and social-manifest symbols are eagerly available. Social deep-import migration and the CI import-linter gate are in force, with per-module legacy exceptions for billing/crm adapter seams only. |
+| `quickscale_core.runtime` public facade | IN | Additive pure re-export seam for module-facing core symbols (DR adapter surface, manifest/resolver types, social-manifest surface). Backups' deep `dr_engine` imports route through the facade; the facade carries the DR orchestration, primitives, recovery, and verification compatibility surface (backups-module-internal) via lazy `__getattr__` loading, while manifest symbols remain available without eagerly loading DR. Social uses the public manifest subfacade, billing/CRM and the generic relocated adapters use the public root facade, and the CI import-linter gate permits no billing/CRM deep-import exceptions. |
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN | User-friendly wrappers for Docker and Django operations. |
 | CLI module management commands (`update`, `push`) | IN | Module update and push via split branches. Module embedding now happens through `quickscale apply`. |
@@ -265,11 +265,11 @@ section describes the mechanism only.
    ``ResolverResult`` (permitted only when the module needs a custom post-hook) must
    still read the manifest rather than carry a Python literal.
 
-**Current state versus this contract.** Three modules (social, billing, CRM) are
-module-owned today. The remaining nine (analytics, blog, listings, forms, backups,
-notifications, auth, orgs, storage) still register at import time from per-module
-blocks inside ``entry_point.py``, which is the adapter-relocation scope of **`SA167b`**
-(v88, merge #17). Their app contributions are no longer Python literals in core:
+**Current state versus this contract.** Nine modules (analytics, backups, billing,
+blog, CRM, forms, listings, notifications, and social) are module-owned today. The
+remaining three (auth, orgs, and storage) still register at import time from per-module
+blocks inside ``entry_point.py``, which is the unfinished adapter-relocation scope of
+**`SA167b`** (v88, merge #17). Their app contributions are no longer Python literals in core:
 **`SA167a`** (v88, merge #8) completed the five-module declaration phase, and those
 five manifests now own the exact app projections consumed by core. This remains a
 temporary registration boundary pending SA167b, not a supported second wiring path:

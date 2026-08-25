@@ -123,7 +123,7 @@ def build_generic_manifest_spec(
     settings, conditional branches).
 
     This function is the **public** version of the generic manifest path.  It
-    is used by module-owned adapters (social, billing, CRM) as well as the
+    is used by the generic module-owned adapters as well as the remaining
     import-time-registered modules.  The underscore-prefixed alias
     ``_build_generic_manifest_spec`` is preserved for backward compatibility.
 
@@ -239,15 +239,13 @@ def refresh_managed_adapters() -> None:
     )
 
     shipped_at_base = set(discover_shipped_module_names())
+    loaded_adapters: dict[str, Callable[..., ModuleWiringSpec]] = {}
 
-    for module_name in list(MANAGED_ADAPTER_ORIGINS):
+    # Resolve every available managed adapter before mutating the live registry.
+    # A failed refresh is fail-hard and atomic: callers retain the complete prior
+    # registry rather than a set whose contents depend on iteration order.
+    for module_name in sorted(MANAGED_ADAPTER_ORIGINS):
         if module_name not in shipped_at_base:
-            # Module is not available at the current base path — remove
-            # from the registry so stale entries don't persist.  Keep the
-            # name in MANAGED_ADAPTER_ORIGINS so it gets re-evaluated on
-            # the next refresh (e.g. when base path changes to a context
-            # where the module-owned adapter is available).
-            MANIFEST_ADAPTER_REGISTRY.pop(module_name, None)
             continue
 
         # Module has a manifest at the active base path — the module-owned
@@ -287,7 +285,7 @@ def refresh_managed_adapters() -> None:
 
         sentinel = getattr(adapter_module, "get_manifest_adapter", None)
         if sentinel is not None:
-            MANIFEST_ADAPTER_REGISTRY[module_name] = sentinel()
+            loaded_adapters[module_name] = sentinel()
             continue
 
         raise ImproperlyConfigured(
@@ -295,6 +293,13 @@ def refresh_managed_adapters() -> None:
             f"quickscale_modules_{module_name}.adapter has no "
             f"get_manifest_adapter function."
         )
+
+    # Commit only after the complete managed set resolved successfully.  Dict
+    # identity and custom entries are preserved while unavailable managed
+    # entries are removed from the active context.
+    for module_name in MANAGED_ADAPTER_ORIGINS - loaded_adapters.keys():
+        MANIFEST_ADAPTER_REGISTRY.pop(module_name, None)
+    MANIFEST_ADAPTER_REGISTRY.update(loaded_adapters)
 
 
 # Analytics is module-owned and refreshed from its public sentinel.

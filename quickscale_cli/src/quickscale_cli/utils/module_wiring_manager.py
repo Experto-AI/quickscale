@@ -257,17 +257,14 @@ def _write_wiring_files(
     return True, "Managed wiring files regenerated"
 
 
-def _restore_modules_context(prior_base_path: Path | None) -> None:
+def _restore_modules_context(
+    prior_base_path: Path | None,
+    prior_registry: Mapping[str, Any],
+) -> None:
+    """Restore the exact modules base and registry state from before regeneration."""
     set_modules_base_path(prior_base_path)
-    if prior_base_path is None:
-        return
-    try:
-        refresh_managed_adapters()
-    except ImproperlyConfigured:
-        # Best-effort restoration of the adapter registry. If the prior base
-        # path no longer has importable managed adapters, there is no
-        # meaningful recovery from the finally block.
-        pass
+    MANIFEST_ADAPTER_REGISTRY.clear()
+    MANIFEST_ADAPTER_REGISTRY.update(prior_registry)
 
 
 def regenerate_managed_wiring(
@@ -307,6 +304,7 @@ def regenerate_managed_wiring(
         return _write_wiring_files(project_path, package_name, {})
 
     prior_base_path: Path | None = None
+    prior_registry = dict(MANIFEST_ADAPTER_REGISTRY)
     try:
         prior_base_path = _get_prior_modules_base_path()
         error = _prepare_modules_base_path(project_path, prior_base_path)
@@ -321,4 +319,4 @@ def regenerate_managed_wiring(
         assert specs is not None
         return _write_wiring_files(project_path, package_name, specs)
     finally:
-        _restore_modules_context(prior_base_path)
+        _restore_modules_context(prior_base_path, prior_registry)
