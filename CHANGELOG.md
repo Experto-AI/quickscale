@@ -4,6 +4,38 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-25, eighth pass).** **No ticket closed and
+  no audit finding closed since the seventh pass**, so no new completion work entered the
+  archive. The pass retired the roadmap's last retained checked record — **SA162 (#14)** — so
+  the roadmap is now open-work-only with no exceptions; SA162's closure evidence is the entry
+  below, merge position **#14 is retired and not reused**, and every SA162 reference in the
+  dependency diagram, merge-order table, shared-surface table, and track-readiness prose was
+  removed or restated as settled tree state. SA151's retained S4-C validation transcript was
+  archived here (next entry); the roadmap keeps only the one-line checkpoint state, the live
+  database-lane ownership constraint, and the two-step S4 continuation plan. The retired
+  `SA150 → SA118` edge note and the retired-merge-position enumeration were dropped as log
+  rather than plan. Rebalance was re-tested and **no track moves**: the only candidate,
+  moving **SA161 (#19) and SA160 (#20) from W3 to W1**, is rejected again — neither is on or
+  feeding the critical path, so the move buys no release date, and it would spread
+  `quickscale_core/tests/fixtures/sa90_emission_manifests.json` across three worktrees
+  because SA142 must stay on W3 for the Docker slot. The open queue is unchanged at **sixteen
+  open v88 ticket entries across fifteen open merge positions**; the critical path remains
+  W2's `SA167a → SA124 → SA123 → SA118 → SA167c`.
+
+- **SA151 S4-C validation transcript (2026-08-24, archived 2026-08-25).** The S4-C software
+  campaign ran green on the unchanged tree: topology **41 passed**; generated
+  empty-PostgreSQL proof **1 passed, 0 skipped**; restricted integration **2,471 passed, 86
+  skipped, 12 deselected, 94.41% mean coverage**; BYPASSRLS **80 passed, 0 errors, 0 skipped,
+  2,488 deselected**; typecheck passed; serial E2E passed Core **36** and CLI **36** with 0
+  skips and cleanup; `make check` passed at **2,806 Core passed / 1 skipped** and **2,117 CLI
+  passed**; `make quality` matched the accepted GNU Make exit-2 oracle of exactly two warning
+  regressions, zero critical regressions, and monotonicity pass. Database ownership was
+  observed 12/12 under the BYPASSRLS role during that lane, restored 12/12 to
+  `quickscale_test_role`, and independently rechecked after all downstream gates. The
+  Adaptive handback stayed partial only because the execution plan hard-coded the stale
+  historical 2,788/2,104 `make check` counts — an evidence-oracle mismatch, not a failing
+  test or product defect. S4-D was therefore not reached and **SA151 remains open**.
+
 - **SA162 — deprecated bool inversion retired; TA69 and arch red flag #5 closed
   (2026-08-24).** `scripts/check_csrf_exempt_gate.py` now evaluates analyzed
   `~True`/`~False` operands with `~int(val) != 0`, preserving bitwise-invert truthiness
