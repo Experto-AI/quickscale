@@ -135,16 +135,19 @@ The manifest-reading `entry_point.py`, the fail-hard `QUICKSCALE_LOCAL_WHEELHOUS
 seam, and the regenerated migration baseline are all merged tree state that open tickets build
 on, not pending dependencies.
 
-**Parallelism result:** W1 has implementation *in flight* and the other two lanes have executable
-work available. W1 carries SA167b P3 as four unmerged commits plus a working-tree `entry_point.py`
-drain. W2's SA123 (#13) is **released to start**: the narrow-authority option was recorded on
-2026-08-25, so SA123 may make SA123-coupled expectation updates to `scripts/test_gate_parity.py`
-and its reviewed plan resumes at Phase A. W3 is released to start SA135+SA163 (#15) now that the
-stable image lifecycle is settled. All three worktrees carry executable work, and the critical
-path is moving again.
+**Parallelism result:** all three lanes carry executable work. **W1's SA167b P3 implementation is
+complete in the worktree and unmerged** — seven commits, working tree clean, `entry_point.py`
+drained from 843 lines to 270 (generic helpers, registry, public entry point only), all twelve
+modules owning an adapter, and `MANAGED_ADAPTER_ORIGINS` derived from
+`discover_shipped_module_names()` rather than hand-listed. W1 is four merges behind `v88`; a
+merge preview of `v88` into `wt-track1` resolves **with no conflicts**, and the `sa142`
+`baseline_evidence` entry survives it. What remains is P4, not implementation. W2's SA123 (#13) is
+**released to start**: the narrow-authority option was recorded on 2026-08-25, so SA123 may make
+SA123-coupled expectation updates to `scripts/test_gate_parity.py` and its reviewed plan resumes at
+Phase A. W3 is released to start SA135+SA163 (#15) now that the stable image lifecycle is settled.
 
-**No track moves this pass.** Every open ticket carries a worktree; none lacks one. One
-candidate was re-tested against the ordering rule and rejected again: moving **SA161 (#19) and
+**No track moves this pass — the twelfth consecutive.** Every open ticket carries a worktree;
+none lacks one. One candidate was re-tested against the ordering rule and rejected again: moving **SA161 (#19) and
 SA160 (#20) from W3 to W1** would relieve the lane holding the exclusive PostgreSQL/Docker
 slot of two band-C tails that need neither PostgreSQL nor Docker. It fails two of the three move tests:
 
@@ -177,7 +180,7 @@ all on W2. Shared closeout surfaces (`CHANGELOG.md`,
 `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`, and both audit docs)
 remain covered by the standing sync-before-merge-back procedure.
 
-### Track readiness (reconciled 2026-08-25, eleventh pass; SA123 authority decision recorded)
+### Track readiness (reconciled 2026-08-25, twelfth pass; SA167b P3 implementation complete and unmerged)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes. The queue and track states below were re-tested for rebalance opportunities (none
@@ -186,7 +189,7 @@ taken — see above).
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
 | **W2** | SA123 (#13) | **yes** — the narrow-authority decision is recorded (2026-08-25); G-001 is discharged and the reviewed plan resumes at Phase A | **yes** — the scanner contract, registry entries, wiring, and SA123-coupled parity expectations are all now within W2's authority | **yes** — #13 is the W2 queue head and is gated by nothing | **truly green — on the critical path** |
-| **W1** | SA167b P3 (#17) | **yes — started** — P1/P2 accepted; P3 has four unmerged commits (adapter contracts, auth, orgs, storage) plus an in-progress `entry_point.py` drain | **yes** — the remaining `MANAGED_ADAPTER_ORIGINS` proof and P4 closeout are W1-owned | **yes** — #17 remains W1's open queue head, gated by nothing | **truly green — in flight** |
+| **W1** | SA167b P4 (#17) | **yes** — P1/P2 accepted and **P3 implementation is complete and committed** (seven commits, clean tree, `entry_point.py` drained, twelve module-owned adapters, derived origin inventory); the next action is the sync-then-verify pass | **yes** — P4 verification and documentation closeout are entirely W1-owned; the sync preview is conflict-free | **yes** — #17 remains W1's open queue head, gated by nothing | **truly green — implementation complete, unmerged** |
 | **W3** | SA135 + SA163 (#15) | **yes** — `deps: none` and the PostgreSQL/Docker lane is released | **yes** — the owned PostgreSQL lifecycle and derived CI environment remain entirely W3-owned | **yes** — #15 is W3's queue head | **truly green** |
 
 **All three tracks are truly green, and W2's is the one on the critical path:**
@@ -195,9 +198,11 @@ taken — see above).
   discharges G-001. Discovery and the reviewed plan are reusable; start at Phase A from a clean
   W2 worktree synced to current `v88`. This is the only currently executable action that shortens
   the release.
-- **W1 / SA167b P3 (#17) — truly green, in flight, off the critical path.** Auth, orgs, and
-  storage adapters are committed in the worktree; finish the `entry_point.py` drain, then prove
-  `MANAGED_ADAPTER_ORIGINS` equals the twelve-module inventory before P4 closeout.
+- **W1 / SA167b P4 (#17) — truly green, implementation complete but unmerged, off the critical
+  path.** This is the lane the release is currently *losing* work in: the whole P3 deliverable
+  exists on `wt-track1` and none of it is on `v88`, so `entry_point.py` on the integration branch
+  still carries the auth, orgs, and storage blocks. Nothing about that is blocked — W1 is four
+  merges behind and the merge resolves cleanly. The remaining work is the P4 pass, not code.
 - **W3 / SA135 + SA163 (#15) — truly green, off the critical path.** The stable image
   lifecycle prerequisite is settled, so the owned PostgreSQL lifecycle may start.
 
@@ -209,9 +214,13 @@ taken — see above).
 
 **Recommended concurrency right now:**
 
-- **W1 — finish SA167b P3 (#17).** The three remaining adapters are relocated in the worktree;
-  what is left is draining the per-module blocks from `entry_point.py` and proving the origin
-  inventory. Then P4 closeout, then merge #17.
+- **W1 — run SA167b P4 and merge #17.** Implementation is done. Sync current `v88` into
+  `wt-track1` (conflict-free as of this pass), then run P4: integration, generator emission
+  parity — mandatory, because SA142 added generator and template assertions and a `sa142`
+  fixture baseline that P3 has never been verified against — full repository gates, then
+  documentation closeout, review of the exact tip, and merge. **Getting this merged is worth more
+  than starting anything new on W1**, because every day it sits unmerged is a day `entry_point.py`
+  diverges between the lane and the integration branch.
 - **W2 — start SA123 (#13).** This is the highest-value action available: it is the head of the
   only remaining critical path. Sync `v88` into a clean W2 worktree, then run the reusable plan
   from Phase A under the recorded narrow authority.
@@ -399,8 +408,14 @@ Conceptual background, mental models, and implementation notes for **every** tic
 
 - [ ] **SA167b — Relocate the nine core-side adapters into their modules.** `Band B · Tier 2 · W1 · merge #17 · deps: none · blocks SA167d`
   **Partial implementation checkpoint (2026-08-25; keep this ticket open):** P1 is accepted: analytics, blog, listings, and forms are module-owned, billing and CRM use the public lazy runtime facade, and the adapter/core/runtime/CLI plus import/lint/type checks passed. P2's backups and notifications implementation and split suites are accepted. Its original literal two-module pytest command failed during collection because both module trees resolved `tests.conftest`; no implementation assertion failed. Equivalent grouped coverage is established with `PYTEST_ADDOPTS='--noconftest --import-mode=importlib'` and `QUICKSCALE_ALLOW_BYPASSRLS=1`, without changing unrelated test-package layout.
-  **P3 is in flight on W1 and unmerged.** Nine modules ship module-owned adapters on the integration branch: analytics, backups, billing, blog, CRM, forms, listings, notifications, and social. The worktree adds auth, orgs, and storage adapters plus the shared adapter manifest contracts, and the `entry_point.py` drain is still in the working tree. Nothing has merged, so `entry_point.py` on `v88` still carries the three core-side blocks.
-  **Remaining handoff:** finish the `entry_point.py` drain, then prove `MANAGED_ADAPTER_ORIGINS` exactly equals the authoritative twelve-module inventory with fail-hard import/sentinel and registry identity/custom-entry coverage. P4 then runs the integration, generator parity, full repository gates, and documentation closeout. Do not close SA167b before both phases and all acceptance evidence finish.
+  **P3 implementation is complete on W1 and unmerged (verified 2026-08-25).** `wt-track1` carries seven commits with a clean working tree at `3df664b4`. All twelve shipped modules own an adapter at `quickscale_modules/<name>/src/quickscale_modules_<name>/adapter.py`; `entry_point.py` is drained from 843 lines to 270 and retains only generic helpers, the registry, and the public entry point; `MANAGED_ADAPTER_ORIGINS` is derived from `discover_shipped_module_names()` rather than hand-listed, with fail-hard import/sentinel and registry-identity coverage in `test_manifest_entry_point.py`. **None of it is on the integration branch** — `entry_point.py` on `v88` still carries the auth, orgs, and storage blocks.
+  **The lane is behind, not blocked.** `wt-track1` branched at `a705ae05` and is four merges behind `v88` (SA124's terminal scope fixes, SA142's Docker image lifecycle, and two documentation merges). A merge preview of `v88` into `wt-track1` resolves **with no conflicts**, and SA142's `sa142` `baseline_evidence` entry in `quickscale_core/tests/fixtures/sa90_emission_manifests.json` survives it — SA167b never edited that fixture, so it is not a contended surface for this ticket.
+  **Remaining handoff — P4 only, no implementation left:**
+  1. Sync current `v88` into `wt-track1` and resolve there (expected conflict-free).
+  2. Re-run generator emission parity **against the synced tree**. This is the one substantive risk: SA142 added assertions to `test_generator.py` and `test_templates.py` and a fixture baseline that P3 has never been evaluated against. If parity moves, append a `sa167b` `baseline_evidence` entry with per-file rationale — never replace a prior entry.
+  3. Run the integration suite and the full repository gates; `make quality` no worse than found.
+  4. Documentation closeout, review of the exact tip, then merge that tip into `v88`.
+  Do not close SA167b before all acceptance evidence finishes.
   Keep it as **one ticket, not one per module**: all nine core-side blocks began in the same file, and the three remaining blocks still share it. Per-module tickets would serialize anyway while adding contention on `entry_point.py` and splitting one logical change nine ways.
   **Acceptance:** every shipped module owns its adapter at `quickscale_modules/<name>/src/quickscale_modules_<name>/adapter.py` exposing `get_manifest_adapter()`; `MANAGED_ADAPTER_ORIGINS` covers the full inventory; no per-module block remains in `entry_point.py`, which retains only generic helpers, the registry, and the public entry point; generator emission parity is unchanged, proving the relocation is behaviour-preserving; the tree conforms to [decisions.md §Module Wiring Authority](decisions.md#module-wiring-authority).
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/entry_point.py`, every `quickscale_modules/*/adapter.py`, `docs/technical/implementation_contract.md`.
