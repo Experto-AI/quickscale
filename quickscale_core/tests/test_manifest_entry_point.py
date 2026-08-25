@@ -447,24 +447,24 @@ class TestManifestAdapterRegistry:
         """The notifications registry entry is callable."""
         assert callable(MANIFEST_ADAPTER_REGISTRY["notifications"])
 
-    def test_auth_registered_at_import(self) -> None:
-        """Auth adapter is registered when entry_point module loads."""
+    def test_auth_registered_after_session_refresh(self) -> None:
+        """Auth adapter is registered by the session refresh fixture."""
         assert "auth" in MANIFEST_ADAPTER_REGISTRY
 
     def test_auth_value_is_callable(self) -> None:
         """The auth registry entry is callable."""
         assert callable(MANIFEST_ADAPTER_REGISTRY["auth"])
 
-    def test_orgs_registered_at_import(self) -> None:
-        """Orgs adapter is registered when entry_point module loads."""
+    def test_orgs_registered_after_session_refresh(self) -> None:
+        """Orgs adapter is registered by the session refresh fixture."""
         assert "orgs" in MANIFEST_ADAPTER_REGISTRY
 
     def test_orgs_value_is_callable(self) -> None:
         """The orgs registry entry is callable."""
         assert callable(MANIFEST_ADAPTER_REGISTRY["orgs"])
 
-    def test_storage_registered_at_import(self) -> None:
-        """Storage adapter is registered when entry_point module loads."""
+    def test_storage_registered_after_session_refresh(self) -> None:
+        """Storage adapter is registered by the session refresh fixture."""
         assert "storage" in MANIFEST_ADAPTER_REGISTRY
 
     def test_storage_value_is_callable(self) -> None:

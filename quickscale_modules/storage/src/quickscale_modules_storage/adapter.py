@@ -18,6 +18,81 @@ from quickscale_core.runtime.manifest import (
 )
 
 
+def _cloud_storage_settings(resolved: dict[str, Any]) -> dict[str, Any]:
+    """Project the ordered S3-compatible settings for cloud backends."""
+    querystring_auth = bool(resolved.get("querystring_auth", False))
+    optional_options = {
+        option_name: value
+        for option_name in (
+            "bucket_name",
+            "endpoint_url",
+            "region_name",
+            "default_acl",
+        )
+        if (value := str(resolved.get(option_name, "")).strip())
+    }
+    storage_options: dict[str, Any] = {
+        "querystring_auth": querystring_auth,
+        **optional_options,
+    }
+    settings: dict[str, Any] = {
+        "STORAGES": {
+            "default": {
+                "BACKEND": "storages.backends.s3.S3Storage",
+                "OPTIONS": storage_options,
+            },
+            "staticfiles": {
+                "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+            },
+        },
+        "AWS_QUERYSTRING_AUTH": querystring_auth,
+    }
+    settings.update(
+        {
+            setting_name: optional_options[option_name]
+            for option_name, setting_name in (
+                ("bucket_name", "AWS_STORAGE_BUCKET_NAME"),
+                ("endpoint_url", "AWS_S3_ENDPOINT_URL"),
+                ("region_name", "AWS_S3_REGION_NAME"),
+            )
+            if option_name in optional_options
+        }
+    )
+
+    credential_env_vars = (
+        (
+            "AWS_ACCESS_KEY_ID",
+            str(
+                resolved.get(
+                    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+                    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+                )
+            ).strip(),
+        ),
+        (
+            "AWS_SECRET_ACCESS_KEY",
+            str(
+                resolved.get(
+                    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+                    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+                )
+            ).strip(),
+        ),
+    )
+    settings.update(
+        {
+            setting_name: f"__QS_ENV__:{env_var_name}"
+            for setting_name, env_var_name in credential_env_vars
+            if env_var_name
+        }
+    )
+
+    default_acl = optional_options.get("default_acl")
+    if default_acl:
+        settings["AWS_DEFAULT_ACL"] = default_acl
+    return settings
+
+
 def _storage_manifest_adapter(
     options: dict[str, Any],
     *,
@@ -43,62 +118,7 @@ def _storage_manifest_adapter(
     }
 
     if backend in {"s3", "r2"}:
-        bucket_name = str(resolved.get("bucket_name", "")).strip()
-        endpoint_url = str(resolved.get("endpoint_url", "")).strip()
-        region_name = str(resolved.get("region_name", "")).strip()
-        default_acl = str(resolved.get("default_acl", "")).strip()
-        querystring_auth = bool(resolved.get("querystring_auth", False))
-        access_key_id_env_var = str(
-            resolved.get(
-                STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-                DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-            )
-        ).strip()
-        secret_access_key_env_var = str(
-            resolved.get(
-                STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-                DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
-            )
-        ).strip()
-
-        storage_options: dict[str, Any] = {
-            "querystring_auth": querystring_auth,
-        }
-        if bucket_name:
-            storage_options["bucket_name"] = bucket_name
-        if endpoint_url:
-            storage_options["endpoint_url"] = endpoint_url
-        if region_name:
-            storage_options["region_name"] = region_name
-        if default_acl:
-            storage_options["default_acl"] = default_acl
-
-        derived_settings["STORAGES"] = {
-            "default": {
-                "BACKEND": "storages.backends.s3.S3Storage",
-                "OPTIONS": storage_options,
-            },
-            "staticfiles": {
-                "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-            },
-        }
-        derived_settings["AWS_QUERYSTRING_AUTH"] = querystring_auth
-        if bucket_name:
-            derived_settings["AWS_STORAGE_BUCKET_NAME"] = bucket_name
-        if endpoint_url:
-            derived_settings["AWS_S3_ENDPOINT_URL"] = endpoint_url
-        if region_name:
-            derived_settings["AWS_S3_REGION_NAME"] = region_name
-        if access_key_id_env_var:
-            derived_settings["AWS_ACCESS_KEY_ID"] = (
-                f"__QS_ENV__:{access_key_id_env_var}"
-            )
-        if secret_access_key_env_var:
-            derived_settings["AWS_SECRET_ACCESS_KEY"] = (
-                f"__QS_ENV__:{secret_access_key_env_var}"
-            )
-        if default_acl:
-            derived_settings["AWS_DEFAULT_ACL"] = default_acl
+        derived_settings.update(_cloud_storage_settings(resolved))
 
     result = ResolverResult(
         module_name="storage",
