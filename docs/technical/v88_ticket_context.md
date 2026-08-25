@@ -10,12 +10,20 @@ This companion says *why the problem exists*, *what mental model to hold*, and *
 code actually lives*. It is explanatory, not authoritative: if this document and the
 roadmap disagree, the roadmap wins.
 
-The roadmap is authoritative for ticket metadata; this page supplies explanatory context for
-each current ticket. The consistency guard checks section coverage, with one context section per
-roadmap ticket and no orphan sections. Closed tickets are not described here; their closure
-evidence lives in [CHANGELOG.md](../../CHANGELOG.md). The SA167a name appears only in the shared
-conceptual umbrella below so the completed handoff is covered without creating a second ticket
-section.
+Read the roadmap ticket first, then the section here.
+
+**This page deliberately carries no second set of schedulable classification rows.** Formal
+band, tier, worktree, merge-position, dependency, slot-ownership, and validation-station
+metadata live in the roadmap and only there. The conceptual notes here may explain why an
+ordering or resource relationship exists, but only the roadmap states its current scheduling
+value or status. The `scripts`-side enforcement checks section *coverage* (one context section
+per open roadmap ticket, with no orphans), rejects copied classification rows, and rejects
+prose claiming a roadmap-open dependency is closed.
+
+It covers every open v88 ticket entry plus the post-v88 entries. Closed tickets are not
+described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
+The SA167a name appears only in the shared conceptual umbrella below so its completed handoff
+is explained without creating a closed-ticket section.
 
 ---
 
@@ -234,37 +242,6 @@ Its `baseline_evidence` entries show the established convention — each past re
 # Service-backed lifecycle
 
 The two lifecycle tickets ask the same question: *who owns the lifecycle of a thing we create?*
-
-## SA151 — Recreate module migrations as clean initial schemas
-
-### The mental model
-
-QuickScale is pre-1.0 and deliberately does not promise backward-compatible database upgrades
-between releases. The migration history is therefore not a product artifact to preserve: each
-module should expose one clean, current `0001_initial` schema, and a new generated project should
-apply those migrations to an empty database without guessing or silently skipping a module.
-
-### What the retained checkpoint proves
-
-The checkpoint regenerated one `0001_initial.py` for each of the ten model-bearing modules and
-removed the stale `0002`–`0005` backups migrations. The source-derived topology guard covers all
-twelve shipped AppConfigs, the ten model-bearing modules, analytics/storage as service-style
-exceptions, and the non-shipped `teams` placeholder. Its 41 focused tests include fail-closed,
-no-execution canaries for migration-base, model-form, AppConfig class-alias, subscript,
-nested-attribute identity drift, and spoofed, rebound, decorated, or multiple-base AppConfig
-provenance. The generated-project proof independently checks every runtime
-AppConfig `name` and `label` against `quickscale_modules_<module>`, derives expected migration labels
-from that oracle, installs all modules into a fresh PostgreSQL 18 database under a restricted
-`NOSUPERUSER NOBYPASSRLS NOINHERIT` role, and passed with 1 test and 0 skips. The retained broad
-integration, type, E2E, `make check`, and accepted `make quality` evidence is archived in
-[CHANGELOG.md](../../CHANGELOG.md).
-
-### Why the checkpoint is retained
-
-That evidence is a retained **partial checkpoint**, not terminal closure. The former F-006–F-009
-guard, census, audit, and docs-hub findings are corrected; S4-C is archived green, while S4-D
-terminal evidence is not included in this checkpoint. Closure status belongs in the
-[roadmap](roadmap.md), not on this explanatory page.
 
 ## SA142 — Reuse and clean E2E Docker images
 
@@ -625,16 +602,16 @@ become debt — it costs a read every audit pass and can never fire.
 Five items are carried. Three are simply not fired and need no work. Two carry explicit
 actions, and one is a naming question that becomes load-bearing on a specific trigger.
 
-### 1. The SA92 migration-squash tuple — artifact found, re-anchor remains
+### 1. The SA92 migration-squash tuple — artifact found, re-anchor remains open work
 
 The artifact is
 `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`, a bounded
 literal tripwire for cross-table `UPDATE … SET organization_id` migration DML; it is
 not a schema-parity proof. Its `_migdir()` helper reads the inert `django_apps:`
 manifest key and silently guesses a conventional path when absent, while its parity
-backstop still names the retired `v87` baseline. SA151 has produced regenerated migrations.
-SA164 owns the `_migdir()` helper correction and parity-backstop re-anchoring against those
-migrations.
+backstop still names the retired `v87` baseline. The current regenerated migrations and
+discharged S4 BYPASSRLS prerequisite are settled; SA164 owns the `_migdir()` helper
+correction and parity-backstop re-anchoring.
 
 ### 2. Privileged-command pair — values agree, claimed authority does not
 
@@ -726,11 +703,10 @@ command in `VERIFICATION_COMMAND_SPECS` still exists, and the file-ownership tax
 sync and enforced by 7 passing conformance tests. So this is not a rot ticket. Four residual
 gaps:
 
-- **The SA151 collision — implementation evidence exists, terminal evidence is incomplete.** The workflow's verification
-  stack runs `quickscale manage migrate` against a recipient that may carry an existing
-  database. SA151's clean-break implementation makes a **fresh database the only upgrade
-  path**, invalidating the in-place workflow's implicit assumption; the in-place workflow needs
-  an explicit fresh-database reconciliation.
+- **The SA151 collision is now a settled prerequisite.** The workflow's verification stack runs
+  `quickscale manage migrate` against a recipient that may carry an existing database. SA151's
+  clean-break implementation makes a **fresh database the only upgrade path**, invalidating the
+  in-place workflow's implicit assumption; SA152 must reconcile that mismatch in its own scope.
 - **No end-to-end exercise.** The targets appear in no CI workflow and no
   `scripts/gate_registry.json` entry. Coverage is unit-level taxonomy conformance only, so
   breakage surfaces for a maintainer **mid-migration** — the worst possible moment.

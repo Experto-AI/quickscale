@@ -21,7 +21,7 @@ ROADMAP = ROOT / "docs/technical/roadmap.md"
 CONTEXT = ROOT / "docs/technical/v88_ticket_context.md"
 DOCS_INDEX = ROOT / "docs/index.md"
 ARCH_AUDIT = ROOT / "docs/others/arch-audit.md"
-
+TECH_AUDIT = ROOT / "docs/others/tech-audit.md"
 TICKET_RE = re.compile(r"\bSA\d+[a-z]?\b")
 TICKET_ENTRY_RE = re.compile(
     r"^\s*-\s+\[[^\]]*\]\s+\*\*(SA\d+[a-z]?)\b[^\n]*$", re.MULTILINE
@@ -91,7 +91,6 @@ def _roadmap_tickets(text: str) -> dict[str, TicketMetadata]:
             "checked roadmap tickets do not match the retained completion marker: "
             f"expected={sorted(RETAINED_CLOSED_TICKETS)}, actual={sorted(closed)}"
         )
-
     open_entries = OPEN_ENTRY_RE.findall(text)
     duplicates = sorted(
         ticket for ticket, count in Counter(open_entries).items() if count > 1
@@ -201,8 +200,13 @@ def _assert_consistent(roadmap_text: str, context_text: str) -> None:
             f"unexpected={sorted(context_tickets - set(roadmap))}"
         )
 
-    if _shared_position_groups(roadmap) != SHARED_POSITION_GROUPS:
-        raise AssertionError("shared-position roadmap classification drift")
+    actual_shared_groups = _shared_position_groups(roadmap)
+    if actual_shared_groups != SHARED_POSITION_GROUPS:
+        raise AssertionError(
+            "shared-position roadmap classification drift: "
+            f"expected={sorted(map(sorted, SHARED_POSITION_GROUPS))}, "
+            f"actual={sorted(map(sorted, actual_shared_groups))}"
+        )
 
     umbrella = sections["SA167a"]
     status_sections = sections | {ticket: umbrella for ticket in UMBRELLA_MEMBERS}
@@ -233,7 +237,83 @@ def _load_documents() -> tuple[str, str]:
     return ROADMAP.read_text(encoding="utf-8"), CONTEXT.read_text(encoding="utf-8")
 
 
-def test_v88_current_context_matches_roadmap_open_tickets() -> None:
+def _number_word(value: int) -> str:
+    words = {13: "thirteen", 14: "fourteen"}
+    return words[value]
+
+
+def _assert_current_status_consumers(
+    roadmap_text: str,
+    context_text: str,
+    docs_index_text: str,
+    arch_audit_text: str,
+    tech_audit_text: str,
+) -> None:
+    roadmap = _roadmap_tickets(roadmap_text)
+    v88 = {
+        ticket: metadata
+        for ticket, metadata in roadmap.items()
+        if metadata.kind == "v88"
+    }
+    positions = {
+        metadata.merge_position
+        for metadata in v88.values()
+        if metadata.merge_position is not None
+    }
+    assert (len(v88), len(positions)) == (14, 13)
+    assert "SA151" not in roadmap
+    assert 3 not in positions
+    assert re.search(r"Positions [^\n]*#3[^\n]*retired", roadmap_text)
+    assert not re.search(r"^## SA151\b", context_text, re.MULTILINE)
+    assert set(CLOSED_ENTRY_RE.findall(roadmap_text)) == {"SA167a"}
+
+    assert v88["SA142"].dependencies == frozenset()
+    assert v88["SA164"].dependencies == frozenset({"SA166"})
+    assert roadmap["SA152"].dependencies == frozenset()
+    assert v88["SA135"].dependencies == frozenset({"SA142"})
+    assert v88["SA163"].dependencies == frozenset({"SA135"})
+    assert "use the same twelve databases" in roadmap_text
+    assert re.search(
+        r"own all twelve databases first.*?ownership must be restored",
+        roadmap_text,
+        re.DOTALL,
+    )
+
+    entry_word = _number_word(len(v88))
+    position_word = _number_word(len(positions))
+    expected_phrases = {
+        docs_index_text: rf"{entry_word} open v88 ticket entries across {position_word} open merge positions",
+        arch_audit_text: rf"{entry_word} open v88 ticket entries[^\n]*{position_word} open merge positions",
+        roadmap_text: rf"{position_word} open merge positions carrying {entry_word} open ticket entries",
+    }
+    for text, pattern in expected_phrases.items():
+        assert re.search(pattern, text, re.IGNORECASE), pattern
+
+    summary = tech_audit_text.split("## Summary table", 1)[1].split("## Findings", 1)[0]
+    severities = re.findall(
+        r"^\| `[^`]+` \(TA\d+\) \| \*{0,2}(S[1-4])\*{0,2} \|",
+        summary,
+        re.MULTILINE,
+    )
+    assert Counter(severities) == Counter({"S3": 1, "S4": 1})
+    assert re.search(
+        r"S1 \*\*0\*\*.*S2 \*\*0\*\*.*S3 \*\*1\*\*.*S4 \*\*1\*\*.*Total 2 open",
+        summary,
+        re.DOTALL,
+    )
+
+
+def test_v88_live_status_consumers_derive_current_counts_and_dependencies() -> None:
+    _assert_current_status_consumers(
+        ROADMAP.read_text(encoding="utf-8"),
+        CONTEXT.read_text(encoding="utf-8"),
+        DOCS_INDEX.read_text(encoding="utf-8"),
+        ARCH_AUDIT.read_text(encoding="utf-8"),
+        TECH_AUDIT.read_text(encoding="utf-8"),
+    )
+
+
+def test_v88_current_context_covers_roadmap_open_tickets() -> None:
     roadmap, context = _load_documents()
     _assert_consistent(roadmap, context)
 
@@ -344,38 +424,36 @@ def test_v88_unknown_roadmap_dependency_is_expected_red_canary() -> None:
 
 def test_v88_dependency_status_contradiction_is_expected_red_canary() -> None:
     roadmap, context = _load_documents()
-    section = _context_sections(context)["SA142"]
-    mutated = context.replace(section, section + "\nSA151 is closed.\n", 1)
-    with pytest.raises(AssertionError, match="claims roadmap-open dependency SA151"):
+    tickets = _roadmap_tickets(roadmap)
+    dependent_ticket = next(
+        ticket
+        for ticket, metadata in tickets.items()
+        if metadata.dependencies - RETAINED_CLOSED_TICKETS
+    )
+    dependency = next(
+        iter(tickets[dependent_ticket].dependencies - RETAINED_CLOSED_TICKETS)
+    )
+    section = _context_sections(context)[dependent_ticket]
+    mutated = context.replace(section, section + f"\n{dependency} is closed.\n", 1)
+    with pytest.raises(
+        AssertionError,
+        match=rf"claims roadmap-open dependency {re.escape(dependency)}",
+    ):
         _assert_consistent(roadmap, mutated)
 
 
 def test_v88_shared_merge_position_drift_is_expected_red_canary() -> None:
     roadmap, context = _load_documents()
-    mutated = roadmap.replace(
-        "SA163 — Derive the CI PostgreSQL environment from one authoritative source.** `Band B · Tier 2 · W3 · merge #15",
-        "SA163 — Derive the CI PostgreSQL environment from one authoritative source.** `Band B · Tier 2 · W3 · merge #26",
+    mutated_roadmap = roadmap.replace(
+        "SA163 — Derive the CI PostgreSQL environment from one authoritative source.** "
+        "`Band B · Tier 2 · W3 · merge #15",
+        "SA163 — Derive the CI PostgreSQL environment from one authoritative source.** "
+        "`Band B · Tier 2 · W3 · merge #26",
         1,
     )
+    assert mutated_roadmap != roadmap
+
     with pytest.raises(
         AssertionError, match="shared-position roadmap classification drift"
     ):
-        _assert_consistent(mutated, context)
-
-
-def test_current_open_queue_counts_match_consumers() -> None:
-    roadmap, _ = _load_documents()
-    v88 = {
-        ticket: metadata
-        for ticket, metadata in _roadmap_tickets(roadmap).items()
-        if metadata.kind == "v88"
-    }
-    assert len(v88) == 15
-    assert len({metadata.merge_position for metadata in v88.values()}) == 14
-    phrase = "fifteen open v88 ticket entries across fourteen open merge positions"
-    for path in (DOCS_INDEX, ARCH_AUDIT):
-        assert phrase in path.read_text(encoding="utf-8").replace("**", "").lower()
-    roadmap_phrase = (
-        "fourteen open merge positions carrying fifteen open ticket entries"
-    )
-    assert roadmap_phrase in roadmap.replace("**", "").lower()
+        _assert_consistent(mutated_roadmap, context)

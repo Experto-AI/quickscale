@@ -4,6 +4,18 @@
 
 ## v88 development — 2026-08-21
 
+- **SA151/SA167a combined synchronization (2026-08-25).** The v88 merge preserves SA151's
+  terminal closure and SA167a's sole retained checked completion marker. Re-deriving the live
+  queue after both closures yields **fourteen open v88 ticket entries across thirteen open merge
+  positions**: SA151 and position #3 are retired, SA167a and position #8 are excluded from open
+  counts, and SA135/SA163 remain two entries sharing position #15. SA142, SA164, and post-v88
+  SA152 carry no SA151 dependency; the completed SA167a handoff releases SA124 and SA167b while
+  remaining a declared prerequisite for SA118 and SA167c. The combined guard passed **21 tests**,
+  the SA167a manifest ownership/parity selection passed **24 tests**, the unchanged PostgreSQL
+  application-registry boot passed **1 test with 0 skips**, and all 12 manifests remained in
+  sync. `make check` passed with **2,839 Core passed / 1 skipped**, **2,117 CLI passed**, and
+  **1,227 gate-suite tests passed**. `make quality` matched the accepted GNU Make exit-2 oracle:
+  monotonicity passed with exactly **2 warning regressions and 0 critical regressions**.
 - **SA167a — five Django app declarations moved into module manifests (2026-08-24).**
   The `auth`, `backups`, `notifications`, `orgs`, and `storage` manifests now carry
   complete static `derivation.wiring_projections` app declarations, with their bundled
@@ -45,6 +57,18 @@
   examples remain green. The settled context contains no matching restatement, and
   `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q --tb=short -o addopts= --no-cov`
   passed all **21 tests**.
+- **SA151 S4-D terminal validation and closure (2026-08-25).** The terminal documentation
+  pass removed SA151's live ticket and stale dependency edges, retired merge position **#3**,
+  and synchronized the roadmap, ticket context, documentation hub, architecture audit, and
+  technology audit to **fifteen open v88 ticket entries across fourteen open merge positions**.
+  The live technology-audit inventory is **S1: 0, S2: 0, S3: 1, S4: 1, total 2**; dated
+  historical totals remain archival. The focused consistency suite passed **13 tests** and the
+  quantified status sweep passed at **15 entries / 14 positions**. Ruff diagnostics passed,
+  `make check` passed with **2,807 Core passed / 1 skipped** and **2,117 CLI passed**, and
+  `make quality` matched the accepted GNU Make exit-2 oracle: **2 warning regressions, 0
+  critical regressions, monotonicity pass**. SA151 is terminally closed; SA142, SA164, and
+  SA152 no longer carry an SA151 dependency.
+
 - **Roadmap cleanup and rebalance review (2026-08-25, eighth pass).** **No ticket closed and
   no audit finding closed since the seventh pass**, so no new completion work entered the
   archive. The pass retired SA162's roadmap entry — its closure evidence is the entry below and
