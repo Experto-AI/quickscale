@@ -4,6 +4,46 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-25, eleventh pass).** **No ticket closed and
+  no audit finding closed since the tenth pass**, so no new completion work entered the archive.
+  The pass finished applying the open-work-only policy without exception: **SA124's retained
+  checked completion marker was removed from `docs/technical/roadmap.md`**, so the roadmap now
+  carries zero checked entries and holds open work only. SA124's closure evidence — the strict
+  `scripts/sa117_scope.json` authority, the six maintained consumers, the AST-aware structural
+  negative probe, the direct/Make parity results, and the full ordered closeout command list —
+  remains in the SA124 entry below and is the sole record of that work. Merge position #11 stays
+  retired and is not reused. The purpose statement, the execution rules, and the `make quality`
+  baseline bullet were restated without the retained-marker exception and without ticket-name
+  references to archived work. `quickscale_core/tests/test_v88_ticket_context_consistency.py` was
+  updated to match: `RETAINED_CLOSED_TICKETS` is now empty and the checked-entry assertion message
+  states the open-work-only rule; the unexpected-checked-entry canary continues to enforce it
+  (20 tests passing). The open queue is unchanged at **thirteen open v88 ticket entries across
+  twelve open merge positions** — SA124 was already excluded from those counts.
+  **In-flight state recorded, not just availability.** W1 carries SA167b P3 as four unmerged
+  worktree commits (shared adapter manifest contracts plus auth, orgs, and storage adapters) with
+  the `entry_point.py` drain still in the working tree; W3 carries SA142 as an uncommitted change
+  across the E2E runner, the parallel runner, `Dockerfile.j2`/`docker-compose.yml.j2`, the CLI
+  docker/project utilities and their suites, and the SA90 emission fixture, on a worktree base
+  several merges behind `v88`. Both facts are now stated on their tickets and in the track table,
+  together with the sync-before-merge-back requirement and the reminder that SA142's rebaseline
+  must append a `baseline_evidence` entry to
+  `quickscale_core/tests/fixtures/sa90_emission_manifests.json` rather than replace prior ones.
+  **Rebalance outcome: no track moves, eleventh consecutive pass.** Every open ticket carries a
+  worktree; none lacks one. W2 remains irreducible at five open legs — SA123, SA166, and SA164 all
+  own `scripts/gate_registry.json`, which never crosses worktrees, and SA118 then SA167c must
+  rewrite `quickscale_modules/*/module.yml` on that same lane. The **SA161 (#19) + SA160 (#20)
+  W3→W1** candidate was re-tested and rejected for the fourth time: neither is on or feeding the
+  critical path, and moving them would spread the SA90 emission fixture across three lanes because
+  SA142 cannot follow them off the Docker slot. The critical path is unchanged at
+  `SA123 → SA118 → SA167c`, three serialized W2 legs. **W1 and W3 are truly green and in flight;
+  both are off the critical path. W2 is blocked before implementation.**
+  **One maintainer decision is open** — SA123's `scripts/test_gate_parity.py` scope authority. It
+  was expanded from two options to three (narrow authority; split SA123 into local-then-hosted
+  with the hosted wiring moved to SA135+SA163; reverse the merge order) with pros, cons, and a
+  recorded recommendation of narrow authority, which unblocks W2's *can start* and *can finish* in
+  one step. Every other blocker (SA135+SA163 behind SA142, SA164 behind SA166) remains a hard
+  upstream dependency that only the upstream work can clear.
+
 - **SA124 — SA117 scope-tool authority unified and terminally closed (2026-08-25).**
   `scripts/sa117_scope.json` is the strict authority for the ordered allowlist, mode/profile
   inputs, help facts, and declared consumers. The six maintained consumers are

@@ -2,8 +2,8 @@
 
 The roadmap is the sole home for schedulable metadata.  The context page may explain
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
-holds open work only except for the single user-required retained SA124 completion marker.
-Completed tickets are otherwise archived in the changelog.  The shared SA167 umbrella may still
+holds open work only and carries no checked entry.  Completed tickets are archived in the
+changelog.  The shared SA167 umbrella may still
 explain the archived SA167a handoff as settled tree state.
 """
 
@@ -38,7 +38,7 @@ SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
 UMBRELLA_TITLE = "SA167a / SA167b / SA167c / SA167d — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167b", "SA167c", "SA167d"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
-RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset({"SA124"})
+RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset()
 ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a"})
 SHARED_POSITION_GROUPS = {frozenset({"SA135", "SA163"})}
 
@@ -90,7 +90,7 @@ def _roadmap_tickets(text: str) -> dict[str, TicketMetadata]:
     closed = set(CLOSED_ENTRY_RE.findall(text))
     if closed != set(RETAINED_CLOSED_TICKETS):
         raise AssertionError(
-            "checked roadmap tickets do not match the retained completion marker: "
+            "checked roadmap tickets are not permitted; the roadmap holds open work only: "
             f"expected={sorted(RETAINED_CLOSED_TICKETS)}, actual={sorted(closed)}"
         )
     open_entries = OPEN_ENTRY_RE.findall(text)
