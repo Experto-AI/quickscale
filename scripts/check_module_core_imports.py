@@ -21,7 +21,7 @@ Reverse direction (SA89b):
 
 Exit codes:
     0 — all imports respect the bidirectional core↔module boundary
-    1 — one or more boundary violations found
+    1 — one or more boundary violations or source inspection failures found
 """
 
 from __future__ import annotations
@@ -125,13 +125,33 @@ class _ModulesImportLinterVisitor(ast.NodeVisitor):
             self.violations.append((node.lineno, node.module))
 
 
-def _check_core_source(source_dir: Path) -> dict[Path, list[tuple[int, str]]]:
+class _ScanResults(dict[Path, list[tuple[int, str]]]):
+    """Boundary violations plus fail-closed source inspection failures."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failures: list[tuple[Path, str]] = []
+
+
+def _parse_source_file(py_file: Path, results: _ScanResults) -> ast.AST | None:
+    try:
+        source = py_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        results.failures.append((py_file, f"read failed: {exc}"))
+        return None
+    try:
+        return ast.parse(source, filename=str(py_file))
+    except SyntaxError as exc:
+        results.failures.append((py_file, f"AST parse failed: {exc}"))
+        return None
+
+
+def _check_core_source(source_dir: Path) -> _ScanResults:
     """Scan *source_dir* for quickscale_modules import violations in core code."""
-    results: dict[Path, list[tuple[int, str]]] = {}
+    results = _ScanResults()
     for py_file in sorted(source_dir.rglob("*.py")):
-        try:
-            tree = ast.parse(py_file.read_text(encoding="utf-8"))
-        except SyntaxError:
+        tree = _parse_source_file(py_file, results)
+        if tree is None:
             continue
         visitor = _ModulesImportLinterVisitor()
         visitor.visit(tree)
@@ -140,19 +160,17 @@ def _check_core_source(source_dir: Path) -> dict[Path, list[tuple[int, str]]]:
     return results
 
 
-def _check_module_source(source_dir: Path, module_name: str) -> dict[Path, list[tuple[int, str]]]:
+def _check_module_source(source_dir: Path, module_name: str) -> _ScanResults:
     """
     Scan *source_dir* for quickscale_core import violations.
 
     Returns a mapping from file path to list of ``(lineno, import_path)``
     tuples for every disallowed import found.
     """
-    results: dict[Path, list[tuple[int, str]]] = {}
+    results = _ScanResults()
     for py_file in sorted(source_dir.rglob("*.py")):
-        try:
-            tree = ast.parse(py_file.read_text(encoding="utf-8"))
-        except SyntaxError:
-            # Skip files with syntax errors (unlikely in a healthy repo)
+        tree = _parse_source_file(py_file, results)
+        if tree is None:
             continue
         visitor = _CoreImportLinterVisitor(module_name)
         visitor.visit(tree)
@@ -181,6 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     modules_root = (repo_root / MODULES_DIR_RELATIVE).resolve()
 
     all_violations: list[tuple[str, Path, int, str]] = []  # (context, file, lineno, import_path)
+    scan_failures: list[tuple[Path, str]] = []
 
     modules_root_found = modules_root.is_dir()
     if modules_root_found:
@@ -194,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
 
             mod_name = mod_dir.name
             violations_by_file = _check_module_source(src_dir, mod_name)
+            scan_failures.extend(violations_by_file.failures)
 
             if not violations_by_file:
                 continue
@@ -222,6 +242,7 @@ def main(argv: list[str] | None = None) -> int:
     core_src_found = core_src.is_dir()
     if core_src_found:
         reverse_violations = _check_core_source(core_src)
+        scan_failures.extend(reverse_violations.failures)
         if reverse_violations:
             _header_printed = False
             for py_file, violations in sorted(reverse_violations.items()):
@@ -242,8 +263,11 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
+    for py_file, failure in scan_failures:
+        print(f"ERROR: Unable to inspect {py_file}: {failure}", file=sys.stderr)
+
     total = len(all_violations)
-    if total == 0 and modules_root_found and core_src_found:
+    if total == 0 and not scan_failures and modules_root_found and core_src_found:
         print(
             "All imports respect the core↔module boundary:\n"
             "  • Module code imports only from the public runtime facades.\n"
@@ -262,6 +286,12 @@ def main(argv: list[str] | None = None) -> int:
     if not modules_root_found or not core_src_found:
         print(
             "ERROR: One or more required scan roots were not found; "
+            "gate cannot verify the boundary.",
+            file=sys.stderr,
+        )
+    if scan_failures:
+        print(
+            f"ERROR: {len(scan_failures)} source file(s) could not be inspected; "
             "gate cannot verify the boundary.",
             file=sys.stderr,
         )

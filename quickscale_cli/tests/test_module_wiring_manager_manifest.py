@@ -579,6 +579,22 @@ class TestRegenerateManagedWiringFailHard:
             f"analytics options, but it failed. Message: {message}"
         )
 
+    def test_invalid_backups_target_mode_fails_through_regenerate(
+        self, tmp_path: Path
+    ) -> None:
+        """CLI regeneration must not silently rewrite an unsupported mode."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"backups": {}})
+
+        success, message = regenerate_managed_wiring(
+            project,
+            module_names=["backups"],
+            option_overrides={"backups": {"target_mode": "unsupported"}},
+        )
+
+        assert success is False
+        assert "modules.backups.target_mode must be one of" in message
+
 
 class TestRegenerateManagedWiringSkipManifestNotFound:
     """SA18.2 regression (CR-SA18.2-003): when _has_real_manifests is True,
@@ -751,6 +767,30 @@ class TestRegenerateManagedWiringPriorBasePath:
             assert settings_modules.exists()
             content = settings_modules.read_text()
             assert "quickscale_modules_billing" in content
+        finally:
+            _md._modules_base_path = original_override
+
+    def test_monorepo_resolution_source_is_restored_after_success(
+        self, tmp_path: Path
+    ) -> None:
+        """A transient regeneration must not turn MONOREPO into OVERRIDE."""
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts.module_discovery import ModuleResolutionSource
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        original_override = _md._modules_base_path
+        try:
+            _md._modules_base_path = None
+            assert _md.get_resolution_source() is ModuleResolutionSource.MONOREPO
+
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+
+            assert success, message
+            assert _md._modules_base_path is None
+            assert _md.get_resolution_source() is ModuleResolutionSource.MONOREPO
         finally:
             _md._modules_base_path = original_override
 

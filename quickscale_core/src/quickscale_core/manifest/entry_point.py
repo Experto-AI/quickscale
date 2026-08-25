@@ -43,7 +43,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import sys
-from typing import Any
+from typing import Any, cast
 
 from quickscale_core.contracts.module_discovery import get_modules_base_path
 from quickscale_core.manifest.assembler import (
@@ -195,6 +195,62 @@ MANIFEST_ADAPTER_REGISTRY: dict[
 MANAGED_ADAPTER_ORIGINS: set[str] = set()
 
 
+def _is_package_module(module_name: str, package_name: str) -> bool:
+    return module_name == package_name or module_name.startswith(f"{package_name}.")
+
+
+def _snapshot_package_modules(package_name: str) -> dict[str, Any]:
+    return {
+        name: module
+        for name, module in sys.modules.items()
+        if _is_package_module(name, package_name)
+    }
+
+
+def _evict_package_modules(package_name: str) -> None:
+    for name in list(sys.modules):
+        if _is_package_module(name, package_name):
+            sys.modules.pop(name, None)
+
+
+def _load_managed_adapter(module_name: str) -> Callable[..., ModuleWiringSpec]:
+    """Load one adapter from the active base without leaking import state."""
+    import importlib  # noqa: PLC0415
+
+    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        ImproperlyConfigured,
+    )
+
+    package_name = f"quickscale_modules_{module_name}"
+    adapter_name = f"{package_name}.adapter"
+    adapter_src_path = get_modules_base_path() / module_name / "src"
+    original_sys_path = sys.path.copy()
+    original_package_modules = _snapshot_package_modules(package_name)
+    try:
+        _evict_package_modules(package_name)
+        if adapter_src_path.is_dir():
+            sys.path.insert(0, str(adapter_src_path))
+        importlib.invalidate_caches()
+        adapter_module = importlib.import_module(adapter_name)
+        sentinel = getattr(adapter_module, "get_manifest_adapter", None)
+        if sentinel is None:
+            raise ImproperlyConfigured(
+                f"Managed adapter for '{module_name}' not importable: "
+                f"{adapter_name} has no get_manifest_adapter function."
+            )
+        return cast(Callable[..., ModuleWiringSpec], sentinel())
+    except ImportError as exc:
+        raise ImproperlyConfigured(
+            f"Managed adapter for '{module_name}' not importable: "
+            f"{adapter_name} could not be loaded. "
+            f"The module package must be installed and importable."
+        ) from exc
+    finally:
+        sys.path[:] = original_sys_path
+        _evict_package_modules(package_name)
+        sys.modules.update(original_package_modules)
+
+
 def refresh_managed_adapters() -> None:
     """
     Refresh managed adapter entries in :data:`MANIFEST_ADAPTER_REGISTRY`
@@ -230,11 +286,7 @@ def refresh_managed_adapters() -> None:
         ImproperlyConfigured: If a managed module's manifest is found at the
             active base path but its Python adapter package is not importable.
     """
-    import importlib  # noqa: PLC0415
-    import importlib.util  # noqa: PLC0415
-
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
-        ImproperlyConfigured,
         discover_shipped_module_names,
     )
 
@@ -248,51 +300,11 @@ def refresh_managed_adapters() -> None:
         if module_name not in shipped_at_base:
             continue
 
-        # Module has a manifest at the active base path — the module-owned
-        # adapter MUST be importable.  Fail hard if it is not.
-        try:
-            adapter_module = importlib.import_module(
-                f"quickscale_modules_{module_name}.adapter"
-            )
-        except ImportError as exc:
-            package_name = f"quickscale_modules_{module_name}"
-            package_root_importable = package_name in sys.modules or (
-                importlib.util.find_spec(package_name) is not None
-            )
-            adapter_src_path = get_modules_base_path() / module_name / "src"
-
-            if package_root_importable or not adapter_src_path.is_dir():
-                raise ImproperlyConfigured(
-                    f"Managed adapter for '{module_name}' not importable: "
-                    f"quickscale_modules_{module_name}.adapter could not be loaded. "
-                    f"The module package must be installed and importable."
-                ) from exc
-
-            original_sys_path = sys.path.copy()
-            try:
-                sys.path.insert(0, str(adapter_src_path))
-                adapter_module = importlib.import_module(
-                    f"quickscale_modules_{module_name}.adapter"
-                )
-            except ImportError as retry_exc:
-                raise ImproperlyConfigured(
-                    f"Managed adapter for '{module_name}' not importable: "
-                    f"quickscale_modules_{module_name}.adapter could not be loaded. "
-                    f"The module package must be installed and importable."
-                ) from retry_exc
-            finally:
-                sys.path[:] = original_sys_path
-
-        sentinel = getattr(adapter_module, "get_manifest_adapter", None)
-        if sentinel is not None:
-            loaded_adapters[module_name] = sentinel()
-            continue
-
-        raise ImproperlyConfigured(
-            f"Managed adapter for '{module_name}' not importable: "
-            f"quickscale_modules_{module_name}.adapter has no "
-            f"get_manifest_adapter function."
-        )
+        # Module has a manifest at the active base path — load its adapter from
+        # that exact source context.  Import state is transactional: neither a
+        # successful nor a failed probe may leave package entries cached for a
+        # later project/base-path refresh.
+        loaded_adapters[module_name] = _load_managed_adapter(module_name)
 
     # Commit only after the complete managed set resolved successfully.  Dict
     # identity and custom entries are preserved while unavailable managed

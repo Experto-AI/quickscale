@@ -28,7 +28,9 @@ def _backups_manifest_adapter(
     naming_prefix = str(resolved.get("naming_prefix", "db")).strip() or "db"
     target_mode = str(resolved.get("target_mode", "local")).strip().lower()
     if target_mode not in {"local", "private_remote"}:
-        target_mode = "local"
+        raise ValueError(
+            "modules.backups.target_mode must be one of: local, private_remote"
+        )
 
     access_key_id_env_var = str(
         resolved.get(BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION, "")

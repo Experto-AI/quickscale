@@ -1348,6 +1348,121 @@ def get_manifest_adapter():
                 sys.modules[package_name] = original_package
             sys.path[:] = original_sys_path
 
+    def test_distinct_embedded_bases_load_their_own_adapter_without_cache_leakage(
+        self, tmp_path: Path
+    ) -> None:
+        """Each base executes its own adapter and leaves ``sys.modules`` exact."""
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        module_name = "_test_sa146_distinct_bases"
+        package_name = f"quickscale_modules_{module_name}"
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_base = get_modules_base_path()
+        original_sys_path = sys.path.copy()
+        original_package_modules = {
+            name: module
+            for name, module in sys.modules.items()
+            if name == package_name or name.startswith(f"{package_name}.")
+        }
+
+        def _adapter_source(marker: str) -> str:
+            return f'''from quickscale_core.module_wiring import ModuleWiringSpec
+
+
+def _adapter(options, **kwargs):
+    return ModuleWiringSpec(settings={{"SOURCE_MARKER": "{marker}"}})
+
+
+def get_manifest_adapter():
+    return _adapter
+'''
+
+        try:
+            first_base = tmp_path / "first" / "modules"
+            second_base = tmp_path / "second" / "modules"
+            self._write_embedded_module(
+                first_base, module_name, _adapter_source("first")
+            )
+            self._write_embedded_module(
+                second_base, module_name, _adapter_source("second")
+            )
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.add(module_name)
+
+            set_modules_base_path(first_base)
+            refresh_managed_adapters()
+            first_adapter = MANIFEST_ADAPTER_REGISTRY[module_name]
+            assert first_adapter({}).settings["SOURCE_MARKER"] == "first"
+
+            set_modules_base_path(second_base)
+            refresh_managed_adapters()
+            second_adapter = MANIFEST_ADAPTER_REGISTRY[module_name]
+            assert second_adapter({}).settings["SOURCE_MARKER"] == "second"
+            assert first_adapter({}).settings["SOURCE_MARKER"] == "first"
+            assert sys.path == original_sys_path
+            assert {
+                name: module
+                for name, module in sys.modules.items()
+                if name == package_name or name.startswith(f"{package_name}.")
+            } == original_package_modules
+        finally:
+            self._restore_state(
+                original_registry, original_origins, original_base, module_name
+            )
+            sys.path[:] = original_sys_path
+
+    def test_failed_embedded_import_restores_relevant_sys_modules_exactly(
+        self, tmp_path: Path
+    ) -> None:
+        """A failed source probe restores prior package objects and entries."""
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            ImproperlyConfigured,
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        module_name = "_test_sa146_sys_modules_failure"
+        package_name = f"quickscale_modules_{module_name}"
+        child_name = f"{package_name}.prior"
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_base = get_modules_base_path()
+        original_sys_path = sys.path.copy()
+        prior_package = ModuleType(package_name)
+        prior_child = ModuleType(child_name)
+        try:
+            modules_dir = tmp_path / "modules"
+            self._write_embedded_module(
+                modules_dir,
+                module_name,
+                "raise ImportError('broken source context')\n",
+            )
+            sys.modules[package_name] = prior_package
+            sys.modules[child_name] = prior_child
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.add(module_name)
+            set_modules_base_path(modules_dir)
+
+            with pytest.raises(ImproperlyConfigured, match="not importable"):
+                refresh_managed_adapters()
+
+            assert sys.modules[package_name] is prior_package
+            assert sys.modules[child_name] is prior_child
+            assert f"{package_name}.adapter" not in sys.modules
+            assert sys.path == original_sys_path
+        finally:
+            self._restore_state(
+                original_registry, original_origins, original_base, module_name
+            )
+            sys.modules.pop(child_name, None)
+            sys.path[:] = original_sys_path
+
 
 # ---------------------------------------------------------------------------
 # SA18.2: Fail-hard on empty-after-resolution analytics manifest settings.

@@ -7,7 +7,9 @@ from typing import Any, Mapping
 
 from quickscale_core.contracts.module_discovery import (
     ImproperlyConfigured,
+    ModuleResolutionSource,
     get_modules_base_path,
+    get_resolution_source,
     set_modules_base_path,
 )
 from quickscale_core.manifest.entry_point import (
@@ -137,11 +139,14 @@ def _load_and_merge_module_options(
     return module_options, None
 
 
-def _get_prior_modules_base_path() -> Path | None:
+def _get_prior_modules_base_path() -> tuple[Path | None, bool]:
     try:
-        return get_modules_base_path()
+        return (
+            get_modules_base_path(),
+            get_resolution_source() is ModuleResolutionSource.OVERRIDE,
+        )
     except ImproperlyConfigured:
-        return None
+        return None, False
 
 
 def _has_embedded_manifests(project_path: Path) -> bool:
@@ -259,10 +264,11 @@ def _write_wiring_files(
 
 def _restore_modules_context(
     prior_base_path: Path | None,
+    prior_base_path_was_override: bool,
     prior_registry: Mapping[str, Any],
 ) -> None:
     """Restore the exact modules base and registry state from before regeneration."""
-    set_modules_base_path(prior_base_path)
+    set_modules_base_path(prior_base_path if prior_base_path_was_override else None)
     MANIFEST_ADAPTER_REGISTRY.clear()
     MANIFEST_ADAPTER_REGISTRY.update(prior_registry)
 
@@ -304,9 +310,10 @@ def regenerate_managed_wiring(
         return _write_wiring_files(project_path, package_name, {})
 
     prior_base_path: Path | None = None
+    prior_base_path_was_override = False
     prior_registry = dict(MANIFEST_ADAPTER_REGISTRY)
     try:
-        prior_base_path = _get_prior_modules_base_path()
+        prior_base_path, prior_base_path_was_override = _get_prior_modules_base_path()
         error = _prepare_modules_base_path(project_path, prior_base_path)
         if error is not None:
             return False, error
@@ -319,4 +326,8 @@ def regenerate_managed_wiring(
         assert specs is not None
         return _write_wiring_files(project_path, package_name, specs)
     finally:
-        _restore_modules_context(prior_base_path, prior_registry)
+        _restore_modules_context(
+            prior_base_path,
+            prior_base_path_was_override,
+            prior_registry,
+        )
