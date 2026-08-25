@@ -35,10 +35,13 @@ def test_private_remote_defaults_credential_references() -> None:
     )
 
 
-def test_unsupported_target_mode_falls_back_to_local() -> None:
-    spec = _backups_manifest_adapter({"target_mode": "unsupported"})
-
-    assert spec.settings["QUICKSCALE_BACKUPS_TARGET_MODE"] == "local"
+@pytest.mark.parametrize("target_mode", ["unsupported", "remote", "", None])
+def test_unsupported_target_mode_is_rejected(target_mode: object) -> None:
+    with pytest.raises(
+        ValueError,
+        match="modules.backups.target_mode must be one of: local, private_remote",
+    ):
+        _backups_manifest_adapter({"target_mode": target_mode})
 
 
 @pytest.mark.parametrize("target_mode", ["LOCAL", " local "])
