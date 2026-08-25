@@ -139,9 +139,11 @@ The manifest-reading `entry_point.py`, the fail-hard `QUICKSCALE_LOCAL_WHEELHOUS
 seam, and the regenerated migration baseline are all merged tree state that open tickets build
 on, not pending dependencies.
 
-**Parallelism result:** all three lanes have an executable implementation action today. W2 is
-ready to start SA123 (#13), W3 is released to start SA142 (#10), and W1's head is SA167b (#17),
-which is now ungated and may start immediately.
+**Parallelism result:** W1 and W3 have executable implementation actions today. W3 is released to
+start SA142 (#10), and W1's head is SA167b (#17), which is ungated and may start immediately. W2's
+SA123 (#13) implementation is paused at its pre-edit authority gate: the reviewed plan requires
+narrow SA123-coupled updates to `scripts/test_gate_parity.py`, while the ownership rule below says
+that no open W2 ticket touches that file.
 
 **No track moves this pass.** Every open ticket carries a worktree; none lacks one. One
 candidate was re-tested against the ordering rule and rejected again: moving **SA161 (#19) and
@@ -178,7 +180,7 @@ all on W2. Shared closeout surfaces (`CHANGELOG.md`,
 `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`, and both audit docs)
 remain covered by the standing sync-before-merge-back procedure.
 
-### Track readiness (reconciled 2026-08-25, ninth pass)
+### Track readiness (reconciled 2026-08-25, tenth pass)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes. The queue and track states below were re-tested for rebalance opportunities (none
@@ -186,15 +188,16 @@ taken — see above).
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W2** | SA123 (#13) | **yes** — SA124 is closed and its prerequisite surface is settled tree state | **yes** — the SA123 gate work remains entirely W2-owned | **yes** — #13 is the queue head for W2 | **truly green — next critical-path leg** |
+| **W2** | SA123 (#13) | **no** — pre-edit scope review found a required coupled test outside SA123's current authority | **no** — `scripts/test_gate_parity.py` ownership must be resolved first | **yes, after the authority gate** — #13 remains the W2 queue head | **blocked on maintainer scope decision** |
 | **W1** | SA167b P3 (#17) | **yes** — P1 is accepted and P2 implementation plus split suites are accepted; the exact P2 grouped command had a collection-only harness collision | **yes** — the remaining auth/orgs/storage relocation and later integration closeout remain W1-owned | **yes** — #17 remains W1's open queue head | **truly green — partial implementation reusable** |
 | **W3** | SA142 (#10) | **yes** — `deps: none` and the Docker lane is released | **yes** — the image lifecycle work remains entirely W3-owned | **yes** — #10 is W3's queue head | **truly green** |
 
-**All three tracks are truly green.** Of the three executable next actions, only one is on the
-critical path:
+**W1 and W3 are truly green; W2 is blocked before implementation.** Neither currently executable
+action is on the critical path:
 
-- **W2 / SA123 (#13) — truly green and on the critical path.** This is the next real
-  release-date action; it heads the remaining spine.
+- **W2 / SA123 (#13) — blocked and on the critical path.** Discovery and the mandatory reviewed
+  plan are reusable, but no implementation began. Resolve the `scripts/test_gate_parity.py`
+  authority conflict recorded on the ticket before restarting.
 - **W3 / SA142 (#10) — truly green, off the critical path.** The Docker-backed second chain is
   released. Closing SA142 will release SA135+SA163 (#15).
 - **W1 / SA167b P3 (#17) — truly green, off the critical path.** P1 and the P2
@@ -204,6 +207,7 @@ critical path:
 
 | Ticket | Blocked state | Blocking ticket | Clearable by a maintainer decision? |
 |---|---|---|---|
+| SA123 (#13) | can start · can finish — **no** | scope authority for `scripts/test_gate_parity.py` | **Yes** — authorize the narrow SA123-coupled expectations or provide an alternative that keeps the unchanged suite green. |
 | SA135 + SA163 (#15) | can start — **no** | SA142 (#10) | No — hard dependency behind SA142. |
 | SA164 (#25) | can start · can finish — no | SA166 (#24) | No — W2 ordering must clear. |
 
@@ -211,17 +215,26 @@ critical path:
 
 - **W1 — continue SA167b at P3 (#17).** Preserve the accepted P1/P2 facade and
   module-owned adapters while relocating auth, orgs, and storage.
-- **W2 — start SA123 (#13).** The head of the critical path, gated by nothing.
+- **W2 — hold SA123 (#13).** Keep the worktree free for this critical-path head until the
+  coupled-test ownership decision is recorded; then resume from its reusable plan.
 - **W3 — start SA142 (#10).** The Docker slot is free and the clean-break migration baseline is
   settled tree state.
 
 #### Open maintainer decisions
 
-**None.** Every remaining blocker in this plan is a hard upstream dependency that only the
-upstream work can clear; none of them can be cleared by a maintainer choice. The decisions that
-were open are settled and archived in [CHANGELOG.md](../../CHANGELOG.md); roadmap documentation
-ownership is **Option A** — the roadmap holds open work only, and completed work is archived
-rather than marked done.
+**SA123 coupled-test authority is open.** Adding the ticket's two hosted scanner gates changes
+generator/parity expectations in `scripts/test_gate_parity.py`, but the ownership rule at
+[Shared conflict surfaces](#shared-conflict-surfaces) reserves that file to SA135+SA163 and says no
+open W2 ticket touches it. Before SA123 implementation starts, choose and record one of:
+
+1. authorize SA123/W2 to update only the hosted-job, `needs`, publish/E2E, and generator
+   expectations directly coupled to its two new gates, leaving generic parity-checker semantics
+   unchanged; or
+2. provide an authoritative alternative that keeps the unchanged 12-job/six-bound-job assertions
+   green after both hosted gates are added.
+
+Roadmap documentation ownership remains **Option A** — the roadmap holds open work only, and
+completed work is archived rather than marked done.
 
 **One standing operating constraint, not a decision:** the local database-lane ownership flip —
 whichever of `make test-integration` and `make test-bypassrls` is about to run must own the
@@ -251,7 +264,8 @@ exact reviewed tip.
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #11, #12, #14, and #23 are **retired and not
 reused**; the tickets that held them are closed and archived in
 [CHANGELOG.md](../../CHANGELOG.md). Gaps in the numbering are expected and carry no meaning.
-Positions #10, #13, and #17 are queue heads gated by nothing.
+Positions #10, #13, and #17 are queue heads. #10 and #17 are gated by nothing; #13 is held at the
+SA123 scope-authority gate recorded above.
 
 Band-C positions (19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. Any of them may slip
 past the release without blocking it; none may displace a band-A or band-B leg.
@@ -323,6 +337,48 @@ Conceptual background, mental models, and implementation notes for **every** tic
 - [ ] **SA123 — Add dependency-vulnerability and security static-analysis gates.** `Band B · Tier 2 · W2 · merge #13 · deps: none · blocks SA118`
   Add blocking dependency and focused security scanners with reviewed suppressions; register every new gate through the authoritative gate registry.
   **Acceptance:** a dependency-vulnerability scanner and a focused security static-analysis scanner run as blocking gates; both are registered in `scripts/gate_registry.json` and pass `scripts/check_gate_parity.py`; every suppression carries a written rationale and an owner; the gates fail on a deliberately introduced known-vulnerable pin and on a deliberately introduced flagged pattern, both reverted before merge; `make quality` is no worse than found.
+  **Planning checkpoint (2026-08-25; keep this ticket open):** W2 was clean at
+  `22860e52e0009d8c44e557d8811505b52e19f423` after merging `v88`. Repository discovery and
+  authoritative tool research completed; the reviewed design selects pinned `pip-audit` and
+  Bandit gates, audits both committed lock projects, rejects native/unaccountable suppressions,
+  and uses an exact owner/rationale/decision/expiry ledger. No scanner dependency, gate, test,
+  workflow, product, or environment change was made, and no implementation validation ran.
+  Mandatory plan review stopped before Phase A because adding two hosted gates necessarily changes
+  SA123-coupled 12-to-14 hosted-job and six-to-eight `test`-barrier expectations in
+  `scripts/test_gate_parity.py`, while the current ownership rule reserves that file to
+  SA135+SA163 and forbids W2 from touching it. The maintainer chose to stop this pass without
+  authorizing either resolution; the decision under [Open maintainer decisions](#open-maintainer-decisions)
+  must be recorded before implementation.
+  **Reusable pending handoff (all phases serial; do not skip the authority gate):**
+  1. **G-001 — scope authority:** authorize only SA123-coupled expectation updates in
+     `scripts/test_gate_parity.py`, or replace the wiring phase with an approved alternative that
+     leaves that file green unchanged. Reconfirm a clean W2 worktree after merging current `v88`;
+     the prior rollback object above is historical evidence, not a future-session base.
+  2. **A-contract — scanner contract:** modify only root `pyproject.toml`/`poetry.lock` and add
+     `scripts/check_security_gates.py`, `scripts/security_suppressions.json`,
+     `scripts/security_probe_cases.json`, and `scripts/test_security_gates.py`. Keep
+     `quickscale_core/poetry.lock` and all member manifests read-only. Observe the installed scanner
+     CLIs before freezing arguments; fail closed if either committed lock cannot be audited
+     lock-natively. Pre-capture `make quality`; require focused wrapper tests, both clean scans, and
+     temporary known-advisory/B602 probes that arm cleanup before creating inputs and finish clean.
+  3. **B-wiring — every caller:** update `Makefile`, `scripts/gate_registry.json`, local runner
+     labels, hosted generator/catalog, generated CI/E2E regions, hand-maintained publish calls, and
+     coupled local/parity tests. `scripts/check_gate_parity.py` remains read-only. If G-001 grants
+     the narrow option, `scripts/test_gate_parity.py` may change only for SA123's hosted jobs,
+     `needs`, run values, publish/E2E paths, and generator expectations. Require public gate targets,
+     parity, generation, and gate-suite checks to exit 0.
+  4. **C-acceptance — no tracked edits:** run both normal gates; the negative-control target;
+     `make check-gate-parity`; `make check-ci-gate-generation`; `make check-gate-suites`;
+     `make lint`; `make typecheck`; `make check`; and `make quality`. Preserve exact exits and
+     scanner/probe identities; quality must be no worse than the Phase A capture.
+  5. **D-closeout:** only after all acceptance evidence passes, align decisions, validation,
+     reviewer/operator, audit, context, roadmap, and changelog documentation. Remove SA123 under
+     the open-work-only policy rather than adding a second checked marker; do not claim merge or
+     publication before it occurs.
+  6. **Post-sync verification and merge:** the maintainer syncs current `v88` into W2, freezes the
+     resulting exact tree, reruns the complete Phase C commands with no tracked edits, then sends
+     that settled delta through convergence review and terminal attestation. Merge only the exact
+     reviewed tip into `v88`; any changed outcome or scope decision stops the handoff.
 
 - [ ] **SA118 — Project every declared manifest default into wiring.** `Band B · Tier 2 · W2 · merge #16 · deps: SA123 · blocks SA167c`
   Materialize authoritative declared defaults without widening into the full imperative-to-declarative migration; rebaseline emission parity with per-file rationale.
