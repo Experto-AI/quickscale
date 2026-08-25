@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 
+import scripts.check_sa117_scope as checker
 from scripts.verify_sa117_publication import (
     _compute_scope_digest,
     _make_evidence,
@@ -31,6 +32,13 @@ from scripts.verify_sa117_publication import (
     op_rollback,
     op_verify,
 )
+
+
+def _scope_contract() -> dict[str, Any]:
+    """Reuse the production contract while varying only fixture path facts."""
+    source = pathlib.Path(__file__).with_name("sa117_scope.json")
+    return json.loads(source.read_text(encoding="utf-8"))["contract"]
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -58,10 +66,12 @@ def valid_scope_file() -> pathlib.Path:
     json.dump(
         {
             "version": "1.0.0",
+            "description": "fixture",
             "paths": [
                 {"path": "scripts/foo.py", "phase": "1", "notes": ""},
                 {"path": "scripts/bar.py", "phase": "1", "notes": ""},
             ],
+            "contract": _scope_contract(),
         },
         tmp,
     )
@@ -259,6 +269,41 @@ class TestOpCapture:
         evidence = json.loads(files[0].read_bytes())
         assert evidence["paths_count"] == 2  # our fixture has 2
 
+    def test_capture_uses_strict_loader_without_module_discovery(
+        self,
+        valid_scope_file: pathlib.Path,
+        evidence_dir: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def discovery_must_not_run(*args: object, **kwargs: object) -> list[str]:
+            raise AssertionError("module discovery is not part of publication capture")
+
+        monkeypatch.setattr(checker, "_authoritative_module_names", discovery_must_not_run)
+        assert (
+            op_capture(
+                version="0.87.0",
+                phase="1",
+                scope_path=valid_scope_file,
+                evidence_dir=evidence_dir,
+            )
+            == 0
+        )
+        evidence_file = next(evidence_dir.glob("sa117_evidence_*.json"))
+        assert op_verify(evidence_path=evidence_file, scope_path=valid_scope_file) == 0
+
+    def test_capture_rejects_malformed_scope_contract(self, evidence_dir: pathlib.Path) -> None:
+        malformed = evidence_dir / "malformed-scope.json"
+        malformed.write_text('{"paths": []}', encoding="utf-8")
+        assert (
+            op_capture(
+                version="0.87.0",
+                phase="1",
+                scope_path=malformed,
+                evidence_dir=evidence_dir,
+            )
+            == 2
+        )
+
 
 # ---------------------------------------------------------------------------
 # op_verify
@@ -308,7 +353,9 @@ class TestOpVerify:
         json.dump(
             {
                 "version": "2.0",
+                "description": "fixture",
                 "paths": [{"path": "other.py", "phase": "1", "notes": ""}],
+                "contract": _scope_contract(),
             },
             tmp2,
         )

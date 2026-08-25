@@ -12,13 +12,23 @@ import pytest
 import scripts.check_sa117_scope as sa117_scope
 from scripts.check_sa117_scope import (
     _LOCKED_MODULE_PACKAGES,
+    _build_parser,
     _expected_inventory,
     _normalise,
+    _tokenise_make_paths,
     _validate_no_nul,
+    load_scope,
     mode_lock,
     mode_verify_lock_diff,
     mode_worktree,
 )
+
+
+def _scope_document(paths: list[dict[str, str]]) -> dict[str, object]:
+    """Build a fixture document with the production contract declaration."""
+    source = pathlib.Path(__file__).with_name("sa117_scope.json")
+    contract = json.loads(source.read_text(encoding="utf-8"))["contract"]
+    return {"version": "1.0.0", "description": "fixture", "paths": paths, "contract": contract}
 
 
 def _lock(version: str, *, content_hash: str = "stable", duplicate: bool = False) -> str:
@@ -113,11 +123,57 @@ class TestLegacyPathModes:
 
     def test_worktree_and_lock_modes_remain_available(self, tmp_path: pathlib.Path) -> None:
         scope = tmp_path / "scope.json"
-        scope.write_text(json.dumps({"paths": [{"path": "Makefile"}]}), encoding="utf-8")
+        scope.write_text(
+            json.dumps(_scope_document([{"path": "Makefile", "phase": "1", "notes": ""}])),
+            encoding="utf-8",
+        )
         assert mode_worktree(scope, paths=["Makefile"]) == 0
         assert mode_worktree(scope, paths=["extra.txt"]) == 1
         assert mode_lock(scope, paths=["Makefile"]) == 0
         assert mode_lock(scope, paths=[]) == 1
+
+
+class TestRequiredInputContract:
+    def test_contract_drives_mode_profiles_and_rejects_malformed_shape(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        scope = tmp_path / "scope.json"
+        scope.write_text(
+            json.dumps(_scope_document([{"path": "Makefile", "phase": "1", "notes": ""}])),
+            encoding="utf-8",
+        )
+        assert mode_worktree(scope, paths=None, profile="make") == 2
+        document = json.loads(scope.read_text(encoding="utf-8"))
+        del document["contract"]["modes"]["worktree"]["profiles"]
+        scope.write_text(json.dumps(document), encoding="utf-8")
+        assert mode_worktree(scope, paths=["Makefile"]) == 2
+
+    def test_make_paths_are_tokenized_as_data_and_nul_is_rejected(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        scope = tmp_path / "scope.json"
+        scope.write_text(
+            json.dumps(
+                _scope_document([{"path": "scripts/space name.py", "phase": "1", "notes": ""}])
+            ),
+            encoding="utf-8",
+        )
+        assert _tokenise_make_paths(["'scripts/space name.py' '$() `x` ; [x]'"]) == [
+            "scripts/space name.py",
+            "$() `x` ; [x]",
+        ]
+        assert mode_worktree(scope, paths=["'scripts/space name.py'"], profile="make") == 0
+        assert mode_worktree(scope, paths=["bad\x00path"], profile="make") == 2
+
+    def test_parser_exposes_all_contract_modes_without_duplicate_authority(self) -> None:
+        parser = _build_parser()
+        assert set(parser._subparsers._group_actions[0].choices) == {
+            "worktree",
+            "emit",
+            "lock",
+            "lock-diff",
+        }
+        assert len(load_scope()) == 106
 
 
 class TestInventoryContract:
@@ -146,6 +202,23 @@ class TestInventoryContract:
         assert "quickscale_core/src/quickscale_core/data/manifests/reports/module.yml" in paths
         assert "quickscale_modules/teams/module.yml" not in paths
         assert len(paths) == 59
+
+    def test_lock_diff_fails_closed_when_lazy_discovery_is_unavailable(
+        self,
+        version_fixture: dict[str, pathlib.Path | str],
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def discovery_fails(*args: object, **kwargs: object) -> list[str]:
+            raise sa117_scope.LockDiffError("synthetic discovery failure")
+
+        monkeypatch.setattr(sa117_scope, "_authoritative_module_names", discovery_fails)
+        output = tmp_path / "evidence.json"
+        output.write_text("stale", encoding="utf-8")
+        assert _run_fixture(version_fixture, output) == 2
+        # Discovery failed before the checker could prove that stale output is
+        # disjoint from every dynamically discovered inventory path.
+        assert output.read_text(encoding="utf-8") == "stale"
 
     def test_complete_a_to_b_fixture_is_clean_and_non_tautological(
         self, version_fixture: dict[str, pathlib.Path | str], tmp_path: pathlib.Path

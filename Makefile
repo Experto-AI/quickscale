@@ -233,18 +233,7 @@ help:
 	@echo "  make check-gate-parity            - SA122a: verify declared gates match every execution context (exit 0 = parity, 1 = JSONL diffs)"
 	@echo "  make check-ci-gate-generation     - SA122b: verify registry-bound hosted CI jobs are generated and current"
 	@echo ""
-	@echo "SA117 scope / publication / apply gates:"
-	@echo "  make sa117-check PATHS='...'      - Scope-guard: compare candidate changed paths against baseline (SCRIPTS_ONLY=1)"
-	@echo "  make sa117-emit                   - Emit scope allowlist paths (PHASE=name to filter)"
-	@echo "  make sa117-lock PATHS='...'       - Lock check: verify candidate paths match allowlist exactly"
-	@echo "  make sa117-lock-diff              - Fail-closed poetry.lock drift proof (SA117_BASELINE_REF required)"
-	@echo "  make sa117-capture VERSION=0.87.0 PHASE=final - Capture publication evidence"
-	@echo "  make sa117-verify EVIDENCE=path   - Verify publication evidence"
-	@echo "  make sa117-authorize VERSION=X DIGEST=D - Authorize a publication"
-	@echo "  make sa117-rollback TOKEN=T DIGEST=D - Rollback a prior authorization"
-	@echo "  make sa117-apply MODULE=M TARGET=T EXEC=E ARGV=A - Execute and verify a module apply"
-	@echo "  make sa117-check-origin MODULE=M DECLARED=O EXPECTED=E - Check origin map consistency"
-	@echo "  make sa117-check-containers TARGET=T - Check for zero container/volume configuration"
+	@$(PYTHON) scripts/check_sa117_scope.py --render-make-help --profile make
 	@echo ""
 	@echo "Version Management:"
 	@echo "  make version-check        - Verify VERSION matches all pyproject.toml files"
@@ -1013,29 +1002,26 @@ check-ci-gate-generation:
 # explicitly as a space-separated list.  Add SCRIPTS_ONLY=1 for Phase 1
 # backward compat.
 sa117-check:
-	@if [ -z "$(PATHS)" ]; then \
-		echo "Error: PATHS is required (space-separated list of changed files)."; \
-		echo "  e.g. make sa117-check PATHS='scripts/foo.py Makefile'"; \
-		exit 1; \
-	fi
-	@$(PYTHON) scripts/check_sa117_scope.py worktree \
-		--paths $(PATHS) \
-		$(if $(SCRIPTS_ONLY),--scripts-only,)
+	@set -e; \
+	paths=$(call shell_quote,$(value PATHS)); \
+	$(PYTHON) scripts/check_sa117_scope.py --profile make worktree \
+		$(if $(value PATHS),--paths "$$paths",) \
+		$(if $(value SCRIPTS_ONLY),--scripts-only,)
 
 # Emit allowlist paths (optionally filtered by PHASE).
 sa117-emit:
-	@$(PYTHON) scripts/check_sa117_scope.py emit $(if $(PHASE),--phase $(PHASE),)
+	@set -e; \
+	phase=$(call shell_quote,$(value PHASE)); \
+	$(PYTHON) scripts/check_sa117_scope.py --profile make emit \
+		$(if $(value PHASE),--phase "$$phase",)
 
 # Lock check: verify candidate paths match allowlist exactly.
 sa117-lock:
-	@if [ -z "$(PATHS)" ]; then \
-		echo "Error: PATHS is required (space-separated list)."; \
-		echo "  e.g. make sa117-lock PATHS='scripts/foo.py Makefile'"; \
-		exit 1; \
-	fi
-	@$(PYTHON) scripts/check_sa117_scope.py lock \
-		--paths $(PATHS) \
-		$(if $(SCRIPTS_ONLY),--scripts-only,)
+	@set -e; \
+	paths=$(call shell_quote,$(value PATHS)); \
+	$(PYTHON) scripts/check_sa117_scope.py --profile make lock \
+		$(if $(value PATHS),--paths "$$paths",) \
+		$(if $(value SCRIPTS_ONLY),--scripts-only,)
 
 # SA117c lock-drift proof. The candidate is always the supplied repository-root
 # poetry.lock; the checker derives its root from that path and requires it to
@@ -1047,23 +1033,18 @@ SA117_EXPECTED_VERSION ?= $(VERSION)
 SA117_EVIDENCE ?= /tmp/sa117-lock-diff-evidence.json
 
 sa117-lock-diff:
-	@if [ -z "$(SA117_BASELINE_REF)" ]; then \
-		echo "Error: SA117_BASELINE_REF is required (full or resolvable Git commit ref)."; \
-		exit 2; \
-	fi
-	@if [ -z "$(SA117_EXPECTED_VERSION)" ]; then \
-		echo "Error: SA117_EXPECTED_VERSION is required (defaults to VERSION)."; \
-		exit 2; \
-	fi
 	@set -e; \
-	root="$(CURDIR)"; \
-	candidate="$(SA117_CANDIDATE)"; \
+	root=$(call shell_quote,$(value CURDIR)); \
+	baseline_ref=$(call shell_quote,$(value SA117_BASELINE_REF)); \
+	candidate=$(call shell_quote,$(value SA117_CANDIDATE)); \
+	expected_version=$(call shell_quote,$(value SA117_EXPECTED_VERSION)); \
+	evidence=$(call shell_quote,$(value SA117_EVIDENCE)); \
 	cd "$$root"; \
-	$(PYTHON) "$$root/scripts/check_sa117_scope.py" lock-diff \
-		--baseline-ref "$(SA117_BASELINE_REF)" \
+	$(PYTHON) "$$root/scripts/check_sa117_scope.py" --profile make lock-diff \
+		$(if $(value SA117_BASELINE_REF),--baseline-ref "$$baseline_ref",) \
 		--candidate "$$candidate" \
-		--expected-version "$(SA117_EXPECTED_VERSION)" \
-		--output "$(SA117_EVIDENCE)"
+		$(if $(value SA117_EXPECTED_VERSION),--expected-version "$$expected_version",) \
+		--output "$$evidence"
 
 # Capture publication evidence.
 sa117-capture:
