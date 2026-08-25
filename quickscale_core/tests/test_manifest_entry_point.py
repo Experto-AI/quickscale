@@ -55,6 +55,9 @@ from quickscale_modules_auth.adapter import (
 from quickscale_modules_orgs.adapter import (
     get_manifest_adapter as get_orgs_manifest_adapter,
 )
+from quickscale_modules_storage.adapter import (
+    get_manifest_adapter as get_storage_manifest_adapter,
+)
 from quickscale_modules_blog.adapter import _blog_post_hook
 from quickscale_modules_forms.adapter import _forms_post_hook
 from quickscale_modules_listings.adapter import _listings_post_hook
@@ -2128,6 +2131,63 @@ class TestSA167bRelocationParity:
             {},
             {"mode": "solo"},
             {"mode": "SAAS"},
+        )
+        for options in repeated_options:
+            old_kind, old_value = self._invoke(core_adapter, dict(options))
+            new_kind, new_value = self._invoke(module_adapter, dict(options))
+            assert (new_kind, new_value) == (old_kind, old_value), options
+
+    def test_storage_module_adapter_matches_core(self) -> None:
+        """Compare the storage sentinel with the inline core oracle."""
+        core_adapter = entry_point_module._storage_manifest_adapter
+        module_adapter = get_storage_manifest_adapter()
+        matrix = [
+            {},
+            {"backend": "local"},
+            {"backend": "s3", "bucket_name": "bucket", "region_name": "us-east-1"},
+            {
+                "backend": "r2",
+                "bucket_name": "bucket",
+                "endpoint_url": "https://account.r2.cloudflarestorage.com",
+                "region_name": "auto",
+                "private_media_enabled": True,
+            },
+            {
+                "backend": "s3",
+                "bucket_name": "bucket",
+                "access_key_id_env_var": "CUSTOM_ACCESS",
+                "secret_access_key_env_var": "CUSTOM_SECRET",
+                "querystring_auth": True,
+            },
+            {
+                "backend": "s3",
+                "media_url": " /uploads ",
+                "public_base_url": " https://cdn.example.com/ ",
+                "bucket_name": " ",
+                "endpoint_url": " ",
+                "region_name": " ",
+                "default_acl": " ",
+            },
+            {"backend": "invalid"},
+            {"backend": "s3", "access_key_id_env_var": "AKIA1234567890123456"},
+            {"backend": "s3", "secret_access_key_env_var": "literal-secret"},
+            {
+                "backend": "s3",
+                "access_key_id": "AKIA1234567890123456",
+                "secret_access_key": "literal-secret",
+            },
+        ]
+
+        for options in matrix:
+            old_kind, old_value = self._invoke(core_adapter, dict(options))
+            new_kind, new_value = self._invoke(module_adapter, dict(options))
+            assert (new_kind, new_value) == (old_kind, old_value), options
+
+        repeated_options = (
+            {"backend": "s3", "bucket_name": "s3-bucket"},
+            {},
+            {"backend": "r2", "bucket_name": "r2-bucket", "endpoint_url": "https://r2"},
+            {"backend": "local"},
         )
         for options in repeated_options:
             old_kind, old_value = self._invoke(core_adapter, dict(options))
