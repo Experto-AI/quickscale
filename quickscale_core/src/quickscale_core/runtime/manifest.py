@@ -31,15 +31,26 @@ from quickscale_core.contracts.module_options import (
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LINK_TREE_PATH,
 )
+from quickscale_core.contracts.module_options import (
+    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+)
 
 # ---------------------------------------------------------------------------
 # Social-manifest surface: resolver
 # ---------------------------------------------------------------------------
 from quickscale_core.contracts.resolvers import (
+    resolve_auth_module_options,
     notifications_runtime_email_backend,
     resolve_backups_module_options,
     resolve_notifications_module_options,
+    resolve_orgs_module_options,
     resolve_social_module_options,
+    resolve_storage_module_options,
+    validate_orgs_module_options,
+    validate_storage_module_options,
 )
 
 # ---------------------------------------------------------------------------
@@ -72,15 +83,24 @@ __all__ = [
     "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
     "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
     "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
+    "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
+    "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
     "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
+    "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+    "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
     # Manifest/resolver types
     "ResolverResult",
     "assemble_wiring_spec",
     "build_generic_manifest_spec",
     "ManifestError",
+    "resolve_auth_module_options",
     "notifications_runtime_email_backend",
     "resolve_backups_module_options",
     "resolve_notifications_module_options",
+    "resolve_orgs_module_options",
+    "resolve_storage_module_options",
+    "validate_orgs_module_options",
+    "validate_storage_module_options",
     # Social-manifest path constants
     "SOCIAL_EMBEDS_PATH",
     "SOCIAL_INTEGRATION_BASE_PATH",

@@ -8,11 +8,15 @@ the eagerly-imported DR surface satisfies the Caller-Parity Pass contract.
 from __future__ import annotations
 
 from inspect import isclass, isfunction
+import os
+import subprocess
+import sys
 
 import pytest
 
 from quickscale_core import runtime
 from quickscale_core.runtime import dr as runtime_dr
+from quickscale_core.runtime import manifest as runtime_manifest
 
 
 # ===================================================================
@@ -119,6 +123,22 @@ class TestRuntimeAllExport:
             f"Missing social symbols: {social_symbols - set(runtime.__all__)}"
         )
 
+    def test_all_contains_manifest_adapter_contract_surface(self) -> None:
+        adapter_symbols = {
+            "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
+            "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
+            "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+            "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+            "resolve_auth_module_options",
+            "resolve_orgs_module_options",
+            "resolve_storage_module_options",
+            "validate_orgs_module_options",
+            "validate_storage_module_options",
+        }
+        assert adapter_symbols.issubset(runtime.__all__), (
+            f"Missing manifest adapter symbols: {adapter_symbols - set(runtime.__all__)}"
+        )
+
     def test_all_no_unexpected_symbols(self) -> None:
         """Each symbol in ``__all__`` is accounted for in the known surface.
 
@@ -140,6 +160,8 @@ class TestRuntimeAllExport:
             "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
             "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
             "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
+            "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
+            "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
             "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
             "PersistedBackupArtifact",
             "PersistedBackupPolicy",
@@ -156,6 +178,8 @@ class TestRuntimeAllExport:
             "SOCIAL_INTEGRATION_EMBEDS_PATH",
             "SOCIAL_LINK_TREE_PATH",
             "ShellCommandRunner",
+            "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+            "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
             "StagedAdminRestoreUpload",
             "_cleanup_admin_restore_upload_directory",
             "_get_authoritative_snapshot_for_artifact",
@@ -199,6 +223,9 @@ class TestRuntimeAllExport:
             "resolve_social_module_options",
             "resolve_backups_module_options",
             "resolve_notifications_module_options",
+            "resolve_auth_module_options",
+            "resolve_orgs_module_options",
+            "resolve_storage_module_options",
             "restore_admin_uploaded_backup",
             "restore_backup_artifact",
             "restore_backup_source",
@@ -212,6 +239,8 @@ class TestRuntimeAllExport:
             "sync_media",
             "update_artifact_after_restore",
             "validate_backup_artifact",
+            "validate_orgs_module_options",
+            "validate_storage_module_options",
         }
         actual = set(runtime.__all__)
         assert actual == expected, (
@@ -306,6 +335,27 @@ class TestRuntimeSymbolTypes:
     def test_resolve_social_module_options_is_callable(self) -> None:
         assert callable(runtime.resolve_social_module_options)
 
+    def test_manifest_adapter_contracts_are_callable(self) -> None:
+        for name in (
+            "resolve_auth_module_options",
+            "resolve_orgs_module_options",
+            "resolve_storage_module_options",
+            "validate_orgs_module_options",
+            "validate_storage_module_options",
+        ):
+            assert callable(getattr(runtime, name)), f"runtime.{name} is not callable"
+
+    def test_storage_environment_contracts_are_strings(self) -> None:
+        for name in (
+            "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
+            "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
+            "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+            "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+        ):
+            assert isinstance(getattr(runtime, name), str), (
+                f"runtime.{name} is not a string"
+            )
+
     # ------------------------------------------------------------------
     # Persistence surface types
     # ------------------------------------------------------------------
@@ -374,12 +424,177 @@ class TestRuntimeImportable:
             "set_rollback_pin",
             "social_provider_supports_embeds",
             "sync_media",
+            "resolve_auth_module_options",
+            "resolve_orgs_module_options",
+            "resolve_storage_module_options",
+            "validate_orgs_module_options",
+            "validate_storage_module_options",
         ],
     )
     def test_symbol_accessible(self, symbol_name: str) -> None:
         assert hasattr(runtime, symbol_name), f"runtime.{symbol_name} is not accessible"
         assert getattr(runtime, symbol_name) is not None, (
             f"runtime.{symbol_name} is None"
+        )
+
+
+class TestManifestFacade:
+    """Verify the paired manifest and root runtime facade contracts."""
+
+    _CONTRACT_NAMES = (
+        "ModuleWiringSpec",
+        "ResolverResult",
+        "assemble_wiring_spec",
+        "build_generic_manifest_spec",
+        "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR",
+        "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
+        "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+        "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+        "resolve_auth_module_options",
+        "resolve_orgs_module_options",
+        "resolve_storage_module_options",
+        "validate_orgs_module_options",
+        "validate_storage_module_options",
+    )
+
+    def test_manifest_exports_only_public_contract_names(self) -> None:
+        assert all(not name.startswith("_") for name in runtime_manifest.__all__)
+        assert set(runtime_manifest.__all__) <= {
+            name for name in dir(runtime_manifest) if not name.startswith("_")
+        }
+
+    def test_canonical_identity_through_both_facades(self) -> None:
+        from quickscale_core.contracts import module_options, resolvers
+        from quickscale_core.manifest import assembler, entry_point, resolver
+        from quickscale_core import module_wiring
+
+        canonical = {
+            "ModuleWiringSpec": module_wiring,
+            "ResolverResult": resolver,
+            "assemble_wiring_spec": assembler,
+            "build_generic_manifest_spec": entry_point,
+            "DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR": module_options,
+            "DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR": module_options,
+            "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION": module_options,
+            "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION": module_options,
+            "resolve_auth_module_options": resolvers,
+            "resolve_orgs_module_options": resolvers,
+            "resolve_storage_module_options": resolvers,
+            "validate_orgs_module_options": resolvers,
+            "validate_storage_module_options": resolvers,
+        }
+        for name in self._CONTRACT_NAMES:
+            canonical_obj = getattr(canonical[name], name)
+            assert getattr(runtime_manifest, name) is canonical_obj
+            assert getattr(runtime, name) is canonical_obj
+
+    def test_direct_import_and_getattr_are_paired(self) -> None:
+        from quickscale_core.runtime import (
+            ModuleWiringSpec,
+            ResolverResult,
+            assemble_wiring_spec,
+            build_generic_manifest_spec,
+            DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+            DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+            STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+            STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+            resolve_auth_module_options,
+            resolve_orgs_module_options,
+            resolve_storage_module_options,
+            validate_orgs_module_options,
+            validate_storage_module_options,
+        )
+        from quickscale_core.runtime.manifest import (
+            ModuleWiringSpec as manifest_wiring_spec,
+            ResolverResult as manifest_resolver_result,
+            assemble_wiring_spec as manifest_assembler,
+            build_generic_manifest_spec as manifest_generic_builder,
+            DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR as manifest_access_key,
+            DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR as manifest_secret_key,
+            STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION as manifest_access_option,
+            STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION as manifest_secret_option,
+            resolve_auth_module_options as manifest_auth_resolver,
+            resolve_orgs_module_options as manifest_orgs_resolver,
+            resolve_storage_module_options as manifest_storage_resolver,
+            validate_orgs_module_options as manifest_orgs_validator,
+            validate_storage_module_options as manifest_storage_validator,
+        )
+
+        root_values = (
+            ModuleWiringSpec,
+            ResolverResult,
+            assemble_wiring_spec,
+            build_generic_manifest_spec,
+            DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
+            DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
+            STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+            STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+            resolve_auth_module_options,
+            resolve_orgs_module_options,
+            resolve_storage_module_options,
+            validate_orgs_module_options,
+            validate_storage_module_options,
+        )
+        manifest_values = (
+            manifest_wiring_spec,
+            manifest_resolver_result,
+            manifest_assembler,
+            manifest_generic_builder,
+            manifest_access_key,
+            manifest_secret_key,
+            manifest_access_option,
+            manifest_secret_option,
+            manifest_auth_resolver,
+            manifest_orgs_resolver,
+            manifest_storage_resolver,
+            manifest_orgs_validator,
+            manifest_storage_validator,
+        )
+        assert root_values == manifest_values
+
+    def test_dir_exposes_contracts_without_loading_dr(self) -> None:
+        assert set(self._CONTRACT_NAMES).issubset(set(dir(runtime_manifest)))
+        assert set(self._CONTRACT_NAMES).issubset(set(runtime.__dir__()))
+
+    def test_manifest_contract_access_is_lazy_with_respect_to_dr(self) -> None:
+        core_src = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "src",
+        )
+        code = (
+            "import sys\n"
+            f"sys.path.insert(0, {core_src!r})\n"
+            "from quickscale_core import runtime\n"
+            "assert 'quickscale_core.runtime.dr' not in sys.modules\n"
+            "from quickscale_core.runtime import manifest\n"
+            "assert 'quickscale_core.runtime.dr' not in sys.modules\n"
+            "names = (\n"
+            "    'ModuleWiringSpec',\n"
+            "    'ResolverResult',\n"
+            "    'assemble_wiring_spec',\n"
+            "    'build_generic_manifest_spec',\n"
+            "    'resolve_auth_module_options',\n"
+            "    'resolve_orgs_module_options',\n"
+            "    'resolve_storage_module_options',\n"
+            "    'validate_orgs_module_options',\n"
+            "    'validate_storage_module_options',\n"
+            ")\n"
+            "for name in names:\n"
+            "    assert getattr(manifest, name) is getattr(runtime, name)\n"
+            "assert 'quickscale_core.runtime.dr' not in sys.modules\n"
+            "assert set(names).issubset(set(dir(runtime)))\n"
+            "assert 'quickscale_core.runtime.dr' not in sys.modules\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, (
+            f"Manifest facade loaded runtime.dr (rc={result.returncode}):\n"
+            f"stdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
         )
 
 
