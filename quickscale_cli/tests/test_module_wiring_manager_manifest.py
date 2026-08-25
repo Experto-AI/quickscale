@@ -53,6 +53,26 @@ def _write_minimal_project(
     )
 
 
+def _write_complete_embedded_inventory(
+    project_path: Path, *, exclude: set[str] | None = None
+) -> None:
+    """Copy the shipped manifest inventory into an embedded test project."""
+    source_root = Path(__file__).resolve().parents[2] / "quickscale_modules"
+    excluded = exclude or set()
+    for module_name in sorted(
+        path.name
+        for path in source_root.iterdir()
+        if path.is_dir()
+        and (path / "module.yml").is_file()
+        and path.name not in excluded
+    ):
+        target = project_path / "modules" / module_name
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "module.yml").write_text(
+            (source_root / module_name / "module.yml").read_text()
+        )
+
+
 class TestRegenerateManagedWiringManifestPath:
     """Phase 3: regeneration routes through the manifest adapter registry."""
 
@@ -60,6 +80,7 @@ class TestRegenerateManagedWiringManifestPath:
         """A registered module (analytics) should be built via the manifest path."""
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        _write_complete_embedded_inventory(project)
 
         success, message = regenerate_managed_wiring(
             project, module_names=["analytics"]
@@ -216,6 +237,7 @@ class TestRegenerateManagedWiringSkipUnknown:
         """Known discovered modules should be wired; unknown ones skipped."""
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        _write_complete_embedded_inventory(project)
 
         # Create modules/ with both a known and unknown module.
         # The known module must have a valid module.yml since the base path
@@ -226,7 +248,7 @@ class TestRegenerateManagedWiringSkipUnknown:
             / "analytics"
             / "module.yml"
         )
-        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics").mkdir(parents=True, exist_ok=True)
         (project / "modules" / "analytics" / "module.yml").write_text(
             analytics_yml.read_text()
         )
@@ -242,6 +264,7 @@ class TestRegenerateManagedWiringSkipUnknown:
         """Discovery from modules/ should skip entries without a manifest adapter."""
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        _write_complete_embedded_inventory(project)
 
         # Create a modules/ directory with both a known and unknown module.
         # The known module must have a valid module.yml since the base path
@@ -252,7 +275,7 @@ class TestRegenerateManagedWiringSkipUnknown:
             / "analytics"
             / "module.yml"
         )
-        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics").mkdir(parents=True, exist_ok=True)
         (project / "modules" / "analytics" / "module.yml").write_text(
             analytics_yml.read_text()
         )
@@ -357,6 +380,7 @@ class TestRegenerateManagedWiringEmbeddedNoMonorepo:
 
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        _write_complete_embedded_inventory(project)
 
         # Create an embedded analytics module with a real module.yml
         analytics_yml = (
@@ -365,7 +389,7 @@ class TestRegenerateManagedWiringEmbeddedNoMonorepo:
             / "analytics"
             / "module.yml"
         )
-        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics").mkdir(parents=True, exist_ok=True)
         (project / "modules" / "analytics" / "module.yml").write_text(
             analytics_yml.read_text()
         )
@@ -442,6 +466,7 @@ class TestRegenerateManagedWiringAdapterFailure:
 
             project = tmp_path / "myapp"
             _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+            _write_complete_embedded_inventory(project, exclude={"analytics"})
 
             # Create an embedded module.yml for the missing module so
             # _has_real_manifests is True and refresh_managed_adapters
@@ -630,14 +655,8 @@ class TestRegenerateManagedWiringSkipManifestNotFound:
         (project / "modules" / "blog").mkdir(parents=True)
 
         success, message = regenerate_managed_wiring(project)
-        assert success, f"regenerate_managed_wiring failed: {message}"
-        assert "regenerated" in message.lower()
-
-        # Verify analytics wiring was still written (blog was silently skipped).
-        settings_modules = project / "myapp" / "settings" / "modules.py"
-        assert settings_modules.exists()
-        content = settings_modules.read_text()
-        assert "quickscale_modules_analytics" in content
+        assert success is False
+        assert "inventory count drift" in message
 
     def test_forwarded_registered_module_without_manifest_still_succeeds(
         self, tmp_path: Path
@@ -665,12 +684,8 @@ class TestRegenerateManagedWiringSkipManifestNotFound:
         success, message = regenerate_managed_wiring(
             project, module_names=["analytics", "blog"]
         )
-        assert success, f"regenerate_managed_wiring failed: {message}"
-        assert "regenerated" in message.lower()
-
-        # Verify analytics wiring was written.
-        content = (project / "myapp" / "settings" / "modules.py").read_text()
-        assert "quickscale_modules_analytics" in content
+        assert success is False
+        assert "inventory count drift" in message
 
 
 class TestRegenerateManagedWiringPriorBasePath:
@@ -810,9 +825,10 @@ class TestRegenerateManagedWiringVersionMismatch:
         """An embedded module with version < core must be rejected."""
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        _write_complete_embedded_inventory(project)
 
         # Create an embedded analytics module with an old version.
-        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics").mkdir(parents=True, exist_ok=True)
         (project / "modules" / "analytics" / "module.yml").write_text(
             'name: analytics\nversion: "0.86.0"\n'
         )
@@ -837,6 +853,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         """A module whose version matches core must still succeed."""
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        _write_complete_embedded_inventory(project)
 
         # Use the real analytics module.yml from the repository.
         analytics_yml = (
@@ -845,7 +862,7 @@ class TestRegenerateManagedWiringVersionMismatch:
             / "analytics"
             / "module.yml"
         )
-        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics").mkdir(parents=True, exist_ok=True)
         (project / "modules" / "analytics" / "module.yml").write_text(
             analytics_yml.read_text()
         )
@@ -868,9 +885,10 @@ class TestRegenerateManagedWiringVersionMismatch:
                 "auth": {},
             },
         )
+        _write_complete_embedded_inventory(project)
 
         # analytics has version 0.86.0 (will be processed first in sorted order).
-        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics").mkdir(parents=True, exist_ok=True)
         (project / "modules" / "analytics" / "module.yml").write_text(
             'name: analytics\nversion: "0.86.0"\n'
         )
@@ -881,7 +899,7 @@ class TestRegenerateManagedWiringVersionMismatch:
             / "auth"
             / "module.yml"
         )
-        (project / "modules" / "auth").mkdir(parents=True)
+        (project / "modules" / "auth").mkdir(parents=True, exist_ok=True)
         (project / "modules" / "auth" / "module.yml").write_text(auth_yml.read_text())
 
         with patch(
@@ -909,9 +927,6 @@ class TestRegenerateManagedWiringVersionMismatch:
         _write_minimal_project(project)
 
         (project / "modules" / "nonexistent").mkdir(parents=True)
-        (project / "modules" / "nonexistent" / "module.yml").write_text(
-            'name: nonexistent\nversion: "0.86.0"\n'
-        )
 
         success, message = regenerate_managed_wiring(
             project, module_names=["nonexistent"]
@@ -933,8 +948,9 @@ class TestRegenerateManagedWiringVersionMismatch:
         must be rejected before any wiring is built."""
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        _write_complete_embedded_inventory(project)
 
-        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics").mkdir(parents=True, exist_ok=True)
         (project / "modules" / "analytics" / "module.yml").write_text(
             'name: analytics\nversion: "0.87.00"\n'
         )
@@ -961,8 +977,9 @@ class TestRegenerateManagedWiringVersionMismatch:
         """A manifest with whitespace-padded version must be rejected."""
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        _write_complete_embedded_inventory(project)
 
-        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics").mkdir(parents=True, exist_ok=True)
         (project / "modules" / "analytics" / "module.yml").write_text(
             'name: analytics\nversion: " 0.87.0 "\n'
         )
