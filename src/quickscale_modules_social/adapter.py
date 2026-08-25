@@ -164,6 +164,15 @@ def _social_manifest_apps(social_manifest: Any) -> tuple[str, ...]:
     contract is missing or malformed rather than allowing a second Python-side
     declaration to drift from ``module.yml``.
     """
+    error_prefix = "Invalid social manifest apps projection"
+    projection = _select_social_manifest_apps_projection(social_manifest, error_prefix)
+    return _validate_social_manifest_apps_projection(projection, error_prefix)
+
+
+def _select_social_manifest_apps_projection(
+    social_manifest: Any, error_prefix: str
+) -> dict[str, Any]:
+    """Select the sole apps projection, ignoring unrelated manifest entries."""
     raw_projections = getattr(social_manifest, "wiring_projections", None)
     projections = (
         [
@@ -175,13 +184,18 @@ def _social_manifest_apps(social_manifest: Any) -> tuple[str, ...]:
         else []
     )
 
-    error_prefix = "Invalid social manifest apps projection"
     if len(projections) != 1:
         raise ValueError(
             f"{error_prefix}: expected exactly one projection, found {len(projections)}"
         )
 
-    projection = projections[0]
+    return projections[0]
+
+
+def _validate_social_manifest_apps_projection(
+    projection: dict[str, Any], error_prefix: str
+) -> tuple[str, ...]:
+    """Validate the selected apps projection and preserve its declared order."""
     if projection.get("derivation_type") != "static":
         raise ValueError(f"{error_prefix}: projection must be static")
 
