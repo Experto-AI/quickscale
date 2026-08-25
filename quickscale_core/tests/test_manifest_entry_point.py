@@ -29,7 +29,6 @@ from pathlib import Path
 import sys
 from types import ModuleType
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 
@@ -793,7 +792,17 @@ class TestManagedAdapterProvenance:
     """
 
     _MANAGED_MODULES = frozenset(
-        {"analytics", "billing", "blog", "crm", "forms", "listings", "social"}
+        {
+            "analytics",
+            "backups",
+            "billing",
+            "blog",
+            "crm",
+            "forms",
+            "listings",
+            "notifications",
+            "social",
+        }
     )
 
     def _available_managed(self) -> frozenset[str]:
@@ -826,6 +835,8 @@ class TestManagedAdapterProvenance:
             "social": "quickscale_modules_social/adapter.py",
             "billing": "quickscale_modules_billing/adapter.py",
             "crm": "quickscale_modules_crm/adapter.py",
+            "backups": "quickscale_modules_backups/adapter.py",
+            "notifications": "quickscale_modules_notifications/adapter.py",
         }
         available = self._available_managed()
         if not available:
@@ -1608,45 +1619,6 @@ class TestFormsPostHookFailHard:
         result = _forms_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.settings["FORMS_PER_PAGE"] == 25
-
-
-class TestNotificationsPostHookFailHard:
-    """Notifications derived_settings use direct access instead of .get() defaults (SA42).
-
-    The notifications post-hook is nested inside _notifications_manifest_adapter
-    and not directly importable.  We verify through the full adapter path:
-    the existing integration test (test_notifications_adapter_returns_spec) proves
-    the happy path still works.  The code change from .get(key, default) to
-    settings[key] means any missing required setting will now raise KeyError
-    instead of silently defaulting.
-    """
-
-    def test_notifications_adapter_returns_spec(self) -> None:
-        """Notifications adapter still produces a valid spec (SA42 happy path)."""
-        spec = build_manifest_wiring_spec("notifications", {})
-        assert isinstance(spec, ModuleWiringSpec)
-        assert "quickscale_modules_notifications" in spec.apps
-        assert spec.settings.get("QUICKSCALE_NOTIFICATIONS_ENABLED") is True
-
-    def test_notifications_missing_enabled_raises_key_error(self) -> None:
-        """A missing QUICKSCALE_NOTIFICATIONS_ENABLED raises KeyError (SA42)."""
-        import quickscale_core.manifest.resolver as _resolver_mod
-
-        _original = _resolver_mod._project_all_derived_settings
-
-        def _strip_enabled(schema: Any, resolved: dict[str, Any]) -> dict[str, Any]:
-            result = _original(schema, resolved)
-            if schema.module_name == "notifications":
-                result.pop("QUICKSCALE_NOTIFICATIONS_ENABLED", None)
-            return result
-
-        with patch.object(
-            _resolver_mod,
-            "_project_all_derived_settings",
-            side_effect=_strip_enabled,
-        ):
-            with pytest.raises(KeyError, match="QUICKSCALE_NOTIFICATIONS_ENABLED"):
-                build_manifest_wiring_spec("notifications", {})
 
 
 _SA167A_MANIFEST_APPS: dict[str, tuple[str, ...]] = {

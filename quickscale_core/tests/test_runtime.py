@@ -101,6 +101,11 @@ class TestRuntimeAllExport:
             "SOCIAL_INTEGRATION_EMBEDS_PATH",
             "SOCIAL_LINK_TREE_PATH",
             "ModuleWiringSpec",
+            "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+            "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+            "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
+            "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
+            "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
             "ResolverResult",
             "assemble_wiring_spec",
             "load_social_manifest",
@@ -131,6 +136,11 @@ class TestRuntimeAllExport:
             "BackupPolicySnapshot",
             "BackupRestoreBlocked",
             "ModuleWiringSpec",
+            "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+            "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+            "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
+            "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
+            "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
             "PersistedBackupArtifact",
             "PersistedBackupPolicy",
             "PersistedBackupSnapshot",
@@ -175,6 +185,7 @@ class TestRuntimeAllExport:
             "iter_expired_unlinked_artifacts",
             "load_default_policy",
             "load_social_manifest",
+            "notifications_runtime_email_backend",
             "prune_expired_backups",
             "refresh_snapshot",
             "record_backup_snapshot_verification",
@@ -186,6 +197,8 @@ class TestRuntimeAllExport:
             "report_backup_snapshot",
             "resolve_admin_uploaded_restore_artifact",
             "resolve_social_module_options",
+            "resolve_backups_module_options",
+            "resolve_notifications_module_options",
             "restore_admin_uploaded_backup",
             "restore_backup_artifact",
             "restore_backup_source",
@@ -257,6 +270,19 @@ class TestRuntimeSymbolTypes:
 
     def test_generic_manifest_surface_is_callable(self) -> None:
         assert callable(runtime.build_generic_manifest_spec)
+
+    def test_relocated_adapter_manifest_surface_is_accessible(self) -> None:
+        for name in (
+            "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+            "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+            "DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR",
+            "DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR",
+            "NOTIFICATIONS_LIVE_EMAIL_BACKEND",
+            "notifications_runtime_email_backend",
+            "resolve_backups_module_options",
+            "resolve_notifications_module_options",
+        ):
+            assert hasattr(runtime, name), f"runtime.{name} is not accessible"
 
     def test_manifest_error_is_exception_class(self) -> None:
         assert issubclass(runtime.ManifestError, Exception)
