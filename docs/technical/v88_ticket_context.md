@@ -12,7 +12,7 @@ roadmap disagree, the roadmap wins.
 
 Read the roadmap ticket first, then the section here.
 
-It covers the **sixteen open v88 ticket entries** across fifteen open merge positions
+It covers the **fifteen open v88 ticket entries** across fourteen open merge positions
 (SA163 executes inside SA135) plus the three post-v88 entries. Closed tickets are not
 described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
 Sections are ordered by merge band (A → B → C), which is also the order in which the work
@@ -272,45 +272,9 @@ Its `baseline_evidence` entries show the established convention — each past re
 
 W3 holds the **exclusive PostgreSQL/Docker slot** for the release. Only one of these legs may be active at a time across all worktrees, and W3 takes scheduling priority while a leg is running — even though W2, not W3, is now the longest dependency chain. The two remaining lifecycle tickets ask the same question: *who owns the lifecycle of a thing we create?*
 
-## SA151 — Recreate module migrations as clean initial schemas
-
-`Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · partial checkpoint retained`
-
-### The mental model
-
-QuickScale is pre-1.0 and deliberately does not promise backward-compatible database upgrades
-between releases. The migration history is therefore not a product artifact to preserve: each
-module should expose one clean, current `0001_initial` schema, and a new generated project should
-apply those migrations to an empty database without guessing or silently skipping a module.
-
-### What the retained checkpoint proves
-
-The checkpoint regenerated one `0001_initial.py` for each of the ten model-bearing modules and
-removed the stale `0002`–`0005` backups migrations. The source-derived topology guard covers all
-twelve shipped AppConfigs, the ten model-bearing modules, analytics/storage as service-style
-exceptions, and the non-shipped `teams` placeholder. Its 41 focused tests include fail-closed,
-no-execution canaries for migration-base, model-form, AppConfig class-alias, subscript,
-nested-attribute identity drift, and spoofed, rebound, decorated, or multiple-base AppConfig
-provenance. The generated-project proof independently checks every runtime
-AppConfig `name` and `label` against `quickscale_modules_<module>`, derives expected migration labels
-from that oracle, installs all modules into a fresh PostgreSQL 18 database under a restricted
-`NOSUPERUSER NOBYPASSRLS NOINHERIT` role, and passed with 1 test and 0 skips. The retained broad
-integration, type, E2E, `make check`, and accepted `make quality` evidence is archived in
-[CHANGELOG.md](../../CHANGELOG.md).
-
-### Why the ticket remains open
-
-That evidence is a retained **partial checkpoint**, not closure. The former F-006–F-009 guard,
-census, audit, and docs-hub findings are corrected. S4-A repaired the missing local PostgreSQL
-host/database prerequisite, and S4-B passed the complete BYPASSRLS lane at 80 passed, 0 errors,
-0 skipped, and 2,488 deselected. S4-C closeout validation and S4-D terminal records remain open,
-so the migration baseline is not yet terminally satisfied for dependency purposes. SA142,
-SA164, and post-v88 SA152 remain blocked until those two closeout stages finish. A retained
-checkpoint is not ticket closure.
-
 ## SA142 — Reuse and clean E2E Docker images
 
-`Band B · Tier 1 · W3 · merge #10 · deps: SA151 (S4-C/S4-D closeout open) · Docker slot`
+`Band B · Tier 1 · W3 · merge #10 · deps: none · Docker slot`
 
 ### The mental model
 
@@ -695,7 +659,7 @@ environment. Documentation only — do not change the derivation.
 
 ## SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items
 
-`Band C · Tier 3 · W2 · merge #25 · deps: SA166, SA151 (S4-C/S4-D closeout open)`
+`Band C · Tier 3 · W2 · merge #25 · deps: SA166`
 
 ### The mental model
 
@@ -706,17 +670,16 @@ become debt — it costs a read every audit pass and can never fire.
 Five items are carried. Three are simply not fired and need no work. Two carry explicit
 actions, and one is a naming question that becomes load-bearing on a specific trigger.
 
-### 1. The SA92 migration-squash tuple — artifact found, re-anchor remains blocked
+### 1. The SA92 migration-squash tuple — artifact found, re-anchor remains open work
 
 The artifact is
 `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`, a bounded
 literal tripwire for cross-table `UPDATE … SET organization_id` migration DML; it is
 not a schema-parity proof. Its `_migdir()` helper reads the inert `django_apps:`
 manifest key and silently guesses a conventional path when absent, while its parity
-backstop still names the retired `v87` baseline. SA151 has produced regenerated
-migrations and discharged its S4 BYPASSRLS prerequisite; terminal closure remains pending on
-S4-C/S4-D. SA164 owns the `_migdir()` helper correction and parity-backstop re-anchoring after
-SA151 closes.
+backstop still names the retired `v87` baseline. The current regenerated migrations and discharged
+S4 BYPASSRLS prerequisite are settled; SA164 owns the `_migdir()` helper correction and
+parity-backstop re-anchoring.
 
 ### 2. Privileged-command pair — values agree, claimed authority does not
 
@@ -804,7 +767,7 @@ not authorize implementing it**, and none may be pulled into a v88 ticket.
 
 ## SA152 — Refresh the beta-migration maintainer targets
 
-`Post-v88 · Tier 3 · deps: SA151 (S4-C/S4-D closeout open)`
+`Post-v88 · Tier 3 · deps: none`
 
 The 2026-08-21 audit found the **mechanics current**: the Makefile flag surface (`DONOR`,
 `RECIPIENT`, `DRY_RUN`, `CONTINUE`, `REPORT`) matches `build_argument_parser()`, every
@@ -812,12 +775,10 @@ command in `VERIFICATION_COMMAND_SPECS` still exists, and the file-ownership tax
 sync and enforced by 7 passing conformance tests. So this is not a rot ticket. Four residual
 gaps:
 
-- **The SA151 collision — implementation evidence exists, terminal closure is pending.** The workflow's verification
-  stack runs `quickscale manage migrate` against a recipient that may carry an existing
-  database. SA151's clean-break implementation makes a **fresh database the only upgrade
-  path**, invalidating the in-place workflow's implicit assumption; terminal SA151 closure
-  still awaits S4-C closeout validation and S4-D terminal records. SA152 can resolve that
-  mismatch only after the dependency closes.
+  - **The SA151 collision is now a settled prerequisite.** The workflow's verification stack runs
+    `quickscale manage migrate` against a recipient that may carry an existing database. SA151's
+    clean-break implementation makes a **fresh database the only upgrade path**, invalidating the
+    in-place workflow's implicit assumption; SA152 must reconcile that mismatch in its own scope.
 - **No end-to-end exercise.** The targets appear in no CI workflow and no
   `scripts/gate_registry.json` entry. Coverage is unit-level taxonomy conformance only, so
   breakage surfaces first for a maintainer **mid-migration** — the worst possible moment.

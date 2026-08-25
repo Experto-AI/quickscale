@@ -1,6 +1,6 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Audit snapshot:** 2026-08-22 · **Prior pass:** 2026-07-26 (reconciled 2026-08-21 at `412d8d20`) · **Branch:** `v88` · **Findings last reconciled at:** `0132e0ea`
+> **Audit snapshot:** 2026-08-22 · **Prior pass:** 2026-07-26 (reconciled 2026-08-21 at `412d8d20`) · **Branch:** `v88` · **Findings last reconciled:** 2026-08-25 current live inventory
 
 ## Orientation summary
 
@@ -61,6 +61,10 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 | `generated-settings-dead-client-ip` (TA68) | S4 | Dead code (generated output) | Two `get_client_ip` definitions in generated settings are unreachable | Trivial | High | new |
 
 **Counts:** S1 **0** · S2 **0** · S3 **1** · S4 **1** · **Total 2 open**. Quick win (⚡ Trivial-effort S3): TA67.
+
+These are the current live-finding counts, derived from the two open summary rows above:
+TA67 (S3) and TA68 (S4). Older TA69-inclusive totals (S3: 1, S4: 2, total 3) remain dated
+historical reconciliation evidence and are not part of the current inventory.
 
 ---
 

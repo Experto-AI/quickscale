@@ -13,6 +13,9 @@ import pytest
 ROOT = Path(__file__).parents[2]
 ROADMAP = ROOT / "docs/technical/roadmap.md"
 CONTEXT = ROOT / "docs/technical/v88_ticket_context.md"
+DOCS_INDEX = ROOT / "docs/index.md"
+ARCH_AUDIT = ROOT / "docs/others/arch-audit.md"
+TECH_AUDIT = ROOT / "docs/others/tech-audit.md"
 TICKET_RE = re.compile(r"\bSA\d+[a-z]?\b")
 TICKET_ENTRY_RE = re.compile(
     r"^\s*-\s+\[[^\]]*\]\s+\*\*(SA\d+[a-z]?)\b[^\n]*$", re.MULTILINE
@@ -30,6 +33,7 @@ AUXILIARY_MULTI_TICKET_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
 
 # SA135 and SA163 share one merge position, but remain separately enumerable roadmap entries.
 SHARED_POSITION_GROUPS = (frozenset({"SA135", "SA163"}),)
+RETIRED_POSITIONS = frozenset({1, 2, 3, 4, 5, 6, 7, 9, 12, 14, 23})
 
 
 @dataclass(frozen=True)
@@ -280,6 +284,78 @@ def _load_documents() -> tuple[str, str]:
     return ROADMAP.read_text(encoding="utf-8"), CONTEXT.read_text(encoding="utf-8")
 
 
+def _number_word(value: int) -> str:
+    words = {
+        14: "fourteen",
+        15: "fifteen",
+    }
+    return words[value]
+
+
+def _assert_current_status_consumers(
+    roadmap_text: str,
+    context_text: str,
+    docs_index_text: str,
+    arch_audit_text: str,
+    tech_audit_text: str,
+) -> None:
+    roadmap = _roadmap_tickets(roadmap_text)
+    v88 = {
+        ticket: metadata
+        for ticket, metadata in roadmap.items()
+        if metadata.kind == "v88"
+    }
+    positions = {
+        metadata.merge_position
+        for metadata in v88.values()
+        if metadata.merge_position is not None
+    }
+    assert (len(v88), len(positions)) == (15, 14)
+    assert "SA151" not in roadmap
+    assert 3 not in positions
+    assert re.search(r"Positions [^\n]*#3[^\n]*retired", roadmap_text)
+
+    assert v88["SA142"].dependencies == frozenset()
+    assert v88["SA164"].dependencies == frozenset({"SA166"})
+    assert roadmap["SA152"].dependencies == frozenset()
+    assert v88["SA135"].dependencies == frozenset({"SA142"})
+    assert v88["SA163"].dependencies == frozenset({"SA135"})
+
+    entry_word = _number_word(len(v88))
+    position_word = _number_word(len(positions))
+    expected_phrases = {
+        context_text: rf"{entry_word} open v88 ticket entries(?:\*){{0,2}} across {position_word} open merge positions",
+        docs_index_text: rf"{entry_word} open v88 ticket entries across {position_word} open merge positions",
+        arch_audit_text: rf"{entry_word} open v88 ticket entries[^\n]*{position_word} open merge positions",
+        roadmap_text: rf"{position_word} open merge positions carrying {entry_word} open ticket entries",
+    }
+    for text, pattern in expected_phrases.items():
+        assert re.search(pattern, text, re.IGNORECASE), pattern
+
+    summary = tech_audit_text.split("## Summary table", 1)[1].split("## Findings", 1)[0]
+    severities = re.findall(
+        r"^\| `[^`]+` \(TA\d+\) \| \*{0,2}(S[1-4])\*{0,2} \|",
+        summary,
+        re.MULTILINE,
+    )
+    assert Counter(severities) == Counter({"S3": 1, "S4": 1})
+    assert re.search(
+        r"S1 \*\*0\*\*.*S2 \*\*0\*\*.*S3 \*\*1\*\*.*S4 \*\*1\*\*.*Total 2 open",
+        summary,
+        re.DOTALL,
+    )
+
+
+def test_v88_live_status_consumers_derive_current_counts_and_dependencies() -> None:
+    _assert_current_status_consumers(
+        ROADMAP.read_text(encoding="utf-8"),
+        CONTEXT.read_text(encoding="utf-8"),
+        DOCS_INDEX.read_text(encoding="utf-8"),
+        ARCH_AUDIT.read_text(encoding="utf-8"),
+        TECH_AUDIT.read_text(encoding="utf-8"),
+    )
+
+
 def test_v88_current_context_matches_roadmap_open_tickets_and_dependencies() -> None:
     roadmap, context = _load_documents()
     _assert_consistent(roadmap, context)
@@ -391,19 +467,24 @@ def test_v88_dependency_status_contradiction_is_expected_red_canary() -> None:
         _assert_consistent(roadmap, mutated_context)
 
 
-@pytest.mark.parametrize(
-    "claim",
-    ["SA151 is closed.", "SA151's regenerated migrations are now settled."],
-)
-def test_v88_positive_dependency_closure_claim_is_expected_red_canary(
-    claim: str,
-) -> None:
+def test_v88_positive_dependency_closure_claim_is_expected_red_canary() -> None:
     roadmap, context = _load_documents()
+    dependency_ticket = next(
+        ticket
+        for ticket, metadata in _roadmap_tickets(roadmap).items()
+        if metadata.dependencies
+    )
+    dependency = next(iter(_roadmap_tickets(roadmap)[dependency_ticket].dependencies))
     sections = _context_sections(context)
-    section = sections["SA142"]
-    mutated_context = context.replace(section, section + f"\n{claim}\n", 1)
+    section = sections[dependency_ticket]
+    mutated_context = context.replace(
+        section, section + f"\n{dependency} is closed.\n", 1
+    )
 
-    with pytest.raises(AssertionError, match="claims roadmap-open dependency SA151"):
+    with pytest.raises(
+        AssertionError,
+        match=rf"claims roadmap-open dependency {re.escape(dependency)}",
+    ):
         _assert_consistent(roadmap, mutated_context)
 
 
