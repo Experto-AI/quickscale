@@ -218,6 +218,13 @@ def _assert_consistent(roadmap_text: str, context_text: str) -> None:
 
 
 SCHEDULABLE_METADATA_RE = re.compile(r"`(?:Band|Post-v88)[^`\n]*\bdeps:[^`\n]*`")
+SEMANTIC_SCHEDULING_RE = re.compile(
+    r"(?ix)"
+    r"\bSA\d+[a-z]?\b[^.\n]{0,100}"
+    r"\b(?:before|after|ahead\s+of|depends?\s+on|blocked?\s+by|"
+    r"prerequisite\s+for|scheduled|scheduling)\b"
+    r"[^.\n]{0,100}\bSA\d+[a-z]?\b"
+)
 
 
 def _load_documents() -> tuple[str, str]:
@@ -232,6 +239,13 @@ def test_v88_current_context_matches_roadmap_open_tickets() -> None:
 def test_v88_context_restates_no_schedulable_roadmap_metadata() -> None:
     _, context = _load_documents()
     assert not SCHEDULABLE_METADATA_RE.findall(context)
+    assert not SEMANTIC_SCHEDULING_RE.findall(context)
+
+
+def test_v88_semantic_scheduling_restatement_is_expected_red_canary() -> None:
+    _, context = _load_documents()
+    mutated = context + "\nSA167a must be merged before SA118.\n"
+    assert SEMANTIC_SCHEDULING_RE.findall(mutated)
 
 
 def test_v88_schedulable_metadata_restatement_is_expected_red_canary() -> None:

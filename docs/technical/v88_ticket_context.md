@@ -1,30 +1,21 @@
 # v88 Ticket Context — Concepts and Implementation Notes
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **v88 Ticket Context**
-> **Related docs**: [Roadmap](roadmap.md) (authority for scope, bands, worktrees, merge order) | [Decisions](decisions.md) | [Validation Policy](validation_policy.md) | [Arch audit](../others/arch-audit.md) | [Tech audit](../others/tech-audit.md)
+> **Related docs**: [Roadmap](roadmap.md) (authority for ticket metadata) | [Decisions](decisions.md) | [Validation Policy](validation_policy.md) | [Arch audit](../others/arch-audit.md) | [Tech audit](../others/tech-audit.md)
 
 ## What this document is
 
-The [roadmap](roadmap.md) says *what* each v88 ticket must achieve and *when* it may run.
+The [roadmap](roadmap.md) says what each v88 ticket must achieve.
 This companion says *why the problem exists*, *what mental model to hold*, and *where the
 code actually lives*. It is explanatory, not authoritative: if this document and the
 roadmap disagree, the roadmap wins.
 
-Read the roadmap ticket first, then the section here.
-
-**This page deliberately restates no schedulable fact.** Band, tier, worktree, merge
-position, dependencies, slot ownership, and validation-station status all live in the
-roadmap and only there — so the two documents cannot drift on them. The only thing
-`scripts`-side enforcement checks between the two files is section *coverage*: one
-context section per open roadmap ticket, no orphans, and no prose here claiming a
-roadmap-open dependency is closed.
-
-It covers every open v88 ticket entry plus the post-v88 entries. Closed tickets are not
-described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md). The
-SA167a name appears only in the shared conceptual umbrella below so the completed handoff is
-covered without creating a schedulable or orphan section.
-Sections are ordered by merge band (A → B → C), which is also the order in which the work
-becomes safe to do.
+The roadmap is authoritative for ticket metadata; this page supplies explanatory context for
+each current ticket. The consistency guard checks section coverage, with one context section per
+roadmap ticket and no orphan sections. Closed tickets are not described here; their closure
+evidence lives in [CHANGELOG.md](../../CHANGELOG.md). The SA167a name appears only in the shared
+conceptual umbrella below so the completed handoff is covered without creating a second ticket
+section.
 
 ---
 
@@ -66,45 +57,23 @@ and SA162 correction are now complete, with their evidence archived in the chang
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA142, SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
 
-The worktree grouping follows it directly:
-
-- **W1** — module-wiring migration and bounded watch-item cleanup.
-- **W2** — duplicated authority + unenforced policy in the **tooling and declared-wiring** domain.
-- **W3** — unowned lifecycle in the **service and emission** domain.
-
----
-
-## Why band A goes first (the argument in one page)
-
 The `scripts/test_*.py` conformance population now has an owning registered execution
 context. Its closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md), so the
 scope allowlist, gate registry, parity, and quality-baseline suites run through the same
 declared gate layer they protect.
 
-Now read the execution rule every ticket in this release inherits: *"Leave `make quality`
-no worse than found."* That rule, and every other ticket's acceptance criteria, are
-discharged by gates in this population. SA124's headline criterion —
-*"`scripts/test_check_sa117_scope.py` covers the divergence failure"* — now lands in a suite
-with a declared execution context. SA123's future gates inherit that context.
+The quality acceptance rule remains: leave `make quality` no worse than found. SA124's headline
+criterion — *"`scripts/test_check_sa117_scope.py` covers the divergence failure"* — lands in a
+suite with a declared execution context.
 
-**Band A is not tidying. It is the difference between shipping tickets and shipping
-claims about tickets.**
+The gate-layer closure evidence, including the current scripts census, registry projection,
+hosted job closure, and isolation Make entrypoint, is archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 ---
 
-## Band A — gate-layer closure
+# Gates and declared wiring
 
-The gate-layer closure evidence, including the current scripts census, registry
-projection, hosted job closure, and isolation Make entrypoint, is archived in
-[CHANGELOG.md](../../CHANGELOG.md). The remaining W2 work starts after this completed
-band-A leg; SA124 and SA123 inherit the registered, green scripts execution context.
-
----
-
-# Band B / W2 — Gates and declared wiring
-
-Everything here merges **after** the completed band-A gate-layer work. SA124's acceptance
-criterion is now written into a suite with a declared execution context.
+SA124's acceptance criterion is written into a suite with a declared execution context.
 
 ## SA124 — Unify SA117 scope-tool path authority
 
@@ -151,10 +120,6 @@ The last bullet is the durable part. *"a test fails if any consumer is added wit
 ### The advisory
 
 `SA117E1-REV-004` is carried by this ticket. **Be aware before starting: that identifier appears nowhere in the repository except the roadmap line itself** — not in `CHANGELOG.md`, not in `docs/`, not in the scope JSON. Its original text is not recoverable from the tree. Your first action should be locating it (check the v87 review history in version control, or `docs/planning/sa117e-4-corrected-source-plan.md`). If it cannot be recovered, the acceptance criterion's *"or explicitly re-carried with rationale"* branch applies — record that the advisory text is lost and either close it as unrecoverable or restate what you believe it covered. Do not silently drop it.
-
-### Why SA123 depends on this
-
-Both tickets edit `scripts/gate_registry.json` and the `Makefile` gate surface. Doing SA124 first means SA123 registers its new gates against a tidied, single-authority path contract rather than against four drifting copies. Serialising them on one track keeps the registry off the cross-track conflict surface entirely.
 
 ---
 
@@ -264,15 +229,11 @@ Its `baseline_evidence` entries show the established convention — each past re
 
 *"rebaseline emission parity with per-file rationale"* means adding an entry in exactly that register. A bulk regeneration with the note "updated hashes" destroys the fixture's value — the whole point is that a human certified each delta was intended.
 
-### Dependencies
-
-**SA123** — same track, sequencing only. The former **SA150** edge is retired: SA118 touches manifest version-spec handling and sits on top of SA150's merged fail-hard seam, which is now settled tree state rather than a pending dependency.
-
 ---
 
-# Band B / W3 — Service-backed lifecycle
+# Service-backed lifecycle
 
-W3 holds the **exclusive PostgreSQL/Docker slot** for the release. Only one of these legs may be active at a time across all worktrees, and W3 takes scheduling priority while a leg is running — even though W2, not W3, is now the longest dependency chain. The two remaining lifecycle tickets ask the same question: *who owns the lifecycle of a thing we create?*
+The two lifecycle tickets ask the same question: *who owns the lifecycle of a thing we create?*
 
 ## SA151 — Recreate module migrations as clean initial schemas
 
@@ -298,13 +259,12 @@ from that oracle, installs all modules into a fresh PostgreSQL 18 database under
 integration, type, E2E, `make check`, and accepted `make quality` evidence is archived in
 [CHANGELOG.md](../../CHANGELOG.md).
 
-### Why the ticket remains open
+### Why the checkpoint is retained
 
-That evidence is a retained **partial checkpoint**, not closure. The former F-006–F-009 guard,
-census, audit, and docs-hub findings are corrected; S4-C is archived green, but the migration
-baseline is not yet terminally satisfied because S4-D remains open, so downstream tickets stay
-blocked. A retained checkpoint is not ticket closure. The [roadmap](roadmap.md) holds which
-validation stations are green and which remain open; do not read station status from this page.
+That evidence is a retained **partial checkpoint**, not terminal closure. The former F-006–F-009
+guard, census, audit, and docs-hub findings are corrected; S4-C is archived green, while S4-D
+terminal evidence is not included in this checkpoint. Closure status belongs in the
+[roadmap](roadmap.md), not on this explanatory page.
 
 ## SA142 — Reuse and clean E2E Docker images
 
@@ -365,7 +325,7 @@ Then add image reclamation to the cleanup path for the variable images that rema
 
 ### Watch out
 
-This edits a **generated-project template**, so it changes emitted output — the SA90 emission-parity fixture will need the same rebaseline-with-rationale treatment described under SA118. Four tickets touch that fixture in one release — SA142, SA118, SA161, and SA160 — across two tracks; each appends its own `baseline_evidence` entry, and the sync-before-merge-back procedure must preserve every prior one.
+This edits a **generated-project template**, so it changes emitted output — the SA90 emission-parity fixture will need the same rebaseline-with-rationale treatment described under SA118. Four tickets touch that fixture in one release — SA142, SA118, SA161, and SA160 — and each appends its own `baseline_evidence` entry; the sync-before-merge-back procedure must preserve every prior one.
 
 ## SA135 — Give test suites an owned PostgreSQL lifecycle
 
@@ -434,10 +394,6 @@ That converts an infrastructure failure into a green build with silently zero in
 
 and the Testing Standards section describes the precondition in prose. Both need updating — this ticket changes a documented contract, which is why `validation_policy.md` is on its conflict surface.
 
-### Depends on SA142 because
-
-SA135 will provision a containerised PostgreSQL, so it should adopt whatever image-identity convention SA142 establishes rather than seeding a second, competing one. This is a genuine ordering dependency, not just slot scheduling.
-
 ---
 
 ## SA163 — Derive the CI PostgreSQL environment from one authoritative source
@@ -487,17 +443,11 @@ Document both as deliberate in the refactor, or the next reader will "unify" the
 
 ### The option choice, already made
 
-**Option 1**: one `scripts/provision_ci_postgres.sh`, four callers, module list derived
-from the discovery shim exactly as `check_sa117_scope.py:48` already does. Option 2 (an
-`environment` block in the gate registry) only if SA123's registry work lands cleanly
-first, since both bump the registry schema.
-
-### Why inside SA135
-
-SA135's allowlist already spans `scripts/test_integration.sh`,
-`scripts/provision_test_roles.sh`, the `Makefile`, and the documented DB precondition.
-SA163 is a second pass over the same files with the same exclusive slot. Two tickets, one
-change. It inherits SA135's PostgreSQL + Docker slot.
+**Selected shape**: one `scripts/provision_ci_postgres.sh`, four callers, and a module list
+derived from the discovery shim exactly as `check_sa117_scope.py:48` already does. The SA135
+surface includes `scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, the
+`Makefile`, and the documented database precondition; SA163 addresses the same provisioning
+contract.
 
 ### Non-negotiable invariants across the refactor
 
@@ -507,14 +457,9 @@ SA135's role contract protects; losing them here loses them everywhere.
 
 ---
 
-# Band C — Bounded independent fixes
+# Bounded independent fixes
 
-None of these blocks anything. Each has a small, well-understood blast radius. They exist
-as **slack filler**: when a worktree finishes a band-B leg and its next leg is waiting on
-another worktree, it takes one of these rather than idling or — much worse — widening the
-ticket it just finished.
-
-**Band C may slip past the release. None may displace a band-A or band-B leg.**
+Each has a small, well-understood blast radius and remains bounded to its stated concern.
 
 ## SA160 — Share one correct CSRF-token helper in the React theme
 
@@ -607,17 +552,7 @@ security-relevant settings, and "it was dead code" is a claim that deserves proo
 ### Emission parity
 
 This edits generated-project templates, so the SA90 emission-parity fixture needs a
-rebaseline with per-file rationale — the same treatment described under SA118. Sequenced
-after SA135 on W3 so the fixture edits stay serialized within the worktree.
-
----
-
-## SA160 / SA161 sequencing note
-
-Both are W3 and both touch `quickscale_core/tests/fixtures/sa90_emission_manifests.json`,
-as do SA142 and SA118. SA118 is the one that crosses worktrees.
-Each rebaseline **appends** its own `baseline_evidence` entry; none may replace a prior
-one. The sync-before-merge-back procedure has to preserve every entry.
+rebaseline with per-file rationale — the same treatment described under SA118.
 
 ---
 
@@ -690,16 +625,16 @@ become debt — it costs a read every audit pass and can never fire.
 Five items are carried. Three are simply not fired and need no work. Two carry explicit
 actions, and one is a naming question that becomes load-bearing on a specific trigger.
 
-### 1. The SA92 migration-squash tuple — artifact found, re-anchor remains blocked
+### 1. The SA92 migration-squash tuple — artifact found, re-anchor remains
 
 The artifact is
 `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`, a bounded
 literal tripwire for cross-table `UPDATE … SET organization_id` migration DML; it is
 not a schema-parity proof. Its `_migdir()` helper reads the inert `django_apps:`
 manifest key and silently guesses a conventional path when absent, while its parity
-backstop still names the retired `v87` baseline. SA151 has produced regenerated
-migrations, but terminal closure remains pending. SA164 owns the `_migdir()` helper
-correction and parity-backstop re-anchoring after SA151 closes.
+backstop still names the retired `v87` baseline. SA151 has produced regenerated migrations.
+SA164 owns the `_migdir()` helper correction and parity-backstop re-anchoring against those
+migrations.
 
 ### 2. Privileged-command pair — values agree, claimed authority does not
 
@@ -755,11 +690,11 @@ topology change**. It was read closely only because the arch audit's delta-class
 step treats unlabeled-behavioural commits as read-at-full-depth. Absent that convention, it
 would have shipped unexamined — and it did ship a red test.
 
-### Why it is Tier 3 and sits behind the gate-layer work
+### Why it is Tier 3
 
 The audit records this as **maintainer-process risk**, not a source finding. The registered
-gate layer is now an executed context, so this ticket can add its process evidence without
-reopening the completed gate-suite work.
+gate layer is an executed context, so this ticket can add its process evidence without
+reopening the gate-suite work.
 
 ### The design constraint that decides whether this succeeds
 
@@ -778,10 +713,10 @@ change, reverted before merge.
 
 ---
 
-# Post-v88 — recorded, not scheduled
+# Post-v88 — recorded backlog
 
-These three are in the roadmap so the findings are not lost. **Listing a sub-item here does
-not authorize implementing it**, and none may be pulled into a v88 ticket.
+These three are in the roadmap so the findings are not lost. Listing a sub-item here does not
+authorize implementing it.
 
 ## SA152 — Refresh the beta-migration maintainer targets
 
@@ -791,14 +726,14 @@ command in `VERIFICATION_COMMAND_SPECS` still exists, and the file-ownership tax
 sync and enforced by 7 passing conformance tests. So this is not a rot ticket. Four residual
 gaps:
 
-- **The SA151 collision — implementation evidence exists, terminal closure is pending.** The workflow's verification
+- **The SA151 collision — implementation evidence exists, terminal evidence is incomplete.** The workflow's verification
   stack runs `quickscale manage migrate` against a recipient that may carry an existing
   database. SA151's clean-break implementation makes a **fresh database the only upgrade
-  path**, invalidating the in-place workflow's implicit assumption; terminal SA151 closure
-  has not been reached. SA152 can resolve that mismatch only after the dependency closes.
+  path**, invalidating the in-place workflow's implicit assumption; the in-place workflow needs
+  an explicit fresh-database reconciliation.
 - **No end-to-end exercise.** The targets appear in no CI workflow and no
   `scripts/gate_registry.json` entry. Coverage is unit-level taxonomy conformance only, so
-  breakage surfaces first for a maintainer **mid-migration** — the worst possible moment.
+  breakage surfaces for a maintainer **mid-migration** — the worst possible moment.
 - **Silent skip in the conformance gate.** `_template_emitted_paths()` calls
   `pytest.skip()` when the template tree is not found, so a path-resolution regression turns
   the ownership gate **green instead of red**. Same silent-fallback family as the closed SA150 and
@@ -810,7 +745,7 @@ gaps:
 
 ## SA153 — Close the property-portal basics gap in `listings`
 
-**The highest-value post-release work**, driven by the planned `buenosairesproperties.com`
+**A high-value post-release work item**, driven by the planned `buenosairesproperties.com`
 migration. The framing that matters: the gap is **not module existence**. `listings` ships a
 deliberately generic `AbstractListing` plus a concrete `Listing`, and `blog` is
 substantially complete. The gap is **property-vertical depth and public presentation**, and
@@ -820,8 +755,7 @@ The structural problem underneath most of the sub-items: the documented extensio
 **subclassing `AbstractListing`**, but `views.py`, `urls.py`, `admin.py`, and `ListingFilter`
 are all bound to the **concrete** `Listing`. So subclassing today yields a model and an admin
 base but **no working public views, URLs, or filters** — the Tier 2 abstract-model contract
-in [module-extension.md](module-extension.md) is half-delivered. Fixing that unlocks
-attributes, filtering, and most of the rest at once.
+in [module-extension.md](module-extension.md) is half-delivered.
 
 Two project constraints bind every sub-item:
 
@@ -839,35 +773,18 @@ anywhere in the tree), and a public JSON read API.
 
 ## SA154 — Property-portal optional capabilities
 
-An **inventory, not schedulable work**. Deliberately held behind SA153 so the basics land
-first and none of these widens that ticket. Map/geocoding, saved searches and match alerts,
+An inventory of optional capabilities, not an implementation instruction. Map/geocoding,
+saved searches and match alerts,
 agent/office profiles, portal syndication feeds, virtual tours, featured placement tied to
 the `billing` credits ledger, blog↔listing cross-linking, and PostgreSQL `SearchVector`
 full-text search.
 
-Discharged only when every sub-item has been promoted to its own ticket with its own
-acceptance criteria, or explicitly dropped with a written rationale.
+Each sub-item needs its own acceptance criteria if it is promoted, or a written rationale if it
+is dropped.
 
 ---
 
-## Reading order
-
-### If you are executing
-
-Follow the merge order in the roadmap. It is the answer.
-
-### If you are coming to this cold and want the model
-
-Each step builds the one after it:
-
-1. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
-2. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
-   (bypassed RLS roles).
-3. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
-   about existing conventions (scope allowlist, gate registry, emission-parity fixture).
-4. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
-
-### The two traps this release keeps setting
+## Reusable reasoning traps
 
 Worth holding as a set, because each appears in more than one ticket:
 
@@ -883,8 +800,8 @@ Worth holding as a set, because each appears in more than one ticket:
 ## SA167a / SA167b / SA167c / SA167d — module wiring standardization
 
 The four roadmap entries share this one conceptual section; the heading names all four so the
-coverage gate can tell an umbrella section from a missing one. Their merge positions,
-dependencies, and readiness live in the [roadmap](roadmap.md), not here.
+coverage gate can tell an umbrella section from a missing one. Their ticket metadata lives in the
+[roadmap](roadmap.md), not here.
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.
@@ -910,5 +827,5 @@ tickets make the tree match it — `a` declares, `b` relocates, `c` retires the 
 and adds the gate that keeps it true, `d` drains the CLI.
 
 **Why the split is by phase and not by module.** All nine core-side blocks live in one
-1,508-line file. Nine per-module tickets would serialize on that file anyway while adding
-nine-way contention and splitting one logical change nine ways.
+1,508-line file. The phase boundary keeps one logical adapter migration understandable without
+turning it into nine separate conceptual sections.

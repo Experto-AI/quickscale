@@ -29,6 +29,15 @@
   substitute. `make check-manifest-sync` and `make check` passed. `make quality` reproduced
   the accepted exit-2 oracle: monotonicity passed, two warning regressions, and zero
   critical regressions. No SA90 fixture or generated-output baseline changed.
+- **SA167a application-registry boot proof (2026-08-25).** The unchanged PostgreSQL-backed
+  all-module proof was run with
+  `poetry run pytest quickscale_core/tests/test_generated_project_runtime.py::TestGeneratedProjectRuntimeSmoke::test_all_module_initial_migrations_apply_from_embedded_sources -q --tb=short -o addopts= --no-cov`.
+  It exited **0** and observed **1 passed in 27.60s**, with **0 skipped**. The proof's
+  generated standalone project applied the all-module migrations, called `django.setup()`,
+  enumerated the application registry and migration state, and completed its disposable
+  PostgreSQL database/role cleanup. This is the retained application-registry boot evidence;
+  the earlier DB-free settings-import note above remains historical evidence for that prior
+  run.
 - **Roadmap cleanup and rebalance review (2026-08-25, eighth pass).** **No ticket closed and
   no audit finding closed since the seventh pass**, so no new completion work entered the
   archive. The pass retired SA162's roadmap entry — its closure evidence is the entry below and
