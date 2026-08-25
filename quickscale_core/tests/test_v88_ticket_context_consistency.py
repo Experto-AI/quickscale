@@ -222,8 +222,10 @@ SEMANTIC_SCHEDULING_RE = re.compile(
     r"(?ix)"
     r"\bSA\d+[a-z]?\b[^.\n]{0,100}"
     r"\b(?:before|after|ahead\s+of|depends?\s+on|blocked?\s+by|"
-    r"prerequisite\s+for|scheduled|scheduling)\b"
+    r"prerequisite\s+for|scheduled|scheduling|follows?|precedes?|until|"
+    r"first\b[^.\n]{0,40}\bthen)\b"
     r"[^.\n]{0,100}\bSA\d+[a-z]?\b"
+    r"|\bSA\d+[a-z]?\b\s*(?:→|->)\s*\bSA\d+[a-z]?\b"
 )
 
 
@@ -242,10 +244,35 @@ def test_v88_context_restates_no_schedulable_roadmap_metadata() -> None:
     assert not SEMANTIC_SCHEDULING_RE.findall(context)
 
 
-def test_v88_semantic_scheduling_restatement_is_expected_red_canary() -> None:
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "SA167a must be merged before SA118.",
+        "SA118 follows SA167a.",
+        "SA118 cannot start until SA167a closes.",
+        "SA167a is a prerequisite for SA118.",
+        "SA167a → SA118.",
+        "Merge SA167a first, then SA118.",
+    ],
+)
+def test_v88_semantic_scheduling_restatement_is_expected_red_canary(
+    claim: str,
+) -> None:
     _, context = _load_documents()
-    mutated = context + "\nSA167a must be merged before SA118.\n"
-    assert SEMANTIC_SCHEDULING_RE.findall(mutated)
+    assert SEMANTIC_SCHEDULING_RE.findall(context + f"\n{claim}\n")
+
+
+@pytest.mark.parametrize(
+    "explanation",
+    [
+        "SA142, SA118, SA161, and SA160 touch the same fixture.",
+        "SA167a and SA167b share one conceptual umbrella.",
+    ],
+)
+def test_v88_semantic_scheduling_guard_avoids_explanatory_false_positives(
+    explanation: str,
+) -> None:
+    assert not SEMANTIC_SCHEDULING_RE.findall(explanation)
 
 
 def test_v88_schedulable_metadata_restatement_is_expected_red_canary() -> None:

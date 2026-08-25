@@ -38,6 +38,13 @@
   PostgreSQL database/role cleanup. This is the retained application-registry boot evidence;
   the earlier DB-free settings-import note above remains historical evidence for that prior
   run.
+- **SA167a scheduling-authority guard proof (2026-08-25).** The context consistency guard
+  keeps scheduling facts in the roadmap and explanatory prose in the context page. Its semantic
+  expected-red coverage rejects equivalent ticket-order claims expressed as `before`, `follows`,
+  `until`, `prerequisite for`, a direct arrow, or `first … then`, while explicit non-ordering
+  examples remain green. The settled context contains no matching restatement, and
+  `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q --tb=short -o addopts= --no-cov`
+  passed all **21 tests**.
 - **Roadmap cleanup and rebalance review (2026-08-25, eighth pass).** **No ticket closed and
   no audit finding closed since the seventh pass**, so no new completion work entered the
   archive. The pass retired SA162's roadmap entry — its closure evidence is the entry below and
