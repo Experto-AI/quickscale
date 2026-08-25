@@ -4,6 +4,46 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-25, ninth pass).** **No ticket closed and no
+  audit finding closed since the eighth pass**, so no new completion work entered the archive.
+  The pass applied Option A without exception: **SA167a's retained checked completion record was
+  removed from `docs/technical/roadmap.md` and merge position #8 is retired and not reused**, so
+  the roadmap now holds open work only and carries no checked entry at all. SA167a's completion
+  evidence — the five manifest app declarations, the resolved `spec.apps` before/after table, the
+  application-registry boot proof, the scheduling-authority guard proof, and the accepted
+  `make quality` exit-2 oracle — is retained in the entries below and is the sole record of that
+  work. Every SA167a reference in the purpose statement, execution rules, priority model, the
+  SA167-family placement bullet, the dependency diagram, the critical-path and irreducibility
+  prose, the track-readiness table, the merge-order table, the shared-conflict-surface table, and
+  the audit-sequencing diagram was removed or restated as settled tree state. Four dependency
+  edges were dropped as a consequence: **SA124 (#11) and SA167b (#17) are now `deps: none`**,
+  **SA118 (#16) depends on SA123 only**, and **SA167c (#21) depends on SA118 only**; #10, #11, and
+  #17 are all ungated queue heads. `quickscale_core/tests/test_v88_ticket_context_consistency.py`
+  was updated to match — `RETAINED_CLOSED_TICKETS` is now empty, the archived SA167a umbrella
+  member is excluded from context coverage, the four new dependency shapes are pinned, position #8
+  is asserted retired, and the obsolete retained-marker canary was removed in favour of the
+  existing unexpected-checked-entry canary. The open queue is unchanged at **fourteen open v88
+  ticket entries across thirteen open merge positions** — SA167a was already excluded from those
+  counts as a completion record. Stale narrative was also pruned: the SA164 watch item no longer
+  refers to the retired "P1" phase name or to SA151's migrations by ticket, and the
+  cross-worktree-edge paragraph now states plainly that no open edge remains.
+  **Rebalance outcome: no track moves, ninth consecutive pass.** Every open ticket carries a
+  worktree; none lacks one. W2 remains irreducible at six open legs — SA124, SA123, SA166, and
+  SA164 all own `scripts/gate_registry.json`, which by standing invariant never crosses
+  worktrees, and SA118 then SA167c must rewrite `quickscale_modules/*/module.yml` on that same
+  lane. Nothing may be pulled forward from W3 because the PostgreSQL/Docker slot is exclusive.
+  The **SA161 (#19) + SA160 (#20) W3→W1** candidate was re-tested and rejected for the third
+  time: neither is on or feeding the critical path, and moving them would spread
+  `quickscale_core/tests/fixtures/sa90_emission_manifests.json` across three lanes because SA142
+  cannot follow them off the Docker slot. **All three tracks are truly green** on all three
+  states (can start / can finish / can merge), and **only W2 / SA124 (#11) is on the critical
+  path**; W3 / SA142 (#10) and W1 / SA167b (#17) are truly green but off it. The critical path is
+  unchanged at `SA124 → SA123 → SA118 → SA167c`, four serialized W2 legs. **No maintainer
+  decision is open**; every remaining blocker (SA135+SA163 behind SA142, SA164 behind SA166) is a
+  hard upstream dependency that only the upstream work can clear. Shared closeout surfaces
+  (`CHANGELOG.md`, `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`,
+  `docs/index.md`, and both audit docs) remain covered by the standing sync-before-merge-back
+  procedure.
 - **SA151/SA167a combined synchronization (2026-08-25).** The v88 merge preserves SA151's
   terminal closure and SA167a's sole retained checked completion marker. Re-deriving the live
   queue after both closures yields **fourteen open v88 ticket entries across thirteen open merge

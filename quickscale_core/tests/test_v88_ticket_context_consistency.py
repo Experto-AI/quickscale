@@ -1,9 +1,10 @@
 """Keep the v88 context coverage aligned with the roadmap's open tickets.
 
 The roadmap is the sole home for schedulable metadata.  The context page may explain
-concepts, but it must not restate bands, positions, dependencies, or readiness.  The
-shared SA167 umbrella is allowed to mention the completed SA167a handoff; the retained
-marker itself remains owned by the roadmap.
+concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
+holds open work only: completed tickets are archived in the changelog and carry no checked
+entry.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
+tree state.
 """
 
 from __future__ import annotations
@@ -37,7 +38,8 @@ SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
 UMBRELLA_TITLE = "SA167a / SA167b / SA167c / SA167d — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167b", "SA167c", "SA167d"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
-RETAINED_CLOSED_TICKETS = frozenset({"SA167a"})
+RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset()
+ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a"})
 SHARED_POSITION_GROUPS = {frozenset({"SA135", "SA163"})}
 
 
@@ -192,7 +194,7 @@ def _assert_consistent(roadmap_text: str, context_text: str) -> None:
     roadmap = _roadmap_tickets(roadmap_text)
     sections = _context_sections(context_text)
     closed = set(CLOSED_ENTRY_RE.findall(roadmap_text))
-    context_tickets = set(sections) - closed
+    context_tickets = set(sections) - closed - ARCHIVED_CONTEXT_TICKETS
     if context_tickets != set(roadmap):
         raise AssertionError(
             "roadmap/current-context ticket coverage drift: "
@@ -262,11 +264,18 @@ def _assert_current_status_consumers(
     }
     assert (len(v88), len(positions)) == (14, 13)
     assert "SA151" not in roadmap
+    assert "SA167a" not in roadmap
     assert 3 not in positions
-    assert re.search(r"Positions [^\n]*#3[^\n]*retired", roadmap_text)
+    assert 8 not in positions
+    assert re.search(r"Positions [^\n]*#3[^\n]*", roadmap_text)
+    assert re.search(r"Positions [^\n]*#8[^\n]*", roadmap_text)
     assert not re.search(r"^## SA151\b", context_text, re.MULTILINE)
-    assert set(CLOSED_ENTRY_RE.findall(roadmap_text)) == {"SA167a"}
+    assert set(CLOSED_ENTRY_RE.findall(roadmap_text)) == set()
 
+    assert v88["SA124"].dependencies == frozenset()
+    assert v88["SA167b"].dependencies == frozenset()
+    assert v88["SA118"].dependencies == frozenset({"SA123"})
+    assert v88["SA167c"].dependencies == frozenset({"SA118"})
     assert v88["SA142"].dependencies == frozenset()
     assert v88["SA164"].dependencies == frozenset({"SA166"})
     assert roadmap["SA152"].dependencies == frozenset()
@@ -377,13 +386,6 @@ def test_v88_unexpected_current_context_ticket_is_expected_red_canary() -> None:
     mutated = context + "\n## SA999 — unexpected expected-red canary\n\nbody\n"
     with pytest.raises(AssertionError, match="ticket coverage drift"):
         _assert_consistent(roadmap, mutated)
-
-
-def test_v88_retained_marker_set_is_expected_red_canary() -> None:
-    roadmap, _ = _load_documents()
-    mutated = roadmap.replace("- [x] **SA167a", "- [ ] **SA167a", 1)
-    with pytest.raises(AssertionError, match="checked roadmap tickets"):
-        _roadmap_tickets(mutated)
 
 
 def test_v88_unexpected_checked_roadmap_entry_is_expected_red_canary() -> None:
