@@ -6,11 +6,12 @@
 
 - **SA124 — SA117 scope-tool authority unified and terminally closed (2026-08-25).**
   `scripts/sa117_scope.json` is the strict authority for the ordered allowlist, mode/profile
-  inputs, help facts, and declared consumers. The maintained consumer set is
-  `scripts/check_sa117_scope.py`, `scripts/sa117_scope.json`,
+  inputs, help facts, and declared consumers. The six maintained consumers are
+  `scripts/check_sa117_scope.py`,
   `scripts/test_check_sa117_scope.py`, `scripts/verify_sa117_publication.py`,
   `scripts/test_verify_sa117_publication.py`, `scripts/README.md`, and `Makefile`; the
-  structural negative probe rejects an added Python consumer or hard-coded Make requirement.
+  AST-aware structural negative probe rejects alternate-form Python imports, any added Python
+  consumer, or a hard-coded Make requirement.
   Direct and Make mode parity is green, including omitted versus explicit-empty inputs, ordered
   emit output, lock fallback, lock-diff meanings, NUL rejection, and adversarial paths containing
   spaces, quotes, shell metacharacters, and wildcards. Make transports raw `PATHS` as one quoted

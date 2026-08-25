@@ -118,6 +118,14 @@ def _normalise(path: str) -> str:
     return "/".join(resolved)
 
 
+def _normalise_candidate(path: str) -> str:
+    """Reject rooted candidate spellings before lexical normalisation."""
+    _validate_no_nul(path)
+    if path.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", path):
+        raise ValueError(f"candidate path must be relative: {path!r}")
+    return _normalise(path)
+
+
 def _json_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     """Reject duplicate JSON object keys before schema validation."""
     result: dict[str, Any] = {}
@@ -366,8 +374,10 @@ def mode_worktree(
         )
         if profile == "make":
             paths = _tokenise_make_paths(paths)
+        if not paths:
+            raise ValueError(f"paths is required for {profile} worktree mode")
         allowed = build_allowlist(load_scope(scope_path))
-        current = {_normalise(path) for path in paths}
+        current = {_normalise_candidate(path) for path in paths}
     except (FileNotFoundError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
@@ -420,7 +430,7 @@ def mode_lock(
             paths if paths is not None else _read_git_tracked_files(repo_root or SCOPE_DIR.parent)
         )
         current = _filter_scope_paths(
-            {_normalise(path) for path in current_paths}, scripts_only=scripts_only
+            {_normalise_candidate(path) for path in current_paths}, scripts_only=scripts_only
         )
         expected = _filter_scope_paths(set(allowed), scripts_only=scripts_only)
     except (FileNotFoundError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:

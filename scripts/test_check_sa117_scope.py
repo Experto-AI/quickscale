@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import pathlib
+import shlex
 import subprocess
 import sys
 
@@ -29,6 +31,45 @@ def _scope_document(paths: list[dict[str, str]]) -> dict[str, object]:
     source = pathlib.Path(__file__).with_name("sa117_scope.json")
     contract = json.loads(source.read_text(encoding="utf-8"))["contract"]
     return {"version": "1.0.0", "description": "fixture", "paths": paths, "contract": contract}
+
+
+def _discover_sa117_consumers(root: pathlib.Path) -> set[str]:
+    """Discover the provider, non-Python consumers, and semantic Python imports."""
+    discovered = {
+        path
+        for path in ("scripts/check_sa117_scope.py", "scripts/README.md", "Makefile")
+        if (root / path).is_file()
+    }
+    for candidate in root.rglob("*.py"):
+        relative = candidate.relative_to(root)
+        if any(part.startswith(".") or part == "__pycache__" for part in relative.parts):
+            continue
+        tree = ast.parse(candidate.read_text(encoding="utf-8"), filename=str(candidate))
+        imports_checker = any(
+            (
+                isinstance(node, ast.Import)
+                and any(alias.name == "scripts.check_sa117_scope" for alias in node.names)
+            )
+            or (
+                isinstance(node, ast.ImportFrom)
+                and (
+                    node.module == "scripts.check_sa117_scope"
+                    or (
+                        node.module == "scripts"
+                        and any(alias.name == "check_sa117_scope" for alias in node.names)
+                    )
+                )
+            )
+            for node in ast.walk(tree)
+        )
+        if imports_checker:
+            discovered.add(relative.as_posix())
+    return discovered
+
+
+def _assert_declared_consumers(root: pathlib.Path, declared: set[str]) -> None:
+    """Require the declared inventory to equal semantic repository consumers."""
+    assert declared == _discover_sa117_consumers(root)
 
 
 def _lock(version: str, *, content_hash: str = "stable", duplicate: bool = False) -> str:
@@ -162,8 +203,73 @@ class TestRequiredInputContract:
             "scripts/space name.py",
             "$() `x` ; [x]",
         ]
+        assert mode_worktree(scope, paths=["scripts/space name.py"], profile="direct") == 0
         assert mode_worktree(scope, paths=["'scripts/space name.py'"], profile="make") == 0
         assert mode_worktree(scope, paths=["bad\x00path"], profile="make") == 2
+
+    @pytest.mark.parametrize(
+        ("profile", "paths"),
+        [
+            pytest.param("direct", [], id="direct-explicit-empty"),
+            pytest.param("make", [], id="make-explicit-empty"),
+            pytest.param("make", ["   \t"], id="make-tokenized-whitespace"),
+        ],
+    )
+    def test_worktree_rejects_tokenized_empty_paths_without_success(
+        self,
+        tmp_path: pathlib.Path,
+        capsys: pytest.CaptureFixture[str],
+        profile: str,
+        paths: list[str],
+    ) -> None:
+        scope = tmp_path / "scope.json"
+        scope.write_text(
+            json.dumps(_scope_document([{"path": "Makefile", "phase": "1", "notes": ""}])),
+            encoding="utf-8",
+        )
+
+        assert mode_worktree(scope, paths=paths, profile=profile) == 2
+        captured = capsys.readouterr()
+        assert "all paths are in the allowlist" not in captured.out
+
+    @pytest.mark.parametrize("mode", [mode_worktree, mode_lock])
+    @pytest.mark.parametrize("profile", ["direct", "make"])
+    @pytest.mark.parametrize(
+        "candidate",
+        [
+            pytest.param("/Makefile", id="posix-absolute"),
+            pytest.param(r"C:\Makefile", id="windows-drive"),
+            pytest.param(r"\\server\share\Makefile", id="unc"),
+        ],
+    )
+    def test_candidate_modes_reject_rooted_aliases_before_normalisation(
+        self,
+        tmp_path: pathlib.Path,
+        mode: object,
+        profile: str,
+        candidate: str,
+    ) -> None:
+        scope = tmp_path / "scope.json"
+        scope.write_text(
+            json.dumps(_scope_document([{"path": "Makefile", "phase": "1", "notes": ""}])),
+            encoding="utf-8",
+        )
+        paths = [candidate] if profile == "direct" else [shlex.quote(candidate)]
+
+        assert mode(scope, paths=paths, profile=profile) == 2  # type: ignore[operator]
+
+    @pytest.mark.parametrize("mode", [mode_worktree, mode_lock])
+    @pytest.mark.parametrize("profile", ["direct", "make"])
+    def test_candidate_modes_preserve_canonical_relative_paths(
+        self, tmp_path: pathlib.Path, mode: object, profile: str
+    ) -> None:
+        scope = tmp_path / "scope.json"
+        scope.write_text(
+            json.dumps(_scope_document([{"path": "Makefile", "phase": "1", "notes": ""}])),
+            encoding="utf-8",
+        )
+
+        assert mode(scope, paths=["Makefile"], profile=profile) == 0  # type: ignore[operator]
 
     def test_parser_exposes_all_contract_modes_without_duplicate_authority(self) -> None:
         parser = _build_parser()
@@ -267,19 +373,7 @@ class TestRequiredInputContract:
         document = json.loads((root / "scripts/sa117_scope.json").read_text(encoding="utf-8"))
         declared = {item["path"] for item in document["contract"]["consumers"]}
 
-        discovered = {"scripts/check_sa117_scope.py", "scripts/README.md", "Makefile"}
-        for candidate in root.rglob("*.py"):
-            if any(part.startswith(".") or part == "__pycache__" for part in candidate.parts):
-                continue
-            text = candidate.read_text(encoding="utf-8")
-            if (
-                "scripts.check_sa117_scope" in text
-                or "scripts/check_sa117_scope.py" in text
-                or "sa117_scope.json" in text
-            ):
-                discovered.add(candidate.relative_to(root).as_posix())
-
-        assert declared == discovered
+        _assert_declared_consumers(root, declared)
         assert all((root / path).is_file() for path in declared)
 
         makefile = (root / "Makefile").read_text(encoding="utf-8")
@@ -287,6 +381,16 @@ class TestRequiredInputContract:
             recipe = makefile.split(target, 1)[1].split("\n\n", 1)[0]
             assert "[ -z " not in recipe
             assert " required" not in recipe.lower()
+
+    def test_undeclared_from_package_consumer_turns_inventory_red(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        consumer = tmp_path / "scripts/alternate_consumer.py"
+        consumer.parent.mkdir()
+        consumer.write_text("from scripts import check_sa117_scope\n", encoding="utf-8")
+
+        with pytest.raises(AssertionError):
+            _assert_declared_consumers(tmp_path, set())
 
     def test_make_transport_does_not_execute_make_or_shell_syntax(self) -> None:
         root = pathlib.Path(__file__).resolve().parents[1]
