@@ -18,6 +18,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import shlex
 import stat
 import subprocess
@@ -147,11 +148,20 @@ def _load_scope_document(scope_path: Path = DEFAULT_SCOPE_PATH) -> dict[str, Any
     paths = data["paths"]
     if not isinstance(paths, list):
         raise ValueError("SA117 scope document 'paths' must be a list")
+    seen_paths: set[str] = set()
     for entry in paths:
         if not isinstance(entry, dict) or set(entry) != {"path", "phase", "notes"}:
             raise ValueError(f"invalid SA117 scope entry shape: {entry!r}")
         if not all(isinstance(entry[key], str) for key in ("path", "phase", "notes")):
             raise ValueError(f"invalid SA117 scope entry types: {entry!r}")
+        path = entry["path"]
+        if not path or path != _normalise(path):
+            raise ValueError(f"SA117 scope path must be canonical and relative: {path!r}")
+        if path in seen_paths:
+            raise ValueError(f"duplicate SA117 scope path: {path!r}")
+        if not entry["phase"]:
+            raise ValueError(f"SA117 scope phase must be non-empty: {path!r}")
+        seen_paths.add(path)
     build_allowlist(paths)
     _validate_contract(data["contract"])
     return data
@@ -163,7 +173,7 @@ def _validate_contract(contract: Any) -> None:
         raise ValueError("SA117 contract must be a JSON object")
     if set(contract) != {"schema_version", "profiles", "modes", "consumers", "metadata"}:
         raise ValueError("SA117 contract has missing or unknown fields")
-    if contract["schema_version"] != 1:
+    if type(contract["schema_version"]) is not int or contract["schema_version"] != 1:
         raise ValueError("unsupported SA117 contract schema_version")
     if contract["profiles"] != ["direct", "make"]:
         raise ValueError("SA117 contract profiles must be exactly direct and make")
@@ -181,13 +191,23 @@ def _validate_contract(contract: Any) -> None:
             raise ValueError(f"SA117 mode {mode_name!r} options/profiles must be objects")
         if set(profiles) != {"direct", "make"}:
             raise ValueError(f"SA117 mode {mode_name!r} profiles are incomplete")
+        seen_flags: set[str] = set()
         for option_name, option in options.items():
+            if not re.fullmatch(r"[a-z][a-z0-9-]*", option_name):
+                raise ValueError(f"invalid SA117 option name: {mode_name}/{option_name}")
             if not isinstance(option, dict) or not {"flag", "kind", "help"} <= set(option):
                 raise ValueError(f"invalid SA117 option contract: {mode_name}/{option_name}")
             if not set(option) <= {"flag", "kind", "help", "nargs", "default"}:
                 raise ValueError(f"unknown SA117 option field: {mode_name}/{option_name}")
             if not all(isinstance(option[key], str) for key in ("flag", "kind", "help")):
                 raise ValueError(f"invalid SA117 option types: {mode_name}/{option_name}")
+            if option["flag"] != f"--{option_name}" or option["flag"] in seen_flags:
+                raise ValueError(
+                    f"invalid or duplicate SA117 option flag: {mode_name}/{option_name}"
+                )
+            if not option["help"]:
+                raise ValueError(f"empty SA117 option help: {mode_name}/{option_name}")
+            seen_flags.add(option["flag"])
             if option["kind"] not in {"paths", "store_true", "value", "path"}:
                 raise ValueError(f"unknown SA117 option kind: {option['kind']!r}")
             if option["kind"] == "paths" and option.get("nargs") != "*":
@@ -198,7 +218,12 @@ def _validate_contract(contract: Any) -> None:
                 )
             if "default" in option and option["kind"] not in {"path", "value"}:
                 raise ValueError(f"default is invalid for boolean/path-list option: {option_name}")
+            if "default" in option and not isinstance(option["default"], str):
+                raise ValueError(
+                    f"SA117 option default must be a string: {mode_name}/{option_name}"
+                )
         option_names = set(options)
+        declared_options: set[str] = set()
         for profile, declaration in profiles.items():
             if (
                 not isinstance(declaration, dict)
@@ -219,10 +244,14 @@ def _validate_contract(contract: Any) -> None:
                 raise ValueError(
                     f"unknown or overlapping SA117 profile option: {mode_name}/{profile}"
                 )
+            declared_options.update(required + optional)
+        if declared_options != option_names:
+            raise ValueError(f"undeclared SA117 mode option: {mode_name}")
     consumers = contract["consumers"]
     if not isinstance(consumers, list) or not consumers:
         raise ValueError("SA117 contract consumers must be a non-empty list")
     seen_consumers: set[str] = set()
+    seen_consumer_paths: set[str] = set()
     for consumer in consumers:
         if not isinstance(consumer, dict) or set(consumer) != {"name", "path"}:
             raise ValueError(f"invalid SA117 consumer declaration: {consumer!r}")
@@ -230,7 +259,13 @@ def _validate_contract(contract: Any) -> None:
             raise ValueError(f"invalid SA117 consumer types: {consumer!r}")
         if consumer["name"] in seen_consumers:
             raise ValueError(f"duplicate SA117 consumer: {consumer['name']!r}")
+        path = consumer["path"]
+        if path != _normalise(path):
+            raise ValueError(f"SA117 consumer path must be canonical and relative: {path!r}")
+        if path in seen_consumer_paths:
+            raise ValueError(f"duplicate SA117 consumer path: {path!r}")
         seen_consumers.add(consumer["name"])
+        seen_consumer_paths.add(path)
     if not isinstance(contract["metadata"], dict) or set(contract["metadata"]) != {"rev_004"}:
         raise ValueError("SA117 contract metadata must contain only rev_004")
     if not isinstance(contract["metadata"]["rev_004"], str):
@@ -259,14 +294,23 @@ def _contract_mode(scope_path: Path, mode: str) -> dict[str, Any]:
 
 
 def _required_inputs(scope_path: Path, mode: str, profile: str, values: Mapping[str, Any]) -> None:
-    """Fail closed when a caller profile omits a contract-required value."""
+    """Fail closed when a caller profile omits or supplies unsupported inputs."""
     if profile not in {"direct", "make"}:
         raise ValueError(f"unknown SA117 caller profile: {profile!r}")
-    declaration = _contract_mode(scope_path, mode)["profiles"][profile]
+    mode_contract = _contract_mode(scope_path, mode)
+    declaration = mode_contract["profiles"][profile]
     for option in declaration["required"]:
         value = values.get(option.replace("-", "_"))
         if value is None:
             raise ValueError(f"{option} is required for {profile} {mode} mode")
+    allowed = set(declaration["required"] + declaration["optional"])
+    for option, option_contract in mode_contract["options"].items():
+        if option in allowed:
+            continue
+        value = values.get(option.replace("-", "_"))
+        supplied = value is not None and (option_contract["kind"] != "store_true" or value is True)
+        if supplied:
+            raise ValueError(f"{option} is not supported for {profile} {mode} mode")
 
 
 def _tokenise_make_paths(paths: list[str] | None) -> list[str] | None:
@@ -308,9 +352,18 @@ def mode_worktree(
     profile: str = "direct",
 ) -> int:
     """Check that candidate paths are members of the allowlist."""
-    del repo_root, allow_untracked
+    del repo_root
     try:
-        _required_inputs(scope_path, "worktree", profile, {"paths": paths})
+        _required_inputs(
+            scope_path,
+            "worktree",
+            profile,
+            {
+                "paths": paths,
+                "allow_untracked": allow_untracked,
+                "scripts_only": scripts_only,
+            },
+        )
         if profile == "make":
             paths = _tokenise_make_paths(paths)
         allowed = build_allowlist(load_scope(scope_path))
@@ -354,7 +407,12 @@ def mode_lock(
 ) -> int:
     """Check that a candidate path set exactly matches the allowlist."""
     try:
-        _required_inputs(scope_path, "lock", profile, {"paths": paths})
+        _required_inputs(
+            scope_path,
+            "lock",
+            profile,
+            {"paths": paths, "scripts_only": scripts_only},
+        )
         if profile == "make":
             paths = _tokenise_make_paths(paths)
         allowed = build_allowlist(load_scope(scope_path))
@@ -1018,6 +1076,19 @@ def _build_parser(scope_path: Path = DEFAULT_SCOPE_PATH) -> argparse.ArgumentPar
     return parser
 
 
+def _requested_scope_path(argv: list[str]) -> Path:
+    """Select the fact document before building the parser it defines."""
+    selected = DEFAULT_SCOPE_PATH
+    for index, argument in enumerate(argv):
+        if argument == "--scope":
+            if index + 1 >= len(argv):
+                raise ValueError("--scope requires a path")
+            selected = Path(argv[index + 1])
+        elif argument.startswith("--scope="):
+            selected = Path(argument.partition("=")[2])
+    return selected
+
+
 def _render_make_help(scope_path: Path = DEFAULT_SCOPE_PATH) -> None:
     """Render only the SA117 help block; Make owns placement in its help text."""
     contract = _load_scope_document(scope_path)["contract"]
@@ -1038,7 +1109,9 @@ def _render_make_help(scope_path: Path = DEFAULT_SCOPE_PATH) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     try:
-        args = _build_parser().parse_args(argv)
+        arguments = list(sys.argv[1:] if argv is None else argv)
+        scope_path = _requested_scope_path(arguments)
+        args = _build_parser(scope_path).parse_args(arguments)
         if args.render_make_help:
             _render_make_help(args.scope)
             return 0

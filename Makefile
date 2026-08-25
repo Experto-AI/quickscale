@@ -83,6 +83,14 @@ unexport MODULE EXPECTED_REMOTE_SHA
 # quoting is applied.
 single_quote := '
 shell_quote = '$(subst $(single_quote),$(single_quote)\$(single_quote)$(single_quote),$(1))'
+
+# Command-line and environment values are untrusted transport data.  GNU Make
+# otherwise exports command-line variables to recipe shells, where command
+# substitution inside values such as PATHS would execute before the checker can
+# validate it.  Preserve caller-owned values literally, while still expanding
+# repository defaults such as $(CURDIR) and $(VERSION).
+sa117_transport_value = $(if $(filter command line environment environment override,$(origin $(1))),$(value $(1)),$($(1)))
+unexport PATHS PHASE SCRIPTS_ONLY
 GATE_REGISTRY ?= $(MAKEFILE_ROOT)scripts/gate_registry.json
 # Keep the fast check aggregation aligned with the registry.  The helper uses
 # the parity checker's strict JSON/schema validator (including duplicate-key
@@ -1028,17 +1036,22 @@ sa117-lock:
 # be the exact Git top-level. Keep the root anchor and every path argument
 # quoted so worktrees with spaces are supported.
 SA117_BASELINE_REF ?=
-SA117_CANDIDATE ?= $(CURDIR)/poetry.lock
-SA117_EXPECTED_VERSION ?= $(VERSION)
+ifndef SA117_CANDIDATE
+SA117_CANDIDATE := $(if $(filter command line environment environment override,$(origin CURDIR)),$(value CURDIR),$(CURDIR))/poetry.lock
+endif
+ifndef SA117_EXPECTED_VERSION
+SA117_EXPECTED_VERSION = $(if $(filter command line environment environment override,$(origin VERSION)),$(value VERSION),$(VERSION))
+endif
 SA117_EVIDENCE ?= /tmp/sa117-lock-diff-evidence.json
+unexport SA117_BASELINE_REF SA117_CANDIDATE SA117_EXPECTED_VERSION SA117_EVIDENCE
 
 sa117-lock-diff:
 	@set -e; \
 	root=$(call shell_quote,$(value CURDIR)); \
-	baseline_ref=$(call shell_quote,$(value SA117_BASELINE_REF)); \
-	candidate=$(call shell_quote,$(value SA117_CANDIDATE)); \
-	expected_version=$(call shell_quote,$(value SA117_EXPECTED_VERSION)); \
-	evidence=$(call shell_quote,$(value SA117_EVIDENCE)); \
+	baseline_ref=$(call shell_quote,$(call sa117_transport_value,SA117_BASELINE_REF)); \
+	candidate=$(call shell_quote,$(call sa117_transport_value,SA117_CANDIDATE)); \
+	expected_version=$(call shell_quote,$(call sa117_transport_value,SA117_EXPECTED_VERSION)); \
+	evidence=$(call shell_quote,$(call sa117_transport_value,SA117_EVIDENCE)); \
 	cd "$$root"; \
 	$(PYTHON) "$$root/scripts/check_sa117_scope.py" --profile make lock-diff \
 		$(if $(value SA117_BASELINE_REF),--baseline-ref "$$baseline_ref",) \

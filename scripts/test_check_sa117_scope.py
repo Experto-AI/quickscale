@@ -175,6 +175,183 @@ class TestRequiredInputContract:
         }
         assert len(load_scope()) == 106
 
+    @pytest.mark.parametrize(
+        "mutation",
+        [
+            pytest.param("boolean-schema-version", id="boolean-schema-version"),
+            pytest.param("noncanonical-path", id="noncanonical-path"),
+            pytest.param("duplicate-path", id="duplicate-path"),
+            pytest.param("mismatched-flag", id="mismatched-flag"),
+            pytest.param("duplicate-consumer-path", id="duplicate-consumer-path"),
+            pytest.param("undeclared-option", id="undeclared-option"),
+        ],
+    )
+    def test_strict_contract_rejects_ambiguous_semantics(
+        self, tmp_path: pathlib.Path, mutation: str
+    ) -> None:
+        document = _scope_document([{"path": "Makefile", "phase": "1", "notes": ""}])
+        contract = document["contract"]
+        assert isinstance(contract, dict)
+        modes = contract["modes"]
+        assert isinstance(modes, dict)
+        worktree = modes["worktree"]
+        assert isinstance(worktree, dict)
+
+        if mutation == "boolean-schema-version":
+            contract["schema_version"] = True
+        elif mutation == "noncanonical-path":
+            document["paths"] = [{"path": "./Makefile", "phase": "1", "notes": ""}]
+        elif mutation == "duplicate-path":
+            document["paths"] = [
+                {"path": "Makefile", "phase": "1", "notes": ""},
+                {"path": "Makefile", "phase": "2", "notes": "duplicate"},
+            ]
+        elif mutation == "mismatched-flag":
+            worktree["options"]["paths"]["flag"] = "--different-name"
+        elif mutation == "duplicate-consumer-path":
+            contract["consumers"][1]["path"] = contract["consumers"][0]["path"]
+        else:
+            worktree["profiles"]["direct"]["required"].remove("paths")
+            worktree["profiles"]["direct"]["optional"].remove("allow-untracked")
+            worktree["profiles"]["make"]["required"].remove("paths")
+
+        scope = tmp_path / "scope.json"
+        scope.write_text(json.dumps(document), encoding="utf-8")
+        with pytest.raises(ValueError):
+            load_scope(scope)
+
+    def test_custom_scope_drives_parser_help_before_argument_parsing(
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        document = _scope_document([{"path": "Makefile", "phase": "1", "notes": ""}])
+        contract = document["contract"]
+        assert isinstance(contract, dict)
+        modes = contract["modes"]
+        assert isinstance(modes, dict)
+        worktree = modes["worktree"]
+        assert isinstance(worktree, dict)
+        worktree["options"]["paths"]["help"] = "Synthetic custom-scope paths help."
+        scope = tmp_path / "scope.json"
+        scope.write_text(json.dumps(document), encoding="utf-8")
+
+        with pytest.raises(SystemExit) as exit_info:
+            sa117_scope.main(["--scope", str(scope), "worktree", "--help"])
+
+        assert exit_info.value.code == 0
+        assert "Synthetic custom-scope paths help." in capsys.readouterr().out
+
+    def test_profile_rejects_options_it_does_not_declare(self, tmp_path: pathlib.Path) -> None:
+        scope = tmp_path / "scope.json"
+        scope.write_text(
+            json.dumps(_scope_document([{"path": "Makefile", "phase": "1", "notes": ""}])),
+            encoding="utf-8",
+        )
+        assert (
+            sa117_scope.main(
+                [
+                    "--scope",
+                    str(scope),
+                    "--profile",
+                    "make",
+                    "worktree",
+                    "--paths",
+                    "Makefile",
+                    "--allow-untracked",
+                ]
+            )
+            == 2
+        )
+
+    def test_declared_consumers_match_structural_repository_consumers(self) -> None:
+        root = pathlib.Path(__file__).resolve().parents[1]
+        document = json.loads((root / "scripts/sa117_scope.json").read_text(encoding="utf-8"))
+        declared = {item["path"] for item in document["contract"]["consumers"]}
+
+        discovered = {"scripts/check_sa117_scope.py", "scripts/README.md", "Makefile"}
+        for candidate in root.rglob("*.py"):
+            if any(part.startswith(".") or part == "__pycache__" for part in candidate.parts):
+                continue
+            text = candidate.read_text(encoding="utf-8")
+            if (
+                "scripts.check_sa117_scope" in text
+                or "scripts/check_sa117_scope.py" in text
+                or "sa117_scope.json" in text
+            ):
+                discovered.add(candidate.relative_to(root).as_posix())
+
+        assert declared == discovered
+        assert all((root / path).is_file() for path in declared)
+
+        makefile = (root / "Makefile").read_text(encoding="utf-8")
+        for target in ("sa117-check:", "sa117-emit:", "sa117-lock:", "sa117-lock-diff:"):
+            recipe = makefile.split(target, 1)[1].split("\n\n", 1)[0]
+            assert "[ -z " not in recipe
+            assert " required" not in recipe.lower()
+
+    def test_make_transport_does_not_execute_make_or_shell_syntax(self) -> None:
+        root = pathlib.Path(__file__).resolve().parents[1]
+        marker = "SA124_CONTRACT_EXPANDED"
+        result = subprocess.run(
+            ["make", "sa117-check", f"PATHS=$(info {marker})"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode != 0
+        assert marker not in (result.stdout + result.stderr).splitlines()
+
+    def test_make_lock_diff_expands_defaults_but_preserves_caller_data(self) -> None:
+        root = pathlib.Path(__file__).resolve().parents[1]
+        marker = "SA124_LOCK_DIFF_EXPANDED"
+        result = subprocess.run(
+            [
+                "make",
+                "-n",
+                "sa117-lock-diff",
+                "SA117_BASELINE_REF=HEAD",
+                f"SA117_CANDIDATE=$(info {marker})",
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0
+        output = result.stdout + result.stderr
+        assert marker not in output.splitlines()
+        assert "$(info SA124_LOCK_DIFF_EXPANDED)" in output
+        default_result = subprocess.run(
+            ["make", "-n", "sa117-lock-diff", "SA117_BASELINE_REF=HEAD"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert default_result.returncode == 0
+        assert str(root / "poetry.lock") in default_result.stdout
+        assert "$(CURDIR)" not in default_result.stdout
+        assert "$(VERSION)" not in default_result.stdout
+
+        version_result = subprocess.run(
+            [
+                "make",
+                "-n",
+                "sa117-lock-diff",
+                "SA117_BASELINE_REF=HEAD",
+                f"VERSION=$(info {marker})",
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert version_result.returncode == 0
+        assert marker not in (version_result.stdout + version_result.stderr).splitlines()
+        assert "$(info SA124_LOCK_DIFF_EXPANDED)" in version_result.stdout
+
 
 class TestInventoryContract:
     def test_inventory_is_exactly_55_files_and_66_values(self) -> None:
