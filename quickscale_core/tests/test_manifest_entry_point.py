@@ -7,7 +7,8 @@ quickscale_core without a quickscale_cli dependency:
 - build_manifest_wiring_spec routing for unknown modules.
 - Custom adapter registration and unregistration.
 - Public exports from quickscale_core.manifest.
-- Provenance-sensitive checks for module-owned vs core fallback adapters.
+- Provenance-sensitive checks for module-owned adapters and the absence of
+  core fallback adapters.
 - Managed-adapter import/factory failure at an active base path.
 
 SA44 Phase 1: managed adapters (social, billing, CRM) are NOT registered at

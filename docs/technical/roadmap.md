@@ -56,7 +56,7 @@ Applying it produces three ranked bands:
 | Band | Rule | Tickets |
 |---|---|---|
 | **A — Restore enforcement** | The gate layer reports green while not running, or runs red on HEAD. Nothing downstream can be trusted until this is fixed. | completed |
-| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | completed SA167a→SA124→SA123→SA118→SA167c (critical path); SA151→SA142→SA135(+SA163); SA167b→SA167d |
+| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | [completed SA167a] → SA124 → SA123 → SA118 → SA167c (critical path); SA151 → SA142 → SA135 (+ SA163); SA167b → SA167d |
 | **C — Bounded independent fixes** | No dependants, small blast radius. Absorbed as slack filler by whichever worktree finishes a band-B leg early. | SA160, SA161, SA164, SA165, SA166 |
 
 **Standing consequences of that rule:**
@@ -173,7 +173,7 @@ and settled SA167a `entry_point.py` hand-off.
 candidate was re-tested against the ordering rule and rejected again: moving **SA161 (#19) and
 SA160 (#20) from W3 to W1** would relieve W3 — the lane holding the exclusive PostgreSQL/Docker
 slot and the longest wall-clock chain — of two band-C tails that need neither PostgreSQL nor
-Docker, and W1 is idle until SA167a lands. It fails two of the three move tests:
+Docker. It fails two of the three move tests:
 
 - **Not on or feeding the critical path.** The path is `SA167a → SA124 → SA123 → SA118 →
   SA167c`, entirely on W2. Neither ticket appears on it or feeds it, so the move buys no
@@ -242,8 +242,6 @@ critical path:
 
 - **W1 — start SA167b (#17).** The archived SA162 semantics fix and completed SA167a manifest
   hand-off are settled; preserve the manifest-reading entry point while relocating adapters.
-- **W2 — advance SA124 (#11).** SA167a's five manifest declarations are complete; preserve
-  that evidence while advancing the next critical-path leg.
 - **W2 — advance SA124 (#11).** SA167a's five manifest declarations are complete; preserve
   that evidence while advancing the next critical-path leg.
 - **W3 — finish SA151 at S4-D.** S4-A through S4-C are archived as green; run terminal records,

@@ -1454,8 +1454,8 @@ def build_manifest_wiring_spec(
 
     Raises:
         ManifestAdapterNotFound: When no manifest adapter is registered for
-            *module_name*.  The caller should fall back to the legacy builder
-            or handle the error.
+            *module_name*.  The caller must surface or handle the error
+            explicitly; no legacy fallback path exists.
     """
     adapter = MANIFEST_ADAPTER_REGISTRY.get(module_name)
     if adapter is None:
