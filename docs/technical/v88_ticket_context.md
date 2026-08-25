@@ -23,37 +23,37 @@ becomes safe to do.
 
 ## The mind map
 
-The whole release is one principle with five failure modes. Every ticket is a leaf.
+The open release work is one principle with four failure modes. Every ticket is a leaf.
 
 ```text
-                    ONE FACT, ONE HOME
-                    ─ and when the home cannot be read, STOP ─
-                              │
-      ┌──────────┬────────────┼────────────┬──────────────┐
-      │          │            │            │              │
-   UNEXECUTED  DUPLICATED   SILENT      UNOWNED       UNENFORCED
-  ENFORCEMENT  AUTHORITY   FALLBACK    LIFECYCLE       POLICY
-      │          │            │            │              │
-    SA162      SA124         SA165        SA142          SA123
-      │        SA118         SA152        SA135          SA166
-  (bool AST    SA163           │          SA161            │
-   gate)       SA160       (state/tool   (images,       (dep-vuln +
-                SA164       fallbacks)    DB, dead       security
-                │                         code)          scanners,
-             (paths, CI                                  testimony
-              env, cookies)                              trail)
+                  ONE FACT, ONE HOME
+                  ─ and when the home cannot be read, STOP ─
+                                  │
+            ┌─────────────┬───────┴───────┬──────────────┐
+            │             │               │              │
+        DUPLICATED      SILENT         UNOWNED       UNENFORCED
+         AUTHORITY     FALLBACK       LIFECYCLE       POLICY
+            │             │               │              │
+          SA124         SA165           SA142          SA123
+          SA118         SA152           SA135          SA166
+          SA163           │             SA161            │
+          SA160       (state/tool      (images,       (dep-vuln +
+          SA164        fallbacks)       DB, dead       security
+            │                            code)          scanners,
+         (paths, CI                                     testimony
+          env, cookies)                                 trail)
 ```
 
 **The one sentence:** *Every fact should have exactly one home, and every consumer should
 read it from that home. When a consumer cannot read it, the system should stop, not guess —
 and the gate that proves all of this must itself actually run.*
 
-That last clause is what the revised priority model added. The original plan had four
-failure modes; auditing the gate layer found a fifth sitting underneath all of them.
+That last clause is what the revised priority model added. Auditing the gate layer found
+an enforcement failure underneath the four open failure modes; the gate-layer prerequisite
+and SA162 correction are now complete, with their evidence archived in the changelog.
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Unexecuted enforcement** — the gate that proves the other four does not run, or runs on a lie | A gate uses a bool inversion Python 3.16 removes | SA162 |
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA124, SA118, SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA142, SA135, SA161 |
@@ -61,7 +61,7 @@ failure modes; auditing the gate layer found a fifth sitting underneath all of t
 
 The worktree grouping follows it directly:
 
-- **W1** — unexecuted enforcement, module-wiring migration, and bounded watch-item cleanup.
+- **W1** — module-wiring migration and bounded watch-item cleanup.
 - **W2** — duplicated authority + unenforced policy in the **tooling and declared-wiring** domain.
 - **W3** — unowned lifecycle in the **service and emission** domain.
 
@@ -634,47 +634,6 @@ one. The sync-before-merge-back procedure has to preserve every entry.
 
 ---
 
-## SA162 — Fix the deprecated bool inversion in the CSRF AST gate
-
-`Band C · Tier 3 · W1 · merge #14 · deps: none · W1's first merge, gated behind nothing`
-
-### The concrete defect
-
-`scripts/check_csrf_exempt_gate.py:271` uses `~val != 0` where `val` may be a `bool`. That
-raises `DeprecationWarning` on 3.12+ and is **removed in Python 3.16** — verified under
-`-W error::DeprecationWarning` on 3.14.6.
-
-Reachable only when analysed source contains a literal `~True`/`~False`, so the cost is
-future breakage, not present miscomputation. Hence Tier 3.
-
-### The correction to carry — read this before touching the line
-
-The arch audit's suggested fix is **`not val`, and it is wrong. Do not apply it.**
-
-The function evaluates the truthiness of a *bitwise invert in analysed source*:
-
-| Expression | Value | Truthy? |
-|---|---|---|
-| `~True` | `-2` | **yes** |
-| `not True` | `False` | **no** |
-
-Substituting `not val` would make the CSRF gate **misjudge every `~<constant>` operand it
-sees** — turning a dormant deprecation into a live correctness bug in a security gate.
-
-The correct fix is `~int(val) != 0`, which preserves the semantics exactly.
-
-This is worth noting as a pattern: an audit's *finding* and an audit's *suggested fix* carry
-different levels of verification. The finding here was correct; the fix was not.
-
-### Acceptance shape
-
-Pin the semantics with a test asserting the gate's verdict on analysed source containing
-both `~True` and `~False`, so nobody can make this substitution later. Run the gate under
-`-W error::DeprecationWarning`. Record the correction in the arch audit when retiring the
-red flag — the wrong fix should not outlive the finding.
-
----
-
 ## SA165 — Discharge the tech-audit watch items that carry an action
 
 `Band C · Tier 3 · W1 · merge #22 · deps: SA167d (worktree ordering)`
@@ -928,24 +887,20 @@ Follow the merge order in the roadmap. It is the answer.
 
 Each step builds the one after it:
 
-1. **SA162** — the remaining unexecuted-enforcement defect, with semantics that must survive
-   Python 3.16's removal of bool inversion.
-2. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
-3. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
+1. **SA142** — lifecycle ownership, with a single missing YAML key as the root cause.
+2. **SA135** — the remaining service-lifecycle ticket carrying real correctness risk
    (bypassed RLS roles).
-4. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
+3. **SA124, SA123, SA118** — the tooling and wiring tickets, which need the most context
    about existing conventions (scope allowlist, gate registry, emission-parity fixture).
-5. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
+4. **SA163** — duplicated authority at its widest: fourteen stations, one environment.
 
-### The three traps this release keeps setting
+### The two traps this release keeps setting
 
 Worth holding as a set, because each appears in more than one ticket:
 
 - **The tautology trap**. A test that reads the authoritative value and asserts the
   authoritative value passes for any value, including nonsense. Derive *wiring* assertions;
   keep *negative controls* literal.
-- **The wrong-fix trap** (SA162). An audit's finding and an audit's
-  suggested fix carry different verification. `not val` would have broken the CSRF gate.
 - **The green-by-absence trap** (SA135, SA152, SA165). Skipping, filtering,
   and unresolvable paths all produce green. Every one of them must be made to produce red.
 
@@ -962,10 +917,10 @@ roadmap dependency without treating the shared heading as a single ticket:
 
 | Ticket | Merge position | Roadmap dependencies | Current status |
 |---|---:|---|---|
-| SA167a | #8 | none | completed; checked handoff marker retained in the roadmap |
-| SA167b | #17 | SA167a, SA162 | SA167a satisfied; blocked only on SA162 |
-| SA167c | #21 | SA167a, SA118 | SA167a satisfied; blocked only on SA118 |
-| SA167d | #18 | SA167b, SA162 | blocked until both worktree-ordering dependencies are ready |
+| SA167a | #8 | none | implementation evidence recorded; roadmap marker pending the exact quality-gate oracle |
+| SA167b | #17 | SA167a | SA167a implementation handoff is present; roadmap marker pending the exact quality-gate oracle; ready for relocation |
+| SA167c | #21 | SA167a, SA118 | SA167a implementation handoff is present; roadmap marker pending the exact quality-gate oracle; blocked only on SA118 |
+| SA167d | #18 | SA167b | blocked until SA167b lands |
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.
@@ -974,10 +929,13 @@ form of the install instructions a normal Django library writes in its README.
 Django assumes a human reads "add this to `INSTALLED_APPS`" and types it; `quickscale
 apply` generates the project, so that instruction has to be data.
 
-**What went wrong.** That one fact — which Django apps a module contributes — ended up
-expressed in five places: a wiring projection in six manifests, a Python literal inside
-core for five more, nothing at all for `social`, an inert `django_apps:` key in eleven
-manifests that no code reads, and a per-module function pair in the CLI. When a fact
+**What went wrong.** That one fact — which Django apps a module contributes — had five
+competing representations at kickoff: a wiring projection in six manifests, a Python literal
+inside core for five more, nothing at all for `social`, an inert `django_apps:` key in eleven
+manifests that no code reads, and a per-module function pair in the CLI. SA167a's implementation
+is in place, with its roadmap marker pending the exact quality-gate oracle:
+all five former core literals now come from their own manifest projections, while the remaining
+nine core-side adapter blocks are the bounded SA167b relocation seam. When a fact
 lives in five places, no one can tell which is the answer, and `social` shipped models
 and a migration that no generated project ever installed.
 

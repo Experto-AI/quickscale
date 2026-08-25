@@ -5,13 +5,12 @@
 
 ## Purpose
 
-This is the current task planner. It normally holds **open work only** (ratified 2026-08-24,
-Option A). Completed tickets, closed findings, review evidence, and release records are archived
-in [CHANGELOG.md](../../CHANGELOG.md) and version control, then removed rather than checked off.
-The checked SA167a entry is the one explicit completion-marker exception required by its
-handoff; it remains only to make the newly satisfied downstream dependencies visible. Every
-count, dependency graph, and queue position below excludes checked entries and therefore refers
-to open work.
+This is the current task planner. It holds **open work plus explicitly retained checked
+completion records** (ratified 2026-08-24, Option A, with SA162 retained for this closeout).
+Completed tickets, closed findings, review evidence, and release records are archived in
+[CHANGELOG.md](../../CHANGELOG.md); a retained checked item is a completion record, not open
+work. Every count, dependency graph, and queue position below refers to open work unless it
+explicitly labels a retained completion record.
 
 ### Execution rules
 
@@ -56,8 +55,8 @@ Applying it produces three ranked bands:
 | Band | Rule | Tickets |
 |---|---|---|
 | **A — Restore enforcement** | The gate layer reports green while not running, or runs red on HEAD. Nothing downstream can be trusted until this is fixed. | completed |
-| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA124→SA123→SA118→SA167c (critical path, after completed SA167a); SA151→SA142→SA135(+SA163); SA167b→SA167d |
-| **C — Bounded independent fixes** | No dependants, small blast radius. Absorbed as slack filler by whichever worktree finishes a band-B leg early. | SA160, SA161, SA162, SA164, SA165, SA166 |
+| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA167a→SA124→SA123→SA118→SA167c (critical path); SA151→SA142→SA135(+SA163); SA167b→SA167d |
+| **C — Bounded independent fixes** | No dependants, small blast radius. Absorbed as slack filler by whichever worktree finishes a band-B leg early. | SA160, SA161, SA164, SA165, SA166 |
 
 **Standing consequences of that rule:**
 
@@ -81,13 +80,12 @@ Applying it produces three ranked bands:
   worktrees" invariant; as band-C tail (#25) it adds nothing to the critical path. Its
   `deps: SA151` (W3) edge is a content dependency on regenerated migrations and remains
   blocked until SA151's remaining S4-C/S4-D closeout and terminal validation close.
-- **The whole SA167 family is in v88 (decision 2026-08-21).** The ordering argument is
-  band A's, one level down: five modules declare their Django apps as Python literals
-  inside core, which is precisely the "default reachable only through imperative code"
-  that SA118's acceptance forbids — SA118 could neither satisfy that criterion nor widen
-  into the literals without breaking its own scope bound. That made **SA167a** a
-  prerequisite rather than follow-on work, and once the declaration lands there is no
-  reason to ship the release with four of the five wiring surfaces still divergent.
+- **The whole SA167 family is in v88 (decision 2026-08-21).** At kickoff, five modules
+  declared their Django apps as Python literals inside core, which was precisely the
+  "default reachable only through imperative code" that SA118's acceptance forbids.
+  **SA167a is now complete:** those five app lists are manifest-owned and core reads their
+  projections. The remaining SA167b/SA167c/SA167d work is deliberately bounded to adapter
+  relocation, inert-key retirement plus its gate, and CLI wiring cleanup.
   Placement is driven by files, not preference:
   - **SA167a** is on W2 at **merge #8** — the earliest defensible slot. It has no
     dependencies, but it is deliberately *not* placed ahead of band A: its acceptance
@@ -101,10 +99,9 @@ Applying it produces three ranked bands:
   - **SA167b** and **SA167d** touch files no other v88 ticket touches (`entry_point.py`,
     the nine `adapter.py` targets, `module_config.py`), so they go to **W1** — the
     lightest lane — and run parallel to W2's second half instead of extending it. They
-    sequence behind SA162 (#14), W1's only leg with no cross-worktree gate.
-  **Cost, stated plainly:** SA167a was the first serialized W2 manifest leg and SA167c remains
-  the last; SA167b and SA167d
-  are free (parallel on W1) and do not extend the four-leg critical path.
+    sequence after the completed SA162 checkpoint (#14), W1's only leg with no cross-worktree gate.
+  **Cost, stated plainly:** SA167a and SA167c remain serialized W2 legs; SA167b and SA167d
+  are free (parallel on W1) and do not extend the five-leg critical path.
 - **SA163 does not get its own slot.** It executes inside SA135, whose allowlist already
   covers the same provisioning files.
 - **The implementation tickets and the audit tickets are one queue.** The merge-order table
@@ -125,13 +122,13 @@ W2 (gate layer ─► gates & declared wiring)   ★ CRITICAL PATH — 6 open le
   inbound edge:   SA151 (partial, #3) ──► SA164 (#25) content baseline not terminally settled
   outbound edge:  SA167a (#8)     ──► SA167b (W1, #17)   entry_point.py, one-way
 
-W1 (module-wiring migration + watch items)   4 open legs, mostly light
-  SA162 ─► SA167b ─► SA167d ─► SA165
-  csrf    relocate   drain     watch
-  gate    9 adapters CLI       items
-            ▲
+W1 (module-wiring migration + watch items)   3 open legs, mostly light
+  [SA162 ✓ #14] ─► SA167b ─► SA167d ─► SA165
+   completed       relocate   drain     watch
+                   9 adapters CLI       items
+                     ▲
   SA167a (W2, #8) ┘  one-way on entry_point.py
-  SA162 (#14) has no cross-worktree gate — W1's first merge is independent of W2
+  SA162 (#14) is complete; SA167b is W1's next merge and remains gated by SA167a only
 
 W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   5 open positions: 3 heavy + 2 band-C
   SA151 ──► SA142 ──► SA135 + SA163 ──► [SA161, SA160]
@@ -144,7 +141,7 @@ W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   5 open positions: 
 prerequisite outside W2 is satisfied. SA166 (#24) and SA164 (#25) are band-C tails behind
 the chain, not on it. W2's back half is the release's implementation work, so W2 sets the
 date. SA167b and SA167d cost nothing on the critical path: W1 runs them against W2's second
-half. **Load check:** W1 carries four open legs and W3 five positions against the four-leg
+half. **Load check:** W1 carries three open legs and W3 five positions against the five-leg
 critical path. W3's two band-C tails do not gate release, so W2 remains the binding lane — see
 the irreducibility argument below.
 
@@ -166,8 +163,9 @@ SA150's former `SA150 → SA118` edge is retired: the fail-hard version-spec sea
 SA118 builds on it as settled tree state, not as a pending dependency.
 
 **Parallelism result:** all three lanes have an executable implementation action today. W2 is
-ready to start SA124 (#11) after SA167a (#8) completed; W3 resumes SA151 at S4-C after the BYPASSRLS environment repair; W1's head
-is SA162 (#14), which SA150's closure freed of its last ordering edge.
+ready to start SA124 (#11) after SA167a (#8) completed; W3 resumes SA151 at S4-C after the
+BYPASSRLS environment repair; W1's head is SA167b (#17) after the completed SA162 checkpoint
+(#14) and the settled SA167a `entry_point.py` hand-off.
 
 **No track moves this pass.** Every open ticket already carries a worktree, and one candidate
 was examined and rejected on the ordering rule: moving **SA161 (#19) and SA160 (#20) from W3 to
@@ -198,21 +196,21 @@ all on W2 after completed SA167a. Shared closeout surfaces (`CHANGELOG.md`,
 `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`, and both audit docs)
 remain covered by the standing sync-before-merge-back procedure.
 
-### Track readiness (reconciled 2026-08-24, sixth pass)
+### Track readiness (reconciled 2026-08-24, seventh pass)
 
 Each track reports three independent states. A track is **truly green** only when all three
-are yes. SA167a closed since the previous pass; W2's next-ticket state moved to SA124. This
-pass also removed the archived SA155 record and SA151's archived closure narrative from the
-planner and re-tested the queue for rebalance opportunities (none taken — see above).
+are yes. SA167a and SA162 closed in this pass; their checked completion records remain visible
+while their merge positions are excluded from open-work counts. The queue and track states below
+were re-tested for rebalance opportunities (none taken — see above).
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
 | **W2** | SA124 (#11) | **yes** — SA167a's five manifest declaration surfaces are complete | **yes** — the SA124 scope-tool surfaces are W2-owned | **yes** — #11 follows completed SA167a | **ready — next critical-path leg** |
-| **W1** | SA162 (#14) | **yes** — `deps: none`; nothing waits on a decision, authorization, or plan gate | **yes** — the whole change is `scripts/check_csrf_exempt_gate.py` plus its focused test and the two audit retirements, all W1-owned | **yes** — #14 is W1's first merge and is order-gated behind nothing | **truly green** |
+| **W1** | SA167b (#17) | **yes** — SA162 (#14) and SA167a (#8) are complete | **yes** — the adapter relocation remains entirely W1-owned | **yes** — #17 follows the completed SA167a hand-off | **truly green** |
 | **W3** | SA151 (#3, **S4-A/S4-B done; S4-C/S4-D open**) | **yes** — the BYPASSRLS environment prerequisite was repaired and the gate passed on 2026-08-24; nothing waits on a decision, authorization, or plan gate | **yes** — only S4-C closeout validation and S4-D terminal records remain, and both are W3-owned; no other track's output is required | **yes** — #3 heads its own chain and merges after nothing | **truly green — restored to the second chain** |
 
-**All three tracks are truly green — every one of the three states is yes on every lane.** Only
-one of the three next actions is on the critical path:
+**All three tracks are truly green.** Of the three executable next actions, only one is on the
+critical path:
 
 - **W2 / SA124 (#11) — truly green and on the critical path.** This is the next real
   release-date action after completed SA167a; it heads the remaining spine.
@@ -220,9 +218,8 @@ one of the three next actions is on the critical path:
   closing it releases SA142 (#10), SA135+SA163 (#15), SA164 (#25), and post-v88 SA152 — high
   value, but it does not move the release date. W3 must observe the lane-ownership flip
   recorded under SA151 S4-A before any database-backed rerun.
-- **W1 / SA162 (#14) — truly green, off the critical path: filler.** It is a band-C trivial fix
-  with no dependants. It is worth running only because W1 would otherwise idle; if W1 ever
-  becomes binding, this is the first leg to defer, never SA167b or SA167d.
+- **W1 / SA167b (#17) — truly green, off the critical path.** SA162 (#14) and SA167a (#8)
+  are complete checked records; SA167b is the next W1 leg and inherits the settled hand-off.
 
 **Blocked next-after tickets, and what clears each:**
 
@@ -234,14 +231,12 @@ one of the three next actions is on the critical path:
 
 **Recommended concurrency right now:**
 
-- **W1 — run SA162 (#14).** Executable today and merges behind nothing. One-line fix
-  (`~int(val) != 0`, *not* the arch audit's wrong `not val`), one pinned-semantics test, two
-  audit retirements. Filler by design; it keeps W1 busy while W2 advances beyond SA167a (#8) and releases
-  SA167b.
-- **W2 — advance SA124 (#11).** SA167a's five manifest declarations and manifest-reading
-  adapters are complete; preserve that evidence while advancing the next critical-path leg.
-- **W3 — resume SA151 at S4-C.** S4-A and S4-B are done and green; the lane is executable
-  today. Run closeout validation, then S4-D terminal records, convergence, and attestation.
+- **W1 — start SA167b (#17).** SA162's semantics fix and SA167a's manifest hand-off are
+  complete; preserve the manifest-reading entry point while relocating the adapters.
+- **W2 — advance SA124 (#11).** SA167a's five manifest declarations are complete; preserve
+  that evidence while advancing the next critical-path leg.
+- **W3 — resume SA151 at S4-C.** S4-A and S4-B are done and green; run closeout validation,
+  then S4-D terminal records, convergence, and attestation.
   Only that clean result unblocks SA142, SA164, and SA152.
 
 #### Open maintainer decisions
@@ -250,8 +245,8 @@ one of the three next actions is on the critical path:
 upstream work can clear; none of them can be cleared by a maintainer choice. The three decisions
 that were open are settled and archived in [CHANGELOG.md](../../CHANGELOG.md): the gate-suite
 execution choice and SA167a's #8 position (both 2026-08-22), and roadmap documentation ownership
-(2026-08-24 — **Option A**: this roadmap holds open work only, completed tickets are archived in
-the changelog and removed here rather than checked off).
+(2026-08-24 — **Option A**, with the explicitly retained checked SA162 completion record: the
+ roadmap holds open work, while retained checked records are excluded from open-work counts).
 
 **One standing operating constraint, not a decision:** the local database-lane ownership flip
 recorded under SA151 **S4-A** — whichever of `make test-integration` and `make test-bypassrls`
@@ -271,11 +266,11 @@ is excluded from the open-position and open-entry counts above.
 | 10 | **SA142** | B | 1 | W3 | SA151 | **yes** — Docker |
 | 11 | **SA124** | B | 1 | W2 | SA167a | no |
 | 13 | **SA123** | B | 2 | W2 | SA124 | no |
-| 14 | **SA162** | C | 3 | W1 | — (`deps: none`) | no |
+| 14 | **SA162 ✓ (completed)** | C | 3 | W1 | — (`deps: none`) | no |
 | 15 | **SA135** + **SA163** | B | 2 | W3 | SA142 | **yes** — PostgreSQL + Docker |
 | 16 | **SA118** | B | 2 | W2 | SA123, **SA167a** | no |
-| 17 | **SA167b** | B | 2 | W1 | SA162, **SA167a** | no |
-| 18 | **SA167d** | B | 3 | W1 | SA162, **SA167b** | no |
+| 17 | **SA167b** | B | 2 | W1 | **SA167a** (after completed SA162) | no |
+| 18 | **SA167d** | B | 3 | W1 | SA167b | no |
 | 19 | **SA161** | C | 3 | W3 | SA135 | no |
 | 20 | **SA160** | C | 2 | W3 | SA161 | no |
 | 21 | **SA167c** | B | 2 | W2 | **SA167a**, **SA118** | no |
@@ -284,13 +279,13 @@ is excluded from the open-position and open-entry counts above.
 | 25 | **SA164** | C | 3 | W2 | SA166, **SA151** | no |
 
 Merges #1 (SA156), #2 (SA137), #4 (SA157), #5 (SA159), #6 (SA158), #6b (SA168), #7
- (gate-layer closure), #9 (SA134), #12 (SA150), and #23 (SA164's former W1 slot) are retired,
-not reused; the ten closed tickets are archived in [CHANGELOG.md](../../CHANGELOG.md), with
-SA167a's checked handoff marker also retained here. SA162 and SA167b swapped positions on
-2026-08-24 (#14 and #17) when SA150's closure left SA162 with no ordering edge, so W1's first
-merge is not gated behind W2.
+(gate-layer closure), #9 (SA134), #12 (SA150), and #23 (SA164's former W1 slot) are retired,
+not reused; the ten closed tickets are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167a
+and SA162 are retained checked completion records and excluded from the open queue. SA162 and
+SA167b swapped positions on 2026-08-24 (#14 and #17) when SA150's closure left SA162 with no
+ordering edge; SA167b now follows both completed checkpoints.
 
-Band-C positions (14, 19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. Any of them may slip
+Band-C positions (19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. Any of them may slip
 past the release without blocking it; none may displace a band-A or band-B leg.
 
 ### Shared conflict surfaces
@@ -369,18 +364,18 @@ Conceptual background, mental models, and implementation notes for **every** tic
   Add blocking dependency and focused security scanners with reviewed suppressions; register every new gate through the authoritative gate registry.
   **Acceptance:** a dependency-vulnerability scanner and a focused security static-analysis scanner run as blocking gates; both are registered in `scripts/gate_registry.json` and pass `scripts/check_gate_parity.py`; every suppression carries a written rationale and an owner; the gates fail on a deliberately introduced known-vulnerable pin and on a deliberately introduced flagged pattern, both reverted before merge; `make quality` is no worse than found.
 
-- [x] **SA167a — Move the five hand-written app declarations into their manifests.** `Band B · Tier 1 · W2 · merge #8 · deps: none · blocks SA118, SA167b, SA167c`
+- [ ] **SA167a — Move the five hand-written app declarations into their manifests.** `Band B · Tier 1 · W2 · merge #8 · deps: none · blocks SA118, SA167b, SA167c`
   Prerequisite of SA118, not follow-on work. Before this ticket, `auth`, `backups`, `notifications`, `orgs`, and `storage` carried their `INSTALLED_APPS` contribution as Python literals inside core-side adapter blocks in `quickscale_core/src/quickscale_core/manifest/entry_point.py`, not in their own `module.yml`. Those were **defaults reachable only through imperative code** — the exact condition SA118's acceptance criterion forbids.
   Scope remained deliberately narrow: **declaration only, no relocation.** Each of the five manifests now has a `derivation.wiring_projections` entry with `wiring_field: apps`, and core reads it. Adapters remain in `entry_point.py` — moving them is SA167b (#17, W1). The other four core-side modules (analytics, blog, listings, forms) already read `apps` from their manifests and were untouched.
-  **Acceptance (satisfied):** each of the five manifests declares its Django apps in its own `derivation.wiring_projections` `apps` entry; no `apps` value is a Python literal in `entry_point.py` for any module; the resolved `spec.apps` for all twelve modules is byte-identical before and after, recorded as a before/after table; generator emission parity is **unchanged** — no rebaseline, which proves the change is behaviour-preserving; a generated project with all modules booted with an identical `MODULE_INSTALLED_APPS`; `make quality` was no worse than found.
+  **Acceptance evidence:** each of the five manifests declares its Django apps in its own `derivation.wiring_projections` `apps` entry; no `apps` value is a Python literal in `entry_point.py` for any module; the resolved `spec.apps` for all twelve modules is byte-identical before and after, recorded as a before/after table; generator emission parity is **unchanged** — no rebaseline, which proves the change is behaviour-preserving; and a generated project with all modules booted with an identical `MODULE_INSTALLED_APPS`. The implementation and focused evidence are complete, but this marker remains pending until the required `make quality` acceptance oracle is reproduced exactly: the current run returned exit 1 with two warning regressions and zero critical regressions, while the accepted oracle requires exit 2. SA167b/SA167c remain pending phases and are not part of this blocker.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_modules/{auth,backups,notifications,orgs,storage}/module.yml`. **Ordering:** must merge before SA118 (#16) and SA167c (#21), which both rewrite the same manifests, and before SA167b (#17, W1), which relocates the adapter blocks this ticket makes manifest-reading.
   **Why #8:** SA167a has no ticket dependencies, and the retired gate-layer position is not reused. This is the earliest slot where its acceptance evidence is evaluated against the completed registered validation context.
 
 - [ ] **SA118 — Project every declared manifest default into wiring.** `Band B · Tier 2 · W2 · merge #16 · deps: SA123, SA167a · blocks SA167c`
   Materialize authoritative declared defaults without widening into the full imperative-to-declarative migration; rebaseline emission parity with per-file rationale.
-  **Acceptance:** every default declared in a module manifest is projected into generated wiring, with no default reachable only through imperative code (the five app-declaration literals are cleared by SA167a first); the imperative-to-declarative migration is *not* attempted — out-of-scope seams are ticketed, not converted; emission parity is rebaselined with a per-file rationale for each changed output; a generated project boots and its module wiring reflects the declared defaults; manifest version-spec handling uses the merged fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` seam (SA150, closed; see [local-wheelhouse.md](local-wheelhouse.md)).
+  **Acceptance:** every default declared in a module manifest is projected into generated wiring, with no default reachable only through imperative code (the five app-declaration literals were cleared by completed SA167a); the imperative-to-declarative migration is *not* attempted — out-of-scope seams are ticketed, not converted; emission parity is rebaselined with a per-file rationale for each changed output; a generated project boots and its module wiring reflects the declared defaults; manifest version-spec handling uses the merged fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` seam (SA150, closed; see [local-wheelhouse.md](local-wheelhouse.md)).
 
-- [ ] **SA167b — Relocate the nine core-side adapters into their modules.** `Band B · Tier 2 · W1 · merge #17 · deps: SA167a (shares entry_point.py, merges first), SA162 (worktree ordering) · blocks SA167d`
+- [ ] **SA167b — Relocate the nine core-side adapters into their modules.** `Band B · Tier 2 · W1 · merge #17 · deps: SA167a (shares entry_point.py, merges first) · blocks SA167d` SA162's worktree-ordering dependency is complete.
   With app declarations already in the manifests (SA167a, #8), what remains is relocation. `analytics, auth, backups, blog, forms, listings, notifications, orgs, storage` still register core-side at import time from per-module blocks in `quickscale_core/src/quickscale_core/manifest/entry_point.py` — about 1,139 lines across nine blocks, ranging from 57 (forms) to 265 (notifications). `billing`, `crm`, and `social` already ship module-owned adapters and collapse to a 2–7 line pointer comment each; that is the shape all twelve should end in, leaving `entry_point.py` at roughly 350 lines of discovery machinery.
   Do it as **one ticket, not one per module**: all nine delete from the same file, so per-module tickets would serialize anyway while adding nine-way contention on `entry_point.py` and splitting one logical change nine ways.
   **Acceptance:** every shipped module owns its adapter at `quickscale_modules/<name>/src/quickscale_modules_<name>/adapter.py` exposing `get_manifest_adapter()`; `MANAGED_ADAPTER_ORIGINS` covers the full inventory; no per-module block remains in `entry_point.py`, which retains only generic helpers, the registry, and the public entry point; generator emission parity is unchanged, proving the relocation is behaviour-preserving; the tree conforms to [decisions.md §Module Wiring Authority](decisions.md#module-wiring-authority).
@@ -391,18 +386,31 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Acceptance:** `django_apps:` is either derived from the `apps` wiring projection or removed from all manifests, `ModuleManifest`, and the loader, with no key parsed-but-unread remaining; a conformance gate fails when a module ships models or a migration without declaring at least one Django app, registered in `scripts/gate_registry.json` and passing `scripts/check_gate_parity.py`; the gate is proved by deleting a module's app declaration and observing red, reverted before merge; `test_sa92_migration_squash_guardrail.py` no longer depends on the retired key.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/{schema,loader}.py`, every `quickscale_modules/*/module.yml`, `scripts/gate_registry.json`, `Makefile`, CI workflow, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`.
 
-- [ ] **SA167d — Drain per-module wiring logic out of the CLI.** `Band B · Tier 3 · W1 · merge #18 · deps: SA167b, SA162 (worktree ordering)`
+- [ ] **SA167d — Drain per-module wiring logic out of the CLI.** `Band B · Tier 3 · W1 · merge #18 · deps: SA167b` SA162's worktree-ordering dependency is complete.
   `quickscale_cli/src/quickscale_cli/commands/module_config.py` is 2,154 lines carrying a `configure_<name>_module()` / `apply_<name>_configuration()` pair per module — a fifth place the same wiring facts are expressed. Plan-time interactive prompts that collect **desired configuration** are legitimate and stay; anything deciding what a module *wires* belongs in the module.
   **Acceptance:** no function in `module_config.py` decides a module's apps, middleware, settings keys, or URL includes — those come from the module's manifest through its adapter; the remaining surface is desired-configuration collection only, and that boundary is stated in the module's docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist) is retired once the deviation it names is gone.
   **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`.
 
-- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · S1-S3 RETAINED; S4-A/S4-B DONE 2026-08-24; S4-C/S4-D OPEN`
+- [ ] **SA151 — Recreate module migrations as clean initial schemas.** `Band B · Tier 1 · W3 · merge #3 · deps: none · PostgreSQL slot · S1-S3 RETAINED; S4-A/S4-B DONE; S4-C SOFTWARE GREEN 2026-08-24; S4-D OPEN`
   QuickScale is pre-1.0 and explicitly not backward compatible across versions, so incremental migration history carries no value. Delete every existing migration in `quickscale_modules/*/src/quickscale_modules_*/migrations/` (notably `backups` `0002`–`0005`, plus each module's stale `0001_initial`) and regenerate a single `0001_initial` per module from the current models.
   **Acceptance:** exactly one `0001_initial` per module with models, and no other migration files; a generated project applies all module migrations from an empty database in one pass; `makemigrations --check --dry-run` reports no pending changes for every module; `make test-integration` passes; existing databases are out of scope by policy — the documented upgrade path is a fresh database; the no-migration-history policy is recorded in [decisions.md](decisions.md).
 
   **Checkpoint state:** S1-S3 and S4-A/S4-B are settled; their evidence is archived in
-  [CHANGELOG.md](../../CHANGELOG.md). The ticket remains open at **S4-C/S4-D**, and
-  SA142/SA164/SA152 remain blocked until it closes.
+  [CHANGELOG.md](../../CHANGELOG.md). S4-C's software campaign is now green, but its Adaptive
+  handback remained partial because the execution plan hard-coded stale historical `make check`
+  counts. The unchanged current tree reports **2,806 Core passed / 1 skipped** and **2,117 CLI
+  passed**, rather than 2,788/2,104. This is an evidence-oracle mismatch, not a failing test or
+  product defect. S4-D was therefore not reached, the item stays unmarked, and SA142/SA164/SA152
+  remain blocked until terminal records, convergence, and attestation close the ticket.
+
+  **Retained S4-C evidence (2026-08-24):** topology **41 passed**; generated empty-PostgreSQL
+  proof **1 passed, 0 skipped**; restricted integration **2,471 passed, 86 skipped, 12 deselected,
+  94.41% mean coverage**; BYPASSRLS **80 passed, 0 errors, 0 skipped, 2,488 deselected**;
+  typecheck passed; serial E2E passed Core **36** and CLI **36** with 0 skips and cleanup;
+  `make check` passed with the current 2,806/2,117 collection above; `make quality` matched the
+  accepted GNU Make exit-2 oracle of exactly two warning regressions, zero critical regressions,
+  and monotonicity pass. Ownership was observed 12/12 under the BYPASSRLS role during that lane,
+  restored 12/12 to `quickscale_test_role`, and independently rechecked after all downstream gates.
 
   One live operating constraint survives from the S4-A repair and must be observed before
   every database-backed run on any lane:
@@ -440,16 +448,16 @@ Conceptual background, mental models, and implementation notes for **every** tic
   > per-lane database set or a provisioning step that owns the flip — is **SA163**'s
   > fourteenth-station work and an additional argument for **SA135**'s owned-lifecycle design.
 
-  **Remaining S4 continuation — what still closes SA151:**
-  1. **S4-C, closeout validation:** confirm the retained focused topology, generated PostgreSQL,
-     restricted integration, serial E2E, typecheck, `make check`, and exact accepted
-     `make quality` evidence still applies to the same settled delta; rerun only what changed or
-     what terminal policy requires. Note the restricted-integration leg was re-measured green
-     during the S4-A repair and may be reused if the delta has not moved.
-  2. **S4-D, terminal records:** run the quantified status sweep, archive terminal evidence in
-     `CHANGELOG.md`, remove this completed open-work body from the roadmap, unblock
-     SA142/SA164/SA152, and take convergence plus terminal attestation. Only that clean result
-     may mark SA151 complete.
+  **Remaining S4 continuation — reusable handoff plan:**
+  1. **S4-C evidence reconciliation:** obtain a fresh reviewed plan that binds `make check` counts
+     from the current command output rather than the stale historical literal. Reuse the retained
+     campaign only if the settled tree and required terminal policy are unchanged; otherwise rerun
+     the affected validation and preserve the pre-armed 12/12 database-restoration contract.
+  2. **S4-D, terminal records:** run the quantified status sweep; archive terminal evidence in
+     `CHANGELOG.md`; remove this completed open-work body from the roadmap; synchronize
+     `v88_ticket_context.md`, the docs hub, audit status, and the consistency canary; unblock
+     SA142/SA164/SA152; then take convergence and terminal attestation. Only that clean result may
+     mark SA151 complete.
 
 - [ ] **SA142 — Reuse and clean E2E Docker images.** `Band B · Tier 1 · W3 · merge #10 · deps: SA151 · Docker slot · blocks SA135`
   Separate stable image identity from per-run container/port/volume identity, reclaim variable images under normal cleanup, and preserve `--no-cleanup` diagnostics.
@@ -495,10 +503,10 @@ Band A is empty: the gate-layer prerequisite (former merge #7) is complete and a
   **Acceptance:** both definitions are deleted, or each carries a comment pointing at the orgs helper as the live implementation; the uppercase settings and the `REST_FRAMEWORK["NUM_PROXIES"]` recomputation are retained unchanged; the misleading behavioural comment at `production.py.j2:119-122` is removed either way; a generated project boots and proxy-aware client-IP resolution is unchanged, asserted by a test; emission parity is rebaselined with rationale; the tech-audit finding is retired.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/`, emission parity baselines, `docs/others/tech-audit.md`.
 
-- [ ] **SA162 — Fix the deprecated bool inversion in the CSRF AST gate.** `Band C · Tier 3 · W1 · merge #14 · deps: none · W1's first merge, gated behind nothing`
-  Closes tech-audit **TA69** (`csrf-gate-bool-invert-deprecated`, S4) and arch red flag #5. `scripts/check_csrf_exempt_gate.py:271` uses `~val != 0` where `val` may be a `bool`; this raises `DeprecationWarning` on 3.12+ and is **removed in Python 3.16**, verified under `-W error::DeprecationWarning` on 3.14.6. Reachable only when analysed source contains a literal `~True`/`~False`, so the cost is future breakage rather than present miscomputation.
+- [x] **SA162 — Fix the deprecated bool inversion in the CSRF AST gate.** `Band C · Tier 3 · W1 · merge #14 · deps: none · completed 2026-08-24; retained checked completion record`
+  Closes tech-audit **TA69** (`csrf-gate-bool-invert-deprecated`, S4) and arch red flag #5. Before SA162, `scripts/check_csrf_exempt_gate.py:271` used `~val != 0` where `val` may be a `bool`; this raised `DeprecationWarning` on 3.14.6 and is **removed in Python 3.16**. The completed implementation uses `~int(val) != 0`, preserving the semantics for analyzed source containing literal `~True`/`~False`.
   **Correction to carry:** the arch audit's suggested fix (`not val`) is **wrong** and must not be applied. The function evaluates the truthiness of a *bitwise invert* in analysed source: `~True` is `-2` (truthy) whereas `not True` is `False`, so that substitution would make the CSRF gate misjudge every `~<constant>` operand it sees. The correct fix is `~int(val) != 0`, preserving the semantics.
-  **Acceptance:** the expression is `~int(val) != 0` or equivalent; the gate runs clean under `-W error::DeprecationWarning`; a test pins the gate's verdict on analysed source containing `~True` and `~False` so the semantics cannot silently change; the arch-audit red flag is retired with the correction recorded, and the tech-audit finding is retired.
+  **Acceptance (met):** the expression is `~int(val) != 0`; the gate runs clean under `-W error::DeprecationWarning`; analyzed-source tests pin the gate's verdict on both `~True` and `~False` so the semantics cannot silently change; the arch-audit red flag is retired with the correction recorded, and the tech-audit finding is retired.
   **Shared conflict surface:** `scripts/check_csrf_exempt_gate.py`, `docs/others/tech-audit.md`, `docs/others/arch-audit.md`.
 
 - [ ] **SA163 — Derive the CI PostgreSQL environment from one authoritative source.** `Band B · Tier 2 · W3 · merge #15 · deps: SA135 — executes inside SA135, not as a separate pass`

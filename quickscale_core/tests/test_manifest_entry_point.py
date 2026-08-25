@@ -1652,6 +1652,107 @@ _SA167A_MANIFEST_APPS: dict[str, tuple[str, ...]] = {
 }
 
 
+class _SA167aAppLiteralVisitor(ast.NodeVisitor):
+    """Collect migrated app literals from executable AST nodes.
+
+    This deliberately does not model only one constructor or keyword shape.
+    An exact app member is an ownership violation whether it appears in a
+    ``WiringProjection``, a helper return, a local variable, or another
+    ``apps=`` consumer.  Module/function/class docstrings are skipped because
+    prose is not executable wiring.
+    """
+
+    def __init__(self, app_literals: frozenset[str]) -> None:
+        self.app_literals = app_literals
+        self.matches: list[tuple[int, str]] = []
+
+    @staticmethod
+    def _is_docstring(node: ast.stmt) -> bool:
+        return (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        )
+
+    def _visit_body(self, body: list[ast.stmt]) -> None:
+        for index, statement in enumerate(body):
+            if index == 0 and self._is_docstring(statement):
+                continue
+            self.visit(statement)
+
+    def visit_Module(self, node: ast.Module) -> None:
+        self._visit_body(node.body)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_body(node.body)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_body(node.body)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._visit_body(node.body)
+
+    @classmethod
+    def _static_string(cls, node: ast.expr) -> str | None:
+        """Resolve a string assembled entirely from literals, if possible."""
+        if isinstance(node, ast.Constant):
+            return node.value if isinstance(node.value, str) else None
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            left = cls._static_string(node.left)
+            right = cls._static_string(node.right)
+            if left is not None and right is not None:
+                return left + right
+        if isinstance(node, ast.JoinedStr):
+            parts: list[str] = []
+            for value in node.values:
+                if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                    parts.append(value.value)
+                    continue
+                if (
+                    isinstance(value, ast.FormattedValue)
+                    and isinstance(value.value, ast.Constant)
+                    and isinstance(value.value.value, str)
+                ):
+                    parts.append(value.value.value)
+                    continue
+                return None
+            return "".join(parts)
+        return None
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        if isinstance(node.value, str) and node.value in self.app_literals:
+            self.matches.append((node.lineno, node.value))
+
+    def visit_BinOp(self, node: ast.BinOp) -> None:
+        value = self._static_string(node)
+        if value in self.app_literals:
+            self.matches.append((node.lineno, value))
+        self.generic_visit(node)
+
+    def visit_JoinedStr(self, node: ast.JoinedStr) -> None:
+        value = self._static_string(node)
+        if value in self.app_literals:
+            self.matches.append((node.lineno, value))
+        self.generic_visit(node)
+
+
+def _find_sa167a_app_literals(source: str) -> list[tuple[int, str]]:
+    """Return every executable exact app member owned by SA167a manifests."""
+    tree = ast.parse(source)
+    app_literals = frozenset(
+        app for apps in _SA167A_MANIFEST_APPS.values() for app in apps
+    )
+    visitor = _SA167aAppLiteralVisitor(app_literals)
+    visitor.visit(tree)
+    return visitor.matches
+
+
+def _assert_no_sa167a_app_literals(source: str) -> None:
+    """Assert that core source cannot reintroduce a migrated app literal."""
+    matches = _find_sa167a_app_literals(source)
+    assert not matches, f"SA167a app literals remain in entry_point.py: {matches}"
+
+
 class TestSA167aManifestOwnedApps:
     """SA167a pins manifest ownership without changing resolved app wiring."""
 
@@ -1672,32 +1773,34 @@ class TestSA167aManifestOwnedApps:
         assert isinstance(expression, dict)
         assert expression.get("value") == list(_SA167A_MANIFEST_APPS[module_name])
 
-    def test_entry_point_has_no_apps_projection_literals(self) -> None:
-        """Core adapters consume manifest app projections rather than literals."""
+    def test_entry_point_has_no_core_owned_app_literals(self) -> None:
+        """Core adapters consume manifest app projections rather than literals.
+
+        The ownership invariant is intentionally stronger than checking only
+        ``WiringProjection`` constructors.  A helper return, a local tuple, or
+        a direct ``ResolverResult(apps=...)`` would still make core the owner.
+        """
         source = Path(inspect.getfile(entry_point_module)).read_text()
-        tree = ast.parse(source)
-        app_projection_lines = [
-            node.lineno
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and (
-                (isinstance(node.func, ast.Name) and node.func.id == "WiringProjection")
-                or (
-                    isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "WiringProjection"
-                )
-            )
-            and any(
-                keyword.arg == "wiring_field"
-                and isinstance(keyword.value, ast.Constant)
-                and keyword.value.value == "apps"
-                for keyword in node.keywords
-            )
-        ]
-        assert not app_projection_lines, (
-            "entry_point.py still declares apps WiringProjection literals at lines "
-            f"{app_projection_lines}"
+        _assert_no_sa167a_app_literals(source)
+
+    def test_non_wiring_projection_literal_is_an_expected_red_canary(self) -> None:
+        """A realistic helper/variable/ModuleWiringSpec form fails closed."""
+        source = Path(inspect.getfile(entry_point_module)).read_text()
+        canary_source = (
+            source
+            + """
+
+def _sa167a_expected_red_canary() -> ModuleWiringSpec:
+    core_owned_apps = ("quickscale_modules_" + "auth",)
+
+    def _apps_from_helper() -> tuple[str, ...]:
+        return core_owned_apps
+
+    return ModuleWiringSpec(apps=_apps_from_helper())
+"""
         )
+        with pytest.raises(AssertionError, match="SA167a app literals"):
+            _assert_no_sa167a_app_literals(canary_source)
 
 
 _EXPECTED_CATALOG_APPS: dict[str, tuple[str, ...]] = {

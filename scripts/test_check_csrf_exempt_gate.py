@@ -1734,6 +1734,28 @@ class TestCsrfExemptVisitorFunctionLevel:
         )
         assert _get_violation_count(source) == 0
 
+    def test_analyzed_source_invert_true_verdict_passes(self) -> None:
+        """The analyzed ``~True`` branch remains reachable and accepted."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if ~True:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
+    def test_analyzed_source_invert_false_verdict_passes(self) -> None:
+        """The analyzed ``~False`` branch remains reachable and accepted."""
+        source = (
+            "@csrf_exempt\n"
+            "def my_view(request):\n"
+            "    if ~False:\n"
+            "        _enforce_csrf(request)\n"
+            "    return JsonResponse({})\n"
+        )
+        assert _get_violation_count(source) == 0
+
     def test_helper_under_if_one_is_reachable_passes(self) -> None:
         """Helper inside ``if 1:`` body is reachable and accepted."""
         source = (

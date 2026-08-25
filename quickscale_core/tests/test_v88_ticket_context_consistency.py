@@ -27,7 +27,7 @@ SECTION_RE = re.compile(r"^## (SA\d+[^\n]*)$", re.MULTILINE)
 UMBRELLA_TITLE = "SA167a / SA167b / SA167c / SA167d — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167b", "SA167c", "SA167d"})
 AUXILIARY_MULTI_TICKET_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
-RETAINED_CLOSED_TICKETS = frozenset({"SA167a"})
+RETAINED_CLOSED_TICKETS = frozenset({"SA162"})
 
 # SA135 and SA163 share one merge position, but remain separately enumerable roadmap entries.
 SHARED_POSITION_GROUPS = (frozenset({"SA135", "SA163"}),)

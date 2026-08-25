@@ -268,12 +268,17 @@ section describes the mechanism only.
 **Current state versus this contract.** Three modules (social, billing, CRM) are
 module-owned today. The remaining nine (analytics, blog, listings, forms, backups,
 notifications, auth, orgs, storage) still register at import time from per-module
-blocks inside ``entry_point.py``, and five of those carry their app list as a Python
-literal in core. The five literals are cleared by **`SA167a`** (v88, merge #8) and the
-blocks relocated by **`SA167b`** (v88, merge #17); they are a **deviation pending migration**,
-not a supported second path: the "compatibility fallback for bundled/installed
-contexts" rationale previously recorded here was retired by the AF7 fail-hard
-decision, which removed the context it described.
+blocks inside ``entry_point.py``, which is the adapter-relocation scope of **`SA167b`**
+(v88, merge #17). Their app contributions are no longer Python literals in core:
+**`SA167a`** (v88, merge #8) completed the five-module declaration phase, and those
+five manifests now own the exact app projections consumed by core. This remains a
+temporary registration boundary pending SA167b, not a supported second wiring path:
+the "compatibility fallback for bundled/installed contexts" rationale previously
+recorded here was retired by the AF7 fail-hard decision, which removed the context it
+described. The inert ``django_apps:`` surface remains parsed-but-unread pending
+**`SA167c`** (v88, merge #21), while the CLI's per-module wiring logic remains pending
+**`SA167d`** (v88, merge #18). The SA167a ownership guard checks executable source rather
+than one constructor shape, including helper, variable, and alternate-constructor forms.
 
 
 #### Module Derivation Schema Types
