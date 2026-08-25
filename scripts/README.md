@@ -125,8 +125,8 @@ The registered scripts gate is deliberately outside product coverage: `make chec
 
 ### SA117 version lockstep
 
-- [sa117_scope.json](./sa117_scope.json) — scope-gate allowlist defining the SA117 path set across all phases, with phase tags for partial rollout. Source of truth for scope-gate verification.
-- [check_sa117_scope.py](./check_sa117_scope.py) — scope guard with `worktree` (check tracked paths against allowlist), `emit` (print filtered paths), and `lock` (exact path-set match) modes. NUL-path safe. Exit codes: 0 pass, 1 semantic rejection, 2 malformed invocation.
+- [sa117_scope.json](./sa117_scope.json) — strict JSON fact home for the 106 ordered SA117 path records, mode/profile required-input declarations, help facts, consumer inventory, and REV-004 metadata.
+- [check_sa117_scope.py](./check_sa117_scope.py) — scope guard with `worktree` (check candidate paths), `emit` (print filtered paths), `lock` (exact path-set match), and `lock-diff` modes. Direct and Make profiles derive requiredness and option help from `sa117_scope.json`; Make path text is tokenized as data and never executed. NUL-path safe. Exit codes: 0 pass, 1 semantic rejection, 2 malformed invocation or unverifiable input.
 - [test_check_sa117_scope.py](./test_check_sa117_scope.py) — focused pytest suite for scope guard: NUL rejection, path normalisation, allowlist loading, and all three modes. Hermetic (no git dependency for most tests; uses explicit path lists).
 - [test_version_tool.py](./test_version_tool.py) — hermetic contract tests for the version tool plus temp-repo update workflow tests. Contract tests define version-string parsing, check/update/lock modes, and error handling. Temp-repo update tests (``TestUpdateWithTempRepo``) build a complete 12-module fixture repository, run ``version_tool.sh update`` / ``make version-update`` / ``make bump-version`` via subprocess, and assert exact mutation sets, caller parity, and Markdown exclusion.
 - [verify_sa117_publication.py](./verify_sa117_publication.py) — publication gate with `capture`, `verify`, `authorize`, and `rollback` operations. Evidence is written to a configurable path (default: `/tmp/opencode/sa117-evidence/`). Authorization requires explicit parameters; rollback requires matching evidence digest. No production mutation.
@@ -136,11 +136,11 @@ The registered scripts gate is deliberately outside product coverage: `make chec
 
 #### SA117c lock-diff contract
 
-`lock-diff` is the sole lock-drift route. It requires `--baseline-ref`, the
+`lock-diff` is the sole lock-drift route. Its strict contract requires `--baseline-ref`, the
 repository-root `--candidate` (`poetry.lock`), and `--expected-version`; the
 candidate root is derived from the supplied lock path. The checker validates
-that this root is exactly the Git top-level repository, then validates exactly
-55 regular inventory files and 66 canonical version values on each
+that this root is exactly the Git top-level repository, then validates the
+authoritative regular inventory and canonical version values on each
 side, including the twelve module package records in `poetry.lock`. Baseline
 Git entries must be regular blobs in mode `100644` or `100755`; candidate
 paths must be regular non-symlink files. Structural TOML, YAML, Python AST,

@@ -15,8 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_core.manifest.entry_point import build_generic_manifest_spec
-from quickscale_core.module_wiring import ModuleWiringSpec
+from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spec
 
 
 def _billing_post_hook(

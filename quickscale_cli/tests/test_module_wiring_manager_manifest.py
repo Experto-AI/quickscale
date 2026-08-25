@@ -19,8 +19,11 @@ import yaml
 from unittest.mock import patch
 
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
+from quickscale_cli.utils import module_wiring_manager
+from quickscale_core.contracts.module_discovery import ImproperlyConfigured
 from quickscale_core.manifest.entry_point import MANIFEST_ADAPTER_REGISTRY
 from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.module_wiring import ModuleWiringSpec
 
 
 def _write_minimal_project(
@@ -303,10 +306,9 @@ class TestManifestAdapterRegistryCompleteness:
     def _refresh_registry(self) -> None:
         """Refresh managed adapters before checking registry completeness.
 
-        Without this, the test is order-dependent: managed-module entries
-        (billing, crm, social) are only populated by
-        refresh_managed_adapters(), which previously was only called on
-        certain regenerate_managed_wiring code paths.
+        Without this, the test is order-dependent: managed-module entries are
+        populated by refresh_managed_adapters(), which previously was only
+        called on certain regenerate_managed_wiring code paths.
         """
         from quickscale_core.manifest.entry_point import (
             MANAGED_ADAPTER_ORIGINS,
@@ -314,10 +316,7 @@ class TestManifestAdapterRegistryCompleteness:
         )
 
         if MANAGED_ADAPTER_ORIGINS:
-            try:
-                refresh_managed_adapters()
-            except Exception:
-                pass  # Best-effort — may not have a modules base path
+            refresh_managed_adapters()
 
     @pytest.mark.parametrize(
         "module_name",
@@ -470,6 +469,49 @@ class TestRegenerateManagedWiringAdapterFailure:
             ORIGINS.clear()
             ORIGINS.update(_orig_origins)
 
+    def test_failed_refresh_restores_exact_prior_registry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failed context switch cannot leak a partial embedded registry."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        (project / "modules" / "analytics").mkdir(parents=True)
+        (project / "modules" / "analytics" / "module.yml").write_text(
+            "version: '1'\nname: analytics\n"
+        )
+
+        registry_identity = id(MANIFEST_ADAPTER_REGISTRY)
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+
+        def custom_adapter(*args: object, **kwargs: object) -> ModuleWiringSpec:
+            return ModuleWiringSpec()
+
+        MANIFEST_ADAPTER_REGISTRY["_test_restore_custom"] = custom_adapter
+        expected_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+
+        def _partially_mutate_then_fail() -> None:
+            MANIFEST_ADAPTER_REGISTRY.pop("analytics", None)
+            MANIFEST_ADAPTER_REGISTRY["_test_leaked"] = custom_adapter
+            raise ImproperlyConfigured("simulated embedded refresh failure")
+
+        monkeypatch.setattr(
+            module_wiring_manager,
+            "refresh_managed_adapters",
+            _partially_mutate_then_fail,
+        )
+        try:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+
+            assert success is False
+            assert "simulated embedded refresh failure" in message
+            assert id(MANIFEST_ADAPTER_REGISTRY) == registry_identity
+            assert MANIFEST_ADAPTER_REGISTRY == expected_registry
+        finally:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+
 
 class TestRegenerateManagedWiringFailHard:
     """SA18.2 fail-hard: invalid analytics configuration must propagate
@@ -536,6 +578,22 @@ class TestRegenerateManagedWiringFailHard:
             "Expected regenerate_managed_wiring to succeed with valid "
             f"analytics options, but it failed. Message: {message}"
         )
+
+    def test_invalid_backups_target_mode_fails_through_regenerate(
+        self, tmp_path: Path
+    ) -> None:
+        """CLI regeneration must not silently rewrite an unsupported mode."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"backups": {}})
+
+        success, message = regenerate_managed_wiring(
+            project,
+            module_names=["backups"],
+            option_overrides={"backups": {"target_mode": "unsupported"}},
+        )
+
+        assert success is False
+        assert "modules.backups.target_mode must be one of" in message
 
 
 class TestRegenerateManagedWiringSkipManifestNotFound:
@@ -709,6 +767,30 @@ class TestRegenerateManagedWiringPriorBasePath:
             assert settings_modules.exists()
             content = settings_modules.read_text()
             assert "quickscale_modules_billing" in content
+        finally:
+            _md._modules_base_path = original_override
+
+    def test_monorepo_resolution_source_is_restored_after_success(
+        self, tmp_path: Path
+    ) -> None:
+        """A transient regeneration must not turn MONOREPO into OVERRIDE."""
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts.module_discovery import ModuleResolutionSource
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        original_override = _md._modules_base_path
+        try:
+            _md._modules_base_path = None
+            assert _md.get_resolution_source() is ModuleResolutionSource.MONOREPO
+
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+
+            assert success, message
+            assert _md._modules_base_path is None
+            assert _md.get_resolution_source() is ModuleResolutionSource.MONOREPO
         finally:
             _md._modules_base_path = original_override
 

@@ -1533,7 +1533,7 @@ class TestModuleWiringSpecs:
 
         The internal ``refresh_managed_adapters()`` call (inserted in
         the SA44 continuation) should re-populate the *managed* adapter
-        entries (billing, crm, social) so that every ``_build_specs()``
+        entries for all nine module-owned adapters so that every ``_build_specs()``
         invocation using a managed module is self-contained regardless
         of prior suite mutations.
         """

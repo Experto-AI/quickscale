@@ -209,3 +209,55 @@ class TestMainMissingRoot:
         assert exit_code == 0, (
             f"Expected zero exit when both roots present, got {exit_code}"
         )
+
+
+class TestSourceInspectionFailures:
+    """Read and AST failures in both scan directions must fail closed."""
+
+    @pytest.mark.parametrize(
+        ("direction", "failure_kind"),
+        [
+            ("module", "read"),
+            ("module", "parse"),
+            ("core", "read"),
+            ("core", "parse"),
+        ],
+    )
+    def test_source_failure_reports_path_and_returns_nonzero(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        direction: str,
+        failure_kind: str,
+    ) -> None:
+        core_src = tmp_path / "quickscale_core" / "src" / "quickscale_core"
+        core_src.mkdir(parents=True)
+        core_file = core_src / "broken.py"
+        core_file.write_text("import os\n", encoding="utf-8")
+
+        module_src = tmp_path / "quickscale_modules" / "test_mod" / "src"
+        module_src.mkdir(parents=True)
+        module_file = module_src / "broken.py"
+        module_file.write_text("import os\n", encoding="utf-8")
+
+        target = module_file if direction == "module" else core_file
+        if failure_kind == "parse":
+            target.write_text("def broken(:\n", encoding="utf-8")
+        else:
+            original_read_text = Path.read_text
+
+            def _fail_target_read(path: Path, *args: object, **kwargs: object) -> str:
+                if path == target:
+                    raise OSError("simulated unreadable source")
+                return original_read_text(path, *args, **kwargs)
+
+            monkeypatch.setattr(Path, "read_text", _fail_target_read)
+
+        exit_code = checker.main([str(tmp_path)])
+
+        captured = capsys.readouterr()
+        assert exit_code != 0
+        assert str(target) in captured.err
+        expected = "read failed" if failure_kind == "read" else "AST parse failed"
+        assert expected in captured.err

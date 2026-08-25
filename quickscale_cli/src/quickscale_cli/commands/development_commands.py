@@ -453,21 +453,8 @@ def _handle_up_process_error(error: subprocess.CalledProcessError) -> None:
     _handle_up_error(error)
 
 
-@click.command()
-@click.option("--build", is_flag=True, help="Rebuild containers before starting")
-@click.option("--no-cache", is_flag=True, help="Build without using cache")
-def up(build: bool, no_cache: bool) -> None:
-    """Start Docker services for development."""
-    # Run read-only theme preflight before any Docker/compose/port probe.
-    # The recovery ledger (.quickscale/apply-recovery.yml) is an internal
-    # apply checkpoint that may carry a ``__checkpoint__`` placeholder
-    # theme before the real project state is saved. The validator's explicit
-    # up-only opt-in accepts that placeholder; other recovery themes fail closed.
-    _validate_theme_preflight_for_up()
-
-    _validate_project_and_docker()
-
-    # Load config to check for default build behavior
+def _load_up_config(build: bool) -> tuple[QuickScaleConfig | None, bool]:
+    """Load the strict project config and resolve the requested build mode."""
     try:
         config = get_project_config(strict=True)
     except ProjectConfigLoadError as error:
@@ -479,15 +466,14 @@ def up(build: bool, no_cache: bool) -> None:
         )
         sys.exit(1)
 
-    # Compute the stable identity after strict configuration validation and
-    # before the port probe or any Compose invocation.
-    compose_environment = _backend_compose_environment()
-
     should_build = build
     if not build and config and config.docker:
         should_build = config.docker.build
+    return config, should_build
 
-    # Check if dependencies changed and suggest rebuild
+
+def _warn_about_changed_dependencies(should_build: bool) -> None:
+    """Warn when dependencies changed and the selected mode will not rebuild."""
     if not should_build and _dependencies_changed_since_last_build():
         click.secho(
             "⚠️  Warning: Dependencies may have changed since last Docker build",
@@ -500,12 +486,14 @@ def up(build: bool, no_cache: bool) -> None:
         )
         click.secho("   quickscale down && quickscale up --build\n", fg="cyan")
 
-    # Check if required port is available BEFORE calling docker compose.
-    port = get_port_from_env()
-    if not is_port_available(port):
-        _show_port_conflict_error(port)
-        sys.exit(1)
 
+def _run_up_services(
+    config: QuickScaleConfig | None,
+    should_build: bool,
+    no_cache: bool,
+    compose_environment: dict[str, str],
+) -> None:
+    """Start services and run the post-start Django commands."""
     try:
         compose_cmd = _require_docker_compose_command()
         _run_docker_compose_up(
@@ -528,6 +516,35 @@ def up(build: bool, no_cache: bool) -> None:
     except KeyboardInterrupt:
         click.echo("\n⚠️  Interrupted by user")
         sys.exit(130)
+
+
+@click.command()
+@click.option("--build", is_flag=True, help="Rebuild containers before starting")
+@click.option("--no-cache", is_flag=True, help="Build without using cache")
+def up(build: bool, no_cache: bool) -> None:
+    """Start Docker services for development."""
+    # Run read-only theme preflight before any Docker/compose/port probe.
+    # The recovery ledger (.quickscale/apply-recovery.yml) is an internal
+    # apply checkpoint that may carry a ``__checkpoint__`` placeholder
+    # theme before the real project state is saved. The validator's explicit
+    # up-only opt-in accepts that placeholder; other recovery themes fail closed.
+    _validate_theme_preflight_for_up()
+
+    _validate_project_and_docker()
+
+    config, should_build = _load_up_config(build)
+    # Compute the stable identity after strict configuration validation and
+    # before the port probe or any Compose invocation.
+    compose_environment = _backend_compose_environment()
+    _warn_about_changed_dependencies(should_build)
+
+    # Check if required port is available BEFORE calling docker compose.
+    port = get_port_from_env()
+    if not is_port_available(port):
+        _show_port_conflict_error(port)
+        sys.exit(1)
+
+    _run_up_services(config, should_build, no_cache, compose_environment)
 
 
 @click.command()

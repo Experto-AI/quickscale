@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from click.testing import CliRunner
 
 from quickscale_cli.commands.development_commands import (
+    _load_up_config,
     down,
     logs,
     manage,
@@ -18,6 +19,227 @@ from quickscale_cli.commands.development_commands import (
 
 class TestUpCommand:
     """Tests for up command."""
+
+    def _invoke_up_with_patched_steps(self, **overrides):
+        """Invoke up with its external steps isolated for error-path tests."""
+        from contextlib import ExitStack
+
+        targets = {
+            "_validate_theme_preflight_for_up": Mock(),
+            "_validate_project_and_docker": Mock(),
+            "get_project_config": Mock(return_value=None),
+            "_backend_compose_environment": Mock(return_value={"QS_IMAGE": "test"}),
+            "_dependencies_changed_since_last_build": Mock(return_value=False),
+            "get_port_from_env": Mock(return_value=8000),
+            "is_port_available": Mock(return_value=True),
+            "_require_docker_compose_command": Mock(return_value=["docker", "compose"]),
+            "_run_docker_compose_up": Mock(),
+            "_update_last_build_timestamp": Mock(),
+            "_run_migrations_after_up": Mock(),
+            "_handle_superuser_after_up": Mock(),
+        }
+        targets.update(overrides)
+
+        with ExitStack() as stack:
+            for name, replacement in targets.items():
+                stack.enter_context(
+                    patch(
+                        f"quickscale_cli.commands.development_commands.{name}",
+                        replacement,
+                    )
+                )
+            return CliRunner().invoke(up)
+
+    def test_up_preserves_validation_warning_port_and_service_order(self):
+        """Theme, validation, warning, port, and services retain their order."""
+        events = []
+        config = Mock(docker=None)
+
+        def record(name, return_value=None):
+            def callback(*args, **kwargs):
+                events.append(name)
+                return return_value
+
+            return Mock(side_effect=callback)
+
+        with patch(
+            "quickscale_cli.commands.development_commands._validate_theme_preflight_for_up",
+            record("theme"),
+        ):
+            with patch(
+                "quickscale_cli.commands.development_commands._validate_project_and_docker",
+                record("project"),
+            ):
+                with patch(
+                    "quickscale_cli.commands.development_commands.get_project_config",
+                    record("config", config),
+                ):
+                    with patch(
+                        "quickscale_cli.commands.development_commands._backend_compose_environment",
+                        record("identity", {"QS_IMAGE": "test"}),
+                    ):
+                        with patch(
+                            "quickscale_cli.commands.development_commands._dependencies_changed_since_last_build",
+                            record("dependencies", False),
+                        ):
+                            with patch(
+                                "quickscale_cli.commands.development_commands.get_port_from_env",
+                                record("port", 8000),
+                            ):
+                                with patch(
+                                    "quickscale_cli.commands.development_commands.is_port_available",
+                                    record("port_available", True),
+                                ):
+                                    with patch(
+                                        "quickscale_cli.commands.development_commands._run_up_services",
+                                        record("services"),
+                                    ) as mock_services:
+                                        result = CliRunner().invoke(up)
+
+        assert result.exit_code == 0
+        assert events == [
+            "theme",
+            "project",
+            "config",
+            "identity",
+            "dependencies",
+            "port",
+            "port_available",
+            "services",
+        ]
+        mock_services.assert_called_once_with(
+            config, False, False, {"QS_IMAGE": "test"}
+        )
+
+    def test_up_build_flag_overrides_config_default(self):
+        """An explicit build flag wins over a false config default."""
+        config = Mock(docker=Mock(build=False))
+
+        with patch(
+            "quickscale_cli.commands.development_commands.get_project_config",
+            return_value=config,
+        ):
+            assert _load_up_config(True) == (config, True)
+
+    def test_up_uses_config_build_default_when_flag_is_absent(self):
+        """The project config controls builds when no explicit flag is given."""
+        config = Mock(docker=Mock(build=True))
+
+        with patch(
+            "quickscale_cli.commands.development_commands.get_project_config",
+            return_value=config,
+        ):
+            assert _load_up_config(False) == (config, True)
+
+    def test_up_no_cache_keeps_build_arguments_and_timestamp_rule(self):
+        """No-cache remains an independent compose option and does not imply timestamping."""
+        runner = CliRunner()
+        compose_environment = {"QS_IMAGE": "test"}
+        with (
+            patch(
+                "quickscale_cli.commands.development_commands._validate_theme_preflight_for_up"
+            ),
+            patch(
+                "quickscale_cli.commands.development_commands._validate_project_and_docker"
+            ),
+            patch(
+                "quickscale_cli.commands.development_commands.get_project_config",
+                return_value=None,
+            ),
+            patch(
+                "quickscale_cli.commands.development_commands._backend_compose_environment",
+                return_value=compose_environment,
+            ),
+            patch(
+                "quickscale_cli.commands.development_commands.get_port_from_env",
+                return_value=8000,
+            ),
+            patch(
+                "quickscale_cli.commands.development_commands.is_port_available",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.development_commands._dependencies_changed_since_last_build",
+                return_value=False,
+            ),
+            patch(
+                "quickscale_cli.commands.development_commands._require_docker_compose_command",
+                return_value=["docker", "compose"],
+            ),
+            patch(
+                "quickscale_cli.commands.development_commands._run_docker_compose_up"
+            ) as mock_compose,
+            patch(
+                "quickscale_cli.commands.development_commands._update_last_build_timestamp"
+            ) as mock_timestamp,
+            patch(
+                "quickscale_cli.commands.development_commands._run_migrations_after_up"
+            ),
+            patch(
+                "quickscale_cli.commands.development_commands._handle_superuser_after_up"
+            ),
+        ):
+            result = runner.invoke(up, ["--no-cache"])
+
+        assert result.exit_code == 0
+        mock_compose.assert_called_once_with(
+            ["docker", "compose"],
+            False,
+            True,
+            environment=compose_environment,
+        )
+        mock_timestamp.assert_not_called()
+
+    def test_up_interrupt_exits_130(self):
+        """An interrupt during service startup retains the documented exit."""
+        result = self._invoke_up_with_patched_steps(
+            _run_docker_compose_up=Mock(side_effect=KeyboardInterrupt)
+        )
+
+        assert result.exit_code == 130
+        assert "Interrupted by user" in result.output
+
+    def test_up_classifies_migration_failure(self):
+        """Migration failures retain their dedicated remediation message."""
+        error = subprocess.CalledProcessError(
+            1,
+            ["docker", "exec", "backend", "python", "manage.py", "migrate"],
+            stderr="migration output",
+        )
+        result = self._invoke_up_with_patched_steps(
+            _run_migrations_after_up=Mock(side_effect=error)
+        )
+
+        assert result.exit_code == 1
+        assert "database migration failed" in result.output
+        assert "migration output" in result.output
+
+    def test_up_classifies_superuser_failure(self):
+        """Superuser failures retain their dedicated remediation message."""
+        error = subprocess.CalledProcessError(
+            1,
+            ["docker", "exec", "backend", "python", "manage.py", "createsuperuser"],
+        )
+        result = self._invoke_up_with_patched_steps(
+            _handle_superuser_after_up=Mock(side_effect=error)
+        )
+
+        assert result.exit_code == 1
+        assert "superuser creation failed" in result.output
+
+    def test_up_classifies_port_conflict_from_compose_failure(self):
+        """Compose port failures retain the port-specific remediation message."""
+        error = subprocess.CalledProcessError(
+            1,
+            ["docker", "compose", "up"],
+            stderr="Bind for 0.0.0.0:8000 failed: port is already allocated",
+        )
+        result = self._invoke_up_with_patched_steps(
+            _run_docker_compose_up=Mock(side_effect=error)
+        )
+
+        assert result.exit_code == 1
+        assert "Port 8000 is already in use" in result.output
 
     def test_up_success(self):
         """Test successful service startup."""
