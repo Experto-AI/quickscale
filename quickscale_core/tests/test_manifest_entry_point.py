@@ -52,6 +52,9 @@ from quickscale_modules_analytics.adapter import _analytics_post_hook
 from quickscale_modules_auth.adapter import (
     get_manifest_adapter as get_auth_manifest_adapter,
 )
+from quickscale_modules_orgs.adapter import (
+    get_manifest_adapter as get_orgs_manifest_adapter,
+)
 from quickscale_modules_blog.adapter import _blog_post_hook
 from quickscale_modules_forms.adapter import _forms_post_hook
 from quickscale_modules_listings.adapter import _listings_post_hook
@@ -2094,6 +2097,37 @@ class TestSA167bRelocationParity:
             {"authentication_method": "username"},
             {},
             {"authentication_method": "both"},
+        )
+        for options in repeated_options:
+            old_kind, old_value = self._invoke(core_adapter, dict(options))
+            new_kind, new_value = self._invoke(module_adapter, dict(options))
+            assert (new_kind, new_value) == (old_kind, old_value), options
+
+    def test_orgs_module_adapter_matches_core(self) -> None:
+        """Compare the orgs sentinel with the inline core oracle."""
+        core_adapter = entry_point_module._orgs_manifest_adapter
+        module_adapter = get_orgs_manifest_adapter()
+        matrix = [
+            {},
+            {"mode": "solo"},
+            {"mode": " SOLO "},
+            {"mode": "saas"},
+            {"mode": " SaaS "},
+            {"mode": "invalid"},
+            {"mode": ""},
+        ]
+
+        for options in matrix:
+            old_kind, old_value = self._invoke(core_adapter, dict(options))
+            new_kind, new_value = self._invoke(module_adapter, dict(options))
+            assert new_kind == old_kind, options
+            assert new_value == old_value, options
+
+        repeated_options = (
+            {"mode": "saas"},
+            {},
+            {"mode": "solo"},
+            {"mode": "SAAS"},
         )
         for options in repeated_options:
             old_kind, old_value = self._invoke(core_adapter, dict(options))
