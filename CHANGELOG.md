@@ -4,6 +4,33 @@
 
 ## v88 development — 2026-08-21
 
+- **SA124 — SA117 scope-tool authority unified and terminally closed (2026-08-25).**
+  `scripts/sa117_scope.json` is the strict authority for the ordered allowlist, mode/profile
+  inputs, help facts, and declared consumers. The maintained consumer set is
+  `scripts/check_sa117_scope.py`, `scripts/sa117_scope.json`,
+  `scripts/test_check_sa117_scope.py`, `scripts/verify_sa117_publication.py`,
+  `scripts/test_verify_sa117_publication.py`, `scripts/README.md`, and `Makefile`; the
+  structural negative probe rejects an added Python consumer or hard-coded Make requirement.
+  Direct and Make mode parity is green, including omitted versus explicit-empty inputs, ordered
+  emit output, lock fallback, lock-diff meanings, NUL rejection, and adversarial paths containing
+  spaces, quotes, shell metacharacters, and wildcards. Make transports raw `PATHS` as one quoted
+  data argument and the checker tokenizes it without shell execution. Publication reuses the
+  strict loader without triggering module discovery; lock-diff still fails closed when discovery
+  is unavailable. REV-004 is truthfully re-carried: `quickscale/src/quickscale/_version.py` is a
+  historical, absent, uncertified, optional allowlist note, not created or required by SA124;
+  devtools remains outside runtime/publication lock-diff inventory.
+  The two quality repairs (`quickscale_cli/.../development_commands.py::up` and
+  `quickscale_modules/social/.../adapter.py::_social_manifest_apps`) removed the warning
+  regressions without changing their behavior. The complete ordered closeout command list
+  passed in both preliminary and final runs: the focused suites passed **89**, **32**, **24**,
+  and **20** tests respectively; `make lint`, `make typecheck`, and `make test` exited 0
+  (`make test`: **2,838 Core passed / 1 skipped**, **2,125 CLI passed**, and the integration
+  module lane passed); `make quality` exited 0; and the generated quality evidence reports
+  `warning_regressions: 0`, `critical_regressions: 0`, `total_regressions: 0`, with
+  `monotonicity_verdict: pass`. SA124 is the sole retained checked roadmap marker; it is removed
+  from open scheduling, releases SA123 (`deps: none`), retires merge position #11, and leaves
+  **thirteen open v88 ticket entries across twelve open merge positions**.
+
 - **Roadmap cleanup and rebalance review (2026-08-25, ninth pass).** **No ticket closed and no
   audit finding closed since the eighth pass**, so no new completion work entered the archive.
   The pass applied Option A without exception: **SA167a's retained checked completion record was

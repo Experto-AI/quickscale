@@ -40,13 +40,13 @@ The open release work is one principle with four failure modes. Every ticket is 
         DUPLICATED      SILENT         UNOWNED       UNENFORCED
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
-          SA124         SA165           SA142          SA123
+                         SA165           SA142          SA123
           SA118         SA152           SA135          SA166
           SA163           │             SA161            │
           SA160       (state/tool      (images,       (dep-vuln +
           SA164        fallbacks)       DB, dead       security
             │                            code)          scanners,
-         (paths, CI                                     testimony
+          (CI env, cookies)                               testimony
           env, cookies)                                 trail)
 ```
 
@@ -60,7 +60,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA124, SA118, SA163, SA160, SA164 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA118, SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA142, SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
@@ -70,64 +70,8 @@ context. Its closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md),
 scope allowlist, gate registry, parity, and quality-baseline suites run through the same
 declared gate layer they protect.
 
-The quality acceptance rule remains: leave `make quality` no worse than found. SA124's headline
-criterion — *"`scripts/test_check_sa117_scope.py` covers the divergence failure"* — lands in a
-suite with a declared execution context.
-
 The gate-layer closure evidence, including the current scripts census, registry projection,
 hosted job closure, and isolation Make entrypoint, is archived in [CHANGELOG.md](../../CHANGELOG.md).
-
----
-
-# Gates and declared wiring
-
-SA124's acceptance criterion is written into a suite with a declared execution context.
-
-## SA124 — Unify SA117 scope-tool path authority
-
-### The mental model
-
-SA117 was a large, high-risk refactor around embedded-manifest and core version lockstep. To keep it controllable it was given a **scope guard**: an explicit allowlist of every file any SA117 phase may touch, in `scripts/sa117_scope.json` (~120 entries, each with a `path`, a `phase`, and `notes`). `scripts/check_sa117_scope.py` enforces it in several modes:
-
-- `worktree` — do the changed files fall inside the allowlist?
-- `emit` — print the allowlist, optionally filtered by phase
-- `lock` — do candidate paths match the allowlist *exactly*?
-- `lock-diff` — fail-closed proof that `poetry.lock` did not drift, normalising only the twelve approved module version leaves
-
-Mental model: the allowlist is a **capability boundary**. The tool's job is to make it impossible to change a file nobody agreed to change.
-
-### The concrete defect
-
-A guard whose own contract is restated in several places can drift, and drift in a guard is worse than drift anywhere else — it fails *open*. The "required-path set" (which inputs each mode requires, and which paths it covers) is currently expressed independently in at least four places:
-
-1. **The CLI** — `argparse` in `check_sa117_scope.py` (~line 826): `worktree.add_argument("--paths", nargs="*", default=None)` with a *runtime* check `raise ValueError("--paths is required for worktree mode")` at line 159. Note `--paths` is declared optional to argparse and required by hand later — that gap is itself a small instance of the problem.
-2. **The Make target** — `Makefile:916-938` re-implements the same requirement in shell:
-   ```make
-   sa117-check:
-   	@if [ -z "$(PATHS)" ]; then \
-   		echo "Error: PATHS is required (space-separated list of changed files)."; \
-   ```
-   and again for `sa117-lock`, and again with different variables for `sa117-lock-diff` (`SA117_BASELINE_REF`, `SA117_EXPECTED_VERSION`).
-3. **`--help` / the Make help text** — `Makefile:234-237` describes the requirements in prose: `"make sa117-lock-diff - Fail-closed poetry.lock drift proof (SA117_BASELINE_REF required)"`.
-4. **`scripts/sa117_scope.json`** — the path data itself.
-
-Four statements of one contract. Add a fifth consumer, or change a requirement in one place, and the others silently disagree.
-
-Contrast this with how the same file handles the *module* inventory: `_authoritative_module_names()` (line ~48) shells out to the discovery shim and raises `LockDiffError` if it cannot. That is the pattern this ticket generalises — the file already knows how to do it right for one kind of fact.
-
-### Implementation shape
-
-Define the required-input/required-path contract once — most naturally as data in or beside `sa117_scope.json`, or as a declarative table in `check_sa117_scope.py` that argparse is built from. Then:
-
-- argparse builds its `required=` flags and help strings from it, so `--help` cannot drift.
-- The Make target stops re-checking emptiness in shell and lets the tool report the error, or reads the same declaration.
-- A test enumerates the consumers and fails if one bypasses the source.
-
-The last bullet is the durable part. *"a test fails if any consumer is added without going through that source"* means the enforcement must be structural, not a comment saying "keep these in sync".
-
-### The advisory
-
-`SA117E1-REV-004` is carried by this ticket. **Be aware before starting: that identifier appears nowhere in the repository except the roadmap line itself** — not in `CHANGELOG.md`, not in `docs/`, not in the scope JSON. Its original text is not recoverable from the tree. Your first action should be locating it (check the v87 review history in version control, or `docs/planning/sa117e-4-corrected-source-plan.md`). If it cannot be recovered, the acceptance criterion's *"or explicitly re-carried with rationale"* branch applies — record that the advisory text is lost and either close it as unrecoverable or restate what you believe it covered. Do not silently drop it.
 
 ---
 

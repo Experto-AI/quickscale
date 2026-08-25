@@ -2,9 +2,9 @@
 
 The roadmap is the sole home for schedulable metadata.  The context page may explain
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
-holds open work only: completed tickets are archived in the changelog and carry no checked
-entry.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
-tree state.
+holds open work only except for the single user-required retained SA124 completion marker.
+Completed tickets are otherwise archived in the changelog.  The shared SA167 umbrella may still
+explain the archived SA167a handoff as settled tree state.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
 UMBRELLA_TITLE = "SA167a / SA167b / SA167c / SA167d — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167b", "SA167c", "SA167d"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
-RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset()
+RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset({"SA124"})
 ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a"})
 SHARED_POSITION_GROUPS = {frozenset({"SA135", "SA163"})}
 
@@ -240,7 +240,7 @@ def _load_documents() -> tuple[str, str]:
 
 
 def _number_word(value: int) -> str:
-    words = {13: "thirteen", 14: "fourteen"}
+    words = {12: "twelve", 13: "thirteen"}
     return words[value]
 
 
@@ -262,17 +262,21 @@ def _assert_current_status_consumers(
         for metadata in v88.values()
         if metadata.merge_position is not None
     }
-    assert (len(v88), len(positions)) == (14, 13)
+    assert (len(v88), len(positions)) == (13, 12)
     assert "SA151" not in roadmap
     assert "SA167a" not in roadmap
     assert 3 not in positions
     assert 8 not in positions
+    assert 11 not in positions
     assert re.search(r"Positions [^\n]*#3[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#8[^\n]*", roadmap_text)
+    assert re.search(r"Positions [^\n]*#11[^\n]*", roadmap_text)
     assert not re.search(r"^## SA151\b", context_text, re.MULTILINE)
-    assert set(CLOSED_ENTRY_RE.findall(roadmap_text)) == set()
+    assert "SA124" not in _context_sections(context_text)
+    assert set(CLOSED_ENTRY_RE.findall(roadmap_text)) == set(RETAINED_CLOSED_TICKETS)
 
-    assert v88["SA124"].dependencies == frozenset()
+    assert "SA124" not in roadmap
+    assert v88["SA123"].dependencies == frozenset()
     assert v88["SA167b"].dependencies == frozenset()
     assert v88["SA118"].dependencies == frozenset({"SA123"})
     assert v88["SA167c"].dependencies == frozenset({"SA118"})
