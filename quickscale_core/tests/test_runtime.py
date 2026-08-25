@@ -136,6 +136,7 @@ class TestRuntimeAllExport:
             "PersistedBackupSnapshot",
             "RemoteMaterializer",
             "ResolverResult",
+            "ManifestError",
             "ResolvedRestoreSource",
             "RestoreResult",
             "RestoreSourceResolutionMode",
@@ -151,6 +152,7 @@ class TestRuntimeAllExport:
             "_resolve_admin_uploaded_restore_artifact",
             "_stage_admin_restore_upload",
             "assemble_wiring_spec",
+            "build_generic_manifest_spec",
             "build_backup_filename",
             "build_backup_snapshot_report",
             "build_database_plan",
@@ -252,6 +254,12 @@ class TestRuntimeSymbolTypes:
 
     def test_assemble_wiring_spec_is_callable(self) -> None:
         assert callable(runtime.assemble_wiring_spec)
+
+    def test_generic_manifest_surface_is_callable(self) -> None:
+        assert callable(runtime.build_generic_manifest_spec)
+
+    def test_manifest_error_is_exception_class(self) -> None:
+        assert issubclass(runtime.ManifestError, Exception)
 
     def test_load_social_manifest_is_callable(self) -> None:
         assert callable(runtime.load_social_manifest)

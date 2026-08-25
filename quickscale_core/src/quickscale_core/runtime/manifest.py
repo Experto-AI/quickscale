@@ -34,6 +34,8 @@ from quickscale_core.contracts.resolvers import resolve_social_module_options
 # Manifest assembler and resolver
 # ---------------------------------------------------------------------------
 from quickscale_core.manifest.assembler import assemble_wiring_spec
+from quickscale_core.manifest.entry_point import build_generic_manifest_spec
+from quickscale_core.manifest.loader import ManifestError
 from quickscale_core.manifest.resolver import ResolverResult
 
 # ---------------------------------------------------------------------------
@@ -57,6 +59,8 @@ __all__ = [
     # Manifest/resolver types
     "ResolverResult",
     "assemble_wiring_spec",
+    "build_generic_manifest_spec",
+    "ManifestError",
     # Social-manifest path constants
     "SOCIAL_EMBEDS_PATH",
     "SOCIAL_INTEGRATION_BASE_PATH",

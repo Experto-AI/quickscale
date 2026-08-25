@@ -117,6 +117,8 @@ __all__ = [
     # Manifest/resolver types
     "ResolverResult",
     "assemble_wiring_spec",
+    "build_generic_manifest_spec",
+    "ManifestError",
     # Social-manifest path constants
     "SOCIAL_EMBEDS_PATH",
     "SOCIAL_INTEGRATION_BASE_PATH",

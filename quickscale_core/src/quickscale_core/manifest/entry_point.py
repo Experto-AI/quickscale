@@ -11,11 +11,12 @@ Manifest adapters are registered in :data:`MANIFEST_ADAPTER_REGISTRY` via one
 of two paths:
 
 1. **Inline registration** — modules registered directly at module load time
-   (analytics, blog, listings, forms, backups, notifications, auth, orgs,
-   storage).  These are not affected by :func:`refresh_managed_adapters`.
+   (backups, notifications, auth, orgs, and storage).  These are not affected
+   by :func:`refresh_managed_adapters`.
 
 2. **Managed origin** (AF7) — modules whose adapter is owned by the module
-   package (social, billing, CRM).  The registry entry is established by
+   package (analytics, billing, blog, listings, CRM, forms, and social).  The
+   registry entry is established by
    :func:`refresh_managed_adapters`, which imports the module-owned adapter
    from ``quickscale_modules_{name}.adapter`` and fails hard (raises
    :class:`~quickscale_core.contracts.module_discovery.ImproperlyConfigured`) when the module
@@ -49,7 +50,7 @@ from quickscale_core.manifest.assembler import (
     assemble_wiring_spec,
 )
 from quickscale_core.manifest.derivation import build_schema_from_manifest
-from quickscale_core.manifest.loader import ManifestError, load_manifest_from_path
+from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.manifest.resolver import resolve_module_config
 from quickscale_core.module_wiring import ModuleWiringSpec
 
@@ -295,109 +296,8 @@ def refresh_managed_adapters() -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# Analytics adapter (first migrated module — uses generic manifest path)
-# ---------------------------------------------------------------------------
-
-
-def _analytics_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
-) -> ModuleWiringSpec:
-    """
-    Apply analytics-specific type coercions and fallback defaults.
-
-    The generic resolver handles wiring projections and option derivations
-    declared in ``module.yml``.  This hook reproduces the legacy boolean/string
-    coercions and fallback defaults that the resolver cannot express
-    declaratively.
-
-    PR-4 hazard: when ``enabled`` is ``False``, the legacy wiring returns an
-    EMPTY ``ModuleWiringSpec``.  This hook reproduces that behaviour.
-    """
-    # PR-4 short-circuit: legacy returns an empty spec when disabled.
-    if not bool(resolved.get("enabled", True)):
-        return ModuleWiringSpec()
-
-    settings = dict(spec.settings)
-
-    # Boolean coercions.
-    for bool_key in (
-        "QUICKSCALE_ANALYTICS_ENABLED",
-        "QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG",
-        "QUICKSCALE_ANALYTICS_EXCLUDE_STAFF",
-        "QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT",
-    ):
-        if bool_key in settings:
-            settings[bool_key] = bool(settings[bool_key])
-
-    # String coercions.
-    for str_key in (
-        "QUICKSCALE_ANALYTICS_PROVIDER",
-        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST",
-    ):
-        if str_key in settings:
-            settings[str_key] = str(settings[str_key]).strip()
-
-    # SA18.2: Fail-hard on empty-after-resolution analytics settings.
-    # An empty result after resolution means the manifest derivation
-    # produced an invalid result — raise descriptively instead of
-    # silently defaulting to PostHog values.
-    _required_nonempty = (
-        "QUICKSCALE_ANALYTICS_PROVIDER",
-        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST",
-    )
-    empty_keys = [k for k in _required_nonempty if k in settings and not settings[k]]
-    if empty_keys:
-        raise ManifestError(
-            f"Analytics manifest settings resolved to empty values: "
-            f"{', '.join(sorted(empty_keys))}. "
-            f"The manifest derivation produced an invalid result."
-        )
-
-    return ModuleWiringSpec(
-        apps=spec.apps,
-        middleware=spec.middleware,
-        settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
-        managed_files=spec.managed_files,
-    )
-
-
-def _analytics_manifest_adapter(
-    options: dict[str, Any],
-    *,
-    project_package: str | None = None,
-) -> ModuleWiringSpec:
-    """
-    Build a ModuleWiringSpec for the analytics module via the manifest path.
-
-    Uses the generic manifest-driven path that reads derivation rules
-    (wiring projections, option derivations) from the analytics ``module.yml``
-    manifest.  A post-resolution hook applies the type coercions and fallback
-    defaults that the legacy ``analytics_contract.py`` used.
-
-    Args:
-        options: Module options (e.g. from ``quickscale.yml``).
-        project_package: Unused for analytics; present for signature parity.
-
-    Returns:
-        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
-        analytics.
-    """
-    return _build_generic_manifest_spec(
-        "analytics",
-        options,
-        post_hook=_analytics_post_hook,
-    )
-
-
-# Register analytics as the first manifest-driven adapter.
-MANIFEST_ADAPTER_REGISTRY["analytics"] = _analytics_manifest_adapter
+# Analytics is module-owned and refreshed from its public sentinel.
+MANAGED_ADAPTER_ORIGINS.add("analytics")
 
 
 # ---------------------------------------------------------------------------
@@ -409,135 +309,12 @@ MANIFEST_ADAPTER_REGISTRY["analytics"] = _analytics_manifest_adapter
 MANAGED_ADAPTER_ORIGINS.add("billing")
 
 
-# ---------------------------------------------------------------------------
-# Blog adapter (C4 — uses generic manifest path)
-# ---------------------------------------------------------------------------
+# Blog is module-owned and refreshed from its public sentinel.
+MANAGED_ADAPTER_ORIGINS.add("blog")
 
 
-def _blog_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
-) -> ModuleWiringSpec:
-    """Apply blog-specific type coercions and static markdownx settings."""
-    settings = dict(spec.settings)
-
-    # SA42: direct required reads — no .get() defaults (SA18.2 pattern).
-    # Missing/invalid raises KeyError or ManifestError instead of silently
-    # defaulting to baked literals.
-    settings["BLOG_POSTS_PER_PAGE"] = int(settings["BLOG_POSTS_PER_PAGE"])
-    settings["BLOG_ENABLE_RSS"] = bool(settings["BLOG_ENABLE_RSS"])
-    api_rate = str(settings["BLOG_API_RATE_LIMIT"]).strip()
-    if not api_rate:
-        raise ManifestError(
-            "Blog manifest setting BLOG_API_RATE_LIMIT resolved to empty value. "
-            "The manifest derivation produced an invalid result."
-        )
-    settings["BLOG_API_RATE_LIMIT"] = api_rate
-
-    # Static markdownx settings (identical to legacy).
-    settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
-        "markdown.extensions.fenced_code",
-        "markdown.extensions.tables",
-        "markdown.extensions.toc",
-    ]
-    settings["MARKDOWNX_MEDIA_PATH"] = "blog/markdownx/"
-
-    return ModuleWiringSpec(
-        apps=spec.apps,
-        middleware=spec.middleware,
-        settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
-        managed_files=spec.managed_files,
-    )
-
-
-def _blog_manifest_adapter(
-    options: dict[str, Any],
-    *,
-    project_package: str | None = None,
-) -> ModuleWiringSpec:
-    """
-    Build a ModuleWiringSpec for the blog module via the manifest path.
-
-    Uses the generic manifest-driven path that reads derivation rules from the
-    blog ``module.yml`` manifest.
-
-    Args:
-        options: Module options (e.g. from ``quickscale.yml``).
-        project_package: Unused for blog; present for signature parity.
-
-    Returns:
-        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
-        blog that is equal to the legacy ``_blog_wiring`` output.
-    """
-    return _build_generic_manifest_spec(
-        "blog",
-        options,
-        post_hook=_blog_post_hook,
-    )
-
-
-MANIFEST_ADAPTER_REGISTRY["blog"] = _blog_manifest_adapter
-
-
-# ---------------------------------------------------------------------------
-# Listings adapter (C3 — uses generic manifest path)
-# ---------------------------------------------------------------------------
-
-
-def _listings_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
-) -> ModuleWiringSpec:
-    """Apply listings-specific int coercion and static markdownx settings."""
-    settings = dict(spec.settings)
-
-    # SA42: direct required read — no .get() default (SA18.2 pattern).
-    settings["LISTINGS_PER_PAGE"] = int(settings["LISTINGS_PER_PAGE"])
-
-    # Static markdownx settings (identical to legacy).
-    settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
-        "markdown.extensions.fenced_code",
-        "markdown.extensions.tables",
-        "markdown.extensions.toc",
-    ]
-
-    return ModuleWiringSpec(
-        apps=spec.apps,
-        middleware=spec.middleware,
-        settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
-        managed_files=spec.managed_files,
-    )
-
-
-def _listings_manifest_adapter(
-    options: dict[str, Any],
-    *,
-    project_package: str | None = None,
-) -> ModuleWiringSpec:
-    """
-    Build a ModuleWiringSpec for the listings module via the manifest path.
-
-    Uses the generic manifest-driven path that reads derivation rules from the
-    listings ``module.yml`` manifest.
-
-    Args:
-        options: Module options (e.g. from ``quickscale.yml``).
-        project_package: Unused for listings; present for signature parity.
-
-    Returns:
-        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
-        listings that is equal to the legacy ``_listings_wiring`` output.
-    """
-    return _build_generic_manifest_spec(
-        "listings",
-        options,
-        post_hook=_listings_post_hook,
-    )
-
-
-MANIFEST_ADAPTER_REGISTRY["listings"] = _listings_manifest_adapter
+# Listings is module-owned and refreshed from its public sentinel.
+MANAGED_ADAPTER_ORIGINS.add("listings")
 
 
 # ---------------------------------------------------------------------------
@@ -549,61 +326,8 @@ MANIFEST_ADAPTER_REGISTRY["listings"] = _listings_manifest_adapter
 MANAGED_ADAPTER_ORIGINS.add("crm")
 
 
-# ---------------------------------------------------------------------------
-# Forms adapter (C7 — uses generic manifest path)
-# ---------------------------------------------------------------------------
-
-
-def _forms_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
-) -> ModuleWiringSpec:
-    """Apply forms-specific int/bool/str coercions."""
-    settings = dict(spec.settings)
-
-    # SA42: direct required reads — no .get() defaults (SA18.2 pattern).
-    settings["FORMS_PER_PAGE"] = int(settings["FORMS_PER_PAGE"])
-    settings["FORMS_SPAM_PROTECTION"] = bool(settings["FORMS_SPAM_PROTECTION"])
-    settings["FORMS_RATE_LIMIT"] = str(settings["FORMS_RATE_LIMIT"])
-    settings["FORMS_DATA_RETENTION_DAYS"] = int(settings["FORMS_DATA_RETENTION_DAYS"])
-    settings["FORMS_SUBMISSIONS_API"] = bool(settings["FORMS_SUBMISSIONS_API"])
-
-    return ModuleWiringSpec(
-        apps=spec.apps,
-        middleware=spec.middleware,
-        settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
-        managed_files=spec.managed_files,
-    )
-
-
-def _forms_manifest_adapter(
-    options: dict[str, Any],
-    *,
-    project_package: str | None = None,
-) -> ModuleWiringSpec:
-    """
-    Build a ModuleWiringSpec for the forms module via the manifest path.
-
-    Uses the generic manifest-driven path that reads derivation rules from the
-    forms ``module.yml`` manifest.
-
-    Args:
-        options: Module options (e.g. from ``quickscale.yml``).
-        project_package: Unused for forms; present for signature parity.
-
-    Returns:
-        A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for
-        forms that is equal to the legacy ``_forms_wiring`` output.
-    """
-    return _build_generic_manifest_spec(
-        "forms",
-        options,
-        post_hook=_forms_post_hook,
-    )
-
-
-MANIFEST_ADAPTER_REGISTRY["forms"] = _forms_manifest_adapter
+# Forms is module-owned and refreshed from its public sentinel.
+MANAGED_ADAPTER_ORIGINS.add("forms")
 
 
 # ---------------------------------------------------------------------------

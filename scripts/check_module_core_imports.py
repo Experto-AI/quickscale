@@ -4,10 +4,9 @@ SA9.6 / SA89b — Bidirectional module-core import-linter gate.
 
 Forward direction (SA9.6):
     Scans ``quickscale_modules/*/src/`` for imports from ``quickscale_core`` and
-    rejects any import that targets a module other than ``quickscale_core.runtime``
-    (except for per-module legacy exceptions documented in
-    ``LEGACY_ALLOWED_IMPORTS``, currently limited to billing and CRM adapter
-    seams).
+    rejects any import that targets a module other than the public runtime
+    facades (``quickscale_core.runtime`` or
+    ``quickscale_core.runtime.manifest``).
 
 Reverse direction (SA89b):
     Scans ``quickscale_core/src/quickscale_core/`` for imports from
@@ -15,11 +14,10 @@ Reverse direction (SA89b):
     source; all module interaction must go through the injected fail-hard
     persistence registry.
 
-This gate enforces the core-as-runtime-API boundary: module code must import
-from the public ``quickscale_core.runtime`` facade rather than reaching
-directly into internal subpackages (``dr_engine``, ``contracts``,
-``manifest``, etc.).  Temporary legacy exceptions exist only for the
-billing and CRM adapter files and must not be used as a general allowlist.
+    This gate enforces the core-as-runtime-API boundary: module code must import
+    from the public ``quickscale_core.runtime`` facade rather than reaching
+    directly into internal subpackages (``dr_engine``, ``contracts``,
+    ``manifest``, etc.).
 
 Exit codes:
     0 — all imports respect the bidirectional core↔module boundary
@@ -43,51 +41,17 @@ _DEFAULT_REPO_ROOT: Path = Path(os.environ.get(REPO_ROOT_ENV, os.getcwd())).reso
 MODULES_DIR_RELATIVE: Path = Path("quickscale_modules")
 CORE_SRC_RELATIVE: Path = Path("quickscale_core") / "src" / "quickscale_core"
 
-# The only allowed quickscale_core import target for module code.
-# Modules must import from the public runtime facade only.
+# The only allowed quickscale_core import targets for module code.
+# Modules must import from the public runtime facade or its manifest subfacade.
 # This set can be extended with explicit exceptions documented in the
 # roadmap or decisions.md when a legitimate cross-boundary import is
 # required.
 ALLOWED_CORE_IMPORTS: frozenset[str] = frozenset(
     {
         "quickscale_core.runtime",
+        "quickscale_core.runtime.manifest",
     }
 )
-
-# Per-module legacy deep imports that are architecturally necessary
-# framework-seam imports (module-registration adapter surface). These exist
-# in billing, CRM, and social and are not part of the runtime API that
-# SA9.3–SA9.5 migrated. They are kept here so the gate passes the current
-# codebase while preventing *new* deep imports from being added to any module
-# (including billing, CRM, and social). Each entry should be removed when the
-# corresponding module migrates its adapter imports to a public seam.
-#
-# Key design property: LEGACY_ALLOWED_IMPORTS is keyed by module directory
-# name so no module inherits another module's exception.
-LEGACY_ALLOWED_IMPORTS: dict[str, frozenset[str]] = {
-    "billing": frozenset(
-        {
-            "quickscale_core.manifest.entry_point",
-            "quickscale_core.module_wiring",
-        }
-    ),
-    "crm": frozenset(
-        {
-            "quickscale_core.manifest.entry_point",
-            "quickscale_core.module_wiring",
-        }
-    ),
-    # Social adapter imports from quickscale_core.runtime.manifest directly
-    # to avoid pulling in the DR surface at import time (which triggers
-    # circular imports through the combined runtime facade).  See the
-    # runtime/__init__.py docstring for the architectural rationale.
-    "social": frozenset(
-        {
-            "quickscale_core.runtime.manifest",
-        }
-    ),
-}
-
 
 # ---------------------------------------------------------------------------
 # AST visitor: collect disallowed quickscale_core imports
@@ -110,13 +74,7 @@ class _CoreImportLinterVisitor(ast.NodeVisitor):
         return module == "quickscale_core" or module.startswith("quickscale_core.")
 
     def _is_allowed(self, module: str) -> bool:
-        if module in ALLOWED_CORE_IMPORTS:
-            return True
-        # Check per-module legacy exceptions
-        if self.module_name in LEGACY_ALLOWED_IMPORTS:
-            if module in LEGACY_ALLOWED_IMPORTS[self.module_name]:
-                return True
-        return False
+        return module in ALLOWED_CORE_IMPORTS
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
@@ -185,8 +143,6 @@ def _check_core_source(source_dir: Path) -> dict[Path, list[tuple[int, str]]]:
 def _check_module_source(source_dir: Path, module_name: str) -> dict[Path, list[tuple[int, str]]]:
     """
     Scan *source_dir* for quickscale_core import violations.
-
-    *module_name* is used to apply per-module legacy exceptions.
 
     Returns a mapping from file path to list of ``(lineno, import_path)``
     tuples for every disallowed import found.
@@ -290,8 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     if total == 0 and modules_root_found and core_src_found:
         print(
             "All imports respect the core↔module boundary:\n"
-            "  • Module code imports only from quickscale_core.runtime "
-            "(+ per-module legacy seams for billing/crm).\n"
+            "  • Module code imports only from the public runtime facades.\n"
             "  • Core source has zero imports from quickscale_modules."
         )
         return 0
@@ -301,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
             f"\n{total} import boundary violation(s) found.\n"
             f"Module code must import from one of: "
             f"{', '.join(sorted(ALLOWED_CORE_IMPORTS))}\n"
-            f"Per-module legacy exceptions exist for billing/crm adapter seams only.\n"
+            f"All module code must use the public quickscale_core.runtime facade.\n"
             f"Core source must not import from quickscale_modules at all."
         )
     if not modules_root_found or not core_src_found:

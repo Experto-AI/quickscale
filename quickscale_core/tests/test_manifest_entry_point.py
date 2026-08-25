@@ -11,7 +11,7 @@ quickscale_core without a quickscale_cli dependency:
   core fallback adapters.
 - Managed-adapter import/factory failure at an active base path.
 
-SA44 Phase 1: managed adapters (social, billing, CRM) are NOT registered at
+SA44 Phase 1: managed adapters are NOT registered at
 import time.  The session-scoped ``_session_managed_adapters`` fixture below
 registers them explicitly via ``refresh_managed_adapters()`` before any test runs.
 
@@ -49,8 +49,12 @@ from quickscale_core.manifest.entry_point import (
     build_manifest_wiring_spec as build_manifest_wiring_spec_direct,
 )
 from quickscale_core.module_wiring import ModuleWiringSpec
+from quickscale_modules_analytics.adapter import _analytics_post_hook
+from quickscale_modules_blog.adapter import _blog_post_hook
+from quickscale_modules_forms.adapter import _forms_post_hook
+from quickscale_modules_listings.adapter import _listings_post_hook
 
-# SA44 Phase 1: managed adapters (social, billing, CRM) are NOT registered
+# SA44 Phase 1: managed adapters are NOT registered
 # at import time.  ``refresh_managed_adapters()`` is called by the
 # session-scoped autouse fixture below, which only tolerates the
 # genuine "managed package not installed" case outside CI. Broken adapter
@@ -617,9 +621,9 @@ def _available_adapters() -> list[str]:
     """Return the subset of expected adapters present in the registry.
 
     Filters *REGISTERED_ADAPTERS* to names that are actually present in
-    ``MANIFEST_ADAPTER_REGISTRY``.  Managed adapters (billing, crm, social)
-    may be absent when the session fixture caught ``ImproperlyConfigured``
-    because their module packages were not importable.
+    ``MANIFEST_ADAPTER_REGISTRY``. Managed adapters may be absent when the
+    session fixture caught ``ImproperlyConfigured`` because their module
+    packages were not importable.
     """
     return [name for name in _REGISTERED_ADAPTERS if name in MANIFEST_ADAPTER_REGISTRY]
 
@@ -788,7 +792,9 @@ class TestManagedAdapterProvenance:
     raises ``ImproperlyConfigured``.
     """
 
-    _MANAGED_MODULES = frozenset({"social", "billing", "crm"})
+    _MANAGED_MODULES = frozenset(
+        {"analytics", "billing", "blog", "crm", "forms", "listings", "social"}
+    )
 
     def _available_managed(self) -> frozenset[str]:
         """Return managed modules that are actually registered."""
@@ -813,6 +819,10 @@ class TestManagedAdapterProvenance:
     def test_module_owned_adapter_source_location(self) -> None:
         """Each managed module's active adapter comes from its own package."""
         expected = {
+            "analytics": "quickscale_modules_analytics/adapter.py",
+            "blog": "quickscale_modules_blog/adapter.py",
+            "listings": "quickscale_modules_listings/adapter.py",
+            "forms": "quickscale_modules_forms/adapter.py",
             "social": "quickscale_modules_social/adapter.py",
             "billing": "quickscale_modules_billing/adapter.py",
             "crm": "quickscale_modules_crm/adapter.py",
@@ -1272,7 +1282,7 @@ class TestAnalyticsPostHookFailHard:
         resolved = {"enabled": True}
 
         with pytest.raises(ManifestError, match="QUICKSCALE_ANALYTICS_PROVIDER"):
-            entry_point_module._analytics_post_hook(spec, resolved)
+            _analytics_post_hook(spec, resolved)
 
     def test_empty_host_raises_manifest_error(self) -> None:
         """An empty QUICKSCALE_ANALYTICS_POSTHOG_HOST raises ManifestError."""
@@ -1290,7 +1300,7 @@ class TestAnalyticsPostHookFailHard:
         resolved = {"enabled": True}
 
         with pytest.raises(ManifestError, match="QUICKSCALE_ANALYTICS_POSTHOG_HOST"):
-            entry_point_module._analytics_post_hook(spec, resolved)
+            _analytics_post_hook(spec, resolved)
 
     def test_multiple_empty_keys_reported(self) -> None:
         """Multiple empty settings are all listed in the error message."""
@@ -1308,7 +1318,7 @@ class TestAnalyticsPostHookFailHard:
         resolved = {"enabled": True}
 
         with pytest.raises(ManifestError) as exc_info:
-            entry_point_module._analytics_post_hook(spec, resolved)
+            _analytics_post_hook(spec, resolved)
         msg = str(exc_info.value)
         assert "QUICKSCALE_ANALYTICS_PROVIDER" in msg
         assert "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR" in msg
@@ -1329,7 +1339,7 @@ class TestAnalyticsPostHookFailHard:
         resolved = {"enabled": True}
 
         # Should not raise.
-        result = entry_point_module._analytics_post_hook(spec, resolved)
+        result = _analytics_post_hook(spec, resolved)
         assert result is not None
         assert isinstance(result, ModuleWiringSpec)
 
@@ -1344,7 +1354,7 @@ class TestAnalyticsPostHookFailHard:
         )
         resolved = {"enabled": False}
 
-        result = entry_point_module._analytics_post_hook(spec, resolved)
+        result = _analytics_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.apps == ()
 
@@ -1418,7 +1428,7 @@ class TestBlogPostHookFailHard:
         )
         resolved: dict[str, Any] = {}
         with pytest.raises(KeyError, match="BLOG_POSTS_PER_PAGE"):
-            entry_point_module._blog_post_hook(spec, resolved)
+            _blog_post_hook(spec, resolved)
 
     def test_missing_enable_rss_raises_key_error(self) -> None:
         """A missing BLOG_ENABLE_RSS raises KeyError."""
@@ -1430,7 +1440,7 @@ class TestBlogPostHookFailHard:
         )
         resolved: dict[str, Any] = {}
         with pytest.raises(KeyError, match="BLOG_ENABLE_RSS"):
-            entry_point_module._blog_post_hook(spec, resolved)
+            _blog_post_hook(spec, resolved)
 
     def test_missing_rate_limit_raises_key_error(self) -> None:
         """A missing BLOG_API_RATE_LIMIT raises KeyError."""
@@ -1442,7 +1452,7 @@ class TestBlogPostHookFailHard:
         )
         resolved: dict[str, Any] = {}
         with pytest.raises(KeyError, match="BLOG_API_RATE_LIMIT"):
-            entry_point_module._blog_post_hook(spec, resolved)
+            _blog_post_hook(spec, resolved)
 
     def test_empty_rate_limit_raises_manifest_error(self) -> None:
         """An empty BLOG_API_RATE_LIMIT raises ManifestError instead of defaulting."""
@@ -1457,7 +1467,7 @@ class TestBlogPostHookFailHard:
         )
         resolved: dict[str, Any] = {}
         with pytest.raises(ManifestError, match="BLOG_API_RATE_LIMIT"):
-            entry_point_module._blog_post_hook(spec, resolved)
+            _blog_post_hook(spec, resolved)
 
     def test_blog_whitespace_only_rate_limit_raises_manifest_error(self) -> None:
         """A whitespace-only BLOG_API_RATE_LIMIT raises ManifestError."""
@@ -1472,7 +1482,7 @@ class TestBlogPostHookFailHard:
         )
         resolved: dict[str, Any] = {}
         with pytest.raises(ManifestError, match="BLOG_API_RATE_LIMIT"):
-            entry_point_module._blog_post_hook(spec, resolved)
+            _blog_post_hook(spec, resolved)
 
     def test_blog_all_settings_present_passes(self) -> None:
         """All blog settings present and valid pass through without error."""
@@ -1484,7 +1494,7 @@ class TestBlogPostHookFailHard:
             }
         )
         resolved: dict[str, Any] = {}
-        result = entry_point_module._blog_post_hook(spec, resolved)
+        result = _blog_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.settings["BLOG_POSTS_PER_PAGE"] == 10
         assert result.settings["BLOG_ENABLE_RSS"] is True
@@ -1499,13 +1509,13 @@ class TestListingsPostHookFailHard:
         spec = ModuleWiringSpec(settings={})
         resolved: dict[str, Any] = {}
         with pytest.raises(KeyError, match="LISTINGS_PER_PAGE"):
-            entry_point_module._listings_post_hook(spec, resolved)
+            _listings_post_hook(spec, resolved)
 
     def test_listings_setting_present_passes(self) -> None:
         """A valid LISTINGS_PER_PAGE passes through without error."""
         spec = ModuleWiringSpec(settings={"LISTINGS_PER_PAGE": 24})
         resolved: dict[str, Any] = {}
-        result = entry_point_module._listings_post_hook(spec, resolved)
+        result = _listings_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.settings["LISTINGS_PER_PAGE"] == 24
 
@@ -1525,7 +1535,7 @@ class TestFormsPostHookFailHard:
         )
         resolved: dict[str, Any] = {}
         with pytest.raises(KeyError, match="FORMS_PER_PAGE"):
-            entry_point_module._forms_post_hook(spec, resolved)
+            _forms_post_hook(spec, resolved)
 
     def test_missing_spam_protection_raises_key_error(self) -> None:
         """A missing FORMS_SPAM_PROTECTION raises KeyError."""
@@ -1539,7 +1549,7 @@ class TestFormsPostHookFailHard:
         )
         resolved: dict[str, Any] = {}
         with pytest.raises(KeyError, match="FORMS_SPAM_PROTECTION"):
-            entry_point_module._forms_post_hook(spec, resolved)
+            _forms_post_hook(spec, resolved)
 
     def test_missing_rate_limit_raises_key_error(self) -> None:
         """A missing FORMS_RATE_LIMIT raises KeyError."""
@@ -1553,7 +1563,7 @@ class TestFormsPostHookFailHard:
         )
         resolved: dict[str, Any] = {}
         with pytest.raises(KeyError, match="FORMS_RATE_LIMIT"):
-            entry_point_module._forms_post_hook(spec, resolved)
+            _forms_post_hook(spec, resolved)
 
     def test_missing_data_retention_days_raises_key_error(self) -> None:
         """A missing FORMS_DATA_RETENTION_DAYS raises KeyError."""
@@ -1567,7 +1577,7 @@ class TestFormsPostHookFailHard:
         )
         resolved: dict[str, Any] = {}
         with pytest.raises(KeyError, match="FORMS_DATA_RETENTION_DAYS"):
-            entry_point_module._forms_post_hook(spec, resolved)
+            _forms_post_hook(spec, resolved)
 
     def test_missing_submissions_api_raises_key_error(self) -> None:
         """A missing FORMS_SUBMISSIONS_API raises KeyError."""
@@ -1581,7 +1591,7 @@ class TestFormsPostHookFailHard:
         )
         resolved: dict[str, Any] = {}
         with pytest.raises(KeyError, match="FORMS_SUBMISSIONS_API"):
-            entry_point_module._forms_post_hook(spec, resolved)
+            _forms_post_hook(spec, resolved)
 
     def test_forms_all_settings_present_passes(self) -> None:
         """All forms settings present and valid pass through without error."""
@@ -1595,7 +1605,7 @@ class TestFormsPostHookFailHard:
             }
         )
         resolved: dict[str, Any] = {}
-        result = entry_point_module._forms_post_hook(spec, resolved)
+        result = _forms_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.settings["FORMS_PER_PAGE"] == 25
 
