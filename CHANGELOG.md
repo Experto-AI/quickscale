@@ -4,6 +4,64 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-26, sixteenth pass).** **Durable progress:
+  all three worktrees are now merged into `v88` and none is ahead.** `wt-track1`, `wt-track2`, and
+  `wt-track3` are each verified ancestors of the integration branch, so no lane carries unmerged
+  work and every lane starts its next leg from the integration tip. The roadmap's retained
+  worktree-object pointers (`wt-track2` `3e514c1a…`, the `wt-track1` P4 checkpoint branch) were
+  therefore removed as spent scheduling context — the objects they named are integration-branch
+  state and the evidence lives here.
+  **No ticket closed** — the roadmap still holds open work only with zero checked entries; the
+  queue stands at twelve open v88 ticket entries across eleven open merge positions.
+  **Completed evidence archived out of the planner:** SA135+SA163's P/A/B/C-partial delivery
+  record (entry above), SA167b's three finished P4 nodes, and SA123's finished validation run were
+  removed from the roadmap and are retained here. Each ticket keeps only its remaining plan.
+  **Rebalance outcome: no track moves, and the reason changed.** With every lane merged and idle,
+  the constraint is no longer merge debt but a single physical resource: one PostgreSQL 18
+  container (`pg18-af10`) holding `localhost:5432` and the twelve shared test databases. W1's
+  SA167b P4 campaign, W2's SA123 acceptance rerun, and W3's strict-C proof all need that cluster,
+  and W3 needs it *empty*. Moving a ticket between lanes cannot relieve that; only scheduling can.
+  **SA161 (#19) + SA160 (#20) from W3 to W2 was re-tested and rejected again** — on W2 the pair
+  would queue behind SA123's acceptance rerun and SA118, arriving later than on W3, and would put
+  band-C filler on the lane that sets the release date. **SA166 / SA164 off W2** stays rejected on
+  the gate-registry invariant, now ten registered gates of which eight are hosted. **SA160 ahead of
+  SA161 inside W3** stays rejected: they share the `sa90_emission_manifests.json` rebaseline
+  ordering and must not be split.
+  **Three-state result.** W1 (SA167b #17) and W2 (SA123 #13) are truly green on can-start,
+  can-finish, and can-merge; W2's is the only truly green ticket **on** the critical path, which is
+  `SA123 acceptance → SA118 → SA167c`. W3 (SA135+SA163 #15) can start and can merge in order but
+  **cannot finish** without an exclusive PostgreSQL/Docker lane. **One maintainer decision is
+  open** — authorizing the temporary stop and restart of `pg18-af10` so W3 can prove host
+  independence — and it is an environment authorization, not a code dependency; every other
+  blocker is a hard upstream edge or a deliberately retained lane-ordering edge.
+  Both audits were re-read and need no change: arch Finding 13 stays live behind SA163, tech TA67
+  and TA68 stay live behind SA160 and SA161, and no finding was closed this pass.
+- **SA135 + SA163 partial delivery merged and preserved — owned PostgreSQL lifecycle, phases
+  P/A/B complete and C delivered but not accepted (2026-08-26; ticket remains open, root
+  merge-back not claimed).** The partial implementation was deliberately committed to `wt-track3`
+  and merged to `v88` (`9f2878c0` → `58214b2f`) so the work is preserved rather than restarted.
+  **A-preflight** reported a focused baseline of **253 passed** with gate parity, generated-workflow
+  checks, and `make quality` green at zero warning and zero critical regressions and monotonicity
+  passing. **B-provisioning-contract** added `scripts/provision_ci_postgres.sh` (619 lines) plus
+  `scripts/test_provision_ci_postgres.py` (627 lines) and rewired `scripts/provision_test_roles.sh`,
+  `scripts/test_integration.sh`, `scripts/test_isolation_conformance.sh`,
+  `scripts/check_ci_locally.sh`, `scripts/test_ci_local_parallel.py`, and the `Makefile`, giving one
+  derived profile, lease, role, client, image, database, and environment authority while preserving
+  the eight-hosted-gate registry state. **C-local-lifecycle** put local restricted, BYPASSRLS,
+  isolation, `make ci`, and direct callers on owned dynamic-port PostgreSQL 18 lifecycles; the
+  narrowed campaign passed 28 provisioning tests, 56 worker-pool tests, 27 local-parallel tests, and
+  a full `make ci` (1,291 registered script tests, 98 coverage-policy tests, 5,067 core/CLI tests
+  plus 332 backups tests, 93.33% core/CLI coverage, 94.53% module mean). **What stopped it:** the
+  strict sequence requires `localhost:5432` to have no listener, and another container held that
+  port, so the ordered restricted → BYPASSRLS → restricted → isolation → CI proof did not run.
+  **Review state:** convergence corrected eight blocking P-C defects; terminal attestation then
+  found poisoned environment values on reused leases and an immediate-child process-group race,
+  both corrected in a single terminal-remediation pass that passed focused and narrowed validation.
+  Those final remediation bytes were applied after attestation and are **not** independently
+  graded — the next exact-candidate review must cover them. Workflow adoption (phase D), policy and
+  audit closeout (phase F), and any completion claim were **not** merged: SA135, SA163, and arch
+  Finding 13 all remain open, and `docs/technical/validation_policy.md` still documents the
+  out-of-band host precondition.
 - **SA169 closed — authoritative lifecycle fixtures restore the shared gate baseline
   (2026-08-26; root merge-back not claimed).** The five lifecycle scenarios now derive their
   physical manifests from the authoritative twelve-module source inventory while keeping desired,
