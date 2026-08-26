@@ -423,6 +423,19 @@ Conceptual background, mental models, and implementation notes for **every** tic
   afterwards** — see [Recorded maintainer decisions](#recorded-maintainer-decisions) for the bounds
   and the restore obligation. Confirm no W1 or W2 campaign is in flight before opening the window,
   then resume at step 1 below without redoing P, A, or B. No decision remains open on this ticket.
+  **Current handoff (2026-08-26): blocked before source or service mutation.** A W2 SA123
+  acceptance campaign was already running against the shared PostgreSQL cluster when this W3
+  continuation reached its preflight. Do not interrupt that campaign and do not open W3's exclusive
+  window until W2 releases the cluster. The worktree is synchronized with `v88`; no SA135/SA163
+  product change from this continuation is pending or needs salvage. No task prerequisite or
+  maintainer decision is unresolved — only the shared-cluster scheduling constraint is active.
+  **Next handoff refinement:** before opening the window, make the existing Docker-unavailable
+  lifecycle probe deterministic in `scripts/test_provision_ci_postgres.py` by supplying hermetic
+  PostgreSQL clients while making Docker unresolvable, and require the exact fail-closed Docker
+  prerequisite error with no allocation. Then execute the serial plan below. Workflow adoption must
+  cover exactly the six hosted stations through the source-defined `backups`, `restricted`,
+  `isolation`, `client-only`, and `bypassrls` profiles; closeout must update every active same-fact
+  count and dependency consumer before the exact post-sync campaign runs.
   **Remaining plan (all phases serial):**
   1. **C-local-lifecycle acceptance remainder:** open the authorized window by stopping
      `pg18-af10`, confirm nothing listens on `localhost:5432`, then run the exact strict sequence
