@@ -57,6 +57,7 @@ django-stubs = "^6.0.7"
 # Testing utilities
 factory-boy = "^3.3.3"
 psycopg2-binary = "^2.9.12"
+bandit = "1.9.4"
 
 [build-system]
 requires = ["poetry-core"]

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "trivy": {
+    "scanner_version": "0.74.0",
+    "package": "sqlparse",
+    "version": "0.5.5",
+    "advisory": "CVE-2026-54284",
+    "fixed_version": "0.6.0",
+    "source": "Trivy v0.74.0 DB output observed during Phase A binding"
+  },
+  "bandit": {
+    "version": "1.9.4",
+    "test_id": "B602",
+    "source": "subprocess.run(\"id\", shell=True)",
+    "line": 2,
+    "source_observation": "Bandit v1.9.4 JSON output observed during Phase A binding"
+  }
+}

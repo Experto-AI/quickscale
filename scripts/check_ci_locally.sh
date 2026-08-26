@@ -288,6 +288,16 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ All csrf_exempt callsites are protected"
             LOCAL_GATE_FAILURE_LABEL="CSRF-Exempt Gate"
             ;;
+        check-dependency-vulnerabilities)
+            LOCAL_GATE_DESCRIPTION="Running dependency vulnerability gate..."
+            LOCAL_GATE_SUCCESS="✓ Dependency vulnerability gate passed"
+            LOCAL_GATE_FAILURE_LABEL="Dependency Vulnerability Gate"
+            ;;
+        check-security-static-analysis)
+            LOCAL_GATE_DESCRIPTION="Running security static-analysis gate..."
+            LOCAL_GATE_SUCCESS="✓ Security static-analysis gate passed"
+            LOCAL_GATE_FAILURE_LABEL="Security Static-Analysis Gate"
+            ;;
         check-gate-suites)
             LOCAL_GATE_DESCRIPTION="Running registered scripts test suites..."
             LOCAL_GATE_SUCCESS="✓ Registered scripts test suites passed"
@@ -328,6 +338,12 @@ run_serial_conformance_gate() {
                 ;;
             check-csrf-exempt)
                 echo "║   ✗ CSRF-Exempt Gate Failed            ║"
+                ;;
+            check-dependency-vulnerabilities)
+                echo "║   ✗ Dependency Vulnerability Gate Failed║"
+                ;;
+            check-security-static-analysis)
+                echo "║   ✗ Security Static-Analysis Gate Failed║"
                 ;;
             *)
                 printf '║   ✗ %-36s║\n' "$target Failed"

@@ -138,6 +138,14 @@ jobs:
         run: |
           make check-csrf-exempt
 
+      - name: Run dependency vulnerability gate
+        run: |
+          make check-dependency-vulnerabilities
+
+      - name: Run security static-analysis gate
+        run: |
+          make check-security-static-analysis
+
       - name: Run rendered frontend proof
         run: |
           make frontend-proof

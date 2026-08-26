@@ -25,6 +25,9 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make ci-e2e` - CI-parity release-gate validation including E2E.
 - `make version-check` - Verify `VERSION` parity across the versioned packages.
 - `make check-gate-suites` - Run every `scripts/test_*.py` suite with pytest's cache provider and product coverage disabled.
+- `make check-dependency-vulnerabilities` - Run the blocking Trivy v0.74.0 scan of both committed Poetry lockfiles.
+- `make check-security-static-analysis` - Run the blocking focused Bandit 1.9.4 source scan.
+- `make security-negative-probes` - Prove scanner, checksum, archive-safety, and stale-database failures remain fail-closed.
 - `make isolation-conformance` - Run the PostgreSQL isolation-conformance suites through the repository-owned runner.
 - `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). Each mutable split-branch update requires a freshly observed exact 40-hex remote SHA. The accepted SA145 exact-SHA contract forbids `ABSENT`; it is not a valid input.
 
@@ -75,8 +78,9 @@ This companion owns repository validation entrypoints, testing standards, covera
 
 ### Registered script-gate and isolation execution
 
-The registry-derived local and hosted conformance flow includes six registered hosted
-gates. `make check-gate-suites` is the owning execution context for all current
+The registry-derived local and hosted conformance flow includes eight registered hosted
+gates: the six established conformance gates plus blocking Trivy dependency-vulnerability
+and Bandit static-security gates. `make check-gate-suites` is the owning execution context for all current
 `scripts/test_*.py` suites and invokes exactly:
 
 ```text
@@ -85,11 +89,18 @@ $(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
 
 The scripts directory remains outside `.coveragerc`; the product coverage source list
 and `fail_under = 90` are unchanged. The hosted CI job set also contains six
-separately justified unowned jobs, for twelve jobs total. `isolation-conformance` is
+separately justified unowned jobs, for fourteen jobs total. `isolation-conformance` is
 one of those hosted-unowned jobs: Make exposes the same runner for local verification,
 but local execution still requires the PostgreSQL 18 service, pre-created databases,
 restricted role, and Poetry environment described by `scripts/test_isolation_conformance.sh`.
 No local PostgreSQL provisioning is implied by this target or policy.
+
+Trivy is acquired on demand from the v0.74.0 release for Linux x86_64/arm64 or
+macOS x86_64/arm64 and verified against the official release-manifest SHA-256
+before extraction. Windows uses WSL and therefore the Linux asset. Unsupported
+native hosts fail explicitly; there is no skip path. Network/database refresh is
+an explicit online prerequisite for the vulnerability target, while Bandit and
+the committed gate/parity checks remain local.
 
 **Generated Projects Include:**
 - a sample `pytest-django` test demonstrating patterns

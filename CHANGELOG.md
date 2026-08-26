@@ -4,6 +4,109 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-26, fifteenth pass).** **One piece of durable
+  progress:** SA123's scanner implementation merged to `v88` (`b890752a`) and its two tech-audit
+  tooling gaps are closed and archived; that work left the roadmap's build queue and the ticket now
+  carries only an acceptance rerun. **No ticket closed** — the roadmap still holds open work only
+  with zero checked entries.
+  **SA169 is unchanged and still caps the release.** Re-verified on the new tip:
+  `quickscale_cli/tests/test_module_lifecycle_cycle.py` still reports `5 failed, 5 passed` on
+  `v88`, and SA123's own ordered campaign reproduced exactly those five at `make check`, from a
+  second lane, independently confirming the fourteenth pass's diagnosis.
+  **W1's merge path measured rather than assumed.** A merge preview of `v88` into `wt-track1`
+  conflicts in exactly one file, `docs/technical/roadmap.md` — the standing shared closeout surface
+  the sync-before-merge-back procedure exists to resolve. `test_module_lifecycle_cycle.py` has not
+  been touched on `v88` since W1 branched, so SA169's repair itself merges cleanly. One new cost is
+  recorded: SA123's merge raised the local gate set from six registered gates to eight, so SA169's
+  post-sync campaign now runs against the added blocking Trivy and Bandit stations.
+  **Lane sync debt re-measured:** `v88` at `b890752a`; W1 (`11e4b154`) 8 ahead / 1 behind; W2
+  (`363822d7`) 1 ahead / 0 behind; **W3 (`07203a7c`) 6 behind** — it was at the tip before SA123
+  merged and must sync before its Phase A rerun so that preflight rebinds against the eight-gate
+  registry.
+  **Rebalance re-asked from scratch because W2 went idle, not merely re-run.** An idle lane is the
+  strongest case for a move that exists. The newly attractive candidate — **SA161 (#19) + SA160
+  (#20) from W3 to W2**, the reverse of the W3-to-W1 move rejected six times — would put
+  `sa90_emission_manifests.json` entirely on one lane and eliminate the only genuinely
+  cross-worktree surface this release. It is **rejected on new grounds**: on W2 the pair would
+  queue behind SA123's acceptance rerun *and* SA118, arriving later than on W3, and it would put
+  band-C filler on the lane that sets the release date. Re-open it if SA118 closes while SA135 is
+  still running. **SA166 / SA164 off W2** was re-tested and rejected again on the gate-registry
+  invariant, which SA123's two new gate entries have made more load-bearing. **No track moved, and
+  no rebalance can fill W2** — every open ticket on every lane is capped by SA169.
+  **Three-state result: SA169 is still the only truly green ticket, and it is now the only lane
+  with work to do at all.** W2 is idle with its implementation merged and its acceptance capped;
+  W3 is paused at Phase A behind the same baseline; both can merge in order. The critical path is
+  now `SA169 → SA123 acceptance → SA118 → SA167c` — its first W2 leg is a rerun rather than a
+  build, which is this pass's real progress. **No maintainer decision is open**: every blocker is a
+  hard upstream edge or a deliberately retained lane-ordering edge.
+  Counts are unchanged at thirteen open v88 ticket entries across twelve open merge positions; the
+  consistency suite passes (20 tests).
+- **SA123 synced-candidate implementation complete; acceptance blocked by SA169 (2026-08-26;
+  root merge-back not claimed).** The accepted dependency design uses **Trivy v0.74.0**, not the earlier proposed
+  `pip-audit`, because Trivy scans both committed Poetry lockfiles directly (including development
+  dependencies); focused source analysis uses **Bandit 1.9.4**. Both are blocking gates in
+  `scripts/gate_registry.json`. The registry now binds **eight hosted gates** and the closed hosted
+  universe is eight bound plus six justified unowned jobs (**14 total**). Trivy acquisition is
+  fail-closed and release-manifest pinned for Linux x86_64/arm64 and macOS x86_64/arm64; Windows
+  uses WSL. Unsupported native hosts, checksum mismatch, unsafe archive members, stale databases,
+  malformed reports, and scanner findings all produce a failing result rather than a skip.
+  The required Phase C campaign used, in order:
+  `make check-dependency-vulnerabilities && make check-security-static-analysis && make
+  security-negative-probes && make check-gate-parity && make check-ci-gate-generation && make
+  check-gate-suites && make lint && make typecheck && make check && make test && make quality`.
+  The campaign passed both scanners, negative probes, parity, generated-workflow checks, the
+  `1,284`-test scripts suite, lint, and typecheck, then stopped at `make check`: core reported
+  `2869 passed, 1 skipped`, while CLI reproduced the five lifecycle failures owned by SA169
+  (`2139 passed, 5 failed`). `make test`, `make quality`, and the required post-sync rerun did not
+  run because the ordered `&&` chain stopped. Focused follow-up reported 40 passing security/v88
+  tests, Ruff clean, and `poetry check --lock` clean. No SA123-attributable failure was observed.
+  The open-only roadmap therefore retains SA123 and position #13, keeps SA118 dependent on it, and
+  records the exact blocker while reconciling all live scanner/topology/audit consumers. This
+  does **not** claim ticket completion, root merge-back, publication, or independent post-terminal
+  grading. The final cross-platform and
+  documentation corrections were applied after terminal attestation and were not independently
+  graded.
+- **Roadmap cleanup and rebalance review (2026-08-26, fourteenth pass).** **No ticket closed and
+  no audit finding closed since the thirteenth pass**, so nothing new entered the archive and the
+  roadmap continues to hold open work only with zero checked entries. Both audits were re-read and
+  carry no finding whose context has gone stale; their reconciliation logs already point closed
+  findings at this file.
+  **Band A reopened, and this is the pass's finding.** `make check` is red on the integration
+  branch itself: `quickscale_cli/tests/test_module_lifecycle_cycle.py` reports `5 failed, 5 passed`
+  on `v88` (measured, not inferred). The five `apply`/`update`/`push`/partial-`remove` scenarios
+  build a minimal fixture exposing one module while SA167b's settled manifest-backed guard
+  correctly requires the authoritative twelve. Because `make check` is a required command in
+  SA123's Phase C, SA135's Phase A preflight, and SA167b's P4 Phase C, **one defect caps all three
+  lanes**. It is now **SA169** (band A, Tier 2, W1, merge **#26**, a new position), the first
+  active cross-worktree dependency edge this release has carried. An attested test-only correction
+  already exists unmerged on `wt-track1` (`11e4b154`) and was independently re-verified this pass
+  at `49 passed` across the lifecycle and real wiring-manager suites, with the production
+  exact-twelve guard untouched; only the repository-wide campaign, sync, exact-tip review, and
+  merge remain.
+  **Three prior roadmap statements were falsified by measurement and corrected.** "Active
+  cross-worktree dependency edges — none" is now one. W2's worktree is **3** commits behind `v88`,
+  not the recorded 14. W3's worktree is **at the integration tip**, 0 ahead and 0 behind, not the
+  recorded 10 behind. W3's "truly green" verdict contradicted the SA135 blocked-baseline block
+  recorded in the same document and has been resolved against the measurement.
+  **Track assignment: one made, no moves.** SA169 was the only ticket without a worktree and is
+  assigned to **W1** — its file is owned by no other open ticket, W1's paused P4 is the campaign
+  that surfaced it, and the attested delta already lives there. The **SA161 (#19) + SA160 (#20) W3
+  to W1** candidate was re-tested and rejected for the seventh time (neither is on or feeding the
+  critical path; moving them would spread `sa90_emission_manifests.json` across three lanes), and
+  **SA166 (#24) / SA164 (#25) off W2** was rejected again on the gate-registry invariant. W2 remains
+  irreducible at five open legs. SA169's conflict surface,
+  `quickscale_cli/tests/test_module_lifecycle_cycle.py`, is uncontended; its closeout touches the
+  standing shared surface, which the sync-before-merge-back procedure covers, and because it merges
+  first every later lane inherits its entries rather than racing them.
+  **Three-state result: SA169 is the only truly green ticket, and it is on the critical path.** W2
+  (SA123 #13) and W3 (SA135+SA163 #15) can both start and should — W2 on Phases A and B, W3 holding
+  at Phase A — but neither can finish until SA169 merges; both can merge in order. The critical path
+  is now `SA169 → SA123 → SA118 → SA167c`. **No maintainer decision is open**: every blocker is a
+  hard upstream edge or a deliberately retained lane-ordering edge.
+  Same-fact consumers updated to **thirteen open v88 ticket entries across twelve open merge
+  positions** (`docs/index.md`, `docs/others/arch-audit.md`, the roadmap, and the live-status
+  assertions in `quickscale_core/tests/test_v88_ticket_context_consistency.py`), and
+  `v88_ticket_context.md` gained an SA169 section. That consistency suite passes (20 tests).
 - **SA167b P1-P3 partial integration merged to `v88` (2026-08-26).** The authorized partial
   checkpoint is now integration-branch state, not worktree state: `wt-track1` and `v88` are the
   same object (`472b63e8`), and the seven P3 commits reached the integration branch through the

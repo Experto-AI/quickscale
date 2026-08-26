@@ -7,6 +7,13 @@
 
 **Tested On**: Ubuntu 22.04, Python 3.14
 
+**Supported contributor hosts**: Linux x86_64/arm64, macOS Intel/Apple Silicon,
+and Windows through WSL. Native Windows/Git Bash is not a supported execution
+host. The mandatory dependency gate downloads the matching Trivy v0.74.0
+release archive for each supported native OS/architecture, verifies the official
+release-manifest SHA-256 before extraction, and fails explicitly on any other
+host; it never silently skips a scan.
+
 ---
 
 ## Prerequisites
