@@ -135,16 +135,18 @@ The manifest-reading `entry_point.py`, the fail-hard `QUICKSCALE_LOCAL_WHEELHOUS
 seam, and the regenerated migration baseline are all merged tree state that open tickets build
 on, not pending dependencies.
 
-**Parallelism result:** all three lanes carry executable work. **SA167b's P1-P3 partial
-integration is merged and is now integration-branch state** — `wt-track1` and `v88` are the same
-object, `entry_point.py` is drained to generic registry/dispatch logic with no per-module block,
-all twelve modules own an adapter, and `MANAGED_ADAPTER_ORIGINS` derives from
-`discover_shipped_module_names()`. Merge evidence is archived in
-[CHANGELOG.md](../../CHANGELOG.md). The merge did **not** close SA167b or release SA167d: W1's
-next action is P4 acceptance, run from the integration tip. W2's SA123 (#13) is **released to
-start**: the narrow-authority option was recorded on 2026-08-25, so SA123 may make SA123-coupled
-expectation updates to `scripts/test_gate_parity.py` and its reviewed plan resumes at Phase A. W3
-is released to start SA135+SA163 (#15) now that the stable image lifecycle is settled.
+**Parallelism result:** W2 and W3 carry executable work; W1 is paused on a scoped P4 gate
+failure. **SA167b's P1-P3 partial integration is merged and is now integration-branch state** —
+`wt-track1` and `v88` were both at `d2770a89905e63bcfb3be73526e3d76ef3d2fe14` when the P4
+campaign began, `entry_point.py` is drained to generic registry/dispatch logic with no per-module
+block, all twelve modules own an adapter, and `MANAGED_ADAPTER_ORIGINS` derives from
+`discover_shipped_module_names()`. P4's independent restoration review and exact PostgreSQL 18
+runtime node passed on 2026-08-26, but the full gate campaign stopped at five pre-existing minimal-
+fixture failures in `quickscale_cli/tests/test_module_lifecycle_cycle.py`; no product files were
+changed. The merge did **not** close SA167b or release SA167d. W1's next action is to authorize the
+separately scoped fixture correction described in the SA167b block, then resume P4 Phase C. W2's
+SA123 (#13) is **released to start** under its recorded narrow authority. W3 is released to start
+SA135+SA163 (#15) now that the stable image lifecycle is settled.
 
 **Lane sync debt (measured 2026-08-26).** W1 is exactly at the integration tip. **W2's worktree is
 14 commits behind `v88` and W3's is 10 commits behind.** Neither is blocked; both must run the
@@ -190,7 +192,7 @@ all on W2. Shared closeout surfaces (`CHANGELOG.md`,
 `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`, and both audit docs)
 remain covered by the standing sync-before-merge-back procedure.
 
-### Track readiness (reconciled 2026-08-26; SA167b partial integration merged, P4 remains open)
+### Track readiness (reconciled 2026-08-26; SA167b P4 stopped at an out-of-scope gate failure)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes. The queue and track states below were re-tested for rebalance opportunities (none
@@ -199,29 +201,32 @@ taken — see above).
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
 | **W2** | SA123 (#13) | **yes** — the narrow-authority decision is recorded (2026-08-25); G-001 is discharged and the reviewed plan resumes at Phase A; **sync first: the worktree is 14 commits behind `v88`** | **yes** — the scanner contract, registry entries, wiring, and SA123-coupled parity expectations are all now within W2's authority | **yes** — #13 is the W2 queue head and is gated by nothing | **truly green — on the critical path** |
-| **W1** | SA167b P4 (#17) | **yes** — P1-P3 are merged integration-branch state and the worktree is exactly at the tip (0 ahead, 0 behind); P4 starts immediately | **yes, once the shared PostgreSQL/Docker slot is scheduled** — the remaining acceptance is entirely W1-owned, but it needs the exclusive slot W3 also wants | **yes** — #17 is the W1 queue head and is gated by nothing | **truly green — off the critical path; slot-scheduled** |
+| **W1** | SA167b P4 (#17) | **no** — P4 review and the exact PG18 runtime node passed, but Phase C stopped at five minimal-fixture lifecycle failures outside the reviewed P4 repair allowlist | **yes after explicit scope is granted to correct the fixture contract** — preserve the exact twelve-module inventory, repair the five lifecycle fixtures separately, then restart Phase C and finish closeout | **no** — #17 remains open until the repaired tree passes the complete campaign and exact-tip closeout | **blocked on scoped fixture repair — off the critical path** |
 | **W3** | SA135 + SA163 (#15) | **yes** — `deps: none` and the PostgreSQL/Docker lane is released; **sync first: the worktree is 10 commits behind `v88`** | **yes** — the owned PostgreSQL lifecycle and derived CI environment remain entirely W3-owned | **yes** — #15 is W3's queue head | **truly green** |
 
-**All three tracks are truly green on all three states. Only W2 is on the critical path:**
+**W2 and W3 remain truly green; W1 is blocked on a bounded fixture correction. Only W2 is on the
+critical path:**
 
 - **W2 / SA123 (#13) — truly green, on the critical path.** The narrow-authority decision
   discharges G-001. Discovery and the reviewed plan are reusable; start at Phase A from a clean
   W2 worktree synced to current `v88`. This is the only currently executable action that shortens
   the release.
-- **W1 / SA167b P4 (#17) — truly green, off the critical path.** P1-P3 are merged
-  integration-branch state; P4 is the whole remaining ticket and is entirely W1-owned: the
-  PostgreSQL-backed generated-project runtime node, the full gate sequence as one run, an
-  independent review of the post-attestation registry/origin restoration, and same-fact
-  documentation closeout. Its only external constraint is scheduling the exclusive
-  PostgreSQL/Docker slot, which W3's #15 also needs.
+- **W1 / SA167b P4 (#17) — blocked on a bounded fixture correction, off the critical path.**
+  Independent restoration review passed (`226 passed`, zero skips, plus import conformance), and
+  the exact generated-project PostgreSQL 18 node passed (`1 passed`, zero skips) with restricted-
+  role, migration-parity, and cleanup assertions. Exact SA90 parity (`6 passed`), `make lint`, and
+  `make typecheck` also passed. `make check` then failed on five lifecycle tests whose minimal
+  auth/blog fixtures expose only one module to the settled exact-twelve inventory guard. The
+  implementation campaign made no product edits; `make test`, `make quality`, documentation
+  closeout, post-sync validation, convergence, attestation, and merge remain pending.
 - **W3 / SA135 + SA163 (#15) — truly green, off the critical path.** The stable image
   lifecycle prerequisite is settled, so the owned PostgreSQL lifecycle may start.
 
-**The one contention to resolve by scheduling, not by ticketing:** W1's P4 and W3's #15 both need
-the exclusive PostgreSQL/Docker slot. Neither blocks the other's *start* — they block each other's
-*slot window*. Give W3 the slot first: #15 is a band-B leg whose whole subject is that slot, while
-W1's P4 is a bounded acceptance run that can take the slot afterwards. W2's SA123 needs no slot and
-runs concurrently with either.
+**The remaining service-slot contention is resolved by scheduling, not by ticketing:** W1 used one
+slot window for its successful P4 runtime node, but its eventual post-sync acceptance must run that
+node again; W3's #15 also needs the exclusive PostgreSQL/Docker slot. Give W3 the next slot first:
+#15 is a band-B leg whose whole subject is that slot, while W1 cannot usefully request another slot
+until its fixture blocker is corrected. W2's SA123 needs no slot and runs concurrently with either.
 
 **Blocked open tickets, edge kind, and what clears each.** Every edge is classified so no blocker
 is ambiguous between "a maintainer decision clears it" and "only the upstream work clears it".
@@ -244,11 +249,12 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
   then run the reusable plan from Phase A under the recorded narrow authority.
 - **W3 — start SA135 + SA163 (#15) and take the PostgreSQL/Docker slot.** Sync first; the
   worktree is 10 commits behind. No open ticket gates this leg.
-- **W1 — run SA167b P4 (#17) from the integration tip.** The worktree is already at `v88`, so
-  P1-P3 need no redoing. Do the non-slot P4 work now — the independent review of the
-  registry/origin restoration and the same-fact documentation reconciliation — and reserve the
-  PostgreSQL/Docker slot for the runtime acceptance node after W3 releases it. SA167d stays
-  blocked until P4 closes.
+- **W1 — correct the SA167b P4 lifecycle-fixture blocker under explicit separate scope.** Preserve
+  the exact twelve-module inventory contract; update the five minimal auth/blog lifecycle fixtures
+  so their embedded source inventory matches the settled contract, run their focused tests, then
+  restart P4 at Phase C from exact parity. Do not redo the already-green independent restoration
+  review or initial PG18 node except where the remaining plan explicitly requires post-sync
+  revalidation. SA167d stays blocked until P4 closes.
 
 #### Recorded maintainer decisions
 
@@ -306,8 +312,9 @@ exact reviewed tip.
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #14, and #23 are **retired and not
 reused**; the tickets that held them are closed and archived in
 [CHANGELOG.md](../../CHANGELOG.md). Gaps in the numbering are expected and carry no meaning.
-Positions #13, #15, and #17 are queue heads, and all three are gated by nothing — #13's
-scope-authority gate was discharged by the narrow-authority decision recorded above.
+Positions #13, #15, and #17 are queue heads. #13 and #15 are gated by nothing — #13's
+scope-authority gate was discharged by the narrow-authority decision recorded above. #17 is paused
+at the bounded lifecycle-fixture scope decision recorded in its task block.
 
 Band-C positions (19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. Any of them may slip
 past the release without blocking it; none may displace a band-A or band-B leg.
@@ -432,28 +439,43 @@ Conceptual background, mental models, and implementation notes for **every** tic
   inventory; transient regeneration restores registry and origin identities and contents together.
   Merge object, command list, and test evidence are archived in [CHANGELOG.md](../../CHANGELOG.md).
   Do not redo P1-P3 — the merged state is the continuation base.
-  **Pending / blocking completion:** the PostgreSQL-backed generated-project runtime node,
-  `make lint`, `make typecheck`, `make check`, and full `make test` have not been run as one P4
-  acceptance sequence against the merged tree. The current-state claims in `decisions.md`,
-  `implementation_contract.md`, `v88_ticket_context.md`, the audits where applicable, and
-  `CHANGELOG.md` still require one closeout reconciliation. The registry/origin restoration was
-  applied after terminal attestation in an earlier implementation pass; it has passing focused and
-  278-test evidence but still needs independent P4 review.
-  **Decisions needed:** none on architecture or adapter design. A maintainer schedules the shared
-  PostgreSQL/Docker slot window and, if a full gate newly fails, decides between fixing an
-  SA167b-coupled defect inside P4 and ticketing an unrelated failure rather than widening this
-  ticket.
-  **Pending P4 plan:**
-  1. Start a clean W1 session from current `v88`; re-inventory the exact merged SA167b delta and
-     independently review registry/origin restoration.
-  2. Reserve the PostgreSQL/Docker slot, freeze the twelve-database/role state, and run the exact
-     generated-project PostgreSQL 18 runtime acceptance with cleanup.
-  3. Run generator parity, `make lint`, `make typecheck`, `make check`, `make test`, and
-     `make quality`; require all commands to exit 0 and quality to remain at zero regressions.
-  4. Reconcile every current-state documentation consumer and archive actual evidence in
-     `CHANGELOG.md`; under the open-work-only policy remove SA167b rather than checking it.
-  5. Sync current `v88` again, rerun affected acceptance, perform convergence and exact-tip
-     terminal attestation, merge, then release SA167d.
+  **P4 checkpoint (2026-08-26, `wt-track1` from
+  `d2770a89905e63bcfb3be73526e3d76ef3d2fe14`):**
+  - Complete: independent registry/origin/context-restoration review; focused tests passed
+    `226 passed`, zero skips, and `make check-module-core-imports` exited 0. No SA167b-coupled
+    defect was found and no product file changed.
+  - Complete: the exact standalone all-module PostgreSQL 18 runtime node passed `1 passed`, zero
+    skips. It proved the restricted role, source/runtime and migration parity, absence of maintainer
+    path/wheelhouse leakage, and database/role/Docker cleanup.
+  - Partial: exact SA90 parity passed `6 passed`, `make lint` exited 0, and `make typecheck` exited
+    0. `make check` exited 2 after its unit stage reported `2869 passed, 1 skipped, 5 failed`.
+    `make test` and `make quality` did not run because the ordered campaign stopped at that failure.
+  - Blocking: the five failures are
+    `quickscale_cli/tests/test_module_lifecycle_cycle.py::{test_apply_updates_blog_enable_rss_for_existing_embedded_project,test_update_after_removal_only_targets_remaining_modules,test_push_after_successful_remove_treats_removed_module_as_absent,test_partial_remove_on_non_consolidated_project_preserves_surviving_tracking,test_update_after_partial_remove_on_non_consolidated_project_targets_surviving}`.
+    Their minimal auth/blog fixtures expose one module while the settled manifest-backed guard
+    correctly requires the authoritative twelve; the common signature is “authoritative module
+    inventory count drift: expected 12, found 1”. Do not weaken the exact inventory guard.
+  **Decision needed before continuation:** explicitly authorize a separate, bounded correction to
+  those lifecycle fixtures (recommended), or assign the correction its own ticket before resuming
+  P4. The reviewed P4 allowlist did not permit an unrelated fixture edit, so this run stopped rather
+  than widening scope silently. No architecture or adapter-design decision is open.
+  **Remaining P4 plan:**
+  1. Preserve the exact twelve-module inventory contract and correct the five minimal lifecycle
+     fixtures under the newly authorized scope; run the five focused tests and the surrounding
+     lifecycle file.
+  2. Restart Phase C from exact SA90 parity, then run `make lint`, `make typecheck`, `make check`,
+     `make test`, and `make quality` as one ordered campaign; require every exit 0 and
+     `.quickscale/quality_gate_status.json` to report a loaded baseline, zero warning/critical
+     regressions, and monotonicity pass.
+  3. Reconcile `decisions.md`, `implementation_contract.md`, `validation_policy.md` only if drifted,
+     `v88_ticket_context.md`, `adaptive.intake.yml`, `CHANGELOG.md`, and every roadmap same-fact
+     consumer. On full completion remove SA167b under the open-work-only policy rather than checking
+     it; on another partial result retain this block and refresh only observed evidence.
+  4. Sync current `v88` into W1, reconcile shared docs, create a clean candidate commit, and rerun
+     the focused restoration suite, exact PG18 node, parity, consistency test, and full gate campaign
+     against that exact tip.
+  5. Run convergence review and terminal attestation over the exact candidate, merge that reviewed
+     tip into `v88`, verify ancestry and clean integration state, then release SA167d.
   Do not close SA167b or start SA167d before this P4 plan finishes.
   Keep it as **one ticket, not one per module**: all nine original core-side blocks began in the
   same file and the relocation shared one registry contract. Per-module tickets would have
