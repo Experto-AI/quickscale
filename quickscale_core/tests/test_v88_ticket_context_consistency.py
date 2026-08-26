@@ -240,7 +240,7 @@ def _load_documents() -> tuple[str, str]:
 
 
 def _number_word(value: int) -> str:
-    words = {11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen"}
+    words = {10: "ten", 11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen"}
     return words[value]
 
 
@@ -262,7 +262,7 @@ def _assert_current_status_consumers(
         for metadata in v88.values()
         if metadata.merge_position is not None
     }
-    assert (len(v88), len(positions)) == (12, 11)
+    assert (len(v88), len(positions)) == (11, 10)
     assert "SA151" not in roadmap
     assert "SA142" not in roadmap
     assert "SA167a" not in roadmap
@@ -271,11 +271,13 @@ def _assert_current_status_consumers(
     assert 8 not in positions
     assert 10 not in positions
     assert 11 not in positions
+    assert 13 not in positions
     assert 26 not in positions
     assert re.search(r"Positions [^\n]*#3[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#8[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#10[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#11[^\n]*", roadmap_text)
+    assert re.search(r"Positions [^\n]*#13[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#26[^\n]*", roadmap_text)
     assert not re.search(r"^## SA151\b", context_text, re.MULTILINE)
     assert not re.search(r"^## SA142\b", context_text, re.MULTILINE)
@@ -284,9 +286,9 @@ def _assert_current_status_consumers(
     assert set(CLOSED_ENTRY_RE.findall(roadmap_text)) == set()
 
     assert "SA124" not in roadmap
-    assert v88["SA123"].dependencies == frozenset()
+    assert "SA123" not in roadmap
     assert v88["SA167b"].dependencies == frozenset()
-    assert v88["SA118"].dependencies == frozenset({"SA123"})
+    assert v88["SA118"].dependencies == frozenset()
     assert v88["SA167c"].dependencies == frozenset({"SA118"})
     assert v88["SA164"].dependencies == frozenset({"SA166"})
     assert roadmap["SA152"].dependencies == frozenset()

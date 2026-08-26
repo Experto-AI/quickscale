@@ -4,6 +4,24 @@
 
 ## v88 development — 2026-08-21
 
+- **SA123 — dependency-vulnerability and security static-analysis gates accepted and closed
+  (2026-08-26; Track 2 post-sync tree).** The already-merged Trivy v0.74.0 and Bandit 1.9.4
+  implementation was proved on the exact clean synced tree. Two ordered campaigns ran without
+  tracked edits; in each campaign, every command exited 0 in this order: `make
+  check-dependency-vulnerabilities`, `make check-security-static-analysis`, `make
+  security-negative-probes`, `make check-gate-parity`, `make check-ci-gate-generation`, `make
+  check-gate-suites`, `make lint`, `make typecheck`, `make check`, `make test`, and `make quality`.
+  Trivy scanned both committed Poetry locks with four accountable suppressions and no
+  unsuppressed findings; Bandit scanned 236 maintained source files with seven accountable
+  suppressions and no unsuppressed findings; the negative probes observed the required Trivy and
+  Bandit exit-1 findings. The scripts gate suite passed 1,312 tests, core checks passed 2,869
+  tests with one expected skip, CLI checks passed 2,144 tests, all module integration suites
+  passed with 94.53% mean coverage, and quality reported zero warning or critical baseline
+  regressions with monotonicity passing. No pre-existing blocker or product defect was exposed.
+  The open-only roadmap removed SA123 and retired merge position #13; SA118 is now the W2 queue
+  head with no dependency. This entry archives acceptance evidence without claiming root merge-back,
+  publication, or any later-ticket completion.
+
 - **Roadmap cleanup and rebalance review (2026-08-26, sixteenth pass).** **Durable progress:
   all three worktrees are now merged into `v88` and none is ahead.** `wt-track1`, `wt-track2`, and
   `wt-track3` are each verified ancestors of the integration branch, so no lane carries unmerged
