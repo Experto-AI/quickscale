@@ -8,7 +8,7 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 **Commit delta since the last pass** (`e40762a0..HEAD`, 7 commits, all 2026-08-20). *Housekeeping:* `309b8b7a` (doc links), `3de43250` (social subtree split, no tree change), `ed8bb9b4` and `10d6bfe2` (release notes and v88 roadmap). *Unlabeled-behavioral — read at full depth:* `be5cf024` "fix(ci): unbind hosted gates from one machine's environment" (adds restricted-role provisioning to the isolation job; relaxes the SA90 emission byte-parity gate for `.env`; moves the managed-adapter completeness assertion out of `_refresh_session_managed_adapters`), `d4b0e834` and `d3d4c633`, both titled "v0.87.0: QuickScale 0.87.0" but in fact changing hosted and publish provisioning (PGDG PostgreSQL 18 client install) and isolation-gate skip semantics. Two release-shaped messages carrying CI-topology changes is exactly the class this audit reads closely, and it paid: `d3d4c633` left a repository conformance test red (see Red flags).
 
-**Growth direction (from the planning surface, authoritative).** The v88 roadmap records the prioritization decision as **"neither"** — no `teams` domain work and no third generated-project updater. Thirteen open v88 ticket entries run on three tracks across twelve open merge positions; the ones that touch this audit's seams are **SA123** (add dependency-vulnerability and security static-analysis gates, *registered through `scripts/gate_registry.json`*, merge #13) and **SA135** (give test suites an owned PostgreSQL lifecycle, merge #15). These remaining tickets land on the CI/governance layer, where Finding 13 remains live.
+**Growth direction (from the planning surface, authoritative).** The v88 roadmap records the prioritization decision as **"neither"** — no `teams` domain work and no third generated-project updater. Thirteen open v88 ticket entries run on three tracks across twelve open merge positions. SA123's Trivy/Bandit implementation is present and the current registry has eight hosted gates, but SA123 remains open at acceptance behind SA169. **SA135** (give test suites an owned PostgreSQL lifecycle, merge #15) also touches this audit's CI/governance seam, where Finding 13 remains live.
 
 **Read fully:** the four workflows, `scripts/gate_registry.json`, `scripts/check_gate_parity.py` (context extraction and comparison), `scripts/sync_ci_gate_jobs.py` (generation and job-set validation), the `Makefile` test/gate targets, `scripts/check_ci_locally.sh` gate stations, `scripts/test_isolation_conformance.sh`, and the three behavioral diffs. **Sampled:** module sources, generator, beta migration, orgs tenancy (prior-finding anchor re-verification only). **Skipped:** generated-project template internals, frontend theme sources.
 
@@ -54,8 +54,8 @@ Finding 13 remains at the `now` horizon. Findings 7, 2 and 4 remain behind the g
 
 The gate-suite closure is complete. The retained source facts are 15 suite files,
 1,227 collected and passed tests, and a cache/coverage-disabled
-`check-gate-suites` target. The six registry-bound hosted jobs and six justified
-unowned jobs form the exact 12-job CI set; `isolation-conformance` is Make-exposed but
+`check-gate-suites` target. The eight registry-bound hosted jobs and six justified
+unowned jobs form the exact 14-job CI set; `isolation-conformance` is Make-exposed but
 remains hosted-unowned because it still requires a PostgreSQL service and restricted role.
 Product sources and the 90% coverage threshold remain unchanged. Durable command,
 registry, generated-workflow, and quality evidence is in [CHANGELOG.md](../../CHANGELOG.md).
@@ -112,7 +112,7 @@ Two apparent divergences are **deliberate and correct**, and this pass verified 
 2. **Extend the registry with an `environment` block** per gate (client version, database set, role contract), and have `sync_ci_gate_jobs.py` generate the provisioning steps into all four workflows the way it already generates job and `needs` regions. Strongest — it makes environment drift a parity failure — and it is the natural home for SA135's outcome. Costs a schema version bump and extends the generator to `publish.yml`/`e2e.yml`/`nightly-bypassrls.yml`, which it does not currently touch.
 3. **A composite action under `.github/actions/setup-postgres/`.** Idiomatic for GitHub Actions and the least project-specific. But it puts the module list outside the Python discovery shim, so it fixes the shell duplication without fixing the derived-module-universe half.
 
-**Recommendation:** **Option 1 as part of SA135**, not before it. SA135 already owns `scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, the `Makefile`, and the documented DB precondition — it is the one ticket whose allowlist already spans this seam, and doing the extraction inside it avoids a second pass over the same files. Take Option 2 only if SA123's registry work lands cleanly first, since both edit the registry schema and the roadmap already routes them onto the same track for exactly that reason. · **Size:** `M` · **First step:** extract the PGDG install block — the only piece that is byte-identical across three workflows and outright wrong in the fourth — into `scripts/` and prove the four callers agree, before touching the module-list loops.
+**Recommendation:** **Option 1 as part of SA135**, not before it. SA135 already owns `scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, the `Makefile`, and the documented DB precondition — it is the one ticket whose allowlist already spans this seam, and doing the extraction inside it avoids a second pass over the same files. The registry now contains the completed eight-hosted-gate schema, so any Option 2 environment extension must preserve that settled contract. · **Size:** `M` · **First step:** extract the PGDG install block — the only piece that is byte-identical across three workflows and outright wrong in the fourth — into `scripts/` and prove the four callers agree, before touching the module-list loops.
 
 ---
 
@@ -190,7 +190,7 @@ Two apparent divergences are **deliberate and correct**, and this pass verified 
 
 ## Change-cost probe
 
-**Target:** **SA123** — "Add dependency-vulnerability and security static-analysis gates … register every new gate through the authoritative gate registry" (v88 Track 2, merge #13). Chosen because it is the next scheduled change that stresses the governance seam, and its acceptance criteria name the registry explicitly.
+**Target:** **SA123** — the implemented dependency-vulnerability and security-static-analysis gate change at open position #13. This dry-run was made before implementation and is retained as dated change-cost evidence; ticket acceptance remains blocked by SA169 and no root merge-back is claimed.
 
 **Measured station list for adding *one* registered gate** (dry-run on paper, in order):
 
@@ -219,7 +219,7 @@ Finding 13 should ride inside SA135 rather than preceding it, since SA135 alread
 
 ## Sound load-bearing decisions
 
-- **The hosted job set is a closed universe.** `sync_ci_gate_jobs.py:314-320` computes `UNOWNED_JOB_IDS | registry-bound jobs` and raises when it does not equal `ci.yml`'s actual job set. Six registered hosted jobs plus six justified unowned jobs equal the exact 12-job workflow set; a new hosted job cannot ship unnoticed.
+- **The hosted job set is a closed universe.** `sync_ci_gate_jobs.py:314-320` computes `UNOWNED_JOB_IDS | registry-bound jobs` and raises when it does not equal `ci.yml`'s actual job set. Eight registered hosted jobs plus six justified unowned jobs equal the exact 14-job workflow set; a new hosted job cannot ship unnoticed.
 - **Module identity is derived, never re-listed.** `check_sa117_scope.py:48` and `version_tool.sh` both shell out to `contracts/module_discovery.py --list-modules` and fail hard when it is unavailable. This is the repository's own good pattern; Finding 13 recommends reusing it rather than inventing a new one.
 - **Tenant isolation is dual-layer and fails closed.** Ambient `TenantManager` scoping plus restricted-role `FORCE RLS`, with a boot guard that rejects a `rolbypassrls`/`rolsuper` runtime role. `be5cf024` strengthened this by making the hosted isolation job connect as `quickscale_test_role` rather than `postgres` — a superuser would have made the RLS proofs vacuous. Protect the `QUICKSCALE_ALLOW_BYPASSRLS: "0"` posture at `ci.yml:626` in any provisioning refactor.
 - **Last-owner safety is a model/signal backstop, not a view check.** Six callsites, one predicate, plus a `pre_delete` receiver that catches direct ORM deletes. A future deletion coordinator (Finding 2) must not weaken this.

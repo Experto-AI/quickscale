@@ -32,9 +32,27 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 TRIVY_VERSION = "0.74.0"
-TRIVY_ARCHIVE = "trivy_0.74.0_Linux-64bit.tar.gz"
-TRIVY_URL = f"https://github.com/aquasecurity/trivy/releases/download/v0.74.0/{TRIVY_ARCHIVE}"
-TRIVY_SHA256 = "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a"
+TRIVY_RELEASE_URL = f"https://github.com/aquasecurity/trivy/releases/download/v{TRIVY_VERSION}"
+# Official v0.74.0 release-manifest digests for every native host supported by
+# the contributor contract. WSL reports Linux and therefore uses a Linux asset.
+TRIVY_ASSETS: dict[tuple[str, str], tuple[str, str]] = {
+    ("Linux", "x86_64"): (
+        "trivy_0.74.0_Linux-64bit.tar.gz",
+        "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a",
+    ),
+    ("Linux", "arm64"): (
+        "trivy_0.74.0_Linux-ARM64.tar.gz",
+        "b94ce1976bbf3c15b514b605ee88be7c6d94a29be2302847ff01cb794d47aad5",
+    ),
+    ("Darwin", "x86_64"): (
+        "trivy_0.74.0_macOS-64bit.tar.gz",
+        "472816f6888dda689d075c30254d4210b4d1035acf365aa72332f584c2f60485",
+    ),
+    ("Darwin", "arm64"): (
+        "trivy_0.74.0_macOS-ARM64.tar.gz",
+        "1caada5e0e2091909357c7525d3aa76f4b660b13821bc143b190c7483e31cc11",
+    ),
+}
 BANDIT_VERSION = "1.9.4"
 LOCK_NAME = "poetry.lock"
 SUPPRESSIONS_PATH = ROOT / "scripts" / "security_suppressions.json"
@@ -196,9 +214,23 @@ def _new_temp_dir(prefix: str) -> Path:
     return path
 
 
-def _assert_supported_platform() -> None:
-    if platform.system() != "Linux" or platform.machine().lower() not in {"x86_64", "amd64"}:
-        raise GateError("Trivy v0.74.0 native acquisition supports Linux amd64 only")
+def _trivy_asset() -> tuple[str, str]:
+    system = platform.system()
+    machine = platform.machine().lower()
+    architecture = {
+        "amd64": "x86_64",
+        "x86_64": "x86_64",
+        "aarch64": "arm64",
+        "arm64": "arm64",
+    }.get(machine, machine)
+    try:
+        return TRIVY_ASSETS[(system, architecture)]
+    except KeyError as exc:
+        raise GateError(
+            "unsupported Trivy host "
+            f"{system}/{machine}; supported native hosts are "
+            "Linux x86_64/arm64 and macOS x86_64/arm64 (Windows uses WSL)"
+        ) from exc
 
 
 def _download(url: str, destination: Path) -> None:
@@ -234,13 +266,15 @@ def _safe_archive_members(archive: tarfile.TarFile, destination: Path) -> list[t
 
 
 def acquire_trivy() -> Path:
-    _assert_supported_platform()
+    archive_name, expected_sha256 = _trivy_asset()
     run_dir = _new_temp_dir("quickscale-trivy-")
-    archive_path = run_dir / TRIVY_ARCHIVE
-    _download(TRIVY_URL, archive_path)
+    archive_path = run_dir / archive_name
+    _download(f"{TRIVY_RELEASE_URL}/{archive_name}", archive_path)
     digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
-    if digest != TRIVY_SHA256:
-        raise GateError(f"Trivy archive checksum mismatch: expected {TRIVY_SHA256}, got {digest}")
+    if digest != expected_sha256:
+        raise GateError(
+            f"Trivy archive checksum mismatch: expected {expected_sha256}, got {digest}"
+        )
     extract_dir = run_dir / "extract"
     extract_dir.mkdir()
     try:

@@ -549,6 +549,19 @@ Keep this anchor in place for compatibility. Update the companion doc when the s
 
 **Validation and Automation Entry Points:** See [validation_policy.md](./validation_policy.md#repository-command-reference) for the authoritative repository command baseline and assistant guidance.
 
+**Security gate tooling:**
+- ✅ Dependency vulnerability scanning uses Trivy v0.74.0 against both committed
+  Poetry lockfiles, including development dependencies; Trivy is the approved
+  lock-native replacement for the originally proposed `pip-audit` design
+- ✅ Static security analysis uses Bandit 1.9.4 over maintained first-party Python
+  source with the focused category contract and reviewed suppression ledger
+- ✅ Native Trivy acquisition supports Linux x86_64/arm64 and macOS
+  x86_64/arm64; Windows contributors use WSL. Every release asset is bound to
+  the official v0.74.0 manifest SHA-256 before safe extraction
+- ❌ A missing tool, unsupported native host, stale vulnerability database,
+  checksum mismatch, unsafe archive, or malformed scanner result must fail the
+  gate; security checks never silently skip
+
 ### CLI Commands {#cli-command-matrix}
 
 The authoritative current CLI command surface now lives in [implementation_contract.md](./implementation_contract.md#cli-command-matrix). Keep this legacy anchor in place for inbound links.

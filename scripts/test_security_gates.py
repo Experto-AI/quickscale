@@ -196,9 +196,65 @@ def test_trivy_acquisition_rejects_wrong_checksum(
     monkeypatch.setattr(
         gates, "_download", lambda _url, destination: destination.write_bytes(payload)
     )
-    monkeypatch.setattr(gates, "TRIVY_SHA256", hashlib.sha256(b"different").hexdigest())
+    monkeypatch.setattr(
+        gates,
+        "_trivy_asset",
+        lambda: ("trivy_0.74.0_Linux-64bit.tar.gz", hashlib.sha256(b"different").hexdigest()),
+    )
     with pytest.raises(GateError, match="checksum mismatch"):
         gates.acquire_trivy()
+
+
+@pytest.mark.parametrize(
+    ("system", "machine", "archive", "digest"),
+    [
+        (
+            "Linux",
+            "x86_64",
+            "trivy_0.74.0_Linux-64bit.tar.gz",
+            "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a",
+        ),
+        (
+            "Linux",
+            "aarch64",
+            "trivy_0.74.0_Linux-ARM64.tar.gz",
+            "b94ce1976bbf3c15b514b605ee88be7c6d94a29be2302847ff01cb794d47aad5",
+        ),
+        (
+            "Darwin",
+            "x86_64",
+            "trivy_0.74.0_macOS-64bit.tar.gz",
+            "472816f6888dda689d075c30254d4210b4d1035acf365aa72332f584c2f60485",
+        ),
+        (
+            "Darwin",
+            "arm64",
+            "trivy_0.74.0_macOS-ARM64.tar.gz",
+            "1caada5e0e2091909357c7525d3aa76f4b660b13821bc143b190c7483e31cc11",
+        ),
+    ],
+)
+def test_trivy_asset_matches_supported_host_release_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    system: str,
+    machine: str,
+    archive: str,
+    digest: str,
+) -> None:
+    """Every documented native host selects its checksum-pinned release asset."""
+    monkeypatch.setattr(gates.platform, "system", lambda: system)
+    monkeypatch.setattr(gates.platform, "machine", lambda: machine)
+    assert gates._trivy_asset() == (archive, digest)
+
+
+def test_trivy_asset_rejects_unsupported_native_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An undocumented native host fails explicitly rather than skipping the gate."""
+    monkeypatch.setattr(gates.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(gates.platform, "machine", lambda: "AMD64")
+    with pytest.raises(GateError, match="unsupported Trivy host Windows/amd64"):
+        gates._trivy_asset()
 
 
 def test_run_command_timeout_is_fail_closed() -> None:

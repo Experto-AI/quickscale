@@ -2,7 +2,7 @@
 # Cross-platform development commands
 #
 # Primary target: Linux/WSL
-# Secondary: Windows (via WSL or Git Bash)
+# Secondary: macOS (Intel or Apple Silicon) and Windows via WSL
 #
 # Usage:
 #   make bootstrap            - Full bootstrap (Python check + poetry install)
