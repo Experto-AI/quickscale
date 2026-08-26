@@ -1,234 +1,102 @@
 #!/usr/bin/env bash
-# provision_test_roles.sh — SA59.3 Retained-role contract provisioning
+# provision_test_roles.sh — retained PostgreSQL test-role contract.
 #
-# Creates/updates all test PostgreSQL roles cluster-wide:
-#
-#   1. quickscale_test_role  — direct-connection role for module test suites
-#      Contract: LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE
-#
-#   2. quickscale_rls_test_role — inner restricted role for RLS boundary tests
-#      Contract: NOBYPASSRLS NOINHERIT NOLOGIN
-#
-#   3. quickscale_rls_op_test_role — operator-access cross-tenant proof role
-#      Contract: NOBYPASSRLS NOINHERIT NOLOGIN
-#
-# Usage:
-#   ./scripts/provision_test_roles.sh          # uses psql (localhost:5432, postgres user)
-#   ./scripts/provision_test_roles.sh -h <host> -U <user>  # custom connection
-#
-# Prerequisites:
-#   - PostgreSQL 18 running with trust authentication (or configured pgpass)
-#   - psql client available (or use --docker flag for docker exec)
-#
-# SA59.3: Every test-database role creation path (CI and local) must assert
-# the full role contract explicitly.
+# With no options this preserves the historical restricted-role behavior and
+# provisions the three RLS helper roles.  ``--profile bypassrls`` additionally
+# provisions the dedicated BYPASSRLS login used by the nightly lane.
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-
-# ---------------------------------------------------------------------------
-# Connection defaults
-# ---------------------------------------------------------------------------
-PGHOST="${PGHOST:-localhost}"
-PGUSER="${PGUSER:-postgres}"
+PGHOST_VALUE="${PGHOST:-localhost}"
+PGUSER_VALUE="${PGUSER:-postgres}"
+PGPORT_VALUE="${PGPORT:-5432}"
 USE_DOCKER=false
 DOCKER_CONTAINER="${QS_PG_CONTAINER:-}"
+PROFILE=restricted
 
-_PSQL() {
-  if [ "$USE_DOCKER" = true ]; then
-    local container="$DOCKER_CONTAINER"
-    if [ -z "$container" ]; then
-      # Try common container names
+die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+safe_identifier() {
+  [[ "$2" =~ ^[a-z][a-z0-9_]*$ && ${#2} -le 63 ]] || die "unsafe $1: $2"
+}
+safe_container_name() {
+  [[ "$1" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || die "unsafe container: $1"
+}
+
+while (($#)); do
+  case "$1" in
+    -h|--host) (($# >= 2)) || die '--host requires a value'; PGHOST_VALUE="$2"; shift 2 ;;
+    -U|--user) (($# >= 2)) || die '--user requires a value'; PGUSER_VALUE="$2"; shift 2 ;;
+    -p|--port) (($# >= 2)) || die '--port requires a value'; PGPORT_VALUE="$2"; shift 2 ;;
+    --docker) USE_DOCKER=true; shift ;;
+    --container) (($# >= 2)) || die '--container requires a value'; DOCKER_CONTAINER="$2"; USE_DOCKER=true; shift 2 ;;
+    --profile) (($# >= 2)) || die '--profile requires a value'; PROFILE="$2"; shift 2 ;;
+    --help)
+      cat <<'EOF'
+Usage: provision_test_roles.sh [-h HOST] [-U USER] [-p PORT] [--docker]
+       [--container NAME] [--profile restricted|bypassrls]
+
+The default restricted profile provisions quickscale_test_role plus the two
+non-login RLS helper roles.  The bypassrls profile also provisions
+quickscale_bypassrls_test_role.
+EOF
+      exit 0
+      ;;
+    *) die "unknown option: $1" ;;
+  esac
+done
+
+[[ "$PGPORT_VALUE" =~ ^[0-9]+$ && "$PGPORT_VALUE" -ge 1 && "$PGPORT_VALUE" -le 65535 ]] || die "invalid port: $PGPORT_VALUE"
+[[ "$PGHOST_VALUE" != *$'\n'* && "$PGHOST_VALUE" != *$'\r'* && "$PGHOST_VALUE" != *[[:space:]]* ]] || die 'unsafe host'
+[[ "$PROFILE" == restricted || "$PROFILE" == bypassrls ]] || die "unknown profile: $PROFILE"
+safe_identifier user "$PGUSER_VALUE"
+
+psql_cmd() {
+  local -a command
+  if [[ "$USE_DOCKER" == true ]]; then
+    if [[ -z "$DOCKER_CONTAINER" ]]; then
       for candidate in pg18-af10 quickscale-postgres-1 postgres; do
-        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$candidate"; then
-          container="$candidate"
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -Fxq "$candidate"; then
+          DOCKER_CONTAINER="$candidate"
           break
         fi
       done
     fi
-    if [ -z "$container" ]; then
-      echo "ERROR: No PostgreSQL container found. Set QS_PG_CONTAINER or start one." >&2
-      exit 1
-    fi
-    docker exec -i "$container" psql -U "$PGUSER" "$@"
+    [[ -n "$DOCKER_CONTAINER" ]] || die 'no PostgreSQL container found; set --container'
+    safe_container_name "$DOCKER_CONTAINER"
+    command=(docker exec -i "$DOCKER_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U "$PGUSER_VALUE")
   else
-    psql -h "$PGHOST" -U "$PGUSER" "$@"
+    command=(psql -X -v ON_ERROR_STOP=1 -h "$PGHOST_VALUE" -p "$PGPORT_VALUE" -U "$PGUSER_VALUE")
   fi
+  "${command[@]}" "$@"
 }
 
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -h|--host) PGHOST="$2"; shift 2 ;;
-    -U|--user) PGUSER="$2"; shift 2 ;;
-    --docker) USE_DOCKER=true; shift ;;
-    --container) DOCKER_CONTAINER="$2"; USE_DOCKER=true; shift 2 ;;
-    --help|-h)
-      echo "Usage: $0 [OPTIONS]"
-      echo ""
-      echo "Options:"
-      echo "  -h, --host HOST       PostgreSQL host (default: localhost)"
-      echo "  -U, --user USER       PostgreSQL user (default: postgres)"
-      echo "  --docker              Use docker exec instead of psql"
-      echo "  --container NAME      Docker container name (implies --docker)"
-      echo "  --help                Show this help message"
-      echo ""
-      echo "Creates/updates quickscale_test_role and quickscale_rls_test_role"
-      echo "with the SA59.3 retained-role contract."
-      exit 0
-      ;;
-    *) echo "Unknown option: $1"; exit 1 ;;
-  esac
-done
+ensure_role() {
+  local role="$1" flags="$2" expected="$3" actual
+  safe_identifier role "$role"
+  psql_cmd -d postgres -v "role_name=$role" -c "SELECT format('CREATE ROLE %I WITH ${flags}', :'role_name') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=:'role_name') \\gexec"
+  psql_cmd -d postgres -v "role_name=$role" -c "SELECT format('ALTER ROLE %I WITH ${flags}', :'role_name') \\gexec"
+  actual=$(psql_cmd -At -d postgres -v "role_name=$role" -c "SELECT rolcanlogin,rolcreatedb,rolinherit,rolbypassrls,rolsuper,rolcreaterole FROM pg_roles WHERE rolname=:'role_name'") || die "failed to verify $role"
+  [[ "$actual" == "$expected" ]] || die "role postcondition failed for $role: $actual (expected $expected)"
+}
 
-echo "=== Provisioning PostgreSQL test roles ==="
+ensure_role quickscale_test_role \
+  'LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE' 't|t|f|f|f|f'
+ensure_role quickscale_rls_test_role \
+  'NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE' 'f|f|f|f|f|f'
+ensure_role quickscale_rls_op_test_role \
+  'NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE' 'f|f|f|f|f|f'
 
-# ---------------------------------------------------------------------------
-# 1. quickscale_test_role — direct-connection integration role
-#    Contract: LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE
-# ---------------------------------------------------------------------------
-ROLE="quickscale_test_role"
-echo ""
-echo "--- ${ROLE} ---"
-
-# Create or update the role with the full SA59.3 contract.
-# Uses ALTER ROLE when the role already exists (idempotent).
-_PSQL -tc \
-  "SELECT 1 FROM pg_roles WHERE rolname = '${ROLE}'" \
-  | grep -q 1 \
-  && EXISTING=true \
-  || EXISTING=false
-
-if [ "$EXISTING" = true ]; then
-  _PSQL -c \
-    "ALTER ROLE ${ROLE} WITH LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE"
-  echo "  ✓ ${ROLE} updated with LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE"
-else
-  _PSQL -c \
-    "CREATE ROLE ${ROLE} WITH LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE"
-  echo "  ✓ ${ROLE} created with LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE"
+if [[ "$PROFILE" == bypassrls ]]; then
+  ensure_role quickscale_bypassrls_test_role \
+    'LOGIN CREATEDB BYPASSRLS NOINHERIT NOSUPERUSER NOCREATEROLE' 't|t|f|t|f|f'
 fi
 
-# Verify every required attribute
-echo "  Verifying attributes..."
-for attr in rolbypassrls rolsuper rolinherit rolcreaterole; do
-  val=$(_PSQL -tc "SELECT ${attr} FROM pg_roles WHERE rolname = '${ROLE}'" | tr -d ' ')
-  expected="f"
-  if [ "$val" != "$expected" ]; then
-    echo "  ERROR: ${ROLE} has ${attr}=${val} (expected ${expected})" >&2
-    exit 1
-  fi
+for role in quickscale_test_role quickscale_rls_test_role quickscale_rls_op_test_role; do
+  psql_cmd -d postgres -v "role_name=$role" -c "SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'role_name') \\gexec"
 done
-echo "  ✓ All attributes verified"
+psql_cmd -d postgres -v role_name=quickscale_test_role -v inner_role=quickscale_rls_test_role -c \
+  "SELECT format('GRANT %I TO %I', :'inner_role', :'role_name') \\gexec"
+psql_cmd -d postgres -v role_name=quickscale_test_role -v inner_role=quickscale_rls_op_test_role -c \
+  "SELECT format('GRANT %I TO %I', :'inner_role', :'role_name') \\gexec"
 
-# Verify login and createdb are set
-for attr in rolcanlogin rolcreatedb; do
-  val=$(_PSQL -tc "SELECT ${attr} FROM pg_roles WHERE rolname = '${ROLE}'" | tr -d ' ')
-  expected="t"
-  if [ "$val" != "$expected" ]; then
-    echo "  ERROR: ${ROLE} has ${attr}=${val} (expected ${expected})" >&2
-    exit 1
-  fi
-done
-echo "  ✓ LOGIN and CREATEDB verified"
-
-# ---------------------------------------------------------------------------
-# 2. quickscale_rls_test_role — inner restricted role for RLS boundary tests
-#    Contract: NOBYPASSRLS NOINHERIT NOLOGIN
-# ---------------------------------------------------------------------------
-INNER_ROLE="quickscale_rls_test_role"
-echo ""
-echo "--- ${INNER_ROLE} ---"
-
-_PSQL -tc \
-  "SELECT 1 FROM pg_roles WHERE rolname = '${INNER_ROLE}'" \
-  | grep -q 1 \
-  && INNER_EXISTS=true \
-  || INNER_EXISTS=false
-
-if [ "$INNER_EXISTS" = true ]; then
-  _PSQL -c \
-    "ALTER ROLE ${INNER_ROLE} WITH NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE"
-  echo "  ✓ ${INNER_ROLE} updated with NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE"
-else
-  _PSQL -c \
-    "CREATE ROLE ${INNER_ROLE} WITH NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE"
-  echo "  ✓ ${INNER_ROLE} created with NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE"
-fi
-
-# Verify attributes for inner role
-echo "  Verifying attributes..."
-for attr in rolbypassrls rolsuper rolinherit rolcanlogin rolcreaterole; do
-  val=$(_PSQL -tc "SELECT ${attr} FROM pg_roles WHERE rolname = '${INNER_ROLE}'" | tr -d ' ')
-  expected="f"
-  if [ "$val" != "$expected" ]; then
-    echo "  ERROR: ${INNER_ROLE} has ${attr}=${val} (expected ${expected})" >&2
-    exit 1
-  fi
-done
-echo "  ✓ All attributes verified"
-
-# ---------------------------------------------------------------------------
-# 3. quickscale_rls_op_test_role — operator-access cross-tenant read-only proof
-#    Contract: NOBYPASSRLS NOINHERIT NOLOGIN
-# ---------------------------------------------------------------------------
-OP_ROLE="quickscale_rls_op_test_role"
-echo ""
-echo "--- ${OP_ROLE} ---"
-
-_PSQL -tc \
-  "SELECT 1 FROM pg_roles WHERE rolname = '${OP_ROLE}'" \
-  | grep -q 1 \
-  && OP_EXISTS=true \
-  || OP_EXISTS=false
-
-if [ "$OP_EXISTS" = true ]; then
-  _PSQL -c \
-    "ALTER ROLE ${OP_ROLE} WITH NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE"
-  echo "  ✓ ${OP_ROLE} updated with NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE"
-else
-  _PSQL -c \
-    "CREATE ROLE ${OP_ROLE} WITH NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE"
-  echo "  ✓ ${OP_ROLE} created with NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE"
-fi
-
-# Verify attributes for operator role
-echo "  Verifying attributes..."
-for attr in rolbypassrls rolsuper rolinherit rolcanlogin rolcreaterole; do
-  val=$(_PSQL -tc "SELECT ${attr} FROM pg_roles WHERE rolname = '${OP_ROLE}'" | tr -d ' ')
-  expected="f"
-  if [ "$val" != "$expected" ]; then
-    echo "  ERROR: ${OP_ROLE} has ${attr}=${val} (expected ${expected})" >&2
-    exit 1
-  fi
-done
-echo "  ✓ All attributes verified"
-
-# ---------------------------------------------------------------------------
-# 4. Grant USAGE ON SCHEMA public (idempotent)
-# ---------------------------------------------------------------------------
-echo ""
-echo "--- Schema grants ---"
-_PSQL -c "GRANT USAGE ON SCHEMA public TO ${ROLE}" 2>/dev/null || echo "  (schema usage already granted for ${ROLE})"
-_PSQL -c "GRANT USAGE ON SCHEMA public TO ${INNER_ROLE}" 2>/dev/null || echo "  (schema usage already granted for ${INNER_ROLE})"
-_PSQL -c "GRANT USAGE ON SCHEMA public TO ${OP_ROLE}" 2>/dev/null || echo "  (schema usage already granted for ${OP_ROLE})"
-echo "  ✓ Schema grants applied"
-
-# ---------------------------------------------------------------------------
-# 5. Grant role membership — quickscale_test_role must be able to SET ROLE
-#    to the RLS roles for RLS-boundary tests.  (CR-SA59-3-001)
-# ---------------------------------------------------------------------------
-echo ""
-echo "--- Role membership grants ---"
-_PSQL -c "GRANT ${INNER_ROLE} TO ${ROLE}"
-_PSQL -c "GRANT ${OP_ROLE} TO ${ROLE}"
-echo "  ✓ ${ROLE} granted membership in ${INNER_ROLE} and ${OP_ROLE}"
-
-echo ""
-echo "=== PostgreSQL test roles provisioned successfully ==="
-echo ""
-echo "  ${ROLE}:     LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE"
-echo "  ${INNER_ROLE}: NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE"
-echo "  ${OP_ROLE}:  NOBYPASSRLS NOINHERIT NOLOGIN NOSUPERUSER NOCREATEROLE"
+printf 'PostgreSQL test roles provisioned successfully (%s profile).\n' "$PROFILE"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run integration tests (module suites requiring PostgreSQL) in the repository.
-# Requires PostgreSQL 18 running on localhost:5432.
+# The provisioning helper owns the PostgreSQL 18 lifecycle for local runs.
 # See scripts/test_isolation_conformance.sh for the restricted role pattern.
 #
 # NOTE: This script runs module integration tests only.
@@ -9,10 +9,7 @@
 # E2E tests are run via scripts/test_e2e.sh.
 #
 # Prerequisites:
-#   - PostgreSQL 18 running on localhost:5432
-#   - All test databases pre-created (see ci.yml create-test-databases step)
-#   - A LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER role (e.g. quickscale_test_role) with
-#     ownership + schema grants on all module test databases
+#   - provision_ci_postgres.sh has supplied a validated lifecycle lease
 #   - Poetry installed, dependencies installed
 
 set -e
@@ -169,10 +166,9 @@ show_help() {
   echo "                        Values exceeding the number of eligible test modules are capped."
   echo ""
   echo "Required environment (PostgreSQL 18):"
-  echo "  - PostgreSQL running on localhost:5432"
-  echo "  - Module test databases pre-created"
-  echo "  - Restricted role (e.g. quickscale_test_role) with LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER"
-  echo "  - QS_*_DB_USER env vars default to quickscale_test_role; can be overridden per module"
+  echo "  - A validated lease from provision_ci_postgres.sh"
+  echo "  - The helper-emitted QS_*_DB_NAME/USER/HOST/PORT mappings"
+  echo "  - Restricted role: LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -196,6 +192,27 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Hosted workflows retain their existing service-container contract until the
+# separately scoped workflow-adoption phase. Local calls must enter through the
+# repository authority, and an inherited validation marker is revalidated
+# against the live lease instead of being trusted as a standalone credential.
+if [[ "${GITHUB_ACTIONS:-}" != true ]]; then
+  lease_profile="${QUICKSCALE_POSTGRES_PROFILE:-restricted}"
+  [[ "$lease_profile" == restricted || "$lease_profile" == bypassrls ]] || {
+    echo "ERROR: unsupported integration PostgreSQL profile: $lease_profile" >&2
+    exit 1
+  }
+  if [[ -z "${QUICKSCALE_POSTGRES_LEASE_TOKEN:-}" || "${QUICKSCALE_POSTGRES_LEASE_VALIDATED:-}" != "$QUICKSCALE_POSTGRES_LEASE_TOKEN" ]]; then
+    if [[ "${QUICKSCALE_ALLOW_BYPASSRLS:-0}" == 1 ]]; then
+      echo "ERROR: direct BYPASSRLS execution is not allowed; use make test-bypassrls" >&2
+      exit 1
+    fi
+    exec "$REPO_ROOT/scripts/provision_ci_postgres.sh" run \
+      --profile restricted -- "$REPO_ROOT/scripts/test_integration.sh" "${PYTEST_EXTRA_ARGS[@]}"
+  fi
+  "$REPO_ROOT/scripts/provision_ci_postgres.sh" validate --profile "$lease_profile"
+fi
 
 extract_coverage_percent() {
   local coverage_xml="$1"
@@ -402,27 +419,6 @@ if [ "$POETRY_AVAILABLE" = false ] && [ -x "$VENV_BIN/python" ]; then
   echo "Execution environment: repo-local .venv (Poetry not found on PATH)"
 fi
 echo ""
-
-# ---------------------------------------------------------------------------
-# SA80.2 — Wire every PostgreSQL-using module's test settings to the
-# restricted role, matching CI workflow retained-role contract.
-# Each var defaults to quickscale_test_role; callers can pre-export to
-# override individual modules.  Keeps the SA58 boot guard active against
-# the NOBYPASSRLS/NOSUPERUSER role.
-# Matches .github/workflows/ci.yml (lines 399-410) and publish.yml (160-171).
-# ---------------------------------------------------------------------------
-export QS_ANALYTICS_DB_USER="${QS_ANALYTICS_DB_USER:-quickscale_test_role}"
-export QS_AUTH_DB_USER="${QS_AUTH_DB_USER:-quickscale_test_role}"
-export QS_BACKUPS_DB_USER="${QS_BACKUPS_DB_USER:-quickscale_test_role}"
-export QS_BILLING_DB_USER="${QS_BILLING_DB_USER:-quickscale_test_role}"
-export QS_BLOG_DB_USER="${QS_BLOG_DB_USER:-quickscale_test_role}"
-export QS_CRM_DB_USER="${QS_CRM_DB_USER:-quickscale_test_role}"
-export QS_FORMS_DB_USER="${QS_FORMS_DB_USER:-quickscale_test_role}"
-export QS_LISTINGS_DB_USER="${QS_LISTINGS_DB_USER:-quickscale_test_role}"
-export QS_NOTIFICATIONS_DB_USER="${QS_NOTIFICATIONS_DB_USER:-quickscale_test_role}"
-export QS_ORGS_DB_USER="${QS_ORGS_DB_USER:-quickscale_test_role}"
-export QS_SOCIAL_DB_USER="${QS_SOCIAL_DB_USER:-quickscale_test_role}"
-export QS_STORAGE_DB_USER="${QS_STORAGE_DB_USER:-quickscale_test_role}"
 
 if [ "$POETRY_AVAILABLE" = false ]; then
   get_repo_venv_python >/dev/null || exit 1

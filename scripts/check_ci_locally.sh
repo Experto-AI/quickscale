@@ -2,8 +2,7 @@
 set -euo pipefail
 
 # Local CI check script — the single pre-push script to verify the primary local
-# development checks (install + lint + typecheck + unit tests + optional
-# integration tests when PostgreSQL is available).
+# development checks with an owned PostgreSQL lifecycle.
 #
 # Usage:
 #   ./scripts/check_ci_locally.sh          # Standard check (lint + type + unit tests)
@@ -409,6 +408,10 @@ launch_static_gate() {
     STATIC_FAILURE_LABELS+=("$failure_label")
     WORKER_ORDER+=("$stage_id")
     (
+        # Backgrounded Bash jobs inherit the parent's ignored INT disposition.
+        # Restore normal signal defaults so the gate's own deterministic signal
+        # tests can deliver INT to their foreground child process groups.
+        trap - HUP INT TERM
         echo "[$stage_number/${TOTAL_STAGES}] $description"
         # run_static_gates_parallel is intentionally called in a conditional
         # so its aggregate status can be handled without set -e exiting before
@@ -572,11 +575,28 @@ run_static_gates_parallel() {
 echo "[1/${TOTAL_STAGES}] Installing dependencies..."
 poetry install --with dev
 
+# Static stages are deliberately database-free. Keep the lifecycle lease in
+# this parent for the coverage/integration tail, but do not leak it into the
+# hermetic subprocess tests that make up the static fan-out.
+SAVED_LEASE="${QUICKSCALE_POSTGRES_LEASE-}"
+SAVED_LEASE_TOKEN="${QUICKSCALE_POSTGRES_LEASE_TOKEN-}"
+SAVED_LEASE_VALIDATED="${QUICKSCALE_POSTGRES_LEASE_VALIDATED-}"
+SAVED_PGHOST="${PGHOST-}"
+SAVED_PGPORT="${PGPORT-}"
+unset QUICKSCALE_POSTGRES_LEASE QUICKSCALE_POSTGRES_LEASE_TOKEN \
+    QUICKSCALE_POSTGRES_LEASE_VALIDATED PGHOST PGPORT
+
 if [ "${QS_CI_PARALLEL:-1}" = "0" ]; then
     run_static_gates_serial
 else
     run_static_gates_parallel || exit 1
 fi
+
+if [ -n "$SAVED_LEASE" ]; then export QUICKSCALE_POSTGRES_LEASE="$SAVED_LEASE"; else unset QUICKSCALE_POSTGRES_LEASE; fi
+if [ -n "$SAVED_LEASE_TOKEN" ]; then export QUICKSCALE_POSTGRES_LEASE_TOKEN="$SAVED_LEASE_TOKEN"; else unset QUICKSCALE_POSTGRES_LEASE_TOKEN; fi
+if [ -n "$SAVED_LEASE_VALIDATED" ]; then export QUICKSCALE_POSTGRES_LEASE_VALIDATED="$SAVED_LEASE_VALIDATED"; else unset QUICKSCALE_POSTGRES_LEASE_VALIDATED; fi
+if [ -n "$SAVED_PGHOST" ]; then export PGHOST="$SAVED_PGHOST"; else unset PGHOST; fi
+if [ -n "$SAVED_PGPORT" ]; then export PGPORT="$SAVED_PGPORT"; else unset PGPORT; fi
 
 # Track overall status for the serial stages that follow the static fan-out.
 FAILED=false
@@ -596,41 +616,15 @@ echo "✓ Combined coverage checks passed (90% equal-weight package mean, 80% pe
 
 echo ""
 echo "[11/${TOTAL_STAGES}] Running integration tests..."
-if command -v pg_isready >/dev/null 2>&1 && pg_isready -h localhost -q 2>/dev/null; then
-    echo "PostgreSQL is available — running integration tests..."
-    ./scripts/test_integration.sh || FAILED=true
-    if [ "$FAILED" = true ]; then
-        echo ""
-        echo "╔════════════════════════════════════════╗"
-        echo "║   ✗ Integration Tests Failed           ║"
-        echo "╚════════════════════════════════════════╝"
-        exit 1
-    fi
-    echo "✓ Integration tests passed"
-else
+./scripts/test_integration.sh || FAILED=true
+if [ "$FAILED" = true ]; then
     echo ""
-    echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║   ✗ PostgreSQL Not Available                               ║"
-    echo "╚══════════════════════════════════════════════════════════════╝"
-    echo ""
-    echo "  Integration tests require PostgreSQL 18 with a LOGIN CREATEDB"
-    echo "  NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE role on localhost:5432."
-    echo ""
-    echo "  QuickScale uses a split test model to separate DB-free"
-    echo "  unit tests from PostgreSQL-backed integration tests:"
-    echo ""
-    echo "    make test-unit           DB-free unit tests (core + CLI)"
-    echo "    make test-integration    Integration tests (requires PostgreSQL)"
-    echo ""
-    echo "  To run checks locally without PostgreSQL, use:"
-    echo "    make test-unit"
-    echo ""
-    echo "  To set up PostgreSQL and run the full suite, see"
-    echo "  docs/technical/development.md for setup instructions,"
-    echo "  then run make ci."
-    echo ""
+    echo "╔════════════════════════════════════════╗"
+    echo "║   ✗ Integration Tests Failed           ║"
+    echo "╚════════════════════════════════════════╝"
     exit 1
 fi
+echo "✓ Integration tests passed"
 
 # Optional E2E tests
 if [ "$RUN_E2E" = true ]; then

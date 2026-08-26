@@ -158,8 +158,26 @@ def _fake_environment(
         tool.chmod(0o755)
 
     environment = os.environ.copy()
+    # The fixture must model a direct, lease-free invocation even when this
+    # suite itself is run beneath the local CI provisioning helper. Otherwise
+    # the production entrypoint legitimately reuses the outer lease and the
+    # fake PATH no longer exercises the unavailable-service boundary.
+    for key in (
+        "QUICKSCALE_POSTGRES_LEASE",
+        "QUICKSCALE_POSTGRES_LEASE_TOKEN",
+        "QUICKSCALE_POSTGRES_LEASE_VALIDATED",
+        "PGHOST",
+        "PGPORT",
+    ):
+        environment.pop(key, None)
     runtime_bin = tmp_path / "runtime-bin"
     runtime_bin.mkdir()
+    # Keep the static-gate harness hermetic. The local-CI production path now
+    # owns its database lane through the provisioning helper; leaking host
+    # Docker/PostgreSQL binaries into this fake PATH would accidentally launch
+    # a real lifecycle instead of exercising the intended unavailable-service
+    # boundary.
+    lifecycle_tools = {"docker", "psql", "pg_dump", "pg_restore"}
     available_names = {entry.name for entry in bin_dir.iterdir()}
     for path_entry in environment["PATH"].split(os.pathsep):
         if not path_entry:
@@ -168,7 +186,11 @@ def _fake_environment(
         if not source_dir.is_dir():
             continue
         for source in source_dir.iterdir():
-            if source.name in available_names or source.name in missing_tools:
+            if (
+                source.name in available_names
+                or source.name in missing_tools
+                or source.name in lifecycle_tools
+            ):
                 continue
             if source.is_file() and os.access(source, os.X_OK):
                 (runtime_bin / source.name).symlink_to(source)

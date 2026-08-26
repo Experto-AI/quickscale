@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 # test_isolation_conformance.sh — AF10 Isolation-Conformance CI Runner
 #
-# Runs the complete isolation-conformance test suite against a live PostgreSQL
-# instance.  Intended for CI (isolation-conformance job) and for local
-# verification after a local PostgreSQL service is started.
+# Runs the complete isolation-conformance test suite against the PostgreSQL
+# lifecycle lease supplied by provision_ci_postgres.sh.
 #
 # Prerequisites:
-#   - PostgreSQL 18 running on localhost:5432
-#   - All test databases pre-created (see ci.yml create-test-databases step)
+#   - provision_ci_postgres.sh has supplied a validated isolation lease
 #   - Poetry installed, dependencies installed
 #
 # What it runs:
@@ -24,40 +22,28 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 # ---------------------------------------------------------------------------
-# PostgreSQL client helper — use local psql when available, fall back to
-# docker exec for local validation (psql may not be on PATH).
-# Override the container name via QS_PG_CONTAINER env var.
+# PostgreSQL client helper. The validated lease supplies the dynamic endpoint;
+# there is deliberately no host-service or alternate-container fallback.
 # ---------------------------------------------------------------------------
 _PSQL() {
-  if command -v psql >/dev/null 2>&1; then
-    psql -h localhost -U postgres "$@"
-  else
-    local container="${QS_PG_CONTAINER:-pg18-af10}"
-    docker exec -i "$container" psql -U postgres "$@"
-  fi
+  psql -X -v ON_ERROR_STOP=1 \
+    -h "${PGHOST:-localhost}" \
+    -p "${PGPORT:?validated PostgreSQL lease did not set PGPORT}" \
+    -U "${QS_ORGS_DB_USER:-quickscale_test_role}" "$@"
 }
 
-# ---------------------------------------------------------------------------
-# Create the restricted PostgreSQL role (idempotent, cluster-wide)
-# ---------------------------------------------------------------------------
-_RESTRICTED_ROLE="quickscale_rls_test_role"
-
-echo "=== Setting up PostgreSQL restricted role ==="
-_PSQL -tc \
-  "SELECT 1 FROM pg_roles WHERE rolname = '${_RESTRICTED_ROLE}'" \
-  | grep -q 1 \
-  || _PSQL -c \
-    "CREATE ROLE ${_RESTRICTED_ROLE} NOBYPASSRLS NOINHERIT NOLOGIN"
-
-# Verify the role was created correctly.
-ROLE_BYPASS=$(_PSQL -tc \
-  "SELECT rolbypassrls FROM pg_roles WHERE rolname = '${_RESTRICTED_ROLE}'" \
-  | tr -d ' ')
-if [ "$ROLE_BYPASS" != "f" ]; then
-  echo "ERROR: ${_RESTRICTED_ROLE} has BYPASSRLS enabled - isolation test would be invalid!"
-  exit 1
+# Hosted workflows retain their existing service-container contract until the
+# separately scoped workflow-adoption phase. Local calls revalidate inherited
+# markers against the live isolation lease rather than trusting marker equality.
+if [[ "${GITHUB_ACTIONS:-}" != true ]]; then
+  if [[ -z "${QUICKSCALE_POSTGRES_LEASE_TOKEN:-}" || "${QUICKSCALE_POSTGRES_LEASE_VALIDATED:-}" != "$QUICKSCALE_POSTGRES_LEASE_TOKEN" ]]; then
+    exec "$REPO_ROOT/scripts/provision_ci_postgres.sh" run \
+      --profile isolation -- "$REPO_ROOT/scripts/test_isolation_conformance.sh" "$@"
+  fi
+  "$REPO_ROOT/scripts/provision_ci_postgres.sh" validate --profile isolation
 fi
-echo "  ✓ ${_RESTRICTED_ROLE} created with NOBYPASSRLS"
+
+echo "=== Using validated PostgreSQL isolation lease ==="
 
 # ---------------------------------------------------------------------------
 # Track results

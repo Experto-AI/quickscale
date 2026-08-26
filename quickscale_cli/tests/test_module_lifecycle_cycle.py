@@ -11,6 +11,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from quickscale_core import __version__ as _core_version
+from quickscale_core.manifest.entry_point import load_module_manifest
 
 # AF5 Phase 4: Bypass the late destructive/remote confirmation gate so test
 # assertions remain stable with the new two-phase confirmation flow.
@@ -168,6 +169,13 @@ def _write_non_consolidated_state_with_modules(
     (state_dir / "state.yml").write_text(yaml.safe_dump(state_data, sort_keys=False))
 
 
+def _write_directory_only_module(project_path: Path, module_name: str) -> None:
+    """Write an embedded module directory without an embedded manifest."""
+    module_dir = project_path / "modules" / module_name
+    module_dir.mkdir(parents=True, exist_ok=True)
+    (module_dir / "__init__.py").write_text("")
+
+
 def _write_project_with_modules_non_consolidated(
     project_path: Path, module_names: list[str]
 ) -> None:
@@ -180,18 +188,8 @@ def _write_project_with_modules_non_consolidated(
     project_path.mkdir()
     (project_path / "manage.py").write_text("# manage")
 
-    _repo_manifests_root = Path(__file__).resolve().parents[2] / "quickscale_modules"
     for module_name in module_names:
-        module_dir = project_path / "modules" / module_name
-        module_dir.mkdir(parents=True)
-        (module_dir / "__init__.py").write_text("")
-        repo_manifest = _repo_manifests_root / module_name / "module.yml"
-        if repo_manifest.exists():
-            (module_dir / "module.yml").write_text(repo_manifest.read_text())
-        else:
-            (module_dir / "module.yml").write_text(
-                f'name: {module_name}\nversion: "0.71.0"\n'
-            )
+        _write_directory_only_module(project_path, module_name)
 
     _write_quickscale_config_with_modules(project_path, module_names)
     _write_non_consolidated_state_with_modules(project_path, module_names)
@@ -277,18 +275,8 @@ def _write_project_with_modules(project_path: Path, module_names: list[str]) -> 
     project_path.mkdir()
     (project_path / "manage.py").write_text("# manage")
 
-    _repo_manifests_root = Path(__file__).resolve().parents[2] / "quickscale_modules"
     for module_name in module_names:
-        module_dir = project_path / "modules" / module_name
-        module_dir.mkdir(parents=True)
-        (module_dir / "__init__.py").write_text("")
-        repo_manifest = _repo_manifests_root / module_name / "module.yml"
-        if repo_manifest.exists():
-            (module_dir / "module.yml").write_text(repo_manifest.read_text())
-        else:
-            (module_dir / "module.yml").write_text(
-                f'name: {module_name}\nversion: "0.71.0"\n'
-            )
+        _write_directory_only_module(project_path, module_name)
 
     _write_quickscale_config_with_modules(project_path, module_names)
     _write_initial_state_with_modules(project_path, module_names)
@@ -367,16 +355,6 @@ def _write_blog_state(project_path: Path, *, enable_rss: bool) -> None:
     state_dir = project_path / ".quickscale"
     state_dir.mkdir(parents=True, exist_ok=True)
     (state_dir / "state.yml").write_text(yaml.safe_dump(state_data, sort_keys=False))
-
-
-def _write_embedded_blog_manifest(project_path: Path) -> None:
-    """Copy the current blog manifest into the embedded project module tree."""
-    repo_root = Path(__file__).resolve().parents[2]
-    manifest_source = repo_root / "quickscale_modules" / "blog" / "module.yml"
-    module_dir = project_path / "modules" / "blog"
-    module_dir.mkdir(parents=True, exist_ok=True)
-    (module_dir / "__init__.py").write_text("")
-    (module_dir / "module.yml").write_text(manifest_source.read_text())
 
 
 def _generate_minimal_project(
@@ -769,16 +747,6 @@ def test_apply_backups_private_remote_stays_offline_with_env_var_refs() -> None:
         assert backups_options["remote_region_name"] == "auto"
 
 
-def _copy_repo_module_manifest(project_path: Path, module_name: str) -> None:
-    """Copy a module.yml from the maintainer repo into the embedded project."""
-    repo_root = Path(__file__).resolve().parents[2]
-    source = repo_root / "quickscale_modules" / module_name / "module.yml"
-    module_dir = project_path / "modules" / module_name
-    module_dir.mkdir(parents=True, exist_ok=True)
-    (module_dir / "__init__.py").write_text("")
-    (module_dir / "module.yml").write_text(source.read_text())
-
-
 def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
     """Repeat apply should treat blog.enable_rss as mutable and avoid re-embed."""
     cli_runner = CliRunner()
@@ -806,9 +774,8 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
 
         # Blog requires orgs>=0.86.0, and orgs requires auth — embed all three
         # so the required-module version constraint is satisfied.
-        _copy_repo_module_manifest(project_path, "auth")
-        _copy_repo_module_manifest(project_path, "orgs")
-        _write_embedded_blog_manifest(project_path)
+        for module_name in ("auth", "orgs", "blog"):
+            _write_directory_only_module(project_path, module_name)
 
         # quickscale.yml: blog with enable_rss=False; auth and orgs are
         # installed.  Orgs implies notifications which is materialized
@@ -923,7 +890,16 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
             yaml.safe_dump(tracking_data, sort_keys=False)
         )
 
+        repository_manifests = {
+            module_name: load_module_manifest(module_name)
+            for module_name in ("auth", "orgs", "notifications", "blog")
+        }
+
         with (
+            patch(
+                "quickscale_cli.commands.apply_command._load_module_manifests",
+                return_value=repository_manifests,
+            ),
             patch(
                 "quickscale_cli.commands.apply_command._embed_modules_step",
                 wraps=_embed_modules_step,

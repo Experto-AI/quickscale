@@ -29,6 +29,7 @@ Preferred maintainer-facing command map:
 | `./scripts/compile_docs.sh` | `make docs` |
 | `./scripts/test_unit.sh` | `make test` or `make test-unit` |
 | `./scripts/test_e2e.sh` | `make test-e2e` |
+| `./scripts/provision_ci_postgres.sh describe --profile restricted --format json` | `make test-postgres-provisioning` (contract suite) |
 | `./scripts/test_agentic_flow.sh` | `make test-agent` |
 | `./scripts/publish.sh build` | `make publish-build` |
 | `./scripts/publish.sh test` | `make publish-test` |
@@ -83,6 +84,8 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 
 - [test_unit.sh](./test_unit.sh) — runs unit tests only (prefer `make test` or `make test-unit`)
 - [test_e2e.sh](./test_e2e.sh) — runs local end-to-end tests and supporting setup (`make test-e2e`)
+- [provision_ci_postgres.sh](./provision_ci_postgres.sh) — the fail-closed PostgreSQL client, profile, lease, and lifecycle authority. `describe` is side-effect-free; `hosted-setup` is GitHub-only; `run` owns a local PostgreSQL 18 container.
+- [test_provision_ci_postgres.py](./test_provision_ci_postgres.py) — hermetic PATH-shim contract tests for discovery, profiles, clients, Docker boundaries, leases, SQL safety, and cleanup ordering (`make test-postgres-provisioning`)
 - [test_agentic_flow.sh](./test_agentic_flow.sh) — runs focused agentic-flow adapter tests (`make test-agent`)
 
 ### Release and distribution
@@ -119,7 +122,7 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 
 The generation drift gate is part of the mandatory fast pre-commit gate (F-006): `make check` invokes `poetry run python scripts/sync_ci_gate_jobs.py --check` directly (non-recursively) after the registry-bound check targets, so stale hosted job IDs, `needs` lists, check commands, or E2E markers/paths fail `make check` with the deterministic diff. The SA122a parity checker is also invoked directly by `make check`, and `make check-gate-parity` remains available as its focused blocking entrypoint. Both Make-driven invocations (the mandatory gates and their standalone targets) pass `--registry "$(GATE_REGISTRY)"`, so Make's registry-derived target selection and every validator in that invocation consume the identical registry — a `GATE_REGISTRY` override can never false-green against the default registry. Hosted CI runs the parity gate unconditionally in the test job. Run the focused targets solo to debug drift. To intentionally refresh the generated regions, run `poetry run python scripts/sync_ci_gate_jobs.py --write --registry scripts/gate_registry.json` from the repository root, then rerun `make check-ci-gate-generation` (or `make check`).
 
-The registered scripts gate is deliberately outside product coverage: `make check-gate-suites` runs exactly `$(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q`, removes its temporary recursion sentinel, and leaves `.coveragerc` and the 90% product threshold unchanged. The six hosted registry-bound jobs are joined by six justified unowned jobs; `isolation-conformance` is exposed through Make for local use but remains a hosted-unowned, PostgreSQL-backed job pending later lifecycle work. It requires PostgreSQL 18, the pre-created test databases, the restricted role setup, and installed Poetry dependencies; it does not provision PostgreSQL locally.
+The registered scripts gate is deliberately outside product coverage: `make check-gate-suites` runs exactly `$(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q`, removes its temporary recursion sentinel, and leaves `.coveragerc` and the 90% product threshold unchanged. The six hosted registry-bound jobs are joined by six justified unowned jobs; `isolation-conformance` is exposed through Make for local use but remains a hosted-unowned, PostgreSQL-backed job. Local Make execution provisions an owned PostgreSQL 18 lifecycle; the existing hosted workflow keeps its service-container setup until the separately scoped workflow-adoption phase.
 
 **Selector behavior**: With no workflow selector, the generator checks both hosted `ci.yml` and E2E `e2e.yml` (default). `--workflow PATH` selects hosted-only generation; `--e2e-workflow PATH` selects E2E-only generation; supplying both selects both explicitly. The publish workflow remains hand-maintained and currently has full coverage of the five standalone repository conformance gates; publish omission is not an expected gap.
 

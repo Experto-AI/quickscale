@@ -52,7 +52,7 @@
 #   make clean                - Remove build artifacts
 
 .PHONY: setup bootstrap smoke-install install \
-        test test-unit test-integration test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-agent \
+        test test-unit test-integration test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-agent test-postgres-provisioning \
         lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
         quality fix check ci ci-e2e \
         docs \
@@ -197,6 +197,7 @@ help:
 	@echo "  make lint-agent           - Lint .agent adapter shell scripts"
 	@echo "  make test-integration-worker-pool - Worker pool harness tests (fast, no PostgreSQL)"
 	@echo "  make test-ci-local-parallel - TP1 local-CI parallelism regression tests"
+	@echo "  make test-postgres-provisioning - Hermetic PostgreSQL provisioning contract tests"
 	@echo ""
 	@echo "Modifiers (apply to most check/test targets — not commands on their own):"
 	@echo "  Section flags (after \`--\`): --quickscale/-q, --core/-c, --cli/-l, --devtools/-d, --modules/-m"
@@ -404,7 +405,11 @@ test-unit:
 # by default so the SA58 boot guard stays active against the restricted role.
 # Override explicitly per-suite (SA14.4 hatch) for tests that need BYPASSRLS.
 test-integration:
-	@scripts/test_integration.sh
+	@if [ "$${GITHUB_ACTIONS:-}" = "true" ]; then \
+		scripts/test_integration.sh; \
+	else \
+		scripts/provision_ci_postgres.sh run --profile restricted -- scripts/test_integration.sh; \
+	fi
 
 # Run ONLY the BYPASSRLS-privileged tests (the `-m bypass_rls` migration/DDL
 # proofs that the default NOBYPASSRLS integration run skips). Kept separate on
@@ -418,8 +423,14 @@ test-integration:
 # scripts/test_isolation_conformance.sh for the role-creation pattern).
 # Intended for a nightly/manual CI job, not the fast pre-commit gate.
 test-bypassrls:
-	@QUICKSCALE_ALLOW_BYPASSRLS=1 QS_SKIP_COVERAGE_GATE=1 \
-		scripts/test_integration.sh -- -m bypass_rls
+	@if [ "$${GITHUB_ACTIONS:-}" = "true" ]; then \
+		QUICKSCALE_ALLOW_BYPASSRLS=1 QS_SKIP_COVERAGE_GATE=1 \
+			scripts/test_integration.sh -- -m bypass_rls; \
+	else \
+		QS_SKIP_COVERAGE_GATE=1 \
+			scripts/provision_ci_postgres.sh run --profile bypassrls -- \
+			scripts/test_integration.sh -- -m bypass_rls; \
+	fi
 
 # Run E2E tests (starts PostgreSQL container, installs Playwright browsers)
 test-e2e:
@@ -620,6 +631,11 @@ test-integration-worker-pool:
 # of ci and cannot recurse through the real ci target.
 test-ci-local-parallel:
 	@$(PYTHON) -m pytest scripts/test_ci_local_parallel.py -q --tb=short
+
+# Hermetic contract suite for the single PostgreSQL environment authority.
+# The suite uses PATH shims and never needs a PostgreSQL server or Docker.
+test-postgres-provisioning:
+	@$(PYTHON) -m pytest scripts/test_provision_ci_postgres.py -q --tb=short -o addopts= --no-cov -p no:cacheprovider
 
 # --- Lint / Format ---
 
@@ -970,7 +986,11 @@ check-gate-suites:
 # The isolation runner owns its full behavior and prerequisites.  Keep this
 # target as a thin Make delegation; hosted CI uses the same caller.
 isolation-conformance:
-	@scripts/test_isolation_conformance.sh
+	@if [ "$${GITHUB_ACTIONS:-}" = "true" ]; then \
+		scripts/test_isolation_conformance.sh; \
+	else \
+		scripts/provision_ci_postgres.sh run --profile isolation -- scripts/test_isolation_conformance.sh; \
+	fi
 
 # --- Gate Registry Parity Check (SA122a) ---
 
@@ -1253,13 +1273,13 @@ check:
 quality:
 	@scripts/check_quality.sh
 
-# Run primary local development checks (lint + typecheck + unit tests; integration when PostgreSQL available)
+# Run primary local development checks with an owned PostgreSQL lifecycle.
 ci: test-ci-local-parallel
-	@scripts/check_ci_locally.sh
+	@scripts/provision_ci_postgres.sh run --profile restricted -- scripts/check_ci_locally.sh
 
-# Run full CI including E2E tests (slow — needs Docker + Playwright)
+# Run full CI including E2E tests with the same owned PostgreSQL lifecycle.
 ci-e2e:
-	@scripts/check_ci_locally.sh --e2e
+	@scripts/provision_ci_postgres.sh run --profile restricted -- scripts/check_ci_locally.sh --e2e
 
 # --- Docs ---
 
