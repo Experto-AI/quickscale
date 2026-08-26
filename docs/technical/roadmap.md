@@ -140,14 +140,15 @@ The manifest-reading `entry_point.py`, the
 fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec seam, and the regenerated migration baseline
 are all merged tree state that open tickets build on, not pending dependencies.
 
-**Parallelism result (shared-baseline closeout): all three queue heads are executable.**
+**Parallelism result (partial W3 checkpoint): all three queue heads are executable.**
 **SA167b's P1-P3 partial integration is merged and is now integration-branch state** —
 `entry_point.py` is drained to generic registry/dispatch logic with no per-module block, all twelve
 modules own an adapter, and `MANAGED_ADAPTER_ORIGINS` derives from `discover_shipped_module_names()`.
 Its P4 campaign may resume. SA123's scanner implementation is merged and its acceptance rerun is
-now executable. SA135+SA163 may restart Phase A against the green shared baseline. Each lane still
-must sync current `v88` before its own exact-candidate validation; the roadmap does not preserve
-worktree-distance snapshots after their scheduling purpose expires.
+now executable. SA135+SA163's partial P-C implementation is retained in `v88`; W3 resumes at the
+strict C no-host acceptance remainder rather than restarting P, A, or B. Each lane still must sync
+current `v88` before its own exact-candidate validation; the roadmap does not preserve worktree-
+distance snapshots after their scheduling purpose expires.
 
 **Rebalance result: no track moves.** W2's first leg is an acceptance rerun rather than a build,
 but it remains the binding lane because SA118 and SA167c follow it. Moving SA161/SA160 from W3 to
@@ -176,7 +177,7 @@ is a rerun, not a build. Shared closeout surfaces (`CHANGELOG.md`,
 `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`, and both audit docs)
 remain covered by the standing sync-before-merge-back procedure.
 
-### Track readiness (reconciled 2026-08-26; shared baseline green)
+### Track readiness (reconciled 2026-08-26; partial W3 checkpoint retained)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes. The queue and track states below were re-tested for rebalance opportunities; no move is
@@ -186,12 +187,13 @@ needed.
 |---|---|---|---|---|---|
 | **W1** | SA167b (#17) | **yes** — P1-P3 are merged and P4's shared gate prerequisite is green | **yes** — the remaining exact-candidate checks and closeout are W1-owned, subject to the shared PostgreSQL/Docker serialization rule | **yes** — #17 is the W1 queue head | **truly green — off the critical path** |
 | **W2** | SA123 (#13) | **yes** — implementation is merged and the acceptance rerun is unblocked | **yes** — its full ordered campaign now starts from a green shared baseline | **yes** — #13 is the W2 queue head | **truly green — on the critical path** |
-| **W3** | SA135 + SA163 (#15) | **yes** — `deps: none` and the PostgreSQL/Docker lane is released | **yes** — Phase A may restart against the green baseline and the lane owns the remaining lifecycle work | **yes** — #15 is the W3 queue head | **truly green — off the critical path** |
+| **W3** | SA135 + SA163 (#15) | **yes to continue** — P/A/B and the local C implementation are retained in `v88` | **not yet** — strict C no-host acceptance and phases D-G remain | **no** — #15 stays open until complete acceptance, closeout, and exact-tip review | **partial checkpoint — off the critical path** |
 
-**All three tracks are truly green.** W2 should run SA123's acceptance rerun first because it is
-the critical-path head. W1 may resume SA167b P4 and W3 may restart SA135+SA163 Phase A, but their
-PostgreSQL/Docker work remains serialized. Give W3 scheduling priority while its owned-lifecycle
-leg is active; W1's exact-candidate runtime window must not overlap it.
+**W1 and W2 are truly green; W3 has a retained partial checkpoint and can continue.** W2 should run
+SA123's acceptance rerun first because it is the critical-path head. W1 may resume SA167b P4 and W3
+may resume SA135+SA163 strict C acceptance, but their PostgreSQL/Docker work remains serialized.
+Give W3 scheduling priority while its owned-lifecycle leg is active; W1's exact-candidate runtime
+window must not overlap it.
 
 **Blocked open tickets, edge kind, and what clears each.** Every edge is classified so no blocker
 is ambiguous between "a maintainer decision clears it" and "only the upstream work clears it".
@@ -213,8 +215,9 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
   close out only the reviewed exact candidate.
 - **W2 — run SA123 acceptance.** Its implementation is merged and the full ordered rerun is the
   critical-path head; do not start SA118 until it closes.
-- **W3 — sync, then restart SA135 + SA163 (#15) at Phase A.** Rebind against the current eight-gate
-  registry and preserve the no-waiver baseline. Coordinate its PostgreSQL/Docker slot with W1.
+- **W3 — continue SA135 + SA163 (#15) from strict C acceptance.** First reserve an exclusive lane
+  with no listener on localhost:5432, then run the remaining C proof and D-G plan below. Rebind
+  against the current eight-gate registry and coordinate the PostgreSQL/Docker slot with W1.
 
 #### Recorded maintainer decisions
 
@@ -272,8 +275,9 @@ exact reviewed tip.
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #14, #23, and #26 are **retired and not
 reused**; the tickets that held them are closed and archived in
 [CHANGELOG.md](../../CHANGELOG.md). Gaps in the numbering are expected and carry no meaning.
-#13, #15, and #17 are the per-lane heads and all three may start today. #13's implementation is
-complete and awaits its acceptance rerun; #17 resumes its remaining P4 validation.
+#13, #15, and #17 are the per-lane heads and all three may act today. #13's implementation is
+complete and awaits its acceptance rerun; #15 resumes from strict C acceptance over its retained
+partial checkpoint; #17 resumes its remaining P4 validation.
 
 Band-C positions (19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. Any of them may slip
 past the release without blocking it; none may displace a band-A or band-B leg.
@@ -416,35 +420,52 @@ Conceptual background, mental models, and implementation notes for **every** tic
 - [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Band B · Tier 2 · W3 · merge #15 · deps: none · PostgreSQL + Docker slot · carries SA163`
   Provision and tear down the server used by repository gates; replace the current out-of-band host assumption while retaining an asserted unavailability negative control.
   **Acceptance:** the integration gate provisions its own PostgreSQL 18 server and tears it down, with no reliance on a pre-existing host server; the `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract is preserved; the asserted-unavailability negative control still fails loudly when the server cannot be provisioned, rather than skipping; `make test-integration` passes on a machine with no PostgreSQL running; [validation_policy.md](validation_policy.md) is updated to drop the out-of-band host precondition; image identity follows the settled content-addressed backend-image convention.
-  **Attempted 2026-08-26 — blocked before implementation.** The clean W3 worktree was synced to
-  current `v88`, the PostgreSQL/Docker slot and required Python 3.14, Docker, and PostgreSQL 18
-  clients were available, and the Phase A preflight bound the current module, database-name,
-  workflow, publish-order, settled security-gate, quality, and open-ticket baselines. No SA135/SA163 source,
-  workflow, test, policy, or audit implementation was applied.
-  **Shared baseline restored:** the focused parity/context preflight and its nested `make check`
-  prerequisite now start from a green repository baseline. No SA135/SA163 source, workflow, test,
-  policy, or audit implementation was applied during the earlier blocked attempt. Rerun Phase A
-  without an accepted-failure waiver.
+  **Partial checkpoint retained in `v88` (2026-08-26):**
+  - **Completed prerequisite:** the shared lifecycle-fixture repair was already merged separately by
+    the shared-baseline repair and passed its complete campaign with the exact-twelve guard intact.
+  - **Completed — A-preflight:** the focused baseline reported `253 passed`; gate parity, generated
+    workflow checks, and `make quality` passed with zero warning/critical regressions and monotonicity
+    passing.
+  - **Completed — B-provisioning-contract:** `scripts/provision_ci_postgres.sh`, retained role
+    contracts, Make entrypoints, and hermetic tests implement one derived profile, lease, role,
+    client, image, database, and environment authority while preserving the current eight-gate
+    registry state.
+  - **Delivered but not fully accepted — C-local-lifecycle:** local restricted, BYPASSRLS,
+    isolation, `make ci`, and direct callers use owned dynamic-port PostgreSQL 18 lifecycles. The
+    narrowed campaign passed 28 provisioning tests, 56 worker-pool tests, 27 local-parallel tests,
+    and full `make ci` (1291 registered script tests, 98 coverage-policy tests, 5067 core/CLI tests
+    plus 332 backups tests, 93.33% core/CLI coverage, and 94.53% module mean). The strict sequence
+    requiring localhost:5432 to be unavailable stopped when another container occupied that port,
+    so the ordered restricted → BYPASSRLS → restricted → isolation → CI proof remains open.
+  - **Review state:** convergence corrected eight blocking P-C defects. Terminal attestation then
+    found poisoned environment values on reused leases and an immediate-child process-group race;
+    the single terminal-remediation pass corrected both and passed focused plus narrowed validation.
+    Those final remediation bytes were applied after terminal attestation and are not independently
+    graded; the next exact-candidate review must cover them.
+  - **Checkpoint disposition:** the partial implementation is deliberately committed and merged to
+    `v88` for preservation. SA135, SA163, and Finding 13 remain open; workflow adoption, policy/audit
+    closeout, and completion claims were not merged.
+  **Pending / blocking:** strict C acceptance requires an exclusive PostgreSQL/Docker lane with no
+  listener on localhost:5432. No product-design decision is open.
+  **Decision needed to continue cleanly:** reserve that exclusive lane and explicitly authorize the
+  temporary stop/restart of whichever known local PostgreSQL container owns port 5432. Recommended:
+  grant that narrow environment authority, then resume without redoing P, A, or B.
   **Remaining plan (all phases serial):**
-  1. **A-preflight:** rerun the complete baseline; require
-     the focused baseline, parity, and quality checks to pass and leave no disposable artifacts.
-  2. **B-provisioning-contract:** add the single fail-closed PostgreSQL provisioning authority,
-     exact restricted/BYPASSRLS profiles, safe environment emission, role postcondition checks,
-     hermetic lifecycle tests, and focused Make targets.
-  3. **C-local-lifecycle:** make restricted and BYPASSRLS Make lanes own a labeled PostgreSQL 18
-     container on a Docker-reported dynamic endpoint, with pre-allocation cleanup identity,
-     composed signal cleanup, and no fallback to host PostgreSQL.
-  4. **D-workflow-parity:** migrate all four maintainer workflows and six provisioning contexts to
-     the helper, preserve deliberate isolation differences and inherited eight-gate behavior, add the
-     helper to the existing E2E trigger-input owner, regenerate the E2E path region, and replace
-     transcribed provisioning-shell assertions with structural parity.
-  5. **E-acceptance:** prove Docker-unavailable failure, host independence, exact cleanup,
-     restricted → BYPASSRLS → restricted coexistence, generated-project runtime, full repository
-     gates, and quality no worse than the Phase A baseline.
-  6. **F-closeout:** only after E is green, reconcile validation policy, Finding 13, ticket context,
-     roadmap counts/dependencies, and changelog evidence under the open-work-only policy.
-  7. **G-post-sync:** sync current `v88` again, rerun the complete acceptance on one clean frozen
-     tree, perform independent convergence and terminal attestation, and merge only that exact tip.
+  1. **C-local-lifecycle acceptance remainder:** with localhost:5432 unavailable, run the exact
+     strict sequence and require no skips, exact-scope cleanup, canary survival, frozen image
+     identity, dynamic loopback endpoints, and restricted → BYPASSRLS → restricted coexistence.
+     Include the post-attestation remediation bytes in the next independent exact-candidate review.
+  2. **D-workflow-parity:** migrate all four maintainer workflows and six provisioning contexts to
+      the helper, preserve deliberate isolation differences and inherited eight-gate behavior, add the
+      helper to the existing E2E trigger-input owner, regenerate the E2E path region, and replace
+      transcribed provisioning-shell assertions with structural parity.
+  3. **E-acceptance:** prove Docker-unavailable failure, host independence, exact cleanup,
+      restricted → BYPASSRLS → restricted coexistence, generated-project runtime, full repository
+      gates, and quality no worse than the Phase A baseline.
+  4. **F-closeout:** only after E is green, reconcile validation policy, Finding 13, ticket context,
+      roadmap counts/dependencies, and changelog evidence under the open-work-only policy.
+  5. **G-post-sync:** sync current `v88` again, rerun the complete acceptance on one clean frozen
+      tree, perform independent convergence and terminal attestation, and merge only that exact tip.
 
 ---
 
