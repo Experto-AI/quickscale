@@ -4,6 +4,61 @@
 
 ## v88 development — 2026-08-21
 
+- **SA167b P1-P3 partial integration merged to `v88` (2026-08-26).** The authorized partial
+  checkpoint is now integration-branch state, not worktree state: `wt-track1` and `v88` are the
+  same object (`472b63e8`), and the seven P3 commits reached the integration branch through the
+  conflict-free merge `ff3c741e` of `v88` object `323dd9fe`. Verified on the integration branch:
+  all **twelve** shipped modules own
+  `quickscale_modules/<name>/src/quickscale_modules_<name>/adapter.py`;
+  `quickscale_core/src/quickscale_core/manifest/entry_point.py` is **270 lines** carrying only
+  generic registry/dispatch logic with **zero** per-module blocks; `MANAGED_ADAPTER_ORIGINS` is
+  derived from `discover_shipped_module_names()` rather than hand-listed, and transient
+  regeneration restores registry and origin identities and contents together. Post-sync evidence
+  recorded at merge time: **278** affected core/runtime/CLI tests passing, **six** exact
+  generator-parity tests passing, the module/core import-boundary check passing, and
+  `make quality` exiting 0 with zero warning regressions, zero critical regressions, and
+  monotonicity passing. **SA167b is not closed and merge position #17 is not retired** — the
+  maintainer explicitly authorized preserving this partial improvement without claiming ticket
+  completion. P4 (PostgreSQL-backed generated-project runtime acceptance, the full
+  `make lint`/`typecheck`/`check`/`test` sequence as one run, independent review of the
+  post-attestation registry/origin restoration, and same-fact documentation closeout) remains open
+  on W1. The open v88 queue is unchanged at **twelve ticket entries across eleven merge
+  positions**.
+- **Roadmap cleanup and rebalance review (2026-08-26, thirteenth pass).** **No ticket closed and
+  no audit finding closed since the twelfth pass.** The archive entry above records the one piece
+  of durable progress — SA167b's partial integration — and the roadmap continues to hold open work
+  only with zero checked entries.
+  **The pass's finding is lane sync debt, measured rather than assumed.** W1 is exactly at the
+  integration tip (0 ahead, 0 behind). **W2 (`wt-track2`, `2ef9bc3c`) is 14 commits behind `v88`
+  and W3 (`wt-track3`, `de3bcd30`) is 10 commits behind**, so both queue heads must sync before
+  their first executable action rather than starting from their current worktree state. This is
+  lag, not blockage; it is now stated on the track table so no session mistakes a stale worktree
+  base for a clean one.
+  **Blocker classification completed.** Every blocked open ticket is now recorded with its edge
+  **kind**: a *hard content edge* that only the upstream work can clear (SA167c behind SA118 on
+  `module.yml`; SA167d behind SA167b; SA160 behind SA161 on the shared SA90 emission fixture;
+  SA164's content dependence on SA167c's retired `django_apps:` key) versus a *lane-ordering edge*
+  the maintainer could in principle reorder (SA118 behind SA123 by the gate-truth-first ordering
+  rule; SA166 behind SA118/SA167c; SA165 behind SA167d; SA161 behind SA135; SA164 behind SA166).
+  No lane-ordering edge is recommended for reversal — each is load-bearing for the registry and
+  manifest single-worktree invariants — but the roadmap no longer leaves any blocker ambiguous
+  between "a maintainer decision clears it" and "only the upstream work clears it".
+  **Rebalance outcome: no track moves, thirteenth consecutive pass.** Every open ticket carries a
+  worktree. W2 remains irreducible at five open legs — SA123, SA166, and SA164 all own
+  `scripts/gate_registry.json`, which never crosses worktrees, and SA118 then SA167c must rewrite
+  `quickscale_modules/*/module.yml` on that same lane. The **SA161 (#19) + SA160 (#20) W3 to W1**
+  candidate was re-tested and rejected for the sixth time: neither is on or feeding the critical
+  path, and moving them would spread `quickscale_core/tests/fixtures/sa90_emission_manifests.json`
+  across three lanes. A new candidate was tested and rejected: moving **SA166 (#24) or SA164 (#25)
+  off W2** would shorten no path, because both sit behind the path's tail as band-C filler, and
+  both own the gate registry. The critical path is unchanged at `SA123 -> SA118 -> SA167c`, three
+  serialized W2 legs.
+  **W2 and W3 are truly green on all three states; W1 is green to start and finish but cannot
+  close until the shared PostgreSQL/Docker slot is scheduled.** W2 / SA123 (#13) is the only green
+  action on the critical path and has not started. **No maintainer decision is open** — the SA123
+  narrow-authority decision remains the last one taken, and every remaining blocker is either a
+  hard upstream edge or a deliberately retained lane-ordering edge.
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` passes (20 tests).
 - **SA142 closed — stable, reusable, and reclaimable E2E Docker image lifecycle (2026-08-25).** Backend image identity is now the full SHA-256 of a versioned contract over Dockerfile bytes, generated-project Python/package metadata, lockfile state, embedded module names and versions, and effective build arguments, producing the stable `quickscale-backend:sha256-<digest>` reference. Generated services, named volumes, and the default network carry fixed QuickScale owner/lifecycle/scope labels; final backend images carry owner, SA142 image-contract, and bound-digest labels. Normal E2E cleanup inspects those labels and removes only matching untagged variable images, never a machine-wide image set, while `--no-cleanup` preserves labelled resources and logs. Direct Compose use retains a project-specific fallback image and `direct-compose` digest sentinel. The source-free installed-wheel lifecycle now builds a hermetic local Git artifact repository from the current bytes of all twelve shipped modules and passes explicit split refs, preserving external-working-directory isolation and avoiding changes to W1-owned product adapters. Validation retained the five-node Core E2E campaign, including one cold/no-cache build versus two faster warm starts and no-cleanup retention, and the exact all-module installed-wheel lifecycle passed in **207.94s** with collectstatic, migrations, live HTTP, and exact-label cleanup. The exact `make check QUIET=1` gate is green after nested coverage-policy Make probes were isolated from inherited recursive-Make and `QUIET` state; its focused policy suite passes **98 tests** without changing thresholds or real quiet-mode semantics. Merge position **#10 is retired**, SA142 is removed from the open-only roadmap and ticket-context page, and **SA135 + SA163 (#15)** is released as W3's head with SA163 still carried inside SA135. Together with SA124's closure, the open v88 queue is now **twelve ticket entries across eleven merge positions**.
 - **Roadmap cleanup and rebalance review (2026-08-25, twelfth pass).** **No ticket closed and no
   audit finding closed since the eleventh pass**, so nothing new entered the archive and the

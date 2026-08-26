@@ -106,9 +106,9 @@ W2 (gates & declared wiring)   ★ CRITICAL PATH — 5 open legs, 3 on the path
 
 W1 (module-wiring migration + watch items)   3 open legs, mostly light, no cross-worktree gate
   SA167b ─► SA167d ─► SA165
-  relocate   drain     watch
-  P4 pending CLI       items
-  (12 owned)
+  P4 only    drain     watch
+  (P1-P3     CLI       items
+   merged)
     #17       #18       #22
 
 W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   3 open positions: 1 heavy + 2 band-C
@@ -135,22 +135,24 @@ The manifest-reading `entry_point.py`, the fail-hard `QUICKSCALE_LOCAL_WHEELHOUS
 seam, and the regenerated migration baseline are all merged tree state that open tickets build
 on, not pending dependencies.
 
-**Parallelism result:** all three lanes carry executable work. **W1's SA167b P1-P3 implementation
-is complete, synced to current `v88`, and approved for a partial merge while the ticket stays
-open.** The sync from `v88` object `323dd9fe` produced W1 merge object `ff3c741e` without conflicts.
-All twelve modules own an adapter, `entry_point.py` retains only generic registry/dispatch logic,
-and `MANAGED_ADAPTER_ORIGINS` is derived from `discover_shipped_module_names()`. Post-sync evidence
-is 278 affected tests passing, six exact generator-parity tests passing, the module/core import
-boundary passing, and `make quality` passing with zero regressions. What remains is P4 full
-acceptance and same-fact documentation closeout; the partial merge does not close SA167b or release
-SA167d. W2's SA123 (#13) is
-**released to start**: the narrow-authority option was recorded on 2026-08-25, so SA123 may make
-SA123-coupled expectation updates to `scripts/test_gate_parity.py` and its reviewed plan resumes at
-Phase A. W3 is released to start SA135+SA163 (#15) now that the stable image lifecycle is settled.
+**Parallelism result:** all three lanes carry executable work. **SA167b's P1-P3 partial
+integration is merged and is now integration-branch state** — `wt-track1` and `v88` are the same
+object, `entry_point.py` is drained to generic registry/dispatch logic with no per-module block,
+all twelve modules own an adapter, and `MANAGED_ADAPTER_ORIGINS` derives from
+`discover_shipped_module_names()`. Merge evidence is archived in
+[CHANGELOG.md](../../CHANGELOG.md). The merge did **not** close SA167b or release SA167d: W1's
+next action is P4 acceptance, run from the integration tip. W2's SA123 (#13) is **released to
+start**: the narrow-authority option was recorded on 2026-08-25, so SA123 may make SA123-coupled
+expectation updates to `scripts/test_gate_parity.py` and its reviewed plan resumes at Phase A. W3
+is released to start SA135+SA163 (#15) now that the stable image lifecycle is settled.
 
-**This partial-integration checkpoint does not change tracks.** The twelfth scheduling pass still
-stands: every open ticket carries a worktree;
-none lacks one. One candidate was re-tested against the ordering rule and rejected again: moving **SA161 (#19) and
+**Lane sync debt (measured 2026-08-26).** W1 is exactly at the integration tip. **W2's worktree is
+14 commits behind `v88` and W3's is 10 commits behind.** Neither is blocked; both must run the
+standing sync-into-worktree step before their first executable action rather than starting from
+current worktree state.
+
+**No track moves this pass.** Every open ticket carries a worktree;
+none lacks one. Two candidates were tested against the ordering rule and rejected. Moving **SA161 (#19) and
 SA160 (#20) from W3 to W1** would relieve the lane holding the exclusive PostgreSQL/Docker
 slot of two band-C tails that need neither PostgreSQL nor Docker. It fails two of the three move tests:
 
@@ -163,6 +165,11 @@ slot of two band-C tails that need neither PostgreSQL nor Docker. It fails two o
 
 Re-open the question only if W3 becomes the binding lane, and move the pair together — SA160's
 `deps: SA161` is an emission-parity ordering edge on that shared fixture and must not be split.
+
+Moving **SA166 (#24) or SA164 (#25) off W2** was tested for the first time this pass and rejected
+on the same rule: both sit *behind* the critical path's tail as band-C filler, so relocating them
+shortens nothing, and both own `scripts/gate_registry.json`, which by standing invariant never
+crosses worktrees.
 
 **W2 is irreducible.** It remains the longest at five open legs: SA123,
 SA166, and SA164 all own `scripts/gate_registry.json`, which by standing invariant
@@ -183,7 +190,7 @@ all on W2. Shared closeout surfaces (`CHANGELOG.md`,
 `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`, and both audit docs)
 remain covered by the standing sync-before-merge-back procedure.
 
-### Track readiness (reconciled 2026-08-26; SA167b partial integration approved, P4 remains open)
+### Track readiness (reconciled 2026-08-26; SA167b partial integration merged, P4 remains open)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes. The queue and track states below were re-tested for rebalance opportunities (none
@@ -191,44 +198,57 @@ taken — see above).
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W2** | SA123 (#13) | **yes** — the narrow-authority decision is recorded (2026-08-25); G-001 is discharged and the reviewed plan resumes at Phase A | **yes** — the scanner contract, registry entries, wiring, and SA123-coupled parity expectations are all now within W2's authority | **yes** — #13 is the W2 queue head and is gated by nothing | **truly green — on the critical path** |
-| **W1** | SA167b P4 (#17) | **yes** — P1-P3 are accepted partial tree state, current `v88` is synced, and affected integration/generator/import/quality checks pass | **yes, when the shared PostgreSQL/Docker slot is scheduled** — full generated-project/runtime and repository gates plus same-fact documentation closeout remain | **yes for the authorized partial merge; no for ticket closure** — #17 stays open until P4 passes | **partial integration green; completion pending** |
-| **W3** | SA135 + SA163 (#15) | **yes** — `deps: none` and the PostgreSQL/Docker lane is released | **yes** — the owned PostgreSQL lifecycle and derived CI environment remain entirely W3-owned | **yes** — #15 is W3's queue head | **truly green** |
+| **W2** | SA123 (#13) | **yes** — the narrow-authority decision is recorded (2026-08-25); G-001 is discharged and the reviewed plan resumes at Phase A; **sync first: the worktree is 14 commits behind `v88`** | **yes** — the scanner contract, registry entries, wiring, and SA123-coupled parity expectations are all now within W2's authority | **yes** — #13 is the W2 queue head and is gated by nothing | **truly green — on the critical path** |
+| **W1** | SA167b P4 (#17) | **yes** — P1-P3 are merged integration-branch state and the worktree is exactly at the tip (0 ahead, 0 behind); P4 starts immediately | **yes, once the shared PostgreSQL/Docker slot is scheduled** — the remaining acceptance is entirely W1-owned, but it needs the exclusive slot W3 also wants | **yes** — #17 is the W1 queue head and is gated by nothing | **truly green — off the critical path; slot-scheduled** |
+| **W3** | SA135 + SA163 (#15) | **yes** — `deps: none` and the PostgreSQL/Docker lane is released; **sync first: the worktree is 10 commits behind `v88`** | **yes** — the owned PostgreSQL lifecycle and derived CI environment remain entirely W3-owned | **yes** — #15 is W3's queue head | **truly green** |
 
-**W2 and W3 are truly green; W1 is partial-integration green, and W2 is on the critical path:**
+**All three tracks are truly green on all three states. Only W2 is on the critical path:**
 
 - **W2 / SA123 (#13) — truly green, on the critical path.** The narrow-authority decision
   discharges G-001. Discovery and the reviewed plan are reusable; start at Phase A from a clean
   W2 worktree synced to current `v88`. This is the only currently executable action that shortens
   the release.
-- **W1 / SA167b P4 (#17) — partial integration green, completion pending, off the critical path.**
-  P1-P3 are synced and have affected integration, generator parity, import-boundary, and zero-
-  regression quality evidence. The maintainer explicitly chose to preserve and merge that partial
-  improvement now. SA167b remains open: full service-backed acceptance, complete repository gates,
-  same-fact documentation reconciliation, and an independent review of the post-attestation
-  registry/origin restoration still belong to P4.
+- **W1 / SA167b P4 (#17) — truly green, off the critical path.** P1-P3 are merged
+  integration-branch state; P4 is the whole remaining ticket and is entirely W1-owned: the
+  PostgreSQL-backed generated-project runtime node, the full gate sequence as one run, an
+  independent review of the post-attestation registry/origin restoration, and same-fact
+  documentation closeout. Its only external constraint is scheduling the exclusive
+  PostgreSQL/Docker slot, which W3's #15 also needs.
 - **W3 / SA135 + SA163 (#15) — truly green, off the critical path.** The stable image
   lifecycle prerequisite is settled, so the owned PostgreSQL lifecycle may start.
 
-**Blocked next-after tickets, and what clears each:**
+**The one contention to resolve by scheduling, not by ticketing:** W1's P4 and W3's #15 both need
+the exclusive PostgreSQL/Docker slot. Neither blocks the other's *start* — they block each other's
+*slot window*. Give W3 the slot first: #15 is a band-B leg whose whole subject is that slot, while
+W1's P4 is a bounded acceptance run that can take the slot afterwards. W2's SA123 needs no slot and
+runs concurrently with either.
 
-| Ticket | Blocked state | Blocking ticket | Clearable by a maintainer decision? |
+**Blocked open tickets, edge kind, and what clears each.** Every edge is classified so no blocker
+is ambiguous between "a maintainer decision clears it" and "only the upstream work clears it".
+
+| Ticket | Blocking ticket | Edge kind | What clears it |
 |---|---|---|---|
-| SA164 (#25) | can start · can finish — no | SA166 (#24) | No — W2 ordering must clear. |
+| SA118 (#16) | SA123 (#13) | **lane-ordering** — same lane, gate-truth-first ordering rule | Upstream work, or a maintainer reordering W2. Reordering is **not** recommended: SA123 makes the gates SA118's acceptance is discharged by. |
+| SA167c (#21) | SA118 (#16) | **hard content** — both rewrite every `quickscale_modules/*/module.yml`, and SA167c retires `django_apps:` over SA118's projection | Only SA118. No decision clears it. |
+| SA167d (#18) | SA167b (#17) | **hard content** — the CLI drain removes wiring logic that must already live in the module adapters | Only SA167b's P4 closure. No decision clears it. |
+| SA161 (#19) | SA135 (#15) | **lane-ordering** — W3 queue position; SA161 also needs the PostgreSQL/Docker slot SA135 holds | Upstream work, or a maintainer reordering W3. Not recommended: SA135 is band B and SA161 is band-C filler. |
+| SA160 (#20) | SA161 (#19) | **hard content** — emission-parity ordering on the shared `sa90_emission_manifests.json` rebaseline | Only SA161. No decision clears it; the pair must not be split. |
+| SA166 (#24) | SA118 (#16), SA167c (#21) | **lane-ordering** — W2 queue position behind the spine; SA166 also owns `scripts/gate_registry.json` | Upstream work, or a maintainer reordering W2. Not recommended: it would put band-C filler ahead of the critical path. |
+| SA164 (#25) | SA166 (#24) | **lane-ordering** for the queue position, **hard content** for its substance — its `test_sa92_migration_squash_guardrail.py` work depends on SA167c having retired `django_apps:` | The content half only SA167c clears. The SA166 position is reorderable but not recommended. |
+| SA165 (#22) | SA167d (#18) | **lane-ordering** — W1 queue position only; SA165 shares no file with SA167d | Upstream work, or a maintainer reordering W1. Reordering is defensible if W1 finishes P4 early and the slot is held by W3. |
 
 **Recommended concurrency right now:**
 
-- **W1 — merge the accepted SA167b partial checkpoint, then schedule P4 before SA167d.** The
-  current `v88` sync, affected 278-test suite, exact generator parity, import boundary, and zero-
-  regression quality gate pass. This merge intentionally preserves useful P1-P3 work without
-  claiming ticket completion. The next W1 session starts from the merged integration tip, reserves
-  the shared PostgreSQL/Docker slot, runs the deferred full acceptance, reconciles same-fact docs,
-  and closes SA167b before SA167d may start.
 - **W2 — start SA123 (#13).** This is the highest-value action available: it is the head of the
-  only remaining critical path. Sync `v88` into a clean W2 worktree, then run the reusable plan
-  from Phase A under the recorded narrow authority.
-- **W3 — start SA135 + SA163 (#15).** The PostgreSQL/Docker slot is free, the stable image
-  lifecycle is settled tree state, and no open ticket gates this leg.
+  only remaining critical path. Sync `v88` into the W2 worktree first — it is 14 commits behind —
+  then run the reusable plan from Phase A under the recorded narrow authority.
+- **W3 — start SA135 + SA163 (#15) and take the PostgreSQL/Docker slot.** Sync first; the
+  worktree is 10 commits behind. No open ticket gates this leg.
+- **W1 — run SA167b P4 (#17) from the integration tip.** The worktree is already at `v88`, so
+  P1-P3 need no redoing. Do the non-slot P4 work now — the independent review of the
+  registry/origin restoration and the same-fact documentation reconciliation — and reserve the
+  PostgreSQL/Docker slot for the runtime acceptance node after W3 releases it. SA167d stays
+  blocked until P4 closes.
 
 #### Recorded maintainer decisions
 
@@ -360,15 +380,10 @@ Conceptual background, mental models, and implementation notes for **every** tic
 - [ ] **SA123 — Add dependency-vulnerability and security static-analysis gates.** `Band B · Tier 2 · W2 · merge #13 · deps: none · blocks SA118`
   Add blocking dependency and focused security scanners with reviewed suppressions; register every new gate through the authoritative gate registry.
   **Acceptance:** a dependency-vulnerability scanner and a focused security static-analysis scanner run as blocking gates; both are registered in `scripts/gate_registry.json` and pass `scripts/check_gate_parity.py`; every suppression carries a written rationale and an owner; the gates fail on a deliberately introduced known-vulnerable pin and on a deliberately introduced flagged pattern, both reverted before merge; `make quality` is no worse than found.
-  **Planning checkpoint (2026-08-25; keep this ticket open):** W2 was clean at
-  `22860e52e0009d8c44e557d8811505b52e19f423` after merging `v88`. Repository discovery and
-  authoritative tool research completed; the reviewed design selects pinned `pip-audit` and
-  Bandit gates, audits both committed lock projects, rejects native/unaccountable suppressions,
-  and uses an exact owner/rationale/decision/expiry ledger. No scanner dependency, gate, test,
-  workflow, product, or environment change was made, and no implementation validation ran.
-  Mandatory plan review stopped before Phase A because adding two hosted gates necessarily changes
-  SA123-coupled 12-to-14 hosted-job and six-to-eight `test`-barrier expectations in
-  `scripts/test_gate_parity.py`.
+  **Reviewed design, reusable (2026-08-25):** pinned `pip-audit` and Bandit gates, both committed
+  lock projects audited lock-natively, native/unaccountable suppressions rejected, and an exact
+  owner/rationale/decision/expiry ledger. No scanner dependency, gate, test, workflow, product, or
+  environment change has been made and no implementation validation has run.
   **G-001 is discharged (2026-08-25): narrow authority granted.** SA123 may change that file only
   for its own two gates' hosted jobs, `needs`, run values, publish/E2E paths, and generator
   expectations; generic parity semantics, the 24-entry publish oracle, and the transcribed
@@ -376,8 +391,8 @@ Conceptual background, mental models, and implementation notes for **every** tic
   [Recorded maintainer decisions](#recorded-maintainer-decisions). **Implementation is released
   and starts at Phase A.**
   **Reusable handoff (all phases serial):**
-  0. **Base:** reconfirm a clean W2 worktree after merging current `v88`; the prior rollback
-     object above is historical evidence, not a future-session base.
+  0. **Base:** sync current `v88` into the W2 worktree (14 commits behind as of 2026-08-26) and
+     reconfirm it clean before Phase A.
   2. **A-contract — scanner contract:** modify only root `pyproject.toml`/`poetry.lock` and add
      `scripts/check_security_gates.py`, `scripts/security_suppressions.json`,
      `scripts/security_probe_cases.json`, and `scripts/test_security_gates.py`. Keep
@@ -410,30 +425,24 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Acceptance:** every default declared in a module manifest is projected into generated wiring, with no default reachable only through imperative code (the five app-declaration literals are already cleared in the tree); the imperative-to-declarative migration is *not* attempted — out-of-scope seams are ticketed, not converted; emission parity is rebaselined with a per-file rationale for each changed output; a generated project boots and its module wiring reflects the declared defaults; manifest version-spec handling uses the merged fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` seam (SA150, closed; see [local-wheelhouse.md](local-wheelhouse.md)).
 
 - [ ] **SA167b — Relocate the nine core-side adapters into their modules.** `Band B · Tier 2 · W1 · merge #17 · deps: none · blocks SA167d`
-  **Partial implementation checkpoint (2026-08-25; keep this ticket open):** P1 is accepted: analytics, blog, listings, and forms are module-owned, billing and CRM use the public lazy runtime facade, and the adapter/core/runtime/CLI plus import/lint/type checks passed. P2's backups and notifications implementation and split suites are accepted. Its original literal two-module pytest command failed during collection because both module trees resolved `tests.conftest`; no implementation assertion failed. Equivalent grouped coverage is established with `PYTEST_ADDOPTS='--noconftest --import-mode=importlib'` and `QUICKSCALE_ALLOW_BYPASSRLS=1`, without changing unrelated test-package layout.
-  **P3 accepted partial integration checkpoint (2026-08-26; keep this ticket open).** The seven
-  P3 commits end at `3df664b4`; syncing `v88` object `323dd9fe` produced conflict-free merge object
-  `ff3c741e`. All twelve shipped modules own
+  **P1-P3 are merged integration-branch state (2026-08-26); the ticket stays open for P4.**
+  All twelve shipped modules own
   `quickscale_modules/<name>/src/quickscale_modules_<name>/adapter.py`; `entry_point.py` retains
-  generic registry/dispatch logic only; origins derive from the discovered inventory; transient
-  regeneration restores registry and origin identities/contents together. Post-sync validation:
-  278 affected core/runtime/CLI tests passed, six exact generator-parity tests passed, the
-  module/core import-boundary check passed, and `make quality` exited 0 with zero warning or
-  critical regressions and monotonicity passing. The maintainer authorized merging this useful
-  partial checkpoint without marking SA167b complete.
+  generic registry/dispatch logic only; `MANAGED_ADAPTER_ORIGINS` derives from the discovered
+  inventory; transient regeneration restores registry and origin identities and contents together.
+  Merge object, command list, and test evidence are archived in [CHANGELOG.md](../../CHANGELOG.md).
+  Do not redo P1-P3 — the merged state is the continuation base.
   **Pending / blocking completion:** the PostgreSQL-backed generated-project runtime node,
-  `make lint`, `make typecheck`, `make check`, and full `make test` were not rerun as one P4
-  acceptance sequence after the sync. The current-state claims in `decisions.md`,
+  `make lint`, `make typecheck`, `make check`, and full `make test` have not been run as one P4
+  acceptance sequence against the merged tree. The current-state claims in `decisions.md`,
   `implementation_contract.md`, `v88_ticket_context.md`, the audits where applicable, and
   `CHANGELOG.md` still require one closeout reconciliation. The registry/origin restoration was
-  applied after terminal attestation in the earlier implementation pass; it has passing focused
-  and 278-test evidence but still needs independent P4 review. These are completion blockers, not
-  blockers to the explicitly authorized partial merge.
-  **Decisions needed for a clean continuation:** no architecture or adapter-design decision is
-  open. A maintainer must reserve a window in the shared PostgreSQL/Docker slot and authorize how
-  to handle any newly failing full gate: fix only an SA167b-coupled defect in P4, or ticket an
-  unrelated failure rather than silently widening this ticket. The merged partial state is the
-  continuation base; do not redo P1-P3.
+  applied after terminal attestation in an earlier implementation pass; it has passing focused and
+  278-test evidence but still needs independent P4 review.
+  **Decisions needed:** none on architecture or adapter design. A maintainer schedules the shared
+  PostgreSQL/Docker slot window and, if a full gate newly fails, decides between fixing an
+  SA167b-coupled defect inside P4 and ticketing an unrelated failure rather than widening this
+  ticket.
   **Pending P4 plan:**
   1. Start a clean W1 session from current `v88`; re-inventory the exact merged SA167b delta and
      independently review registry/origin restoration.
