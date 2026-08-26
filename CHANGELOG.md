@@ -4,6 +4,43 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-26, fifteenth pass).** **One piece of durable
+  progress:** SA123's scanner implementation merged to `v88` (`b890752a`) and its two tech-audit
+  tooling gaps are closed and archived; that work left the roadmap's build queue and the ticket now
+  carries only an acceptance rerun. **No ticket closed** — the roadmap still holds open work only
+  with zero checked entries.
+  **SA169 is unchanged and still caps the release.** Re-verified on the new tip:
+  `quickscale_cli/tests/test_module_lifecycle_cycle.py` still reports `5 failed, 5 passed` on
+  `v88`, and SA123's own ordered campaign reproduced exactly those five at `make check`, from a
+  second lane, independently confirming the fourteenth pass's diagnosis.
+  **W1's merge path measured rather than assumed.** A merge preview of `v88` into `wt-track1`
+  conflicts in exactly one file, `docs/technical/roadmap.md` — the standing shared closeout surface
+  the sync-before-merge-back procedure exists to resolve. `test_module_lifecycle_cycle.py` has not
+  been touched on `v88` since W1 branched, so SA169's repair itself merges cleanly. One new cost is
+  recorded: SA123's merge raised the local gate set from six registered gates to eight, so SA169's
+  post-sync campaign now runs against the added blocking Trivy and Bandit stations.
+  **Lane sync debt re-measured:** `v88` at `b890752a`; W1 (`11e4b154`) 8 ahead / 1 behind; W2
+  (`363822d7`) 1 ahead / 0 behind; **W3 (`07203a7c`) 6 behind** — it was at the tip before SA123
+  merged and must sync before its Phase A rerun so that preflight rebinds against the eight-gate
+  registry.
+  **Rebalance re-asked from scratch because W2 went idle, not merely re-run.** An idle lane is the
+  strongest case for a move that exists. The newly attractive candidate — **SA161 (#19) + SA160
+  (#20) from W3 to W2**, the reverse of the W3-to-W1 move rejected six times — would put
+  `sa90_emission_manifests.json` entirely on one lane and eliminate the only genuinely
+  cross-worktree surface this release. It is **rejected on new grounds**: on W2 the pair would
+  queue behind SA123's acceptance rerun *and* SA118, arriving later than on W3, and it would put
+  band-C filler on the lane that sets the release date. Re-open it if SA118 closes while SA135 is
+  still running. **SA166 / SA164 off W2** was re-tested and rejected again on the gate-registry
+  invariant, which SA123's two new gate entries have made more load-bearing. **No track moved, and
+  no rebalance can fill W2** — every open ticket on every lane is capped by SA169.
+  **Three-state result: SA169 is still the only truly green ticket, and it is now the only lane
+  with work to do at all.** W2 is idle with its implementation merged and its acceptance capped;
+  W3 is paused at Phase A behind the same baseline; both can merge in order. The critical path is
+  now `SA169 → SA123 acceptance → SA118 → SA167c` — its first W2 leg is a rerun rather than a
+  build, which is this pass's real progress. **No maintainer decision is open**: every blocker is a
+  hard upstream edge or a deliberately retained lane-ordering edge.
+  Counts are unchanged at thirteen open v88 ticket entries across twelve open merge positions; the
+  consistency suite passes (20 tests).
 - **SA123 synced-candidate implementation complete; acceptance blocked by SA169 (2026-08-26;
   root merge-back not claimed).** The accepted dependency design uses **Trivy v0.74.0**, not the earlier proposed
   `pip-audit`, because Trivy scans both committed Poetry lockfiles directly (including development

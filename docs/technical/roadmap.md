@@ -147,22 +147,35 @@ Every *other* remaining dependency is intra-lane. The manifest-reading `entry_po
 fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec seam, and the regenerated migration baseline
 are all merged tree state that open tickets build on, not pending dependencies.
 
-**Parallelism result:** all three lanes carry executable work, and all three are capped by SA169.
+**Parallelism result (fifteenth pass): only W1 carries executable work; W2 is idle and W3 is
+paused, both capped by SA169.**
 **SA167b's P1-P3 partial integration is merged and is now integration-branch state** —
 `entry_point.py` is drained to generic registry/dispatch logic with no per-module block, all twelve
 modules own an adapter, and `MANAGED_ADAPTER_ORIGINS` derives from `discover_shipped_module_names()`.
 P4's independent restoration review and exact PostgreSQL 18 runtime node passed on 2026-08-26, but
 the full gate campaign stopped at the five lifecycle failures now owned by SA169. W2's SA123 (#13)
-has implemented and validated its focused scanner/gate surface, but remains open because its full
-ordered acceptance reproduced the same five SA169 failures at `make check`. W3 is **released to
-start** SA135+SA163 (#15). Neither can reach its acceptance gate until SA169 merges.
+has implemented and validated its focused scanner/gate surface — **that implementation is now
+merged integration-branch state** (`b890752a`) — but the ticket remains open because its full
+ordered acceptance reproduced the same five SA169 failures at `make check`. **W2's session has
+since ended, so W2 is now an idle lane**: its only remaining SA123 work is an acceptance rerun it
+cannot perform, and its next ticket SA118 is gated behind that. W3 is **released to start**
+SA135+SA163 (#15) but is paused on the same baseline. Neither can reach its acceptance gate until
+SA169 merges.
 
-**Lane sync debt (re-measured 2026-08-26, fourteenth pass — the thirteenth pass's figures were
-stale).** `v88` is at `07203a7c`. **W1 (`wt-track1`, `11e4b154`) is 2 ahead and 1 behind**, carrying
-the attested SA169 fixture delta. **W2 (`wt-track2`, `d2770a89`) is 3 commits behind and 0 ahead**
-— not the 14 previously recorded. **W3 (`wt-track3`) is exactly at the integration tip**, 0 ahead
-and 0 behind — not the 10 previously recorded; it synced on `07203a7c`. W2 must run the standing
-sync-into-worktree step before its first executable action; W3 need not.
+**Lane sync debt (re-measured 2026-08-26, fifteenth pass — the fourteenth pass's figures are
+superseded by SA123's merge).** `v88` is at `b890752a`. **W1 (`wt-track1`, `11e4b154`) is 8 ahead
+and 1 behind**, carrying the attested SA169 fixture delta. **W2 (`wt-track2`, `363822d7`) is 1
+ahead and 0 behind** — its implementation merged, leaving only its own checkpoint commit. **W3
+(`wt-track3`, `07203a7c`) is 6 commits behind**; it was at the tip before SA123 merged and must
+sync before its Phase A rerun.
+
+**W1's merge path is measured, not assumed.** A merge preview of `v88` into `wt-track1` conflicts
+in exactly one file — `docs/technical/roadmap.md`, the standing shared closeout surface that the
+sync-before-merge-back procedure exists to resolve. `quickscale_cli/tests/test_module_lifecycle_cycle.py`
+has **not** been touched on `v88` since W1 branched, so SA169's actual repair merges cleanly.
+**One new cost on SA169:** SA123's merge raised the local gate set from six registered gates to
+eight, adding blocking Trivy and Bandit stations. SA169's post-sync campaign now runs against that
+larger set, which requires Trivy acquisition to succeed on the runner.
 
 **One track assigned this pass; no track moved.** SA169 is the only ticket opened without a
 worktree, and it is **assigned to W1**. W1 is the correct lane on all three tests: the repair is
@@ -171,29 +184,44 @@ owns; W1's SA167b P4 is the campaign that surfaced it and is already paused behi
 attested delta already exists on `wt-track1`, so routing it anywhere else would move a finished
 change across lanes for nothing. It is *on* the critical path in the sense that matters — it caps
 W2's spine — but it does not lengthen that spine, because it runs on a different worktree and
-merges ahead of it. Every other open ticket already carries a worktree. Two candidates were tested against the ordering rule and rejected. Moving **SA161 (#19) and
-SA160 (#20) from W3 to W1** would relieve the lane holding the exclusive PostgreSQL/Docker
-slot of two band-C tails that need neither PostgreSQL nor Docker. It fails two of the three move tests:
+merges ahead of it. Every other open ticket already carries a worktree.
 
-- **Not on or feeding the critical path.** The remaining path is `SA123 → SA118 →
-  SA167c`, entirely on W2. Neither ticket appears on it or feeds it, so the move buys no
-  release date — it is filler relocated, not a spine shortened.
-- **It creates a merge hazard.** `quickscale_core/tests/fixtures/sa90_emission_manifests.json`
-  is still owned by SA118, SA161, and SA160 — today W2 plus W3, two worktrees. Moving the
-  pair to W1 would spread one rebaselined fixture across three lanes.
+**W2 went idle this pass, so the rebalance question was re-asked from scratch rather than
+re-run.** An idle lane is the strongest argument for a move that exists, and two candidates were
+tested against it.
 
-Re-open the question only if W3 becomes the binding lane, and move the pair together — SA160's
-`deps: SA161` is an emission-parity ordering edge on that shared fixture and must not be split.
+Moving **SA161 (#19) and SA160 (#20) from W3 to W2** is the newly attractive candidate, and it is
+the *reverse* of the W3-to-W1 move rejected six times before. It would relieve W3 — the lane
+holding the exclusive PostgreSQL/Docker slot — of two band-C tails needing neither, and it would
+put `quickscale_core/tests/fixtures/sa90_emission_manifests.json` entirely on one lane, since
+SA118 (W2) is the third owner. **That would eliminate the only surface this release that genuinely
+crosses worktrees.** It is nonetheless rejected, on a different ground from the old rejection:
 
-Moving **SA166 (#24) or SA164 (#25) off W2** was tested for the first time this pass and rejected
-on the same rule: both sit *behind* the critical path's tail as band-C filler, so relocating them
-shortens nothing, and both own `scripts/gate_registry.json`, which by standing invariant never
-crosses worktrees.
+- **It would make the tickets later, not sooner.** On W3 the pair queues behind SA135 alone. On W2
+  they would queue behind SA123's acceptance rerun *and* SA118 — a longer wait, on the lane that
+  sets the release date.
+- **It would put band-C filler on the critical-path lane.** SA161 rebaselines the same fixture
+  SA118 rebaselines. Sequencing filler around the spine on the binding lane risks delaying SA118
+  to save a merge resolution that the standing per-entry `baseline_evidence` procedure already
+  handles.
 
-**W2 is irreducible.** It remains the longest at five open legs: SA123,
-SA166, and SA164 all own `scripts/gate_registry.json`, which by standing invariant
-never crosses worktrees, and SA118 and SA167c must rewrite
-`quickscale_modules/*/module.yml` in that order on that same lane. Nothing may be pulled forward from
+Re-open it if SA118 closes while SA135 is still running, which inverts both objections at once.
+Move the pair together in any case — SA160's `deps: SA161` is an emission-parity ordering edge on
+that shared fixture and must not be split.
+
+Moving **SA166 (#24) or SA164 (#25) off W2** was re-tested and rejected again: both sit *behind*
+the critical path's tail as band-C filler, so relocating them shortens nothing, and both own
+`scripts/gate_registry.json`, which by standing invariant never crosses worktrees — an invariant
+SA123's merge has just made more load-bearing, not less, by adding two gates to that file.
+
+**No truly green filler exists for the idle W2.** Every open ticket on every lane is capped by
+SA169, so W2's idleness cannot be filled by rebalancing; it is cleared only by SA169 merging.
+
+**W2 is irreducible, and now also thinner than it looks.** It still holds five open legs, but
+SA123's is an acceptance rerun over already-merged work rather than a build. SA123, SA166, and
+SA164 all own `scripts/gate_registry.json`, which by standing invariant never crosses worktrees —
+SA123's merge added two gate entries to that file, strengthening the invariant. SA118 and SA167c
+must rewrite `quickscale_modules/*/module.yml` in that order on that same lane. Nothing may be pulled forward from
 W3 because the PostgreSQL/Docker slot is exclusive — and W3 can now take it for SA135+SA163, which
 will regain scheduling priority while active. SA165 stays on W1 because it edits `scripts/test_isolation_conformance.sh`
 and the SA90 emission gate's `_HOST_DEPENDENT_PATHS`, which W3's SA163/SA161/SA160 legs read or
@@ -204,25 +232,27 @@ rebaseline.
 databases, not just for the Docker slot. This is a local-cluster artifact
 that hosted CI does not have, and retiring it is **SA135**/**SA163** work.
 
-The remaining critical path is `SA169 → SA123 → SA118 → SA167c`: SA169 is a short
-test-only cap on W1, then three serialized implementation legs on W2. Shared closeout surfaces (`CHANGELOG.md`,
+The remaining critical path is `SA169 → SA123 acceptance → SA118 → SA167c`: SA169 is a short
+test-only cap on W1, then an acceptance rerun of already-merged SA123 work, then two serialized
+implementation legs on W2. **SA123's implementation leaving the path is the release's real progress
+this pass** — the spine's first W2 leg is now a rerun, not a build. Shared closeout surfaces (`CHANGELOG.md`,
 `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`, and both audit docs)
 remain covered by the standing sync-before-merge-back procedure.
 
-### Track readiness (reconciled 2026-08-26, fourteenth pass; band A reopened as SA169)
+### Track readiness (reconciled 2026-08-26, fifteenth pass; SA123 implementation merged, W2 idle)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes. The queue and track states below were re-tested for rebalance opportunities (one
-assignment made, no moves — see above).
+assignment made in the prior pass, no moves — see above).
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W1** | SA169 (#26) | **yes** — the bounded test-only correction is written and attested on `wt-track1`; nothing gates it | **yes** — the repair, its focused tests, and the repository gates are all W1-owned; verified `49 passed` on `wt-track1` | **yes** — #26 is the queue-wide head and is gated by nothing | **truly green — on the critical path** |
-| **W2** | SA123 (#13) | **yes** — implementation and focused checks are complete on the synced tree | **no** — the ordered acceptance reaches `make check` and reproduces the five SA169 failures | **yes** — #13 is the W2 queue head | **implemented; cannot close until SA169 — on the critical path** |
-| **W3** | SA135 + SA163 (#15) | **yes** — `deps: none`, the PostgreSQL/Docker lane is released, and the worktree is at the integration tip | **no** — the Phase A preflight's parity baseline is red for the same five failures; SA135 attempted this on 2026-08-26 and stopped before implementation | **yes** — #15 is W3's queue head | **can start; cannot close until SA169 — off the critical path** |
+| **W1** | SA169 (#26) | **yes** — the bounded test-only correction is written and attested on `wt-track1`; nothing gates it | **yes** — the repair, its focused tests, and the repository gates are all W1-owned; verified `49 passed` on `wt-track1` | **yes** — #26 is the queue-wide head and is gated by nothing; **sync first: 8 ahead, 1 behind, roadmap-only conflict** | **truly green — the only executable lane, on the critical path** |
+| **W2** | SA123 (#13) | **no work left to start** — the implementation is merged to `v88` (`b890752a`) and the session has ended; all that remains is an acceptance rerun that cannot pass today | **no** — the ordered acceptance reaches `make check` and reproduces the five SA169 failures | **yes** — #13 is the W2 queue head | **idle — implementation done, acceptance capped by SA169 — on the critical path** |
+| **W3** | SA135 + SA163 (#15) | **yes** — `deps: none` and the PostgreSQL/Docker lane is released; **sync first: 6 commits behind `v88`** after SA123's merge | **no** — the Phase A preflight's parity baseline is red for the same five failures; SA135 attempted this on 2026-08-26 and stopped before implementation | **yes** — #15 is W3's queue head | **paused at Phase A; cannot close until SA169 — off the critical path** |
 
-**SA169 is the only truly green ticket, and it is on the critical path.** W2 and W3 are green to
-start but neither can finish:
+**SA169 remains the only truly green ticket, and it is on the critical path — and it is now the
+only lane with work to do at all.** W2 has spent its startable work; W3 is paused:
 
 - **W1 / SA169 (#26) — truly green, on the critical path.** The correction derives physical
   manifests from the authoritative source inventory, keeps physical/config/state/tracking facts
@@ -233,18 +263,23 @@ start but neither can finish:
   against `5 failed, 5 passed` for the same lifecycle file on `v88`. What remains is the ordered
   repository-wide gate campaign, sync, exact-tip review, and merge. **This is the highest-value
   action available in the release: it uncaps all three lanes.**
-- **W2 / SA123 (#13) — implementation complete, cannot close until SA169.** Trivy, Bandit,
-  negative probes, parity, generation, gate suites, lint, and typecheck are green. The ordered
-  campaign reproduced SA169 at `make check`; do not widen SA123 to repair those fixtures.
-- **W3 / SA135 + SA163 (#15) — start blocked at Phase A, off the critical path.** The 2026-08-26
+- **W2 / SA123 (#13) — idle, implementation merged, cannot close until SA169.** Trivy v0.74.0,
+  Bandit 1.9.4, negative probes, parity, generation, the 1,284-test scripts suite, lint, and
+  typecheck are green, and all of it is on `v88`. The ordered campaign reproduced SA169 at
+  `make check`; do not widen SA123 to repair those fixtures. **This lane cannot be refilled by
+  rebalancing** — see the move tests above.
+- **W3 / SA135 + SA163 (#15) — paused at Phase A, off the critical path.** The 2026-08-26
   attempt confirmed the environment and bound every baseline, then stopped: the focused parity
   baseline nests `make -n check` and inherits the same five failures. No SA135/SA163 source,
-  workflow, test, policy, or audit change was applied. Phase A reruns cleanly once SA169 merges.
+  workflow, test, policy, or audit change was applied. It must now sync `v88` — it is 6 commits
+  behind after SA123's merge, and its Phase A baseline must rebind against the eight-gate registry
+  — then rerun Phase A once SA169 merges.
 
-**Service-slot scheduling is unchanged by SA169** — the repair needs no PostgreSQL or Docker slot.
-W1 will need one slot window for SA167b's post-sync exact-candidate verification, and W3's #15
-needs the exclusive slot for its whole subject. Give W3 the next slot once SA169 has merged and its
-Phase A is green. W2's SA123 needs no slot and runs concurrently with either.
+**Service-slot scheduling is unchanged by SA169 or by SA123's merge** — neither needs a
+PostgreSQL or Docker slot. W1 will need one slot window for SA167b's post-sync exact-candidate
+verification, and W3's #15 needs the exclusive slot for its whole subject. Give W3 the next slot
+once SA169 has merged and its Phase A is green. There is no slot contention right now, because
+only W1 has executable work and it needs no slot.
 
 **Blocked open tickets, edge kind, and what clears each.** Every edge is classified so no blocker
 is ambiguous between "a maintainer decision clears it" and "only the upstream work clears it".
@@ -268,11 +303,12 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 - **W1 — finish and merge SA169 (#26) first.** Run the ordered repository-wide campaign over the
   attested delta, sync current `v88`, review the exact tip, and merge. Nothing else in the release
   can reach a checked box before this lands. SA167b P4 resumes at Phase C immediately after.
-- **W2 — hold SA123 (#13) at acceptance.** Its implementation is complete, but the full campaign
-  cannot proceed beyond `make check` until SA169 clears the shared fixture baseline.
-- **W3 — hold SA135 + SA163 (#15) at Phase A.** The worktree is already at the tip and the
-  environment is confirmed; rerun the Phase A preflight the moment SA169 merges, with no
-  accepted-failure waiver. Do not widen SA135 to fix the CLI tests — that is SA169's scope.
+- **W2 — nothing to run.** SA123's implementation is merged; only the acceptance rerun remains
+  and it cannot pass until SA169 clears the baseline. The lane stays idle by design, not by
+  oversight, and no rebalance can fill it.
+- **W3 — sync, then hold SA135 + SA163 (#15) at Phase A.** The worktree is 6 commits behind after
+  SA123's merge; sync it now so the Phase A preflight rebinds against the eight-gate registry, then
+  rerun that preflight the moment SA169 merges, with no accepted-failure waiver. Do not widen SA135 to fix the CLI tests — that is SA169's scope.
 
 #### Recorded maintainer decisions
 
