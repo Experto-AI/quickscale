@@ -100,7 +100,7 @@ CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PUBLISH_YML = REPO_ROOT / ".github" / "workflows" / "publish.yml"
 E2E_YML = REPO_ROOT / ".github" / "workflows" / "e2e.yml"
 
-# The 5 conformance gate make targets
+# The 7 publish-bound conformance gate make targets
 CONFORMANCE_MAKE_TARGETS: frozenset[str] = frozenset(
     {
         "check-core-compat",
@@ -108,6 +108,8 @@ CONFORMANCE_MAKE_TARGETS: frozenset[str] = frozenset(
         "check-manifest-sync",
         "check-org-context-primitives",
         "check-csrf-exempt",
+        "check-dependency-vulnerabilities",
+        "check-security-static-analysis",
     }
 )
 
@@ -454,8 +456,25 @@ _E2E_PATHS: list[str] = [
     "scripts/_qs_jobs.sh",
     "scripts/test_e2e.sh",
     "scripts/test_e2e_parallel.py",
+    "quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py",
+    "scripts/smoke_install.sh",
+    "scripts/_installed_wheel_venv.sh",
+    "scripts/provision_installed_venv.sh",
+    "scripts/_python_requirement.sh",
     ".github/workflows/ci.yml",
     ".github/workflows/e2e.yml",
+    "pyproject.toml",
+    "poetry.lock",
+    "quickscale_core/pyproject.toml",
+    "quickscale_core/poetry.lock",
+    "scripts/check_security_gates.py",
+    "scripts/security_suppressions.json",
+    "scripts/security_probe_cases.json",
+    "quickscale/src/**",
+    "quickscale_cli/src/**",
+    "quickscale_core/src/**",
+    "quickscale_devtools/src/**",
+    "quickscale_modules/*/src/**",
 ]
 
 
@@ -601,7 +620,7 @@ class TestE2eTriggerAggregate:
 
     def test_aggregate_extra_path_in_e2e_detected(self, tmp_path: Path) -> None:
         """A path in e2e.yml but not in any trigger_input is reported as extra."""
-        # The real e2e.yml has 28 paths; use a subset that leaves some uncovered.
+        # The real e2e.yml has 45 paths; use a subset that leaves some uncovered.
         # Use just one path that exists in e2e.yml.
         gates = [
             {
@@ -818,20 +837,20 @@ class TestMalformedSources:
 class TestParserPrecision:
     """Extraction functions correctly identify gates in each source."""
 
-    def test_serial_extracts_all_six_registered_conformance_gates(self) -> None:
-        """The serial path in check_ci_locally.sh has all six registered gates."""
+    def test_serial_extracts_all_eight_registered_conformance_gates(self) -> None:
+        """The serial path in check_ci_locally.sh has all eight registered gates."""
         targets = _extract_check_ci_serial_gates(CHECK_CI)
         expected = set(_registry_local_gate_targets())
         assert targets == expected, f"Serial extraction returned {targets}, expected {expected}"
 
-    def test_parallel_extracts_all_six_registered_conformance_gates(self) -> None:
-        """The parallel path in check_ci_locally.sh has all six registered gates."""
+    def test_parallel_extracts_all_eight_registered_conformance_gates(self) -> None:
+        """The parallel path in check_ci_locally.sh has all eight registered gates."""
         targets = _extract_check_ci_parallel_gates(CHECK_CI)
         expected = set(_registry_local_gate_targets())
         assert targets == expected, f"Parallel extraction returned {targets}, expected {expected}"
 
-    def test_hosted_has_all_six_registered_conformance_jobs(self) -> None:
-        """ci.yml job names include all six registered conformance jobs."""
+    def test_hosted_has_all_eight_registered_conformance_jobs(self) -> None:
+        """ci.yml job names include all eight registered conformance jobs."""
         ci_jobs = _extract_ci_job_names(CI_YML)
         expected_jobs: frozenset[str] = frozenset(
             {
@@ -841,6 +860,8 @@ class TestParserPrecision:
                 "org-context-primitives-gate",
                 "csrf-exempt-gate",
                 "check-gate-suites",
+                "dependency-vulnerabilities-gate",
+                "security-static-analysis-gate",
             }
         )
         assert expected_jobs.issubset(ci_jobs), (
@@ -863,7 +884,7 @@ class TestParserPrecision:
         actual = [job_id for job_id in jobs if job_id in expected]
         assert actual == expected
 
-    def test_publish_has_all_five_check_gates(self) -> None:
+    def test_publish_has_all_seven_check_gates(self) -> None:
         """publish.yml contains every conformance gate make target."""
         targets = _extract_publish_gates(PUBLISH_YML)
         missing = CONFORMANCE_MAKE_TARGETS - targets
@@ -873,7 +894,7 @@ class TestParserPrecision:
         """Serial extraction should not pick gates that only exist in parallel."""
         serial = _extract_check_ci_serial_gates(CHECK_CI)
         parallel = _extract_check_ci_parallel_gates(CHECK_CI)
-        # All six registered conformance gates are in both — verify this holds
+        # All eight registered conformance gates are in both — verify this holds
         assert serial == parallel, (
             f"Serial and parallel extraction disagree: serial={serial}, parallel={parallel}"
         )
@@ -974,17 +995,18 @@ class TestParserPrecision:
         gates = _extract_check_ci_parallel_gates(script)
         assert gates == {"check-core-compat"}
 
-    def test_e2e_extracts_thirty_three_paths(self) -> None:
-        """The generated workflow has exactly 33 ordered trigger paths."""
+    def test_e2e_extracts_forty_five_paths(self) -> None:
+        """The generated workflow has exactly 45 ordered trigger paths."""
         paths = _extract_e2e_trigger_paths(E2E_YML)
-        assert len(paths) == 33, f"Expected 33 paths, got {len(paths)}"
+        assert len(paths) == 45, f"Expected 45 paths, got {len(paths)}"
 
     def test_e2e_paths_order_preserved(self) -> None:
         """e2e trigger paths preserve the order from the workflow file."""
         paths = _extract_e2e_trigger_paths(E2E_YML)
         # First and last paths as order sentinels
         assert paths[0] == "quickscale_modules/backups/**"
-        assert paths[-1] == ".github/workflows/e2e.yml"
+        assert paths[-1] == "quickscale_modules/*/src/**"
+        assert paths[paths.index(".github/workflows/e2e.yml")] == ".github/workflows/e2e.yml"
         # Confirm a few mid-sequence paths in order
         backup_idx = paths.index("quickscale_modules/backups/**")
         plan_idx = paths.index("quickscale_cli/src/quickscale_cli/commands/plan_command.py")
@@ -1017,8 +1039,8 @@ class TestParserPrecision:
         for job in expected_jobs:
             assert job in jobs, f"Expected {job} in publish.yml jobs, got: {jobs}"
 
-    def test_publish_has_all_five_check_targets(self) -> None:
-        """publish.yml must contain all 5 conformance gate make targets."""
+    def test_publish_has_all_seven_check_targets(self) -> None:
+        """publish.yml must contain all seven conformance gate make targets."""
         targets = _extract_publish_gates(PUBLISH_YML)
         missing = CONFORMANCE_MAKE_TARGETS - targets
         assert not missing, f"publish.yml is missing make targets: {missing}"
@@ -1049,6 +1071,8 @@ class TestParserPrecision:
         assert _extract_ci_needs(CI_YML) == {
             "backups-validation": (),
             "check-gate-suites": (),
+            "dependency-vulnerabilities-gate": (),
+            "security-static-analysis-gate": (),
             "csrf-exempt-gate": (),
             "isolation-conformance": (
                 "backups-validation",
@@ -1081,11 +1105,13 @@ class TestParserPrecision:
                 "org-context-primitives-gate",
                 "csrf-exempt-gate",
                 "check-gate-suites",
+                "dependency-vulnerabilities-gate",
+                "security-static-analysis-gate",
             ),
         }
 
-    def test_all_twelve_bound_hosted_run_values_match_current_source(self) -> None:
-        """The six bound hosted jobs expose their twelve exact run values."""
+    def test_all_sixteen_bound_hosted_run_values_match_current_source(self) -> None:
+        """The eight bound hosted jobs expose their sixteen exact run values."""
         bound_jobs = {
             "module-core-compat",
             "module-core-import-linter",
@@ -1093,6 +1119,8 @@ class TestParserPrecision:
             "org-context-primitives-gate",
             "csrf-exempt-gate",
             "check-gate-suites",
+            "dependency-vulnerabilities-gate",
+            "security-static-analysis-gate",
         }
         assert _extract_hosted_run_values(CI_YML, bound_jobs) == {
             "module-core-compat": ("poetry install --with dev\n", "make check-core-compat\n"),
@@ -1107,9 +1135,17 @@ class TestParserPrecision:
             ),
             "csrf-exempt-gate": ("poetry install --with dev\n", "make check-csrf-exempt\n"),
             "check-gate-suites": ("poetry install --with dev\n", "make check-gate-suites\n"),
+            "dependency-vulnerabilities-gate": (
+                "poetry install --with dev\n",
+                "make check-dependency-vulnerabilities\n",
+            ),
+            "security-static-analysis-gate": (
+                "poetry install --with dev\n",
+                "make check-security-static-analysis\n",
+            ),
         }
 
-    def test_all_twenty_four_publish_run_values_are_structural(self) -> None:
+    def test_all_twenty_six_publish_run_values_are_structural(self) -> None:
         """Every current publish run block matches the literal ordered oracle."""
         values = _extract_publish_run_values(PUBLISH_YML)
         assert values == [
@@ -1141,6 +1177,8 @@ class TestParserPrecision:
             ("test", "make check-manifest-sync\n"),
             ("test", "make check-org-context-primitives\n"),
             ("test", "make check-csrf-exempt\n"),
+            ("test", "make check-dependency-vulnerabilities\n"),
+            ("test", "make check-security-static-analysis\n"),
             ("test", "make frontend-proof\n"),
             ("test", "make smoke-install\n"),
             ("test", "make lint -- --core --cli --modules --devtools\n"),
@@ -2773,11 +2811,13 @@ class TestMakefileTargetParsing:
         for target in (
             "check-core-compat",
             "check-csrf-exempt",
+            "check-dependency-vulnerabilities",
             "check-gate-parity",
             "check-gate-suites",
             "check-manifest-sync",
             "check-module-core-imports",
             "check-org-context-primitives",
+            "check-security-static-analysis",
         ):
             assert target in targets, f"Expected {target} in Makefile targets, got: {targets}"
 
@@ -2799,7 +2839,7 @@ class TestYamlStructuralParsing:
     def test_ci_job_names_extracted(self) -> None:
         """ci.yml job names are extracted via structural YAML parsing."""
         jobs = _extract_ci_job_names(CI_YML)
-        # Should include the six registered conformance gate job names
+        # Should include the eight registered conformance gate job names
         for job in (
             "module-core-compat",
             "module-core-import-linter",
@@ -2807,6 +2847,8 @@ class TestYamlStructuralParsing:
             "org-context-primitives-gate",
             "csrf-exempt-gate",
             "check-gate-suites",
+            "dependency-vulnerabilities-gate",
+            "security-static-analysis-gate",
         ):
             assert job in jobs, f"Expected {job} in ci.yml jobs, got: {jobs}"
 
@@ -3171,7 +3213,7 @@ class TestRealCheckMembership:
     """The repository Makefile's check aggregation invariant (F-001)."""
 
     def test_standalone_conformance_gates_are_check_members(self) -> None:
-        """All five standalone conformance gates are reachable from the real check target."""
+        """All seven standalone conformance gates are reachable from the real check target."""
         members = _extract_check_members(REPO_ROOT / "Makefile")
         for target in CONFORMANCE_MAKE_TARGETS:
             assert target in members, f"Expected {target} in check members"
@@ -3185,7 +3227,7 @@ class TestRealCheckMembership:
     def test_parity_gate_is_explicitly_planned_by_check(self) -> None:
         """The check recipe directly runs parity without recursive make."""
         result = subprocess.run(
-            ["make", "-n", "check", "QUIET=1"],
+            ["make", "-n", "check"],
             cwd=str(REPO_ROOT),
             capture_output=True,
             text=True,
@@ -3239,7 +3281,8 @@ class TestMakeRegistryDerivation:
         output = result.stdout + result.stderr
         assert (
             "make check-core-compat check-module-core-imports check-manifest-sync "
-            "check-org-context-primitives check-csrf-exempt check-gate-suites check-gate-parity"
+            "check-org-context-primitives check-csrf-exempt check-gate-suites "
+            "check-dependency-vulnerabilities check-security-static-analysis check-gate-parity"
         ) in output
 
     def test_local_non_check_gate_is_excluded_without_makefile_edit(self, tmp_path: Path) -> None:
@@ -3282,7 +3325,8 @@ class TestMakeRegistryDerivation:
         output = result.stdout + result.stderr
         assert (
             "make check-core-compat check-module-core-imports check-manifest-sync "
-            "check-org-context-primitives check-csrf-exempt check-gate-suites"
+            "check-org-context-primitives check-csrf-exempt check-gate-suites "
+            "check-dependency-vulnerabilities check-security-static-analysis"
         ) in output
         assert "make temporary-local-non-check" not in output
 
@@ -3324,7 +3368,7 @@ class TestHostedCiGateGeneration:
         workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
         registry = _parse_registry(DEFAULT_REGISTRY)
         jobs, needs, run_values = self._projection(workflow_text)
-        assert len(jobs) == 12
+        assert len(jobs) == 14
         assert needs["test"] == (
             "backups-validation",
             "module-manifest-contract",
@@ -3334,6 +3378,8 @@ class TestHostedCiGateGeneration:
             "org-context-primitives-gate",
             "csrf-exempt-gate",
             "check-gate-suites",
+            "dependency-vulnerabilities-gate",
+            "security-static-analysis-gate",
         )
         for consumer in ("isolation-conformance", "lint-cli"):
             assert needs[consumer] == (
@@ -3414,7 +3460,8 @@ class TestHostedCiGateGeneration:
         assert (
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, "
-            "csrf-exempt-gate, check-gate-suites]" in generated
+            "csrf-exempt-gate, check-gate-suites, dependency-vulnerabilities-gate, "
+            "security-static-analysis-gate]" in generated
         )
         assert expected_workflow_text(generated, gates) == generated
 
@@ -3464,7 +3511,8 @@ class TestHostedCiGateGeneration:
         assert (
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, "
-            "csrf-exempt-gate, check-gate-suites]" in generated
+            "csrf-exempt-gate, check-gate-suites, dependency-vulnerabilities-gate, "
+            "security-static-analysis-gate]" in generated
         )
         assert expected_workflow_text(generated, gates) == generated
 
@@ -3501,7 +3549,8 @@ class TestHostedCiGateGeneration:
         assert (
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
             "module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, "
-            "csrf-exempt-gate, check-gate-suites]" in written
+            "csrf-exempt-gate, check-gate-suites, dependency-vulnerabilities-gate, "
+            "security-static-analysis-gate]" in written
         )
 
         clean = subprocess.run(
@@ -3936,7 +3985,7 @@ class TestMandatoryGenerationGate:
     def test_mandatory_check_plans_generation_drift_gate(self) -> None:
         """The real Makefile's check recipe plans the direct generation check."""
         result = subprocess.run(
-            ["make", "-n", "check", "QUIET=1"],
+            ["make", "-n", "check"],
             cwd=str(REPO_ROOT),
             capture_output=True,
             text=True,
@@ -4058,7 +4107,7 @@ class TestGenerationGateRegistryParity:
         # targets that exist, so the planned generation line is what is proven.
         registry_path = self._custom_registry(tmp_path, renamed=False)
         result = subprocess.run(
-            ["make", "-n", "check", "QUIET=1", f"GATE_REGISTRY={registry_path}"],
+            ["make", "-n", "check", f"GATE_REGISTRY={registry_path}"],
             cwd=str(REPO_ROOT),
             capture_output=True,
             text=True,

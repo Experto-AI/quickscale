@@ -64,6 +64,8 @@ HOSTED_GATE_ORDER = (
     "check-org-context-primitives",
     "check-csrf-exempt",
     "check-gate-suites",
+    "check-dependency-vulnerabilities",
+    "check-security-static-analysis",
 )
 UNOWNED_JOB_RATIONALES = {
     "lint-frontend": "Frontend toolchain validation remains a separately owned hosted job.",
@@ -142,6 +144,14 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
     "check-gate-suites": HostedJobSpec(
         "Registered Script Gate Suites",
         "Run registered scripts test suites",
+    ),
+    "check-dependency-vulnerabilities": HostedJobSpec(
+        "Dependency Vulnerability Gate (SA123)",
+        "Run dependency vulnerability gate",
+    ),
+    "check-security-static-analysis": HostedJobSpec(
+        "Security Static Analysis Gate (SA123)",
+        "Run security static-analysis gate",
     ),
 }
 
@@ -307,7 +317,7 @@ def _locate_hosted_jobs(
     jobs: dict[str, Any], label: str, *, allow_missing: bool = False
 ) -> dict[str, str]:
     """
-    Locate the six hosted jobs by their static catalog display names.
+    Locate the eight hosted jobs by their static catalog display names.
 
     Display metadata is helper-owned and static, so the generated job IDs may
     be stale before an edit: a registry ``ci_job`` (F-005) or Make-target
@@ -627,7 +637,7 @@ def _top_level_job_headers(lines: list[str]) -> list[tuple[int, str]]:
 
 def _locate_hosted_job_headers(lines: list[str], *, allow_missing: bool = False) -> list[int]:
     """
-    Locate the six hosted job header lines by their display names.
+    Locate the eight hosted job header lines by their display names.
 
     Use static display metadata to find the (possibly stale) hosted job IDs;
     this permits a registry ``ci_job`` (F-005) or Make-target edit while

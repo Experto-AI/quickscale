@@ -65,6 +65,7 @@
         check-core-compat check-module-core-imports check-manifest-sync \
         check-org-context-primitives \
          check-csrf-exempt check-gate-suites isolation-conformance \
+         check-dependency-vulnerabilities check-security-static-analysis security-negative-probes \
          check-gate-parity check-ci-gate-generation \
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
         sa117-capture sa117-verify sa117-authorize sa117-rollback \
@@ -236,6 +237,9 @@ help:
 	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
+	@echo "  make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability scan"
+	@echo "  make check-security-static-analysis  - Blocking Bandit static security scan"
+	@echo "  make security-negative-probes     - Verify scanner finding exit contracts"
 	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
 	@echo "  make isolation-conformance         - Run the PostgreSQL isolation-conformance suite"
 	@echo "  make check-gate-parity            - SA122a: verify declared gates match every execution context (exit 0 = parity, 1 = JSONL diffs)"
@@ -875,6 +879,20 @@ check-org-context-primitives:
 # Exits 1 on any unprotected csrf_exempt usage.
 check-csrf-exempt:
 	@$(PYTHON) scripts/check_csrf_exempt_gate.py
+
+# --- SA123 Security Gates ---
+
+# Public Make callers for the registry-bound scanner wrapper. Scanner
+# acquisition, invocation, and suppression adjudication remain owned by the
+# wrapper rather than being duplicated in Make recipes.
+check-dependency-vulnerabilities:
+	@$(PYTHON) scripts/check_security_gates.py dependency-vulnerabilities
+
+check-security-static-analysis:
+	@$(PYTHON) scripts/check_security_gates.py security-static-analysis
+
+security-negative-probes:
+	@$(PYTHON) scripts/check_security_gates.py security-negative-probes
 
 # Run every scripts/test_*.py suite without pytest cache artifacts or product
 # coverage.  ``make check`` reaches this target through the registry-derived

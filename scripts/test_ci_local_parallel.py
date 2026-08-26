@@ -327,6 +327,8 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
         "check-org-context-primitives": "Running org-context",
         "check-csrf-exempt": "Running CSRF",
         "check-gate-suites": "Running registered scripts",
+        "check-dependency-vulnerabilities": "Running dependency vulnerability",
+        "check-security-static-analysis": "Running security static-analysis",
     }
     replay_markers = [
         "[2/11] Running linters",

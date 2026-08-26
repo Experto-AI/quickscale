@@ -646,6 +646,8 @@ class TestMakefileGateTargetDerivation:
         "check-org-context-primitives",
         "check-csrf-exempt",
         "check-gate-suites",
+        "check-dependency-vulnerabilities",
+        "check-security-static-analysis",
     )
 
     def _derive_targets(self, cwd: Path, *, registry: Path | None = None) -> str:
@@ -724,7 +726,8 @@ class TestRegisteredScriptGateTarget:
                 if "--print-check-targets" in args:
                     print(
                         "check-core-compat check-module-core-imports check-manifest-sync "
-                        "check-org-context-primitives check-csrf-exempt check-gate-suites"
+                        "check-org-context-primitives check-csrf-exempt check-gate-suites "
+                        "check-dependency-vulnerabilities check-security-static-analysis"
                     )
                     raise SystemExit(0)
                 if args[:2] != ["-m", "pytest"]:
@@ -1044,7 +1047,9 @@ class TestMakefileCoveragePipeline:
                         "check-manifest-sync "
                         "check-org-context-primitives "
                         "check-csrf-exempt "
-                        "check-gate-suites"
+                        "check-gate-suites "
+                        "check-dependency-vulnerabilities "
+                        "check-security-static-analysis"
                     )
                     raise SystemExit(0)
 
@@ -1510,7 +1515,9 @@ class TestCheckQuietSectionDispatch:
                         "check-manifest-sync "
                         "check-org-context-primitives "
                         "check-csrf-exempt "
-                        "check-gate-suites"
+                        "check-gate-suites "
+                        "check-dependency-vulnerabilities "
+                        "check-security-static-analysis"
                     )
                     raise SystemExit(0)
                 raise SystemExit(0)
@@ -2560,7 +2567,9 @@ class TestCheckNormalFrontendLint:
                         "check-manifest-sync "
                         "check-org-context-primitives "
                         "check-csrf-exempt "
-                        "check-gate-suites"
+                        "check-gate-suites "
+                        "check-dependency-vulnerabilities "
+                        "check-security-static-analysis"
                     )
                     raise SystemExit(0)
                 raise SystemExit(0)
