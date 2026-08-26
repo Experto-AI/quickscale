@@ -4,6 +4,27 @@
 
 ## v88 development — 2026-08-21
 
+- **SA169 closed — authoritative lifecycle fixtures restore the shared gate baseline
+  (2026-08-26; root merge-back not claimed).** The five lifecycle scenarios now derive their
+  physical manifests from the authoritative twelve-module source inventory while keeping desired,
+  applied, and legacy-tracking state independently minimal. Removal scenarios isolate only the
+  managed-wiring writer, assert the exact surviving-module forwarding contract, and leave real
+  generated-file behavior to the wiring-manager suite; the production exact-twelve inventory guard
+  is unchanged. The focused lifecycle and wiring-manager command passed **49 tests**. After the
+  session's isolated PostgreSQL 18 service was found to have the required role but none of the
+  twelve pre-created module databases, the missing databases were created from the authoritative
+  inventory under `quickscale_test_role`; the full ordered campaign then passed `make lint`,
+  `make typecheck`, `make check`, `make test`, and `make quality`. `make check` reported Core
+  **2,869 passed / 1 skipped**, CLI **2,144 passed**, scripts **1,284 passed**, and zero Trivy or
+  Bandit findings; `make test` repeated the Core/CLI results and passed all twelve integration
+  module suites at **94.53%** equal-weight mean coverage. The quality report loaded its baseline,
+  reported zero warning and critical regressions, and passed monotonicity. The open-only roadmap
+  therefore removes SA169 and retires merge position **#26**, releases the three previously capped
+  acceptance paths, and now carries **twelve open v88 ticket entries across eleven open merge
+  positions**. Current-state consumers in the roadmap, ticket-context page, docs hub, architecture
+  audit, and consistency tests were reconciled; earlier dated SA169 blocker entries below, the
+  architecture audit's explicitly retained change-cost probe, and the tech-audit reconciliation log
+  remain archival evidence rather than current status.
 - **Roadmap cleanup and rebalance review (2026-08-26, fifteenth pass).** **One piece of durable
   progress:** SA123's scanner implementation merged to `v88` (`b890752a`) and its two tech-audit
   tooling gaps are closed and archived; that work left the roadmap's build queue and the ticket now
