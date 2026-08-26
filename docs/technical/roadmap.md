@@ -475,6 +475,41 @@ Conceptual background, mental models, and implementation notes for **every** tic
 - [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Band B · Tier 2 · W3 · merge #15 · deps: none · PostgreSQL + Docker slot · carries SA163`
   Provision and tear down the server used by repository gates; replace the current out-of-band host assumption while retaining an asserted unavailability negative control.
   **Acceptance:** the integration gate provisions its own PostgreSQL 18 server and tears it down, with no reliance on a pre-existing host server; the `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract is preserved; the asserted-unavailability negative control still fails loudly when the server cannot be provisioned, rather than skipping; `make test-integration` passes on a machine with no PostgreSQL running; [validation_policy.md](validation_policy.md) is updated to drop the out-of-band host precondition; image identity follows the settled content-addressed backend-image convention.
+  **Attempted 2026-08-26 — blocked before implementation.** The clean W3 worktree was synced to
+  current `v88`, the PostgreSQL/Docker slot and required Python 3.14, Docker, and PostgreSQL 18
+  clients were available, and the Phase A preflight bound the current module, database-name,
+  workflow, publish-order, SA123, quality, and open-ticket baselines. No SA135/SA163 source,
+  workflow, test, policy, or audit implementation was applied.
+  **Blocking baseline:**
+  `poetry run pytest scripts/test_gate_parity.py quickscale_core/tests/test_v88_ticket_context_consistency.py -q --tb=short -o addopts= --no-cov -p no:cacheprovider`
+  is red because its nested `make -n check` observes five pre-existing failures in
+  `quickscale_cli/tests/test_module_lifecycle_cycle.py` (the remove/apply/update cases at lines
+  955, 986, 1040, 1105, and 1155 return exit 1 instead of 0). That makes the three parity
+  assertions for mandatory `make check` membership red as well. `make check-gate-parity` is green,
+  and `make quality` reports zero warning regressions, zero critical regressions, and passing
+  monotonicity. The CLI failures are outside SA135/SA163's authorized lifecycle/provisioning
+  surfaces, so the standing scope rule requires their own triage/fix rather than widening this
+  ticket. Close that baseline defect, then rerun Phase A without an accepted-failure waiver.
+  **Remaining plan (all phases serial):**
+  1. **A-preflight:** rerun the complete baseline after the CLI lifecycle defect is closed; require
+     the focused baseline, parity, and quality checks to pass and leave no disposable artifacts.
+  2. **B-provisioning-contract:** add the single fail-closed PostgreSQL provisioning authority,
+     exact restricted/BYPASSRLS profiles, safe environment emission, role postcondition checks,
+     hermetic lifecycle tests, and focused Make targets.
+  3. **C-local-lifecycle:** make restricted and BYPASSRLS Make lanes own a labeled PostgreSQL 18
+     container on a Docker-reported dynamic endpoint, with pre-allocation cleanup identity,
+     composed signal cleanup, and no fallback to host PostgreSQL.
+  4. **D-workflow-parity:** migrate all four maintainer workflows and six provisioning contexts to
+     the helper, preserve deliberate isolation differences and inherited SA123 behavior, add the
+     helper to the existing E2E trigger-input owner, regenerate the E2E path region, and replace
+     transcribed provisioning-shell assertions with structural parity.
+  5. **E-acceptance:** prove Docker-unavailable failure, host independence, exact cleanup,
+     restricted → BYPASSRLS → restricted coexistence, generated-project runtime, full repository
+     gates, and quality no worse than the Phase A baseline.
+  6. **F-closeout:** only after E is green, reconcile validation policy, Finding 13, ticket context,
+     roadmap counts/dependencies, and changelog evidence under the open-work-only policy.
+  7. **G-post-sync:** sync current `v88` again, rerun the complete acceptance on one clean frozen
+     tree, perform independent convergence and terminal attestation, and merge only that exact tip.
 
 ---
 
