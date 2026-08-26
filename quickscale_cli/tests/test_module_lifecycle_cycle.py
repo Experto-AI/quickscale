@@ -11,6 +11,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from quickscale_core import __version__ as _core_version
+from quickscale_core.contracts.module_discovery import authoritative_module_names
 
 # AF5 Phase 4: Bypass the late destructive/remote confirmation gate so test
 # assertions remain stable with the new two-phase confirmation flow.
@@ -170,7 +171,7 @@ def _write_non_consolidated_state_with_modules(
 
 def _write_project_with_modules_non_consolidated(
     project_path: Path, module_names: list[str]
-) -> None:
+) -> set[str]:
     """Write the minimal project layout with non-consolidated state.
 
     Like ``_write_project_with_modules`` but state.yml lacks the Phase 2
@@ -180,23 +181,13 @@ def _write_project_with_modules_non_consolidated(
     project_path.mkdir()
     (project_path / "manage.py").write_text("# manage")
 
-    _repo_manifests_root = Path(__file__).resolve().parents[2] / "quickscale_modules"
-    for module_name in module_names:
-        module_dir = project_path / "modules" / module_name
-        module_dir.mkdir(parents=True)
-        (module_dir / "__init__.py").write_text("")
-        repo_manifest = _repo_manifests_root / module_name / "module.yml"
-        if repo_manifest.exists():
-            (module_dir / "module.yml").write_text(repo_manifest.read_text())
-        else:
-            (module_dir / "module.yml").write_text(
-                f'name: {module_name}\nversion: "0.71.0"\n'
-            )
+    inventory = _write_complete_module_manifest_inventory(project_path)
 
     _write_quickscale_config_with_modules(project_path, module_names)
     _write_non_consolidated_state_with_modules(project_path, module_names)
     _write_initial_module_tracking_with_modules(project_path, module_names)
     _write_managed_package_layout(project_path)
+    return inventory
 
 
 def _write_initial_module_tracking(project_path: Path) -> None:
@@ -272,28 +263,116 @@ def _write_apply_recovery_state_with_modules(
     )
 
 
-def _write_project_with_modules(project_path: Path, module_names: list[str]) -> None:
-    """Write the minimal generated-project layout for remove/update/push tests."""
+def _write_project_with_modules(
+    project_path: Path,
+    module_names: list[str],
+    *,
+    physical_module_names: list[str] | None = None,
+) -> set[str]:
+    """Write a project with independently selected physical and state modules."""
     project_path.mkdir()
     (project_path / "manage.py").write_text("# manage")
 
-    _repo_manifests_root = Path(__file__).resolve().parents[2] / "quickscale_modules"
-    for module_name in module_names:
-        module_dir = project_path / "modules" / module_name
-        module_dir.mkdir(parents=True)
-        (module_dir / "__init__.py").write_text("")
-        repo_manifest = _repo_manifests_root / module_name / "module.yml"
-        if repo_manifest.exists():
-            (module_dir / "module.yml").write_text(repo_manifest.read_text())
-        else:
-            (module_dir / "module.yml").write_text(
-                f'name: {module_name}\nversion: "0.71.0"\n'
-            )
+    inventory = _write_source_derived_module_manifest_inventory(
+        project_path,
+        physical_module_names,
+    )
 
     _write_quickscale_config_with_modules(project_path, module_names)
     _write_initial_state_with_modules(project_path, module_names)
     _write_initial_module_tracking_with_modules(project_path, module_names)
     _write_managed_package_layout(project_path)
+    return inventory
+
+
+def _write_source_derived_module_manifest_inventory(
+    project_path: Path,
+    module_names: list[str] | None = None,
+) -> set[str]:
+    """Copy all or a selected subset of authoritative source manifests."""
+    authoritative_names = set(authoritative_module_names())
+    requested_names = authoritative_names if module_names is None else set(module_names)
+    assert requested_names <= authoritative_names
+    repo_manifests_root = Path(__file__).resolve().parents[2] / "quickscale_modules"
+    for module_name in sorted(requested_names):
+        repo_manifest = repo_manifests_root / module_name / "module.yml"
+        assert repo_manifest.is_file(), f"Missing source manifest: {repo_manifest}"
+        module_dir = project_path / "modules" / module_name
+        module_dir.mkdir(parents=True, exist_ok=True)
+        (module_dir / "__init__.py").write_text("")
+        (module_dir / "module.yml").write_text(repo_manifest.read_text())
+    return requested_names
+
+
+def _write_complete_module_manifest_inventory(project_path: Path) -> set[str]:
+    """Copy the complete authoritative manifest inventory into a project."""
+    return _write_source_derived_module_manifest_inventory(project_path)
+
+
+def _physical_module_manifest_names(project_path: Path) -> set[str]:
+    """Return embedded module directories that expose a manifest."""
+    modules_dir = project_path / "modules"
+    if not modules_dir.is_dir():
+        return set()
+    return {
+        module_dir.name
+        for module_dir in modules_dir.iterdir()
+        if module_dir.is_dir() and (module_dir / "module.yml").is_file()
+    }
+
+
+def _assert_physical_module_manifest_names(
+    project_path: Path, expected_names: set[str]
+) -> None:
+    """Keep physical manifest inventory separate from lifecycle state."""
+    assert _physical_module_manifest_names(project_path) == expected_names
+
+
+def _assert_scenario_module_sets(
+    project_path: Path,
+    *,
+    desired_names: set[str],
+    applied_names: set[str],
+    tracked_names: set[str],
+) -> None:
+    """Assert desired, applied, and legacy tracking sets independently."""
+    config = yaml.safe_load((project_path / "quickscale.yml").read_text())
+    state = yaml.safe_load((project_path / ".quickscale" / "state.yml").read_text())
+    tracking = yaml.safe_load((project_path / ".quickscale" / "config.yml").read_text())
+    assert set(config.get("modules", {})) == desired_names
+    assert set(state.get("modules", {})) == applied_names
+    assert set(tracking.get("modules", {})) == tracked_names
+
+
+def _invoke_auth_remove_without_retesting_wiring(
+    runner: CliRunner,
+    project_path: Path,
+    inventory: set[str],
+) -> Any:
+    """Remove auth while preserving lifecycle coverage over a real inventory.
+
+    Partial physical inventories cannot exercise the exact-twelve adapter refresh
+    after removal without changing production behavior. These lifecycle scenarios
+    therefore isolate the wiring writer after asserting that remove forwards the
+    exact physical survivors. Real adapter refresh, empty selection, and managed-file
+    generation remain covered by ``test_module_wiring_manager_manifest.py``.
+    """
+    with patch(
+        "quickscale_cli.commands.remove_command.regenerate_managed_wiring",
+        return_value=(True, "Managed wiring isolated by lifecycle fixture"),
+    ) as mock_regenerate_managed_wiring:
+        result = runner.invoke(
+            remove,
+            ["auth", "--force"],
+            catch_exceptions=False,
+        )
+
+    mock_regenerate_managed_wiring.assert_called_once_with(
+        project_path,
+        module_names=sorted(inventory - {"auth"}),
+        project_package="myproject",
+    )
+    return result
 
 
 def _write_managed_package_layout(project_path: Path) -> None:
@@ -367,16 +446,6 @@ def _write_blog_state(project_path: Path, *, enable_rss: bool) -> None:
     state_dir = project_path / ".quickscale"
     state_dir.mkdir(parents=True, exist_ok=True)
     (state_dir / "state.yml").write_text(yaml.safe_dump(state_data, sort_keys=False))
-
-
-def _write_embedded_blog_manifest(project_path: Path) -> None:
-    """Copy the current blog manifest into the embedded project module tree."""
-    repo_root = Path(__file__).resolve().parents[2]
-    manifest_source = repo_root / "quickscale_modules" / "blog" / "module.yml"
-    module_dir = project_path / "modules" / "blog"
-    module_dir.mkdir(parents=True, exist_ok=True)
-    (module_dir / "__init__.py").write_text("")
-    (module_dir / "module.yml").write_text(manifest_source.read_text())
 
 
 def _generate_minimal_project(
@@ -515,16 +584,20 @@ def test_remove_with_pending_recovery_then_apply_does_not_resurrect_removed_modu
 ) -> None:
     """Remove should clear stale recovery state so later apply only adds desired modules."""
     project_path = tmp_path / "myproject"
-    _write_project_with_modules(project_path, ["auth"])
+    inventory = _write_project_with_modules(
+        project_path,
+        ["auth"],
+        physical_module_names=["auth"],
+    )
     _write_apply_recovery_state_with_modules(project_path, ["auth"])
 
     runner = CliRunner()
     monkeypatch.chdir(project_path)
 
-    remove_result = runner.invoke(
-        remove,
-        ["auth", "--force"],
-        catch_exceptions=False,
+    remove_result = _invoke_auth_remove_without_retesting_wiring(
+        runner,
+        project_path,
+        inventory,
     )
 
     assert remove_result.exit_code == 0
@@ -769,16 +842,6 @@ def test_apply_backups_private_remote_stays_offline_with_env_var_refs() -> None:
         assert backups_options["remote_region_name"] == "auto"
 
 
-def _copy_repo_module_manifest(project_path: Path, module_name: str) -> None:
-    """Copy a module.yml from the maintainer repo into the embedded project."""
-    repo_root = Path(__file__).resolve().parents[2]
-    source = repo_root / "quickscale_modules" / module_name / "module.yml"
-    module_dir = project_path / "modules" / module_name
-    module_dir.mkdir(parents=True, exist_ok=True)
-    (module_dir / "__init__.py").write_text("")
-    (module_dir / "module.yml").write_text(source.read_text())
-
-
 def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
     """Repeat apply should treat blog.enable_rss as mutable and avoid re-embed."""
     cli_runner = CliRunner()
@@ -804,11 +867,8 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
             'python = "^3.12"\n'
         )
 
-        # Blog requires orgs>=0.86.0, and orgs requires auth — embed all three
-        # so the required-module version constraint is satisfied.
-        _copy_repo_module_manifest(project_path, "auth")
-        _copy_repo_module_manifest(project_path, "orgs")
-        _write_embedded_blog_manifest(project_path)
+        inventory = _write_complete_module_manifest_inventory(project_path)
+        _assert_physical_module_manifest_names(project_path, inventory)
 
         # quickscale.yml: blog with enable_rss=False; auth and orgs are
         # installed.  Orgs implies notifications which is materialized
@@ -923,6 +983,13 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
             yaml.safe_dump(tracking_data, sort_keys=False)
         )
 
+        _assert_scenario_module_sets(
+            project_path,
+            desired_names={"auth", "orgs", "blog"},
+            applied_names={"auth", "orgs", "notifications", "blog"},
+            tracked_names={"auth", "orgs", "notifications", "blog"},
+        )
+
         with (
             patch(
                 "quickscale_cli.commands.apply_command._embed_modules_step",
@@ -958,6 +1025,15 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
         assert "Immutable config changes" not in result.output
         assert "No new modules to embed" in result.output
         assert mock_embed_modules_step.call_args.args[1] == []
+        _assert_physical_module_manifest_names(project_path, inventory)
+        # Config validation materializes orgs' notifications dependency in
+        # desired state; the pre-apply explicit set remains auth/orgs/blog.
+        _assert_scenario_module_sets(
+            project_path,
+            desired_names={"auth", "orgs", "notifications", "blog"},
+            applied_names={"auth", "orgs", "notifications", "blog"},
+            tracked_names={"auth", "orgs", "notifications", "blog"},
+        )
 
         settings_modules = (package_dir / "settings" / "modules.py").read_text()
         assert "'BLOG_ENABLE_RSS': False" in settings_modules
@@ -972,18 +1048,26 @@ def test_update_after_removal_only_targets_remaining_modules(
 ) -> None:
     """Test update only processes modules present in config after removal"""
     project_path = tmp_path / "myproject"
-    _write_project_with_modules(project_path, ["auth", "blog"])
+    inventory = _write_project_with_modules(project_path, ["auth", "blog"])
+    _assert_physical_module_manifest_names(project_path, inventory)
+    _assert_scenario_module_sets(
+        project_path,
+        desired_names={"auth", "blog"},
+        applied_names={"auth", "blog"},
+        tracked_names={"auth", "blog"},
+    )
 
     runner = CliRunner()
     monkeypatch.chdir(project_path)
 
-    remove_result = runner.invoke(
-        remove,
-        ["auth", "--force"],
-        catch_exceptions=False,
+    remove_result = _invoke_auth_remove_without_retesting_wiring(
+        runner,
+        project_path,
+        inventory,
     )
 
     assert remove_result.exit_code == 0
+    _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
     # Phase 3: remove no longer writes to legacy config.yml.
     # The legacy config.yml is a read-through compatibility input only.
     legacy_tracking = yaml.safe_load(
@@ -991,7 +1075,14 @@ def test_update_after_removal_only_targets_remaining_modules(
     )
     # Both auth and blog remain in legacy config since remove no longer mutates it.
     assert set(legacy_tracking.get("modules", {})) == {"auth", "blog"}
+    _assert_scenario_module_sets(
+        project_path,
+        desired_names={"blog"},
+        applied_names={"blog"},
+        tracked_names={"auth", "blog"},
+    )
 
+    _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
     with (
         patch(
             "quickscale_cli.commands.module_commands._validate_update_environment",
@@ -1018,6 +1109,13 @@ def test_update_after_removal_only_targets_remaining_modules(
     assert module_info.branch == "splits/blog-module"
     assert remote == "https://github.com/Experto-AI/quickscale.git"
     assert no_preview is True
+    _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
+    _assert_scenario_module_sets(
+        project_path,
+        desired_names={"blog"},
+        applied_names={"blog"},
+        tracked_names={"auth", "blog"},
+    )
 
 
 def test_push_after_successful_remove_treats_removed_module_as_absent(
@@ -1026,19 +1124,34 @@ def test_push_after_successful_remove_treats_removed_module_as_absent(
 ) -> None:
     """Push should reject removed modules while still allowing remaining ones."""
     project_path = tmp_path / "myproject"
-    _write_project_with_modules(project_path, ["auth", "blog"])
+    inventory = _write_project_with_modules(project_path, ["auth", "blog"])
+    _assert_physical_module_manifest_names(project_path, inventory)
+    _assert_scenario_module_sets(
+        project_path,
+        desired_names={"auth", "blog"},
+        applied_names={"auth", "blog"},
+        tracked_names={"auth", "blog"},
+    )
 
     runner = CliRunner()
     monkeypatch.chdir(project_path)
 
-    remove_result = runner.invoke(
-        remove,
-        ["auth", "--force"],
-        catch_exceptions=False,
+    remove_result = _invoke_auth_remove_without_retesting_wiring(
+        runner,
+        project_path,
+        inventory,
     )
 
     assert remove_result.exit_code == 0
+    _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
+    _assert_scenario_module_sets(
+        project_path,
+        desired_names={"blog"},
+        applied_names={"blog"},
+        tracked_names={"auth", "blog"},
+    )
 
+    _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
     with (
         patch("quickscale_cli.commands.module_commands.is_git_repo", return_value=True),
         patch(
@@ -1072,6 +1185,13 @@ def test_push_after_successful_remove_treats_removed_module_as_absent(
     assert removed_result.exit_code != 0
     assert "not installed" in removed_result.output.lower()
     mock_push.assert_not_called()
+    _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
+    _assert_scenario_module_sets(
+        project_path,
+        desired_names={"blog"},
+        applied_names={"blog"},
+        tracked_names={"auth", "blog"},
+    )
 
 
 def test_partial_remove_on_non_consolidated_project_preserves_surviving_tracking(
@@ -1091,20 +1211,36 @@ def test_partial_remove_on_non_consolidated_project_preserves_surviving_tracking
     from quickscale_core.project_state import ProjectStateManager
 
     project_path = tmp_path / "myproject"
-    _write_project_with_modules_non_consolidated(project_path, ["auth", "blog"])
+    inventory = _write_project_with_modules_non_consolidated(
+        project_path, ["auth", "blog"]
+    )
+    _assert_physical_module_manifest_names(project_path, inventory)
+    _assert_scenario_module_sets(
+        project_path,
+        desired_names={"auth", "blog"},
+        applied_names={"auth", "blog"},
+        tracked_names={"auth", "blog"},
+    )
 
     runner = CliRunner()
     monkeypatch.chdir(project_path)
 
-    remove_result = runner.invoke(
-        remove,
-        ["auth", "--force"],
-        catch_exceptions=False,
+    remove_result = _invoke_auth_remove_without_retesting_wiring(
+        runner,
+        project_path,
+        inventory,
     )
 
     assert remove_result.exit_code == 0
     assert not (project_path / "modules" / "auth").exists()
     assert (project_path / "modules" / "blog").exists()
+    _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
+    _assert_scenario_module_sets(
+        project_path,
+        desired_names={"blog"},
+        applied_names={"blog"},
+        tracked_names={"auth", "blog"},
+    )
 
     # The surviving module's tracking fields must be materialised in state.yml.
     state_after_remove = yaml.safe_load(
@@ -1127,6 +1263,7 @@ def test_partial_remove_on_non_consolidated_project_preserves_surviving_tracking
     assert blog_reloaded.prefix == "modules/blog"
     assert blog_reloaded.branch == "splits/blog-module"
     assert blog_reloaded.installed_at == "2025-01-01"
+    _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
 
 
 def test_update_after_partial_remove_on_non_consolidated_project_targets_surviving(
@@ -1142,18 +1279,35 @@ def test_update_after_partial_remove_on_non_consolidated_project_targets_survivi
     the git-subtree push target.
     """
     project_path = tmp_path / "myproject"
-    _write_project_with_modules_non_consolidated(project_path, ["auth", "blog"])
+    inventory = _write_project_with_modules_non_consolidated(
+        project_path, ["auth", "blog"]
+    )
+    _assert_physical_module_manifest_names(project_path, inventory)
+    _assert_scenario_module_sets(
+        project_path,
+        desired_names={"auth", "blog"},
+        applied_names={"auth", "blog"},
+        tracked_names={"auth", "blog"},
+    )
 
     runner = CliRunner()
     monkeypatch.chdir(project_path)
 
-    remove_result = runner.invoke(
-        remove,
-        ["auth", "--force"],
-        catch_exceptions=False,
+    remove_result = _invoke_auth_remove_without_retesting_wiring(
+        runner,
+        project_path,
+        inventory,
     )
     assert remove_result.exit_code == 0
+    _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
+    _assert_scenario_module_sets(
+        project_path,
+        desired_names={"blog"},
+        applied_names={"blog"},
+        tracked_names={"auth", "blog"},
+    )
 
+    _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
     with (
         patch(
             "quickscale_cli.commands.module_commands._validate_update_environment",
@@ -1180,6 +1334,13 @@ def test_update_after_partial_remove_on_non_consolidated_project_targets_survivi
     assert module_info.branch == "splits/blog-module"
     assert remote == "https://github.com/Experto-AI/quickscale.git"
     assert no_preview is True
+    _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
+    _assert_scenario_module_sets(
+        project_path,
+        desired_names={"blog"},
+        applied_names={"blog"},
+        tracked_names={"auth", "blog"},
+    )
 
 
 @pytest.mark.e2e
