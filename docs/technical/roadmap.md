@@ -467,6 +467,11 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Remaining plan:** after SA169 clears the shared baseline, rerun the entire ordered Phase C
   command and its exact-tree post-sync rerun with no tracked edits; only then remove SA123 under
   the open-work-only policy. Do not claim root merge-back or publication before it occurs.
+  **Retained checkpoint:** branch `wt-track2` object
+  `3e514c1a264d218dc85ed33656b8bf61808086db` contains the implemented scanner contract, every
+  registered caller, cross-platform Trivy acquisition, and reconciled live documentation. SA123
+  remains unmerged and pending only on the five lifecycle tests owned by SA169, followed by the
+  Phase C and exact-tree post-sync reruns above; no additional design decision is open.
 
 - [ ] **SA118 — Project every declared manifest default into wiring.** `Band B · Tier 2 · W2 · merge #16 · deps: SA123 · blocks SA167c`
   Materialize authoritative declared defaults without widening into the full imperative-to-declarative migration; rebaseline emission parity with per-file rationale.
