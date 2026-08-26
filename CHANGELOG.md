@@ -4,6 +4,47 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-26, fourteenth pass).** **No ticket closed and
+  no audit finding closed since the thirteenth pass**, so nothing new entered the archive and the
+  roadmap continues to hold open work only with zero checked entries. Both audits were re-read and
+  carry no finding whose context has gone stale; their reconciliation logs already point closed
+  findings at this file.
+  **Band A reopened, and this is the pass's finding.** `make check` is red on the integration
+  branch itself: `quickscale_cli/tests/test_module_lifecycle_cycle.py` reports `5 failed, 5 passed`
+  on `v88` (measured, not inferred). The five `apply`/`update`/`push`/partial-`remove` scenarios
+  build a minimal fixture exposing one module while SA167b's settled manifest-backed guard
+  correctly requires the authoritative twelve. Because `make check` is a required command in
+  SA123's Phase C, SA135's Phase A preflight, and SA167b's P4 Phase C, **one defect caps all three
+  lanes**. It is now **SA169** (band A, Tier 2, W1, merge **#26**, a new position), the first
+  active cross-worktree dependency edge this release has carried. An attested test-only correction
+  already exists unmerged on `wt-track1` (`11e4b154`) and was independently re-verified this pass
+  at `49 passed` across the lifecycle and real wiring-manager suites, with the production
+  exact-twelve guard untouched; only the repository-wide campaign, sync, exact-tip review, and
+  merge remain.
+  **Three prior roadmap statements were falsified by measurement and corrected.** "Active
+  cross-worktree dependency edges — none" is now one. W2's worktree is **3** commits behind `v88`,
+  not the recorded 14. W3's worktree is **at the integration tip**, 0 ahead and 0 behind, not the
+  recorded 10 behind. W3's "truly green" verdict contradicted the SA135 blocked-baseline block
+  recorded in the same document and has been resolved against the measurement.
+  **Track assignment: one made, no moves.** SA169 was the only ticket without a worktree and is
+  assigned to **W1** — its file is owned by no other open ticket, W1's paused P4 is the campaign
+  that surfaced it, and the attested delta already lives there. The **SA161 (#19) + SA160 (#20) W3
+  to W1** candidate was re-tested and rejected for the seventh time (neither is on or feeding the
+  critical path; moving them would spread `sa90_emission_manifests.json` across three lanes), and
+  **SA166 (#24) / SA164 (#25) off W2** was rejected again on the gate-registry invariant. W2 remains
+  irreducible at five open legs. SA169's conflict surface,
+  `quickscale_cli/tests/test_module_lifecycle_cycle.py`, is uncontended; its closeout touches the
+  standing shared surface, which the sync-before-merge-back procedure covers, and because it merges
+  first every later lane inherits its entries rather than racing them.
+  **Three-state result: SA169 is the only truly green ticket, and it is on the critical path.** W2
+  (SA123 #13) and W3 (SA135+SA163 #15) can both start and should — W2 on Phases A and B, W3 holding
+  at Phase A — but neither can finish until SA169 merges; both can merge in order. The critical path
+  is now `SA169 → SA123 → SA118 → SA167c`. **No maintainer decision is open**: every blocker is a
+  hard upstream edge or a deliberately retained lane-ordering edge.
+  Same-fact consumers updated to **thirteen open v88 ticket entries across twelve open merge
+  positions** (`docs/index.md`, `docs/others/arch-audit.md`, the roadmap, and the live-status
+  assertions in `quickscale_core/tests/test_v88_ticket_context_consistency.py`), and
+  `v88_ticket_context.md` gained an SA169 section. That consistency suite passes (20 tests).
 - **SA167b P1-P3 partial integration merged to `v88` (2026-08-26).** The authorized partial
   checkpoint is now integration-branch state, not worktree state: `wt-track1` and `v88` are the
   same object (`472b63e8`), and the seven P3 commits reached the integration branch through the
