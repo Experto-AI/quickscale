@@ -89,7 +89,7 @@ Applying it produces three ranked bands:
     lightest lane — and run parallel to W2's second half instead of extending it. Neither
     carries a cross-worktree gate.
   **Cost, stated plainly:** SA167c is a serialized W2 leg; SA167b and
-   SA167d are free (parallel on W1) and do not extend the three-leg critical path.
+   SA167d are free (parallel on W1) and do not extend the two-leg critical path.
 - **SA163 does not get its own slot.** It executes inside SA135, whose allowlist already
   covers the same provisioning files.
 - **The implementation tickets and the audit tickets are one queue.** The merge-order table
@@ -129,7 +129,7 @@ legs; SA166 (#24) and SA164 (#25) are band-C tails behind
 the chain, not on it. W2's back half is the release's implementation work, so W2 sets the
 date. SA167b and SA167d cost nothing on the critical path: W1 runs them against W2's second
 half. **Load check:** W1 carries three open legs — SA167b, SA167d, SA165 — and W3
-three positions, against the three-leg W2 spine. W3's two band-C tails do not gate release, so W2 remains the binding lane — see
+three positions, against the four-leg W2 spine. W3's two band-C tails do not gate release, so W2 remains the binding lane — see
 the irreducibility argument below.
 
 **Second chain:** W3, `SA135` carrying `SA163`, one service-backed open leg followed by
@@ -441,12 +441,13 @@ Conceptual background, mental models, and implementation notes for **every** tic
   afterwards** — see [Recorded maintainer decisions](#recorded-maintainer-decisions) for the bounds
   and the restore obligation. Confirm no W1 or W2 campaign is in flight before opening the window,
   then resume at step 1 below without redoing P, A, or B. No decision remains open on this ticket.
-  **Current handoff (2026-08-26): blocked before source or service mutation.** A W2 SA123
-  acceptance campaign was already running against the shared PostgreSQL cluster when this W3
-  continuation reached its preflight. Do not interrupt that campaign and do not open W3's exclusive
-  window until W2 releases the cluster. The worktree is synchronized with `v88`; no SA135/SA163
-  product change from this continuation is pending or needs salvage. No task prerequisite or
-  maintainer decision is unresolved — only the shared-cluster scheduling constraint is active.
+  **Current handoff (2026-08-26): ready to continue from strict C acceptance.** SA123's two
+  exact-tree acceptance campaigns are complete, and W2 has released the shared PostgreSQL cluster.
+  Before source or service mutation, confirm no W1 or W2 campaign has since started, then open W3's
+  exclusive window under the authorization above. The worktree is synchronized with `v88`; no
+  SA135/SA163 product change from the blocked continuation is pending or needs salvage. No task
+  prerequisite or maintainer decision is unresolved; the standing shared-cluster scheduling rule
+  remains, but this handoff records no active contention.
   **Next handoff refinement:** before opening the window, make the existing Docker-unavailable
   lifecycle probe deterministic in `scripts/test_provision_ci_postgres.py` by supplying hermetic
   PostgreSQL clients while making Docker unresolvable, and require the exact fail-closed Docker

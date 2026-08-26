@@ -300,6 +300,21 @@ def _assert_current_status_consumers(
         roadmap_text,
         re.DOTALL,
     )
+    assert "do not extend the two-leg critical path" in roadmap_text
+    assert "against the four-leg W2 spine" in roadmap_text
+
+    current_handoff = re.search(
+        r"\*\*Current handoff \(2026-08-26\):(?P<body>.*?)"
+        r"\*\*Next handoff refinement:",
+        roadmap_text,
+        re.DOTALL,
+    )
+    assert current_handoff is not None
+    handoff_text = current_handoff.group(0)
+    assert "ready to continue from strict C acceptance" in handoff_text
+    assert "W2 has released the shared PostgreSQL cluster" in handoff_text
+    assert "blocked before source or service mutation" not in handoff_text
+    assert "until W2 releases the cluster" not in handoff_text
 
     entry_word = _number_word(len(v88))
     position_word = _number_word(len(positions))
