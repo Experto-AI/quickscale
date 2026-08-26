@@ -40,14 +40,14 @@ The open release work is one principle with four failure modes. Every ticket is 
         DUPLICATED      SILENT         UNOWNED       UNENFORCED
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
-          SA124         SA165           SA142          SA123
-          SA118         SA152           SA135          SA166
-          SA163           │             SA161            │
-          SA160       (state/tool      (images,       (dep-vuln +
-          SA164        fallbacks)       DB, dead       security
-            │                            code)          scanners,
-         (paths, CI                                     testimony
-          env, cookies)                                 trail)
+          SA118         SA165           SA135          SA123
+          SA163         SA152           SA161          SA166
+          SA160           │               │              │
+          SA164       (state/tool      (DB, dead      (dep-vuln +
+            │          fallbacks)       code)          security
+       (defaults, CI env,                             scanners,
+        cookies, watchlists)                         testimony
+                                                        trail)
 ```
 
 **The one sentence:** *Every fact should have exactly one home, and every consumer should
@@ -60,9 +60,9 @@ and SA162 correction are now complete, with their evidence archived in the chang
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | the SA117 required-path set restated in four places; manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA124, SA118, SA163, SA160, SA164 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA118, SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
-| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | E2E images accumulate; the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA142, SA135, SA161 |
+| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
@@ -70,64 +70,8 @@ context. Its closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md),
 scope allowlist, gate registry, parity, and quality-baseline suites run through the same
 declared gate layer they protect.
 
-The quality acceptance rule remains: leave `make quality` no worse than found. SA124's headline
-criterion — *"`scripts/test_check_sa117_scope.py` covers the divergence failure"* — lands in a
-suite with a declared execution context.
-
 The gate-layer closure evidence, including the current scripts census, registry projection,
 hosted job closure, and isolation Make entrypoint, is archived in [CHANGELOG.md](../../CHANGELOG.md).
-
----
-
-# Gates and declared wiring
-
-SA124's acceptance criterion is written into a suite with a declared execution context.
-
-## SA124 — Unify SA117 scope-tool path authority
-
-### The mental model
-
-SA117 was a large, high-risk refactor around embedded-manifest and core version lockstep. To keep it controllable it was given a **scope guard**: an explicit allowlist of every file any SA117 phase may touch, in `scripts/sa117_scope.json` (~120 entries, each with a `path`, a `phase`, and `notes`). `scripts/check_sa117_scope.py` enforces it in several modes:
-
-- `worktree` — do the changed files fall inside the allowlist?
-- `emit` — print the allowlist, optionally filtered by phase
-- `lock` — do candidate paths match the allowlist *exactly*?
-- `lock-diff` — fail-closed proof that `poetry.lock` did not drift, normalising only the twelve approved module version leaves
-
-Mental model: the allowlist is a **capability boundary**. The tool's job is to make it impossible to change a file nobody agreed to change.
-
-### The concrete defect
-
-A guard whose own contract is restated in several places can drift, and drift in a guard is worse than drift anywhere else — it fails *open*. The "required-path set" (which inputs each mode requires, and which paths it covers) is currently expressed independently in at least four places:
-
-1. **The CLI** — `argparse` in `check_sa117_scope.py` (~line 826): `worktree.add_argument("--paths", nargs="*", default=None)` with a *runtime* check `raise ValueError("--paths is required for worktree mode")` at line 159. Note `--paths` is declared optional to argparse and required by hand later — that gap is itself a small instance of the problem.
-2. **The Make target** — `Makefile:916-938` re-implements the same requirement in shell:
-   ```make
-   sa117-check:
-   	@if [ -z "$(PATHS)" ]; then \
-   		echo "Error: PATHS is required (space-separated list of changed files)."; \
-   ```
-   and again for `sa117-lock`, and again with different variables for `sa117-lock-diff` (`SA117_BASELINE_REF`, `SA117_EXPECTED_VERSION`).
-3. **`--help` / the Make help text** — `Makefile:234-237` describes the requirements in prose: `"make sa117-lock-diff - Fail-closed poetry.lock drift proof (SA117_BASELINE_REF required)"`.
-4. **`scripts/sa117_scope.json`** — the path data itself.
-
-Four statements of one contract. Add a fifth consumer, or change a requirement in one place, and the others silently disagree.
-
-Contrast this with how the same file handles the *module* inventory: `_authoritative_module_names()` (line ~48) shells out to the discovery shim and raises `LockDiffError` if it cannot. That is the pattern this ticket generalises — the file already knows how to do it right for one kind of fact.
-
-### Implementation shape
-
-Define the required-input/required-path contract once — most naturally as data in or beside `sa117_scope.json`, or as a declarative table in `check_sa117_scope.py` that argparse is built from. Then:
-
-- argparse builds its `required=` flags and help strings from it, so `--help` cannot drift.
-- The Make target stops re-checking emptiness in shell and lets the tool report the error, or reads the same declaration.
-- A test enumerates the consumers and fails if one bypasses the source.
-
-The last bullet is the durable part. *"a test fails if any consumer is added without going through that source"* means the enforcement must be structural, not a comment saying "keep these in sync".
-
-### The advisory
-
-`SA117E1-REV-004` is carried by this ticket. **Be aware before starting: that identifier appears nowhere in the repository except the roadmap line itself** — not in `CHANGELOG.md`, not in `docs/`, not in the scope JSON. Its original text is not recoverable from the tree. Your first action should be locating it (check the v87 review history in version control, or `docs/planning/sa117e-4-corrected-source-plan.md`). If it cannot be recovered, the acceptance criterion's *"or explicitly re-carried with rationale"* branch applies — record that the advisory text is lost and either close it as unrecoverable or restate what you believe it covered. Do not silently drop it.
 
 ---
 
@@ -241,68 +185,7 @@ Its `baseline_evidence` entries show the established convention — each past re
 
 # Service-backed lifecycle
 
-The two lifecycle tickets ask the same question: *who owns the lifecycle of a thing we create?*
-
-## SA142 — Reuse and clean E2E Docker images
-
-### The mental model
-
-Every Docker E2E run creates several kinds of object, and they have genuinely different natural lifetimes:
-
-| Object | Should be | Why |
-|---|---|---|
-| **Image** | *stable and shared* | An expensive build artifact; identical inputs → identical image. Rebuilding it per run is waste. |
-| **Container** | *per-run and disposable* | Carries run state; sharing one across parallel lanes causes interference. |
-| **Port** | *per-run* | Two lanes on one port collide. |
-| **Volume** | *per-run* | Carries database state that must not leak between runs. |
-
-`scripts/test_e2e.sh` gets three of these four right, and rigorously so. Look at lines 483-500:
-
-```bash
-lane_container_prefix="$(sanitize_scope "${lane_prefix_base}-${BASHPID}")"
-lane_compose_project="$(sanitize_scope "${lane_compose_base}-${BASHPID}")"
-export QS_E2E_CONTAINER_PREFIX="$lane_container_prefix"
-export COMPOSE_PROJECT_NAME="$lane_compose_project"
-```
-
-Per-lane, PID-scoped identity, with `cleanup_scoped_containers()` reclaiming by both the compose-project label and the name prefix, signal traps on TERM/INT/HUP, and a pre-cleanup pass before the run. This is careful code.
-
-### The concrete defect
-
-The image is the one that isn't handled — and the cause is a single missing line in `quickscale_core/src/quickscale_core/generator/templates/docker-compose.yml.j2`:
-
-```yaml
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        INSTALL_DEV: "true"
-    container_name: {{ project_name }}_backend
-```
-
-There is a `build:` stanza but **no `image:` key**. When Compose builds a service with no explicit image name, it derives one from the project name: `<compose_project>-backend`.
-
-And `COMPOSE_PROJECT_NAME` is exported as `${lane_compose_base}-${BASHPID}` — deliberately different every run.
-
-So image identity inherits container identity. Consequences:
-
-1. **No reuse.** Every run builds from scratch under a new name, even with byte-identical inputs. That is the "measurably faster second run" the acceptance asks for.
-2. **No reclamation.** Cleanup is `docker compose down -v --remove-orphans` plus container removal by label and name. `down` removes containers, networks, and volumes — **not images**. Nothing in the script ever runs `docker image rm` or `docker image prune`. Every run permanently leaks one image.
-
-Confirm the leak before starting: `docker images | grep backend | wc -l` on this machine, given the E2E history, is your baseline evidence.
-
-### Implementation shape
-
-Give the backend service an explicit `image:` whose tag derives from **build inputs**, not from run identity — the Dockerfile, the Python constraint, the lockfile, the installed module set. Content-addressing (a hash of those inputs) gives correct reuse *and* correct invalidation: change an input, get a new tag automatically; change nothing, hit the cache.
-
-Then add image reclamation to the cleanup path for the variable images that remain, filtered by a QuickScale-owned label so you never remove an unrelated user image. **A blanket `docker image prune -a` is unacceptable** — E2E runs on developer machines.
-
-`--no-cleanup` must still preserve everything needed for diagnosis. Its current output tells the user exactly how to clean up by hand (lines 513-516); extend that guidance to images rather than leaving a new class of leftover undocumented.
-
-### Watch out
-
-This edits a **generated-project template**, so it changes emitted output — the SA90 emission-parity fixture will need the same rebaseline-with-rationale treatment described under SA118. Four tickets touch that fixture in one release — SA142, SA118, SA161, and SA160 — and each appends its own `baseline_evidence` entry; the sync-before-merge-back procedure must preserve every prior one.
+The remaining lifecycle ticket asks: *who owns the lifecycle of a thing we create?*
 
 ## SA135 — Give test suites an owned PostgreSQL lifecycle
 
@@ -791,9 +674,11 @@ competing representations at kickoff: a wiring projection in six manifests, a Py
 inside core for five more, nothing at all for `social`, an inert `django_apps:` key in eleven
 manifests that no code reads, and a per-module function pair in the CLI. SA167a's implementation
 and accepted root quality-gate oracle are recorded on the integration branch:
-all five former core literals now come from their own manifest projections. SA167b P1/P2 have
-since moved analytics, backups, blog, forms, listings, and notifications; auth, orgs, and storage
-are the three remaining core-side adapter blocks in the bounded relocation seam. When a fact
+all five former core literals now come from their own manifest projections. SA167b has since moved
+every module: P1/P2 relocated analytics, backups, blog, forms, listings, and notifications, and P3
+relocated auth, orgs, and storage, leaving no per-module block in core. P3 is complete on its
+worktree and not yet merged, so the integration branch still shows the three core-side blocks
+until it lands. When a fact
 lives in five places, no one can tell which is the answer, and `social` shipped models
 and a migration that no generated project ever installed.
 
@@ -804,5 +689,5 @@ tickets make the tree match it — `a` declares, `b` relocates, `c` retires the 
 and adds the gate that keeps it true, `d` drains the CLI.
 
 **Why the split is by phase and not by module.** All nine core-side blocks began in one
-1,508-line file; the three remaining blocks still share that file. The phase boundary keeps one
+1,508-line file, and every phase has had to edit that same file. The phase boundary keeps one
 logical adapter migration understandable without turning it into nine separate conceptual sections.

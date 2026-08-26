@@ -54,6 +54,8 @@ import sys
 from pathlib import Path
 from typing import Any, Final
 
+from scripts.check_sa117_scope import load_scope
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -209,18 +211,13 @@ def op_capture(
     Returns 0 on success, 2 on error.
     """
     try:
+        scope_entries = load_scope(scope_path)
         scope_digest = _compute_scope_digest(scope_path)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, OSError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
-    # Count paths in the scope
-    try:
-        scope_data = json.loads(scope_path.read_bytes())
-        paths_count = len(scope_data.get("paths", []))
-    except (json.JSONDecodeError, OSError) as exc:
-        print(f"ERROR: failed to read scope file: {exc}", file=sys.stderr)
-        return 2
+    paths_count = len(scope_entries)
 
     evidence = _make_evidence(
         version=version,
@@ -263,6 +260,12 @@ def op_verify(
 
     Returns 0 on pass, 1 on verification failure, 2 on error.
     """
+    try:
+        scope_entries = load_scope(scope_path)
+    except (FileNotFoundError, OSError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
     # Load evidence
     try:
         evidence = _read_evidence(evidence_path)
@@ -279,6 +282,14 @@ def op_verify(
     if evidence["paths_count"] <= 0:
         print(
             f"VERIFY FAILED: paths_count is not positive: {evidence['paths_count']}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if evidence["paths_count"] != len(scope_entries):
+        print(
+            "VERIFY FAILED: paths_count does not match strict scope contract: "
+            f"{evidence['paths_count']} != {len(scope_entries)}",
             file=sys.stderr,
         )
         return 1

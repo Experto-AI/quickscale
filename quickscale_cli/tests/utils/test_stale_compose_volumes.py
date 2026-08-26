@@ -222,13 +222,15 @@ class TestUpMigrationFailureRemediation:
         monkeypatch.setattr(f"{module}._validate_theme_preflight_for_up", lambda: None)
         monkeypatch.setattr(f"{module}._validate_project_and_docker", lambda: True)
         monkeypatch.setattr(f"{module}.get_project_config", lambda strict=True: None)
+        monkeypatch.setattr(f"{module}._backend_compose_environment", lambda: {})
         monkeypatch.setattr(f"{module}.get_port_from_env", lambda: 8000)
         monkeypatch.setattr(f"{module}.is_port_available", lambda port: True)
         monkeypatch.setattr(
             f"{module}._require_docker_compose_command", lambda: ["docker", "compose"]
         )
         monkeypatch.setattr(
-            f"{module}._run_docker_compose_up", lambda cmd, build, no_cache: None
+            f"{module}._run_docker_compose_up",
+            lambda cmd, build, no_cache, environment=None: None,
         )
 
         def _raise_migrate() -> None:

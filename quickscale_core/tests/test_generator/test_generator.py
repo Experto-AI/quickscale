@@ -468,6 +468,48 @@ class TestProjectGeneratorMultipleProjects:
             assert (output_path / project_name / "settings" / "base.py").exists()
 
 
+class TestGeneratedProjectSa142Contract:
+    """Verify fresh generation emits the SA142 image/resource contract."""
+
+    def test_generated_compose_consumes_identity_and_labels_resources(
+        self, tmp_path: Path
+    ) -> None:
+        """Generated Compose keeps direct defaults and labels all removable objects."""
+        output_path = tmp_path / "sa142_project"
+        ProjectGenerator(theme="showcase_react").generate("sa142_project", output_path)
+
+        compose = (output_path / "docker-compose.yml").read_text()
+        dockerfile = (output_path / "Dockerfile").read_text()
+
+        assert (
+            'image: "${QUICKSCALE_BACKEND_IMAGE:-quickscale-backend:sa142_project}"'
+            in compose
+        )
+        assert (
+            'container_name: "${QUICKSCALE_RESOURCE_PREFIX:-sa142_project}_backend"'
+            in compose
+        )
+        assert (
+            'container_name: "${QUICKSCALE_RESOURCE_PREFIX:-sa142_project}_db"'
+            in compose
+        )
+        assert (
+            'container_name: "${QUICKSCALE_RESOURCE_PREFIX:-sa142_project}_frontend"'
+            in compose
+        )
+        assert compose.count('com.quickscale.owner: "quickscale"') == 7
+        assert compose.count('com.quickscale.lifecycle: "e2e"') == 7
+        assert compose.count("com.quickscale.scope:") == 7
+        assert 'com.quickscale.owner="quickscale"' in dockerfile
+        assert (
+            'com.quickscale.image-contract="${QUICKSCALE_IMAGE_CONTRACT}"' in dockerfile
+        )
+        assert (
+            'com.quickscale.image-digest="${QUICKSCALE_BACKEND_IMAGE_DIGEST}"'
+            in dockerfile
+        )
+
+
 class TestProjectGeneratorThemeValidation:
     """Tests for theme validation and template path edge cases."""
 

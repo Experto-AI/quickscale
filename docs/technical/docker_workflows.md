@@ -24,6 +24,17 @@ docker:
 QuickScale keeps the generated `docker-compose.yml` file name, but repo-owned
 commands and docs use the Docker Compose v2 plugin syntax: `docker compose`.
 
+### Image and resource identity
+
+QuickScale deliberately gives Docker images and running resources different lifetimes:
+
+- The backend image is stable and content-addressed. QuickScale hashes the Dockerfile, generated-project Python/package metadata, lockfile state, embedded module names and versions, and effective build arguments into `quickscale-backend:sha256-<digest>`. Re-running `quickscale up --build` with unchanged inputs reuses that identity; a bound-input change selects a new one.
+- Containers, ports, volumes, networks, and Compose project names remain run- or project-scoped so concurrent projects do not share mutable state.
+- Generated services, named volumes, and the default network carry `com.quickscale.owner`, `com.quickscale.lifecycle`, and `com.quickscale.scope` labels. Repository E2E cleanup requires exact label matches before removing a resource.
+- Final backend images carry owner, image-contract, and bound-digest labels. Normal E2E cleanup removes only matching untagged variable images and never runs a machine-wide image prune. E2E `--no-cleanup` preserves labelled resources and logs for diagnosis.
+
+Running `docker compose` directly remains supported. Without a QuickScale-injected content identity, Compose uses the generated project's fallback backend image name and the image records a `direct-compose` digest sentinel.
+
 ### `docker.start`
 
 Controls whether `quickscale apply` automatically starts Docker services.

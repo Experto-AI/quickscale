@@ -15,6 +15,7 @@
 # Options:
 #   --headed          Run Playwright in headed mode (show browser)
 #   --no-cleanup      Don't cleanup Docker containers (for debugging)
+#   --cleanup-scope S Clean only the exact labelled Docker scope S
 #   --full            Show full pytest output (per-file lines)
 #   --verbose         Alias for --full
 #   --help            Show this help message
@@ -42,6 +43,7 @@ NC='\033[0m' # No Color
 # Default options
 HEADED=""
 CLEANUP=true
+CLEANUP_SCOPE=""
 SHOW_FULL_OUTPUT=false
 PYTEST_ARGS=()
 
@@ -56,6 +58,14 @@ while [[ $# -gt 0 ]]; do
             CLEANUP=false
             shift
             ;;
+        --cleanup-scope)
+            if [[ $# -lt 2 || -z "$2" ]]; then
+                echo "Error: --cleanup-scope requires a Docker-safe scope" >&2
+                exit 2
+            fi
+            CLEANUP_SCOPE="$2"
+            shift 2
+            ;;
         --full|--verbose|-v)
             SHOW_FULL_OUTPUT=true
             shift
@@ -66,6 +76,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --headed          Run Playwright in headed mode (show browser)"
             echo "  --no-cleanup      Don't cleanup Docker containers (for debugging)"
+            echo "  --cleanup-scope S Clean only the exact labelled Docker scope S"
             echo "  --full            Show full pytest output (per-file lines)"
             echo "  --verbose, -v     Alias for --full"
             echo "  --help, -h        Show this help message"
@@ -321,7 +332,10 @@ echo ""
 
 # The parent owns only the worker logs. Containers are cleaned up by the lane
 # that created them, so concurrent lanes never remove one another's services.
-WORKER_TEMP_DIR="$(mktemp -d)"
+# Scope is deliberately empty until the temp allocation succeeds; signal/EXIT
+# cleanup is armed below before Docker can be touched.
+WORKER_TEMP_DIR=""
+RUN_SCOPE=""
 declare -a WORKER_PIDS=()
 declare -a WORKER_ORDER=()
 
@@ -344,6 +358,110 @@ cleanup_temp_files() {
     if [ -n "${WORKER_TEMP_DIR:-}" ] && [ -d "$WORKER_TEMP_DIR" ]; then
         rm -rf "$WORKER_TEMP_DIR"
     fi
+}
+
+validate_scope() {
+    local scope="$1"
+    if [[ ! "$scope" =~ ^[a-z0-9][a-z0-9_-]{0,62}$ ]]; then
+        echo -e "${RED}Error: Docker scope must be lowercase and Docker-safe${NC}" >&2
+        return 1
+    fi
+}
+
+label_filter_args() {
+    local scope="$1"
+    LABEL_FILTER_ARGS=(
+        --filter "label=com.quickscale.owner=quickscale"
+        --filter "label=com.quickscale.lifecycle=e2e"
+        --filter "label=com.quickscale.scope=$scope"
+    )
+}
+
+resource_ids() {
+    local resource_type="$1" scope="$2"
+    label_filter_args "$scope"
+    case "$resource_type" in
+        container) docker ps -aq "${LABEL_FILTER_ARGS[@]}" ;;
+        volume) docker volume ls -q "${LABEL_FILTER_ARGS[@]}" ;;
+        network) docker network ls -q "${LABEL_FILTER_ARGS[@]}" ;;
+        *) echo "Unknown Docker resource type: $resource_type" >&2; return 2 ;;
+    esac
+}
+
+inspect_resource_labels() {
+    local resource_type="$1" resource_id="$2" scope="$3" output
+    case "$resource_type" in
+        container) output="$(docker container inspect --format '{{index .Config.Labels "com.quickscale.owner"}}|{{index .Config.Labels "com.quickscale.lifecycle"}}|{{index .Config.Labels "com.quickscale.scope"}}' "$resource_id")" ;;
+        volume|network) output="$(docker "$resource_type" inspect --format '{{index .Labels "com.quickscale.owner"}}|{{index .Labels "com.quickscale.lifecycle"}}|{{index .Labels "com.quickscale.scope"}}' "$resource_id")" ;;
+        *) return 2 ;;
+    esac
+    [ "$output" = "quickscale|e2e|$scope" ]
+}
+
+cleanup_scoped_images() {
+    local scope="$1" digest="${2:-}" image_ids image_id output
+    # A missing digest means the stable image contract was not allocated by
+    # this process.  It is safer to retain images than to guess.
+    [ -n "$digest" ] || return 0
+    image_ids="$(docker image ls -aq \
+        --filter "label=com.quickscale.owner=quickscale" \
+        --filter "label=com.quickscale.image-contract=sa142" \
+        --filter "label=com.quickscale.image-digest=$digest" \
+        --filter dangling=true 2>/dev/null)" || return 1
+    for image_id in $image_ids; do
+        output="$(docker image inspect --format '{{index .Config.Labels "com.quickscale.owner"}}|{{index .Config.Labels "com.quickscale.image-contract"}}|{{index .Config.Labels "com.quickscale.image-digest"}}|{{json .RepoTags}}' "$image_id")" || return 1
+        # Tagged stable images are never removable, even if a daemon ignores
+        # the dangling filter.  Any label mismatch fails closed.
+        case "$output" in
+            "quickscale|sa142|$digest|[]") docker image rm "$image_id" || return 1 ;;
+            *) echo "Refusing image cleanup for mismatched or tagged image $image_id" >&2; return 1 ;;
+        esac
+    done
+}
+
+cleanup_scoped_resources() {
+    local scope="$1" resource_type ids resource_id
+    local -A cleanup_ids=()
+    local -a ids_array=()
+    validate_scope "$scope" || return 1
+    for resource_type in container volume network; do
+        if ! ids="$(resource_ids "$resource_type" "$scope")"; then
+            echo "Unable to enumerate labelled $resource_type resources for scope $scope" >&2
+            return 1
+        fi
+        for resource_id in $ids; do
+            if ! inspect_resource_labels "$resource_type" "$resource_id" "$scope"; then
+                echo "Refusing cleanup: $resource_type $resource_id failed label reinspection" >&2
+                return 1
+            fi
+        done
+        cleanup_ids[$resource_type]="$ids"
+    done
+
+    # Deletion is fixed-argv and ordered so dependent resources disappear
+    # before volumes and networks.  No Compose project/name selector is used.
+    if [ -n "${cleanup_ids[container]:-}" ]; then
+        mapfile -t ids_array <<< "${cleanup_ids[container]}"
+        docker rm -f "${ids_array[@]}" || return 1
+    fi
+    if [ -n "${cleanup_ids[volume]:-}" ]; then
+        mapfile -t ids_array <<< "${cleanup_ids[volume]}"
+        docker volume rm -f "${ids_array[@]}" || return 1
+    fi
+    if [ -n "${cleanup_ids[network]:-}" ]; then
+        mapfile -t ids_array <<< "${cleanup_ids[network]}"
+        docker network rm "${ids_array[@]}" || return 1
+    fi
+
+    for resource_type in container volume network; do
+        if ! ids="$(resource_ids "$resource_type" "$scope")"; then
+            return 1
+        fi
+        if [ -n "$ids" ]; then
+            echo "Labelled $resource_type resources remain in scope $scope: $ids" >&2
+            return 1
+        fi
+    done
 }
 
 # _fmt_duration  — humanize a second count for a run measured in hours.
@@ -433,20 +551,13 @@ trap '_handle_worker_signal TERM 143' TERM
 trap '_handle_worker_signal INT 130' INT
 trap '_handle_worker_signal HUP 129' HUP
 
-cleanup_scoped_containers() {
-    local compose_project="$1"
-    local container_prefix="$2"
-    local container_ids
-
-    container_ids="$(docker ps -aq --filter "label=com.docker.compose.project=$compose_project" 2>/dev/null || true)"
-    if [ -n "$container_ids" ]; then
-        printf '%s\n' "$container_ids" | xargs -r docker rm -f 2>/dev/null || true
-    fi
-    container_ids="$(docker ps -aq --filter "name=$container_prefix" 2>/dev/null || true)"
-    if [ -n "$container_ids" ]; then
-        printf '%s\n' "$container_ids" | xargs -r docker rm -f 2>/dev/null || true
-    fi
-}
+# Arm obligations before allocating the run scope.  The scope is frozen once
+# from the unique temp directory and is never recomputed during cleanup.
+WORKER_TEMP_DIR="$(mktemp -d)"
+RUN_SCOPE="$(sanitize_scope "qs-e2e-${WORKER_TEMP_DIR##*/}")"
+RUN_SCOPE="${RUN_SCOPE:0:63}"
+validate_scope "$RUN_SCOPE"
+export QS_E2E_RUN_SCOPE="$RUN_SCOPE"
 
 run_e2e_lane() {
     local lane="$1"
@@ -458,7 +569,9 @@ run_e2e_lane() {
     local lane_compose_base
     local lane_container_prefix
     local lane_compose_project
+    local lane_resource_scope
     local lane_app_port
+    local lane_image_digest
     local lane_cleanup_done=false
     local lane_tests_passed=false
     local -a pytest_cmd
@@ -478,14 +591,16 @@ run_e2e_lane() {
     # Every lane gets its own Compose project, container-name prefix, and host
     # port.  In serial mode an explicitly requested port remains unchanged;
     # in concurrent mode it is reserved for Core and CLI receives a free port.
-    lane_prefix_base="$(sanitize_scope "${QS_E2E_CONTAINER_PREFIX:-qs-e2e}-${lane}")"
-    lane_prefix_base="${lane_prefix_base:0:35}"
-    lane_container_prefix="$(sanitize_scope "${lane_prefix_base}-${BASHPID}")"
-    lane_container_prefix="${lane_container_prefix:0:50}"
+    lane_prefix_base="$(sanitize_scope "${RUN_SCOPE}-${lane}")"
+    lane_prefix_base="${lane_prefix_base:0:48}"
+    lane_resource_scope="$(sanitize_scope "${lane_prefix_base}-${BASHPID}")"
+    lane_resource_scope="${lane_resource_scope:0:63}"
+    lane_container_prefix="$lane_resource_scope"
     lane_compose_base="$(sanitize_scope "${QS_E2E_COMPOSE_PROJECT_NAME:-$lane_prefix_base}")"
-    lane_compose_base="${lane_compose_base:0:35}"
+    lane_compose_base="${lane_compose_base:0:48}"
     lane_compose_project="$(sanitize_scope "${lane_compose_base}-${BASHPID}")"
-    lane_compose_project="${lane_compose_project:0:50}"
+    lane_compose_project="${lane_compose_project:0:63}"
+    lane_image_digest="${QUICKSCALE_BACKEND_IMAGE_DIGEST:-}"
 
     if [ -n "${QS_E2E_APP_PORT:-}" ] && { [ "$E2E_PARALLEL" = false ] || [ "$lane" = "core" ]; }; then
         lane_app_port="$QS_E2E_APP_PORT"
@@ -494,8 +609,17 @@ run_e2e_lane() {
     fi
 
     export QS_E2E_LANE="$lane"
+    export QS_E2E_RUN_SCOPE="$RUN_SCOPE"
+    export QS_E2E_RESOURCE_SCOPE="$lane_resource_scope"
     export QS_E2E_CONTAINER_PREFIX="$lane_container_prefix"
     export QS_E2E_COMPOSE_PROJECT_NAME="$lane_compose_project"
+    export QS_E2E_LIFECYCLE="e2e"
+    if [ "$CLEANUP" = true ]; then
+        export QS_E2E_NO_CLEANUP=0
+    else
+        export QS_E2E_NO_CLEANUP=1
+    fi
+    export QUICKSCALE_RESOURCE_PREFIX="$lane_resource_scope"
     export QS_E2E_APP_PORT="$lane_app_port"
     export COMPOSE_PROJECT_NAME="$lane_compose_project"
 
@@ -505,15 +629,21 @@ run_e2e_lane() {
         fi
         lane_cleanup_done=true
         if [ "$CLEANUP" = true ]; then
-            echo -e "\n${YELLOW}[$lane_label] Cleaning up Docker containers (pytest-docker handles this)...${NC}"
-            (cd "$CORE_DIR/tests" && docker compose -f docker-compose.test.yml down -v --remove-orphans 2>/dev/null || true)
-            cleanup_scoped_containers "$lane_compose_project" "$lane_container_prefix"
+            echo -e "\n${YELLOW}[$lane_label] Cleaning up labelled Docker scope $lane_resource_scope...${NC}"
+            cleanup_scoped_images "$lane_resource_scope" "$lane_image_digest" || cleanup_status=$?
+            cleanup_scoped_resources "$lane_resource_scope" || cleanup_status=$?
+            if [ "${cleanup_status:-0}" -ne 0 ]; then
+                echo -e "${RED}[$lane_label] ✗ Cleanup failed for scope $lane_resource_scope${NC}" >&2
+                echo "[$lane_label] Cleanup command: $SCRIPT_DIR/test_e2e.sh --cleanup-scope $lane_resource_scope" >&2
+                return 1
+            fi
             echo -e "${GREEN}[$lane_label] ✓ Cleanup complete${NC}"
         else
             echo -e "\n${YELLOW}[$lane_label] Skipping cleanup (--no-cleanup specified)${NC}"
-            echo -e "${BLUE}[$lane_label] To manually cleanup this lane, run:${NC}"
-            echo "  docker ps -aq --filter label=com.docker.compose.project=$lane_compose_project | xargs -r docker rm -f"
-            echo "  docker ps -aq --filter name=$lane_container_prefix | xargs -r docker rm -f"
+            echo -e "${BLUE}[$lane_label] Diagnostic scope: $lane_resource_scope${NC}"
+            echo "  docker ps -a --filter label=com.quickscale.owner=quickscale --filter label=com.quickscale.lifecycle=e2e --filter label=com.quickscale.scope=$lane_resource_scope"
+            echo "  docker logs ${lane_container_prefix}_backend"
+            echo "  $SCRIPT_DIR/test_e2e.sh --cleanup-scope $lane_resource_scope"
         fi
     }
 
@@ -527,7 +657,14 @@ run_e2e_lane() {
     echo ""
 
     echo -e "${BLUE}[$lane_label] Cleaning up any orphaned test containers...${NC}"
-    cleanup_scoped_containers "$lane_compose_project" "$lane_container_prefix"
+    if [ "$CLEANUP" = true ]; then
+        if ! cleanup_scoped_images "$lane_resource_scope" "$lane_image_digest" || \
+            ! cleanup_scoped_resources "$lane_resource_scope"; then
+            echo -e "${RED}[$lane_label] ✗ Pre-clean failed; pytest will not run${NC}" >&2
+            lane_cleanup_done=true
+            return 1
+        fi
+    fi
     echo -e "${GREEN}[$lane_label] ✓ Pre-cleanup complete${NC}"
     echo ""
 
@@ -541,6 +678,11 @@ run_e2e_lane() {
     fi
     if [ "$lane" = "core" ] && [ -n "$HEADED" ]; then
         pytest_cmd+=("$HEADED")
+    fi
+    if [ "$CLEANUP" = false ]; then
+        # Diagnostics must stop at the first failing test so retained state
+        # describes one failure rather than a later cascade.
+        pytest_cmd+=(--maxfail=1)
     fi
     if [ "${E2E_XDIST_WORKERS:-0}" -ge 2 ]; then
         pytest_cmd+=(-n "$E2E_XDIST_WORKERS" --dist loadscope)
@@ -563,10 +705,13 @@ run_e2e_lane() {
 
     echo ""
     if [ "$lane_tests_passed" = true ]; then
-        cleanup_lane
-        return 0
+        if cleanup_lane; then
+            return 0
+        fi
+        echo -e "${RED}[$lane_label] ✗ Tests passed but cleanup failed${NC}" >&2
+        return 1
     fi
-    cleanup_lane
+    cleanup_lane || echo "[$lane_label] Cleanup failed after primary test failure; preserving test exit" >&2
     return 1
 }
 
@@ -654,6 +799,14 @@ run_lanes_parallel() {
 
     [ "$failed" = false ]
 }
+
+if [ -n "$CLEANUP_SCOPE" ]; then
+    validate_scope "$CLEANUP_SCOPE"
+    echo -e "${BLUE}Cleaning labelled E2E resources in scope $CLEANUP_SCOPE${NC}"
+    cleanup_scoped_images "$CLEANUP_SCOPE" "${QUICKSCALE_BACKEND_IMAGE_DIGEST:-}" || exit 1
+    cleanup_scoped_resources "$CLEANUP_SCOPE"
+    exit $?
+fi
 
 echo -e "${BLUE}[1/4] Checking Docker...${NC}"
 if ! docker info > /dev/null 2>&1; then

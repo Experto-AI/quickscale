@@ -25,7 +25,6 @@ import urllib.parse
 from pathlib import Path
 
 import pytest
-
 from quickscale_cli.utils.docker_utils import get_docker_compose_command
 from quickscale_core.generator.runtime_pins import (
     DJANGO_CI_MATRIX_VERSION,
@@ -568,7 +567,7 @@ class TestFullE2EWorkflow:
 
         # Verify docker compose config is valid
         result = subprocess.run(
-            [*get_docker_compose_command(), "config"],
+            [*get_docker_compose_command(), "config", "--format", "json"],
             cwd=project_path,
             capture_output=True,
             text=True,
@@ -576,6 +575,70 @@ class TestFullE2EWorkflow:
 
         # Should successfully parse the config
         assert result.returncode == 0, f"docker compose config failed: {result.stderr}"
+
+        config = json.loads(result.stdout)
+        services = config["services"]
+        expected_scope = os.environ.get("QUICKSCALE_RESOURCE_PREFIX", project_name)
+        assert services["backend"]["image"] == "quickscale-backend:docker_test"
+        assert (
+            services["backend"]["build"]["args"]["QUICKSCALE_BACKEND_IMAGE_DIGEST"]
+            == "direct-compose"
+        )
+        assert (
+            services["backend"]["build"]["args"]["QUICKSCALE_IMAGE_CONTRACT"] == "sa142"
+        )
+        for service_name in ("db", "frontend", "backend"):
+            labels = services[service_name]["labels"]
+            assert labels["com.quickscale.owner"] == "quickscale"
+            assert labels["com.quickscale.lifecycle"] == "e2e"
+            assert labels["com.quickscale.scope"] == expected_scope
+        assert services["backend"]["container_name"] == f"{expected_scope}_backend"
+        assert services["db"]["container_name"] == f"{expected_scope}_db"
+        assert services["frontend"]["container_name"] == f"{expected_scope}_frontend"
+
+        volumes = config["volumes"]
+        for volume_name in ("postgres_data", "static_volume", "media_volume"):
+            labels = volumes[volume_name]["labels"]
+            assert labels["com.quickscale.owner"] == "quickscale"
+            assert labels["com.quickscale.lifecycle"] == "e2e"
+            assert labels["com.quickscale.scope"] == expected_scope
+        network_labels = config["networks"]["default"]["labels"]
+        assert network_labels["com.quickscale.owner"] == "quickscale"
+        assert network_labels["com.quickscale.lifecycle"] == "e2e"
+        assert network_labels["com.quickscale.scope"] == expected_scope
+
+        injected_env = {
+            **os.environ,
+            "QUICKSCALE_BACKEND_IMAGE": "quickscale-backend:sha256-bound",
+            "QUICKSCALE_BACKEND_IMAGE_DIGEST": "bound-digest",
+            "QUICKSCALE_RESOURCE_PREFIX": "run-bound",
+        }
+        injected = subprocess.run(
+            [*get_docker_compose_command(), "config", "--format", "json"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env=injected_env,
+        )
+        assert injected.returncode == 0, (
+            f"injected docker compose config failed: {injected.stderr}"
+        )
+        injected_config = json.loads(injected.stdout)
+        injected_services = injected_config["services"]
+        assert (
+            injected_services["backend"]["image"] == "quickscale-backend:sha256-bound"
+        )
+        assert (
+            injected_services["backend"]["build"]["args"][
+                "QUICKSCALE_BACKEND_IMAGE_DIGEST"
+            ]
+            == "bound-digest"
+        )
+        assert injected_services["backend"]["container_name"] == "run-bound_backend"
+        assert (
+            injected_services["backend"]["labels"]["com.quickscale.scope"]
+            == "run-bound"
+        )
 
     def test_generated_project_tests_run(self, tmp_path, e2e_postgres_url):
         """Verify the generated project's test suite runs successfully."""
@@ -1990,6 +2053,110 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
 @pytest.mark.e2e
 class TestDockerIntegration:
     """Test Docker-related functionality."""
+
+    @pytest.mark.e2e
+    def test_sa142_backend_image_reuse_and_warm_build(self, tmp_path, docker_available):
+        """Measure one cold/no-cache start against two plain warm starts."""
+        from quickscale_core.generator import ProjectGenerator
+
+        helper = TestFullE2EWorkflow()
+        project_name = "sa142_warm_build"
+        project_path = tmp_path / project_name
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+
+        scope = os.environ.get("QS_E2E_RESOURCE_SCOPE", "sa142-warm-build")
+        port = int(os.environ.get("QS_E2E_APP_PORT", str(helper._find_free_port())))
+        env = {
+            **os.environ,
+            "COMPOSE_PROJECT_NAME": scope,
+            "QUICKSCALE_RESOURCE_PREFIX": scope,
+            "QS_E2E_RESOURCE_SCOPE": scope,
+            "PORT": str(port),
+        }
+
+        def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["poetry", "run", "quickscale", *args],
+                cwd=project_path,
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=1800,
+            )
+
+        def reset() -> None:
+            down = run_cli("down", "--volumes")
+            assert down.returncode == 0, down.stderr
+            helper._ensure_port_free(port)
+
+        durations: list[float] = []
+        try:
+            for iteration in range(3):
+                reset()
+                started = time.monotonic()
+                up_args = ("up", "--no-cache") if iteration == 0 else ("up",)
+                up = run_cli(*up_args)
+                assert up.returncode == 0, up.stderr
+                migrate = run_cli("manage", "migrate", "--noinput")
+                assert migrate.returncode == 0, migrate.stderr
+                durations.append(time.monotonic() - started)
+                if iteration > 0:
+                    assert "--build" not in up.stdout
+            assert len(durations) == 3
+            if os.environ.get("QS_SA142_TIMING_ACCEPTANCE") == "1":
+                cold, warm_one, warm_two = durations
+                warm_variability = abs(warm_one - warm_two)
+                assert warm_one < cold and warm_two < cold
+                assert cold - max(warm_one, warm_two) > warm_variability
+        finally:
+            reset()
+
+    @pytest.mark.e2e
+    def test_sa142_no_cleanup_diagnostic_probe(self, tmp_path, docker_available):
+        """Retain labelled resources and readable logs only in no-cleanup mode."""
+        from quickscale_core.generator import ProjectGenerator
+
+        helper = TestFullE2EWorkflow()
+        project_name = "sa142_no_cleanup_probe"
+        project_path = tmp_path / project_name
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+        scope = os.environ.get("QS_E2E_RESOURCE_SCOPE", "sa142-no-cleanup")
+        port = int(os.environ.get("QS_E2E_APP_PORT", str(helper._find_free_port())))
+        env = {
+            **os.environ,
+            "COMPOSE_PROJECT_NAME": scope,
+            "QUICKSCALE_RESOURCE_PREFIX": scope,
+            "QS_E2E_RESOURCE_SCOPE": scope,
+            "PORT": str(port),
+        }
+        up = subprocess.run(
+            ["poetry", "run", "quickscale", "up"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=1800,
+        )
+        assert up.returncode == 0, up.stderr
+        try:
+            logs = subprocess.run(
+                ["docker", "logs", f"{scope}_backend"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            assert logs.returncode == 0, logs.stderr
+        finally:
+            if os.environ.get("QS_E2E_NO_CLEANUP") != "1":
+                down = subprocess.run(
+                    ["poetry", "run", "quickscale", "down", "--volumes"],
+                    cwd=project_path,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    timeout=180,
+                )
+                assert down.returncode == 0, down.stderr
 
     def test_dockerfile_is_valid(self, tmp_path):
         """Verify Dockerfile can be built successfully."""

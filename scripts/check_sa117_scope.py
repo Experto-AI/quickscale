@@ -18,12 +18,14 @@ import datetime
 import hashlib
 import json
 import os
+import re
+import shlex
 import stat
 import subprocess
 import sys
 import tempfile
 import tomllib
-from collections.abc import Hashable
+from collections.abc import Hashable, Mapping
 from pathlib import Path
 from typing import Any, Final
 
@@ -76,9 +78,22 @@ def _locked_module_packages(module_names: list[str]) -> list[str]:
 
 
 # Compatibility for direct tests and callers that inspect the historical
-# private name.  Production paths below always resolve the inventory for the
-# candidate repository at the point of use.
-_LOCKED_MODULE_PACKAGES: Final[list[str]] = _locked_module_packages(_authoritative_module_names())
+# private name.  This is deliberately inert: authoritative discovery is lazy
+# and only happens while executing lock-diff.
+_LOCKED_MODULE_PACKAGES: Final[list[str]] = [
+    "quickscale-module-analytics",
+    "quickscale-module-auth",
+    "quickscale-module-backups",
+    "quickscale-module-billing",
+    "quickscale-module-blog",
+    "quickscale-module-crm",
+    "quickscale-module-forms",
+    "quickscale-module-listings",
+    "quickscale-module-notifications",
+    "quickscale-module-orgs",
+    "quickscale-module-social",
+    "quickscale-module-storage",
+]
 
 
 def _validate_no_nul(path: str) -> str:
@@ -103,18 +118,171 @@ def _normalise(path: str) -> str:
     return "/".join(resolved)
 
 
-def load_scope(scope_path: Path = DEFAULT_SCOPE_PATH) -> list[dict[str, Any]]:
-    """Load the path allowlist and validate its outer shape."""
+def _normalise_candidate(path: str) -> str:
+    """Reject rooted candidate spellings before lexical normalisation."""
+    _validate_no_nul(path)
+    if path.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", path):
+        raise ValueError(f"candidate path must be relative: {path!r}")
+    return _normalise(path)
+
+
+def _json_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON object keys before schema validation."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key!r}")
+        result[key] = value
+    return result
+
+
+def _load_scope_document(scope_path: Path = DEFAULT_SCOPE_PATH) -> dict[str, Any]:
+    """Load and strictly validate the single SA117 fact document."""
     if not scope_path.is_file():
         raise FileNotFoundError(f"SA117 scope file not found: {scope_path}")
-    with scope_path.open("rb") as handle:
-        data = json.load(handle)
-    if not isinstance(data, dict) or not isinstance(data.get("paths"), list):
-        raise ValueError(f"SA117 scope file must contain a 'paths' list: {scope_path}")
-    for entry in data["paths"]:
-        if not isinstance(entry, dict) or "path" not in entry:
-            raise ValueError(f"invalid SA117 scope entry: {entry!r}")
-    return data["paths"]
+    try:
+        with scope_path.open("rb") as handle:
+            data = json.load(handle, object_pairs_hook=_json_without_duplicate_keys)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"malformed SA117 scope JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("SA117 scope document must be a JSON object")
+    if set(data) != {"version", "description", "paths", "contract"}:
+        raise ValueError("SA117 scope document has missing or unknown top-level fields")
+    if not isinstance(data["version"], str) or not data["version"]:
+        raise ValueError("SA117 scope version must be a non-empty string")
+    if not isinstance(data["description"], str):
+        raise ValueError("SA117 scope description must be a string")
+    paths = data["paths"]
+    if not isinstance(paths, list):
+        raise ValueError("SA117 scope document 'paths' must be a list")
+    seen_paths: set[str] = set()
+    for entry in paths:
+        if not isinstance(entry, dict) or set(entry) != {"path", "phase", "notes"}:
+            raise ValueError(f"invalid SA117 scope entry shape: {entry!r}")
+        if not all(isinstance(entry[key], str) for key in ("path", "phase", "notes")):
+            raise ValueError(f"invalid SA117 scope entry types: {entry!r}")
+        path = entry["path"]
+        if not path or path != _normalise(path):
+            raise ValueError(f"SA117 scope path must be canonical and relative: {path!r}")
+        if path in seen_paths:
+            raise ValueError(f"duplicate SA117 scope path: {path!r}")
+        if not entry["phase"]:
+            raise ValueError(f"SA117 scope phase must be non-empty: {path!r}")
+        seen_paths.add(path)
+    build_allowlist(paths)
+    _validate_contract(data["contract"])
+    return data
+
+
+def _validate_contract(contract: Any) -> None:
+    """Validate mode/profile/option/consumer contract data without defaults."""
+    if not isinstance(contract, dict):
+        raise ValueError("SA117 contract must be a JSON object")
+    if set(contract) != {"schema_version", "profiles", "modes", "consumers", "metadata"}:
+        raise ValueError("SA117 contract has missing or unknown fields")
+    if type(contract["schema_version"]) is not int or contract["schema_version"] != 1:
+        raise ValueError("unsupported SA117 contract schema_version")
+    if contract["profiles"] != ["direct", "make"]:
+        raise ValueError("SA117 contract profiles must be exactly direct and make")
+    modes = contract["modes"]
+    if not isinstance(modes, dict) or set(modes) != {"worktree", "emit", "lock", "lock-diff"}:
+        raise ValueError("SA117 contract modes must be exactly worktree, emit, lock, lock-diff")
+    for mode_name, mode in modes.items():
+        if not isinstance(mode, dict) or set(mode) != {"help", "options", "profiles"}:
+            raise ValueError(f"invalid SA117 mode contract: {mode_name}")
+        if not isinstance(mode["help"], str) or not mode["help"]:
+            raise ValueError(f"SA117 mode {mode_name!r} help must be a non-empty string")
+        options = mode["options"]
+        profiles = mode["profiles"]
+        if not isinstance(options, dict) or not isinstance(profiles, dict):
+            raise ValueError(f"SA117 mode {mode_name!r} options/profiles must be objects")
+        if set(profiles) != {"direct", "make"}:
+            raise ValueError(f"SA117 mode {mode_name!r} profiles are incomplete")
+        seen_flags: set[str] = set()
+        for option_name, option in options.items():
+            if not re.fullmatch(r"[a-z][a-z0-9-]*", option_name):
+                raise ValueError(f"invalid SA117 option name: {mode_name}/{option_name}")
+            if not isinstance(option, dict) or not {"flag", "kind", "help"} <= set(option):
+                raise ValueError(f"invalid SA117 option contract: {mode_name}/{option_name}")
+            if not set(option) <= {"flag", "kind", "help", "nargs", "default"}:
+                raise ValueError(f"unknown SA117 option field: {mode_name}/{option_name}")
+            if not all(isinstance(option[key], str) for key in ("flag", "kind", "help")):
+                raise ValueError(f"invalid SA117 option types: {mode_name}/{option_name}")
+            if option["flag"] != f"--{option_name}" or option["flag"] in seen_flags:
+                raise ValueError(
+                    f"invalid or duplicate SA117 option flag: {mode_name}/{option_name}"
+                )
+            if not option["help"]:
+                raise ValueError(f"empty SA117 option help: {mode_name}/{option_name}")
+            seen_flags.add(option["flag"])
+            if option["kind"] not in {"paths", "store_true", "value", "path"}:
+                raise ValueError(f"unknown SA117 option kind: {option['kind']!r}")
+            if option["kind"] == "paths" and option.get("nargs") != "*":
+                raise ValueError(f"paths option must have nargs '*': {mode_name}/{option_name}")
+            if option["kind"] != "paths" and "nargs" in option:
+                raise ValueError(
+                    f"nargs is only valid for paths options: {mode_name}/{option_name}"
+                )
+            if "default" in option and option["kind"] not in {"path", "value"}:
+                raise ValueError(f"default is invalid for boolean/path-list option: {option_name}")
+            if "default" in option and not isinstance(option["default"], str):
+                raise ValueError(
+                    f"SA117 option default must be a string: {mode_name}/{option_name}"
+                )
+        option_names = set(options)
+        declared_options: set[str] = set()
+        for profile, declaration in profiles.items():
+            if (
+                not isinstance(declaration, dict)
+                or set(declaration) != {"required", "optional"}
+                or not isinstance(declaration["required"], list)
+                or not isinstance(declaration["optional"], list)
+                or any(
+                    not isinstance(item, str)
+                    for item in declaration["required"] + declaration["optional"]
+                )
+            ):
+                raise ValueError(f"invalid SA117 profile declaration: {mode_name}/{profile}")
+            required = declaration["required"]
+            optional = declaration["optional"]
+            if len(required) != len(set(required)) or len(optional) != len(set(optional)):
+                raise ValueError(f"duplicate SA117 profile option: {mode_name}/{profile}")
+            if set(required) & set(optional) or not set(required + optional) <= option_names:
+                raise ValueError(
+                    f"unknown or overlapping SA117 profile option: {mode_name}/{profile}"
+                )
+            declared_options.update(required + optional)
+        if declared_options != option_names:
+            raise ValueError(f"undeclared SA117 mode option: {mode_name}")
+    consumers = contract["consumers"]
+    if not isinstance(consumers, list) or not consumers:
+        raise ValueError("SA117 contract consumers must be a non-empty list")
+    seen_consumers: set[str] = set()
+    seen_consumer_paths: set[str] = set()
+    for consumer in consumers:
+        if not isinstance(consumer, dict) or set(consumer) != {"name", "path"}:
+            raise ValueError(f"invalid SA117 consumer declaration: {consumer!r}")
+        if not all(isinstance(consumer[key], str) and consumer[key] for key in ("name", "path")):
+            raise ValueError(f"invalid SA117 consumer types: {consumer!r}")
+        if consumer["name"] in seen_consumers:
+            raise ValueError(f"duplicate SA117 consumer: {consumer['name']!r}")
+        path = consumer["path"]
+        if path != _normalise(path):
+            raise ValueError(f"SA117 consumer path must be canonical and relative: {path!r}")
+        if path in seen_consumer_paths:
+            raise ValueError(f"duplicate SA117 consumer path: {path!r}")
+        seen_consumers.add(consumer["name"])
+        seen_consumer_paths.add(path)
+    if not isinstance(contract["metadata"], dict) or set(contract["metadata"]) != {"rev_004"}:
+        raise ValueError("SA117 contract metadata must contain only rev_004")
+    if not isinstance(contract["metadata"]["rev_004"], str):
+        raise ValueError("SA117 rev_004 metadata must be a string")
+
+
+def load_scope(scope_path: Path = DEFAULT_SCOPE_PATH) -> list[dict[str, Any]]:
+    """Load the strictly validated path allowlist."""
+    return _load_scope_document(scope_path)["paths"]
 
 
 def build_allowlist(scope_entries: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -126,6 +294,45 @@ def build_allowlist(scope_entries: list[dict[str, Any]]) -> dict[str, dict[str, 
             raise ValueError(f"duplicate path in SA117 scope: {path!r}")
         result[path] = entry
     return result
+
+
+def _contract_mode(scope_path: Path, mode: str) -> dict[str, Any]:
+    """Return one already validated mode declaration."""
+    return _load_scope_document(scope_path)["contract"]["modes"][mode]
+
+
+def _required_inputs(scope_path: Path, mode: str, profile: str, values: Mapping[str, Any]) -> None:
+    """Fail closed when a caller profile omits or supplies unsupported inputs."""
+    if profile not in {"direct", "make"}:
+        raise ValueError(f"unknown SA117 caller profile: {profile!r}")
+    mode_contract = _contract_mode(scope_path, mode)
+    declaration = mode_contract["profiles"][profile]
+    for option in declaration["required"]:
+        value = values.get(option.replace("-", "_"))
+        if value is None:
+            raise ValueError(f"{option} is required for {profile} {mode} mode")
+    allowed = set(declaration["required"] + declaration["optional"])
+    for option, option_contract in mode_contract["options"].items():
+        if option in allowed:
+            continue
+        value = values.get(option.replace("-", "_"))
+        supplied = value is not None and (option_contract["kind"] != "store_true" or value is True)
+        if supplied:
+            raise ValueError(f"{option} is not supported for {profile} {mode} mode")
+
+
+def _tokenise_make_paths(paths: list[str] | None) -> list[str] | None:
+    """Parse Make's one raw data argument without evaluating shell syntax."""
+    if paths is None:
+        return None
+    if len(paths) != 1:
+        return paths
+    raw = paths[0]
+    _validate_no_nul(raw)
+    try:
+        return shlex.split(raw, posix=True)
+    except ValueError as exc:
+        raise ValueError(f"invalid Make PATHS data: {exc}") from exc
 
 
 def _filter_scope_paths(paths: set[str], *, scripts_only: bool) -> set[str]:
@@ -150,14 +357,27 @@ def mode_worktree(
     repo_root: Path | None = None,
     allow_untracked: bool = False,
     scripts_only: bool = False,
+    profile: str = "direct",
 ) -> int:
     """Check that candidate paths are members of the allowlist."""
-    del repo_root, allow_untracked
+    del repo_root
     try:
+        _required_inputs(
+            scope_path,
+            "worktree",
+            profile,
+            {
+                "paths": paths,
+                "allow_untracked": allow_untracked,
+                "scripts_only": scripts_only,
+            },
+        )
+        if profile == "make":
+            paths = _tokenise_make_paths(paths)
+        if not paths:
+            raise ValueError(f"paths is required for {profile} worktree mode")
         allowed = build_allowlist(load_scope(scope_path))
-        if paths is None:
-            raise ValueError("--paths is required for worktree mode")
-        current = {_normalise(path) for path in paths}
+        current = {_normalise_candidate(path) for path in paths}
     except (FileNotFoundError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
@@ -173,9 +393,10 @@ def mode_worktree(
     return 0
 
 
-def mode_emit(scope_path: Path, *, phase: str | None = None) -> int:
+def mode_emit(scope_path: Path, *, phase: str | None = None, profile: str = "direct") -> int:
     """Emit allowlisted paths, optionally filtered by phase."""
     try:
+        _required_inputs(scope_path, "emit", profile, {"phase": phase})
         entries = load_scope(scope_path)
         for entry in entries:
             if phase is None or entry.get("phase") == phase:
@@ -192,15 +413,24 @@ def mode_lock(
     paths: list[str] | None = None,
     repo_root: Path | None = None,
     scripts_only: bool = False,
+    profile: str = "direct",
 ) -> int:
     """Check that a candidate path set exactly matches the allowlist."""
     try:
+        _required_inputs(
+            scope_path,
+            "lock",
+            profile,
+            {"paths": paths, "scripts_only": scripts_only},
+        )
+        if profile == "make":
+            paths = _tokenise_make_paths(paths)
         allowed = build_allowlist(load_scope(scope_path))
         current_paths = (
             paths if paths is not None else _read_git_tracked_files(repo_root or SCOPE_DIR.parent)
         )
         current = _filter_scope_paths(
-            {_normalise(path) for path in current_paths}, scripts_only=scripts_only
+            {_normalise_candidate(path) for path in current_paths}, scripts_only=scripts_only
         )
         expected = _filter_scope_paths(set(allowed), scripts_only=scripts_only)
     except (FileNotFoundError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
@@ -386,9 +616,13 @@ def _parse_project_version(content: bytes, path: str, expected_name: str) -> str
     return _parse_canonical_version(version)
 
 
-def _expected_inventory(repo_root: Path | None = None) -> list[str]:
+def _expected_inventory(
+    repo_root: Path | None = None, module_names: list[str] | None = None
+) -> list[str]:
     """Return the inventory paths derived from the authoritative modules."""
-    module_names = _authoritative_module_names(repo_root)
+    module_names = (
+        module_names if module_names is not None else _authoritative_module_names(repo_root)
+    )
     paths = ["VERSION", "poetry.lock"]
     paths.extend(
         [
@@ -718,7 +952,7 @@ def mode_verify_lock_diff(
         root = candidate_path.parent.resolve()
         module_names = _authoritative_module_names(root)
         module_packages = _locked_module_packages(module_names)
-        paths = _expected_inventory(root)
+        paths = _expected_inventory(root, module_names)
         output_resolved = output.resolve()
         for path in paths:
             if output_resolved == (root / path).resolve():
@@ -811,7 +1045,7 @@ def mode_verify_lock_diff(
             print("SA117 lock-diff: unauthorized lock structure drift detected.", file=sys.stderr)
         print(f"Evidence written to {output}")
         return 0 if clean else 1
-    except (LockDiffError, OSError, subprocess.SubprocessError) as exc:
+    except Exception as exc:  # noqa: BLE001 - command-line checker must never traceback
         print(f"ERROR: {exc}", file=sys.stderr)
         if output_safe_to_remove:
             try:
@@ -821,48 +1055,105 @@ def mode_verify_lock_diff(
         return 2
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def _build_parser(scope_path: Path = DEFAULT_SCOPE_PATH) -> argparse.ArgumentParser:
+    """Build the CLI from the strict JSON mode/option declaration."""
+    contract = _load_scope_document(scope_path)["contract"]
     parser = argparse.ArgumentParser(prog="check_sa117_scope.py")
-    parser.add_argument("--scope", type=Path, default=DEFAULT_SCOPE_PATH)
-    subparsers = parser.add_subparsers(dest="mode", required=True)
-    worktree = subparsers.add_parser("worktree")
-    worktree.add_argument("--paths", nargs="*", default=None)
-    worktree.add_argument("--allow-untracked", action="store_true")
-    worktree.add_argument("--scripts-only", action="store_true")
-    emit = subparsers.add_parser("emit")
-    emit.add_argument("--phase")
-    lock = subparsers.add_parser("lock")
-    lock.add_argument("--paths", nargs="*", default=None)
-    lock.add_argument("--scripts-only", action="store_true")
-    lock_diff = subparsers.add_parser("lock-diff")
-    lock_diff.add_argument("--baseline-ref", required=True)
-    lock_diff.add_argument("--candidate", type=Path, required=True)
-    lock_diff.add_argument("--expected-version", required=True)
-    lock_diff.add_argument("--output", type=Path, default=DEFAULT_EVIDENCE_PATH)
+    parser.add_argument("--scope", type=Path, default=scope_path)
+    parser.add_argument("--profile", default="direct", help="Caller profile (direct or make).")
+    parser.add_argument(
+        "--render-make-help",
+        action="store_true",
+        help="Render the SA117 section consumed by the root Makefile help target.",
+    )
+    subparsers = parser.add_subparsers(dest="mode", required=False)
+    for mode_name, mode in contract["modes"].items():
+        subparser = subparsers.add_parser(mode_name, help=mode["help"])
+        for option_name, option in mode["options"].items():
+            kwargs: dict[str, Any] = {"dest": option_name.replace("-", "_")}
+            if option["kind"] == "store_true":
+                kwargs["action"] = "store_true"
+            elif option["kind"] == "paths":
+                kwargs.update(nargs="*", default=None)
+            elif option["kind"] == "path":
+                kwargs["type"] = Path
+                if "default" in option:
+                    kwargs["default"] = Path(option["default"])
+            else:
+                if "default" in option:
+                    kwargs["default"] = option["default"]
+            subparser.add_argument(option["flag"], help=option["help"], **kwargs)
     return parser
 
 
+def _requested_scope_path(argv: list[str]) -> Path:
+    """Select the fact document before building the parser it defines."""
+    selected = DEFAULT_SCOPE_PATH
+    for index, argument in enumerate(argv):
+        if argument == "--scope":
+            if index + 1 >= len(argv):
+                raise ValueError("--scope requires a path")
+            selected = Path(argv[index + 1])
+        elif argument.startswith("--scope="):
+            selected = Path(argument.partition("=")[2])
+    return selected
+
+
+def _render_make_help(scope_path: Path = DEFAULT_SCOPE_PATH) -> None:
+    """Render only the SA117 help block; Make owns placement in its help text."""
+    contract = _load_scope_document(scope_path)["contract"]
+    modes = contract["modes"]
+    print("SA117 scope / publication gates:")
+    print("  make sa117-check PATHS='...'      - " + modes["worktree"]["help"])
+    print("  make sa117-emit                   - " + modes["emit"]["help"])
+    print("  make sa117-lock PATHS='...'       - " + modes["lock"]["help"])
+    print("  make sa117-lock-diff              - " + modes["lock-diff"]["help"])
+    print("  make sa117-capture VERSION=X PHASE=Y - Capture publication evidence")
+    print("  make sa117-verify EVIDENCE=path   - Verify publication evidence")
+    print("  make sa117-authorize VERSION=X DIGEST=D - Authorize a publication")
+    print("  make sa117-rollback TOKEN=T DIGEST=D - Roll back a prior authorization")
+    print("  make sa117-apply MODULE=M TARGET=T EXEC=E ARGV=A - Execute and verify a module apply")
+    print("  make sa117-check-origin MODULE=M DECLARED=O EXPECTED=E - Check origin map consistency")
+    print("  make sa117-check-containers TARGET=T - Check for zero container/volume configuration")
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
-    if args.mode == "worktree":
-        return mode_worktree(
-            args.scope,
-            paths=args.paths,
-            allow_untracked=args.allow_untracked,
-            scripts_only=args.scripts_only,
-        )
-    if args.mode == "emit":
-        return mode_emit(args.scope, phase=args.phase)
-    if args.mode == "lock":
-        return mode_lock(args.scope, paths=args.paths, scripts_only=args.scripts_only)
-    if args.mode == "lock-diff":
-        return mode_verify_lock_diff(
-            args.candidate,
-            baseline_ref=args.baseline_ref,
-            expected_version=args.expected_version,
-            output_path=args.output,
-        )
-    return 2
+    try:
+        arguments = list(sys.argv[1:] if argv is None else argv)
+        scope_path = _requested_scope_path(arguments)
+        args = _build_parser(scope_path).parse_args(arguments)
+        if args.render_make_help:
+            _render_make_help(args.scope)
+            return 0
+        if args.mode is None:
+            raise ValueError("a checker mode is required")
+        profile_values = vars(args)
+        _required_inputs(args.scope, args.mode, args.profile, profile_values)
+        if args.mode == "worktree":
+            return mode_worktree(
+                args.scope,
+                paths=args.paths,
+                allow_untracked=args.allow_untracked,
+                scripts_only=args.scripts_only,
+                profile=args.profile,
+            )
+        if args.mode == "emit":
+            return mode_emit(args.scope, phase=args.phase, profile=args.profile)
+        if args.mode == "lock":
+            return mode_lock(
+                args.scope, paths=args.paths, scripts_only=args.scripts_only, profile=args.profile
+            )
+        if args.mode == "lock-diff":
+            return mode_verify_lock_diff(
+                args.candidate,
+                baseline_ref=args.baseline_ref,
+                expected_version=args.expected_version,
+                output_path=args.output,
+            )
+        raise ValueError(f"unsupported checker mode: {args.mode!r}")
+    except (FileNotFoundError, OSError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

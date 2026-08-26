@@ -114,6 +114,9 @@ No local PostgreSQL provisioning is implied by this target or policy.
 - PostgreSQL 18 container via `pytest-docker`.
 - Playwright browser automation with Chromium.
 - Full project lifecycle coverage: generate -> install -> migrate -> serve -> browse.
+- Stable content-addressed backend image identity across unchanged runs, with measured cold-versus-warm reuse coverage.
+- Run-scoped container, port, volume, and network identity with exact QuickScale owner/lifecycle/scope labels; normal cleanup must remove matching disposable resources and untagged variable images without broad pruning, while `--no-cleanup` preserves diagnostic state.
+- A source-free installed-wheel lifecycle from an external working directory that applies current artifacts for all twelve shipped modules and proves collectstatic, migrations, HTTP service, and exact-label cleanup.
 - Separate from fast CI using `@pytest.mark.e2e`.
 
 **When Required:**
@@ -183,6 +186,7 @@ Key expectations:
 - cover generate -> install -> migrate -> serve -> browse flows
 - keep E2E separate from the fast default test path
 - validate database, Docker, and browser integration together before release closeout when appropriate
+- keep stable backend image identity independent from per-run resource identity, and bind cleanup to inspected labels rather than names or global prune commands
 
 <a id="runner-tuning-knobs"></a>
 ### Runner Tuning Knobs

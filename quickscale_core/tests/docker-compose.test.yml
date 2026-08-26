@@ -1,6 +1,10 @@
 services:
   postgres:
     image: postgres:18-alpine
+    labels:
+      com.quickscale.owner: "quickscale"
+      com.quickscale.lifecycle: "e2e"
+      com.quickscale.scope: "${QS_E2E_RESOURCE_SCOPE:-qscaletest}"
     environment:
       POSTGRES_DB: test_db
       POSTGRES_USER: test_user
@@ -17,3 +21,14 @@ services:
 
 volumes:
   postgres_test_data:
+    labels:
+      com.quickscale.owner: "quickscale"
+      com.quickscale.lifecycle: "e2e"
+      com.quickscale.scope: "${QS_E2E_RESOURCE_SCOPE:-qscaletest}"
+
+networks:
+  default:
+    labels:
+      com.quickscale.owner: "quickscale"
+      com.quickscale.lifecycle: "e2e"
+      com.quickscale.scope: "${QS_E2E_RESOURCE_SCOPE:-qscaletest}"

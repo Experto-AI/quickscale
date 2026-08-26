@@ -275,7 +275,9 @@ def test_signal_stops_both_lane_workers_and_cleans_up(
             with subprocess.Popen(["kill", "-0", str(pid)]) as probe:
                 assert probe.wait() != 0, f"lane worker {pid} was left running"
     docker_events = (tmp_path / "docker.log").read_text(encoding="utf-8").splitlines()
-    assert sum("compose" in event and " down " in event for event in docker_events) == 2
+    assert not any("compose" in event and " down " in event for event in docker_events)
+    assert any("label=com.quickscale.owner=quickscale" in event for event in docker_events)
+    assert not any("--remove-orphans" in event or "name=" in event for event in docker_events)
 
 
 def test_signal_after_core_lane_completes_only_targets_active_lane(tmp_path: Path) -> None:

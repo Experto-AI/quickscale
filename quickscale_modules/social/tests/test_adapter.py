@@ -9,6 +9,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+import re
 from typing import Any
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -18,6 +19,7 @@ from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_social.adapter import (
     _social_manifest_adapter,
+    _social_manifest_apps,
     get_manifest_adapter,
 )
 
@@ -46,7 +48,7 @@ def _static_apps_projection(apps: list[Any] | None = None) -> dict[str, Any]:
     }
 
 
-def _mock_social_manifest(*, wiring_projections: list[dict[str, Any]]) -> MagicMock:
+def _mock_social_manifest(*, wiring_projections: Any) -> MagicMock:
     """Build a mocked manifest with the fields consumed by the adapter."""
     return MagicMock(
         managed_files=PropertyMock(return_value={}),
@@ -156,14 +158,53 @@ class TestSocialManifestAdapterApps:
         assert resolver_result.apps == ("synthetic_social_app",)
 
     @pytest.mark.parametrize(
-        "wiring_projections",
+        "ignored_projection",
         [
-            pytest.param([], id="missing"),
+            pytest.param(None, id="non-dict-none"),
+            pytest.param("ignored", id="non-dict-string"),
+            pytest.param({"wiring_field": "settings"}, id="non-app-dict"),
+        ],
+    )
+    def test_ignored_entries_are_filtered_with_valid_apps_projection(
+        self, ignored_projection: Any
+    ) -> None:
+        """Unrelated entries do not count toward the selected apps projection."""
+        manifest = _mock_social_manifest(
+            wiring_projections=[
+                ignored_projection,
+                _static_apps_projection(["social_first", "social_second"]),
+            ]
+        )
+
+        assert _social_manifest_apps(manifest) == (
+            "social_first",
+            "social_second",
+        )
+
+    @pytest.mark.parametrize(
+        "wiring_projections, expected_error",
+        [
+            pytest.param(
+                None,
+                "Invalid social manifest apps projection: expected exactly one projection, found 0",
+                id="non-list-none",
+            ),
+            pytest.param(
+                {},
+                "Invalid social manifest apps projection: expected exactly one projection, found 0",
+                id="non-list-dict",
+            ),
+            pytest.param(
+                [],
+                "Invalid social manifest apps projection: expected exactly one projection, found 0",
+                id="missing",
+            ),
             pytest.param(
                 [
                     _static_apps_projection(["social_one"]),
                     _static_apps_projection(["social_two"]),
                 ],
+                "Invalid social manifest apps projection: expected exactly one projection, found 2",
                 id="duplicate",
             ),
             pytest.param(
@@ -174,11 +215,56 @@ class TestSocialManifestAdapterApps:
                         "expression": {"option": "app"},
                     }
                 ],
+                "Invalid social manifest apps projection: projection must be static",
                 id="non-static",
             ),
-            pytest.param([_static_apps_projection([])], id="empty"),
-            pytest.param([_static_apps_projection([""])], id="blank-string"),
-            pytest.param([_static_apps_projection(["social", 7])], id="non-string"),
+            pytest.param(
+                [
+                    {
+                        "wiring_field": "apps",
+                        "derivation_type": "static",
+                    }
+                ],
+                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
+                id="missing-expression",
+            ),
+            pytest.param(
+                [
+                    {
+                        "wiring_field": "apps",
+                        "derivation_type": "static",
+                        "expression": "not-a-mapping",
+                    }
+                ],
+                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
+                id="non-dict-expression",
+            ),
+            pytest.param(
+                [
+                    {
+                        "wiring_field": "apps",
+                        "derivation_type": "static",
+                        "expression": {"value": "social"},
+                    }
+                ],
+                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
+                id="non-list-value",
+            ),
+            pytest.param(
+                [_static_apps_projection([])],
+                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
+                id="empty",
+            ),
+            pytest.param(
+                [_static_apps_projection([""])],
+                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
+                id="blank-string",
+            ),
+            pytest.param(
+                [_static_apps_projection(["social", 7])],
+                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
+                id="non-string",
+            ),
         ],
     )
     @patch("quickscale_modules_social.adapter.load_social_manifest")
@@ -187,7 +273,8 @@ class TestSocialManifestAdapterApps:
         self,
         mock_resolve: MagicMock,
         mock_load: MagicMock,
-        wiring_projections: list[dict[str, Any]],
+        wiring_projections: Any,
+        expected_error: str,
     ) -> None:
         """Missing or malformed social apps projections must fail closed."""
         mock_resolve.return_value = _social_options()
@@ -195,7 +282,7 @@ class TestSocialManifestAdapterApps:
             wiring_projections=wiring_projections
         )
 
-        with pytest.raises(ValueError, match="social manifest apps projection"):
+        with pytest.raises(ValueError, match=f"^{re.escape(expected_error)}$"):
             _social_manifest_adapter({}, project_package="myapp")
 
 

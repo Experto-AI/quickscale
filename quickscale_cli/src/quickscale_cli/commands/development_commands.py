@@ -14,7 +14,10 @@ from quickscale_core.utils.theme_validation import (
     validate_theme_preflight,
 )
 from quickscale_cli.utils.docker_utils import (
+    BackendImageIdentityError,
     DockerComposePluginRequiredError,
+    build_backend_child_environment,
+    build_backend_image_identity,
     find_stale_project_volumes,
     get_docker_compose_command,
     get_port_from_env,
@@ -147,7 +150,36 @@ def _validate_theme_preflight_for_up() -> None:
         sys.exit(1)
 
 
-def _run_docker_compose_up(compose_cmd: list, build: bool, no_cache: bool) -> None:
+def _backend_compose_environment(project_path: Path | None = None) -> dict[str, str]:
+    """Build the isolated Compose environment for a generated project."""
+    root = project_path or Path.cwd()
+    environment = os.environ.copy()
+    if not ((root / "Dockerfile").exists() or (root / "docker-compose.yml").exists()):
+        return environment
+    try:
+        image_identity = build_backend_image_identity(root)
+        return build_backend_child_environment(
+            image_identity,
+            base_environment=environment,
+            project_path=root,
+        )
+    except BackendImageIdentityError as error:
+        click.secho("❌ Error: Backend image identity is invalid", fg="red", err=True)
+        click.echo(str(error), err=True)
+        sys.exit(1)
+    except ValueError as error:
+        click.secho("❌ Error: Docker resource prefix is invalid", fg="red", err=True)
+        click.echo(str(error), err=True)
+        sys.exit(1)
+
+
+def _run_docker_compose_up(
+    compose_cmd: list,
+    build: bool,
+    no_cache: bool,
+    *,
+    environment: dict[str, str] | None = None,
+) -> None:
     """Execute docker compose up with appropriate flags."""
     project_name = _validated_verifier_compose_project()
     compose_prefix = compose_cmd + (
@@ -161,20 +193,42 @@ def _run_docker_compose_up(compose_cmd: list, build: bool, no_cache: bool) -> No
     if build or no_cache:
         cmd.append("--build")
 
-    if no_cache:
-        cmd.append("--no-cache")
-
     click.echo("🚀 Starting Docker services...")
 
-    if build or no_cache:
+    show_output = build or no_cache
+    if show_output:
         click.echo("📦 Building Docker images...")
         click.echo("")
-        subprocess.run(cmd, check=True, text=True)
-    else:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    if no_cache:
+        _execute_compose_up(
+            [*compose_prefix, "--progress", "plain", "build", "--no-cache"],
+            show_output=True,
+            environment=environment,
+        )
+    _execute_compose_up(cmd, show_output=show_output, environment=environment)
 
     click.secho("✅ Services started successfully!", fg="green", bold=True)
     click.echo("💡 Tip: Use 'quickscale logs' to view service logs")
+
+
+def _execute_compose_up(
+    cmd: list[str],
+    *,
+    show_output: bool,
+    environment: dict[str, str] | None,
+) -> None:
+    """Run one prepared Compose command with the requested output policy."""
+    child_environment = dict(environment or os.environ)
+    if show_output:
+        subprocess.run(cmd, check=True, text=True, env=child_environment)
+        return
+    subprocess.run(
+        cmd,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=child_environment,
+    )
 
 
 def _handle_up_error(error: subprocess.CalledProcessError) -> None:
@@ -368,21 +422,39 @@ def _show_inconsistent_migration_history_help() -> None:
     )
 
 
-@click.command()
-@click.option("--build", is_flag=True, help="Rebuild containers before starting")
-@click.option("--no-cache", is_flag=True, help="Build without using cache")
-def up(build: bool, no_cache: bool) -> None:
-    """Start Docker services for development."""
-    # Run read-only theme preflight before any Docker/compose/port probe.
-    # The recovery ledger (.quickscale/apply-recovery.yml) is an internal
-    # apply checkpoint that may carry a ``__checkpoint__`` placeholder
-    # theme before the real project state is saved. The validator's explicit
-    # up-only opt-in accepts that placeholder; other recovery themes fail closed.
-    _validate_theme_preflight_for_up()
+def _handle_up_process_error(error: subprocess.CalledProcessError) -> None:
+    """Report a failed post-start action or Compose invocation."""
+    if _command_contains(error, "manage.py", "migrate"):
+        click.secho(
+            "❌ Error: Services started but database migration failed",
+            fg="red",
+            err=True,
+        )
+        if error.stderr:
+            click.echo(f"\nError output:\n{error.stderr}", err=True)
+        if _is_inconsistent_migration_history(error):
+            _show_inconsistent_migration_history_help()
+        else:
+            click.echo(
+                "💡 Tip: Run 'quickscale manage migrate' and inspect logs with 'quickscale logs backend'",
+                err=True,
+            )
+        return
 
-    _validate_project_and_docker()
+    if _command_contains(error, "manage.py", "createsuperuser"):
+        click.secho(
+            "❌ Error: Services started but superuser creation failed",
+            fg="red",
+            err=True,
+        )
+        click.echo("💡 Tip: Run 'quickscale manage createsuperuser' manually", err=True)
+        return
 
-    # Load config to check for default build behavior
+    _handle_up_error(error)
+
+
+def _load_up_config(build: bool) -> tuple[QuickScaleConfig | None, bool]:
+    """Load the strict project config and resolve the requested build mode."""
     try:
         config = get_project_config(strict=True)
     except ProjectConfigLoadError as error:
@@ -397,8 +469,11 @@ def up(build: bool, no_cache: bool) -> None:
     should_build = build
     if not build and config and config.docker:
         should_build = config.docker.build
+    return config, should_build
 
-    # Check if dependencies changed and suggest rebuild
+
+def _warn_about_changed_dependencies(should_build: bool) -> None:
+    """Warn when dependencies changed and the selected mode will not rebuild."""
     if not should_build and _dependencies_changed_since_last_build():
         click.secho(
             "⚠️  Warning: Dependencies may have changed since last Docker build",
@@ -411,15 +486,22 @@ def up(build: bool, no_cache: bool) -> None:
         )
         click.secho("   quickscale down && quickscale up --build\n", fg="cyan")
 
-    # Check if required port is available BEFORE calling docker compose.
-    port = get_port_from_env()
-    if not is_port_available(port):
-        _show_port_conflict_error(port)
-        sys.exit(1)
 
+def _run_up_services(
+    config: QuickScaleConfig | None,
+    should_build: bool,
+    no_cache: bool,
+    compose_environment: dict[str, str],
+) -> None:
+    """Start services and run the post-start Django commands."""
     try:
         compose_cmd = _require_docker_compose_command()
-        _run_docker_compose_up(compose_cmd, should_build, no_cache)
+        _run_docker_compose_up(
+            compose_cmd,
+            should_build,
+            no_cache,
+            environment=compose_environment,
+        )
 
         # Update build timestamp if build was performed
         if should_build:
@@ -428,37 +510,41 @@ def up(build: bool, no_cache: bool) -> None:
         _run_migrations_after_up()
         _handle_superuser_after_up(config)
 
-    except subprocess.CalledProcessError as e:
-        if _command_contains(e, "manage.py", "migrate"):
-            click.secho(
-                "❌ Error: Services started but database migration failed",
-                fg="red",
-                err=True,
-            )
-            if e.stderr:
-                click.echo(f"\nError output:\n{e.stderr}", err=True)
-            if _is_inconsistent_migration_history(e):
-                _show_inconsistent_migration_history_help()
-            else:
-                click.echo(
-                    "💡 Tip: Run 'quickscale manage migrate' and inspect logs with 'quickscale logs backend'",
-                    err=True,
-                )
-        elif _command_contains(e, "manage.py", "createsuperuser"):
-            click.secho(
-                "❌ Error: Services started but superuser creation failed",
-                fg="red",
-                err=True,
-            )
-            click.echo(
-                "💡 Tip: Run 'quickscale manage createsuperuser' manually", err=True
-            )
-        else:
-            _handle_up_error(e)
+    except subprocess.CalledProcessError as error:
+        _handle_up_process_error(error)
         sys.exit(1)
     except KeyboardInterrupt:
         click.echo("\n⚠️  Interrupted by user")
         sys.exit(130)
+
+
+@click.command()
+@click.option("--build", is_flag=True, help="Rebuild containers before starting")
+@click.option("--no-cache", is_flag=True, help="Build without using cache")
+def up(build: bool, no_cache: bool) -> None:
+    """Start Docker services for development."""
+    # Run read-only theme preflight before any Docker/compose/port probe.
+    # The recovery ledger (.quickscale/apply-recovery.yml) is an internal
+    # apply checkpoint that may carry a ``__checkpoint__`` placeholder
+    # theme before the real project state is saved. The validator's explicit
+    # up-only opt-in accepts that placeholder; other recovery themes fail closed.
+    _validate_theme_preflight_for_up()
+
+    _validate_project_and_docker()
+
+    config, should_build = _load_up_config(build)
+    # Compute the stable identity after strict configuration validation and
+    # before the port probe or any Compose invocation.
+    compose_environment = _backend_compose_environment()
+    _warn_about_changed_dependencies(should_build)
+
+    # Check if required port is available BEFORE calling docker compose.
+    port = get_port_from_env()
+    if not is_port_available(port):
+        _show_port_conflict_error(port)
+        sys.exit(1)
+
+    _run_up_services(config, should_build, no_cache, compose_environment)
 
 
 @click.command()

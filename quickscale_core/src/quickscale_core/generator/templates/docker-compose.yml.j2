@@ -1,7 +1,11 @@
 services:
   db:
     image: postgres:{{ postgres_docker_tag }}
-    container_name: {{ project_name }}_db
+    container_name: "${QUICKSCALE_RESOURCE_PREFIX:-{{ project_name }}}_db"
+    labels:
+      com.quickscale.owner: "quickscale"
+      com.quickscale.lifecycle: "e2e"
+      com.quickscale.scope: "${QUICKSCALE_RESOURCE_PREFIX:-{{ project_name }}}"
     environment:
       POSTGRES_DB: {{ package_name }}
       POSTGRES_USER: postgres
@@ -23,7 +27,11 @@ services:
 {% if theme == 'showcase_react' %}
   frontend:
     image: node:24-slim
-    container_name: {{ project_name }}_frontend
+    container_name: "${QUICKSCALE_RESOURCE_PREFIX:-{{ project_name }}}_frontend"
+    labels:
+      com.quickscale.owner: "quickscale"
+      com.quickscale.lifecycle: "e2e"
+      com.quickscale.scope: "${QUICKSCALE_RESOURCE_PREFIX:-{{ project_name }}}"
     # Map to host user to prevent root-owned files in mounted volumes
     user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
     working_dir: /app/frontend
@@ -37,12 +45,19 @@ services:
 {% endif %}
 
   backend:
+    image: "${QUICKSCALE_BACKEND_IMAGE:-quickscale-backend:{{ project_name }}}"
     build:
       context: .
       dockerfile: Dockerfile
       args:
         INSTALL_DEV: "true"  # Install dev dependencies for local development
-    container_name: {{ project_name }}_backend
+        QUICKSCALE_BACKEND_IMAGE_DIGEST: "${QUICKSCALE_BACKEND_IMAGE_DIGEST:-direct-compose}"
+        QUICKSCALE_IMAGE_CONTRACT: "sa142"
+    container_name: "${QUICKSCALE_RESOURCE_PREFIX:-{{ project_name }}}_backend"
+    labels:
+      com.quickscale.owner: "quickscale"
+      com.quickscale.lifecycle: "e2e"
+      com.quickscale.scope: "${QUICKSCALE_RESOURCE_PREFIX:-{{ project_name }}}"
     command: python manage.py runserver 0.0.0.0:${PORT:-8000}
     # Map to host user to prevent root-owned files in mounted volumes
     user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
@@ -67,5 +82,24 @@ services:
 
 volumes:
   postgres_data:
+    labels:
+      com.quickscale.owner: "quickscale"
+      com.quickscale.lifecycle: "e2e"
+      com.quickscale.scope: "${QUICKSCALE_RESOURCE_PREFIX:-{{ project_name }}}"
   static_volume:
+    labels:
+      com.quickscale.owner: "quickscale"
+      com.quickscale.lifecycle: "e2e"
+      com.quickscale.scope: "${QUICKSCALE_RESOURCE_PREFIX:-{{ project_name }}}"
   media_volume:
+    labels:
+      com.quickscale.owner: "quickscale"
+      com.quickscale.lifecycle: "e2e"
+      com.quickscale.scope: "${QUICKSCALE_RESOURCE_PREFIX:-{{ project_name }}}"
+
+networks:
+  default:
+    labels:
+      com.quickscale.owner: "quickscale"
+      com.quickscale.lifecycle: "e2e"
+      com.quickscale.scope: "${QUICKSCALE_RESOURCE_PREFIX:-{{ project_name }}}"

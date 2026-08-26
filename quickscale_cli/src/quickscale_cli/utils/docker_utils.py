@@ -1,14 +1,285 @@
 """Docker interaction utilities for QuickScale CLI."""
 
+from dataclasses import dataclass
+import hashlib
+import os
+import re
 import socket
 import subprocess
 import sys
 import time
+import tomllib
+from collections.abc import Mapping
 from pathlib import Path
 
 
 class DockerComposePluginRequiredError(RuntimeError):
     """Raised when the Docker Compose v2 plugin is unavailable."""
+
+
+class BackendImageIdentityError(ValueError):
+    """Raised when the inputs for the development backend image are invalid."""
+
+
+@dataclass(frozen=True)
+class BackendImageIdentity:
+    """The stable development backend image contract.
+
+    ``manifest`` is retained for diagnostics and tests.  The Docker tag uses
+    the complete SHA-256 digest rather than a truncated prefix so two distinct
+    manifests cannot silently address the same local image.
+    """
+
+    reference: str
+    digest: str
+    manifest: bytes
+
+    @property
+    def image_reference(self) -> str:
+        """Backward-compatible descriptive name for :attr:`reference`."""
+        return self.reference
+
+
+IMAGE_REFERENCE_ENV_VAR = "QUICKSCALE_BACKEND_IMAGE"
+IMAGE_DIGEST_ENV_VAR = "QUICKSCALE_BACKEND_IMAGE_DIGEST"
+RESOURCE_PREFIX_ENV_VAR = "QUICKSCALE_RESOURCE_PREFIX"
+_IMAGE_CONTRACT_VERSION = b"quickscale-backend-image-v1"
+_MISSING_LOCK_MARKER = b"<missing-poetry-lock>"
+_DEFAULT_BUILD_ARGS = {"INSTALL_DEV": "true"}
+_RESOURCE_PREFIX_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{0,62}\Z")
+
+
+def _read_required_bytes(path: Path, label: str) -> bytes:
+    """Read a required identity input without normalising its bytes."""
+    try:
+        return path.read_bytes()
+    except OSError as error:
+        raise BackendImageIdentityError(
+            f"Unable to read required backend image input {label}: {path}"
+        ) from error
+
+
+def _read_project_metadata(path: Path, label: str) -> dict:
+    """Read and validate one TOML metadata file."""
+    raw = _read_required_bytes(path, label)
+    try:
+        data = tomllib.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        raise BackendImageIdentityError(
+            f"Malformed backend image input {label}: {path}"
+        ) from error
+    if not isinstance(data, dict):
+        raise BackendImageIdentityError(
+            f"Malformed backend image input {label}: {path}"
+        )
+    return data
+
+
+def _metadata_value(data: dict, field: str, label: str) -> str:
+    """Return a non-empty package metadata value from PEP 621 or Poetry."""
+    project = data.get("project")
+    poetry = (
+        data.get("tool", {}).get("poetry")
+        if isinstance(data.get("tool"), dict)
+        else None
+    )
+    value = project.get(field) if isinstance(project, dict) else None
+    if value is None and isinstance(poetry, dict):
+        value = poetry.get(field)
+    if not isinstance(value, str) or not value:
+        raise BackendImageIdentityError(
+            f"Missing or invalid {field} in embedded package metadata: {label}"
+        )
+    return value
+
+
+def _python_constraint(data: dict, path: Path) -> str:
+    """Extract the generated project's authoritative Python constraint."""
+    project = data.get("project")
+    value = project.get("requires-python") if isinstance(project, dict) else None
+    if value is None:
+        poetry = (
+            data.get("tool", {}).get("poetry")
+            if isinstance(data.get("tool"), dict)
+            else None
+        )
+        dependencies = poetry.get("dependencies") if isinstance(poetry, dict) else None
+        value = dependencies.get("python") if isinstance(dependencies, dict) else None
+    if not isinstance(value, str) or not value:
+        raise BackendImageIdentityError(
+            f"Missing or invalid generated Python constraint: {path}"
+        )
+    return value
+
+
+def _frame_field(name: str, value: bytes) -> bytes:
+    """Frame one manifest field with explicit UTF-8 name/value lengths."""
+    name_bytes = name.encode("ascii")
+    return (
+        len(name_bytes).to_bytes(4, "big")
+        + name_bytes
+        + len(value).to_bytes(8, "big")
+        + value
+    )
+
+
+def _frame_named_pairs(pairs: list[tuple[str, str]], label: str) -> bytes:
+    """Frame ordered name/value records without delimiter ambiguity."""
+    return b"".join(
+        _frame_field(
+            label,
+            _frame_field("name", name.encode("utf-8"))
+            + _frame_field("version", value.encode("utf-8")),
+        )
+        for name, value in pairs
+    )
+
+
+def validate_resource_prefix(prefix: str) -> str:
+    """Validate and return a Docker-safe resource prefix."""
+    if (
+        not isinstance(prefix, str)
+        or _RESOURCE_PREFIX_PATTERN.fullmatch(prefix) is None
+    ):
+        raise ValueError(
+            "QUICKSCALE_RESOURCE_PREFIX must start with a lowercase ASCII letter or "
+            "digit and contain only lowercase letters, digits, '_' or '-'"
+        )
+    return prefix
+
+
+def get_resource_prefix(
+    project_path: Path | None = None,
+    *,
+    environment: Mapping[str, str] | None = None,
+) -> str:
+    """Return the validated explicit resource prefix or ordinary project name."""
+    source_environment = os.environ if environment is None else environment
+    configured = source_environment.get(RESOURCE_PREFIX_ENV_VAR)
+    if configured is not None:
+        return validate_resource_prefix(configured)
+    path = project_path if project_path is not None else Path.cwd()
+    return validate_resource_prefix(compose_project_name(path))
+
+
+def _embedded_module_versions(modules_root: Path) -> list[tuple[str, str]]:
+    """Return sorted embedded package name/version pairs for the manifest."""
+    if not modules_root.exists():
+        return []
+    if not modules_root.is_dir():
+        raise BackendImageIdentityError(
+            f"Embedded modules path is not a directory: {modules_root}"
+        )
+    try:
+        module_paths = sorted(path for path in modules_root.iterdir() if path.is_dir())
+    except OSError as error:
+        raise BackendImageIdentityError(
+            f"Unable to inspect embedded modules: {modules_root}"
+        ) from error
+
+    modules: list[tuple[str, str]] = []
+    for module_path in module_paths:
+        metadata_path = module_path / "pyproject.toml"
+        if not metadata_path.exists():
+            raise BackendImageIdentityError(
+                f"Missing embedded package metadata: {metadata_path}"
+            )
+        metadata = _read_project_metadata(metadata_path, f"module {module_path.name}")
+        modules.append(
+            (
+                _metadata_value(metadata, "name", module_path.name),
+                _metadata_value(metadata, "version", module_path.name),
+            )
+        )
+    return modules
+
+
+def _validated_build_args(
+    build_args: Mapping[str, str] | None,
+) -> dict[str, str]:
+    """Return manifest build arguments after strict string validation."""
+    selected_args = dict(_DEFAULT_BUILD_ARGS if build_args is None else build_args)
+    invalid = any(
+        not isinstance(name, str) or not name or not isinstance(value, str)
+        for name, value in selected_args.items()
+    )
+    if invalid:
+        raise BackendImageIdentityError(
+            "Backend image build arguments must be non-empty strings"
+        )
+    return selected_args
+
+
+def build_backend_image_identity(
+    project_path: Path | None = None,
+    *,
+    build_args: Mapping[str, str] | None = None,
+) -> BackendImageIdentity:
+    """Build the deterministic full-digest backend image identity.
+
+    The project path is used only to locate generated files.  It is never
+    included in the manifest, which makes identical generated inputs produce
+    the same reference in different directories.
+    """
+    root = (project_path or Path.cwd()).resolve()
+    dockerfile_path = root / "Dockerfile"
+    pyproject_path = root / "pyproject.toml"
+    dockerfile = _read_required_bytes(dockerfile_path, "Dockerfile")
+    pyproject = _read_project_metadata(pyproject_path, "generated pyproject.toml")
+    python_constraint = _python_constraint(pyproject, pyproject_path)
+
+    lock_path = root / "poetry.lock"
+    lock = (
+        _MISSING_LOCK_MARKER
+        if not lock_path.exists()
+        else _read_required_bytes(lock_path, "poetry.lock")
+    )
+
+    modules = _embedded_module_versions(root / "modules")
+    selected_args = _validated_build_args(build_args)
+
+    fields = [
+        ("contract", _IMAGE_CONTRACT_VERSION),
+        ("dockerfile", dockerfile),
+        ("python-constraint", python_constraint.encode("utf-8")),
+        ("poetry-lock", lock),
+        (
+            "embedded-modules",
+            _frame_named_pairs(sorted(modules), "module"),
+        ),
+        (
+            "build-args",
+            _frame_named_pairs(sorted(selected_args.items()), "arg"),
+        ),
+    ]
+    manifest = b"".join(_frame_field(name, value) for name, value in fields)
+    digest = hashlib.sha256(manifest).hexdigest()
+    return BackendImageIdentity(
+        reference=f"quickscale-backend:sha256-{digest}",
+        digest=digest,
+        manifest=manifest,
+    )
+
+
+# Descriptive alias used by callers that treat the digest as a calculation.
+calculate_backend_image_identity = build_backend_image_identity
+
+
+def build_backend_child_environment(
+    identity: BackendImageIdentity,
+    *,
+    base_environment: Mapping[str, str] | None = None,
+    project_path: Path | None = None,
+) -> dict[str, str]:
+    """Return a copied child environment containing P1 Compose values."""
+    environment = dict(os.environ if base_environment is None else base_environment)
+    environment[IMAGE_REFERENCE_ENV_VAR] = identity.reference
+    environment[IMAGE_DIGEST_ENV_VAR] = identity.digest
+    environment[RESOURCE_PREFIX_ENV_VAR] = get_resource_prefix(
+        project_path,
+        environment=environment,
+    )
+    return environment
 
 
 def is_interactive() -> bool:
@@ -196,9 +467,14 @@ def compose_project_name(project_path: Path) -> str:
     Mirrors Compose's normalization: lowercase, with every character outside
     ``[a-z0-9_-]`` replaced by an underscore and leading separators dropped.
     """
+    resolved_name: object = project_path.resolve().name
+    # Keep this helper friendly to callers that provide a lightweight Path
+    # double; real Path objects always take the resolved branch.
+    if not isinstance(resolved_name, str):
+        resolved_name = project_path.name
     normalized = "".join(
         char if char.isalnum() or char in "_-" else "_"
-        for char in project_path.resolve().name.lower()
+        for char in resolved_name.lower()
     )
     return normalized.lstrip("_-")
 
