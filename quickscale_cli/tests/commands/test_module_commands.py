@@ -3835,10 +3835,10 @@ class TestApplyAllModulesManagedWiringAcceptance:
             settings_modules = project / "myapp" / "settings" / "modules.py"
             assert settings_modules.exists()
 
-            # Verify at least a few known app-producing modules appear
-            # in settings.  Not every module produces an app entry
-            # (social is managed-files-only), so we spot-check the
-            # core set.
+            # All twelve modules contribute established app tuples, including
+            # social's quickscale_modules_social entry.  The complete registry
+            # is asserted above, so generated settings use a representative
+            # spot-check here.
             content = settings_modules.read_text()
             for mod in ("analytics", "auth", "billing", "blog", "listings", "orgs"):
                 app_label = f"quickscale_modules_{mod}"
