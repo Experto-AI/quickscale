@@ -4,8 +4,8 @@
 
 ## v88 development — 2026-08-21
 
-- **SA167b adapter relocation accepted on the W1 tree (2026-08-26; candidate commit and
-  root merge-back not claimed).** All twelve shipped modules expose `get_manifest_adapter()`
+- **SA167b adapter relocation accepted and merged into `v88` (2026-08-26).** All twelve
+  shipped modules expose `get_manifest_adapter()`
   from their module packages, while `quickscale_core/src/quickscale_core/manifest/entry_point.py`
   retains generic discovery, registry, and dispatch only. The exact SA90 parity node
   `TestSa90ExactManifestParity::test_generated_tree_matches_manifest` passed **3 tests**.
@@ -16,9 +16,29 @@
   regressions, and passed monotonicity; analyzer findings remained at the observed baseline.
   Restoration/provenance coverage and the PostgreSQL-backed generated-project runtime proof
   remained green. The roadmap and current same-fact consumers were reconciled under the
-  open-work-only policy: SA167b is removed and merge position #17 is retired. Candidate
-  commit creation, exact-tip convergence review, terminal attestation, ancestry verification,
-  and merge into `v88` remain root-owned operational closeout steps.
+  open-work-only policy: SA167b is removed and merge position #17 is retired. Exact-tip
+  convergence corrected three stale ownership/count claims and passed the complete acceptance
+  campaign. Terminal attestation found one stale comment about `social`; terminal remediation
+  corrected it and reran the full campaign green. Those final comment-only bytes were applied
+  after terminal attestation and are not independently graded. The reviewed W1 history was then
+  synchronized with current `v88`, preserving the concurrent SA123 closeout, and merged back.
+- **SA123 — dependency-vulnerability and security static-analysis gates accepted and closed
+  (2026-08-26; Track 2 post-sync tree).** The already-merged Trivy v0.74.0 and Bandit 1.9.4
+  implementation was proved on the exact clean synced tree. Two ordered campaigns ran without
+  tracked edits; in each campaign, every command exited 0 in this order: `make
+  check-dependency-vulnerabilities`, `make check-security-static-analysis`, `make
+  security-negative-probes`, `make check-gate-parity`, `make check-ci-gate-generation`, `make
+  check-gate-suites`, `make lint`, `make typecheck`, `make check`, `make test`, and `make quality`.
+  Trivy scanned both committed Poetry locks with four accountable suppressions and no
+  unsuppressed findings; Bandit scanned 236 maintained source files with seven accountable
+  suppressions and no unsuppressed findings; the negative probes observed the required Trivy and
+  Bandit exit-1 findings. The scripts gate suite passed 1,312 tests, core checks passed 2,869
+  tests with one expected skip, CLI checks passed 2,144 tests, all module integration suites
+  passed with 94.53% mean coverage, and quality reported zero warning or critical baseline
+  regressions with monotonicity passing. No pre-existing blocker or product defect was exposed.
+  The open-only roadmap removed SA123 and retired merge position #13; SA118 is now the W2 queue
+  head with no dependency. This entry archives acceptance evidence without claiming root merge-back,
+  publication, or any later-ticket completion.
 
 - **Roadmap cleanup and rebalance review (2026-08-26, sixteenth pass).** **Durable progress:
   all three worktrees are now merged into `v88` and none is ahead.** `wt-track1`, `wt-track2`, and

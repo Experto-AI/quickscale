@@ -74,21 +74,6 @@ hosted job closure, and isolation Make entrypoint, is archived in [CHANGELOG.md]
 
 ---
 
-## SA123 — Add dependency-vulnerability and security static-analysis gates
-
-The implementation is present: Trivy v0.74.0 scans both committed Poetry locks,
-Bandit 1.9.4 performs focused source analysis, and eight registry-bound hosted
-gates are generated and parity-checked. Trivy acquisition is checksum-pinned for
-Linux and macOS x86_64/arm64; Windows uses WSL, and unsupported native hosts fail
-explicitly rather than skipping.
-
-The shared lifecycle baseline is green. SA123 remains open for its own complete ordered
-acceptance and exact-tree post-sync rerun; its security gates, negative probes, parity,
-generation, 1,284-test gate suite, lint, and typecheck already pass. The remaining work is
-validation and closeout of this ticket's implemented surface, not another product change.
-
----
-
 ## SA118 — Project every declared manifest default into wiring
 
 ### The mental model
@@ -645,8 +630,7 @@ all five former core literals now come from their own manifest projections. SA16
 moved every module: P1/P2 relocated analytics, backups, blog, forms, listings, and notifications,
 and P3 relocated auth, orgs, and storage, leaving no per-module block in core. Its P4 acceptance
 then confirmed the twelve module-owned adapters, generic-only core registry, restoration behavior,
-and unchanged emission parity on the current W1 tree; candidate commit, convergence, attestation,
-and merge remain operational closeout. When a fact
+and unchanged emission parity; the accepted boundary is merged integration-branch state. When a fact
 lives in five places, no one can tell which is the answer, and `social` shipped models
 and a migration that no generated project ever installed.
 

@@ -277,9 +277,9 @@ each exposes ``get_manifest_adapter()`` from its package, and
 ``entry_point.py`` contains only generic registry/dispatch logic. Their app contributions
 are no longer Python literals in core: **`SA167a`** (v88, merge #8) completed the
 five-module declaration phase, and those manifests own the exact app projections consumed
-by the adapters. **`SA167b`** (v88, merge #17) completed the remaining adapter relocation
-and its P4 acceptance on the current W1 tree; the candidate commit, convergence review,
-terminal attestation, and merge are operational closeout steps, not alternate wiring paths.
+by the adapters. **`SA167b`** (v88, retired merge #17) completed the remaining adapter
+relocation and P4 acceptance; the accepted adapter boundary is merged integration-branch
+state, not an alternate wiring path.
 The "compatibility fallback for bundled/installed contexts" rationale previously recorded
 here was retired by the AF7 fail-hard decision, which removed the context it described. The
 inert ``django_apps:`` surface remains parsed-but-unread pending **`SA167c`** (v88, merge

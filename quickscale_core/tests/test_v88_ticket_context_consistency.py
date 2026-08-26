@@ -241,6 +241,7 @@ def _load_documents() -> tuple[str, str]:
 
 def _number_word(value: int) -> str:
     words = {
+        9: "nine",
         10: "ten",
         11: "eleven",
         12: "twelve",
@@ -268,7 +269,7 @@ def _assert_current_status_consumers(
         for metadata in v88.values()
         if metadata.merge_position is not None
     }
-    assert (len(v88), len(positions)) == (11, 10)
+    assert (len(v88), len(positions)) == (10, 9)
     assert "SA151" not in roadmap
     assert "SA142" not in roadmap
     assert "SA167a" not in roadmap
@@ -278,11 +279,14 @@ def _assert_current_status_consumers(
     assert 10 not in positions
     assert 11 not in positions
     assert 17 not in positions
+    assert 13 not in positions
     assert 26 not in positions
     assert re.search(r"Positions [^\n]*#3[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#8[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#10[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#11[^\n]*", roadmap_text)
+    assert re.search(r"Positions [^\n]*#13[^\n]*", roadmap_text)
+    assert re.search(r"Positions [^\n]*#17[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#26[^\n]*", roadmap_text)
     assert not re.search(r"^## SA151\b", context_text, re.MULTILINE)
     assert not re.search(r"^## SA142\b", context_text, re.MULTILINE)
@@ -292,9 +296,9 @@ def _assert_current_status_consumers(
     assert set(CLOSED_ENTRY_RE.findall(roadmap_text)) == set()
 
     assert "SA124" not in roadmap
-    assert v88["SA123"].dependencies == frozenset()
+    assert "SA123" not in roadmap
     assert v88["SA167d"].dependencies == frozenset()
-    assert v88["SA118"].dependencies == frozenset({"SA123"})
+    assert v88["SA118"].dependencies == frozenset()
     assert v88["SA167c"].dependencies == frozenset({"SA118"})
     assert v88["SA164"].dependencies == frozenset({"SA166"})
     assert roadmap["SA152"].dependencies == frozenset()
@@ -306,6 +310,21 @@ def _assert_current_status_consumers(
         roadmap_text,
         re.DOTALL,
     )
+    assert "does not extend the two-leg critical path" in roadmap_text
+    assert "against the four-leg W2 spine" in roadmap_text
+
+    current_handoff = re.search(
+        r"\*\*Current handoff \(2026-08-26\):(?P<body>.*?)"
+        r"\*\*Next handoff refinement:",
+        roadmap_text,
+        re.DOTALL,
+    )
+    assert current_handoff is not None
+    handoff_text = current_handoff.group(0)
+    assert "ready to continue from strict C acceptance" in handoff_text
+    assert "W2 has released the shared PostgreSQL cluster" in handoff_text
+    assert "blocked before source or service mutation" not in handoff_text
+    assert "until W2 releases the cluster" not in handoff_text
 
     entry_word = _number_word(len(v88))
     position_word = _number_word(len(positions))
