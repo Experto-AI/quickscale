@@ -64,6 +64,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
+| **False green** — the shared gate the other modes are measured by is itself red | `make check` fails on the integration branch, so no lane's acceptance can be trusted | SA169 |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
 context. Its closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md), so the
@@ -72,6 +73,48 @@ declared gate layer they protect.
 
 The gate-layer closure evidence, including the current scripts census, registry projection,
 hosted job closure, and isolation Make entrypoint, is archived in [CHANGELOG.md](../../CHANGELOG.md).
+
+---
+
+## SA169 — Restore a green `make check` baseline on the integration branch
+
+### The mental model
+
+Every lane's acceptance criteria are discharged by the same command set, and `make check` is in
+all of them. That makes the integration branch's own gate status a *shared resource*, not a
+per-ticket concern: when `make check` is red on `v88`, no ticket on any worktree can honestly
+reach a checked box, no matter how complete its own work is. This is the same reasoning that put
+the original gate-layer prerequisite in band A — a ticket that makes a gate tell the truth
+outranks a ticket that makes the product better.
+
+### The concrete gap
+
+Five scenarios in `quickscale_cli/tests/test_module_lifecycle_cycle.py` — the `apply`, `update`,
+`push`, and partial-`remove` cases — build a minimal auth/blog fixture project that exposes a
+single module. The manifest-backed inventory guard settled by SA167b correctly demands the
+authoritative twelve, so every one of them fails with `authoritative module inventory count
+drift: expected 12, found 1`.
+
+**The fixtures are wrong; the guard is right.** The tempting fix — relaxing the guard to accept a
+smaller inventory — would undo the exact contract SA167b's whole adapter relocation exists to
+establish, and would re-open the "declared but unverified" trap that made `social` look wired when
+it was not. The correct shape is to derive the fixture's physical manifests from the authoritative
+source inventory while keeping the *config*, *state*, and *tracking* facts minimal, so a test about
+removal semantics stays a test about removal semantics.
+
+### Why this is its own ticket
+
+It surfaced inside SA167b's P4 campaign, whose reviewed allowlist did not permit an unrelated
+fixture edit — widening in place would have been a silent scope expansion of exactly the kind the
+execution rules forbid. Independently, SA135's Phase A preflight and SA123's Phase C both hit the
+same wall. One defect blocking three lanes belongs in one ticket that merges ahead of all of them,
+not fixed three times or absorbed into whichever lane noticed it first.
+
+### Reasoning trap to avoid
+
+A red test in a file your ticket does not own is not automatically "pre-existing noise to waive".
+Check whether it is *upstream of your acceptance command*. Here it is, which is why an
+accepted-failure waiver would have produced a false green on three separate tickets.
 
 ---
 
