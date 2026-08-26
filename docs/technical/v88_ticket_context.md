@@ -622,11 +622,12 @@ Worth holding as a set, because each appears in more than one ticket:
 
 ---
 
-## SA167a / SA167b / SA167c / SA167d — module wiring standardization
+## SA167a / SA167c / SA167d — module wiring standardization
 
-The four roadmap entries share this one conceptual section; the heading names all four so the
-coverage gate can tell an umbrella section from a missing one. Their ticket metadata lives in the
-[roadmap](roadmap.md), not here.
+These roadmap entries share this one conceptual section; the heading names the open members so
+the coverage gate can tell an umbrella section from a missing one. Their ticket metadata lives in
+the [roadmap](roadmap.md), not here. SA167b's completed relocation and P4 acceptance are archived
+in [CHANGELOG.md](../../CHANGELOG.md), not described as open work here.
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.
@@ -640,10 +641,12 @@ competing representations at kickoff: a wiring projection in six manifests, a Py
 inside core for five more, nothing at all for `social`, an inert `django_apps:` key in eleven
 manifests that no code reads, and a per-module function pair in the CLI. SA167a's implementation
 and accepted root quality-gate oracle are recorded on the integration branch:
-all five former core literals now come from their own manifest projections. SA167b has since moved
-every module: P1/P2 relocated analytics, backups, blog, forms, listings, and notifications, and P3
-relocated auth, orgs, and storage, leaving no per-module block in core. P1-P3 are merged
-integration-branch state. When a fact
+all five former core literals now come from their own manifest projections. SA167b subsequently
+moved every module: P1/P2 relocated analytics, backups, blog, forms, listings, and notifications,
+and P3 relocated auth, orgs, and storage, leaving no per-module block in core. Its P4 acceptance
+then confirmed the twelve module-owned adapters, generic-only core registry, restoration behavior,
+and unchanged emission parity on the current W1 tree; candidate commit, convergence, attestation,
+and merge remain operational closeout. When a fact
 lives in five places, no one can tell which is the answer, and `social` shipped models
 and a migration that no generated project ever installed.
 

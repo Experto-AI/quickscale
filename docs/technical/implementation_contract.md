@@ -272,20 +272,20 @@ section describes the mechanism only.
    ``ResolverResult`` (permitted only when the module needs a custom post-hook) must
    still read the manifest rather than carry a Python literal.
 
-**Current state versus this contract.** Nine modules (analytics, backups, billing,
-blog, CRM, forms, listings, notifications, and social) are module-owned today. The
-remaining three (auth, orgs, and storage) still register at import time from per-module
-blocks inside ``entry_point.py``, which is the unfinished adapter-relocation scope of
-**`SA167b`** (v88, merge #17). Their app contributions are no longer Python literals in core:
-**`SA167a`** (v88, merge #8) completed the five-module declaration phase, and those
-five manifests now own the exact app projections consumed by core. This remains a
-temporary registration boundary pending SA167b, not a supported second wiring path:
-the "compatibility fallback for bundled/installed contexts" rationale previously
-recorded here was retired by the AF7 fail-hard decision, which removed the context it
-described. The inert ``django_apps:`` surface remains parsed-but-unread pending
-**`SA167c`** (v88, merge #21), while the CLI's per-module wiring logic remains pending
-**`SA167d`** (v88, merge #18). The SA167a ownership guard checks executable source rather
-than one constructor shape, including helper, variable, and alternate-constructor forms.
+**Current state versus this contract.** All twelve shipped modules are module-owned today:
+each exposes ``get_manifest_adapter()`` from its package, and
+``entry_point.py`` contains only generic registry/dispatch logic. Their app contributions
+are no longer Python literals in core: **`SA167a`** (v88, merge #8) completed the
+five-module declaration phase, and those manifests own the exact app projections consumed
+by the adapters. **`SA167b`** (v88, merge #17) completed the remaining adapter relocation
+and its P4 acceptance on the current W1 tree; the candidate commit, convergence review,
+terminal attestation, and merge are operational closeout steps, not alternate wiring paths.
+The "compatibility fallback for bundled/installed contexts" rationale previously recorded
+here was retired by the AF7 fail-hard decision, which removed the context it described. The
+inert ``django_apps:`` surface remains parsed-but-unread pending **`SA167c`** (v88, merge
+#21), while the CLI's per-module wiring logic remains pending **`SA167d`** (v88, merge #18).
+The SA167a ownership guard checks executable source rather than one constructor shape,
+including helper, variable, and alternate-constructor forms.
 
 
 #### Module Derivation Schema Types

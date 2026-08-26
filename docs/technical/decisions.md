@@ -451,7 +451,7 @@ The remaining deviations are scheduled inside v88; none is deferred.
 | Deviation | Owner |
 |---|---|
 | Five modules (auth, backups, notifications, orgs, storage) now declare their app lists in their own manifests; core reads those projections | **SA167a** — completed v88, merge #8 |
-| Nine modules (analytics, backups, billing, blog, CRM, forms, listings, notifications, and social) now own their adapters and consume the public `quickscale_core.runtime` facade or its `runtime.manifest` subfacade; only auth, orgs, and storage still register core-side in `quickscale_core/.../manifest/entry_point.py` | **SA167b** — v88, merge #17; partial implementation, with the remaining three relocations still open |
+| All twelve shipped modules own their adapters and consume the public `quickscale_core.runtime` facade or its `runtime.manifest` subfacade; `quickscale_core/.../manifest/entry_point.py` contains only generic registry/dispatch logic | **SA167b** — v88, merge #17; implementation and P4 acceptance complete on the current W1 tree; candidate commit, convergence, attestation, and merge remain operational closeout |
 | `quickscale_cli/.../commands/module_config.py` holds per-module wiring logic | **SA167d** — v88, merge #18 |
 | `django_apps:` is parsed by `manifest/loader.py` and read by no production code path; no gate requires a model-bearing module to declare an app | **SA167c** — v88, merge #21 |
 

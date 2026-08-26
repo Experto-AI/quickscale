@@ -4,6 +4,22 @@
 
 ## v88 development — 2026-08-21
 
+- **SA167b adapter relocation accepted on the W1 tree (2026-08-26; candidate commit and
+  root merge-back not claimed).** All twelve shipped modules expose `get_manifest_adapter()`
+  from their module packages, while `quickscale_core/src/quickscale_core/manifest/entry_point.py`
+  retains generic discovery, registry, and dispatch only. The exact SA90 parity node
+  `TestSa90ExactManifestParity::test_generated_tree_matches_manifest` passed **3 tests**.
+  The ordered `make lint`, `make typecheck`, `make check`, `make test`, and `make quality`
+  campaign passed: `make check` reported **1,312** script tests, `make test` reported
+  **2,869 Core passed / 1 skipped**, **2,144 CLI passed**, and all module integration suites
+  passed. The quality artifact loaded its baseline, reported zero warning, critical, and total
+  regressions, and passed monotonicity; analyzer findings remained at the observed baseline.
+  Restoration/provenance coverage and the PostgreSQL-backed generated-project runtime proof
+  remained green. The roadmap and current same-fact consumers were reconciled under the
+  open-work-only policy: SA167b is removed and merge position #17 is retired. Candidate
+  commit creation, exact-tip convergence review, terminal attestation, ancestry verification,
+  and merge into `v88` remain root-owned operational closeout steps.
+
 - **Roadmap cleanup and rebalance review (2026-08-26, sixteenth pass).** **Durable progress:
   all three worktrees are now merged into `v88` and none is ahead.** `wt-track1`, `wt-track2`, and
   `wt-track3` are each verified ancestors of the integration branch, so no lane carries unmerged

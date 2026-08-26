@@ -35,11 +35,11 @@ OPEN_TICKET_RE = re.compile(
 )
 SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
 
-UMBRELLA_TITLE = "SA167a / SA167b / SA167c / SA167d — module wiring standardization"
-UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167b", "SA167c", "SA167d"})
+UMBRELLA_TITLE = "SA167a / SA167c / SA167d — module wiring standardization"
+UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167c", "SA167d"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
 RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset()
-ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a"})
+ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a", "SA167b"})
 SHARED_POSITION_GROUPS = {frozenset({"SA135", "SA163"})}
 
 
@@ -240,7 +240,13 @@ def _load_documents() -> tuple[str, str]:
 
 
 def _number_word(value: int) -> str:
-    words = {11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen"}
+    words = {
+        10: "ten",
+        11: "eleven",
+        12: "twelve",
+        13: "thirteen",
+        14: "fourteen",
+    }
     return words[value]
 
 
@@ -262,7 +268,7 @@ def _assert_current_status_consumers(
         for metadata in v88.values()
         if metadata.merge_position is not None
     }
-    assert (len(v88), len(positions)) == (12, 11)
+    assert (len(v88), len(positions)) == (11, 10)
     assert "SA151" not in roadmap
     assert "SA142" not in roadmap
     assert "SA167a" not in roadmap
@@ -271,6 +277,7 @@ def _assert_current_status_consumers(
     assert 8 not in positions
     assert 10 not in positions
     assert 11 not in positions
+    assert 17 not in positions
     assert 26 not in positions
     assert re.search(r"Positions [^\n]*#3[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#8[^\n]*", roadmap_text)
@@ -280,12 +287,13 @@ def _assert_current_status_consumers(
     assert not re.search(r"^## SA151\b", context_text, re.MULTILINE)
     assert not re.search(r"^## SA142\b", context_text, re.MULTILINE)
     assert not re.search(r"^## SA169\b", context_text, re.MULTILINE)
+    assert "SA167b" not in _context_sections(context_text)
     assert "SA124" not in _context_sections(context_text)
     assert set(CLOSED_ENTRY_RE.findall(roadmap_text)) == set()
 
     assert "SA124" not in roadmap
     assert v88["SA123"].dependencies == frozenset()
-    assert v88["SA167b"].dependencies == frozenset()
+    assert v88["SA167d"].dependencies == frozenset()
     assert v88["SA118"].dependencies == frozenset({"SA123"})
     assert v88["SA167c"].dependencies == frozenset({"SA118"})
     assert v88["SA164"].dependencies == frozenset({"SA166"})
@@ -366,7 +374,7 @@ def test_v88_semantic_scheduling_restatement_is_expected_red_canary(
     "explanation",
     [
         "SA118, SA161, and SA160 touch the same fixture.",
-        "SA167a and SA167b share one conceptual umbrella.",
+        "SA167a and SA167c share one conceptual umbrella.",
     ],
 )
 def test_v88_semantic_scheduling_guard_avoids_explanatory_false_positives(
