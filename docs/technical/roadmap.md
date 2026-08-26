@@ -466,6 +466,11 @@ Conceptual background, mental models, and implementation notes for **every** tic
       roadmap counts/dependencies, and changelog evidence under the open-work-only policy.
   5. **G-post-sync:** sync current `v88` again, rerun the complete acceptance on one clean frozen
       tree, perform independent convergence and terminal attestation, and merge only that exact tip.
+  6. **Standing closeout obligations:** archive actual evidence in `CHANGELOG.md`, remove SA135 and
+     SA163 only after full completion under the open-work-only policy, retire Finding 13 only with
+     passing evidence, merge the exact reviewed tip into `v88`, and report final changed-line and
+     elapsed-time/lines-per-hour metrics using the original measurement start of
+     `2026-08-26 16:07:35 +0200`.
 
 ---
 
