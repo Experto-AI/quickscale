@@ -191,13 +191,14 @@ needed.
 |---|---|---|---|---|---|
 | **W1** | SA167b (#17) | **yes** — P1-P3 are merged, the lane is at the integration tip, and P4's shared gate prerequisite is green | **yes** — the remaining exact-candidate checks and closeout are W1-owned, subject to the shared PostgreSQL/Docker serialization rule | **yes** — #17 is the W1 queue head | **truly green — off the critical path** |
 | **W2** | SA123 (#13) | **yes** — implementation is merged and the acceptance rerun is unblocked | **yes** — its full ordered campaign starts from a green shared baseline | **yes** — #13 is the W2 queue head | **truly green — on the critical path** |
-| **W3** | SA135 + SA163 (#15) | **yes to continue** — P/A/B and the local C implementation are merged into `v88` | **no** — strict C acceptance needs an exclusive cluster with no listener on `localhost:5432`, currently held by `pg18-af10`; a maintainer environment authorization clears it, not upstream work | **yes in order** — #15 is the W3 queue head and has no upstream ticket ahead of it | **not truly green — blocked on an environment decision, off the critical path** |
+| **W3** | SA135 + SA163 (#15) | **yes to continue** — P/A/B and the local C implementation are merged into `v88`, and the exclusive PostgreSQL/Docker window is authorized | **yes** — strict C acceptance and phases D-G are W3-owned; the `pg18-af10` stop/restart that gated them is granted | **yes in order** — #15 is the W3 queue head and has no upstream ticket ahead of it | **truly green — off the critical path** |
 
-**W1 and W2 are truly green; only W2's is on the critical path — W1's SA167b is real but parallel
-work, and W3 is blocked on a decision rather than on code.** W2 should run SA123's acceptance rerun
-first because it is the critical-path head. W1 may resume SA167b P4. W3 cannot finish until the
-exclusive PostgreSQL/Docker window is granted; give it scheduling priority the moment it is, and
-keep W1's exact-candidate runtime window from overlapping it.
+**All three tracks are truly green.** W2's SA123 is the only truly green ticket **on** the critical
+path and should run first, because it heads `SA123 acceptance → SA118 → SA167c`. W1's SA167b P4 and
+W3's SA135+SA163 are real band-B work but sit off the path, so neither moves the release date.
+**Scheduling, not dependency, is now the only thing separating them:** all three need the shared
+PostgreSQL cluster and W3 needs it empty, so W3 takes priority while its owned-lifecycle leg is
+active and W1's and W2's campaigns must not overlap that window.
 
 **Blocked open tickets, edge kind, and what clears each.** Every edge is classified so no blocker
 is ambiguous between "a maintainer decision clears it" and "only the upstream work clears it".
@@ -219,24 +220,43 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
   close out only the reviewed exact candidate.
 - **W2 — run SA123 acceptance.** Its implementation is merged and the full ordered rerun is the
   critical-path head; do not start SA118 until it closes.
-- **W3 — continue SA135 + SA163 (#15) from strict C acceptance, once the window is granted.**
-  Reserve an exclusive lane with no listener on `localhost:5432` — today that means stopping
-  `pg18-af10` for the duration — then run the remaining C proof and the D-G plan below. Rebind
-  against the current eight-hosted-gate registry and coordinate the PostgreSQL/Docker slot with W1.
+- **W3 — continue SA135 + SA163 (#15) from strict C acceptance.** The window is authorized: with
+  no W1 or W2 campaign in flight, stop `pg18-af10`, confirm nothing listens on `localhost:5432`,
+  run the remaining C proof and the D-G plan below, then restart the container and verify the
+  restore. Rebind against the current eight-hosted-gate registry and hold the PostgreSQL/Docker
+  slot against W1 for the duration.
 
-#### Open maintainer decision
-
-**One decision is open: grant W3 an exclusive PostgreSQL/Docker window.** SA135's strict C proof
-must show the suites provision their *own* server, which is only observable when no server is
-already listening on `localhost:5432`. The container `pg18-af10` holds that port and the twelve
-shared test databases that W1 and W2 also run against. The decision is whether to authorize
-stopping and restarting it for one window. **Recommended: yes, narrowly** — it unblocks *can
-finish* for W3 only, costs W1 and W2 nothing as long as their campaigns are not running in that
-window, and is reversible by restarting the container. The alternative — a second cluster on
-another port — does not satisfy the acceptance criterion, because the criterion is precisely the
-absence of a host server. No other decision is open anywhere in the v88 plan.
+**No maintainer decision is open anywhere in the v88 plan.** The last one — W3's exclusive
+PostgreSQL/Docker window — was decided on 2026-08-26 and is recorded below.
 
 #### Recorded maintainer decisions
+
+**W3 exclusive PostgreSQL/Docker window — decided 2026-08-26: authorized, narrowly.** W3 may stop
+the container `pg18-af10` for one window and must restart it afterwards.
+
+**Why the window is needed.** SA135's strict C acceptance must show the suites provision their
+*own* PostgreSQL 18 server. That is only observable when nothing is already listening on
+`localhost:5432`; with a host server present the proof is vacuous, because the suites could be
+silently reusing it. `pg18-af10` holds that port and the twelve shared `test_quickscale_*`
+databases.
+
+**Why this option.** The rejected alternative — standing a second cluster up on another port —
+does not satisfy the criterion at all, since the criterion is precisely the *absence* of a host
+server. Deferring W3 was the other alternative; it was rejected because SA135 is band B and the
+window is cheap and reversible. The grant is also the organic reading of the standing rule that
+**W3 holds the exclusive PostgreSQL/Docker slot** — this authorizes the slot rather than inventing
+a new privilege.
+
+**What is authorized, and its bounds.** Stopping `pg18-af10` and restarting it after the proof.
+Nothing else: the container must not be removed, its volume must not be pruned, and the twelve
+databases and the `quickscale_test_role` ownership state must be intact when W1 and W2 next run.
+Recovery is `docker start pg18-af10`.
+
+**Cost accepted, and who carries it.** W1 and W2 lose the shared cluster for the duration, so
+**neither may have a campaign in flight when the window opens** — W3 takes scheduling priority
+while its owned-lifecycle leg is active, per the standing serialization rule, and W1's
+exact-candidate runtime window must not overlap it. **W3 owns the restore**: the window is not
+closed until `pg18-af10` is running again and the restricted-role lane is verified green.
 
 **SA123 coupled-test authority — decided 2026-08-25: option 1, narrow authority.** Adding the
 ticket's two hosted scanner gates changes generator/parity expectations in
@@ -292,10 +312,10 @@ exact reviewed tip.
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #14, #23, and #26 are **retired and not
 reused**; the tickets that held them are closed and archived in
 [CHANGELOG.md](../../CHANGELOG.md). Gaps in the numbering are expected and carry no meaning.
-#13, #15, and #17 are the per-lane heads. #13 and #17 may act today — #13's implementation is
-complete and awaits its acceptance rerun, #17 resumes its remaining P4 validation. #15 resumes from
-strict C acceptance over its merged partial implementation, but cannot finish until the exclusive
-PostgreSQL/Docker window is granted.
+#13, #15, and #17 are the per-lane heads and all three may act today — #13's implementation is
+complete and awaits its acceptance rerun, #17 resumes its remaining P4 validation, and #15 resumes
+from strict C acceptance over its merged partial implementation under the authorized exclusive
+PostgreSQL/Docker window. They are serialized by that shared cluster, not by any ticket edge.
 
 Band-C positions (19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. Any of them may slip
 past the release without blocking it; none may displace a band-A or band-B leg.
@@ -434,18 +454,21 @@ Conceptual background, mental models, and implementation notes for **every** tic
   integration-branch state. The full delivery record — counts, the eight corrected P-C defects, and
   the two post-attestation remediations that are **not** independently graded — is archived in
   [CHANGELOG.md](../../CHANGELOG.md). Resume at the strict C acceptance remainder.
-  **Blocking condition (measured 2026-08-26):** strict C acceptance requires no listener on
-  `localhost:5432`. The container `pg18-af10` (`postgres:18`) currently holds that port and the
-  twelve shared test databases, which W1's and W2's campaigns also use.
-  **Maintainer decision required — environment authority, not a design choice.** Reserve an
-  exclusive PostgreSQL/Docker lane and authorize the temporary stop and restart of `pg18-af10`.
-  Recommended: grant that narrow authority for one window, then resume without redoing P, A, or B.
-  No product-design decision is open.
+  **Environment precondition (measured 2026-08-26):** strict C acceptance requires no listener on
+  `localhost:5432`. The container `pg18-af10` (`postgres:18`) holds that port and the twelve shared
+  test databases, which W1's and W2's campaigns also use.
+  **Authorized (2026-08-26):** W3 may stop `pg18-af10` for one window and **must restart it
+  afterwards** — see [Recorded maintainer decisions](#recorded-maintainer-decisions) for the bounds
+  and the restore obligation. Confirm no W1 or W2 campaign is in flight before opening the window,
+  then resume at step 1 below without redoing P, A, or B. No decision remains open on this ticket.
   **Remaining plan (all phases serial):**
-  1. **C-local-lifecycle acceptance remainder:** with localhost:5432 unavailable, run the exact
-     strict sequence and require no skips, exact-scope cleanup, canary survival, frozen image
-     identity, dynamic loopback endpoints, and restricted → BYPASSRLS → restricted coexistence.
-     Include the post-attestation remediation bytes in the next independent exact-candidate review.
+  1. **C-local-lifecycle acceptance remainder:** open the authorized window by stopping
+     `pg18-af10`, confirm nothing listens on `localhost:5432`, then run the exact strict sequence
+     and require no skips, exact-scope cleanup, canary survival, frozen image identity, dynamic
+     loopback endpoints, and restricted → BYPASSRLS → restricted coexistence. Include the
+     post-attestation remediation bytes in the next independent exact-candidate review. **Close the
+     window before handing the cluster back:** restart `pg18-af10`, confirm the twelve databases and
+     `quickscale_test_role` ownership survived, and record that restore with the phase evidence.
   2. **D-workflow-parity:** migrate all four maintainer workflows and six provisioning contexts to
       the helper, preserve deliberate isolation differences and inherited eight-hosted-gate behavior, add the
       helper to the existing E2E trigger-input owner, regenerate the E2E path region, and replace
