@@ -1,6 +1,6 @@
 # Structural Autopsy: QuickScale
 
-> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-25 · **Branch:** `v88`
+> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-26 · **Branch:** `v88`
 
 ## Orientation summary
 
@@ -8,7 +8,7 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 **Commit delta since the last pass** (`e40762a0..HEAD`, 7 commits, all 2026-08-20). *Housekeeping:* `309b8b7a` (doc links), `3de43250` (social subtree split, no tree change), `ed8bb9b4` and `10d6bfe2` (release notes and v88 roadmap). *Unlabeled-behavioral — read at full depth:* `be5cf024` "fix(ci): unbind hosted gates from one machine's environment" (adds restricted-role provisioning to the isolation job; relaxes the SA90 emission byte-parity gate for `.env`; moves the managed-adapter completeness assertion out of `_refresh_session_managed_adapters`), `d4b0e834` and `d3d4c633`, both titled "v0.87.0: QuickScale 0.87.0" but in fact changing hosted and publish provisioning (PGDG PostgreSQL 18 client install) and isolation-gate skip semantics. Two release-shaped messages carrying CI-topology changes is exactly the class this audit reads closely, and it paid: `d3d4c633` left a repository conformance test red (see Red flags).
 
-**Growth direction (from the planning surface, authoritative).** The v88 roadmap records the prioritization decision as **"neither"** — no `teams` domain work and no third generated-project updater. Thirteen open v88 ticket entries run on three tracks across twelve open merge positions. SA123's Trivy/Bandit implementation is present and the current registry has eight hosted gates, but SA123 remains open at acceptance behind SA169. **SA135** (give test suites an owned PostgreSQL lifecycle, merge #15) also touches this audit's CI/governance seam, where Finding 13 remains live.
+**Growth direction (from the planning surface, authoritative).** The v88 roadmap records the prioritization decision as **"neither"** — no `teams` domain work and no third generated-project updater. Twelve open v88 ticket entries run on three tracks across eleven open merge positions. SA123's Trivy/Bandit implementation is present, the current registry has eight hosted gates, and its acceptance rerun is no longer baseline-blocked. **SA135** (give test suites an owned PostgreSQL lifecycle, merge #15) also touches this audit's CI/governance seam, where Finding 13 remains live.
 
 **Read fully:** the four workflows, `scripts/gate_registry.json`, `scripts/check_gate_parity.py` (context extraction and comparison), `scripts/sync_ci_gate_jobs.py` (generation and job-set validation), the `Makefile` test/gate targets, `scripts/check_ci_locally.sh` gate stations, `scripts/test_isolation_conformance.sh`, and the three behavioral diffs. **Sampled:** module sources, generator, beta migration, orgs tenancy (prior-finding anchor re-verification only). **Skipped:** generated-project template internals, frontend theme sources.
 
@@ -190,7 +190,7 @@ Two apparent divergences are **deliberate and correct**, and this pass verified 
 
 ## Change-cost probe
 
-**Target:** **SA123** — the implemented dependency-vulnerability and security-static-analysis gate change at open position #13. This dry-run was made before implementation and is retained as dated change-cost evidence; ticket acceptance remains blocked by SA169 and no root merge-back is claimed.
+**Target:** **SA123** — the implemented dependency-vulnerability and security-static-analysis gate change at open position #13. This dry-run was made before implementation and is retained as dated change-cost evidence; at that checkpoint ticket acceptance remained blocked by SA169, and no root merge-back is claimed by this probe.
 
 **Measured station list for adding *one* registered gate** (dry-run on paper, in order):
 

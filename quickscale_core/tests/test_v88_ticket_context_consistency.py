@@ -262,27 +262,30 @@ def _assert_current_status_consumers(
         for metadata in v88.values()
         if metadata.merge_position is not None
     }
-    assert (len(v88), len(positions)) == (13, 12)
+    assert (len(v88), len(positions)) == (12, 11)
     assert "SA151" not in roadmap
     assert "SA142" not in roadmap
     assert "SA167a" not in roadmap
+    assert "SA169" not in roadmap
     assert 3 not in positions
     assert 8 not in positions
     assert 10 not in positions
     assert 11 not in positions
+    assert 26 not in positions
     assert re.search(r"Positions [^\n]*#3[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#8[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#10[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#11[^\n]*", roadmap_text)
+    assert re.search(r"Positions [^\n]*#26[^\n]*", roadmap_text)
     assert not re.search(r"^## SA151\b", context_text, re.MULTILINE)
     assert not re.search(r"^## SA142\b", context_text, re.MULTILINE)
+    assert not re.search(r"^## SA169\b", context_text, re.MULTILINE)
     assert "SA124" not in _context_sections(context_text)
     assert set(CLOSED_ENTRY_RE.findall(roadmap_text)) == set()
 
     assert "SA124" not in roadmap
-    assert v88["SA169"].dependencies == frozenset()
     assert v88["SA123"].dependencies == frozenset()
-    assert v88["SA167b"].dependencies == frozenset({"SA169"})
+    assert v88["SA167b"].dependencies == frozenset()
     assert v88["SA118"].dependencies == frozenset({"SA123"})
     assert v88["SA167c"].dependencies == frozenset({"SA118"})
     assert v88["SA164"].dependencies == frozenset({"SA166"})
