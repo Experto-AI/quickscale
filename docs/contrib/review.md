@@ -22,6 +22,10 @@ Review the change against these questions:
 - changed behavior is covered by tests or an explicit gap is recorded
 - documentation impact is handled or intentionally not needed
 - any remaining follow-up work is clearly separated from close blockers
+- security-gate evidence names both blocking scanners (`Trivy v0.74.0` for
+  committed locks and `Bandit 1.9.4` for focused source analysis), confirms the
+  negative probes, and records all eight registry-bound hosted gates rather than
+  treating scanner execution as an unregistered workflow step
 
 ## Review Outcome Guidance
 

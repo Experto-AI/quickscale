@@ -184,6 +184,56 @@
             },
             "depends_on": [],
             "trigger_inputs": []
+        },
+        {
+            "id": "check-dependency-vulnerabilities",
+            "description": "Blocking Trivy scan of root and quickscale_core Poetry locks including development dependencies",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish",
+                "e2e-trigger"
+            ],
+            "bindings": {
+                "make_target": "check-dependency-vulnerabilities",
+                "ci_job": "dependency-vulnerabilities-gate",
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": [
+                "pyproject.toml",
+                "poetry.lock",
+                "quickscale_core/pyproject.toml",
+                "quickscale_core/poetry.lock"
+            ]
+        },
+        {
+            "id": "check-security-static-analysis",
+            "description": "Blocking Bandit static security scan across maintained Python source roots",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish",
+                "e2e-trigger"
+            ],
+            "bindings": {
+                "make_target": "check-security-static-analysis",
+                "ci_job": "security-static-analysis-gate",
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": [
+                "scripts/check_security_gates.py",
+                "scripts/security_suppressions.json",
+                "scripts/security_probe_cases.json",
+                "quickscale/src/**",
+                "quickscale_cli/src/**",
+                "quickscale_core/src/**",
+                "quickscale_devtools/src/**",
+                "quickscale_modules/*/src/**"
+            ]
         }
     ]
 }

@@ -4,6 +4,31 @@
 
 ## v88 development — 2026-08-21
 
+- **SA123 synced-candidate implementation complete; acceptance blocked by SA169 (2026-08-26;
+  root merge-back not claimed).** The accepted dependency design uses **Trivy v0.74.0**, not the earlier proposed
+  `pip-audit`, because Trivy scans both committed Poetry lockfiles directly (including development
+  dependencies); focused source analysis uses **Bandit 1.9.4**. Both are blocking gates in
+  `scripts/gate_registry.json`. The registry now binds **eight hosted gates** and the closed hosted
+  universe is eight bound plus six justified unowned jobs (**14 total**). Trivy acquisition is
+  fail-closed and release-manifest pinned for Linux x86_64/arm64 and macOS x86_64/arm64; Windows
+  uses WSL. Unsupported native hosts, checksum mismatch, unsafe archive members, stale databases,
+  malformed reports, and scanner findings all produce a failing result rather than a skip.
+  The required Phase C campaign used, in order:
+  `make check-dependency-vulnerabilities && make check-security-static-analysis && make
+  security-negative-probes && make check-gate-parity && make check-ci-gate-generation && make
+  check-gate-suites && make lint && make typecheck && make check && make test && make quality`.
+  The campaign passed both scanners, negative probes, parity, generated-workflow checks, the
+  `1,284`-test scripts suite, lint, and typecheck, then stopped at `make check`: core reported
+  `2869 passed, 1 skipped`, while CLI reproduced the five lifecycle failures owned by SA169
+  (`2139 passed, 5 failed`). `make test`, `make quality`, and the required post-sync rerun did not
+  run because the ordered `&&` chain stopped. Focused follow-up reported 40 passing security/v88
+  tests, Ruff clean, and `poetry check --lock` clean. No SA123-attributable failure was observed.
+  The open-only roadmap therefore retains SA123 and position #13, keeps SA118 dependent on it, and
+  records the exact blocker while reconciling all live scanner/topology/audit consumers. This
+  does **not** claim ticket completion, root merge-back, publication, or independent post-terminal
+  grading. The final cross-platform and
+  documentation corrections were applied after terminal attestation and were not independently
+  graded.
 - **Roadmap cleanup and rebalance review (2026-08-26, fourteenth pass).** **No ticket closed and
   no audit finding closed since the thirteenth pass**, so nothing new entered the archive and the
   roadmap continues to hold open work only with zero checked entries. Both audits were re-read and

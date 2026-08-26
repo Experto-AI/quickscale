@@ -40,14 +40,13 @@ The open release work is one principle with four failure modes. Every ticket is 
         DUPLICATED      SILENT         UNOWNED       UNENFORCED
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
-          SA118         SA165           SA135          SA123
-          SA163         SA152           SA161          SA166
-          SA160           │               │              │
-          SA164       (state/tool      (DB, dead      (dep-vuln +
-            │          fallbacks)       code)          security
-       (defaults, CI env,                             scanners,
-        cookies, watchlists)                         testimony
-                                                        trail)
+          SA118         SA165           SA135          SA166
+          SA163         SA152           SA161            │
+          SA160           │               │         (testimony
+          SA164       (state/tool      (DB, dead       trail)
+            │          fallbacks)       code)
+       (defaults, CI env,
+        cookies, watchlists)
 ```
 
 **The one sentence:** *Every fact should have exactly one home, and every consumer should
@@ -63,8 +62,8 @@ and SA162 correction are now complete, with their evidence archived in the chang
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA118, SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA135, SA161 |
-| **Unenforced policy** — a rule exists only in a human's head | no dependency-vulnerability or security static-analysis gate; no requirement that a behavioural commit leave a trail | SA123, SA166 |
-| **False green** — the shared gate the other modes are measured by is itself red | `make check` fails on the integration branch, so no lane's acceptance can be trusted | SA169 |
+| **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail | SA166 |
+| **False green** — the shared gate the other modes are measured by is itself red | `make check` fails on the integration branch, so no lane's acceptance can be trusted | SA169; SA123 remains open only at acceptance behind this baseline |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
 context. Its closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md), so the
@@ -120,49 +119,18 @@ accepted-failure waiver would have produced a false green on three separate tick
 
 ## SA123 — Add dependency-vulnerability and security static-analysis gates
 
-### The mental model
+The implementation is present: Trivy v0.74.0 scans both committed Poetry locks,
+Bandit 1.9.4 performs focused source analysis, and eight registry-bound hosted
+gates are generated and parity-checked. Trivy acquisition is checksum-pinned for
+Linux and macOS x86_64/arm64; Windows uses WSL, and unsupported native hosts fail
+explicitly rather than skipping.
 
-QuickScale's CI discipline is centralised in `scripts/gate_registry.json` — a declared list of every gating checkpoint, with each gate naming the **contexts** it must run in:
-
-```json
-"contexts": {
-    "local-serial":  "scripts/check_ci_locally.sh serial mode",
-    "local-parallel":"scripts/check_ci_locally.sh parallel mode",
-    "hosted":        ".github/workflows/ci.yml hosted CI",
-    "publish":       ".github/workflows/publish.yml release workflow",
-    "e2e-trigger":   ".github/workflows/e2e.yml ordered path allowlist"
-}
-```
-
-Each gate entry carries `id`, `description`, `required_contexts`, `bindings` (`make_target`, `ci_job`, `local_ci_stage`), `depends_on`, and `trigger_inputs`. `scripts/check_gate_parity.py` then proves that what the registry declares actually exists in every context — a gate cannot be green locally and absent in hosted CI.
-
-**This is the key insight for the ticket: the registry is the gate's real home. A scanner wired only into `ci.yml` is not a QuickScale gate; it is a workflow step that parity checking will reject.**
-
-### The concrete gap
-
-`docs/others/tech-audit.md` names it precisely under **Tooling gaps**:
-
-> **Dependency vulnerabilities:** no blocking `pip-audit`/Safety-equivalent scanner with a reviewed allowlist. Roadmap SA123 owns this for v88.
->
-> **Security static analysis:** no focused Bandit/Semgrep-equivalent rules for subprocess shell use, unsafe deserialization, TLS disabling, Django raw/marked-safe sinks, and committed credentials. SA123 owns this for v88.
-
-That second entry is effectively your rule list. Five named categories — treat them as the scope boundary. "Focused" is doing real work in that sentence: turning on Bandit's full default rule set across a repository this size produces a wall of findings, most of them noise in test code, and the predictable outcome is a blanket suppression that makes the gate decorative.
-
-### Design tensions to resolve deliberately
-
-**Blocking vs advisory.** A dependency-vulnerability scanner queries a database that changes without your code changing. A new CVE published overnight turns a green build red with no commit. That is *correct* — you want to know — but it means the gate can block an unrelated release. Decide and document how a fresh CVE is triaged under time pressure, because the reviewed-suppression mechanism is what stands between you and someone disabling the gate at 2am.
-
-**Suppressions are the deliverable, not an afterthought.** *"every suppression carries a written rationale and an owner"*. A suppression file with entries but no rationale is worse than no gate — it looks like coverage. Model the format on the existing quality-waiver structure (`scripts/quality_waivers.json`) so the repository has one shape for "accepted exception".
-
-**Registration is the acceptance criterion.** Both gates need `scripts/gate_registry.json` entries with correct `required_contexts` and `bindings`, and `scripts/check_gate_parity.py` must pass. Also consider `trigger_inputs`: a dependency scanner's trigger is `poetry.lock` and every `pyproject.toml`, not source files.
-
-### The negative-control requirement
-
-*"the gates fail on a deliberately introduced known-vulnerable pin and on a deliberately introduced flagged pattern, both reverted before merge"*. This is non-negotiable evidence. A scanner that runs, exits 0, and has never been shown to exit nonzero is unproven — misconfigured path filters are the single most common way security scanners silently scan nothing. Capture the failing output in the ticket evidence and revert both probes before merge.
-
-### Files
-
-`scripts/gate_registry.json`, `Makefile`, `.github/workflows/ci.yml`, `scripts/check_ci_locally.sh`, a new suppression/allowlist file, `pyproject.toml` (tool config + dev dependency). `scripts/sync_ci_gate_jobs.py` may need to know about the new jobs. Watch the `make quality` ceiling — the acceptance says leave it no worse than found.
+SA123 remains open because the required ordered acceptance reached `make check`
+and reproduced the five unrelated lifecycle failures owned by SA169. The security
+gates, negative probes, parity, generation, 1,284-test gate suite, lint, and
+typecheck all passed before the campaign stopped. `make test`, `make quality`, and
+the required post-sync rerun did not run. This is an acceptance blocker, not an
+invitation to fix SA169 inside the security-gate ticket.
 
 ---
 
