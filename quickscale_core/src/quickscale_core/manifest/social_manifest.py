@@ -1,8 +1,8 @@
 """Social module manifest-driven adapter code.
 
 Provides the provider catalog, URL helpers, and managed-file renderers that
-the social module adapter in :mod:`quickscale_core.manifest.entry_point`
-requires.  Relocated from the previous ``quickscale_cli.social_manifest`` adapter during T2.3 Phase 4.
+the module-owned :mod:`quickscale_modules_social.adapter` requires. Relocated
+from the previous ``quickscale_cli.social_manifest`` adapter during T2.3 Phase 4.
 """
 
 from __future__ import annotations
