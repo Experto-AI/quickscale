@@ -11,7 +11,9 @@ exercise the manager indirectly through CLI commands.
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -74,6 +76,56 @@ def _write_complete_embedded_inventory(
         (target / "module.yml").write_text(
             (source_root / module_name / "module.yml").read_text()
         )
+
+
+def _load_embedded_manifest_contract(project_path: Path) -> dict[str, Any]:
+    """Capture defaults and mutable setting mappings from embedded manifests."""
+    manifests: dict[str, object] = {}
+    options: dict[str, dict[str, object]] = {}
+    option_to_setting: dict[str, dict[str, str]] = {}
+    expected_settings: dict[str, dict[str, object]] = {}
+
+    modules_root = project_path / "modules"
+    for manifest_path in sorted(modules_root.glob("*/module.yml")):
+        manifest = load_manifest_from_path(manifest_path)
+        module_name = manifest_path.parent.name
+        manifests[module_name] = manifest
+        options[module_name] = manifest.get_defaults()
+        mapping = manifest.get_django_settings_mapping()
+        option_to_setting[module_name] = mapping
+        expected_settings[module_name] = {
+            setting_name: manifest.mutable_options[option_name].default
+            for option_name, setting_name in mapping.items()
+        }
+
+    return {
+        "manifests": manifests,
+        "names": tuple(sorted(manifests)),
+        "options": options,
+        "option_to_setting": option_to_setting,
+        "expected_settings": expected_settings,
+    }
+
+
+def _read_emitted_module_settings(project_path: Path) -> dict[str, Any]:
+    """Read ``MODULE_SETTINGS`` without executing generated project code."""
+    settings_path = project_path / "myapp" / "settings" / "modules.py"
+    tree = ast.parse(settings_path.read_text(), filename=str(settings_path))
+    assignments = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "MODULE_SETTINGS"
+    ]
+    assert len(assignments) == 1, (
+        "Generated modules.py must define MODULE_SETTINGS once"
+    )
+    value_node = assignments[0].value
+    assert value_node is not None, "MODULE_SETTINGS assignment must have a value"
+    value = ast.literal_eval(value_node)
+    assert isinstance(value, dict), "MODULE_SETTINGS must be a dictionary"
+    return value
 
 
 class TestRegenerateManagedWiringManifestPath:
@@ -206,6 +258,43 @@ class TestRegenerateManagedWiringManifestPath:
         content = (project / "myapp" / "settings" / "modules.py").read_text()
         assert "quickscale_modules_analytics" in content
         assert "quickscale_modules_billing" in content
+
+    def test_all_embedded_modules_regenerate_manifest_defaults(
+        self, tmp_path: Path
+    ) -> None:
+        """Real CLI regeneration must retain every manifest-owned setting."""
+        project = tmp_path / "myapp"
+        _write_minimal_project(project)
+        _write_complete_embedded_inventory(project)
+        contract = _load_embedded_manifest_contract(project)
+        names = contract["names"]
+        options = contract["options"]
+        expected_settings = contract["expected_settings"]
+        assert isinstance(names, tuple)
+        assert isinstance(options, dict)
+        assert isinstance(expected_settings, dict)
+        assert len(names) == 12
+        assert sum(len(settings) for settings in expected_settings.values()) == 68
+
+        _write_minimal_project(
+            project,
+            modules={name: options[name] for name in names},
+        )
+
+        success, message = regenerate_managed_wiring(project)
+        assert success, f"regenerate_managed_wiring failed: {message}"
+
+        emitted = _read_emitted_module_settings(project)
+        for name in names:
+            expected = expected_settings[name]
+            assert {
+                setting_name: emitted[setting_name] for setting_name in expected
+            } == expected
+        content = (project / "myapp" / "settings" / "modules.py").read_text()
+        assert all(f"quickscale_modules_{name}" in content for name in names)
+        assert any(value is False for value in emitted.values())
+        assert any(value == "" for value in emitted.values())
+        assert any(isinstance(value, list) for value in emitted.values())
 
 
 class TestRegenerateManagedWiringSkipUnknown:

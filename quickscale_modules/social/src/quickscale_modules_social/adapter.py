@@ -23,6 +23,7 @@ from quickscale_core.runtime.manifest import (
     ModuleWiringSpec,
     ResolverResult,
     assemble_wiring_spec,
+    build_generic_manifest_spec,
     load_social_manifest,
     render_social_managed_init_module,
     render_social_managed_urls_module,
@@ -74,24 +75,24 @@ def _social_manifest_adapter(
         if social_provider_supports_embeds(provider)
     ]
 
-    derived_settings: dict[str, Any] = {
-        "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED": bool(
-            resolved.get("link_tree_enabled", True)
-        ),
-        "QUICKSCALE_SOCIAL_LAYOUT_VARIANT": str(resolved.get("layout_variant", "list")),
-        "QUICKSCALE_SOCIAL_EMBEDS_ENABLED": bool(resolved.get("embeds_enabled", True)),
-        "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST": provider_allowlist,
-        "QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST": embed_provider_allowlist,
-        "QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS": int(
-            resolved.get("cache_ttl_seconds", 300)
-        ),
-        "QUICKSCALE_SOCIAL_LINKS_PER_PAGE": int(resolved.get("links_per_page", 24)),
-        "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE": int(resolved.get("embeds_per_page", 12)),
-        "QUICKSCALE_SOCIAL_LINK_TREE_PATH": SOCIAL_LINK_TREE_PATH,
-        "QUICKSCALE_SOCIAL_EMBEDS_PATH": SOCIAL_EMBEDS_PATH,
-        "QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH": SOCIAL_INTEGRATION_BASE_PATH,
-        "QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH": SOCIAL_INTEGRATION_EMBEDS_PATH,
-    }
+    manifest_spec = build_generic_manifest_spec("social", options)
+    settings = dict(manifest_spec.settings)
+    settings.update(
+        {
+            "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED": bool(resolved["link_tree_enabled"]),
+            "QUICKSCALE_SOCIAL_LAYOUT_VARIANT": str(resolved["layout_variant"]),
+            "QUICKSCALE_SOCIAL_EMBEDS_ENABLED": bool(resolved["embeds_enabled"]),
+            "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST": provider_allowlist,
+            "QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST": embed_provider_allowlist,
+            "QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS": int(resolved["cache_ttl_seconds"]),
+            "QUICKSCALE_SOCIAL_LINKS_PER_PAGE": int(resolved["links_per_page"]),
+            "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE": int(resolved["embeds_per_page"]),
+            "QUICKSCALE_SOCIAL_LINK_TREE_PATH": SOCIAL_LINK_TREE_PATH,
+            "QUICKSCALE_SOCIAL_EMBEDS_PATH": SOCIAL_EMBEDS_PATH,
+            "QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH": SOCIAL_INTEGRATION_BASE_PATH,
+            "QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH": SOCIAL_INTEGRATION_EMBEDS_PATH,
+        }
+    )
 
     # Load the manifest-declared wiring and managed_files contracts so the assembler
     # populates spec.managed_files with output_path -> renderer_id mappings
@@ -104,7 +105,7 @@ def _social_manifest_adapter(
         module_name="social",
         defaults={},
         resolved=resolved,
-        derived_settings=derived_settings,
+        derived_settings=settings,
         apps=apps,
         middleware=(),
         url_includes=(

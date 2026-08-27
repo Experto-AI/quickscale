@@ -22,7 +22,7 @@ import urllib.error
 import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, cast
 
 import pytest
 
@@ -334,7 +334,7 @@ def _restricted_postgres_database(
     postgres_service: dict[str, Any],
 ) -> Iterator[dict[str, Any]]:
     """Create and deterministically clean up a restricted, owned database."""
-    import psycopg2  # type: ignore[import-untyped]
+    import psycopg2
 
     scope = os.environ.get("QS_E2E_CONTAINER_PREFIX", "qs-sa151-180655")
     suffix = secrets.token_hex(8)
@@ -454,16 +454,13 @@ def _restricted_postgres_database(
             admin_connection.close()
 
 
-def _source_module_inventory() -> dict[str, Any]:
-    """Bind module names, roots, options, and source migration shape once."""
-    from quickscale_cli.commands.module_config import (
-        get_default_orgs_config,
-        get_module_configurator,
-    )
+def _source_module_inventory(embedded_root: Path) -> dict[str, Any]:
+    """Bind embedded manifest defaults, mappings, and source migration shape."""
     from quickscale_core.contracts.module_discovery import (
         authoritative_module_names,
         discover_shipped_module_paths,
     )
+    from quickscale_core.manifest.loader import load_manifest_from_path
 
     names = tuple(authoritative_module_names())
     roots = discover_shipped_module_paths()
@@ -476,14 +473,25 @@ def _source_module_inventory() -> dict[str, Any]:
         for name in names
     }
     options: dict[str, dict[str, object]] = {}
+    option_to_setting: dict[str, dict[str, str]] = {}
+    setting_names: dict[str, list[str]] = {}
+    expected_settings: dict[str, dict[str, object]] = {}
+    manifests: dict[str, Any] = {}
     for name in names:
-        configurator = get_module_configurator(name)
-        if name == "orgs":
-            options[name] = dict(get_default_orgs_config())
-        else:
-            assert configurator is not None, f"Missing configurator for {name}"
-            options[name] = dict(configurator.get_defaults())
+        manifest_path = embedded_root / name / "module.yml"
+        assert manifest_path.exists(), f"Embedded manifest missing for {name}"
+        manifest = load_manifest_from_path(manifest_path)
+        manifests[name] = manifest
+        options[name] = dict(manifest.get_defaults())
+        mapping = manifest.get_django_settings_mapping()
+        option_to_setting[name] = mapping
+        setting_names[name] = list(mapping.values())
+        expected_settings[name] = {
+            setting_name: manifest.mutable_options[option_name].default
+            for option_name, setting_name in mapping.items()
+        }
     assert set(options) == set(names), "Module options do not cover authoritative names"
+    assert sum(len(settings) for settings in expected_settings.values()) == 68
 
     model_modules: set[str] = set()
     service_modules: set[str] = set()
@@ -517,7 +525,11 @@ def _source_module_inventory() -> dict[str, Any]:
         "names": names,
         "roots": roots,
         "expected_app_config_identities": expected_app_config_identities,
+        "manifests": manifests,
         "options": options,
+        "option_to_setting": option_to_setting,
+        "setting_names": setting_names,
+        "expected_settings": expected_settings,
         "model_modules": model_modules,
         "service_modules": service_modules,
         "initial_migrations": initial_migrations,
@@ -528,15 +540,19 @@ def _run_generated_json_probe(
     project_path: Path,
     project_name: str,
     environment: dict[str, str],
+    setting_names: dict[str, list[str]],
 ) -> dict[str, Any]:
-    """Collect runtime app, origin, loader, recorder, and path provenance."""
-    probe = """
+    """Collect runtime settings, app provenance, migrations, and path provenance."""
+    setting_names_json = json.dumps(setting_names, sort_keys=True)
+    probe = (
+        """
 import json
 import pathlib
 import sys
 
 import django
 from django.apps import apps
+from django.conf import settings
 from django.db import connection
 from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.recorder import MigrationRecorder
@@ -544,6 +560,7 @@ from django.db.migrations.recorder import MigrationRecorder
 django.setup()
 project_root = pathlib.Path.cwd().resolve()
 embedded_root = (project_root / "modules").resolve()
+manifest_setting_names = json.loads(%r)
 
 def embedded_name(value):
     if not value:
@@ -586,6 +603,14 @@ migration_files = []
 for path in sorted(embedded_root.glob("*/**/migrations/0001_initial.py")):
     migration_files.append(str(path.relative_to(project_root)))
 
+manifest_settings = {
+    module_name: {
+        setting_name: getattr(settings, setting_name)
+        for setting_name in module_setting_names
+    }
+    for module_name, module_setting_names in manifest_setting_names.items()
+}
+
 with connection.cursor() as cursor:
     cursor.execute(
         "SELECT table_name FROM information_schema.tables "
@@ -599,9 +624,12 @@ print(json.dumps({
     "disk_migrations": disk,
     "applied_migrations": applied,
     "migration_files": migration_files,
+    "manifest_settings": manifest_settings,
     "public_tables": public_tables,
 }, sort_keys=True))
 """
+        % setting_names_json
+    )
     result = subprocess.run(
         ["poetry", "run", "python", "-c", probe],
         cwd=project_path,
@@ -613,7 +641,7 @@ print(json.dumps({
         f"Generated runtime probe failed:\nstdout: {result.stdout}\n"
         f"stderr: {result.stderr}"
     )
-    return json.loads(result.stdout)
+    return cast(dict[str, Any], json.loads(result.stdout))
 
 
 def test_install_project_dependencies_strict_network_failure_is_not_skipped(
@@ -943,13 +971,13 @@ class TestGeneratedProjectRuntimeSmoke:
             regenerate_managed_wiring,
         )
         from quickscale_core.generator import ProjectGenerator
+        from quickscale_core.contracts.module_discovery import (
+            authoritative_module_names,
+            discover_shipped_module_paths,
+        )
 
-        inventory = _source_module_inventory()
-        names = inventory["names"]
-        roots = inventory["roots"]
-        options = inventory["options"]
-        model_modules = inventory["model_modules"]
-        service_modules = inventory["service_modules"]
+        names = tuple(authoritative_module_names())
+        roots = discover_shipped_module_paths()
 
         project_name = "runtime_all_modules"
         project_path = tmp_path / project_name
@@ -966,6 +994,12 @@ class TestGeneratedProjectRuntimeSmoke:
             assert (embedded_path / "pyproject.toml").exists(), (
                 f"{name} module pyproject.toml missing after embed"
             )
+        inventory = _source_module_inventory(project_path / "modules")
+        assert inventory["names"] == names
+        options = inventory["options"]
+        expected_settings = inventory["expected_settings"]
+        model_modules = inventory["model_modules"]
+        service_modules = inventory["service_modules"]
         assert {
             path.name for path in (project_path / "modules").iterdir() if path.is_dir()
         } == set(names)
@@ -1056,6 +1090,7 @@ class TestGeneratedProjectRuntimeSmoke:
                 project_path,
                 project_name,
                 makemigrations_environment,
+                inventory["setting_names"],
             )
             runtime_identities = {
                 config["module"]: {
@@ -1089,6 +1124,19 @@ class TestGeneratedProjectRuntimeSmoke:
                 if config["model_origin"] is not None
             }
             assert runtime_model_modules == model_modules
+            assert runtime["manifest_settings"] == expected_settings
+            assert (
+                sum(len(settings) for settings in runtime["manifest_settings"].values())
+                == 68
+            )
+            runtime_settings = [
+                value
+                for settings in runtime["manifest_settings"].values()
+                for value in settings.values()
+            ]
+            assert any(value is False for value in runtime_settings)
+            assert any(value == "" for value in runtime_settings)
+            assert any(isinstance(value, list) for value in runtime_settings)
             assert set(runtime["migration_files"]) == {
                 f"modules/{name}/{inventory['initial_migrations'][name]}"
                 for name in model_modules
