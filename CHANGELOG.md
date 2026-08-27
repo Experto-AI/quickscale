@@ -4,6 +4,52 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-27, nineteenth pass).** **No ticket closed and
+  no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
+  positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Every open task
+  already carries a track.
+  **Two false claims corrected against measured worktree state.** The planner recorded W3 as
+  *merged and idle* and SA167d as *implemented, accepted, merge-back only*. Re-measured:
+  `wt-track2` is an ancestor of `v88` (merged, clean, idle), but **`wt-track3` is three commits
+  ahead** (`202a4a00`, `50afb8e8`, `6cdff32c`) with an **uncommitted working tree** and a
+  `make test-e2e` run executing — SA135+SA163 is *in flight*, not idle — and **`wt-track1` is six
+  commits ahead**, not one. SA167d's own checkpoint on that branch records **phases A-D accepted
+  and phase E outstanding**, because E's first pre-close focused sequence failed before convergence
+  corrected the defect and the forward-only workflow cannot retroactively accept it. SA167d's scope
+  is restated from "merge back" to "re-run and accept phase E, reconcile the eight-document ledger
+  and the executable consistency test to the A-E-accepted state and the final 2,879 Core / 2,094
+  CLI totals, then sync-verify-merge".
+  **New cross-worktree conflict surface identified.** `wt-track3` `6cdff32c` edits
+  `scripts/test_isolation_conformance.sh`, which **SA165 (#22, W1)** also owns. Merge order #15
+  before #22 makes the contention one-directional, and the standing sync-before-merge-back
+  procedure covers it; the roadmap now names the surface explicitly.
+  **Rebalance outcome: four moves tested, all rejected.** SA161 (#19) + SA160 (#20) off W3 —
+  rejected, SA161's acceptance needs the W3-owned exclusive PostgreSQL/Docker slot. SA166 (#24) /
+  SA164 (#25) off W2 — rejected on the standing invariant that `scripts/gate_registry.json` never
+  crosses worktrees. SA160 ahead of SA161 inside W3 — rejected on the shared
+  `sa90_emission_manifests.json` rebaseline ordering. **SA165 (#22) off W1 — newly rejected** on
+  the freshly measured `test_isolation_conformance.sh` contention with in-flight W3 work.
+  **Critical path unchanged and now the only lever:** `SA167c` (#21) on W2, with SA166 (#24) and
+  SA164 (#25) as band-C tails behind it. **W2 is the one idle lane and holds the only
+  critical-path ticket**, so starting SA167c is the only action that shortens the release; W1's
+  and W3's green tickets are real band-B work but do not move the date. The binding constraint
+  across all three heads is the single shared PostgreSQL 18 cluster, not any ticket edge.
+  **Audits re-read, nothing closed.** arch Finding 13 stays live under SA163; Findings 7, 2, and 4
+  stay behind their growth triggers; tech-audit counts remain S3 1 (TA67/SA160), S4 1 (TA68/SA161),
+  total 2 open. No red flag is open in either document, and both counts already matched the
+  planner, so neither audit needed an edit.
+  **Archived out of the planner (context no longer needed to execute).** The 2026-08-21
+  prioritization-decision prose is reduced to the standing **"neither"** rule. The SA123
+  coupled-test authority decision block is removed; only the surviving obligation on SA135+SA163
+  (#15) — preserve SA123's hosted-job, `needs`-edge, run-value, publish/E2E-path, and generator
+  expectations and the regenerated 24-entry publish oracle — is retained, inside that ticket. The
+  W3 exclusive PostgreSQL/Docker window decision is reduced to a standing slot rule: the window was
+  authorized 2026-08-26, **has been exercised once**, and `pg18-af10` is up again. The multi-pass
+  rebalance narrative and the repeated `make quality` baseline restatements are dropped as log.
+  **One maintainer decision is open:** whether to release SA165 (#22) from its SA167d ordering on
+  W1. The roadmap records the context, both alternatives, and the recommendation (keep the
+  ordering). It affects **can start** for SA165 only, and touches no critical path.
+
 - **Roadmap cleanup and rebalance review (2026-08-27, eighteenth pass).** **No ticket closed and
   no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
   positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries.
