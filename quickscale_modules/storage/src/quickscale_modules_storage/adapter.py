@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from quickscale_core.runtime.manifest import (
-    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
     ModuleWiringSpec,
     ResolverResult,
     STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
@@ -20,7 +18,7 @@ from quickscale_core.runtime.manifest import (
 
 def _cloud_storage_settings(resolved: dict[str, Any]) -> dict[str, Any]:
     """Project the ordered S3-compatible settings for cloud backends."""
-    querystring_auth = bool(resolved.get("querystring_auth", False))
+    querystring_auth = bool(resolved["querystring_auth"])
     optional_options = {
         option_name: value
         for option_name in (
@@ -29,7 +27,7 @@ def _cloud_storage_settings(resolved: dict[str, Any]) -> dict[str, Any]:
             "region_name",
             "default_acl",
         )
-        if (value := str(resolved.get(option_name, "")).strip())
+        if (value := str(resolved[option_name]).strip())
     }
     storage_options: dict[str, Any] = {
         "querystring_auth": querystring_auth,
@@ -62,21 +60,11 @@ def _cloud_storage_settings(resolved: dict[str, Any]) -> dict[str, Any]:
     credential_env_vars = (
         (
             "AWS_ACCESS_KEY_ID",
-            str(
-                resolved.get(
-                    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-                    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-                )
-            ).strip(),
+            str(resolved[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION]).strip(),
         ),
         (
             "AWS_SECRET_ACCESS_KEY",
-            str(
-                resolved.get(
-                    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-                    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
-                )
-            ).strip(),
+            str(resolved[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]).strip(),
         ),
     )
     settings.update(
@@ -103,29 +91,43 @@ def _storage_manifest_adapter(
 
     resolved = resolve_storage_module_options(options)
     validation_issues = validate_storage_module_options(options)
-    backend = str(resolved.get("backend", "local")).lower()
+    backend = str(resolved["backend"]).lower()
     manifest_spec = build_generic_manifest_spec("storage", options)
 
-    media_url = str(resolved.get("media_url", "/media/"))
-    public_base_url = str(resolved.get("public_base_url", "")).strip()
-    derived_settings: dict[str, Any] = {
-        "QUICKSCALE_STORAGE_BACKEND": backend,
-        "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": public_base_url,
-        "MEDIA_URL": media_url,
-        "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": bool(
-            resolved.get("private_media_enabled", False)
-        ),
-    }
+    media_url = str(resolved["media_url"])
+    public_base_url = str(resolved["public_base_url"]).strip()
+    settings = dict(manifest_spec.settings)
+    settings.update(
+        {
+            "QUICKSCALE_STORAGE_BACKEND": backend,
+            "MEDIA_URL": media_url,
+            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": public_base_url,
+            "AWS_STORAGE_BUCKET_NAME": str(resolved["bucket_name"]).strip(),
+            "AWS_S3_ENDPOINT_URL": str(resolved["endpoint_url"]).strip(),
+            "AWS_S3_REGION_NAME": str(resolved["region_name"]).strip(),
+            "QUICKSCALE_STORAGE_ACCESS_KEY_ID_ENV_VAR": str(
+                resolved[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION]
+            ).strip(),
+            "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR": str(
+                resolved[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]
+            ).strip(),
+            "AWS_DEFAULT_ACL": str(resolved["default_acl"]).strip(),
+            "AWS_QUERYSTRING_AUTH": bool(resolved["querystring_auth"]),
+            "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": bool(
+                resolved["private_media_enabled"]
+            ),
+        }
+    )
 
     if backend in {"s3", "r2"}:
-        derived_settings.update(_cloud_storage_settings(resolved))
+        settings.update(_cloud_storage_settings(resolved))
 
     result = ResolverResult(
         module_name="storage",
         defaults={},
         resolved=resolved,
         validation_issues=validation_issues,
-        derived_settings=derived_settings,
+        derived_settings=settings,
         apps=manifest_spec.apps,
         middleware=manifest_spec.middleware,
         url_includes=manifest_spec.url_includes,

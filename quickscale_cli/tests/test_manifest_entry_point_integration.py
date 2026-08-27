@@ -95,9 +95,8 @@ class TestAnalyticsManifestEntryPoint:
     def test_settings_reflect_supplied_options(self) -> None:
         """Derived settings reflect the supplied option values.
 
-        PR-4 (C2) note: when ``enabled=False``, the parity adapter reproduces
-        the legacy ``_analytics_wiring`` short-circuit and returns an EMPTY
-        ModuleWiringSpec.  Only the enabled=True case populates settings.
+        Analytics keeps its app and URL suppression when disabled while still
+        projecting the manifest-owned settings baseline.
         """
         # Enabled case: custom api key must appear in settings.
         enabled_options = dict(self._ANALYTICS_OPTIONS)
@@ -111,13 +110,15 @@ class TestAnalyticsManifestEntryPoint:
             == "MY_CUSTOM_KEY"
         )
 
-        # Disabled case: legacy returns an EMPTY spec (PR-4 parity).
+        # Disabled case: app and URL wiring are suppressed, but manifest-owned
+        # settings remain available to generated settings.
         disabled_options = dict(self._ANALYTICS_OPTIONS)
         disabled_options["enabled"] = False
 
         disabled_spec = build_manifest_wiring_spec("analytics", disabled_options)
         assert disabled_spec.apps == ()
-        assert dict(disabled_spec.settings) == {}
+        assert disabled_spec.settings["QUICKSCALE_ANALYTICS_ENABLED"] is False
+        assert "QUICKSCALE_ANALYTICS_PROVIDER" in disabled_spec.settings
 
     def test_all_expected_settings_present(self) -> None:
         """All expected analytics settings are present in the spec."""

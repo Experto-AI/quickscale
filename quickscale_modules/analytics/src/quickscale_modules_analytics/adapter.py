@@ -15,9 +15,6 @@ def _analytics_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
     """Apply analytics-specific type coercions and fallback defaults."""
-    if not bool(resolved.get("enabled", True)):
-        return ModuleWiringSpec()
-
     settings = dict(spec.settings)
     for bool_key in (
         "QUICKSCALE_ANALYTICS_ENABLED",
@@ -36,6 +33,11 @@ def _analytics_post_hook(
     ):
         if str_key in settings:
             settings[str_key] = str(settings[str_key]).strip()
+
+    # Analytics remains disabled in the app and URL wiring when requested, but
+    # its manifest-owned settings still need to reach generated settings.
+    if not bool(resolved["enabled"]):
+        return ModuleWiringSpec(settings=settings)
 
     required_nonempty = (
         "QUICKSCALE_ANALYTICS_PROVIDER",

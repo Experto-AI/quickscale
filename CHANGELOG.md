@@ -4,8 +4,57 @@
 
 ## v88 development — 2026-08-21
 
+- **SA118 — manifest-default projection closed and archived (2026-08-27; resynced W2
+  candidate).** The corrected source inventory contains **68 mutable** manifest options and
+  **2 immutable** metadata values. The implementation projects every mutable
+  `django_setting` generically from the resolved manifest map, then composes the complete map
+  with module-owned adapters; explicit derivations remain the authorized normalization and
+  supplementary-wiring layer. The six adapters without explicit option derivations cover **43
+  mutable settings** through that generic composition. The two immutable values remain outside
+  the generic map and retain their established adapter behavior.
+  **Authorized visible deltas:** analytics keeps its app/URL disablement when disabled while
+  emitting its declared settings, including `QUICKSCALE_ANALYTICS_ENABLED = False`; storage
+  emits all ten declared mutable settings for local/blank values while retaining local-only
+  omission of cloud `STORAGES` and runtime credential bindings, with cloud credentials rendered
+  only as `__QS_ENV__:` references. The generic projection preserves false, blank-string, and
+  empty-list values, and the imperative-to-declarative migration remains out of scope.
+  **Evidence:** the SA118-1 focused campaign passed **245 tests** and the affected module
+  suites passed; SA118-2 passed **40** managed-wiring tests, **6** SA90 exact-emission tests
+  with **zero generated-output delta**, and **1** PostgreSQL standalone-runtime test. The
+  managed-output proof regenerated wiring from embedded manifests and matched the complete
+  captured mapping; the standalone runtime booted with `django.setup()`, applied migrations,
+  verified module/migration provenance and manifest-mapped values, and proved no local
+  wheelhouse or maintainer-path provenance. The corrected candidate was resynced from
+  `v88` **e52939b608ba5c661207e1e69a1e9c44cc52da0f** at synced W2 candidate
+  **c32d624b086cf6cdd45048b6d1455611fbcae35b**. Convergence corrected the stale
+  analytics-disabled and v88-status consumers, then `make check-manifest-sync`, `make lint`, and
+  `make typecheck` each exited **0**. The exact two-node regression command passed **2 tests**,
+  the complete v88 context suite passed **20 tests**, and the final full `make test` exited **0**:
+  Core passed **2,876 tests with 1 skip**, CLI passed **2,145 tests**, and every module
+  integration suite passed. This supersedes the docs-phase checkpoint where the old
+  analytics-disabled omission assertion was the sole full-suite failure.
+  The open-only roadmap removes SA118 and retires merge position **#16**; SA167c is now the W2
+  queue head with no SA118 dependency.
+
+- **SA118 truthful handoff checkpoint (2026-08-27; recorded after terminal review).**
+  **Completed:** the product implementation, manifest-derived managed-output proof, standalone
+  runtime proof, same-fact documentation reconciliation, convergence corrections, and full
+  repository gates are complete at reviewed W2 product state
+  `b02f5609db9cdde02737943eec921784c4440f03`. Terminal review found no blocking defect and judged
+  that state functionally merge-ready. **Pending:** plan phase SA118-3 remains formally unaccepted
+  because its implementation handback was partial when two current-count consumers were still
+  outside that phase's scope; convergence subsequently corrected those consumers and made the
+  focused and full gates green, but the phase ledger is not retroactively rewritten. No product or
+  documentation correction remains for that phase. **Blocking:** none for merge. **Advisory:** one
+  test function name still says disabled analytics omits managed settings even though its docstring
+  and assertions correctly retain all eight settings and omit only app wiring; closure is to rename
+  that test without changing its assertions. **Decisions needed:** none. **Remaining plan:** commit
+  and attest this status-only checkpoint, merge the exact W2 tip into `v88`, then begin SA167c from
+  the resulting integration state; the advisory rename may be taken separately. At checkpoint
+  creation the reviewed product state was committed on `wt-track2` but had not yet landed on `v88`.
+
 - **Roadmap cleanup and rebalance review (2026-08-27, seventeenth pass).** **No ticket closed and
-  no track moved** — the queue still stands at **ten open v88 ticket entries across nine open merge
+  no track moved** — the queue then stood at **ten open v88 ticket entries across nine open merge
   positions** (#15, #16, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Track 3 was
   confirmed integrated: `wt-track1`, `wt-track2`, and `wt-track3` are each verified ancestors of
   `v88`, W3 having merged at `d650cf26`.
@@ -16,7 +65,7 @@
   onto one serialized lane — but both tickets are band C and off the critical path, so the move
   cannot change the release date while loading W1 to four legs against W3's one. The W3→W2 move,
   moving SA166/SA164 off W2, and splitting SA160 ahead of SA161 remain rejected on their standing
-  grounds. **Nothing can shorten the release:** `SA118 → SA167c` is pinned to W2 by
+  grounds. **Nothing can shorten the release:** `SA167c` is pinned to W2 by
   `quickscale_modules/*/module.yml` and `scripts/gate_registry.json` ownership, and no move removes
   a leg from that path or lets one start earlier.
   **One previously unnamed cross-lane conflict surface was recorded:**

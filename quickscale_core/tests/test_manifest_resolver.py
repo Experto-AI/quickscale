@@ -1481,9 +1481,122 @@ class TestDerivedSettingsProjection:
         result = resolve_module_config(manifest, schema)
 
         assert result.derived_settings == {
+            "TEST_KEY": "val",
+            "TEST_MODE": "on",
             "SETTING_A": "val",
             "SETTING_B": "on",
         }
+
+    def test_manifest_mapping_preserves_false_blank_and_empty_list_values(self) -> None:
+        """Manifest-owned mutable values are projected without truthiness filters."""
+        manifest = _make_manifest(
+            mutable_options={
+                "enabled": ConfigOption(
+                    name="enabled",
+                    option_type="boolean",
+                    default=False,
+                    django_setting="TEST_ENABLED",
+                    mutability="mutable",
+                ),
+                "label": ConfigOption(
+                    name="label",
+                    option_type="string",
+                    default="",
+                    django_setting="TEST_LABEL",
+                    mutability="mutable",
+                ),
+                "tags": ConfigOption(
+                    name="tags",
+                    option_type="list",
+                    default=[],
+                    django_setting="TEST_TAGS",
+                    mutability="mutable",
+                ),
+            },
+            immutable_options={
+                "embed_only": ConfigOption(
+                    name="embed_only",
+                    option_type="string",
+                    default="locked",
+                    django_setting="TEST_IMMUTABLE",
+                    mutability="immutable",
+                ),
+            },
+        )
+
+        result = resolve_module_config(manifest, _make_schema())
+
+        assert result.derived_settings == {
+            "TEST_ENABLED": False,
+            "TEST_LABEL": "",
+            "TEST_TAGS": [],
+        }
+        assert "TEST_IMMUTABLE" not in result.derived_settings
+
+    def test_manifest_mapping_uses_resolved_overrides(self) -> None:
+        """Overrides replace manifest defaults in the generic projection."""
+        manifest = _make_manifest(
+            mutable_options={
+                "enabled": ConfigOption(
+                    name="enabled",
+                    option_type="boolean",
+                    default=True,
+                    django_setting="TEST_ENABLED",
+                    mutability="mutable",
+                ),
+                "tags": ConfigOption(
+                    name="tags",
+                    option_type="list",
+                    default=["default"],
+                    django_setting="TEST_TAGS",
+                    mutability="mutable",
+                ),
+            }
+        )
+
+        result = resolve_module_config(
+            manifest,
+            _make_schema(),
+            overrides={"enabled": False, "tags": []},
+        )
+
+        assert result.derived_settings == {
+            "TEST_ENABLED": False,
+            "TEST_TAGS": [],
+        }
+
+    def test_explicit_derivation_overrides_manifest_mapping_collision(self) -> None:
+        """Explicit derivations take precedence over the direct baseline."""
+        manifest = _make_manifest(
+            mutable_options={
+                "mode": ConfigOption(
+                    name="mode",
+                    option_type="string",
+                    default="baseline",
+                    django_setting="TEST_MODE",
+                    mutability="mutable",
+                ),
+            }
+        )
+        schema = _make_schema(
+            option_derivations={
+                "mode": OptionDerivation(
+                    option_key="mode",
+                    derived_settings=[
+                        DerivedSetting(
+                            setting_key="TEST_MODE",
+                            source_options=["mode"],
+                            derivation_type="static",
+                            expression={"value": "explicit"},
+                        )
+                    ],
+                )
+            }
+        )
+
+        result = resolve_module_config(manifest, schema)
+
+        assert result.derived_settings["TEST_MODE"] == "explicit"
 
 
 # ---------------------------------------------------------------------------

@@ -1197,13 +1197,14 @@ class TestModuleWiringSpecs:
         assert settings["QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT"] is False
 
     def test_analytics_wiring_disabled_omits_managed_settings(self):
-        """Disabled analytics should not contribute apps or managed settings."""
+        """Compatibility node: disabled analytics omits apps, not owned settings."""
         specs = _build_specs({"analytics": {"enabled": False}})
 
         apps, _, settings, _ = collect_wiring(specs)
 
         assert "quickscale_modules_analytics" not in apps
-        assert "QUICKSCALE_ANALYTICS_ENABLED" not in settings
+        assert len(settings) == 8
+        assert settings["QUICKSCALE_ANALYTICS_ENABLED"] is False
 
     def test_analytics_wiring_includes_module_owned_urls(self):
         """Analytics wiring should include the module-owned URL mount."""
