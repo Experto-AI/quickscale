@@ -212,6 +212,70 @@ SA135's role contract protects; losing them here loses them everywhere.
 
 Each has a small, well-understood blast radius and remains bounded to its stated concern.
 
+## SA170 — Give the E2E Docker harness a closed resource contract
+
+### The mental model
+
+Every E2E resource this project creates is stamped with a **scope** — a unique string minted once
+per run — and every cleanup reclaims resources by asking Docker "give me everything labelled with
+this scope". Nothing is found by name. That is what lets two runs share one Docker daemon without
+touching each other's containers, and what lets cleanup be exhaustive without guessing.
+
+The design holds everywhere except two places, and both stalled a phase of another ticket for
+several passes. Understanding why they stalled it is the point of this ticket.
+
+### Why the symptoms looked like flakes
+
+A flake is a failure that appears and disappears without the code changing. Both symptoms here —
+a container that could not be found, and a build that ran out of time — have that surface.
+Underneath, neither is random:
+
+**Shared mutable name.** One test builds its Docker image under a hardcoded tag instead of a
+scoped one, and deletes that tag when it finishes. Two runs on one machine therefore reach for the
+same object, and whichever finishes first deletes it out from under the other. The collision needs
+two runs to overlap, so it looks like chance — but it is a missing scope, not a race.
+
+**A budget that measures the machine.** The same test allows five minutes for a Docker build. A
+warm build takes seconds because Docker reuses cached layers; a cold one recompiles a frontend and
+installs a database client. Whether five minutes is generous or insufficient depends on the cache,
+not on the code. Re-running it on a warm machine will pass forever and prove nothing.
+
+### The finding that actually explains the stall
+
+The third defect is the reason the first two were never diagnosed.
+
+The helper that waits for a container to start asks Docker for containers *whose name contains* a
+string — a substring match, not an exact one — and asks for **all** containers, including ones that
+have already died. It then decides "is it running?" by looking for the word `up` somewhere in the
+reply. A container that crashed one second after starting does not produce that word, so the helper
+concludes "not ready *yet*" and keeps waiting. Forty seconds later it reports *"the container did
+not become running in time"* — which is true, and useless. The crash and its exit code are never
+shown.
+
+So the harness's failure report cannot distinguish **"still starting"** from **"already dead"**.
+That is why repeatedly re-running the suite produced greens that taught nobody anything: on the runs
+that did fail, the harness had already thrown away the reason.
+
+### Why the old acceptance criterion could not be met
+
+The blocked phase required *red-before / green-after* evidence: show the failure happening, apply
+the fix, show it gone. That is the right standard for a deterministic defect. It cannot be met for a
+collision between two runs that must be scheduled to overlap, and it cannot be met for a timeout
+whose outcome depends on cache state.
+
+The resolution is not to lower the standard. It is to **apply it one level down**, where the
+behaviour *is* deterministic: the readiness decision is a pure function of a status string, so it
+can be fed a crashed container's status and shown to answer wrongly today and correctly after; and
+whether cleanup can see an image is a labelled-resource query, which either finds it or does not.
+Both give genuine red-before/green-after evidence in milliseconds, with no flake to reproduce.
+
+### The reasoning trap this illustrates
+
+*Re-running a test is evidence about the test's environment, not about the code.* When a suite keeps
+passing but a failure is known to exist, the useful question is not "how do I make it fail again"
+but "what would this harness have told me if it had failed" — and if the answer is "nothing
+specific", that is the first defect to fix.
+
 ## SA160 — Share one correct CSRF-token helper in the React theme
 
 ### The mental model

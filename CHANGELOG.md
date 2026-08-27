@@ -4,6 +4,60 @@
 
 ## v88 development — 2026-08-21
 
+- **W3 blocker root-caused; SA170 opened and SA135 unblocked (2026-08-27).** The v88 plan carried
+  **no open maintainer decision** after this pass. SA135+SA163's phase E1 had been stalled across
+  several passes on a requirement for deterministic red-before/green-after evidence for two
+  historical E2E failures — a Docker `No such container` startup race and a 300-second React build
+  timeout — neither of which would reproduce. Reading the harness rather than re-running it showed
+  **the criterion was unsatisfiable as written and both symptoms have one readable structural
+  cause**, none of it in SA135's provisioning code.
+  **What the harness actually does.** `scripts/test_e2e.sh:557` mints `RUN_SCOPE` from `mktemp -d`
+  and `:596` appends `$BASHPID` per lane; `docker-compose.yml.j2` stamps
+  `com.quickscale.{owner,lifecycle,scope}` on every container and volume; `cleanup_scoped_resources`
+  reclaims by label. **The emitted `qs_e2e_tmp_*` scopes the phase flagged as a deviation are that
+  design working correctly** — `sanitize_scope` lowercases and maps non-alphanumerics to `_`, so
+  `qs-e2e-tmp.XXXX` becomes `qs_e2e_tmp_xxxx`. There is no supported way to pin the scope from
+  outside, so the phase's "fixed E1 label" requirement was unfulfillable.
+  **Three defects, one shape.** (1) `quickscale_cli/tests/test_react_theme_e2e.py:657` hardcodes
+  `image_tag = "quickscale-react-test"` with no `--label` and no scope prefix, so two concurrent
+  runs on one daemon share the tag and one test's `finally: docker rmi` removes the image the other
+  is about to `docker run` — the `No such container`/`No such image` class; and because the image is
+  unlabelled **and tagged rather than dangling**, `cleanup_scoped_images` (`test_e2e.sh:401-420`)
+  cannot see it by construction, which is why the prior pass had to hunt it by literal name.
+  (2) The same call budgets `timeout=300` for a cold build that compiles a React frontend and
+  installs a PostgreSQL 18 client — a measurement of Docker layer-cache state, not of the product —
+  and does not catch `subprocess.TimeoutExpired`. (3) **The finding that explains the stall:**
+  `docker_utils.py:328-348` runs `docker ps -a --filter name=<name>`, a **substring** regex over
+  **dead** containers, and the readiness poll at `test_e2e_development_workflow.py:157-168` accepts
+  `"up" in status.lower()`. A container that crashes on startup reads as "not up *yet*", so the poll
+  burns its full 40 s and reports a generic timeout that names no cause. **When this harness fails
+  it cannot say why**, so re-running it was never going to produce the demanded evidence.
+  **Resolution — a third option, not either of the two on the table.** Neither accepting green
+  re-runs (leaves live defects) nor stress-hunting the collision (unbounded) was right. The defects
+  are repaired under a new ticket and proved where determinism exists: a unit test over the
+  readiness predicate and the `docker ps` argv, a labelled-resource assertion that
+  `cleanup_scoped_resources` reclaims the build image, and a two-scope collision test — all genuine
+  red-before/green-after, none requiring a flake to reproduce. **Nothing is waived**; the obligation
+  moved to a ticket that can discharge it.
+  **Planner changes.** **SA170 — Give the E2E Docker harness a closed resource contract and a
+  truthful failure report** is opened at Band B · Tier 2 · **W3** · **merge #27** ·
+  deps: SA135 (worktree ordering), holding the exclusive Docker slot. SA135's phase E1 is re-scoped
+  to the PostgreSQL-lifecycle evidence it owns and **W3's *can start* moves from no to yes** — all
+  three tracks are now truly green at their queue heads, with SA167c (#21) still the sole
+  critical-path ticket. The previously raised D2 (running SA161/SA160 ahead of a stalled SA135) is
+  **withdrawn**: the idle window it was written to fill no longer exists. Counts move to **ten open
+  v88 ticket entries across nine open merge positions**, reconciled in `docs/technical/roadmap.md`,
+  `docs/index.md`, `docs/others/arch-audit.md`, `docs/technical/v88_ticket_context.md` (new SA170
+  concept section), and the executable ledger in
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` (`(9, 8)` → `(10, 9)`, plus SA170's
+  dependency assertion). **20 passed.**
+  **New live tech-audit finding.** **TA70 — `container-status-substring-match` (S4)** records defect
+  (3) against shipped CLI surface: `get_container_status` is public in
+  `quickscale_cli/src/`, has no production caller today, and its substring-over-`-a` matching is why
+  a stalled ticket stayed stalled. The tooling gap *"no test exercises the E2E harness's own failure
+  paths"* is recorded alongside it. Live inventory moves to **S3: 1 (TA67) · S4: 2 (TA68, TA70) ·
+  Total 3 open**, reconciled in the tech-audit summary table and the executable consumer.
+
 - **Roadmap cleanup and rebalance review (2026-08-27, twenty-second pass).** **No ticket closed
   and no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
   positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Every open task

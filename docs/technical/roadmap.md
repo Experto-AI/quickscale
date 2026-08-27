@@ -46,7 +46,7 @@ Applying it produces three ranked bands:
 | Band | Rule | Tickets |
 |---|---|---|
 | **A — Restore enforcement** | The gate layer reports green while not running, or runs red on HEAD. Nothing downstream can be trusted until this is fixed. | — (shared baseline green; prior repair archived) |
-| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA167c (critical path); SA135 (+ SA163); SA167d |
+| **B — Release work on the critical paths** | The two longest serialized chains, one of which holds the exclusive service slot. | SA167c (critical path); SA135 (+ SA163); SA170; SA167d |
 | **C — Bounded independent fixes** | No dependants, small blast radius. Absorbed as slack filler by whichever worktree finishes a band-B leg early. | SA160, SA161, SA164, SA165, SA166 |
 
 **Standing consequences of that rule:**
@@ -81,7 +81,7 @@ Applying it produces three ranked bands:
 ### Dependency graph and critical path
 
 ```text
-v88 — three worktrees, eight open merge positions carrying nine open ticket entries, one merge queue
+v88 — three worktrees, nine open merge positions carrying ten open ticket entries, one merge queue
 
 BAND A — clear; shared repository gates are green
 
@@ -104,11 +104,13 @@ W1 (module-wiring migration + watch items)   2 open legs, no cross-worktree depe
              with SA163)
      #18       #22
 
-W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   3 open positions: 1 heavy PARTIAL MERGED + 2 band-C
-  SA135 + SA163 ──► [SA161, SA160]
-  owned PG lifecycle    emission-adjacent
-  + derived CI env      fillers
-        #15              #19, #20
+W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   4 open positions: 1 heavy PARTIAL MERGED
+                                                           + 1 harness repair + 2 band-C
+  SA135 + SA163 ──► SA170 ──► [SA161, SA160]
+  owned PG lifecycle  E2E docker   emission-adjacent
+  + derived CI env    resource     fillers
+                      contract
+        #15             #27          #19, #20
 ```
 
 **Longest open release chain — the critical path:** W2's
@@ -117,13 +119,16 @@ leg; SA166 (#24) and SA164 (#25) are band-C tails behind
 the chain, not on it. W2's back half is the release's implementation work, so W2 sets the
 date. SA167d costs nothing on the critical path: W1 runs it against W2's second half.
 **Load check:** W1 carries two open legs (SA167d's outstanding phase E, then SA165); W3 carries
-three positions (the stalled SA135+SA163, then SA161 and SA160), against the three-leg W2 spine.
-W3's two band-C tails do not gate release, so W2 remains the binding lane.
+four positions (SA135+SA163, then SA170, then SA161 and SA160), against the three-leg W2 spine.
+W3's band-C tails do not gate release and SA170 is off the critical path, so W2 remains the binding
+lane — SA170 lengthens W3's queue without lengthening the release.
 
 
-**Second chain:** W3, `SA135` carrying `SA163`, one service-backed open leg — currently stalled on
-  decision **D1** — followed by emission-adjacent fillers and serialized on the exclusive slot while
-  that leg is active.
+**Second chain:** W3, `SA135` carrying `SA163`, one service-backed open leg — **no longer stalled**
+  after this pass root-caused the E1 blocker out of it — followed by `SA170`'s harness repair and the
+  emission-adjacent fillers, serialized on the exclusive slot while a leg is active. At four
+  positions W3 is now the longest *queue*, but SA167c on W2 remains the longest *chain* and still
+  sets the date.
 
 **Active cross-worktree dependency edges — none.** Every remaining *dependency* is intra-lane.
 One cross-worktree **shared file** remains but no live contention does: SA163's merged partial and
@@ -151,13 +156,12 @@ will have to resolve `docs/technical/roadmap.md` against this pass. No suite is 
 `pg18-af10` holds all twelve `test_quickscale_*` databases.
 Each lane still syncs current `v88` before its own exact-candidate validation.
 
-**Rebalance result (twenty-second pass): no track moves; one intra-lane reorder is now proposed.**
+**Rebalance result (twenty-second pass): no track moves; one ticket opened.**
 Every open ticket already carries a track, and the binding constraint is physical — one PostgreSQL 18
 cluster on `localhost:5432` holding the twelve shared test databases, which W3 needs *empty*. No
-ticket move relieves that; only scheduling does. What changed this pass is that **W3 is now clean,
-idle, and stalled on a maintainer decision**, so its two band-C tails are being held by a lane
-position rather than by any work in progress — see the open reorder decision below. Moves tested and
-rejected:
+ticket move relieves that; only scheduling does. What changed this pass is that **W3's stall was
+root-caused out of SA135 into the new SA170 (#27)**, so W3 has executable band-B work at its head
+again and needs no reorder. Moves tested and rejected:
 
 - **SA161 (#19) + SA160 (#20) off W3** — rejected. SA161's acceptance needs the exclusive
   PostgreSQL/Docker slot, which is W3-owned by standing rule, so any other lane leaves it blocked
@@ -168,20 +172,22 @@ rejected:
   dependency on SA167c.
 - **SA160 ahead of SA161 inside W3** — rejected: they share the emission-parity rebaseline
   ordering on `sa90_emission_manifests.json` and must not be split.
-- **SA161 (#19) + SA160 (#20) *ahead of* SA135 (#15) inside W3** — **not rejected; raised as an
-  open maintainer decision** (see [Open decisions](#open-decisions)). This is a queue reorder inside
-  one lane, not a track move, so it creates no new conflict surface: SA161/SA160 touch generator
-  templates and `sa90_emission_manifests.json`, which SA135+SA163 does not touch at all, and the
-  pair stays in its own required order. It was rejected in prior passes as band-C displacing band-B;
-  that objection is weaker now that SA135 cannot advance at all until the decision below is
-  answered.
+- **SA161 (#19) + SA160 (#20) *ahead of* SA135 (#15) inside W3** — **raised, then withdrawn within
+  this pass.** It was proposed to stop W3 idling while SA135 was stalled; root-causing that stall
+  out of SA135 removed the idle window, so the standing rule that band-C filler must not displace a
+  band-B leg applies normally again.
+- **SA170 (#27) onto W1 or W2** — rejected. It edits `quickscale_cli/tests/test_react_theme_e2e.py`,
+  `test_e2e_development_workflow.py`, `docker_utils.py`, and `scripts/test_e2e.sh`, and its
+  acceptance runs real Docker builds — the exclusive slot is W3-owned by standing rule. Placing it
+  on W2 would also put non-critical-path work on the lane that sets the release date.
 - **SA165 (#22) off W1** — rejected. SA163's edit to
   `scripts/test_isolation_conformance.sh` is now merged into `v88`, so it is settled input rather
   than an active cross-worktree hazard. Moving SA165 still buys nothing on the critical path and
   would move W1-owned filler without shortening its queue. Its W1 *ordering* remains the separate
   open decision below.
 
-**Nothing can shorten the release.** The critical path is `SA167c`, pinned to W2 by
+**Nothing can shorten the release.** SA170 lengthens W3's queue but not the release: W3 was already
+off the critical path. The critical path is `SA167c`, pinned to W2 by
 `quickscale_modules/*/module.yml` and `scripts/gate_registry.json` ownership, with no prerequisite
 outside W2. SA166 (#24) and SA164 (#25) are band-C tails *behind* the spine. W2 is idle, so the
 only lever available is **continuing SA167c from its merged retirement slice**, not moving anything.
@@ -212,13 +218,17 @@ independently graded; the affected claims are marked once here rather than repea
 |---|---|---|---|---|---|
 | **W1** | SA167d (#18) — A-D accepted, **E outstanding** | **yes** — re-running phase E is executable today; no decision, no upstream ticket. Contends with W3 for the shared cluster | **yes** — phase E, the ledger reconciliation, and the merge-back are all W1-owned | **yes** — #18 is the W1 queue head with no upstream ticket | **truly green — off the critical path** |
 | **W2** | SA167c (#21) — Phase-A slice merged, **A unaccepted; B-F outstanding** | **yes** — worktree is clean, idle, and fully merged back; resume acceptance on the merged bytes. No decision or upstream ticket blocks it | **yes** — remaining gate, proof, closeout, and frozen-candidate work is W2-owned | **yes** — #21 remains the W2 queue head | **truly green — on the critical path** |
-| **W3** | SA135 + SA163 (#15) — C/D accepted, E outstanding | **no** — the next E1 attempt needs decision **D1** below, after every executed reproduction context passed without yielding a cause; E1's exact literal `TEST COMMAND` chain was not run and remains outstanding unless that decision expressly supersedes it | **yes, after that decision** — the remaining E/F/G work is W3-owned; the exclusive slot remains authorized when needed | **yes** — #15 is the W3 queue head | **decision-blocked — off the critical path; worktree merged, clean, and idle** |
+| **W3** | SA135 + SA163 (#15) — C/D accepted, E outstanding | **yes** — E1 is re-scoped to the PostgreSQL-lifecycle evidence SA135 owns, which is deterministic today. The two E2E Docker failures that stalled it are re-ticketed as SA170 (#27); no decision or upstream ticket blocks #15 | **yes** — the remaining E/F/G work is W3-owned; the exclusive slot remains authorized when needed | **yes** — #15 is the W3 queue head | **truly green — off the critical path; worktree merged, clean, and idle** |
+| **W3 (queue tail)** | SA170 (#27) — newly opened | **yes** — the root cause is identified and its proofs are pure unit tests plus one labelled-resource assertion; none needs the cluster | **yes** — every file it touches is W3-owned CLI test/util and harness code | **no** — merges after SA135 (#15) | **blocked on merge order only** |
 
-**W1 and W2 are truly green; W3 is decision-blocked at SA135+SA163 (#15).** Only **SA167c (#21)**
+**All three tracks are now truly green at their queue heads.** W3's block is cleared by this pass:
+SA135's phase E1 was stalled on an acceptance criterion that could not be satisfied, not on missing
+work — see [Open decisions](#open-decisions). Only **SA167c (#21)**
 is on the critical path — it is the one ticket whose progress moves the release date. SA167d and
 SA135+SA163 are real band-B work but are **filler with respect to the release date**: finishing
 either does not shorten the chain. W1 is additionally the only track with an unmerged product
-delta, so its merge-back is the one outstanding integration risk.
+delta, so its merge-back is the one outstanding integration risk. SA170 (#27) is band-B work behind
+SA135 on W3 and is off the critical path.
 
 **The binding constraint is the shared PostgreSQL cluster, not any ticket edge.** No W3 suite is
 currently holding it. W1's phase-E `make test`, W2's SA167c campaign, and the next W3 E2E rerun
@@ -231,8 +241,9 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 |---|---|---|---|
 | SA167c (#21) | — | **queue head; Phase-A slice merged** | No dependency or decision blocks it. Acceptance must first use a focused command that does not inherit whole-package coverage, with the restricted PostgreSQL role; then continue B-F. |
 | SA167d (#18) | — | **queue head** | Nothing blocks it. Startable today; competes with W3 for the cluster. |
-| SA135 + SA163 (#15) | — | **queue head; partial merged; decision-blocked (D1)** | No upstream ticket blocks it. **A maintainer decision clears it, not upstream work.** The maintainer must choose whether repeated exact green evidence may replace deterministic red-before/green-after evidence, or whether a new E1 attempt must instrument the runner-generated scope and stress the historical failure boundaries. |
-| SA161 (#19) | SA135 (#15) | **lane-ordering** — W3 queue position; SA161 also needs the PostgreSQL/Docker slot SA135 holds | **A maintainer decision clears it** (**D2** below), or upstream work. Previously not recommended; now live, because SA135 is stalled on D1 and W3 is idle. |
+| SA135 + SA163 (#15) | — | **queue head; partial merged; unblocked this pass** | Nothing blocks it. The former decision block is retired: the two E2E Docker failures were root-caused out of this ticket into SA170 (#27), and E1 is re-scoped to the deterministic PostgreSQL-lifecycle evidence SA135 owns. |
+| SA170 (#27) | SA135 (#15) | **lane-ordering** — W3 queue position; SA170 also needs the Docker slot SA135 holds | **Upstream work only.** No decision clears it. It is deliberately behind SA135 so it starts from the settled provisioning bytes. |
+| SA161 (#19) | SA135 (#15) | **lane-ordering** — W3 queue position; SA161 also needs the PostgreSQL/Docker slot SA135 holds | **Upstream work only, again.** D2 is withdrawn: it existed to fill W3 idle time while SA135 was stalled, and SA135 is no longer stalled. |
 | SA160 (#20) | SA161 (#19) | **hard content** — emission-parity ordering on the shared `sa90_emission_manifests.json` rebaseline | Only SA161. No decision clears it; the pair must not be split. |
 | SA166 (#24) | SA167c (#21) | **lane-ordering** — W2 queue position behind the spine; SA166 also owns `scripts/gate_registry.json` | Upstream work, or a maintainer reordering W2. Not recommended: it would put band-C filler ahead of the critical path. |
 | SA164 (#25) | SA166 (#24) | **lane-ordering** for the queue position, **hard content** for its substance — its `test_sa92_migration_squash_guardrail.py` work depends on SA167c having retired `django_apps:` | The content half only SA167c clears. The SA166 position is reorderable by decision, but not recommended. |
@@ -243,12 +254,9 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 - **W2 — continue SA167c (#21).** Do not redo the merged manifest-retirement bytes. First accept
   them with the corrected focused command and restricted PostgreSQL role, then implement B-F.
   This remains the only action that shortens the release.
-- **W3 — pause SA135 + SA163 (#15) at phase E1 for decision D1.** Do not redo C or D. The orphan
-  cleanup is already closed and every executed reproduction context passed, but E1's exact literal
-  `TEST COMMAND` chain was not run. A new pass either expressly supersedes that requirement by
-  policy or runs it after instrumenting the generated lane scopes and stress-reproducing the
-  historical boundaries. Only after E1 is accepted may the unchanged-tree serial E2E and `ci-e2e`
-  acceptance proceed. **If D1 is not answered promptly, D2 keeps W3 productive instead of idle.**
+- **W3 — resume SA135 + SA163 (#15) at the re-scoped phase E1.** Do not redo C or D, and do not
+  attempt the two E2E Docker failures here — they are SA170's. Accept E1 on the provisioning
+  evidence this ticket owns, then run E2's unchanged-tree serial E2E and `ci-e2e`.
 - **W1 — re-run and accept SA167d's phase E (#18)**, then do the ledger reconciliation and the
   merge-back. This is the release's only unmerged delta and it is ageing seven commits behind
   `v88`; schedule its `make test` outside W3's window.
@@ -256,43 +264,42 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 
 #### Open decisions
 
-Two decisions are open in the v88 plan. Both are the maintainer's; neither is cleared by upstream
-work.
+**No maintainer decision is open in the v88 plan.** The one that was open — SA135's phase-E1
+evidence policy, carried as **D1** — is closed by this pass on engineering grounds rather than by a
+judgement call, and **D2 is withdrawn** because the idle window it was written to fill no longer
+exists. Both are recorded here until SA170 merges.
 
-**D1 — SA135+SA163 (#15), evidence policy for phase E1.** *Blocks W3's **can start**.*
-The reviewed phase requires deterministic red-before/green-after evidence for two historical
-failures (a Docker `No such container` startup race and a 300-second React build timeout). Neither
-reproduced in the isolated development node, the isolated React node, their synchronized pair, or
-the exact serial full-E2E context — every one of them passed green — and the runner emitted
-`qs_e2e_tmp_*` lane scopes instead of the fixed label the phase asked for, so fixed-scope ownership
-was never independently proved. The alternatives are stated in the SA135 ticket block below
-(**Option 1** accept the repeated green evidence; **Option 2, recommended** keep the causal
-requirement and instrument/stress the boundaries under the emitted scopes). Answering it moves W3's
-**can start** from *no* to *yes*; **can finish** and **can merge** are already *yes*.
+**D1 — closed: the criterion was unsatisfiable, and the cause was findable by reading the harness.**
+The phase demanded deterministic red-before/green-after evidence for a Docker `No such container`
+startup race and a 300-second React build timeout. Neither symptom could be scheduled on demand, so
+the two alternatives previously offered were *accept green re-runs and never learn the cause*
+(Option 1) or *stress the boundaries until something breaks* (Option 2). Both were the wrong shape:
+Option 1 leaves live defects in the tree, and Option 2 hunts a collision whose cause is already
+legible in about forty lines of source. Root-causing the harness this pass produced a third answer,
+which is what the plan now follows:
 
-**D2 — W3 queue order while D1 is unanswered.** *Would change nothing on the critical path; it
-only converts W3 idle time into band-C progress.*
-SA161 (#19) and SA160 (#20) sit behind SA135 (#15) purely by W3 lane position — they share no file
-with it and have no content dependency on it. The standing rule that band-C filler must not
-displace a band-B leg was written for a *running* band-B leg; SA135 is currently stalled and cannot
-run at all until D1 is answered.
-- **Option A (status quo).** Keep #15 → #19 → #20 and leave W3 idle until D1. Pro: the standing
-  ordering rule is untouched and SA135 merges first, so its `scripts/test_isolation_conformance.sh`
-  bytes reach `v88` before SA165 (#22) needs them. Con: a whole lane produces nothing for as long as
-  D1 is unanswered.
-- **Option B (recommended if D1 will not be answered today).** Run SA161 then SA160 now, keeping
-  their own required order, and return to SA135 when D1 lands. Pro: W3 stops idling; the pair is
-  small, template-only, and needs no PostgreSQL lifecycle work of its own. Con: SA135's merge slips
-  behind two band-C merges, and the merge table's *merges after* column and positions must be
-  restated in the same change. It does **not** touch the critical path either way — SA167c on W2
-  still sets the date.
-If Option B is chosen, the merge order becomes #19 → #20 → #15 within W3, and SA165 (#22) keeps
-starting from whichever SA163 bytes are on `v88` at its own sync — already-merged input in both
-options, since SA163's `test_isolation_conformance.sh` edit is on `v88` today.
+> **Option 3 — fix the structure, and prove the fix where determinism actually exists.**
+> Both symptoms come from one shape: `quickscale_cli/tests/test_react_theme_e2e.py:657` opts out of
+> the per-scope Docker resource contract that every other E2E resource obeys (fixed
+> `quickscale-react-test` tag, no `com.quickscale.*` labels, no scope prefix), so concurrent runs
+> collide on the tag and the harness's label-driven cleanup cannot see the image; and
+> `docker_utils.py:328-348` filters containers with `docker ps -a --filter name=<name>`, a
+> **substring** regex over dead containers, so `quickscale_cli/tests/test_e2e_development_workflow.py:157-168`
+> reads a crashed container as "not up yet", waits out its full 40 s, and reports a generic timeout
+> that names no cause. **That last one explains the whole stall:** when this harness fails it cannot
+> say why, so re-running it was never going to yield the evidence the phase asked for.
+> The repair is ticketed as **SA170 (#27)** with proofs that *are* deterministic — a unit test over
+> the readiness predicate and the `docker ps` argv, a labelled-resource assertion that
+> `cleanup_scoped_resources` reclaims the build image, and a two-scope collision test. None requires
+> reproducing a flake. Nothing is waived: the obligation moved to a ticket that can discharge it.
 
-SA165's W1 queue position is a **closed** decision governed by the standing rule below, not an open
-one.
+Effect on the three states: W3's **can start** moves from *no* to *yes*, because SA135's E1 is now
+scoped to PostgreSQL-lifecycle evidence it can produce today. **Can finish** and **can merge** were
+already *yes*.
 
+**D2 — withdrawn.** It proposed running SA161/SA160 ahead of SA135 to stop W3 idling while D1 was
+unanswered. With D1 closed, W3 has band-B work at its head again, and the standing rule that band-C
+filler must not displace a band-B leg applies normally. Revisit only if SA135 stalls again.
 
 #### Standing rules carried from closed decisions
 
@@ -335,19 +342,20 @@ exact reviewed tip.
 | 22 | **SA165** | C | 3 | W1 | SA167d | no |
 | 24 | **SA166** | C | 3 | W2 | SA167c | no |
 | 25 | **SA164** | C | 3 | W2 | SA166 | no |
+| 27 | **SA170** | B | 2 | W3 | SA135 | **yes** — Docker |
 
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16, #17, #23, and #26 are **retired and not
-reused**; the tickets that held them are closed and archived in
+reused**; #27 is newly allocated to SA170 (opened 2026-08-27); the tickets that held them are closed and archived in
 [CHANGELOG.md](../../CHANGELOG.md). Gaps in the numbering are expected and carry no meaning.
 #15, #18, and #21 are the per-lane heads. #21 has a merged Phase-A slice at `f6f3bbce`: its product
 bytes are reviewed, but A is unaccepted and B-F are outstanding. #18 is a stalled acceptance on
 `wt-track1` product tip `1743871f` (phases A-D accepted, E outstanding) and is the only unmerged
 delta in the release; #15 has a merged partial with C/D accepted and E outstanding. All three remain
-serialized by the shared PostgreSQL cluster, not by any ticket edge. If decision **D2** is answered
-*Option B*, W3's internal order becomes #19 → #20 → #15 and the *Merges after* column is restated in
-that same change.
+serialized by the shared PostgreSQL cluster, not by any ticket edge. #27 is newly opened behind #15
+on W3 and carries the E2E-harness obligation lifted out of #15's phase E1.
 
-Band-C positions (19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. Any of them may slip
+Band-C positions (19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. #27 is band B and
+is not a band-C tail: it discharges an obligation lifted out of #15, so it may not be dropped. Any of them may slip
 past the release without blocking it; none may displace a band-A or band-B leg.
 
 ### Shared conflict surfaces
@@ -364,8 +372,9 @@ Additional per-ticket surfaces:
 | SA164 | `docs/others/arch-audit.md`, `scripts/gate_registry.json`, `scripts/check_gate_parity.py`, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`, `.../production.py.j2`, `quickscale_modules/orgs/.../apps.py` | watchlist discharge; **W2** — registry and the SA92 test are W2-owned surfaces, and it merges last |
 | SA165 | `docs/others/tech-audit.md`, `quickscale_core/.../state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `OPERATIONS.md.j2` | watchlist discharge; W1-isolated |
 | SA166 | `scripts/gate_registry.json`, `Makefile`, CI workflow, `docs/others/tech-audit.md` | new process gate |
+| SA170 | `quickscale_cli/src/quickscale_cli/utils/docker_utils.py`, `quickscale_cli/tests/test_e2e_development_workflow.py`, `quickscale_cli/tests/test_react_theme_e2e.py`, `scripts/test_e2e.sh`, `docs/others/tech-audit.md` | E2E Docker resource contract and failure diagnostics; **W3** — needs the exclusive Docker slot |
 
-**Seven surfaces are contended and need naming explicitly:**
+**Eight surfaces are contended and need naming explicitly:**
 
 - `scripts/gate_registry.json` — SA167c, SA166, and SA164 own this W2-only surface. SA123's two
   scanner entries are settled tree state and remain preserved while the registry never crosses
@@ -401,6 +410,11 @@ Additional per-ticket surfaces:
 - `quickscale_core/tests/fixtures/sa90_emission_manifests.json` — SA161 and SA160. Each
   rebaseline appends its own `baseline_evidence` entry with per-file rationale; the
   sync-before-merge-back procedure must preserve every prior entry.
+
+- `scripts/test_e2e.sh` — SA170 (#27, W3) is the only open owner. SA135+SA163's merged partial
+  already settled the provisioning side of the E2E lane; SA170 touches the scope/cleanup side.
+  Merge order #15 before #27 keeps the handoff one-directional within W3, and no other lane touches
+  this file.
 
 `docs/others/arch-audit.md` is on the surface of SA163 only (Finding 13).
 Findings 2, 4, and 7 remain untouched, per the standing "neither" rule above.
@@ -542,29 +556,28 @@ Conceptual background, mental models, and implementation notes for **every** tic
   passed), isolated React node (1 passed), synchronized two-node run (2 passed), and exact
   `QS_E2E_PARALLEL=0 make test-e2e` context (Core 38 passed; CLI 40 passed; cleanup complete). E1's
   exact literal `TEST COMMAND` chain was not run.
-  **Pending:** E1 is still unaccepted because the reviewed phase required deterministic causal and
-  red-before/green-after evidence, and its exact literal `TEST COMMAND` chain remains outstanding
-  unless the maintainer's policy decision expressly supersedes it. E2 must then run
+  **Pending:** E1 is narrowed to what this ticket actually owns — the **PostgreSQL lifecycle**
+  evidence: provisioning, teardown, the role contract, and the asserted-unavailability negative
+  control, all of which E0 and the C/D phases already exercise deterministically. The two historical
+  **E2E Docker-harness** failures that stalled E1 are **not SA135 defects** and are re-ticketed as
+  **SA170 (#27)**; see that ticket for the root cause. E2 must then run
   `QS_E2E_PARALLEL=0 make test-e2e` followed only on green by `make ci-e2e` on one unchanged
   candidate; `make ci-e2e` was not reached in this pass.
   F must reconcile validation policy, Finding 13, ticket context, roadmap counts/dependencies, and
   changelog evidence. G must sync current `v88`, run the complete campaign and independent review
   on one unchanged tip, and merge only that exact tip.
-  **Blocking:** the historical Docker `No such container` startup race and 300-second React build
-  timeout remain unclosed because neither reproduced in isolated, synchronized, or exact serial
-  full-E2E contexts. The exact runner generated `qs_e2e_tmp_*` lane scopes rather than the requested
-  fixed E1 label, so fixed-scope ownership was not independently proved even though cleanup left no
-  residual resource. Close the block either by an explicitly authorized evidence-policy change or
-  by deterministic instrumentation/stress reproduction of each historical boundary; never guess a
-  correction, weaken an assertion, or treat the old failures as waived.
-  **Decisions needed: D1** — see [Open decisions](#open-decisions). Choose one before another E1
-  attempt. **Option 1:** accept repeated isolated,
-  paired, and exact-context green evidence in place of deterministic red-before/green-after evidence;
-  this permits E2 but leaves the historical causes unknown. **Option 2 (recommended):** keep the
-  causal-evidence requirement, first establish whether generated `qs_e2e_tmp_*` scopes are the
-  intended harness contract, then instrument/stress the startup and build-time boundaries under
-  those emitted scopes; this costs another E1 pass but preserves fail-closed ownership evidence.
-  The exclusive service-window authorization remains available; `pg18-af10` is running.
+  **Why the previous blocker is retired, not waived.** E1 was previously held on deterministic
+  red-before/green-after evidence for a Docker `No such container` startup race and a 300-second
+  React build timeout. Neither reproduced in isolated, paired, or exact serial full-E2E contexts,
+  and the runner emitted `qs_e2e_tmp_*` lane scopes instead of the fixed label the phase named.
+  **Root-causing the harness showed the criterion was unsatisfiable as written and that both
+  symptoms have a readable structural cause** — see SA170. Re-running SA135's phase E can never
+  produce that evidence, because the defects are not in SA135's provisioning code. The obligation
+  moves to SA170 with a deterministic proof; nothing is waived.
+  **Decisions needed:** none. The scope split is recorded under
+  [Open decisions](#open-decisions) as **D1**, already answered by this pass's root-cause reading;
+  it is retained there only until SA170 merges. The exclusive service-window authorization remains
+  available; `pg18-af10` is running.
   **Inherited obligation from the closed SA123.** When this ticket retires or derives the
   transcribed provisioning shell literal in `scripts/test_gate_parity.py`, it must preserve SA123's
   settled hosted-job, `needs`-edge, run-value, publish/E2E-path, and generator expectations (the
@@ -575,12 +588,14 @@ Conceptual background, mental models, and implementation notes for **every** tic
   [Shared conflict surfaces](#shared-conflict-surfaces) — merge order #15 before #22 means SA165
   starts from the settled SA163 bytes, and the sync-before-merge-back procedure covers it.
   **Remaining plan (all phases serial; P/A/B/C/D and accepted E0 are not repeated):**
-  1. **E1 — causal-evidence remainder:** apply the decision above. If Option 2 is chosen, bind the
-     runner's emitted lane scopes, add deterministic instrumentation/stress at each historical
-     startup/build boundary, make only corrections supported by a reproduced cause, and run the
-     exact literal E1 `TEST COMMAND` chain. If Option 1 is chosen, it must expressly say whether it
-     supersedes that unrun chain. Preserve the green isolated/pair/full-run evidence as context,
-     not as retroactive E1 acceptance.
+  1. **E1 — PostgreSQL-lifecycle evidence only:** accept E1 on the provisioning surface this
+     ticket owns — `make test-integration` on a host with no PostgreSQL running, the
+     `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract, the hermetic
+     Docker-unavailable probe, and the asserted-unavailability negative control failing loudly
+     rather than skipping. Each of these is deterministic today and needs no flake reproduction.
+     Record the emitted `qs_e2e_tmp_*` scope as the harness's intended per-run isolation contract
+     (`scripts/test_e2e.sh:557` derives it from `mktemp -d`), not as a deviation. Do **not** attempt
+     the two E2E Docker failures here; they are SA170's.
   2. **E2 — unchanged-candidate acceptance:** after E1 is accepted, run exact serial E2E and then
      `make ci-e2e` on one unchanged tree, with exact cleanup and PostgreSQL baseline equality.
   3. **F — policy and status reconciliation:** reconcile validation policy, Finding 13, ticket
@@ -603,7 +618,8 @@ Tickets opened from the live findings in [arch-audit.md](../others/arch-audit.md
 
 **These are not follow-on work.** The former band-A gate-layer ticket is complete; the remaining
 audit-derived entries are sequenced with the implementation section.
-SA163 executes inside SA135. The remaining five are **band C** slack filler. The merge-order
+SA163 executes inside SA135, and SA170 is band-B harness work opened out of SA135's phase E1. The
+remaining five are **band C** slack filler. The merge-order
 table above is the single authority; this section carries the finding detail.
 
 Every ticket here that closes or changes a live finding takes `docs/others/arch-audit.md`
@@ -615,10 +631,79 @@ or `docs/others/tech-audit.md` onto its shared conflict surface per the executio
 W2 spine:  SA167c (#21) ──► SA166 (#24) ──► SA164 (#25)
 
 SA163 (arch F13, CI environment) ──► rides inside SA135 (W3, merge #15)
+
+W3 tail:   SA135 (#15) ──► SA170 (#27) ──► SA161 (#19) ──► SA160 (#20)
 ```
 
 Band A is clear. The completed shared-baseline repair and the previous gate-layer prerequisite are
 archived in [CHANGELOG.md](../../CHANGELOG.md), and their positions are retired rather than reused.
+
+- [ ] **SA170 — Give the E2E Docker harness a closed resource contract and a truthful failure report.** `Band B · Tier 2 · W3 · merge #27 · deps: SA135 (worktree ordering) · PostgreSQL + Docker slot · absorbs SA135's stalled E1 flake obligation`
+  Closes tech-audit **TA70** (`container-status-substring-match`, S4) and the carried tooling gap
+  *"no test exercises the E2E harness's own failure paths"*.
+  Opened 2026-08-27 by root-causing the two historical failures that stalled SA135's phase E1 — a
+  Docker `No such container` startup race and a 300-second React build timeout. Neither is a SA135
+  provisioning defect, and neither is a genuine race in Docker. Both are readable in the harness
+  source, and both come from the **same shape**: one test opts out of the per-scope resource
+  contract every other E2E resource obeys, and the readiness helper cannot report why anything
+  failed.
+  - **The scope contract works and the React build test is outside it.** `scripts/test_e2e.sh:557`
+    derives `RUN_SCOPE` from `mktemp -d` and `:596` appends `$BASHPID` per lane, so every run and
+    lane gets a unique scope; `docker-compose.yml.j2` stamps `com.quickscale.{owner,lifecycle,scope}`
+    on every container and volume, and `cleanup_scoped_resources` reclaims by label. The emitted
+    `qs_e2e_tmp_*` names are that design working, not a deviation.
+    `quickscale_cli/tests/test_react_theme_e2e.py:657` instead hardcodes `image_tag =
+    "quickscale-react-test"` and builds with no `--label` and no scope prefix. Consequences, both
+    structural: two concurrent E2E runs on one daemon share that tag, so one test's
+    `finally: docker rmi quickscale-react-test` (`:692`) removes the image the other is about to
+    `docker run` — which is exactly the `No such container`/`No such image` class; and because the
+    image carries none of the `com.quickscale.*` labels and is tagged rather than dangling,
+    `cleanup_scoped_images` (`scripts/test_e2e.sh:401-420`) **cannot** see it by construction, which
+    is why the prior pass had to hunt it by literal name.
+  - **`timeout=300` measures the Docker layer cache, not the product.** The same call
+    (`test_react_theme_e2e.py:663-668`) budgets five minutes for a cold build that compiles a React
+    frontend and installs a PostgreSQL 18 client. Warm it is seconds; cold — after a prune, a base
+    image bump, or a loaded host — it is minutes. `subprocess.TimeoutExpired` is not caught, so a
+    timeout aborts before the assertions and leaves the partial build behind. This is a benchmark
+    wearing an assertion's clothes and **cannot be made deterministic by re-running it.**
+  - **The readiness helper destroys its own diagnostic.**
+    `quickscale_cli/tests/test_e2e_development_workflow.py:157-168` polls
+    `get_container_status(name)` and accepts `"up" in status.lower()`.
+    `get_container_status` (`quickscale_cli/src/quickscale_cli/utils/docker_utils.py:328-348`) runs
+    `docker ps -a --filter name=<name>`, where Docker's `name` filter is a **substring regex**, not
+    an exact match, and `-a` includes dead containers. So `<scope>_backend` also matches any
+    container whose name contains that string, several matches are concatenated into one blob before
+    the substring test, and a container that **exited immediately** yields a status the predicate
+    reads as "not up yet" — the poll then burns its full 40 s and reports the generic
+    *"Backend container did not become running within 40s"*. **The crash reason is never surfaced.**
+    That is why repeated E1 reruns kept returning green-but-uninformative: when the harness does
+    fail, it cannot tell you why, so no number of reruns yields a cause.
+  **Acceptance:** the React build image is tagged from `QS_E2E_RESOURCE_SCOPE` and carries the same
+  `com.quickscale.{owner,lifecycle,scope}` labels as every other E2E resource, so
+  `scripts/test_e2e.sh --cleanup-scope <scope>` reclaims it and no fixed tag remains in any test;
+  `subprocess.TimeoutExpired` is caught and fails with a message naming cache state and the observed
+  duration, and the build budget is either raised to a documented cold-cache figure or split into a
+  correctness assertion plus a separately-reported duration; `get_container_status` filters on an
+  anchored exact name (`name=^<name>$`), returns a structured state rather than a display string,
+  and distinguishes *absent*, *created*, *running*, and *exited(code)*; the readiness poll fails
+  immediately and loudly on *exited*, naming the exit code and the last log lines, instead of
+  waiting out its timeout; a test asserts a second concurrent scope cannot observe or delete the
+  first scope's build image; tech-audit **TA70** (`container-status-substring-match`) is retired.
+  **Evidence policy — this is the deterministic red-before/green-after E1 could not produce.**
+  Each defect is proved at the level where determinism exists, with no flake reproduction required:
+  (1) a pure unit test over the readiness predicate and over `get_container_status`'s argv, fed
+  `Exited (1) 3 seconds ago`, `Created`, `Up 3 seconds`, a two-container blob, and `None` — red on
+  today's substring logic, green after; (2) a labelled-resource assertion that
+  `cleanup_scoped_resources <scope>` removes the React build image — red today because the image is
+  unlabelled, green after; (3) a two-scope test proving the fixed-tag collision is gone. All three
+  are repeatable and none depends on scheduling a collision.
+  **Why this is a separate ticket rather than a widening of SA135.** SA135 owns the PostgreSQL
+  lifecycle; these are E2E Docker-harness defects in CLI test code and `docker_utils.py`, files SA135
+  does not touch. Per the execution rules, a scope finding is ticketed rather than fixed in place.
+  Splitting it lets SA135's phase E close on the provisioning evidence it can actually produce.
+  **Serialization:** inherits W3's exclusive PostgreSQL + Docker slot. Merges after SA135 so it
+  starts from the settled provisioning bytes.
+  **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/utils/docker_utils.py`, `quickscale_cli/tests/test_e2e_development_workflow.py`, `quickscale_cli/tests/test_react_theme_e2e.py`, `scripts/test_e2e.sh`, `docs/others/tech-audit.md`.
 
 - [ ] **SA160 — Share one correct CSRF-token helper in the React theme.** `Band C · Tier 2 · W3 · merge #20 · deps: SA161 (emission-parity ordering)`
   Closes tech-audit **TA67** (`spa-csrf-token-duplicate-cookie`, S3) — the only finding in deployment reality #3, the internet-facing generated project. `themes/showcase_react/src/hooks/useApi.ts:20-28` and `src/components/forms/FormRenderer.tsx:206-211` carry the same eleven lines: the parser splits `document.cookie` on `"; csrftoken="` and accepts the result **only when it yields exactly two parts**. Two `csrftoken` cookies yield three, so `getCsrfToken()` returns `''`, `buildRequestHeaders` (`:89-94`) skips `X-CSRFToken`, and Django rejects every POST/PUT/PATCH/DELETE with 403. The triggering state is ordinary: an `app.example.com` deployment alongside a `.example.com` cookie, the outcome of setting or changing `CSRF_COOKIE_DOMAIN`, of a sibling Django app on another subdomain, or of a stale apex-scoped cookie. GETs keep working, so the app looks alive and merely refuses to save, and no error names the cause. Fails closed — availability, not a security hole. There is no shared CSRF helper, no fetch interceptor, and no template-injected token, so no layer-up guard exists.

@@ -59,12 +59,13 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 |---|---|---|---|---|---|---|
 | `spa-csrf-token-duplicate-cookie` (TA67) | **S3** | Correctness (frontend) | `getCsrfToken` returns `''` whenever two `csrftoken` cookies are present — every SPA write 403s | Trivial ⚡ | High | new |
 | `generated-settings-dead-client-ip` (TA68) | S4 | Dead code (generated output) | Two `get_client_ip` definitions in generated settings are unreachable | Trivial | High | new |
+| `container-status-substring-match` (TA70) | S4 | Correctness (shipped CLI utility) | `get_container_status` matches container names by substring over dead containers, so callers cannot tell "starting" from "crashed" | Trivial ⚡ | High | new 2026-08-27 |
 
-**Counts:** S1 **0** · S2 **0** · S3 **1** · S4 **1** · **Total 2 open**. Quick win (⚡ Trivial-effort S3): TA67.
+**Counts:** S1 **0** · S2 **0** · S3 **1** · S4 **2** · **Total 3 open**. Quick win (⚡ Trivial-effort S3): TA67.
 
-These are the current live-finding counts, derived from the two open summary rows above:
-TA67 (S3) and TA68 (S4). Older TA69-inclusive totals (S3: 1, S4: 2, total 3) remain dated
-historical reconciliation evidence and are not part of the current inventory.
+These are the current live-finding counts, derived from the three open summary rows above:
+TA67 (S3), TA68 (S4), and TA70 (S4). Older TA69-inclusive totals are dated historical
+reconciliation evidence and are not part of the current inventory.
 
 ---
 
@@ -110,6 +111,33 @@ function getCsrfToken(): string {
 **Deliberate?** None found. The `parts.length === 2` idiom is a widely copied snippet; nothing in either file acknowledges the multi-cookie case.
 
 ---
+
+### TA70 — `get_container_status` matches by substring over dead containers
+
+`quickscale_cli/src/quickscale_cli/utils/docker_utils.py:328-348` runs
+`docker ps -a --filter name=<container_name>` and returns `result.stdout.strip()`. Two problems
+compound:
+
+- Docker's `name` filter is a **substring regex**, not an exact match, so `<scope>_backend` also
+  matches `<scope>_backend_1` or any longer name containing it. With several matches,
+  `--format {{.Status}}` emits one line each and `.strip()` returns a multi-line blob that no caller
+  can attribute to a container.
+- `-a` includes containers that have already exited, so the function returns a status for a dead
+  container indistinguishable — to a substring test — from one that has not started yet.
+
+The sole caller today is the E2E readiness poll at
+`quickscale_cli/tests/test_e2e_development_workflow.py:157-168`, which accepts
+`"up" in status.lower()`. A container that crashes on startup yields `Exited (1) …`, the predicate
+reads "not up *yet*", and the poll waits out its full 40 s before reporting the generic *"Backend
+container did not become running within 40s"*. **The exit code and cause are discarded**, which is
+why repeated E2E reruns produced greens that identified nothing. The function is public shipped CLI
+surface with no production caller, so the blast radius today is diagnostic quality rather than
+runtime behaviour — but it is the reason a stalled ticket stayed stalled across several passes.
+
+**Fix:** filter on an anchored exact name (`name=^<name>$`), return a structured state that
+distinguishes *absent* / *created* / *running* / *exited(code)* rather than a display string, and
+make the readiness poll fail immediately and loudly on *exited*. Owned by **SA170** (roadmap
+merge #27).
 
 ### S4
 
@@ -168,6 +196,7 @@ function getCsrfToken(): string {
 |---|---|---|
 | Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The theme has an eslint config — a `no-duplicate-imports`-style rule will not catch copied functions; the shared-helper fix is the real prevention |
 | No gate requires a changelog/ticket trail for behavioural commits | **SA166** | **Carried.** `d3d4c633` shipped a CI-topology change under a release-shaped message and left a conformance test red. Remains maintainer-process risk rather than a source finding |
+| No test exercises the E2E harness's own failure paths | **TA70** | The readiness predicate and `get_container_status`'s argv are pure functions of a status string and a name; a table test over `Exited (1) …`, `Created`, `Up 3 seconds`, a multi-container blob, and `None` costs minutes and is what makes the defect provable. Owned by SA170 |
 | ~~`scripts/` suites are in no execution context~~ | Arch Finding 12 | **Closed by SA155:** the green suite population is registered through `check-gate-suites`; detailed evidence is retained in [CHANGELOG.md](../../CHANGELOG.md) |
 
 ---
