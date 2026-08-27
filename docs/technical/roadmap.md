@@ -393,6 +393,15 @@ Conceptual background, mental models, and implementation notes for **every** tic
   `python -m pytest quickscale_core/tests/test_root_pytest_collection_config.py quickscale_core/tests/test_v88_ticket_context_consistency.py -q`
   exited 1, and Phase E was unreached. Later convergence validation is evidence about the settled
   bytes, not phase acceptance.
+  **Truthful checkpoint (2026-08-27):** the retained partial delivery is on branch `wt-track1` at
+  object `f4e31dda317bf498d4ae4a9c553ad4a130bfb2d7`. **Completed:** phases A-C are accepted and
+  their product bytes are preserved. **Pending:** Phase D remains delivered but unaccepted, and
+  Phase E remains unreached. **Blocking:** the exact Phase D command exited 1 because its isolated
+  run inherited the package coverage threshold without collecting product source; Phase D closes
+  only when the owning workflow runs that exact command and explicitly adjudicates its result.
+  **Decisions needed:** none. **Remaining plan:** execute the Phase D and Phase E handoffs below in
+  order. This checkpoint records unfinished work rather than SA167d completion; at checkpoint
+  creation, merge-back of this partial state is pending checkpoint attestation.
   **Remaining Phase D handoff — documentation acceptance:** reconcile every current-state SA167d
   status, dependency, merge-position, queue-count, validation-count, and author-guidance claim in
   `docs/technical/decisions.md`, `docs/technical/implementation_contract.md`,
