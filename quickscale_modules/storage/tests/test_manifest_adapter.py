@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import subprocess
 import sys
@@ -9,12 +10,56 @@ from typing import Any
 
 import pytest
 
+import quickscale_modules_storage as storage_api
 from quickscale_core.manifest import ManifestError
 from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_modules_storage.adapter import (
     _storage_manifest_adapter,
     get_manifest_adapter,
 )
+
+
+PUBLIC_STORAGE_EXPORTS = (
+    "StorageBackendSelection",
+    "ValidatedUpload",
+    "build_public_media_url",
+    "build_upload_path",
+    "make_cache_friendly_name",
+    "select_storage_backend",
+    "validate_file_upload",
+)
+
+
+class TestStoragePublicApi:
+    """The dependency-light package facade preserves every helper export."""
+
+    def test_public_export_inventory_is_explicit_and_complete(self) -> None:
+        assert tuple(storage_api.__all__) == PUBLIC_STORAGE_EXPORTS
+
+    @pytest.mark.parametrize("name", PUBLIC_STORAGE_EXPORTS)
+    def test_public_export_is_resolved_lazily_and_cached(self, name: str) -> None:
+        storage_api.__dict__.pop(name, None)
+
+        value = getattr(storage_api, name)
+        helpers = importlib.import_module("quickscale_modules_storage.helpers")
+
+        assert value is getattr(helpers, name)
+        assert storage_api.__dict__[name] is value
+        assert getattr(storage_api, name) is value
+
+    def test_unknown_attribute_fails_without_polluting_the_package(self) -> None:
+        missing_name = "not_a_storage_export"
+
+        with pytest.raises(
+            AttributeError,
+            match=(
+                r"module 'quickscale_modules_storage' has no attribute "
+                r"'not_a_storage_export'"
+            ),
+        ):
+            getattr(storage_api, missing_name)
+
+        assert missing_name not in storage_api.__dict__
 
 
 class TestStorageManifestAdapter:

@@ -4,6 +4,7 @@ import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from quickscale_core.utils.project_identity import (
     derive_package_from_slug,
@@ -48,6 +49,60 @@ def _migration_probe_script() -> str:
     )
 
 
+def _assessment_from_probe_payload(
+    payload: dict[str, Any],
+) -> AuthMigrationAssessment:
+    """Translate a decoded migration probe payload into a stable assessment."""
+    if not payload.get("ok"):
+        return AuthMigrationAssessment(
+            status="unverifiable",
+            reason=payload.get("error", "unknown migration recorder error"),
+        )
+
+    if payload.get("incompatible"):
+        return AuthMigrationAssessment(
+            status="incompatible",
+            reason=(
+                "Default Django auth/admin/session/contenttypes migrations are already "
+                "applied in this database."
+            ),
+        )
+
+    return AuthMigrationAssessment(
+        status="compatible",
+        reason="No incompatible core auth migrations were detected.",
+    )
+
+
+def _assessment_from_probe_result(
+    result: subprocess.CompletedProcess[str],
+) -> AuthMigrationAssessment:
+    """Parse migration probe process output into a stable assessment."""
+    if result.returncode != 0:
+        output_error = (result.stderr or result.stdout or "").strip() or "unknown error"
+        return AuthMigrationAssessment(
+            status="unverifiable",
+            reason=f"migration recorder check failed: {output_error}",
+        )
+
+    output_lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if not output_lines:
+        return AuthMigrationAssessment(
+            status="unverifiable",
+            reason="migration recorder check produced no output",
+        )
+
+    try:
+        payload = json.loads(output_lines[-1])
+    except json.JSONDecodeError:
+        return AuthMigrationAssessment(
+            status="unverifiable",
+            reason=f"unexpected migration recorder output: {output_lines[-1]}",
+        )
+
+    return _assessment_from_probe_payload(payload)
+
+
 def assess_auth_migration_state(
     project_path: Path | None = None,
 ) -> AuthMigrationAssessment:
@@ -77,47 +132,7 @@ def assess_auth_migration_state(
             reason=f"failed to execute Django runtime check: {error}",
         )
 
-    if result.returncode != 0:
-        output_error = (result.stderr or result.stdout or "").strip() or "unknown error"
-        return AuthMigrationAssessment(
-            status="unverifiable",
-            reason=f"migration recorder check failed: {output_error}",
-        )
-
-    output_lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    if not output_lines:
-        return AuthMigrationAssessment(
-            status="unverifiable",
-            reason="migration recorder check produced no output",
-        )
-
-    try:
-        payload = json.loads(output_lines[-1])
-    except json.JSONDecodeError:
-        return AuthMigrationAssessment(
-            status="unverifiable",
-            reason=f"unexpected migration recorder output: {output_lines[-1]}",
-        )
-
-    if not payload.get("ok"):
-        return AuthMigrationAssessment(
-            status="unverifiable",
-            reason=payload.get("error", "unknown migration recorder error"),
-        )
-
-    if payload.get("incompatible"):
-        return AuthMigrationAssessment(
-            status="incompatible",
-            reason=(
-                "Default Django auth/admin/session/contenttypes migrations are already "
-                "applied in this database."
-            ),
-        )
-
-    return AuthMigrationAssessment(
-        status="compatible",
-        reason="No incompatible core auth migrations were detected.",
-    )
+    return _assessment_from_probe_result(result)
 
 
 def has_migrations_been_run(project_path: Path | None = None) -> bool:

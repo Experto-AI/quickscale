@@ -131,12 +131,6 @@
         "symbol": "_add_storage_dependencies",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/module_config.py::assess_auth_migration_state": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/module_config.py",
-        "max_complexity": 14,
-        "symbol": "assess_auth_migration_state",
-        "type": "function"
-      },
       "quickscale_cli/src/quickscale_cli/commands/module_config.py::configure_backups_module": {
         "file": "quickscale_cli/src/quickscale_cli/commands/module_config.py",
         "max_complexity": 11,
