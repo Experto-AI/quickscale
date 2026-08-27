@@ -21,8 +21,10 @@ class TestStorageManifestAdapter:
         """The public sentinel returns the module adapter."""
         assert get_manifest_adapter() is _storage_manifest_adapter
 
-    def test_local_defaults_preserve_exact_shape_and_omissions(self) -> None:
-        """Local storage emits only its four unconditional settings."""
+    def test_local_defaults_emit_all_manifest_settings_and_omit_cloud_runtime(
+        self,
+    ) -> None:
+        """Local storage emits every manifest setting but no cloud runtime block."""
         spec = _storage_manifest_adapter({})
 
         assert isinstance(spec, ModuleWiringSpec)
@@ -32,14 +34,28 @@ class TestStorageManifestAdapter:
         assert spec.url_includes == ()
         assert spec.settings == {
             "QUICKSCALE_STORAGE_BACKEND": "local",
-            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": "",
             "MEDIA_URL": "/media/",
+            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": "",
+            "AWS_STORAGE_BUCKET_NAME": "",
+            "AWS_S3_ENDPOINT_URL": "",
+            "AWS_S3_REGION_NAME": "",
+            "QUICKSCALE_STORAGE_ACCESS_KEY_ID_ENV_VAR": "AWS_ACCESS_KEY_ID",
+            "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR": "AWS_SECRET_ACCESS_KEY",
+            "AWS_DEFAULT_ACL": "",
+            "AWS_QUERYSTRING_AUTH": False,
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": False,
         }
         assert list(spec.settings) == [
             "QUICKSCALE_STORAGE_BACKEND",
-            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL",
             "MEDIA_URL",
+            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL",
+            "AWS_STORAGE_BUCKET_NAME",
+            "AWS_S3_ENDPOINT_URL",
+            "AWS_S3_REGION_NAME",
+            "QUICKSCALE_STORAGE_ACCESS_KEY_ID_ENV_VAR",
+            "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
+            "AWS_DEFAULT_ACL",
+            "AWS_QUERYSTRING_AUTH",
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED",
         ]
         assert "STORAGES" not in spec.settings
@@ -82,14 +98,17 @@ class TestStorageManifestAdapter:
         }
         assert list(spec.settings) == [
             "QUICKSCALE_STORAGE_BACKEND",
-            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL",
             "MEDIA_URL",
+            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL",
+            "AWS_STORAGE_BUCKET_NAME",
+            "AWS_S3_ENDPOINT_URL",
+            "AWS_S3_REGION_NAME",
+            "QUICKSCALE_STORAGE_ACCESS_KEY_ID_ENV_VAR",
+            "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
+            "AWS_DEFAULT_ACL",
+            "AWS_QUERYSTRING_AUTH",
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED",
             "STORAGES",
-            "AWS_QUERYSTRING_AUTH",
-            "AWS_STORAGE_BUCKET_NAME",
-            *(["AWS_S3_ENDPOINT_URL"] if "endpoint_url" in extra_options else []),
-            *(["AWS_S3_REGION_NAME"] if "region_name" in extra_options else []),
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",
         ]
@@ -117,7 +136,7 @@ class TestStorageManifestAdapter:
     def test_cloud_options_preserve_blanks_and_omit_blank_provider_settings(
         self,
     ) -> None:
-        """Blank optional cloud fields are omitted rather than emitted as blanks."""
+        """Blank cloud fields remain settings but stay out of provider options."""
         spec = _storage_manifest_adapter(
             {
                 "backend": "s3",
@@ -154,7 +173,7 @@ class TestStorageManifestAdapter:
             "AWS_S3_REGION_NAME",
             "AWS_DEFAULT_ACL",
         ):
-            assert setting_name not in spec.settings
+            assert spec.settings[setting_name] == ""
 
     def test_custom_credential_names_are_references_not_values(self) -> None:
         """Custom credential options become environment-reference markers."""
@@ -215,8 +234,15 @@ class TestStorageManifestAdapter:
         assert s3.settings["QUICKSCALE_STORAGE_BACKEND"] == "s3"
         assert local.settings == {
             "QUICKSCALE_STORAGE_BACKEND": "local",
-            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": "",
             "MEDIA_URL": "/media/",
+            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": "",
+            "AWS_STORAGE_BUCKET_NAME": "",
+            "AWS_S3_ENDPOINT_URL": "",
+            "AWS_S3_REGION_NAME": "",
+            "QUICKSCALE_STORAGE_ACCESS_KEY_ID_ENV_VAR": "AWS_ACCESS_KEY_ID",
+            "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR": "AWS_SECRET_ACCESS_KEY",
+            "AWS_DEFAULT_ACL": "",
+            "AWS_QUERYSTRING_AUTH": False,
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": False,
         }
         assert r2.settings["QUICKSCALE_STORAGE_BACKEND"] == "r2"

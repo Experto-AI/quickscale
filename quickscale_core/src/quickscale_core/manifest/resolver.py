@@ -412,19 +412,29 @@ def _project_derived_setting(setting: DerivedSetting, resolved: dict[str, Any]) 
 
 
 def _project_all_derived_settings(
+    manifest: ModuleManifest,
     derivation_schema: ModuleDerivationSchema,
     resolved: dict[str, Any],
 ) -> dict[str, Any]:
-    """Compute all derived Django settings from resolved option values.
+    """Project manifest settings, then apply explicit derivations.
+
+    Every mutable manifest option with a ``django_setting`` contributes a
+    direct baseline value.  Explicit ``DerivedSetting`` declarations are
+    applied afterward so an adapter can intentionally transform or supplement
+    that baseline without dropping settings that have no explicit derivation.
 
     Args:
+        manifest: The manifest declaring the mutable option-to-setting map.
         derivation_schema: The module's derivation schema.
         resolved: The fully resolved option values.
 
     Returns:
         A mapping of Django setting keys to their computed values.
     """
-    result: dict[str, Any] = {}
+    result = {
+        setting_key: resolved[option_key]
+        for option_key, setting_key in manifest.get_django_settings_mapping().items()
+    }
     all_settings = derivation_schema.get_all_derived_settings()
 
     for setting in all_settings:
@@ -642,7 +652,9 @@ def resolve_module_config(
         validation_issues.extend(issues)
 
     # Step 6: Project derived Django settings
-    derived_settings = _project_all_derived_settings(derivation_schema, resolved)
+    derived_settings = _project_all_derived_settings(
+        manifest, derivation_schema, resolved
+    )
 
     # Step 7: Project wiring contributions (apps, middleware, url_includes,
     # pre_home_url_includes) from the derivation schema's wiring projections.

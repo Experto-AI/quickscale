@@ -42,13 +42,13 @@ The open release work is one principle with four failure modes. Every ticket is 
         DUPLICATED      SILENT         UNOWNED       UNENFORCED
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
-          SA118         SA165           SA135          SA166
-          SA163         SA152           SA161            │
-          SA160           │               │         (testimony
-          SA164       (state/tool      (DB, dead       trail)
+           SA163         SA165           SA135          SA166
+           SA160         SA152           SA161            │
+           SA164           │               │         (testimony
+                         (state/tool      (DB, dead       trail)
             │          fallbacks)       code)
-       (defaults, CI env,
-        cookies, watchlists)
+       (CI env, cookies,
+        watchlists)
 ```
 
 **The one sentence:** *Every fact should have exactly one home, and every consumer should
@@ -61,7 +61,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | manifest defaults restated in imperative code; the PGDG install copied across 14 stations | SA118, SA163, SA160, SA164 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | the PGDG install copied across 14 stations; duplicated cookies and watchlist authority | SA163, SA160, SA164 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA135, SA161 |
 | **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail | SA166 |
@@ -73,66 +73,6 @@ declared gate layer they protect.
 
 The gate-layer closure evidence, including the current scripts census, registry projection,
 hosted job closure, and isolation Make entrypoint, is archived in [CHANGELOG.md](../../CHANGELOG.md).
-
----
-
-## SA118 — Project every declared manifest default into wiring
-
-### The mental model
-
-Each module carries a `module.yml` manifest that **declares** its configuration surface. From `quickscale_modules/storage/module.yml`:
-
-```yaml
-config:
-  mutable:
-    backend:
-      type: string
-      default: "local"
-      django_setting: QUICKSCALE_STORAGE_BACKEND
-      validation:
-        choices: ["local", "s3", "r2"]
-    media_url:
-      type: string
-      default: "/media/"
-      django_setting: MEDIA_URL
-  immutable:
-    private_media_enabled:
-      type: boolean
-      default: false
-```
-
-Every entry states four things: a type, a default, the Django setting it maps to, and (sometimes) validation. `mutable` options must have a `django_setting` — `quickscale_core/src/quickscale_core/manifest/loader.py:242` enforces it. `ModuleManifest.get_django_settings_mapping()` (`manifest/schema.py:225`) already exposes the name→setting map.
-
-So the declaration is rich and validated. The question SA118 asks is: **does the generated project's wiring actually reflect every declared default, or do some defaults exist only inside imperative Python that re-states them?**
-
-A concrete example of the second pattern lives in the closed SA150's file:
-
-```python
-backend = str((module_options or {}).get("backend", "local")).strip().lower()
-```
-
-That `"local"` is `storage.backend`'s manifest default, retyped in `module_dependency_sync.py`. Change the manifest and this code keeps the old default. It is the same class of bug as the completed pin-authority work, one layer up.
-
-### The scope boundary — this is the important part
-
-There is a much larger, tempting project here: converting all imperative module wiring to a declarative manifest-driven pipeline. **SA118 explicitly is not that project.** The acceptance says: *"the imperative-to-declarative migration is not attempted — out-of-scope seams are ticketed, not converted."*
-
-The line to hold:
-
-- **In scope:** a default is *declared* in a manifest, and generated wiring does not carry it (or carries a stale copy). Fix the projection.
-- **Out of scope:** a behaviour is imperative and has no manifest declaration at all. Do not invent a declaration for it. File a ticket.
-
-The distinction is "is there already a declared fact being ignored?" — not "could this be declarative in principle?"
-
-### Emission parity — expect this to be the bulk of the work
-
-Changing what the generator emits collides with `quickscale_core/tests/fixtures/sa90_emission_manifests.json`. Read its `_provenance` block: it holds *exact path/hash/mode manifests* for three generator variants, deliberately built independently of the production emission mapping so it is a real check and not a mirror.
-
-Its `baseline_evidence` entries show the established convention — each past rebaseline records ticket id, date, what changed, and which specific hashes moved:
-
-> `"sa106": "Regenerated 2026-07-20 — three identity-bearing frontend source templates converted from .j2 to static verbatim-copy files (SA106). ... Deltas: useModules.ts.j2→static, ... 3 fixture hashes updated: useModules.ts, Dashboard.tsx, Sidebar.tsx."`
-
-*"rebaseline emission parity with per-file rationale"* means adding an entry in exactly that register. A bulk regeneration with the note "updated hashes" destroys the fixture's value — the whole point is that a human certified each delta was intended.
 
 ---
 
@@ -365,7 +305,7 @@ security-relevant settings, and "it was dead code" is a claim that deserves proo
 ### Emission parity
 
 This edits generated-project templates, so the SA90 emission-parity fixture needs a
-rebaseline with per-file rationale — the same treatment described under SA118.
+  rebaseline with per-file rationale, following the established emission-parity convention.
 
 ---
 

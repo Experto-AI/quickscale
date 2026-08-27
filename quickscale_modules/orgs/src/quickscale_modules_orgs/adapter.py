@@ -25,12 +25,15 @@ def _orgs_manifest_adapter(
     resolved = resolve_orgs_module_options(options)
     validation_issues = validate_orgs_module_options(options)
     manifest_spec = build_generic_manifest_spec("orgs", options)
-    mode = str(resolved.get("mode", "solo")).strip().lower()
+    mode = str(resolved["mode"]).strip().lower()
 
-    derived_settings: dict[str, Any] = {
-        "ACCOUNT_ADAPTER": "quickscale_modules_orgs.adapters.OrgsAccountAdapter",
-        "QUICKSCALE_MODE": mode,
-    }
+    settings = dict(manifest_spec.settings)
+    settings.update(
+        {
+            "ACCOUNT_ADAPTER": "quickscale_modules_orgs.adapters.OrgsAccountAdapter",
+            "QUICKSCALE_MODE": mode,
+        }
+    )
 
     root_include = ("", "quickscale_modules_orgs.urls")
     if mode == "solo":
@@ -45,7 +48,7 @@ def _orgs_manifest_adapter(
         defaults={},
         resolved=resolved,
         validation_issues=validation_issues,
-        derived_settings=derived_settings,
+        derived_settings=settings,
         apps=manifest_spec.apps,
         middleware=("quickscale_modules_orgs.middleware.TenantMiddleware",),
         url_includes=url_includes,

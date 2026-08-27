@@ -652,10 +652,12 @@ class TestRegisteredAdapterPaths:
         assert isinstance(spec, ModuleWiringSpec)
         assert "quickscale_modules_analytics" in spec.apps
 
-    def test_analytics_disabled_returns_empty_spec(self) -> None:
+    def test_analytics_disabled_suppresses_apps_but_retains_settings(self) -> None:
         spec = build_manifest_wiring_spec("analytics", {"enabled": False})
         assert isinstance(spec, ModuleWiringSpec)
         assert spec.apps == ()
+        assert len(spec.settings) == 8
+        assert spec.settings["QUICKSCALE_ANALYTICS_ENABLED"] is False
 
     def test_billing_adapter_returns_spec(self) -> None:
         if "billing" not in MANIFEST_ADAPTER_REGISTRY:
@@ -782,6 +784,61 @@ class TestRegisteredAdapterPaths:
             assert isinstance(spec, ModuleWiringSpec), (
                 f"{name} adapter failed with project_package kwarg"
             )
+
+    def test_all_adapters_emit_manifest_owned_mutable_settings(self) -> None:
+        """Every public adapter preserves its complete manifest setting map."""
+        inventory = {
+            module_name: (
+                load_module_manifest(module_name),
+                load_module_manifest(module_name).get_django_settings_mapping(),
+                load_module_manifest(module_name).get_defaults(),
+            )
+            for module_name in _REGISTERED_ADAPTERS
+        }
+
+        for module_name, (_, mapping, defaults) in inventory.items():
+            kwargs = {"project_package": "myapp"} if module_name == "social" else {}
+            spec = build_manifest_wiring_spec(module_name, {}, **kwargs)
+
+            for option_name, setting_name in mapping.items():
+                assert setting_name in spec.settings, (
+                    f"{module_name} omitted manifest setting {setting_name} "
+                    f"for option {option_name}"
+                )
+                assert spec.settings[setting_name] == defaults[option_name], (
+                    f"{module_name} changed manifest default for {option_name}"
+                )
+
+    @pytest.mark.parametrize(
+        ("module_name", "overrides", "setting_name", "expected"),
+        [
+            ("analytics", {"enabled": False}, "QUICKSCALE_ANALYTICS_ENABLED", False),
+            (
+                "notifications",
+                {"default_tags": []},
+                "QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS",
+                [],
+            ),
+            (
+                "social",
+                {"provider_allowlist": []},
+                "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST",
+                [],
+            ),
+        ],
+    )
+    def test_manifest_setting_edge_values_survive_public_adapters(
+        self,
+        module_name: str,
+        overrides: dict[str, object],
+        setting_name: str,
+        expected: object,
+    ) -> None:
+        """False and empty values remain settings rather than being omitted."""
+        kwargs = {"project_package": "myapp"} if module_name == "social" else {}
+        spec = build_manifest_wiring_spec(module_name, overrides, **kwargs)
+
+        assert spec.settings[setting_name] == expected
 
 
 # ---------------------------------------------------------------------------
@@ -1667,8 +1724,7 @@ class TestAnalyticsPostHookFailHard:
         assert isinstance(result, ModuleWiringSpec)
 
     def test_disabled_short_circuit_still_works(self) -> None:
-        """The PR-4 disabled short-circuit returns empty spec before
-        reaching the empty-settings check."""
+        """Disabled analytics suppresses wiring before nonempty validation."""
         spec = ModuleWiringSpec(
             settings={
                 "QUICKSCALE_ANALYTICS_ENABLED": False,
@@ -1680,6 +1736,7 @@ class TestAnalyticsPostHookFailHard:
         result = _analytics_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.apps == ()
+        assert result.settings == spec.settings
 
 
 # ---------------------------------------------------------------------------

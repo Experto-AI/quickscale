@@ -52,10 +52,12 @@ def _notifications_manifest_adapter(
     resolved = resolve_notifications_module_options(options)
     runtime_email_backend = notifications_runtime_email_backend(resolved)
     manifest_spec = build_generic_manifest_spec("notifications", options)
+    settings = dict(manifest_spec.settings)
+    settings.update(_notifications_derived_settings(resolved))
     spec = ModuleWiringSpec(
         apps=manifest_spec.apps,
         middleware=manifest_spec.middleware,
-        settings=_notifications_derived_settings(resolved),
+        settings=settings,
         pre_home_url_includes=manifest_spec.pre_home_url_includes,
         url_includes=(
             *manifest_spec.url_includes,

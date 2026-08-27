@@ -270,7 +270,7 @@ def _assert_current_status_consumers(
         for metadata in v88.values()
         if metadata.merge_position is not None
     }
-    assert (len(v88), len(positions)) == (10, 9)
+    assert (len(v88), len(positions)) == (9, 8)
     assert "SA151" not in roadmap
     assert "SA142" not in roadmap
     assert "SA167a" not in roadmap
@@ -307,9 +307,9 @@ def _assert_current_status_consumers(
 
     assert "SA124" not in roadmap
     assert "SA123" not in roadmap
-    assert v88["SA118"].dependencies == frozenset()
-    assert v88["SA167c"].dependencies == frozenset({"SA118"})
     assert v88["SA167d"].dependencies == frozenset()
+    assert "SA118" not in v88
+    assert v88["SA167c"].dependencies == frozenset()
     assert v88["SA165"].dependencies == frozenset({"SA167d"})
     assert v88["SA164"].dependencies == frozenset({"SA166"})
     assert roadmap["SA152"].dependencies == frozenset()
@@ -321,8 +321,8 @@ def _assert_current_status_consumers(
         roadmap_text,
         re.DOTALL,
     )
-    assert "remaining serialized W2 leg" in roadmap_text
-    assert "against the four-leg W2 spine" in roadmap_text
+    assert "does not extend the one-leg critical path" in roadmap_text
+    assert "against the three-leg W2 spine" in roadmap_text
 
     current_handoff = re.search(
         r"\*\*Current handoff \(2026-08-26\):(?P<body>.*?)"
