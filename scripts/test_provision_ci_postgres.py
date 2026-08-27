@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import stat
 import subprocess
 import sys
@@ -16,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts/provision_ci_postgres.sh"
 
 
-def invoke(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _invoke_environment(env: dict[str, str] | None = None) -> dict[str, str]:
     variables = os.environ.copy()
     # The suite is also run inside the restricted local-CI lease. Each case
     # must start with an intentionally independent lifecycle environment so a
@@ -39,13 +40,28 @@ def invoke(*args: str, env: dict[str, str] | None = None) -> subprocess.Complete
     variables.update({"PYTHON": sys.executable, "PYTHONPATH": str(ROOT / "quickscale_core/src")})
     if env:
         variables.update(env)
+    return variables
+
+
+def invoke(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["/bin/bash", str(HELPER), *args],
         cwd=ROOT,
-        env=variables,
+        env=_invoke_environment(env),
         text=True,
         capture_output=True,
         check=False,
+    )
+
+
+def spawn(*args: str, env: dict[str, str] | None = None) -> subprocess.Popen[str]:
+    return subprocess.Popen(
+        ["/bin/bash", str(HELPER), *args],
+        cwd=ROOT,
+        env=_invoke_environment(env),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
 
 
@@ -169,6 +185,117 @@ exit 1''',
     assert time.monotonic() - started < 5
     assert "cannot verify the process group of a live child" in result.stderr
     assert any("rm -f container-id" in call for call in docker_log.read_text().splitlines())
+
+
+def test_lifecycle_record_rejects_an_existing_directory_before_allocation(
+    tmp_path: Path,
+) -> None:
+    tools, docker_log = fake_local_lifecycle_tools(tmp_path)
+    record = tmp_path / "lifecycle-record"
+    record.mkdir()
+
+    result = invoke(
+        "run",
+        "--profile",
+        "restricted",
+        "--",
+        "/bin/true",
+        env={
+            "PATH": f"{tools}:/usr/bin",
+            "TMPDIR": str(tmp_path),
+            "QS_PROVISION_SCOPE": "invalid_record",
+            "QS_PROVISION_LIFECYCLE_RECORD": str(record),
+        },
+    )
+
+    assert result.returncode != 0
+    assert "must be a regular file path" in result.stderr
+    assert not docker_log.exists()
+
+
+@pytest.mark.parametrize(
+    ("signal_number", "signal_name", "expected_status"),
+    [
+        (signal.SIGHUP, "HUP", 129),
+        (signal.SIGINT, "INT", 130),
+        (signal.SIGTERM, "TERM", 143),
+    ],
+)
+def test_signal_cleanup_waits_for_verified_child_group_and_records_lifecycle(
+    tmp_path: Path,
+    signal_number: signal.Signals,
+    signal_name: str,
+    expected_status: int,
+) -> None:
+    tools, _ = fake_local_lifecycle_tools(tmp_path)
+    record = tmp_path / "lifecycle.json"
+    descendant_pid_file = tmp_path / "descendant.pid"
+    process = spawn(
+        "run",
+        "--profile",
+        "restricted",
+        "--",
+        "/bin/bash",
+        "-c",
+        (
+            'trap \'kill "$descendant" 2>/dev/null; '
+            f'wait "$descendant" 2>/dev/null; exit {expected_status}\' {signal_name}; '
+            f"sleep 30 & descendant=$!; printf '%s\\n' \"$descendant\" > {descendant_pid_file!s}; "
+            'wait "$descendant"'
+        ),
+        env={
+            "PATH": f"{tools}:/usr/bin",
+            "TMPDIR": str(tmp_path),
+            "QS_PROVISION_SCOPE": f"signal_barrier_{signal_name.lower()}",
+            "QS_PROVISION_LIFECYCLE_RECORD": str(record),
+        },
+    )
+    try:
+        deadline = time.monotonic() + 10
+        readiness: dict[str, object] | None = None
+        while time.monotonic() < deadline:
+            if record.exists():
+                readiness = json.loads(record.read_text())
+                if readiness["readiness"]["event"] == "child_group_verified":
+                    break
+            time.sleep(0.05)
+        assert readiness is not None
+        assert readiness["readiness"]["verified"] is True
+        assert readiness["readiness"]["child_pid"] == readiness["readiness"]["child_pgid"]
+        process.send_signal(signal_number)
+        stdout, stderr = process.communicate(timeout=10)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+
+    assert process.returncode == expected_status, stderr
+    assert stdout == ""
+    final_record = json.loads(record.read_text())
+    assert final_record["profile"] == "restricted"
+    assert final_record["scope"] == f"signal_barrier_{signal_name.lower()}"
+    assert final_record["image_id"] == "sha256:" + "a" * 64
+    assert final_record["endpoint"] == {"host": "localhost", "port": "55432"}
+    assert final_record["readiness"]["event"] == "child_group_verified"
+    assert final_record["child_status"] == expected_status
+    descendant_pid = int(descendant_pid_file.read_text())
+    assert subprocess.run(["kill", "-0", str(descendant_pid)], check=False).returncode != 0
+    process_group = int(final_record["readiness"]["child_pgid"])
+    process_table = subprocess.run(
+        ["ps", "-eo", "pid=,pgid=,stat="], capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    assert not any(
+        fields[1] == str(process_group) and not fields[2].startswith("Z")
+        for line in process_table
+        if (fields := line.split()) and len(fields) >= 3
+    )
+    assert final_record["cleanup"] == {
+        "container": True,
+        "scope": True,
+        "lease": True,
+        "complete": True,
+    }
+    assert "LIFECYCLE_RECORD=" in stderr
 
 
 @pytest.mark.parametrize(

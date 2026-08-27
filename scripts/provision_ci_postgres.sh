@@ -37,6 +37,19 @@ CONTAINER_ID=""
 CHILD_PID=""
 CHILD_PGID=""
 CLEANUP_ARMED=false
+LIFECYCLE_STARTED=false
+LIFECYCLE_RECORD_PATH=""
+LIFECYCLE_IMAGE_ID=""
+LIFECYCLE_ENDPOINT_HOST=""
+LIFECYCLE_ENDPOINT_PORT=""
+LIFECYCLE_READINESS_EVENT="none"
+LIFECYCLE_CHILD_PID=""
+LIFECYCLE_CHILD_PGID=""
+LIFECYCLE_CHILD_SID=""
+LIFECYCLE_CHILD_STATUS=""
+LIFECYCLE_CONTAINER_CLEANUP=false
+LIFECYCLE_SCOPE_CLEANUP=false
+LIFECYCLE_LEASE_CLEANUP=false
 
 die() {
   printf 'ERROR: %s\n' "$*" >&2
@@ -175,6 +188,50 @@ json_string_array() {
     printf '"%s"' "$(json_escape "$item")"
   done
   printf ']'
+}
+
+configure_lifecycle_record() {
+  local requested="${QS_PROVISION_LIFECYCLE_RECORD:-}" parent
+  [[ -z "$requested" ]] && return 0
+  validate_word QS_PROVISION_LIFECYCLE_RECORD "$requested"
+  [[ "$requested" == /* ]] || die "QS_PROVISION_LIFECYCLE_RECORD must be an absolute path"
+  [[ ! -L "$requested" ]] || die "QS_PROVISION_LIFECYCLE_RECORD must not be a symlink"
+  [[ ! -e "$requested" || -f "$requested" ]] || die "QS_PROVISION_LIFECYCLE_RECORD must be a regular file path"
+  parent=$(dirname -- "$requested")
+  [[ -d "$parent" ]] || die "lifecycle record parent is unavailable"
+  LIFECYCLE_RECORD_PATH="$requested"
+  export QUICKSCALE_POSTGRES_LIFECYCLE_RECORD="$requested"
+}
+
+lifecycle_record_json() {
+  local child_status_json=null
+  [[ "$LIFECYCLE_CHILD_STATUS" =~ ^[0-9]+$ ]] && child_status_json="$LIFECYCLE_CHILD_STATUS"
+  printf '{"schema_version":1,"mode":"local","profile":"%s","scope":"%s","container_id":"%s","image_id":"%s","endpoint":{"host":"%s","port":"%s"},"readiness":{"event":"%s","verified":%s,"child_pid":"%s","child_pgid":"%s","child_sid":"%s"},"child_status":%s,"cleanup":{"container":%s,"scope":%s,"lease":%s,"complete":%s}}' \
+    "$(json_escape "$PROFILE")" "$(json_escape "$SCOPE")" \
+    "$(json_escape "$CONTAINER_ID")" "$(json_escape "$LIFECYCLE_IMAGE_ID")" \
+    "$(json_escape "$LIFECYCLE_ENDPOINT_HOST")" "$(json_escape "$LIFECYCLE_ENDPOINT_PORT")" \
+    "$(json_escape "$LIFECYCLE_READINESS_EVENT")" \
+    "$([[ "$LIFECYCLE_READINESS_EVENT" == child_group_verified ]] && printf true || printf false)" \
+    "$(json_escape "$LIFECYCLE_CHILD_PID")" "$(json_escape "$LIFECYCLE_CHILD_PGID")" \
+    "$(json_escape "$LIFECYCLE_CHILD_SID")" "$child_status_json" \
+    "$LIFECYCLE_CONTAINER_CLEANUP" "$LIFECYCLE_SCOPE_CLEANUP" \
+    "$LIFECYCLE_LEASE_CLEANUP" \
+    "$([[ "$LIFECYCLE_CONTAINER_CLEANUP" == true && "$LIFECYCLE_SCOPE_CLEANUP" == true && "$LIFECYCLE_LEASE_CLEANUP" == true ]] && printf true || printf false)"
+}
+
+write_lifecycle_record() {
+  local record
+  record=$(lifecycle_record_json)
+  if [[ -n "$LIFECYCLE_RECORD_PATH" ]]; then
+    local temporary="${LIFECYCLE_RECORD_PATH}.tmp.$$"
+    umask 077
+    printf '%s\n' "$record" > "$temporary"
+    chmod 600 "$temporary"
+    mv -f -- "$temporary" "$LIFECYCLE_RECORD_PATH"
+  fi
+  # The record is deliberately emitted on stderr: stdout belongs exclusively
+  # to the child command.  The Docker-negative path never arms this record.
+  printf 'LIFECYCLE_RECORD=%s\n' "$record" >&2
 }
 
 description_json() {
@@ -444,16 +501,35 @@ cleanup() {
     kill -TERM "$CHILD_PID" 2>/dev/null || true
   fi
   [[ -z "$CHILD_PID" ]] || wait "$CHILD_PID" 2>/dev/null || true
-  if [[ -n "$CONTAINER_ID" ]]; then docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true; fi
+  if [[ -n "$CONTAINER_ID" ]]; then
+    if docker rm -f "$CONTAINER_ID" >/dev/null 2>&1; then
+      LIFECYCLE_CONTAINER_CLEANUP=true
+    fi
+  else
+    LIFECYCLE_CONTAINER_CLEANUP=true
+  fi
   if [[ -n "$SCOPE" ]]; then
     local ids id; local -a owned_ids=()
-    ids=$(docker ps -aq --filter "$OWNER_LABEL" --filter "$LIFECYCLE_LABEL" --filter "label=com.quickscale.scope=$SCOPE" 2>/dev/null || true)
-    if [[ -n "$ids" ]]; then
-      while IFS= read -r id; do [[ -n "$id" ]] && owned_ids+=("$id"); done <<< "$ids"
-      ((${#owned_ids[@]} == 0)) || docker rm -f "${owned_ids[@]}" >/dev/null 2>&1 || true
+    LIFECYCLE_SCOPE_CLEANUP=false
+    if ids=$(docker ps -aq --filter "$OWNER_LABEL" --filter "$LIFECYCLE_LABEL" --filter "label=com.quickscale.scope=$SCOPE" 2>/dev/null); then
+      LIFECYCLE_SCOPE_CLEANUP=true
+      if [[ -n "$ids" ]]; then
+        while IFS= read -r id; do [[ -n "$id" ]] && owned_ids+=("$id"); done <<< "$ids"
+        if ((${#owned_ids[@]} > 0)); then
+          docker rm -f "${owned_ids[@]}" >/dev/null 2>&1 || LIFECYCLE_SCOPE_CLEANUP=false
+        fi
+      fi
     fi
+  else
+    LIFECYCLE_SCOPE_CLEANUP=true
   fi
-  [[ -z "$LEASE_DIR" ]] || rm -rf -- "$LEASE_DIR"
+  if [[ -z "$LEASE_DIR" ]] || rm -rf -- "$LEASE_DIR"; then
+    LIFECYCLE_LEASE_CLEANUP=true
+  fi
+  if [[ "$LIFECYCLE_STARTED" == true ]]; then
+    LIFECYCLE_CHILD_STATUS="$status"
+    write_lifecycle_record
+  fi
   exit "$status"
 }
 
@@ -473,15 +549,18 @@ run_local() {
   validate_host_port
   verify_clients
   command -v docker >/dev/null 2>&1 || die "Docker is required for local PostgreSQL"
+  configure_lifecycle_record
   local temp_base="${TMPDIR:-/tmp}" image_id published_port
   [[ -d "$temp_base" ]] || die "temporary directory is unavailable"
   profile_scope
   CLEANUP_ARMED=true
+  LIFECYCLE_STARTED=true
   trap cleanup EXIT HUP INT TERM
   trap 'forward_signal HUP 129' HUP
   trap 'forward_signal INT 130' INT
   trap 'forward_signal TERM 143' TERM
   image_id=$(resolve_image)
+  LIFECYCLE_IMAGE_ID="$image_id"
   DESCRIPTION_DIGEST=$(printf '%s' "$(description_json)" | sha256sum | cut -d' ' -f1)
   # Keep the process-wide client default compatible with existing settings;
   # module mappings still carry the concrete loopback endpoint below.
@@ -494,6 +573,8 @@ run_local() {
   published_port=$(docker port "$CONTAINER_ID" 5432/tcp | sed -n 's/.*127\.0\.0\.1:\([0-9][0-9]*\).*/\1/p' | sed -n '1p')
   [[ "$published_port" =~ ^[0-9]+$ ]] || die "Docker did not report a dynamic loopback port"
   PGHOST_VALUE=localhost; PGPORT_VALUE="$published_port"
+  LIFECYCLE_ENDPOINT_HOST="$PGHOST_VALUE"
+  LIFECYCLE_ENDPOINT_PORT="$PGPORT_VALUE"
   export PGHOST=localhost PGPORT="$PGPORT_VALUE"
   DESCRIPTION_DIGEST=$(printf '%s' "$(description_json)" | sha256sum | cut -d' ' -f1)
   sed -i "s/^endpoint_host=.*/endpoint_host=localhost/; s/^endpoint_port=.*/endpoint_port=$PGPORT_VALUE/; s/^description_digest=.*/description_digest=$DESCRIPTION_DIGEST/" "$LEASE_FILE"
@@ -537,9 +618,15 @@ run_local() {
   fi
   [[ "$CHILD_PGID" =~ ^[0-9]+$ && "$CHILD_PGID" == "$CHILD_PID" ]] || die "child process group is not distinct"
   [[ "$child_sid" == "$CHILD_PID" && "$CHILD_PGID" != "$parent_pgid" ]] || die "child session is not distinct"
+  LIFECYCLE_CHILD_SID="$child_sid"
+  LIFECYCLE_CHILD_PID="$CHILD_PID"
+  LIFECYCLE_CHILD_PGID="$CHILD_PGID"
+  LIFECYCLE_READINESS_EVENT=child_group_verified
+  write_lifecycle_record
   wait "$CHILD_PID" || result=$?
   CHILD_PID=""
   CHILD_PGID=""
+  LIFECYCLE_CHILD_STATUS="$result"
   exit "$result"
 }
 

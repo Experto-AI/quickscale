@@ -193,10 +193,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Hosted workflows retain their existing service-container contract until the
-# separately scoped workflow-adoption phase. Local calls must enter through the
-# repository authority, and an inherited validation marker is revalidated
-# against the live lease instead of being trusted as a standalone credential.
+# Hosted workflows run the restricted helper profile against their PostgreSQL
+# service container. Local calls must enter through the repository authority;
+# an inherited validation marker is revalidated against the live lease instead
+# of being trusted as a standalone credential.
 if [[ "${GITHUB_ACTIONS:-}" != true ]]; then
   lease_profile="${QUICKSCALE_POSTGRES_PROFILE:-restricted}"
   [[ "$lease_profile" == restricted || "$lease_profile" == bypassrls ]] || {

@@ -296,6 +296,20 @@ class TestHostedPostgresProfileParity:
 
     def test_exactly_six_stations_use_expected_profiles(self) -> None:
         observed: dict[tuple[str, str], str] = {}
+        actual_call_counts: dict[tuple[str, str], int] = {}
+        workflow_dir = REPO_ROOT / ".github" / "workflows"
+        workflow_paths = sorted([*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")])
+        for workflow_path in workflow_paths:
+            workflow = yaml.safe_load(workflow_path.read_text())
+            jobs = workflow.get("jobs", {})
+            for job_id in jobs:
+                calls = _hosted_setup_calls(workflow_path, job_id)
+                if calls:
+                    station = (workflow_path.relative_to(REPO_ROOT).as_posix(), job_id)
+                    actual_call_counts[station] = len(calls)
+
+        assert set(actual_call_counts) == set(EXPECTED_HOSTED_PROFILE_BY_STATION)
+        assert set(actual_call_counts.values()) == {1}
         total_calls = 0
         for station, expected_profile in EXPECTED_HOSTED_PROFILE_BY_STATION.items():
             workflow_name, job_id = station

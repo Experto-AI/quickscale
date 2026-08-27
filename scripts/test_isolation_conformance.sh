@@ -32,9 +32,9 @@ _PSQL() {
     -U "${QS_ORGS_DB_USER:-quickscale_test_role}" "$@"
 }
 
-# Hosted workflows retain their existing service-container contract until the
-# separately scoped workflow-adoption phase. Local calls revalidate inherited
-# markers against the live isolation lease rather than trusting marker equality.
+# Hosted workflows run the isolation helper profile against their PostgreSQL
+# service container. Local calls revalidate inherited markers against the live
+# isolation lease rather than trusting marker equality.
 if [[ "${GITHUB_ACTIONS:-}" != true ]]; then
   if [[ -z "${QUICKSCALE_POSTGRES_LEASE_TOKEN:-}" || "${QUICKSCALE_POSTGRES_LEASE_VALIDATED:-}" != "$QUICKSCALE_POSTGRES_LEASE_TOKEN" ]]; then
     exec "$REPO_ROOT/scripts/provision_ci_postgres.sh" run \
