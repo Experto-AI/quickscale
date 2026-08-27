@@ -166,98 +166,14 @@ jobs:
         run: |
           make typecheck -- --core --cli --modules --devtools
 
-      - name: Install PostgreSQL 18 client tooling
-        # The backups module's DR engine enforces a PostgreSQL 18
-        # pg_dump/pg_restore contract. The runner image resolves
-        # `postgresql-client` to 16.x, which fails that contract, so install
-        # from PGDG exactly as ci.yml and e2e.yml do.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ca-certificates curl
-          distro_codename="$(
-            . /etc/os-release
-            echo "$VERSION_CODENAME"
-          )"
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client-18
-          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
-
-      - name: Verify PostgreSQL 18 client tooling
-        run: |
-          test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"
-          test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"
-          /usr/lib/postgresql/18/bin/pg_dump --version | grep -F "(PostgreSQL) 18"
-          /usr/lib/postgresql/18/bin/pg_restore --version | grep -F "(PostgreSQL) 18"
-
-      - name: Create test databases in PostgreSQL
-        run: |
-          for db in \
-            test_quickscale_smoke \
-            test_quickscale_analytics \
-            test_quickscale_auth \
-            test_quickscale_backups \
-            test_quickscale_billing \
-            test_quickscale_blog \
-            test_quickscale_crm \
-            test_quickscale_forms \
-            test_quickscale_listings \
-            test_quickscale_notifications \
-            test_quickscale_orgs \
-            test_quickscale_social \
-            test_quickscale_storage; do
-            createdb -h localhost -U postgres "$db" 2>/dev/null || echo "Database $db already exists"
-          done
-
-      - name: Provision PostgreSQL test roles (SA59.3)
-        run: |
-          ./scripts/provision_test_roles.sh
-
-          ROLE="quickscale_test_role"
-
-          # Grant ownership of all test databases to the restricted role so
-          # Django's test runner can create test_* databases from these templates.
-          for db in \
-          test_quickscale_analytics \
-          test_quickscale_auth \
-          test_quickscale_backups \
-          test_quickscale_billing \
-          test_quickscale_blog \
-          test_quickscale_crm \
-          test_quickscale_forms \
-          test_quickscale_listings \
-          test_quickscale_notifications \
-          test_quickscale_orgs \
-          test_quickscale_social \
-          test_quickscale_storage; do
-          psql -h localhost -U postgres -c "ALTER DATABASE \"$db\" OWNER TO ${ROLE};"
-            psql -h localhost -U postgres -d "$db" -c "GRANT ALL ON SCHEMA public TO ${ROLE};"
-          done
-          echo "✓ Database ownership and schema permissions granted to ${ROLE}"
+      - name: Provision hosted PostgreSQL restricted profile
+        run: scripts/provision_ci_postgres.sh hosted-setup --profile restricted
 
       - name: Run unit tests (core + CLI, DB-free)
         run: |
           make test-unit SECTION="core cli"
 
       - name: Run integration tests (modules, PostgreSQL NOBYPASSRLS gate)
-        env:
-          QUICKSCALE_ALLOW_BYPASSRLS: "0"
-          QS_ANALYTICS_DB_USER: quickscale_test_role
-          QS_AUTH_DB_USER: quickscale_test_role
-          QS_BACKUPS_DB_USER: quickscale_test_role
-          QS_BILLING_DB_USER: quickscale_test_role
-          QS_BLOG_DB_USER: quickscale_test_role
-          QS_CRM_DB_USER: quickscale_test_role
-          QS_FORMS_DB_USER: quickscale_test_role
-          QS_LISTINGS_DB_USER: quickscale_test_role
-          QS_NOTIFICATIONS_DB_USER: quickscale_test_role
-          QS_ORGS_DB_USER: quickscale_test_role
-          QS_SOCIAL_DB_USER: quickscale_test_role
-          QS_STORAGE_DB_USER: quickscale_test_role
         run: |
           ./scripts/test_integration.sh
 

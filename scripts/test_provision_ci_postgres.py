@@ -306,7 +306,7 @@ def test_all_profiles_have_exact_database_and_environment_contract(profile: str)
     assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)
     if profile == "backups":
-        assert [entry["name"] for entry in data["databases"]] == ["test_quickscale_backups"]
+        assert [entry["key"] for entry in data["databases"]] == ["backups"]
         assert set(data["environment"]) == {
             "QS_BACKUPS_DB_" + suffix for suffix in ("NAME", "USER", "HOST", "PORT")
         }
@@ -316,13 +316,20 @@ def test_all_profiles_have_exact_database_and_environment_contract(profile: str)
         modules = data["discovery"]["modules"]
         expected = ["smoke", *modules]
         if profile == "isolation":
-            expected.remove("backups")
+            expected = [key for key in expected if key != "backups"]
         assert [entry["key"] for entry in data["databases"]] == expected
-        mapped = (
-            modules
-            if profile != "isolation"
-            else ["orgs", "billing", "blog", "crm", "forms", "listings"]
-        )
+        if profile == "isolation":
+            mapped = sorted(
+                {
+                    key.removeprefix("QS_").split("_DB_", 1)[0].lower()
+                    for key in data["environment"]
+                    if key.startswith("QS_")
+                }
+            )
+            assert len(mapped) == 6
+            assert "backups" not in mapped
+        else:
+            mapped = [entry["module"] for entry in data["databases"] if entry["module"]]
         assert set(data["environment"]) == {
             f"QS_{module.upper()}_DB_{suffix}"
             for module in mapped
@@ -334,6 +341,30 @@ def test_all_profiles_have_exact_database_and_environment_contract(profile: str)
     elif profile in {"restricted", "isolation"}:
         assert data["role"]["name"] == "quickscale_test_role"
         assert data["environment"]["QUICKSCALE_ALLOW_BYPASSRLS"] == "0"
+
+
+def test_profile_descriptions_are_complete_source_bindings() -> None:
+    """Every hosted profile exposes all facts consumed by workflow callers."""
+    for profile in ("backups", "restricted", "isolation", "bypassrls", "client-only"):
+        result = invoke(
+            "describe",
+            "--profile",
+            profile,
+            "--format",
+            "json",
+            env={"QS_PROVISION_HOSTED": "1"},
+        )
+        assert result.returncode == 0, result.stderr
+        data = json.loads(result.stdout)
+        assert data["profile"] == profile
+        assert data["discovery"]["modules"] == sorted(data["discovery"]["modules"])
+        assert len(data["discovery"]["modules"]) == 12
+        if profile == "client-only":
+            assert data["databases"] == []
+            assert data["environment"] == {}
+        else:
+            assert data["databases"]
+            assert data["role"]["flags"]
 
 
 def test_local_profile_names_are_qualified_and_disjoint() -> None:
@@ -393,6 +424,7 @@ def test_host_and_port_are_validated_before_mutation(variables: dict[str, str]) 
 
 
 def test_local_never_installs_clients_and_requires_docker(tmp_path: Path) -> None:
+    """The Docker prerequisite is checked after clients, without host fallbacks."""
     only_bash = tmp_path / "only-bash"
     only_bash.mkdir()
     (only_bash / "dirname").symlink_to("/usr/bin/dirname")
@@ -407,22 +439,35 @@ def test_local_never_installs_clients_and_requires_docker(tmp_path: Path) -> Non
     assert result.returncode != 0 and "required PostgreSQL client" in result.stderr
     tools = tmp_path / "tools"
     tools.mkdir()
+    # Keep this branch hermetic: the host has both Docker and apt-get, so a
+    # PATH containing /usr/bin would turn a negative prerequisite test into a
+    # real allocation or an installation attempt.  The client scripts use an
+    # env-based shebang, while the helper needs dirname before it reaches its
+    # Docker guard; expose only those utilities and the PostgreSQL shims.
+    (tools / "bash").symlink_to("/bin/bash")
+    (tools / "dirname").symlink_to("/usr/bin/dirname")
     for tool in ("psql", "pg_dump", "pg_restore"):
         executable(tools / tool, f'echo "{tool} (PostgreSQL) 18.1"')
+    docker_log = tmp_path / "docker.log"
+    apt_log = tmp_path / "apt-get.log"
     result = invoke(
         "run",
         "--profile",
         "restricted",
         "--",
         "true",
-        env={"PATH": f"{tools}:/usr/bin", "TMPDIR": str(tmp_path)},
+        env={
+            "PATH": str(tools),
+            "TMPDIR": str(tmp_path),
+            "QS_DOCKER_LOG": str(docker_log),
+            "QS_APT_LOG": str(apt_log),
+        },
     )
-    # A real daemon may be available even though the PATH intentionally omits
-    # the PostgreSQL client installation path. In that case the fake clients
-    # reach the server-major guard rather than the Docker prerequisite guard.
     assert result.returncode != 0
-    assert "Docker" in result.stderr or "server did not report" in result.stderr
-    assert "apt-get" not in result.stderr
+    assert result.stderr == "ERROR: Docker is required for local PostgreSQL\n"
+    assert not docker_log.exists()
+    assert not apt_log.exists()
+    assert not any(path.name.startswith("quickscale-postgres.") for path in tmp_path.iterdir())
 
 
 def test_hosted_setup_is_github_only_and_client_only_writes_lease(tmp_path: Path) -> None:

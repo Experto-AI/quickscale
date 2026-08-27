@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import select
 import shlex
 import shutil
@@ -99,6 +100,53 @@ CHECK_CI = REPO_ROOT / "scripts" / "check_ci_locally.sh"
 CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PUBLISH_YML = REPO_ROOT / ".github" / "workflows" / "publish.yml"
 E2E_YML = REPO_ROOT / ".github" / "workflows" / "e2e.yml"
+
+# The six service-backed workflow stations are the only callers allowed to
+# provision hosted PostgreSQL.  This mapping is the test-owned station
+# contract; profile facts themselves come from provision_ci_postgres.sh.
+EXPECTED_HOSTED_PROFILE_BY_STATION: dict[tuple[str, str], str] = {
+    (".github/workflows/ci.yml", "backups-validation"): "backups",
+    (".github/workflows/ci.yml", "test"): "restricted",
+    (".github/workflows/ci.yml", "isolation-conformance"): "isolation",
+    (".github/workflows/publish.yml", "test"): "restricted",
+    (".github/workflows/e2e.yml", "e2e-tests"): "client-only",
+    (".github/workflows/nightly-bypassrls.yml", "bypassrls"): "bypassrls",
+}
+
+
+def _hosted_setup_calls(path: Path, job_id: str) -> list[str]:
+    """Return helper hosted-setup profiles from one structurally parsed job."""
+    workflow = _parse_yaml_strict(path.read_text(encoding="utf-8"), str(path))
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    job = jobs.get(job_id)
+    assert isinstance(job, dict), f"{job_id} is missing from {path}"
+    steps = job.get("steps")
+    assert isinstance(steps, list)
+    profiles: list[str] = []
+    pattern = re.compile(r"^scripts/provision_ci_postgres\.sh hosted-setup --profile ([a-z-]+)$")
+    for step in steps:
+        if not isinstance(step, dict) or not isinstance(step.get("run"), str):
+            continue
+        match = pattern.fullmatch(step["run"].strip())
+        if match:
+            profiles.append(match.group(1))
+    return profiles
+
+
+def _workflow_job_run_text(path: Path, job_id: str) -> str:
+    """Return only shell blocks belonging to one structurally parsed job."""
+    workflow = _parse_yaml_strict(path.read_text(encoding="utf-8"), str(path))
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    job = jobs.get(job_id)
+    assert isinstance(job, dict)
+    steps = job.get("steps")
+    assert isinstance(steps, list)
+    return "\n".join(
+        step["run"] for step in steps if isinstance(step, dict) and isinstance(step.get("run"), str)
+    )
+
 
 # The 7 publish-bound conformance gate make targets
 CONFORMANCE_MAKE_TARGETS: frozenset[str] = frozenset(
@@ -241,6 +289,60 @@ class TestCurrentRepositoryState:
         """A green checker does not emit an ERROR diagnostic."""
         result = _run_checker()
         assert "ERROR:" not in result.stderr
+
+
+class TestHostedPostgresProfileParity:
+    """Hosted workflow stations delegate to the single profile authority."""
+
+    def test_exactly_six_stations_use_expected_profiles(self) -> None:
+        observed: dict[tuple[str, str], str] = {}
+        total_calls = 0
+        for station, expected_profile in EXPECTED_HOSTED_PROFILE_BY_STATION.items():
+            workflow_name, job_id = station
+            workflow_path = REPO_ROOT / workflow_name
+            calls = _hosted_setup_calls(workflow_path, job_id)
+            assert len(calls) == 1, f"{station} must have exactly one hosted-setup call"
+            assert calls[0] == expected_profile
+            observed[station] = calls[0]
+            total_calls += len(calls)
+
+            job_text = _workflow_job_run_text(workflow_path, job_id)
+            assert "apt-get" not in job_text
+            assert "createdb" not in job_text
+            assert "ALTER DATABASE" not in job_text
+            assert "provision_test_roles.sh" not in job_text
+
+        assert observed == EXPECTED_HOSTED_PROFILE_BY_STATION
+        assert total_calls == len(EXPECTED_HOSTED_PROFILE_BY_STATION)
+
+    def test_profiles_are_bound_by_helper_describe_json(self) -> None:
+        helper = REPO_ROOT / "scripts" / "provision_ci_postgres.sh"
+        for profile in sorted(set(EXPECTED_HOSTED_PROFILE_BY_STATION.values())):
+            result = subprocess.run(
+                [
+                    "/bin/bash",
+                    str(helper),
+                    "describe",
+                    "--profile",
+                    profile,
+                    "--format",
+                    "json",
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert result.returncode == 0, result.stderr
+            description = json.loads(result.stdout)
+            assert description["profile"] == profile
+            assert description["schema_version"] == 1
+            if profile == "client-only":
+                assert description["databases"] == []
+                assert description["environment"] == {}
+            else:
+                assert description["databases"]
+                assert description["role"]["flags"]
 
 
 # =========================================================================
@@ -453,6 +555,7 @@ _E2E_PATHS: list[str] = [
     "quickscale_core/tests/conftest.py",
     "Makefile",
     "scripts/check_ci_locally.sh",
+    "scripts/provision_ci_postgres.sh",
     "scripts/_qs_jobs.sh",
     "scripts/test_e2e.sh",
     "scripts/test_e2e_parallel.py",
@@ -620,8 +723,7 @@ class TestE2eTriggerAggregate:
 
     def test_aggregate_extra_path_in_e2e_detected(self, tmp_path: Path) -> None:
         """A path in e2e.yml but not in any trigger_input is reported as extra."""
-        # The real e2e.yml has 45 paths; use a subset that leaves some uncovered.
-        # Use just one path that exists in e2e.yml.
+        # Use just one path that exists in e2e.yml, leaving the remainder uncovered.
         gates = [
             {
                 "id": "gate-b",
@@ -995,10 +1097,11 @@ class TestParserPrecision:
         gates = _extract_check_ci_parallel_gates(script)
         assert gates == {"check-core-compat"}
 
-    def test_e2e_extracts_forty_five_paths(self) -> None:
-        """The generated workflow has exactly 45 ordered trigger paths."""
+    def test_e2e_paths_match_registry_source(self) -> None:
+        """The generated workflow has exactly the registry-derived paths."""
         paths = _extract_e2e_trigger_paths(E2E_YML)
-        assert len(paths) == 45, f"Expected 45 paths, got {len(paths)}"
+        registry_paths = list(_expected_e2e_paths(_parse_registry(DEFAULT_REGISTRY)))
+        assert paths == registry_paths
 
     def test_e2e_paths_order_preserved(self) -> None:
         """e2e trigger paths preserve the order from the workflow file."""
@@ -1145,8 +1248,8 @@ class TestParserPrecision:
             ),
         }
 
-    def test_all_twenty_six_publish_run_values_are_structural(self) -> None:
-        """Every current publish run block matches the literal ordered oracle."""
+    def test_publish_run_values_preserve_ordered_oracle(self) -> None:
+        """Every publish run block matches the literal ordered oracle."""
         values = _extract_publish_run_values(PUBLISH_YML)
         assert values == [
             (
@@ -1184,79 +1287,7 @@ class TestParserPrecision:
             ("test", "make lint -- --core --cli --modules --devtools\n"),
             ("test", "make test-integration-worker-pool\n"),
             ("test", "make typecheck -- --core --cli --modules --devtools\n"),
-            (
-                "test",
-                "sudo apt-get update\n"
-                "sudo apt-get install -y ca-certificates curl\n"
-                'distro_codename="$(\n'
-                "  . /etc/os-release\n"
-                '  echo "$VERSION_CODENAME"\n'
-                ')"\n'
-                "sudo install -d /usr/share/postgresql-common/pgdg\n"
-                "sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \\\n"
-                "  -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc\n"
-                'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] '
-                'http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \\\n'
-                "  | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null\n"
-                "sudo apt-get update\n"
-                "sudo apt-get install -y postgresql-client-18\n"
-                'echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"\n',
-            ),
-            (
-                "test",
-                'test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"\n'
-                'test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"\n'
-                '/usr/lib/postgresql/18/bin/pg_dump --version | grep -F "(PostgreSQL) 18"\n'
-                '/usr/lib/postgresql/18/bin/pg_restore --version | grep -F "(PostgreSQL) 18"\n',
-            ),
-            (
-                "test",
-                "for db in \\\n"
-                "  test_quickscale_smoke \\\n"
-                "  test_quickscale_analytics \\\n"
-                "  test_quickscale_auth \\\n"
-                "  test_quickscale_backups \\\n"
-                "  test_quickscale_billing \\\n"
-                "  test_quickscale_blog \\\n"
-                "  test_quickscale_crm \\\n"
-                "  test_quickscale_forms \\\n"
-                "  test_quickscale_listings \\\n"
-                "  test_quickscale_notifications \\\n"
-                "  test_quickscale_orgs \\\n"
-                "  test_quickscale_social \\\n"
-                "  test_quickscale_storage; do\n"
-                '  createdb -h localhost -U postgres "$db" 2>/dev/null || echo '
-                '"Database $db already exists"\n'
-                "done\n",
-            ),
-            (
-                "test",
-                "./scripts/provision_test_roles.sh\n"
-                "\n"
-                'ROLE="quickscale_test_role"\n'
-                "\n"
-                "# Grant ownership of all test databases to the restricted role so\n"
-                "# Django's test runner can create test_* databases from these templates.\n"
-                "for db in \\\n"
-                "test_quickscale_analytics \\\n"
-                "test_quickscale_auth \\\n"
-                "test_quickscale_backups \\\n"
-                "test_quickscale_billing \\\n"
-                "test_quickscale_blog \\\n"
-                "test_quickscale_crm \\\n"
-                "test_quickscale_forms \\\n"
-                "test_quickscale_listings \\\n"
-                "test_quickscale_notifications \\\n"
-                "test_quickscale_orgs \\\n"
-                "test_quickscale_social \\\n"
-                "test_quickscale_storage; do\n"
-                'psql -h localhost -U postgres -c "ALTER DATABASE \\"$db\\" OWNER TO '
-                '${ROLE};"\n'
-                '  psql -h localhost -U postgres -d "$db" -c "GRANT ALL ON SCHEMA public TO '
-                '${ROLE};"\n'
-                "done\n"
-                'echo "✓ Database ownership and schema permissions granted to ${ROLE}"\n',
-            ),
+            ("test", "scripts/provision_ci_postgres.sh hosted-setup --profile restricted"),
             ("test", 'make test-unit SECTION="core cli"\n'),
             ("test", "./scripts/test_integration.sh\n"),
             (
