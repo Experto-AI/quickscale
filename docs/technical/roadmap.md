@@ -249,6 +249,15 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 | SA164 (#25) | SA166 (#24) | **lane-ordering** for the queue position, **hard content** for its substance — its `test_sa92_migration_squash_guardrail.py` work depends on SA167c having retired `django_apps:` | The content half only SA167c clears. The SA166 position is reorderable by decision, but not recommended. |
 | SA165 (#22) | SA167d (#18) | **lane-ordering only** — W1 queue position; SA165 shares no file with SA167d, and its `scripts/test_isolation_conformance.sh` edit is contended with SA163 (#15), not with #18 | **Upstream work only.** The reorder decision was put to the maintainer on 2026-08-27 and answered *keep the ordering*; it is now a standing rule below, so no decision remains that clears this. |
 
+**Dispatch prerequisites, measured 2026-08-27 after this pass.** All three worktrees are clean and
+no suite is running; `pg18-af10` is up with all twelve `test_quickscale_*` databases owned by
+`quickscale_test_role`. **Every worktree is behind `v88` and must sync before its ticket starts.**
+A trial merge of current `v88` into each shows: **W2 (3 behind) and W3 (6 behind) merge cleanly**;
+**W1 (9 ahead / 9 behind) conflicts in `docs/technical/roadmap.md`** — expected, because `467714cb`
+and this pass both rewrote its state blocks. Resolve in the worktree by keeping this pass's
+structure and re-running `test_v88_ticket_context_consistency.py` in the same change, per the
+standing rule.
+
 **Recommended concurrency right now:**
 
 - **W2 — continue SA167c (#21).** Do not redo the merged manifest-retirement bytes. First accept
@@ -526,8 +535,24 @@ Conceptual background, mental models, and implementation notes for **every** tic
   on one unchanged tip, and supplying that tip's complete diff to an independent reviewer before
   merge-back.
   **Decisions needed:** none. SA165 remains blocked only by completion of this ticket.
-  **Remaining plan, in order.** (1) Re-run E0's exact ordered acceptance sequence on the retained
-  delta and accept phase E only if it is green. (2) Complete C1's same-fact ledger reconciliation and
+  **E0's ordered acceptance sequence — reconstructed 2026-08-27 and now written down.** The prior
+  plan said only *"re-run E0's exact ordered sequence"*, whose referent lived in a dispatch document
+  that is not in the tree; **that made this ticket undispatchable**. The sequence below is
+  reconstructed from this ticket's own acceptance criteria and the recorded E0 evidence (816 focused
+  tests, then lint, then typecheck, then an ordered `make test` that failed on storage coverage).
+  Run it in this order on the retained delta, stopping at the first red:
+  1. `poetry run pytest quickscale_cli/tests/commands/test_module_config.py quickscale_cli/tests/commands/test_module_config_extended.py quickscale_cli/tests/commands/test_module_commands.py quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_cli/tests/test_module_manifest_contract.py -q -o addopts= --no-cov`
+     — the CLI wiring-boundary surface; expect green and the recorded **816** focused total.
+  2. `make lint` and `make typecheck` — expect exit 0.
+  3. `make test` — the ordered combined gate; expect Core, CLI, and module totals green with no
+     coverage regression. This is the step E0 failed on; it is the one that must now be green.
+  4. `make check` and `make quality` — expect `make quality` no worse than found (zero warning,
+     critical, and total regressions).
+  **Rollback:** the delta is committed at `1743871f`; `git reset --hard 1743871f` in `wt-track1`
+  discards any correction attempt without touching `v88`. Schedule steps 1-4 outside W3's cluster
+  window.
+  **Remaining plan, in order.** (1) Run the reconstructed E0 sequence above on the retained
+  delta and accept phase E only if every step is green. (2) Complete C1's same-fact ledger reconciliation and
   executable consistency test without archiving SA167d early. (3) Synchronize current `v88`, resolve
   the standing closeout conflict surface, and run V1's complete validation campaign on one frozen
   candidate. (4) Independently review the complete authoritative diff for that exact candidate.
@@ -555,7 +580,8 @@ Conceptual background, mental models, and implementation notes for **every** tic
   E1 then recorded these green runs without changing a file: the isolated development node (1
   passed), isolated React node (1 passed), synchronized two-node run (2 passed), and exact
   `QS_E2E_PARALLEL=0 make test-e2e` context (Core 38 passed; CLI 40 passed; cleanup complete). E1's
-  exact literal `TEST COMMAND` chain was not run.
+  exact literal `TEST COMMAND` chain was not run — **historical note only**; that chain belonged to
+  the superseded E1 scope and is discharged by SA170 (#27), not by this ticket.
   **Pending:** E1 is narrowed to what this ticket actually owns — the **PostgreSQL lifecycle**
   evidence: provisioning, teardown, the role contract, and the asserted-unavailability negative
   control, all of which E0 and the C/D phases already exercise deterministically. The two historical
