@@ -1015,6 +1015,44 @@ class TestDiscoveredInventoryRegistryTransition:
             MANAGED_ADAPTER_ORIGINS.clear()
             MANAGED_ADAPTER_ORIGINS.update(original_origins)
 
+    def test_refresh_registers_generated_subset_against_bundled_inventory(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Generated projects load only their embedded authoritative adapters."""
+        from quickscale_core.contracts import module_discovery
+
+        active = {"auth", "orgs"}
+        bundled = set(module_discovery.discover_bundled_module_names())
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+
+        monkeypatch.setattr(
+            module_discovery,
+            "discover_shipped_module_names",
+            lambda: sorted(active),
+        )
+        monkeypatch.setattr(
+            module_discovery,
+            "discover_bundled_module_names",
+            lambda: sorted(bundled),
+        )
+        monkeypatch.setattr(
+            entry_point_module,
+            "_load_managed_adapter",
+            lambda _name: lambda _options, **_kwargs: ModuleWiringSpec(),
+        )
+        try:
+            refresh_managed_adapters()
+
+            assert len(bundled) == 12
+            assert MANAGED_ADAPTER_ORIGINS == active
+            assert active.issubset(MANIFEST_ADAPTER_REGISTRY)
+        finally:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(original_origins)
+
     def test_failed_resolution_preserves_registry_and_origins_atomically(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -198,23 +198,55 @@ def discover_shipped_module_names() -> list[str]:
 def authoritative_module_names() -> list[str]:
     """Return the fail-hard inventory of shipped module names.
 
-    The source manifest scan is the single inventory input for release and
-    validation tooling.  Placeholder names are never public modules, even if
-    a malformed or future repository state gives one a manifest.  A count
-    mismatch is also rejected so consumers cannot silently operate on a
-    partial or accidentally expanded release inventory.
+    Source manifests are preferred in the maintainer monorepo; installed and
+    generated contexts resolve the same inventory from bundled manifests.
+    Placeholder names are never public modules, even if a malformed or future
+    repository state gives one a manifest.  A count mismatch is also rejected
+    so consumers cannot silently operate on an accidentally changed release
+    inventory.
 
     Raises:
         ImproperlyConfigured: If a placeholder is discovered or the number of
             discovered modules differs from :data:`AUTHORITATIVE_MODULE_COUNT`.
     """
-    names = discover_shipped_module_names()
+    if _modules_base_path is not None:
+        resolution_source = ModuleResolutionSource.OVERRIDE
+        names = discover_shipped_module_names()
+    else:
+        try:
+            names = discover_shipped_module_names()
+            resolution_source = ModuleResolutionSource.MONOREPO
+        except ImproperlyConfigured:
+            names = discover_bundled_module_names()
+            resolution_source = ModuleResolutionSource.BUNDLED
     placeholders = sorted(set(names) & PLACEHOLDER_MODULE_NAMES)
     if placeholders:
         raise ImproperlyConfigured(
             "Authoritative module inventory contains placeholder module(s): "
             + ", ".join(placeholders)
         )
+    if len(names) == AUTHORITATIVE_MODULE_COUNT:
+        return names
+
+    # An override commonly points at a generated project's selected embedded
+    # modules.  That source subset is authoritative for adapter loading, but it
+    # is not the shipped product inventory shown by plan/status or validated by
+    # source-free E2E nodes.  Resolve that inventory from the wheel's bundled
+    # manifests while preserving fail-hard source drift in the monorepo.
+    if resolution_source is ModuleResolutionSource.OVERRIDE:
+        bundled_names = discover_bundled_module_names()
+        bundled_placeholders = sorted(set(bundled_names) & PLACEHOLDER_MODULE_NAMES)
+        if bundled_placeholders:
+            raise ImproperlyConfigured(
+                "Authoritative bundled module inventory contains placeholder "
+                "module(s): " + ", ".join(bundled_placeholders)
+            )
+        if (
+            set(names).issubset(bundled_names)
+            and len(bundled_names) == AUTHORITATIVE_MODULE_COUNT
+        ):
+            return bundled_names
+
     if len(names) != AUTHORITATIVE_MODULE_COUNT:
         raise ImproperlyConfigured(
             "Authoritative module inventory count drift: expected "
@@ -407,9 +439,10 @@ def resolve_manifest_base_path() -> Path:
     silently empty or defaulted manifest.
 
     Note this resolves *manifest* reads only.  Source-required operations
-    (:func:`get_modules_base_path`, :func:`discover_shipped_module_paths`,
-    ``load_module_manifest``, ``refresh_managed_adapters``) intentionally remain
-    fail-hard against the source tree and must not call this.
+    (:func:`get_modules_base_path`, :func:`discover_shipped_module_paths`, and
+    ``load_module_manifest``) intentionally remain fail-hard against the source
+    tree.  ``refresh_managed_adapters`` may consult bundled *names* to validate a
+    generated subset, but it loads adapter source only from the active base.
 
     Raises:
         ImproperlyConfigured: If neither the source workspace nor the bundled

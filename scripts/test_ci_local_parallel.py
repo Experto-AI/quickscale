@@ -168,6 +168,7 @@ def _fake_environment(
         "QUICKSCALE_POSTGRES_LEASE_VALIDATED",
         "PGHOST",
         "PGPORT",
+        "QS_CI_PARALLEL",
     ):
         environment.pop(key, None)
     runtime_bin = tmp_path / "runtime-bin"
@@ -224,7 +225,10 @@ def _run_ci(
     if parallel is not None:
         environment["QS_CI_PARALLEL"] = parallel
     else:
-        environment.pop("QS_CI_PARALLEL", None)
+        # The harness's default mode is parallel.  Set it explicitly so an
+        # outer `QS_CI_PARALLEL=0 make ci` cannot silently turn these worker
+        # lifecycle tests into the serial path before the reap-boundary hook.
+        environment["QS_CI_PARALLEL"] = "1"
     if registry is not None:
         environment["GATE_REGISTRY"] = str(registry)
     return subprocess.run(

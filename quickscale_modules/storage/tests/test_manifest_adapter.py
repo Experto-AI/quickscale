@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from typing import Any
 
 import pytest
@@ -20,6 +23,31 @@ class TestStorageManifestAdapter:
     def test_sentinel_returns_callable(self) -> None:
         """The public sentinel returns the module adapter."""
         assert get_manifest_adapter() is _storage_manifest_adapter
+
+    def test_adapter_imports_before_django_and_pillow_are_installed(self) -> None:
+        """Installed apply can load the adapter before module dependencies."""
+        probe = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import importlib.abc, sys\n"
+                    "class Blocker(importlib.abc.MetaPathFinder):\n"
+                    "    def find_spec(self, fullname, path=None, target=None):\n"
+                    "        if fullname.split('.', 1)[0] in {'django', 'PIL'}:\n"
+                    "            raise ModuleNotFoundError(fullname)\n"
+                    "        return None\n"
+                    "sys.meta_path.insert(0, Blocker())\n"
+                    "from quickscale_modules_storage.adapter import get_manifest_adapter\n"
+                    "assert callable(get_manifest_adapter())\n"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            check=False,
+        )
+        assert probe.returncode == 0, probe.stderr
 
     def test_local_defaults_emit_all_manifest_settings_and_omit_cloud_runtime(
         self,
