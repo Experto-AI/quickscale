@@ -4,6 +4,30 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-27, eighteenth pass).** **No ticket closed and
+  no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
+  positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries.
+  **One false claim corrected.** The planner asserted that all three worktrees were merged into
+  `v88`. Re-measured: `wt-track2` and `wt-track3` are ancestors of `v88`, but **`wt-track1` is
+  not** — it carries `7d5651a8`, SA167d's accepted CLI-wiring-drain implementation, whose own
+  acceptance record explicitly declined to claim merge-back. SA167d therefore stays open, with its
+  scope restated from "implement" to "merge back": sync `v88`, resolve the standing closeout trio
+  (`CHANGELOG.md`, `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`) preserving
+  both SA118's archived entry and SA167d's own, rerun verification on the resolved tip, merge that
+  exact tip. No product file is contended; `module_config.py` is touched by no other v88 ticket.
+  **Rebalance outcome: four moves tested, all rejected.** SA161 (#19) + SA160 (#20) from W3 to W1
+  was re-tested against W1's reduced load now that SA167d is built, and rejected on a stronger
+  ground than last pass: SA161's acceptance needs the exclusive PostgreSQL/Docker slot, which is
+  W3-owned by standing rule, so the move would either violate that rule or leave SA161 blocked on
+  W3 regardless. The W3→W2 move, moving SA166/SA164 off W2, and splitting SA160 ahead of SA161
+  remain rejected on their standing grounds.
+  **Audits re-read, nothing closed.** arch Finding 13 stays live under SA163; Findings 7, 2, and 4
+  stay behind their growth triggers; tech-audit counts remain S3 1 (TA67/SA160), S4 1 (TA68/SA161),
+  total 2 open. No red flag is open in either document, and both counts already matched the
+  planner, so neither audit needed an edit.
+  **Critical path unchanged:** `SA167c` on W2, with SA166 (#24) and SA164 (#25) as band-C tails
+  behind it. No maintainer decision is open anywhere in the v88 plan.
+
 - **SA118 — manifest-default projection closed and archived (2026-08-27; resynced W2
   candidate).** The corrected source inventory contains **68 mutable** manifest options and
   **2 immutable** metadata values. The implementation projects every mutable

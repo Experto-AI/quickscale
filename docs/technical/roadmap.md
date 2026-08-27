@@ -107,10 +107,12 @@ W2 (gates & declared wiring)   ★ CRITICAL PATH — 3 open legs, 1 on the path
   apps+gate
     #21       #24       #25
 
-W1 (module-wiring migration + watch items)   2 open legs, mostly light, no cross-worktree gate
+W1 (module-wiring migration + watch items)   2 open legs, no cross-worktree gate
   SA167d ─► SA165
   drain     watch
   CLI       items
+  (built,   (open)
+   merge)
      #18       #22
 
 W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   3 open positions: 1 heavy + 2 band-C
@@ -125,8 +127,8 @@ W3 (service lifecycle — exclusive PostgreSQL/Docker slot)   3 open positions: 
 leg; SA166 (#24) and SA164 (#25) are band-C tails behind
 the chain, not on it. W2's back half is the release's implementation work, so W2 sets the
 date. SA167d costs nothing on the critical path: W1 runs it against W2's second half.
-**Load check:** W1 carries two open legs — SA167d and SA165 — and W3
-three positions, against the three-leg W2 spine. W3's two band-C tails do not gate release, so W2 remains the binding lane — see
+**Load check:** W1 carries two open legs — SA167d, whose only remaining step is merge-back, and
+SA165 — and W3 three positions, against the three-leg W2 spine. W3's two band-C tails do not gate release, so W2 remains the binding lane — see
 the irreducibility argument below.
 
 **Second chain:** W3, `SA135` carrying `SA163`, one service-backed open leg followed by
@@ -137,14 +139,17 @@ The manifest-reading `entry_point.py`, the
 fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec seam, and the regenerated migration baseline
 are all merged tree state that open tickets build on, not pending dependencies.
 
-**Parallelism result: all three lanes are merged into `v88` and all three queue heads are
-executable.** `wt-track1`, `wt-track2`, and `wt-track3` are each verified ancestors of the
-integration branch (W3 merged at `d650cf26`), so no lane carries unmerged work and every lane
-starts from the integration tip. Each lane still syncs current `v88` before its own
+**Parallelism result: two lanes are merged; W1 carries an accepted unmerged candidate.**
+`wt-track2` and `wt-track3` are verified ancestors of the integration branch (W3 merged at
+`d650cf26`), so both start from the integration tip. **`wt-track1` is not an ancestor of `v88`**
+(measured 2026-08-27): it holds one commit, `7d5651a8`, which is SA167d's accepted
+implementation — merge-back was explicitly not claimed at acceptance. W1's open work is therefore
+the merge-back itself, not the implementation. Each lane still syncs current `v88` before its own
 exact-candidate validation.
 
-**Rebalance result (2026-08-27): no track moves. The binding constraint is physical, not merge
-debt.** With every lane merged and idle, the one contended resource is a single PostgreSQL 18
+**Rebalance result (2026-08-27, eighteenth pass): no track moves. The binding constraint is
+physical, not merge debt.** With W2 and W3 idle at the tip and W1 holding only a merge-back, the
+one contended resource is a single PostgreSQL 18
 cluster holding `localhost:5432` and the twelve shared test databases — and W3 needs it *empty*.
 No ticket move can relieve that; only scheduling can. Four moves were tested and rejected:
 
@@ -158,7 +163,11 @@ No ticket move can relieve that; only scheduling can. Four moves were tested and
   It is rejected because it buys nothing that matters: both tickets are band C, off the critical
   path, and cannot move the release date, while the move would load W1 to four legs against W3's
   one and give SA161's generated-project boot proof the same shared-cluster contention it has
-  today. Revisit only if W3's window slips far enough that band-C availability starts to matter.
+  today. **Re-tested this pass against W1's reduced load** — with SA167d implemented, W1's only
+  remaining implementation leg is SA165, so the "four legs on W1" objection is now weaker. The move
+  is still rejected, and now on a stronger ground: SA161's acceptance needs the exclusive
+  PostgreSQL/Docker slot, which is W3-owned by standing rule, so moving it to W1 would either
+  violate that rule or leave it blocked on W3 anyway. Revisit only if the slot rule changes.
 - **SA166 (#24) or SA164 (#25) off W2** — rejected on the standing invariant that
   `scripts/gate_registry.json` never crosses worktrees.
 - **SA160 ahead of SA161 inside W3** — rejected: they share the emission-parity rebaseline
@@ -185,7 +194,7 @@ Shared closeout surfaces (`CHANGELOG.md`, `docs/technical/roadmap.md`,
 sync-before-merge-back procedure.
 
 
-### Track readiness (reconciled 2026-08-27; all three worktrees merged into `v88`)
+### Track readiness (reconciled 2026-08-27; W2 and W3 merged, W1 pending merge-back)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes. The queue and track states below were re-tested for rebalance opportunities; no move is
@@ -193,13 +202,15 @@ needed.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
-| **W1** | SA167d (#18) | **yes** — SA167b is accepted and archived, and the lane is at the integration tip | **yes** — SA167d is W1-owned, subject to the shared PostgreSQL/Docker serialization rule | **yes** — #18 is the W1 queue head | **truly green — off the critical path** |
+| **W1** | SA167d (#18) — **implemented, awaiting merge-back** | **yes** — the implementation is accepted at `wt-track1` `7d5651a8`; the open action is sync-and-merge, not coding | **yes** — the remaining work is W1-owned: sync `v88` into the worktree, resolve the closeout surfaces, rerun the ticket's verification, merge the exact tip | **yes** — #18 is the W1 queue head with no upstream ticket | **truly green — off the critical path** |
 | **W2** | SA167c (#21) | **yes** — the manifest-default projection is accepted and archived, leaving inert-key retirement unblocked | **yes** — the ticket is W2-owned and starts from the accepted resynced candidate | **yes** — #21 is the W2 queue head | **truly green — on the critical path** |
 | **W3** | SA135 + SA163 (#15) | **yes to continue** — P/A/B and the local C implementation are merged into `v88`, and the exclusive PostgreSQL/Docker window is authorized | **yes** — strict C acceptance and phases D-G are W3-owned; the `pg18-af10` stop/restart that gated them is granted | **yes in order** — #15 is the W3 queue head and has no upstream ticket ahead of it | **truly green — off the critical path** |
 
 **All three tracks are truly green — SA167c (#21), SA167d (#18), and SA135+SA163 (#15).** W2's
 SA167c is the only truly green ticket **on** the critical path and should run first. W1's SA167d and
 W3's SA135+SA163 are real band-B work but sit off the path, so neither moves the release date.
+**W1's green is a merge-back green, not an implementation green:** the code is written and accepted,
+so #18 closes as soon as the sync-resolve-verify-merge procedure runs.
 **Scheduling, not dependency, is now the only thing separating them:** all three need the shared
 PostgreSQL cluster and W3 needs it empty, so W3 takes priority while its owned-lifecycle leg is
 active and W1's and W2's campaigns must not overlap that window.
@@ -214,12 +225,14 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 | SA160 (#20) | SA161 (#19) | **hard content** — emission-parity ordering on the shared `sa90_emission_manifests.json` rebaseline | Only SA161. No decision clears it; the pair must not be split. |
 | SA166 (#24) | SA167c (#21) | **lane-ordering** — W2 queue position behind the spine; SA166 also owns `scripts/gate_registry.json` | Upstream work, or a maintainer reordering W2. Not recommended: it would put band-C filler ahead of the critical path. |
 | SA164 (#25) | SA166 (#24) | **lane-ordering** for the queue position, **hard content** for its substance — its `test_sa92_migration_squash_guardrail.py` work depends on SA167c having retired `django_apps:` | The content half only SA167c clears. The SA166 position is reorderable but not recommended. |
-| SA165 (#22) | SA167d (#18) | **lane-ordering** — W1 queue position only; SA165 shares no file with SA167d | Upstream work, or a maintainer reordering W1. Reordering is defensible if W1 finishes P4 early and the slot is held by W3. |
+| SA165 (#22) | SA167d (#18) | **lane-ordering** — W1 queue position only; SA165 shares no file with SA167d | Upstream work — but SA167d is already implemented, so this clears as soon as #18 merges back. No maintainer decision is needed. |
 
 **Recommended concurrency right now:**
 
-- **W1 — continue SA167d.** SA167b's accepted adapter relocation is archived; start the CLI
-  wiring drain from the reviewed current tree.
+- **W1 — merge SA167d back.** The CLI wiring drain is implemented and accepted at `wt-track1`
+  `7d5651a8`; no coding remains. Sync current `v88` into the worktree, resolve the closeout
+  surfaces named below, rerun the ticket's verification on the resolved tip, then merge that exact
+  tip and archive its evidence in `CHANGELOG.md`.
 - **W2 — start SA167c.** The manifest-default projection is accepted and archived; inert-key
   retirement is now the critical-path head.
 - **W3 — continue SA135 + SA163 (#15) from strict C acceptance.** The window is authorized: with
@@ -296,10 +309,11 @@ exact reviewed tip.
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16, #17, #23, and #26 are **retired and not
 reused**; the tickets that held them are closed and archived in
 [CHANGELOG.md](../../CHANGELOG.md). Gaps in the numbering are expected and carry no meaning.
-#15, #18, and #21 are the per-lane heads and all three may act today — #18 starts from SA167b's
-accepted closure, #21 starts from the accepted manifest-default projection, and #15 resumes
-from strict C acceptance over its merged partial implementation under the authorized exclusive
-PostgreSQL/Docker window. They are serialized by that shared cluster, not by any ticket edge.
+#15, #18, and #21 are the per-lane heads and all three may act today — #18 is implemented at
+`wt-track1` `7d5651a8` and needs only its sync-resolve-verify-merge pass, #21 starts from the
+accepted manifest-default projection, and #15 resumes from strict C acceptance over its merged
+partial implementation under the authorized exclusive PostgreSQL/Docker window. They are serialized
+by the shared cluster, not by any ticket edge.
 
 Band-C positions (19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. Any of them may slip
 past the release without blocking it; none may displace a band-A or band-B leg.
@@ -378,7 +392,20 @@ Conceptual background, mental models, and implementation notes for **every** tic
 - [ ] **SA167d — Drain per-module wiring logic out of the CLI.** `Band B · Tier 3 · W1 · merge #18 · deps: none`
   `quickscale_cli/src/quickscale_cli/commands/module_config.py` is 2,154 lines carrying a `configure_<name>_module()` / `apply_<name>_configuration()` pair per module — a fifth place the same wiring facts are expressed. Plan-time interactive prompts that collect **desired configuration** are legitimate and stay; anything deciding what a module *wires* belongs in the module.
   **Acceptance:** no function in `module_config.py` decides a module's apps, middleware, settings keys, or URL includes — those come from the module's manifest through its adapter; the remaining surface is desired-configuration collection only, and that boundary is stated in the module's docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist) is retired once the deviation it names is gone.
-  **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`.
+  **State (measured 2026-08-27): implemented and accepted, not merged back.** `wt-track1`
+  `7d5651a8` carries the accepted delta and passed the authoritative gate sequence (`make lint`,
+  `make typecheck`, `make test`) at acceptance; the acceptance record explicitly did not claim
+  merge-back. **The remaining open work is the merge-back only**, which is why this ticket is still
+  here under the open-work-only policy.
+  **Merge-back conflict surface, and why it is covered.** `wt-track1` also edits the shared closeout
+  files — `CHANGELOG.md`, `docs/technical/roadmap.md`, and `docs/technical/v88_ticket_context.md` —
+  and `v88` has advanced since the candidate was cut (SA118's closure at `70c3abb8`). Those three
+  files are the exact standing conflict surface named in the execution rules, so the
+  sync-before-merge-back procedure covers them: resolve in the worktree preserving **both** SA118's
+  archived entry on `v88` and SA167d's own, rerun the ticket's verification on the resolved tip,
+  leave no unmerged files, then review and merge that exact tip. No product file is contended —
+  `module_config.py` is touched by no other v88 ticket.
+  **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`, plus the standing closeout trio above at merge-back.
 
 - [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Band B · Tier 2 · W3 · merge #15 · deps: none · PostgreSQL + Docker slot · carries SA163`
   Provision and tear down the server used by repository gates; replace the current out-of-band host assumption while retaining an asserted unavailability negative control.
