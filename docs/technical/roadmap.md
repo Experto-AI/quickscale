@@ -54,10 +54,12 @@ Applying it produces three ranked bands:
 - **Band A is clear.** Shared repository gates are green; the completion evidence is archived in
   [CHANGELOG.md](../../CHANGELOG.md). No open ticket may waive them.
   *Found red and repaired inside this pass:* `quickscale_core/tests/test_v88_ticket_context_consistency.py`
-  was left failing on `v88` HEAD by `24cfe174`, which rewrote the roadmap's W3 state block without
-  re-anchoring the test that reads it. The anchor is corrected here and the gate passes again
-  (20 passed). This is the standing hazard of the shared closeout surface: **a roadmap edit that
-  changes the W3/W1 state blocks must re-run this test in the same change.**
+  failed on `v88` HEAD because `7db1b633` gave SA167c a state header byte-identical to SA135's, so
+  the test's non-greedy W3 anchor bound to the earlier SA167c block. SA167c's header now reads
+  *Phase-A product slice merged*, the anchors are unambiguous again, and the gate passes
+  (20 passed). This is the recurring hazard of the shared closeout surface: **a roadmap edit that
+  changes a W1/W2/W3 state block must re-run this test in the same change, and two blocks must
+  never share a state header.**
 - **The critical path is on the gate track, not the service track.** W2's `SA167c` is one
   serialized merge leg with no prerequisite outside W2. W3 keeps the exclusive PostgreSQL/Docker
   slot and therefore keeps scheduling priority *while a leg is active*, but it is no longer the
@@ -115,12 +117,13 @@ leg; SA166 (#24) and SA164 (#25) are band-C tails behind
 the chain, not on it. W2's back half is the release's implementation work, so W2 sets the
 date. SA167d costs nothing on the critical path: W1 runs it against W2's second half.
 **Load check:** W1 carries two open legs (SA167d's outstanding phase E, then SA165); W3 carries
-three positions (the in-flight SA135+SA163, then SA161 and SA160), against the three-leg W2 spine.
+three positions (the stalled SA135+SA163, then SA161 and SA160), against the three-leg W2 spine.
 W3's two band-C tails do not gate release, so W2 remains the binding lane.
 
 
-**Second chain:** W3, `SA135` carrying `SA163`, one service-backed open leg followed by
-  emission-adjacent fillers and serialized on the exclusive slot while that leg is active.
+**Second chain:** W3, `SA135` carrying `SA163`, one service-backed open leg — currently stalled on
+  decision **D1** — followed by emission-adjacent fillers and serialized on the exclusive slot while
+  that leg is active.
 
 **Active cross-worktree dependency edges — none.** Every remaining *dependency* is intra-lane.
 One cross-worktree **shared file** remains but no live contention does: SA163's merged partial and
@@ -130,22 +133,31 @@ The manifest-reading `entry_point.py`, the
 fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec seam, and the regenerated migration baseline
 are all merged tree state that open tickets build on, not pending dependencies.
 
-**Parallelism result (measured 2026-08-27, twenty-first pass): W2 and W3 product tips are merged;
-W1 carries unmerged work.** W2's product HEAD `f6f3bbce` and `wt-track3` tip `0aabb4a0` are both
-ancestors of `v88`. SA167c's reviewed manifest-retirement slice is merged, but its acceptance and
-phases B-F remain open; the roadmap checkpoint is still being reconciled in W2, so that worktree is
-not yet clean. W3 is merged, clean, and decision-blocked. ***corrected after checkpoint attestation
-— not independently graded***
-**`wt-track1` is eight commits ahead** (tip `1743871f`, clean) carrying SA167d's A-D-accepted delta.
-W3's partial SA135+SA163 delivery reached `v88` in **two** merges — `0661f55f` and then
-`f070f39b`, which carries the `203fcd61` lifecycle/module-E2E remediation. No suite is running and
+**Merge-back status (measured 2026-08-27, twenty-second pass, `v88` at `713bd4a7`): two of three
+tracks are fully merged back; only W1 is not.**
+
+| Worktree | Tip | Ahead / behind `v88` | Merged back? | Tree |
+|---|---|---|---|---|
+| `wt-track2` (W2) | `80ca33b4` | 0 / 1 | **yes** — ancestor of `v88` | clean, idle |
+| `wt-track3` (W3) | `0aabb4a0` | 0 / 4 | **yes** — ancestor of `v88` | clean, idle |
+| `wt-track1` (W1) | `467714cb` | **9 / 7** | **no** | clean |
+
+W2's SA167c Phase-A slice (`f6f3bbce`) and W3's SA135+SA163 partial (through `0661f55f` and
+`f070f39b`, the latter carrying the `203fcd61` lifecycle/module-E2E remediation) are both on the
+integration branch, and both worktrees are now clean and idle. **`wt-track1` holds the release's
+only unmerged product delta:** SA167d's A-D-accepted work at product tip `1743871f`, plus one
+docs-only checkpoint `467714cb`. It is also **seven commits behind**, so its sync-before-merge-back
+will have to resolve `docs/technical/roadmap.md` against this pass. No suite is running and
 `pg18-af10` holds all twelve `test_quickscale_*` databases.
 Each lane still syncs current `v88` before its own exact-candidate validation.
 
-**Rebalance result (twentieth pass): no track moves.** Every open ticket already has a track, and
-the binding constraint is physical — one PostgreSQL 18 cluster on `localhost:5432` holding the
-twelve shared test databases, which W3 needs *empty*. No ticket move relieves that; only
-scheduling does. Moves tested and rejected:
+**Rebalance result (twenty-second pass): no track moves; one intra-lane reorder is now proposed.**
+Every open ticket already carries a track, and the binding constraint is physical — one PostgreSQL 18
+cluster on `localhost:5432` holding the twelve shared test databases, which W3 needs *empty*. No
+ticket move relieves that; only scheduling does. What changed this pass is that **W3 is now clean,
+idle, and stalled on a maintainer decision**, so its two band-C tails are being held by a lane
+position rather than by any work in progress — see the open reorder decision below. Moves tested and
+rejected:
 
 - **SA161 (#19) + SA160 (#20) off W3** — rejected. SA161's acceptance needs the exclusive
   PostgreSQL/Docker slot, which is W3-owned by standing rule, so any other lane leaves it blocked
@@ -156,6 +168,13 @@ scheduling does. Moves tested and rejected:
   dependency on SA167c.
 - **SA160 ahead of SA161 inside W3** — rejected: they share the emission-parity rebaseline
   ordering on `sa90_emission_manifests.json` and must not be split.
+- **SA161 (#19) + SA160 (#20) *ahead of* SA135 (#15) inside W3** — **not rejected; raised as an
+  open maintainer decision** (see [Open decisions](#open-decisions)). This is a queue reorder inside
+  one lane, not a track move, so it creates no new conflict surface: SA161/SA160 touch generator
+  templates and `sa90_emission_manifests.json`, which SA135+SA163 does not touch at all, and the
+  pair stays in its own required order. It was rejected in prior passes as band-C displacing band-B;
+  that objection is weaker now that SA135 cannot advance at all until the decision below is
+  answered.
 - **SA165 (#22) off W1** — rejected. SA163's edit to
   `scripts/test_isolation_conformance.sh` is now merged into `v88`, so it is settled input rather
   than an active cross-worktree hazard. Moving SA165 still buys nothing on the critical path and
@@ -177,34 +196,29 @@ Shared closeout surfaces (`CHANGELOG.md`, `docs/technical/roadmap.md`,
 sync-before-merge-back procedure.
 
 
-### Track readiness (re-measured 2026-08-27, twenty-first pass)
+### Track readiness (re-measured 2026-08-27, twenty-second pass)
 
 Each track reports three independent states. A track is **truly green** only when all three are
 yes.
 
-**Measured worktree state.** W2 product HEAD `f6f3bbce` and `wt-track3` tip `0aabb4a0` are ancestors
-of `v88`. W2 carries SA167c's merged partial plus this in-progress roadmap reconciliation, so it is
-not yet clean or idle; W3 is clean and decision-blocked. `wt-track1` is **eight commits ahead** and
-clean (tip `1743871f`). ***corrected after checkpoint attestation — not independently graded***
-W3's delivered product partial is merged into `v88` through `0661f55f` and `f070f39b`;
-`pg18-af10` is up with the twelve databases intact and no suite is in flight.
-
-**The prior shared-resource cleanup is closed and was not a ticket edge.** Before the next E2E
-campaign, `sa142-no-cleanup_backend` and `sa142-no-cleanup_db` disappeared without an action from
-the W3 pass. A renewed fail-closed inspection confirmed both names absent, so no substitute name
-was guessed and no `docker rm` was issued. `pg18-af10`, its volume, all twelve databases, and
-`quickscale_test_role` ownership remained identical before and after the campaign.
+**Measured worktree state.** See the merge-back table above: `wt-track2` (`80ca33b4`) and
+`wt-track3` (`0aabb4a0`) are ancestors of `v88` — both merged, clean, and idle. `wt-track1` is
+**nine commits ahead and seven behind**, clean, holding SA167d's A-D-accepted product tip `1743871f`
+under one docs-only checkpoint. `pg18-af10` is up with the twelve databases intact and no suite is
+in flight. Evidence produced after terminal attestation in the W1 and W3 passes was not
+independently graded; the affected claims are marked once here rather than repeated per line.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
 | **W1** | SA167d (#18) — A-D accepted, **E outstanding** | **yes** — re-running phase E is executable today; no decision, no upstream ticket. Contends with W3 for the shared cluster | **yes** — phase E, the ledger reconciliation, and the merge-back are all W1-owned | **yes** — #18 is the W1 queue head with no upstream ticket | **truly green — off the critical path** |
-| **W2** | SA167c (#21) — retirement slice merged, **A unaccepted; B-F outstanding** | **yes** — resume acceptance on the merged bytes; no decision or upstream ticket blocks it | **yes** — remaining gate, proof, closeout, and frozen-candidate work is W2-owned | **yes** — #21 remains the W2 queue head | **truly green — on the critical path, partial merged** |
-| **W3** | SA135 + SA163 (#15) — C/D accepted, E outstanding | **no** — the next E1 attempt needs the maintainer decision after every executed reproduction context passed without yielding a cause; E1's exact literal `TEST COMMAND` chain was not run and remains outstanding unless that decision expressly supersedes it | **yes, after that decision** — the remaining E/F/G work is W3-owned; the exclusive slot remains authorized when needed | **yes** — #15 is the W3 queue head | **decision-blocked — off the critical path, partial merged** — ***corrected after checkpoint attestation — not independently graded*** |
+| **W2** | SA167c (#21) — Phase-A slice merged, **A unaccepted; B-F outstanding** | **yes** — worktree is clean, idle, and fully merged back; resume acceptance on the merged bytes. No decision or upstream ticket blocks it | **yes** — remaining gate, proof, closeout, and frozen-candidate work is W2-owned | **yes** — #21 remains the W2 queue head | **truly green — on the critical path** |
+| **W3** | SA135 + SA163 (#15) — C/D accepted, E outstanding | **no** — the next E1 attempt needs decision **D1** below, after every executed reproduction context passed without yielding a cause; E1's exact literal `TEST COMMAND` chain was not run and remains outstanding unless that decision expressly supersedes it | **yes, after that decision** — the remaining E/F/G work is W3-owned; the exclusive slot remains authorized when needed | **yes** — #15 is the W3 queue head | **decision-blocked — off the critical path; worktree merged, clean, and idle** |
 
 **W1 and W2 are truly green; W3 is decision-blocked at SA135+SA163 (#15).** Only **SA167c (#21)**
 is on the critical path — it is the one ticket whose progress moves the release date. SA167d and
 SA135+SA163 are real band-B work but are **filler with respect to the release date**: finishing
-either does not shorten the chain.
+either does not shorten the chain. W1 is additionally the only track with an unmerged product
+delta, so its merge-back is the one outstanding integration risk.
 
 **The binding constraint is the shared PostgreSQL cluster, not any ticket edge.** No W3 suite is
 currently holding it. W1's phase-E `make test`, W2's SA167c campaign, and the next W3 E2E rerun
@@ -215,10 +229,10 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 
 | Ticket | Blocking ticket | Edge kind | What clears it |
 |---|---|---|---|
-| SA167c (#21) | — | **queue head; partial merged** | No dependency or decision blocks it. Acceptance must first use a focused command that does not inherit whole-package coverage, with the restricted PostgreSQL role; then continue B-F. |
+| SA167c (#21) | — | **queue head; Phase-A slice merged** | No dependency or decision blocks it. Acceptance must first use a focused command that does not inherit whole-package coverage, with the restricted PostgreSQL role; then continue B-F. |
 | SA167d (#18) | — | **queue head** | Nothing blocks it. Startable today; competes with W3 for the cluster. |
-| SA135 + SA163 (#15) | — | **queue head; partial merged; decision-blocked** | No upstream ticket blocks it. The maintainer must choose whether repeated exact green evidence may replace deterministic red-before/green-after evidence, or whether a new E1 attempt must instrument the runner-generated scope and stress the historical failure boundaries. |
-| SA161 (#19) | SA135 (#15) | **lane-ordering** — W3 queue position; SA161 also needs the PostgreSQL/Docker slot SA135 holds | Upstream work, or a maintainer reordering W3. Not recommended: SA135 is band B and SA161 is band-C filler. |
+| SA135 + SA163 (#15) | — | **queue head; partial merged; decision-blocked (D1)** | No upstream ticket blocks it. **A maintainer decision clears it, not upstream work.** The maintainer must choose whether repeated exact green evidence may replace deterministic red-before/green-after evidence, or whether a new E1 attempt must instrument the runner-generated scope and stress the historical failure boundaries. |
+| SA161 (#19) | SA135 (#15) | **lane-ordering** — W3 queue position; SA161 also needs the PostgreSQL/Docker slot SA135 holds | **A maintainer decision clears it** (**D2** below), or upstream work. Previously not recommended; now live, because SA135 is stalled on D1 and W3 is idle. |
 | SA160 (#20) | SA161 (#19) | **hard content** — emission-parity ordering on the shared `sa90_emission_manifests.json` rebaseline | Only SA161. No decision clears it; the pair must not be split. |
 | SA166 (#24) | SA167c (#21) | **lane-ordering** — W2 queue position behind the spine; SA166 also owns `scripts/gate_registry.json` | Upstream work, or a maintainer reordering W2. Not recommended: it would put band-C filler ahead of the critical path. |
 | SA164 (#25) | SA166 (#24) | **lane-ordering** for the queue position, **hard content** for its substance — its `test_sa92_migration_squash_guardrail.py` work depends on SA167c having retired `django_apps:` | The content half only SA167c clears. The SA166 position is reorderable by decision, but not recommended. |
@@ -229,20 +243,55 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 - **W2 — continue SA167c (#21).** Do not redo the merged manifest-retirement bytes. First accept
   them with the corrected focused command and restricted PostgreSQL role, then implement B-F.
   This remains the only action that shortens the release.
-- **W3 — pause SA135 + SA163 (#15) at phase E1 for the decision in its ticket block.** Do not redo
-  C or D. The orphan cleanup is already closed and every executed reproduction context passed, but
-  E1's exact literal `TEST COMMAND` chain was not run. A new pass either expressly supersedes that
-  requirement by policy or runs it after instrumenting the generated lane scopes and
-  stress-reproducing the historical boundaries. Only after E1 is accepted may the unchanged-tree
-  serial E2E and `ci-e2e` acceptance proceed. ***corrected after checkpoint attestation — not
-  independently graded***
-- **W1 — re-run and accept SA167d's phase E (#18)**, then do the ledger reconciliation. Schedule
-  its `make test` outside W3's window.
+- **W3 — pause SA135 + SA163 (#15) at phase E1 for decision D1.** Do not redo C or D. The orphan
+  cleanup is already closed and every executed reproduction context passed, but E1's exact literal
+  `TEST COMMAND` chain was not run. A new pass either expressly supersedes that requirement by
+  policy or runs it after instrumenting the generated lane scopes and stress-reproducing the
+  historical boundaries. Only after E1 is accepted may the unchanged-tree serial E2E and `ci-e2e`
+  acceptance proceed. **If D1 is not answered promptly, D2 keeps W3 productive instead of idle.**
+- **W1 — re-run and accept SA167d's phase E (#18)**, then do the ledger reconciliation and the
+  merge-back. This is the release's only unmerged delta and it is ageing seven commits behind
+  `v88`; schedule its `make test` outside W3's window.
 
-**One maintainer decision is open in the v88 plan, inside SA135+SA163 (#15).** It was raised after
-the isolated development and React nodes, their synchronized pair, and the exact serial full-E2E
-context all passed without reproducing either historical failure. SA165's W1 queue position remains
-a closed decision governed by the standing rule below.
+
+#### Open decisions
+
+Two decisions are open in the v88 plan. Both are the maintainer's; neither is cleared by upstream
+work.
+
+**D1 — SA135+SA163 (#15), evidence policy for phase E1.** *Blocks W3's **can start**.*
+The reviewed phase requires deterministic red-before/green-after evidence for two historical
+failures (a Docker `No such container` startup race and a 300-second React build timeout). Neither
+reproduced in the isolated development node, the isolated React node, their synchronized pair, or
+the exact serial full-E2E context — every one of them passed green — and the runner emitted
+`qs_e2e_tmp_*` lane scopes instead of the fixed label the phase asked for, so fixed-scope ownership
+was never independently proved. The alternatives are stated in the SA135 ticket block below
+(**Option 1** accept the repeated green evidence; **Option 2, recommended** keep the causal
+requirement and instrument/stress the boundaries under the emitted scopes). Answering it moves W3's
+**can start** from *no* to *yes*; **can finish** and **can merge** are already *yes*.
+
+**D2 — W3 queue order while D1 is unanswered.** *Would change nothing on the critical path; it
+only converts W3 idle time into band-C progress.*
+SA161 (#19) and SA160 (#20) sit behind SA135 (#15) purely by W3 lane position — they share no file
+with it and have no content dependency on it. The standing rule that band-C filler must not
+displace a band-B leg was written for a *running* band-B leg; SA135 is currently stalled and cannot
+run at all until D1 is answered.
+- **Option A (status quo).** Keep #15 → #19 → #20 and leave W3 idle until D1. Pro: the standing
+  ordering rule is untouched and SA135 merges first, so its `scripts/test_isolation_conformance.sh`
+  bytes reach `v88` before SA165 (#22) needs them. Con: a whole lane produces nothing for as long as
+  D1 is unanswered.
+- **Option B (recommended if D1 will not be answered today).** Run SA161 then SA160 now, keeping
+  their own required order, and return to SA135 when D1 lands. Pro: W3 stops idling; the pair is
+  small, template-only, and needs no PostgreSQL lifecycle work of its own. Con: SA135's merge slips
+  behind two band-C merges, and the merge table's *merges after* column and positions must be
+  restated in the same change. It does **not** touch the critical path either way — SA167c on W2
+  still sets the date.
+If Option B is chosen, the merge order becomes #19 → #20 → #15 within W3, and SA165 (#22) keeps
+starting from whichever SA163 bytes are on `v88` at its own sync — already-merged input in both
+options, since SA163's `test_isolation_conformance.sh` edit is on `v88` today.
+
+SA165's W1 queue position is a **closed** decision governed by the standing rule below, not an open
+one.
 
 
 #### Standing rules carried from closed decisions
@@ -290,11 +339,13 @@ exact reviewed tip.
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16, #17, #23, and #26 are **retired and not
 reused**; the tickets that held them are closed and archived in
 [CHANGELOG.md](../../CHANGELOG.md). Gaps in the numbering are expected and carry no meaning.
-#15, #18, and #21 are the per-lane heads. #21 has a merged partial at `f6f3bbce`: its Phase-A
-product bytes are reviewed, but A is unaccepted and B-F are outstanding. #18 is a stalled
-acceptance on `wt-track1` `810eefd8` (phases A-D accepted, E outstanding), and #15 has a merged
-partial with C/D accepted and E outstanding. All three remain serialized by the shared
-PostgreSQL cluster, not by any ticket edge.
+#15, #18, and #21 are the per-lane heads. #21 has a merged Phase-A slice at `f6f3bbce`: its product
+bytes are reviewed, but A is unaccepted and B-F are outstanding. #18 is a stalled acceptance on
+`wt-track1` product tip `1743871f` (phases A-D accepted, E outstanding) and is the only unmerged
+delta in the release; #15 has a merged partial with C/D accepted and E outstanding. All three remain
+serialized by the shared PostgreSQL cluster, not by any ticket edge. If decision **D2** is answered
+*Option B*, W3's internal order becomes #19 → #20 → #15 and the *Merges after* column is restated in
+that same change.
 
 Band-C positions (19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. Any of them may slip
 past the release without blocking it; none may displace a band-A or band-B leg.
@@ -373,8 +424,9 @@ Conceptual background, mental models, and implementation notes for **every** tic
   The merged partial below removes that redundant surface; SA164 still owns making the remaining
   conventional migration-path lookup fail hard and re-anchoring its parity backstop.
   **Acceptance:** `django_apps:` is either derived from the `apps` wiring projection or removed from all manifests, `ModuleManifest`, and the loader, with no key parsed-but-unread remaining; a conformance gate fails when a module ships models or a migration without declaring at least one Django app, registered in `scripts/gate_registry.json` and passing `scripts/check_gate_parity.py`; the gate is proved by deleting a module's app declaration and observing red, reverted before merge; `test_sa92_migration_squash_guardrail.py` no longer depends on the retired key.
-  **State (measured 2026-08-27): partial delivery merged into `v88`.** `wt-track2` product commit
-  `f6f3bbce` is merged. Phase A was dispatched but is **not accepted**; phases B-F were not reached.
+  **State (measured 2026-08-27): Phase-A product slice merged into `v88`.** `wt-track2` product
+  commit `f6f3bbce` is merged and `wt-track2` (`80ca33b4`) is now an ancestor of `v88` — clean and
+  idle. Phase A was dispatched but is **not accepted**; phases B-F were not reached.
   Keep this item unchecked under the open-work-only policy.
   **Completed in the merged partial:** removed `django_apps:` from `ModuleManifest`, the loader,
   the obsolete loader test, all eleven source declarations and their eleven byte-identical core
@@ -426,12 +478,12 @@ Conceptual background, mental models, and implementation notes for **every** tic
   in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist)
   is retired once the deviation it names is gone.
   **State (measured 2026-08-27): phases A-D accepted, phase E outstanding.** The retained product
-  tip is `1743871f`; its only working-tree change is this uncommitted roadmap checkpoint. At the
-  checkpoint correction, `v88` was `80ca33b4`, with six commits present only on `v88` and eight
-  present only on `wt-track1`. A-D acceptance evidence is archived in
-  [CHANGELOG.md](../../CHANGELOG.md). Keep this item unchecked: the retained product delta is
-  unmerged and its terminal review produced no grade. **This is not a merge-back-only ticket.**
-  ***corrected after checkpoint attestation — not independently graded***
+  tip is `1743871f`, carried under one docs-only checkpoint at `wt-track1` tip `467714cb`; the
+  worktree is clean. Against `v88` at `713bd4a7`, `wt-track1` is **nine commits ahead and seven
+  behind** — **this is the release's only unmerged product delta.** A-D acceptance evidence is
+  archived in [CHANGELOG.md](../../CHANGELOG.md). Keep this item unchecked: the retained product
+  delta is unmerged and its terminal review produced no grade.
+  **This is not a merge-back-only ticket.**
   **Completed in the latest resumption.** The worktree synchronized the then-current `v88` at
   `ca9ecbdc` and preserved strict twelve-module no-argument adapter refresh plus scoped
   selected-module refresh. E0's focused acceptance surface passed 816 tests, and lint and type
@@ -453,12 +505,12 @@ Conceptual background, mental models, and implementation notes for **every** tic
   `quickscale_core/tests/test_v88_ticket_context_consistency.py` must be reconciled to the accepted
   A-E ledger and the final observed totals.
   **Blocking.** The terminal review was blocked because it did not receive the complete authoritative
-  diff from the pre-run base through `1743871f`; therefore the product delta is ungraded. Current
-  `v88` also advanced after the last synchronization and was observed at `80ca33b4` during the
-  checkpoint correction. Close both blocks by accepting E0, completing C1, synchronizing the
-  then-current `v88` successor, running the complete final campaign on one unchanged tip, and
-  supplying that tip's complete diff to an independent reviewer before merge-back.
-  ***corrected after checkpoint attestation — not independently graded***
+  diff from the pre-run base through `1743871f`; therefore the product delta is ungraded. `v88` has
+  also advanced seven commits past the last synchronization, so the sync will have to resolve
+  `docs/technical/roadmap.md` against the current pass. Close both blocks by accepting E0,
+  completing C1, synchronizing the then-current `v88` successor, running the complete final campaign
+  on one unchanged tip, and supplying that tip's complete diff to an independent reviewer before
+  merge-back.
   **Decisions needed:** none. SA165 remains blocked only by completion of this ticket.
   **Remaining plan, in order.** (1) Re-run E0's exact ordered acceptance sequence on the retained
   delta and accept phase E only if it is green. (2) Complete C1's same-fact ledger reconciliation and
@@ -489,14 +541,12 @@ Conceptual background, mental models, and implementation notes for **every** tic
   E1 then recorded these green runs without changing a file: the isolated development node (1
   passed), isolated React node (1 passed), synchronized two-node run (2 passed), and exact
   `QS_E2E_PARALLEL=0 make test-e2e` context (Core 38 passed; CLI 40 passed; cleanup complete). E1's
-  exact literal `TEST COMMAND` chain was not run. ***corrected after checkpoint attestation — not
-  independently graded***
+  exact literal `TEST COMMAND` chain was not run.
   **Pending:** E1 is still unaccepted because the reviewed phase required deterministic causal and
   red-before/green-after evidence, and its exact literal `TEST COMMAND` chain remains outstanding
   unless the maintainer's policy decision expressly supersedes it. E2 must then run
   `QS_E2E_PARALLEL=0 make test-e2e` followed only on green by `make ci-e2e` on one unchanged
-  candidate; `make ci-e2e` was not reached in this pass. ***corrected after checkpoint attestation
-  — not independently graded***
+  candidate; `make ci-e2e` was not reached in this pass.
   F must reconcile validation policy, Finding 13, ticket context, roadmap counts/dependencies, and
   changelog evidence. G must sync current `v88`, run the complete campaign and independent review
   on one unchanged tip, and merge only that exact tip.
@@ -507,7 +557,8 @@ Conceptual background, mental models, and implementation notes for **every** tic
   residual resource. Close the block either by an explicitly authorized evidence-policy change or
   by deterministic instrumentation/stress reproduction of each historical boundary; never guess a
   correction, weaken an assertion, or treat the old failures as waived.
-  **Decisions needed:** choose one before another E1 attempt. **Option 1:** accept repeated isolated,
+  **Decisions needed: D1** — see [Open decisions](#open-decisions). Choose one before another E1
+  attempt. **Option 1:** accept repeated isolated,
   paired, and exact-context green evidence in place of deterministic red-before/green-after evidence;
   this permits E2 but leaves the historical causes unknown. **Option 2 (recommended):** keep the
   causal-evidence requirement, first establish whether generated `qs_e2e_tmp_*` scopes are the
@@ -529,8 +580,7 @@ Conceptual background, mental models, and implementation notes for **every** tic
      startup/build boundary, make only corrections supported by a reproduced cause, and run the
      exact literal E1 `TEST COMMAND` chain. If Option 1 is chosen, it must expressly say whether it
      supersedes that unrun chain. Preserve the green isolated/pair/full-run evidence as context,
-     not as retroactive E1 acceptance. ***corrected after checkpoint attestation — not independently
-     graded***
+     not as retroactive E1 acceptance.
   2. **E2 — unchanged-candidate acceptance:** after E1 is accepted, run exact serial E2E and then
      `make ci-e2e` on one unchanged tree, with exact cleanup and PostgreSQL baseline equality.
   3. **F — policy and status reconciliation:** reconcile validation policy, Finding 13, ticket

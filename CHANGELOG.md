@@ -4,6 +4,58 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-27, twenty-second pass).** **No ticket closed
+  and no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
+  positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Every open task
+  already carries a track.
+  **A shared repository gate was found red on the integration branch and repaired in-pass.**
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` failed on `v88` HEAD `713bd4a7`.
+  Commit `7db1b633` gave SA167c a state header byte-identical to SA135's
+  (`**State (measured 2026-08-27): partial delivery merged into `v88`.**`), so the test's
+  non-greedy W3 anchor bound to the earlier SA167c block and its accepted-phase ledger assertions
+  failed. SA167c's header is restated as *Phase-A product slice merged*, making both anchors
+  unambiguous; **20 passed**. The roadmap's standing rule is widened accordingly: a roadmap edit
+  touching any W1/W2/W3 state block must re-run this test in the same change, and two state blocks
+  must never share a header.
+  **Merge-back audit — two of three tracks are merged back, one is not.** `wt-track2` (`80ca33b4`,
+  0 ahead / 1 behind) and `wt-track3` (`0aabb4a0`, 0 ahead / 4 behind) are both ancestors of `v88`:
+  merged, clean, idle. **`wt-track1` is nine commits ahead and seven behind** (tip `467714cb` over
+  product tip `1743871f`, clean) and holds **the release's only unmerged product delta**, SA167d's
+  A-D-accepted CLI wiring drain. The planner previously recorded W2 as *not yet clean* and W1 as
+  *eight commits ahead of `1743871f`*; both are corrected, and the roadmap now carries an explicit
+  per-worktree merge-back table instead of prose.
+  **Rebalance outcome: no track moves, one intra-lane reorder newly raised as a decision.** The
+  four standing moves are re-tested and rejected again for unchanged reasons (SA161/SA160 off W3 —
+  the exclusive PostgreSQL/Docker slot is W3-owned; SA166/SA164 off W2 — `scripts/gate_registry.json`
+  never crosses worktrees and SA164 has a hard content dependency on SA167c; SA160 ahead of SA161 —
+  the shared `sa90_emission_manifests.json` rebaseline ordering must not be split; SA165 off W1 —
+  buys nothing on the critical path). **Newly raised:** running SA161 (#19) then SA160 (#20) ahead
+  of the stalled SA135 (#15) *inside* W3. It is a lane reorder, not a track move, so it creates no
+  new conflict surface — the pair touches generator templates and the emission fixture, which
+  SA135+SA163 does not touch at all. It is raised as decision **D2** rather than applied, because
+  the standing rule forbids band-C displacing band-B; the rule was written for a *running* band-B
+  leg, and SA135 cannot run until D1 is answered. **Critical path unchanged:** `SA167c` (#21) on
+  W2, now clean, idle, and fully merged back.
+  **Two maintainer decisions are open, both gathered into a new *Open decisions* section.** **D1**
+  (SA135+SA163 phase-E1 evidence policy) blocks W3's *can start* and is decision-clearable, not
+  upstream-clearable. **D2** (W3 queue order while D1 is unanswered) converts W3 idle time into
+  band-C progress and touches nothing on the critical path. SA165's W1 ordering remains a closed
+  decision carried as a standing rule.
+  **Planner fluff removed.** Five repetitions of the *corrected after checkpoint attestation — not
+  independently graded* marker are collapsed into one statement in Track readiness; the closed
+  `sa142-no-cleanup_*` orphan-container inspection is dropped from the planner (it was already
+  closed and was never a ticket edge); stale commit identities `810eefd8`, `f6f3bbce`-as-HEAD, and
+  the *six commits present only on `v88`* checkpoint arithmetic are replaced by measured values.
+  **Audit closure narratives archived out of the live audits.** `docs/others/arch-audit.md` drops
+  five reconciliation entries that only restated closed history (prior red flags, the
+  SA156/SA157/SA158 closure reconciliation, SA158's pre-edit `make quality` discrepancy, SA168/SA159
+  closure, SA162/TA69 closure) and its Red-flags section now leads with *no red flag is open*.
+  `docs/others/tech-audit.md` drops six equivalent entries (TA63/quality baseline, SA150
+  local-wheelhouse, the two tooling gaps, the six adjudicated arch red-flag leads, TA65/SA159,
+  TA69/SA162) and replaces them with one pointer line. No live finding, count, watch item, or
+  severity changed: arch Finding 13 stays live under SA163, Findings 7/2/4 stay behind their growth
+  triggers, and the tech-audit inventory remains **S3: 1 (TA67) · S4: 1 (TA68) · Total 2 open**.
+
 - **Roadmap cleanup and rebalance review (2026-08-27, twentieth pass).** **No ticket closed and
   no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
   positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Every open task
