@@ -4,16 +4,20 @@
 
 ## v88 development — 2026-08-21
 
-- **SA167d — CLI per-module wiring cleanup accepted (2026-08-27; root merge-back not
-  claimed).** The accepted delta leaves `quickscale_cli` responsible for collecting desired
+- **SA167d — CLI per-module wiring cleanup partial delivery retained (2026-08-27; root
+  merge-back not claimed).** The settled product delta leaves `quickscale_cli` responsible for collecting desired
   configuration while module-owned manifests and adapters remain the wiring authorities.
-  The configured Ruff formatter repaired the seven pre-existing accepted-delta files named by
-  the lint gate. The authoritative gate sequence passed: `make lint`, `make typecheck`, and
-  `make test`; the latter observed **2,869 Core passed / 1 skipped**, **2,093 CLI passed**, and
+  Phases A-C are accepted; Phase D was delivered but remains unaccepted because its exact command
+  `python -m pytest quickscale_core/tests/test_root_pytest_collection_config.py
+  quickscale_core/tests/test_v88_ticket_context_consistency.py -q` exited 1, and Phase E was
+  unreached. The configured Ruff formatter repaired the seven pre-existing product-delta files
+  named by the lint gate. A later convergence gate sequence passed `make lint`, `make typecheck`,
+  and `make test`; that computed evidence does not accept Phase D or E. `make test` observed
+  **2,870 Core passed / 1 skipped**, **2,093 CLI passed**, and
   **2,544 module-integration tests passed / 86 skipped / 12 deselected**, with **94.53%** mean
-  module coverage. The focused roadmap/context consistency command is run after the documentation
-  reconciliation. This entry records observed validation only and does not claim publication,
-  root merge-back, or completion of any later ticket.
+  module coverage. The roadmap retains SA167d at merge position #18, with the complete remaining
+  Phase D/E handoff and SA165 dependency. This entry records observed evidence only and does not
+  claim SA167d completion, publication, root merge-back, or completion of any later ticket.
 
 - **Roadmap cleanup and rebalance review (2026-08-27, seventeenth pass).** **No ticket closed and
   no track moved** — the queue still stands at **ten open v88 ticket entries across nine open merge

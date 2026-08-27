@@ -331,8 +331,10 @@ yourself editing either to register a module, the module's own declaration is in
 > directly, and update the `embed` command's docstring. That flow described the
 > pre-plan/apply `embed` command, removed in **v0.72.0**; `MODULE_CONFIGURATORS` no longer
 > exists. Wiring is declared in `module.yml` and executed by the module's `adapter.py`.
-> The per-module `apply_<name>_configuration()` functions still present in
-> `module_config.py` were the completed **`SA167d`** (v88, merge #18) cleanup surface, not a pattern to copy.
+> The per-module `apply_<name>_configuration()` functions formerly present in
+> `module_config.py` are absent from the settled product bytes and remain a pattern not to copy.
+> **`SA167d`** (v88, merge #18) is still open: phases A-C are accepted, Phase D was
+> delivered but remains unaccepted after its exact command exited 1, and Phase E was unreached.
 
 **5. Template Integration (showcase_react theme):**
 - [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure

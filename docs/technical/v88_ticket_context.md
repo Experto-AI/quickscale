@@ -22,8 +22,10 @@ prose claiming a roadmap-open dependency is closed.
 
 It covers every open v88 ticket entry plus the post-v88 entries. Closed tickets are not
 covered as open sections; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
-The completed SA167a and SA167d handoffs appear only as historical context in the shared
-conceptual section below, without creating closed-ticket sections.
+The completed SA167a handoff appears only as historical context in the shared conceptual
+section below. SA167d remains an open member of that section: phases A-C are accepted,
+Phase D was delivered but remains unaccepted after its exact command exited 1, and Phase E
+was unreached.
 
 ---
 
@@ -609,11 +611,12 @@ Worth holding as a set, because each appears in more than one ticket:
 
 ## SA167c — module wiring standardization
 
-This open roadmap entry carries conceptual context for the module-wiring standardization. The
-completed SA167a and SA167d handoffs are retained only as historical context; their completion
-evidence is archived in [CHANGELOG.md](../../CHANGELOG.md). Ticket metadata lives in the
-[roadmap](roadmap.md), not here. SA167b's completed relocation and P4 acceptance are likewise
-archived there rather than described as open work here.
+These open roadmap entries carry conceptual context for the module-wiring standardization. The
+completed SA167a handoff is retained only as historical context, and SA167b's completed relocation
+and P4 acceptance are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167d remains open:
+phases A-C are accepted, Phase D was delivered but remains unaccepted after
+its exact command exited 1, and Phase E was unreached. Ticket metadata and the remaining D/E
+handoff live in the [roadmap](roadmap.md), not here.
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.
