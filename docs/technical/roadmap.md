@@ -83,11 +83,13 @@ v88 — three worktrees, eight open merge positions carrying nine open ticket en
 
 BAND A — clear; shared repository gates are green
 
-W2 (gates & declared wiring)   ★ CRITICAL PATH — 3 open legs, 1 on the path — LANE IDLE
+W2 (gates & declared wiring)   ★ CRITICAL PATH — 3 open legs, 1 on the path — PARTIAL MERGED
   SA167c ─► SA166 ─► SA164
   retire    testimony  watch
   django_   trail      items
   apps+gate
+  (retirement bytes merged;
+   A acceptance + B-F open)
     #21       #24       #25
 
 W1 (module-wiring migration + watch items)   2 open legs, no cross-worktree dependency
@@ -128,8 +130,12 @@ The manifest-reading `entry_point.py`, the
 fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec seam, and the regenerated migration baseline
 are all merged tree state that open tickets build on, not pending dependencies.
 
-**Parallelism result (measured 2026-08-27, twentieth pass): W2 and W3 are merged; W1 carries
-unmerged work.** `wt-track2` and `wt-track3` are both ancestors of `v88` — merged, clean, idle.
+**Parallelism result (measured 2026-08-27, twenty-first pass): W2 and W3 product tips are merged;
+W1 carries unmerged work.** `wt-track2` and `wt-track3` are both ancestors of `v88`. W2's product
+HEAD is `f6f3bbce`, with SA167c's reviewed manifest-retirement slice merged but its acceptance and
+phases B-F still open; the roadmap checkpoint itself was uncommitted at measurement time, so W2 was
+not yet clean. W3 is merged, clean, and idle. ***corrected after checkpoint attestation — not
+independently graded***
 **`wt-track1` is six commits ahead** (tip `810eefd8`, clean) carrying SA167d's A-D-accepted delta.
 W3's partial SA135+SA163 delivery reached `v88` in **two** merges — `0661f55f` and then
 `f070f39b`, which carries the `203fcd61` lifecycle/module-E2E remediation. No suite is running and
@@ -159,7 +165,7 @@ scheduling does. Moves tested and rejected:
 **Nothing can shorten the release.** The critical path is `SA167c`, pinned to W2 by
 `quickscale_modules/*/module.yml` and `scripts/gate_registry.json` ownership, with no prerequisite
 outside W2. SA166 (#24) and SA164 (#25) are band-C tails *behind* the spine. W2 is idle, so the
-only lever available is **starting SA167c**, not moving anything.
+only lever available is **continuing SA167c from its merged retirement slice**, not moving anything.
 
 **Standing serialization constraint between lanes.** W3's database-backed legs and any W1/W2 run of
 `make check` / `make test-integration` contend for the *ownership* of the twelve local test
@@ -171,13 +177,15 @@ Shared closeout surfaces (`CHANGELOG.md`, `docs/technical/roadmap.md`,
 sync-before-merge-back procedure.
 
 
-### Track readiness (re-measured 2026-08-27, twentieth pass)
+### Track readiness (re-measured 2026-08-27, twenty-first pass)
 
 Each track reports three independent states. A track is **truly green** only when all three are
 yes.
 
-**Measured worktree state.** `wt-track2` (tip `6011044c`) and `wt-track3` (tip `24cfe174`) are
-both ancestors of `v88` — merged, clean, idle. `wt-track1` is **six commits ahead** and clean
+**Measured worktree state.** `wt-track2` product HEAD `f6f3bbce` and `wt-track3` tip `9bf4946f` are
+both ancestors of `v88`. W2 carries SA167c's merged partial and an uncommitted roadmap checkpoint,
+so it is not yet clean or idle; W3 is clean and idle. `wt-track1` is **six commits ahead** and clean.
+***corrected after checkpoint attestation — not independently graded***
 (tip `810eefd8`). W3's delivered partial is merged into `v88` through `0661f55f` and `f070f39b`;
 `pg18-af10` is up with the twelve databases intact and no suite is in flight.
 
@@ -189,12 +197,12 @@ and must be removed before the next E2E campaign so the rerun starts from a clea
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
 | **W1** | SA167d (#18) — A-D accepted, **E outstanding** | **yes** — re-running phase E is executable today; no decision, no upstream ticket. Contends with W3 for the shared cluster | **yes** — phase E, the ledger reconciliation, and the merge-back are all W1-owned | **yes** — #18 is the W1 queue head with no upstream ticket | **truly green — off the critical path** |
-| **W2** | SA167c (#21) | **yes** — W2 is merged, clean, and idle at the tip; the manifest-default projection it needed is archived | **yes** — W2-owned surfaces only (`module.yml`, `gate_registry.json`, the manifest schema/loader) | **yes** — #21 is the W2 queue head | **truly green — on the critical path** |
+| **W2** | SA167c (#21) — retirement slice merged, **A unaccepted; B-F outstanding** | **yes** — resume acceptance on the merged bytes; no decision or upstream ticket blocks it | **yes** — remaining gate, proof, closeout, and frozen-candidate work is W2-owned | **yes** — #21 remains the W2 queue head | **truly green — on the critical path, partial merged** |
 | **W3** | SA135 + SA163 (#15) — C/D accepted, E outstanding | **yes** — resume from the merged partial; no decision or upstream ticket blocks it | **yes** — the remaining E/F/G work is W3-owned; the exclusive slot remains authorized when needed | **yes** — #15 is the W3 queue head | **truly green — off the critical path, partial merged** |
 
 **All three tracks are truly green: SA167c (#21), SA167d (#18), and SA135+SA163 (#15).**
 Only **SA167c (#21) is on the critical path** — it is the one ticket whose progress moves the
-release date, and W2 is the one lane sitting idle. SA167d and SA135+SA163 are real band-B work but
+release date, and W2 now has a merged partial to resume. SA167d and SA135+SA163 are real band-B work but
 are **filler with respect to the release date**: finishing either does not shorten the chain.
 
 **The binding constraint is the shared PostgreSQL cluster, not any ticket edge.** No W3 suite is
@@ -206,7 +214,7 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 
 | Ticket | Blocking ticket | Edge kind | What clears it |
 |---|---|---|---|
-| SA167c (#21) | — | **queue head** | Nothing blocks it. Startable today. |
+| SA167c (#21) | — | **queue head; partial merged** | No dependency or decision blocks it. Acceptance must first use a focused command that does not inherit whole-package coverage, with the restricted PostgreSQL role; then continue B-F. |
 | SA167d (#18) | — | **queue head** | Nothing blocks it. Startable today; competes with W3 for the cluster. |
 | SA135 + SA163 (#15) | — | **queue head; partial merged** | No upstream ticket or decision blocks it. Product acceptance remains blocked by two CLI E2E failures described in the ticket block below. |
 | SA161 (#19) | SA135 (#15) | **lane-ordering** — W3 queue position; SA161 also needs the PostgreSQL/Docker slot SA135 holds | Upstream work, or a maintainer reordering W3. Not recommended: SA135 is band B and SA161 is band-C filler. |
@@ -217,8 +225,9 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 
 **Recommended concurrency right now:**
 
-- **W2 — start SA167c (#21).** This is the only action that shortens the release. W2 is idle and
-  the lane is clean.
+- **W2 — continue SA167c (#21).** Do not redo the merged manifest-retirement bytes. First accept
+  them with the corrected focused command and restricted PostgreSQL role, then implement B-F.
+  This remains the only action that shortens the release.
 - **W3 — continue SA135 + SA163 (#15) from phase E.** Do not redo C or D. First remove the two
   orphaned `sa142-no-cleanup_*` containers so the rerun starts from clean Docker state, then
   resolve the two CLI E2E resource failures, then run the exact serial E2E and `ci-e2e` gates on
@@ -277,10 +286,10 @@ exact reviewed tip.
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16, #17, #23, and #26 are **retired and not
 reused**; the tickets that held them are closed and archived in
 [CHANGELOG.md](../../CHANGELOG.md). Gaps in the numbering are expected and carry no meaning.
-#15, #18, and #21 are the per-lane heads. **#21 is the only clean, idle head with no partial
-acceptance ledger to resume**;
-#18 is a stalled acceptance on `wt-track1` `810eefd8` (phases A-D accepted, E outstanding) and #15
-has a merged partial with C/D accepted and E outstanding. All three remain serialized by the shared
+#15, #18, and #21 are the per-lane heads. #21 has a merged partial at `f6f3bbce`: its Phase-A
+product bytes are reviewed, but A is unaccepted and B-F are outstanding. #18 is a stalled
+acceptance on `wt-track1` `810eefd8` (phases A-D accepted, E outstanding), and #15 has a merged
+partial with C/D accepted and E outstanding. All three remain serialized by the shared
 PostgreSQL cluster, not by any ticket edge.
 
 Band-C positions (19, 20, 22, 24, 25) are *earliest-eligible*, not commitments. Any of them may slip
@@ -306,8 +315,9 @@ Additional per-ticket surfaces:
 - `scripts/gate_registry.json` — SA167c, SA166, and SA164 own this W2-only surface. SA123's two
   scanner entries are settled tree state and remain preserved while the registry never crosses
   worktrees.
-- `quickscale_modules/*/module.yml` — SA167c (#21), **on W2**. It retires `django_apps:` across
-  all twelve after the accepted manifest-default projection. Keeping this W2-only surface on one
+- `quickscale_modules/*/module.yml` — SA167c (#21), **on W2**. Its merged partial retires
+  `django_apps:` from the eleven manifests that carried it while preserving all twelve accepted
+  app projections. Keeping this W2-only surface on one
   lane is why SA167c could not move to W1 with the other wiring legs.
 - `quickscale_core/.../manifest/entry_point.py` — no open ticket owns this file. Its
   manifest-read behaviour and module-owned adapter registry are settled tree state; future
@@ -354,8 +364,49 @@ sit ahead of open work in this section.
 Conceptual background, mental models, and implementation notes for **every** ticket live in [v88_ticket_context.md](v88_ticket_context.md); this roadmap remains authoritative for scope, worktrees, and merge order.
 
 - [ ] **SA167c — Retire `django_apps:` and gate the app declaration.** `Band B · Tier 2 · W2 · merge #21 · deps: none · closes the SA167 family`
-  `django_apps:` is declared in eleven manifests and parsed by `manifest/loader.py:597` into `ModuleManifest.django_apps`, where **no production code path reads it**. It is inert declarative surface that reads as authoritative — the trap that made `social` look declared when it was not. One test helper does consume it (`quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py:53`) and silently falls back to a guessed path when it is absent, which is why `social` passed that gate too; that fallback is owned by SA164.
+  `django_apps:` was inert declarative surface: eleven manifests carried it, the loader parsed it,
+  no production path read it, and one SA92 helper used it before falling back to a guessed path.
+  The merged partial below removes that redundant surface; SA164 still owns making the remaining
+  conventional migration-path lookup fail hard and re-anchoring its parity backstop.
   **Acceptance:** `django_apps:` is either derived from the `apps` wiring projection or removed from all manifests, `ModuleManifest`, and the loader, with no key parsed-but-unread remaining; a conformance gate fails when a module ships models or a migration without declaring at least one Django app, registered in `scripts/gate_registry.json` and passing `scripts/check_gate_parity.py`; the gate is proved by deleting a module's app declaration and observing red, reverted before merge; `test_sa92_migration_squash_guardrail.py` no longer depends on the retired key.
+  **State (measured 2026-08-27): partial delivery merged into `v88`.** `wt-track2` product commit
+  `f6f3bbce` is merged. Phase A was dispatched but is **not accepted**; phases B-F were not reached.
+  Keep this item unchecked under the open-work-only policy.
+  **Completed in the merged partial:** removed `django_apps:` from `ModuleManifest`, the loader,
+  the obsolete loader test, all eleven source declarations and their eleven byte-identical core
+  snapshots; removed the SA92 helper's retired-key dependency and stale payload plumbing; preserved
+  all twelve non-empty `apps` wiring projections and public adapter outputs. Independent convergence
+  fixed the stale helper plumbing, and terminal review found no product-slice defect.
+  **Blocking:** Phase A's literal focused loader command ran 112 passing tests but exited 1 because
+  the package configuration measured only 36.59% of the whole core package against `fail-under=90`.
+  The default orgs command also selected a privileged PostgreSQL role. Close this by explicitly
+  accepting the already-merged bytes with
+  `poetry run pytest quickscale_core/tests/test_manifest_loader.py -q -o addopts= --no-cov` and
+  `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules`, while retaining the
+  broad coverage obligation in the final campaign. Do not treat the prior green substitute runs as
+  retroactive Phase-A acceptance.
+  **Decisions needed:** none. The focused acceptance command must isolate behavior from the
+  whole-package coverage gate; the final broad campaign remains mandatory.
+  **Remaining plan (all phases serial; do not redo the merged retirement bytes):**
+  1. **A-acceptance remainder:** explicitly accept the merged Phase-A slice with the corrected
+     focused commands above, manifest sync/parity, the four caller-projection suites, and unchanged
+     apps-projection evidence.
+  2. **B-gate:** add a fail-hard `check_module_app_declaration` checker and hermetic tests covering
+     model/migration evidence, empty or malformed projections, malformed manifests, inventory and
+     filesystem failures, evidence-free modules, deterministic diagnostics, and current tree state.
+  3. **C-integration:** register `check-module-app-declaration` in Make and the gate registry for
+     local serial, local parallel, and hosted CI; update the hosted generator/catalog, generated
+     `ci.yml`, parity/current-state tests, local-runner labels, and script map. Publish and E2E remain
+     unchanged.
+  4. **D-negative proof:** remove `social`'s sole apps projection temporarily, require the new gate
+     to fail for the intended reason, restore the exact bytes, and prove both the gate and manifest
+     sync green.
+  5. **E-closeout:** reconcile decisions, implementation contract, validation policy, ticket
+     context, roadmap queue/counts, and changelog evidence. Archive and remove SA167c only after all
+     acceptance is green; retain the SA164 and SA166 boundaries.
+  6. **F-frozen candidate:** sync current `v88`, run the complete focused-to-broad campaign on one
+     unchanged candidate, perform independent convergence and terminal attestation, and merge only
+     that exact tip.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/manifest/{schema,loader}.py`, every `quickscale_modules/*/module.yml`, `scripts/gate_registry.json`, `Makefile`, CI workflow, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`.
 
 - [ ] **SA167d — Complete the CLI wiring-drain acceptance.** `Band B · Tier 2 · W1 · merge #18 · deps: none · blocks SA165`
@@ -500,7 +551,7 @@ archived in [CHANGELOG.md](../../CHANGELOG.md), and their positions are retired 
 
 - [ ] **SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items.** `Band C · Tier 3 · W2 · merge #25 · deps: SA166 (worktree ordering)`
   The arch audit carries five watch items; three are simply not fired and need no work, but two carry explicit actions and one is a naming question that becomes load-bearing on a specific trigger.
-  - **SA92 migration-squash discovery tuple — artifact located 2026-08-21, now evaluable.** The audit recorded this as unlocatable, but the artifact is `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py` — a bounded literal tripwire for cross-table `UPDATE … SET organization_id` DML in migrations. The prior search missed it because it grepped for `squash` in source rather than in test filenames. Two live observations: its `_migdir()` helper (`:53-59`) reads the **inert** `django_apps:` manifest key and then silently falls back to the conventional path when it is absent. `social` has a production `apps` wiring projection but deliberately no inert key, so this helper still passes social only through that fallback — a silent fallback of exactly the class [tech-audit.md](../others/tech-audit.md) owns; and its authoritative backstop is a catalog/data parity gate anchored to `v87`, a retired release ref no longer resolved by the quality gate. Re-anchor both against the regenerated migrations now on the integration branch.
+  - **SA92 migration-squash discovery tuple — artifact located 2026-08-21, now evaluable.** The audit recorded this as unlocatable, but the artifact is `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py` — a bounded literal tripwire for cross-table `UPDATE … SET organization_id` DML in migrations. The prior search missed it because it grepped for `squash` in source rather than in test filenames. SA167c's merged partial removed the helper's dependency on the retired `django_apps:` key; `_migdir()` still uses the conventional path and returns `None` when it is absent, so SA164 must make that lookup fail hard rather than silently skipping a module. Its authoritative backstop is also still a catalog/data parity gate anchored to `v87`, a retired release ref no longer resolved by the quality gate. Re-anchor both remaining obligations against the regenerated migrations now on the integration branch.
   - **Privileged-command template/runtime pair — values verified equal, governance artifacts disagree.** `production.py.j2:185` and `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:36` both hold `frozenset({"migrate", "createcachetable"})`, but the `apps.py` docstring calls itself "the single source of truth for which commands are privileged" while the template holds an independent copy. The values agree; the claimed authority does not.
   - **`trigger_inputs` has drifted from its name.** `check_gate_parity.py:2652-2690` uses the field as a bidirectional partition of `e2e.yml`'s path allowlist, not as "what changes should trigger this gate" — which is why `check-core-compat`'s trigger is `quickscale_modules/backups/**`. Not a defect; the check it performs is real and exact. Becomes load-bearing only if a gate is ever *skipped* on the basis of `trigger_inputs`.
   **Acceptance:** the SA92 item is re-anchored to `test_sa92_migration_squash_guardrail.py` with a stated trigger, its `_migdir()` fallback fails loudly instead of guessing the path, and its `v87`-anchored parity backstop is re-anchored to the current regenerated migrations; the privileged-command SSOT claim is made true — either the template reads the runtime frozenset or the docstring stops claiming sole authority — with a test asserting the two cannot diverge; `trigger_inputs` is either renamed to describe what it does or its docstring/schema description records the actual semantics plus the skip-based promotion trigger; the three not-fired items (module universe in environment lists, frontend runtime module keys, and the now-absorbed watch half of Finding 13) are re-stated with their triggers intact; `docs/others/arch-audit.md` is updated in the same change.
