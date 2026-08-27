@@ -4,6 +4,17 @@
 
 ## v88 development — 2026-08-21
 
+- **SA167d — CLI per-module wiring cleanup accepted (2026-08-27; root merge-back not
+  claimed).** The accepted delta leaves `quickscale_cli` responsible for collecting desired
+  configuration while module-owned manifests and adapters remain the wiring authorities.
+  The configured Ruff formatter repaired the seven pre-existing accepted-delta files named by
+  the lint gate. The authoritative gate sequence passed: `make lint`, `make typecheck`, and
+  `make test`; the latter observed **2,869 Core passed / 1 skipped**, **2,093 CLI passed**, and
+  **2,544 module-integration tests passed / 86 skipped / 12 deselected**, with **94.53%** mean
+  module coverage. The focused roadmap/context consistency command is run after the documentation
+  reconciliation. This entry records observed validation only and does not claim publication,
+  root merge-back, or completion of any later ticket.
+
 - **Roadmap cleanup and rebalance review (2026-08-27, seventeenth pass).** **No ticket closed and
   no track moved** — the queue still stands at **ten open v88 ticket entries across nine open merge
   positions** (#15, #16, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Track 3 was

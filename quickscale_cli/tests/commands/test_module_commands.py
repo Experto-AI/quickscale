@@ -8,15 +8,13 @@ import pytest
 import yaml
 from contextlib import ExitStack
 
-from quickscale_cli.commands.module_config import (
-    APPLY_MODULE_EXECUTION_MODE,
-    ModuleConfigurator,
-)
+from quickscale_cli.commands.module_config import ModuleConfigurator
 from quickscale_core.manifest.loader import ManifestError
 from quickscale_core.utils.git_utils import GitError
 
 
 from quickscale_cli.commands.module_commands import (
+    APPLY_MODULE_EXECUTION_MODE,
     _check_auth_module_migrations,
     _commit_module_update,
     _install_module_dependencies,
@@ -269,9 +267,14 @@ class TestPerformModuleEmbed:
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
     @patch("quickscale_cli.commands.module_commands.add_module")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
+    @patch(
+        "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+        return_value=(True, "ok"),
+    )
     @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_successful_embed_without_configurator(
         self,
+        mock_wiring,
         mock_subtree,
         mock_add_module,
         mock_install,
@@ -309,6 +312,9 @@ class TestPerformModuleEmbed:
         )
         mock_sync_dependencies.assert_called_once_with(tmp_path, {"auth": {}})
         mock_install.assert_called_once_with(tmp_path, "auth")
+        mock_wiring.assert_called_once_with(
+            tmp_path, module_names=["auth"], option_overrides={"auth": {}}
+        )
         output = capsys.readouterr().out
         assert "Selected ref: splits/auth-module/0.87.0" in output
         assert "Branch: splits/auth-module" not in output
@@ -317,8 +323,13 @@ class TestPerformModuleEmbed:
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
     @patch("quickscale_cli.commands.module_commands.add_module")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
+    @patch(
+        "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+        return_value=(True, "ok"),
+    )
     def test_embed_with_configurator(
         self,
+        mock_wiring,
         mock_subtree,
         mock_add_module,
         mock_install,
@@ -332,17 +343,11 @@ class TestPerformModuleEmbed:
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text('name: blog\nversion: "0.87.0"\n')
 
-        # Mock configurator
         configurator = Mock(return_value={})
-        applier = Mock()
 
         with patch(
             "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
-            {
-                "blog": ModuleConfigurator(
-                    name="blog", configure=configurator, apply=applier
-                )
-            },
+            {"blog": ModuleConfigurator(name="blog", configure=configurator)},
         ):
             result = _perform_module_embed(
                 tmp_path,
@@ -355,7 +360,11 @@ class TestPerformModuleEmbed:
 
         assert result[0] is True
         assert result[1] is not None
-        applier.assert_called_once_with(tmp_path, {"some": "config"})
+        mock_wiring.assert_called_once_with(
+            tmp_path,
+            module_names=["blog"],
+            option_overrides={"blog": {"some": "config"}},
+        )
         mock_sync_dependencies.assert_called_once_with(
             tmp_path,
             {"blog": {"some": "config"}},
@@ -418,11 +427,11 @@ class TestPerformModuleEmbed:
         mock_add_module.assert_not_called()
         mock_install.assert_not_called()
 
-    def test_apply_mode_failure_cleans_partial_module_directory_and_tracking(
+    def test_apply_mode_does_not_run_standalone_wiring_manager(
         self,
         tmp_path,
     ):
-        """Apply embeds should remove failed subtree artifacts so reruns are not blocked."""
+        """Apply embeds defer the single managed-wiring pass to apply orchestration."""
 
         def _fake_subtree_add(*, prefix: str, remote: str, branch: str, squash: bool):
             del remote, branch, squash
@@ -430,30 +439,14 @@ class TestPerformModuleEmbed:
             module_dir.mkdir(parents=True, exist_ok=True)
             (module_dir / "module.yml").write_text('name: blog\nversion: "0.87.0"\n')
 
-        def _failing_applier(
-            project_path: Path,
-            config: dict[str, object],
-            *,
-            execution_mode: str,
-        ) -> None:
-            del project_path, config
-            if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-                raise RuntimeError("apply-specific configuration failed")
-
         with (
             patch(
                 "quickscale_cli.commands.module_commands.run_git_subtree_add",
                 side_effect=_fake_subtree_add,
             ),
-            patch.dict(
-                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
-                {
-                    "blog": ModuleConfigurator(
-                        name="blog", configure=Mock(), apply=_failing_applier
-                    )
-                },
-                clear=True,
-            ),
+            patch(
+                "quickscale_cli.commands.module_commands.regenerate_managed_wiring"
+            ) as mock_wiring,
         ):
             result = _perform_module_embed(
                 tmp_path,
@@ -467,18 +460,21 @@ class TestPerformModuleEmbed:
                 execution_mode=APPLY_MODULE_EXECUTION_MODE,
             )
 
-        assert result == (False, None)
-        assert not (tmp_path / "modules" / "blog").exists()
-        config_path = tmp_path / ".quickscale" / "config.yml"
-        assert not config_path.exists() or "blog:" not in config_path.read_text()
+        assert result[0] is True
+        mock_wiring.assert_not_called()
 
     @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
     @patch("quickscale_cli.commands.module_commands.add_module")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
+    @patch(
+        "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+        return_value=(True, "ok"),
+    )
     @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_source_ref_forwarded_to_subtree_add_and_provenance_returned(
         self,
+        mock_wiring,
         mock_subtree,
         mock_add_module,
         mock_install,
@@ -521,6 +517,7 @@ class TestPerformModuleEmbed:
         assert provenance.prefix == "modules/auth"
         assert provenance.installed_version == "0.87.0"
         assert provenance.selected_ref == "feature/preseal-auth"
+        mock_wiring.assert_called_once()
         assert "Selected ref: feature/preseal-auth" in capsys.readouterr().out
 
 
@@ -641,6 +638,10 @@ class TestModuleVersionMismatchEnforcement:
             patch(
                 "quickscale_cli.commands.module_commands._install_module_dependencies",
                 return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+                return_value=(True, "ok"),
             ),
             patch(
                 "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
@@ -1011,7 +1012,7 @@ class TestEmbedModule:
             patch("quickscale_cli.commands.module_commands.run_git_subtree_add"),
             patch("quickscale_cli.commands.module_commands.add_module"),
             patch(
-                "quickscale_cli.commands.module_config.regenerate_managed_wiring",
+                "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
                 return_value=(True, "ok"),
             ) as mock_regenerate,
         ):
@@ -1268,15 +1269,10 @@ class TestEmbedModule:
         mock_perform.return_value = (True, None)
 
         configurator = Mock(return_value={"test": "config"})
-        applier = Mock()
 
         with patch(
             "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
-            {
-                "blog": ModuleConfigurator(
-                    name="blog", configure=configurator, apply=applier
-                )
-            },
+            {"blog": ModuleConfigurator(name="blog", configure=configurator)},
         ):
             result = embed_module("blog", tmp_path, non_interactive=True)
 

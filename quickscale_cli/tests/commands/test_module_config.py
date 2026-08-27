@@ -1,83 +1,15 @@
 """Tests for module_config.py - module configuration functions."""
 
-import subprocess
-from unittest.mock import Mock, patch
-
-import click
-import pytest
+from unittest.mock import patch
 
 from quickscale_cli.commands.module_config import (
-    _add_django_allauth_dependency,
-    _generate_auth_settings_addition,
-    _regenerate_wiring_for_module,
-    apply_auth_configuration,
-    apply_blog_configuration,
     configure_auth_module,
     configure_blog_module,
     get_default_auth_config,
     get_default_blog_config,
-    has_migrations_been_run,
     MODULE_CONFIGURATOR_REGISTRY,
     ModuleConfigurator,
 )
-
-
-class TestHasMigrationsBeenRun:
-    """Tests for has_migrations_been_run function."""
-
-    def test_sqlite_database_exists(self, tmp_path, monkeypatch):
-        """SQLite file presence no longer determines auth migration safety."""
-        monkeypatch.chdir(tmp_path)
-        (tmp_path / "db.sqlite3").touch()
-
-        result = has_migrations_been_run()
-
-        assert result is False
-
-    @patch("quickscale_cli.commands.module_config.subprocess.run")
-    def test_postgres_migrations_applied(self, mock_run, tmp_path, monkeypatch):
-        """Test returns True when PostgreSQL migrations have been run."""
-        monkeypatch.chdir(tmp_path)
-        mock_run.return_value = Mock(
-            returncode=0,
-            stdout='{"ok": true, "incompatible": true, "count": 2}',
-            stderr="",
-        )
-        (tmp_path / "manage.py").write_text("#!/usr/bin/env python\n")
-
-        result = has_migrations_been_run()
-
-        assert result is True
-
-    @patch("quickscale_cli.commands.module_config.subprocess.run")
-    def test_no_migrations_applied(self, mock_run, tmp_path, monkeypatch):
-        """Test returns False when no migrations have been applied."""
-        monkeypatch.chdir(tmp_path)
-        mock_run.return_value = Mock(returncode=0, stdout="No migrations")
-
-        result = has_migrations_been_run()
-
-        assert result is False
-
-    @patch("quickscale_cli.commands.module_config.subprocess.run")
-    def test_subprocess_timeout(self, mock_run, tmp_path, monkeypatch):
-        """Test returns False when subprocess times out."""
-        monkeypatch.chdir(tmp_path)
-        mock_run.side_effect = subprocess.TimeoutExpired("cmd", 5)
-
-        result = has_migrations_been_run()
-
-        assert result is False
-
-    @patch("quickscale_cli.commands.module_config.subprocess.run")
-    def test_file_not_found_error(self, mock_run, tmp_path, monkeypatch):
-        """Test returns False when manage.py is not found."""
-        monkeypatch.chdir(tmp_path)
-        mock_run.side_effect = FileNotFoundError()
-
-        result = has_migrations_been_run()
-
-        assert result is False
 
 
 class TestAuthModuleConfig:
@@ -113,153 +45,6 @@ class TestAuthModuleConfig:
         assert config["email_verification"] == "mandatory"
         assert config["authentication_method"] == "username"
 
-    def test_generate_auth_settings_addition(self):
-        """Test generation of auth settings."""
-        config = {
-            "registration_enabled": True,
-            "email_verification": "optional",
-            "authentication_method": "email",
-        }
-
-        settings = _generate_auth_settings_addition(config)
-
-        assert "ACCOUNT_ALLOW_REGISTRATION = True" in settings
-        assert 'ACCOUNT_EMAIL_VERIFICATION = "optional"' in settings
-        assert "ACCOUNT_LOGIN_METHODS" in settings
-
-    def test_add_django_allauth_dependency_already_exists(self, tmp_path):
-        """Test adding django-allauth when it already exists."""
-        pyproject_path = tmp_path / "pyproject.toml"
-        pyproject_path.write_text(
-            '[tool.poetry.dependencies]\ndjango-allauth = "^0.50.0"\n'
-        )
-
-        # Should not raise
-        _add_django_allauth_dependency(tmp_path, pyproject_path)
-
-    def test_add_django_allauth_dependency_no_auth_module(self, tmp_path):
-        """Test adding django-allauth when auth module is missing."""
-        pyproject_path = tmp_path / "pyproject.toml"
-        pyproject_path.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
-
-        with pytest.raises(click.Abort):
-            _add_django_allauth_dependency(tmp_path, pyproject_path)
-
-    def test_add_django_allauth_dependency_success(self, tmp_path):
-        """Test successfully adding django-allauth dependency."""
-        # Create main pyproject.toml
-        pyproject_path = tmp_path / "pyproject.toml"
-        pyproject_path.write_text(
-            '[tool.poetry.dependencies]\npython = "^3.14"\nDjango = "^6.0"\n'
-        )
-
-        # Create auth module pyproject.toml with django-allauth
-        auth_dir = tmp_path / "modules" / "auth"
-        auth_dir.mkdir(parents=True)
-        auth_pyproject = auth_dir / "pyproject.toml"
-        auth_pyproject.write_text(
-            '[tool.poetry.dependencies]\ndjango-allauth = "^0.60.0"\n'
-        )
-
-        _add_django_allauth_dependency(tmp_path, pyproject_path)
-
-        content = pyproject_path.read_text()
-        assert "django-allauth" in content
-
-    @patch("quickscale_cli.commands.module_config._add_django_allauth_dependency")
-    @patch("quickscale_cli.commands.module_config.Path.exists")
-    def test_apply_auth_configuration(self, mock_exists, mock_add_dep, tmp_path):
-        """Test applying auth configuration to project."""
-        # Mock file existence checks
-        mock_exists.return_value = True
-
-        # Create minimal project structure
-        settings_dir = tmp_path / "myproject" / "settings"
-        settings_dir.mkdir(parents=True)
-        base_py = settings_dir / "base.py"
-        base_py.write_text("INSTALLED_APPS = []\nMIDDLEWARE = []\n")
-
-        urls_py = tmp_path / "myproject" / "urls.py"
-        urls_py.write_text("urlpatterns = []\n")
-
-        pyproject_toml = tmp_path / "pyproject.toml"
-        pyproject_toml.write_text("[tool.poetry.dependencies]\n")
-
-        config = get_default_auth_config()
-
-        # This will partially succeed - testing main logic flow
-        try:
-            apply_auth_configuration(tmp_path, config)
-        except Exception:
-            # Expected to fail on some operations, but tests that code runs
-            pass
-
-    def test_apply_auth_configuration_aborts_on_malformed_quickscale(
-        self, tmp_path, capsys
-    ):
-        """Managed wiring should fail explicitly when quickscale.yml is malformed."""
-        project = tmp_path / "myproject"
-        project.mkdir()
-        (project / "quickscale.yml").write_text('version: "1"\nproject: [\n')
-
-        with pytest.raises(click.Abort):
-            apply_auth_configuration(project, get_default_auth_config())
-
-        error_output = capsys.readouterr().err
-        assert "Managed wiring regeneration failed" in error_output
-        assert "contains invalid YAML" in error_output
-
-    def test_apply_auth_configuration_aborts_when_identity_unresolved(
-        self, tmp_path, capsys
-    ):
-        """Managed wiring should fail explicitly when no identity source exists."""
-        project = tmp_path / "myproject"
-        project.mkdir()
-
-        with pytest.raises(click.Abort):
-            _regenerate_wiring_for_module(
-                project,
-                "auth",
-                get_default_auth_config(),
-            )
-
-        error_output = capsys.readouterr().err
-        assert "Managed wiring regeneration failed" in error_output
-        assert "Unable to resolve project identity" in error_output
-
-    @patch(
-        "quickscale_cli.commands.module_config.regenerate_managed_wiring",
-        return_value=(
-            False,
-            "Managed adapter for 'billing' not importable: "
-            "quickscale_modules_billing.adapter could not be loaded",
-        ),
-    )
-    def test_regenerate_wiring_for_module_handles_adapter_failure(
-        self, mock_regenerate, tmp_path, capsys
-    ):
-        """CLI-facing handler raises click.Abort with user-friendly message
-        when regenerate_managed_wiring returns an adapter failure."""
-        project = tmp_path / "myproject"
-        project.mkdir()
-        (project / "myproject").mkdir()  # package directory
-        (project / "quickscale.yml").write_text(
-            'version: "1"\nproject: {slug: myproject, package: myproject, theme: showcase_react}\n'
-            "modules: {}\ndocker: {start: false}\n"
-        )
-
-        with pytest.raises(click.Abort):
-            _regenerate_wiring_for_module(
-                project,
-                "auth",
-                get_default_auth_config(),
-            )
-
-        error_output = capsys.readouterr().err
-        assert "Managed wiring regeneration failed" in error_output
-        assert "billing" in error_output
-        assert "not importable" in error_output
-
 
 class TestBlogModuleConfig:
     """Tests for blog module configuration functions."""
@@ -293,32 +78,6 @@ class TestBlogModuleConfig:
         assert config["posts_per_page"] == 20
         assert config["api_rate_limit"] == "10/minute"
 
-    @patch("quickscale_cli.commands.module_config.Path.exists")
-    def test_apply_blog_configuration(self, mock_exists, tmp_path):
-        """Test applying blog configuration to project."""
-        mock_exists.return_value = True
-
-        # Create minimal project structure
-        settings_dir = tmp_path / "myproject" / "settings"
-        settings_dir.mkdir(parents=True)
-        base_py = settings_dir / "base.py"
-        base_py.write_text("INSTALLED_APPS = []\n")
-
-        urls_py = tmp_path / "myproject" / "urls.py"
-        urls_py.write_text("urlpatterns = []\n")
-
-        pyproject_toml = tmp_path / "pyproject.toml"
-        pyproject_toml.write_text("[tool.poetry.dependencies]\n")
-
-        config = get_default_blog_config()
-
-        # Test that function runs without crashing
-        try:
-            apply_blog_configuration(tmp_path, config)
-        except Exception:
-            # Expected to fail on some operations
-            pass
-
 
 class TestModuleConfigurators:
     """Tests for MODULE_CONFIGURATOR_REGISTRY."""
@@ -332,7 +91,6 @@ class TestModuleConfigurators:
             assert isinstance(entry, ModuleConfigurator)
             assert entry.name == name
             assert callable(entry.configure)
-            assert callable(entry.apply)
 
     def test_module_configurator_registry_has_defaults(self):
         """Every registered configurator should expose a get_defaults factory."""

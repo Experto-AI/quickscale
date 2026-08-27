@@ -11,17 +11,61 @@ test environment to exercise the combined core/CLI caller path.
 
 from __future__ import annotations
 
+
 import pytest
 
+from quickscale_core.contracts.module_discovery import (
+    discover_shipped_module_names,
+    get_modules_base_path,
+)
 from quickscale_core.manifest import (
     build_manifest_wiring_spec,
     refresh_managed_adapters,
 )
+from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 # SA44 Phase 1: managed adapters require explicit
 # refresh_managed_adapters() before use.
 refresh_managed_adapters()
+
+
+class TestSourceDiscoveredManifestAdapterParity:
+    """Source manifests and module-owned adapters define the wiring contract."""
+
+    def test_all_source_modules_build_from_refreshed_adapters(self) -> None:
+        """Build a spec for every discovered source manifest, including orgs."""
+        module_names = discover_shipped_module_names()
+        source_base = get_modules_base_path()
+        manifests = {
+            module_name: load_manifest_from_path(
+                source_base / module_name / "module.yml"
+            )
+            for module_name in module_names
+        }
+
+        assert len(module_names) == 12
+        assert "orgs" in module_names
+        assert set(manifests) == set(module_names)
+
+        refresh_managed_adapters()
+        specs = {
+            module_name: build_manifest_wiring_spec(
+                module_name, {}, project_package="myproject"
+            )
+            for module_name in module_names
+        }
+
+        assert set(specs) == set(manifests)
+        assert all(isinstance(spec, ModuleWiringSpec) for spec in specs.values())
+        for module_name, manifest in manifests.items():
+            declared_apps = {
+                app
+                for projection in manifest.wiring_projections
+                if projection.get("wiring_field") == "apps"
+                for app in (projection.get("expression") or {}).get("value", [])
+            }
+            assert declared_apps <= set(specs[module_name].apps)
 
 
 # ---------------------------------------------------------------------------

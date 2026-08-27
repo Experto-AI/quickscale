@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 import tomllib
 from pathlib import Path
@@ -9,14 +10,8 @@ from pathlib import Path
 from packaging.version import Version
 
 from quickscale_cli.commands.module_config import (
-    get_default_analytics_config,
-    get_default_auth_config,
-    get_default_backups_config,
+    MODULE_CONFIGURATOR_REGISTRY,
     get_default_blog_config,
-    get_default_crm_config,
-    get_default_forms_config,
-    get_default_social_config,
-    get_default_storage_config,
 )
 from quickscale_core.contracts.module_catalog import get_discovered_module_entries
 from quickscale_core.manifest.entry_point import (
@@ -42,17 +37,6 @@ REACT_TEMPLATES_DIR = (
     / "themes"
     / "showcase_react"
 )
-
-DEFAULT_CONFIG_FACTORIES = {
-    "analytics": get_default_analytics_config,
-    "auth": get_default_auth_config,
-    "blog": get_default_blog_config,
-    "crm": get_default_crm_config,
-    "forms": get_default_forms_config,
-    "storage": get_default_storage_config,
-    "backups": get_default_backups_config,
-    "social": get_default_social_config,
-}
 
 BASE_RUNTIME_DEPENDENCY_NAMES = {"django", "python"}
 FIRST_PARTY_MODULE_PACKAGE_PREFIX = "quickscale-module-"
@@ -172,7 +156,21 @@ def test_ready_modules_have_valid_manifest() -> None:
 
 def test_configurator_defaults_match_manifest_option_keys() -> None:
     """Configurator default keys must align with manifest option keys."""
-    for module_name, factory in DEFAULT_CONFIG_FACTORIES.items():
+    discovered_names = {entry.name for entry in get_discovered_module_entries()}
+    configurator_names = set(MODULE_CONFIGURATOR_REGISTRY)
+
+    assert discovered_names - configurator_names == {"orgs"}, (
+        "Every discovered module except orgs must have a desired-option "
+        f"configurator: missing={sorted(discovered_names - configurator_names)}"
+    )
+    assert configurator_names - discovered_names == set(), (
+        "Configurator registry must not expose modules absent from source "
+        f"discovery: extra={sorted(configurator_names - discovered_names)}"
+    )
+
+    for module_name in sorted(configurator_names):
+        factory = MODULE_CONFIGURATOR_REGISTRY[module_name].get_defaults
+        assert factory is not None, f"{module_name} must expose a default factory"
         manifest = load_manifest_from_path(_manifest_path(module_name))
         manifest_keys = set(manifest.get_all_options().keys())
         default_keys = set(factory().keys())
@@ -181,6 +179,52 @@ def test_configurator_defaults_match_manifest_option_keys() -> None:
             f"Default config keys mismatch for '{module_name}': "
             f"defaults={sorted(default_keys)} manifest={sorted(manifest_keys)}"
         )
+
+
+def test_module_config_is_desired_configuration_only() -> None:
+    """The CLI config module must not regain operational wiring ownership."""
+    module_config_path = (
+        REPO_ROOT
+        / "quickscale_cli"
+        / "src"
+        / "quickscale_cli"
+        / "commands"
+        / "module_config.py"
+    )
+    tree = ast.parse(module_config_path.read_text(), filename=str(module_config_path))
+
+    imported_modules: set[str] = set()
+    imported_symbols: set[str] = set()
+    definitions: set[str] = set()
+    configurator_fields: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imported_modules.add(node.module or "")
+            imported_symbols.update(alias.name for alias in node.names)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            definitions.add(node.name)
+        elif isinstance(node, (ast.AnnAssign, ast.Assign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            configurator_fields.update(
+                target.id for target in targets if isinstance(target, ast.Name)
+            )
+
+    assert not any("module_wiring_manager" in module for module in imported_modules)
+    assert "ModuleWiringSpec" not in imported_symbols
+    assert not {name for name in definitions if name.startswith("apply_")}, (
+        "module_config.py must not define apply-time configuration functions"
+    )
+    assert "apply" not in configurator_fields
+    assert (
+        not {
+            "_is_app_in_installed_apps",
+            "_filter_new_apps",
+            "_generate_auth_settings_addition",
+        }
+        & definitions
+    )
 
 
 def test_mutable_options_map_to_valid_django_settings() -> None:

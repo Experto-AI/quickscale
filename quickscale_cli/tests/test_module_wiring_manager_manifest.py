@@ -12,21 +12,29 @@ exercise the manager indirectly through CLI commands.
 from __future__ import annotations
 
 from pathlib import Path
+import sys
+import types
+from unittest.mock import patch
 
 import pytest
 import yaml
 
-from unittest.mock import patch
-
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_cli.utils import module_wiring_manager
 from quickscale_core.contracts.module_discovery import ImproperlyConfigured
+from quickscale_core.contracts.module_discovery import (
+    discover_shipped_module_names,
+    get_modules_base_path,
+)
 from quickscale_core.manifest.entry_point import (
     MANAGED_ADAPTER_ORIGINS,
     MANIFEST_ADAPTER_REGISTRY,
+    build_manifest_wiring_spec,
+    refresh_managed_adapters,
 )
 from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.module_wiring import ModuleWiringSpec
+from quickscale_core import module_wiring as core_module_wiring
 
 
 def _write_minimal_project(
@@ -206,6 +214,178 @@ class TestRegenerateManagedWiringManifestPath:
         content = (project / "myapp" / "settings" / "modules.py").read_text()
         assert "quickscale_modules_analytics" in content
         assert "quickscale_modules_billing" in content
+
+    def test_manager_uses_only_refreshed_adapters_for_desired_overrides(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Manager execution must not depend on removed config/applier APIs.
+
+        The poisoned module_config import makes any accidental runtime access
+        to the removed wiring surface fail immediately.  The expected spec is
+        independently obtained from the refreshed module-owned adapter, while
+        the manager's writer, collection, and render calls are observed for
+        parity with that result.
+        """
+        project = tmp_path / "myapp"
+        desired_options = {"analytics": {"provider": "posthog"}}
+        _write_minimal_project(
+            project, modules={"analytics": desired_options["analytics"]}
+        )
+        _write_complete_embedded_inventory(project)
+
+        class _RemovedModuleConfig(types.ModuleType):
+            def __getattribute__(self, name: str) -> object:
+                raise AssertionError(
+                    f"manager accessed removed module_config wiring surface: {name}"
+                )
+
+        monkeypatch.setitem(
+            sys.modules,
+            "quickscale_cli.commands.module_config",
+            _RemovedModuleConfig("quickscale_cli.commands.module_config"),
+        )
+
+        refresh_managed_adapters()
+        expected_spec = build_manifest_wiring_spec(
+            "analytics", desired_options["analytics"], project_package="myapp"
+        )
+
+        with (
+            patch.object(
+                module_wiring_manager,
+                "refresh_managed_adapters",
+                wraps=module_wiring_manager.refresh_managed_adapters,
+            ) as refresh_spy,
+            patch.object(
+                module_wiring_manager,
+                "write_managed_wiring",
+                wraps=module_wiring_manager.write_managed_wiring,
+            ) as writer_spy,
+            patch.object(
+                core_module_wiring,
+                "collect_wiring",
+                wraps=core_module_wiring.collect_wiring,
+            ) as collect_spy,
+            patch.object(
+                core_module_wiring,
+                "collect_url_wiring",
+                wraps=core_module_wiring.collect_url_wiring,
+            ) as collect_urls_spy,
+            patch.object(
+                core_module_wiring,
+                "render_settings_modules_py",
+                wraps=core_module_wiring.render_settings_modules_py,
+            ) as render_settings_spy,
+            patch.object(
+                core_module_wiring,
+                "render_urls_modules_py",
+                wraps=core_module_wiring.render_urls_modules_py,
+            ) as render_urls_spy,
+        ):
+            success, message = regenerate_managed_wiring(
+                project,
+                module_names=["analytics"],
+                option_overrides=desired_options,
+                project_package="myapp",
+            )
+
+        assert success, message
+        assert refresh_spy.call_count == 1
+        writer_spy.assert_called_once()
+        actual_specs = writer_spy.call_args.args[1]
+        assert actual_specs == {"analytics": expected_spec}
+
+        assert render_settings_spy.call_count == 1
+        assert render_urls_spy.call_count == 1
+        assert render_settings_spy.call_args.args[0] == actual_specs
+        assert render_urls_spy.call_args.args[0] == actual_specs
+        assert collect_spy.call_count >= 1
+        assert all(call.args[0] == actual_specs for call in collect_spy.call_args_list)
+        assert collect_urls_spy.call_count >= 1
+        assert all(
+            call.args[0] == actual_specs for call in collect_urls_spy.call_args_list
+        )
+
+        settings_content = (project / "myapp" / "settings" / "modules.py").read_text()
+        assert "posthog" in settings_content
+
+    def test_manager_inputs_match_refreshed_adapter_specs_for_all_source_modules(
+        self, tmp_path: Path
+    ) -> None:
+        """Every source-discovered adapter supplies the manager's wiring input."""
+        project = tmp_path / "myapp"
+        module_names = discover_shipped_module_names()
+        source_base = get_modules_base_path()
+        source_manifests = {
+            module_name: load_manifest_from_path(
+                source_base / module_name / "module.yml"
+            )
+            for module_name in module_names
+        }
+        assert len(module_names) == 12
+        assert set(source_manifests) == set(module_names)
+
+        empty_options = {module_name: {} for module_name in module_names}
+        _write_minimal_project(project, modules=empty_options)
+        _write_complete_embedded_inventory(project)
+
+        refresh_managed_adapters()
+        expected_specs = {
+            module_name: build_manifest_wiring_spec(
+                module_name, empty_options[module_name], project_package="myapp"
+            )
+            for module_name in module_names
+        }
+
+        with (
+            patch.object(
+                module_wiring_manager,
+                "write_managed_wiring",
+                wraps=module_wiring_manager.write_managed_wiring,
+            ) as writer_spy,
+            patch.object(
+                core_module_wiring,
+                "collect_wiring",
+                wraps=core_module_wiring.collect_wiring,
+            ) as collect_spy,
+            patch.object(
+                core_module_wiring,
+                "render_settings_modules_py",
+                wraps=core_module_wiring.render_settings_modules_py,
+            ) as render_settings_spy,
+            patch.object(
+                core_module_wiring,
+                "render_urls_modules_py",
+                wraps=core_module_wiring.render_urls_modules_py,
+            ) as render_urls_spy,
+        ):
+            success, message = regenerate_managed_wiring(
+                project,
+                module_names=module_names,
+                project_package="myapp",
+            )
+
+        assert success, message
+        writer_spy.assert_called_once()
+        actual_specs = writer_spy.call_args.args[1]
+        assert actual_specs == expected_specs
+        assert set(actual_specs) == set(source_manifests)
+
+        for module_name, manifest in source_manifests.items():
+            declared_apps = {
+                app
+                for projection in manifest.wiring_projections
+                if projection.get("wiring_field") == "apps"
+                for app in (projection.get("expression") or {}).get("value", [])
+            }
+            assert declared_apps <= set(actual_specs[module_name].apps)
+
+        assert render_settings_spy.call_args.args[0] == expected_specs
+        assert render_urls_spy.call_args.args[0] == expected_specs
+        assert collect_spy.call_count >= 1
+        assert all(
+            call.args[0] == expected_specs for call in collect_spy.call_args_list
+        )
 
 
 class TestRegenerateManagedWiringSkipUnknown:
@@ -537,12 +717,14 @@ class TestRegenerateManagedWiringAdapterFailure:
             _partially_mutate_then_fail,
         )
         try:
-            success, message = regenerate_managed_wiring(
-                project, module_names=["analytics"]
-            )
+            with patch.object(module_wiring_manager, "write_managed_wiring") as writer:
+                success, message = regenerate_managed_wiring(
+                    project, module_names=["analytics"]
+                )
 
             assert success is False
             assert "simulated embedded refresh failure" in message
+            writer.assert_not_called()
             assert id(MANIFEST_ADAPTER_REGISTRY) == registry_identity
             assert MANIFEST_ADAPTER_REGISTRY == expected_registry
             assert MANIFEST_ADAPTER_REGISTRY["_test_restore_custom"] is custom_adapter

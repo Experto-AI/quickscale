@@ -68,9 +68,12 @@ from quickscale_cli.commands.apply_support import (
     _report_theme_preflight_error,
 )
 from quickscale_cli.commands.apply_support import _resolve_apply_raw_root  # noqa: F401
-from quickscale_cli.commands.module_commands import embed_module, ModuleEmbedProvenance
-from quickscale_cli.commands.module_config import (
+from quickscale_cli.commands.module_commands import (
     APPLY_MODULE_EXECUTION_MODE,
+    embed_module,
+    ModuleEmbedProvenance,
+)
+from quickscale_cli.commands.module_config import (
     get_default_backups_config,
     validate_backups_module_options,
 )
@@ -2980,15 +2983,12 @@ def _regenerate_managed_wiring_for_apply(
         delta: Any | None,
     ) -> tuple[bool, str]:
         try:
-            desired_module_names = sorted(qs_config.modules.keys())
-            if existing_state is None:
-                selected = module_names
-            else:
-                unchanged = getattr(delta, "modules_unchanged", []) if delta else []
-                selected = sorted(set(unchanged) | set(module_names))
-            if not desired_module_names:
-                selected = []
-            options = {m: c.options for m, c in qs_config.modules.items()}
+            del module_names, existing_state, delta
+            selected = sorted(qs_config.modules.keys())
+            options = {
+                module_name: dict(module_config.options or {})
+                for module_name, module_config in qs_config.modules.items()
+            }
             return regenerate_managed_wiring(
                 output_path,
                 module_names=selected,

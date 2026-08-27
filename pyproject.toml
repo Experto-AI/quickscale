@@ -65,6 +65,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 pythonpath = [".", "quickscale/src", "quickscale_core/src", "quickscale_cli/src", "quickscale_devtools/src"]
+consider_namespace_packages = true
 
 [tool.pylint.main]
 # Use multiple processes for faster analysis

@@ -7,7 +7,7 @@ from datetime import datetime
 from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Literal
 
 import click
 
@@ -22,6 +22,11 @@ from quickscale_cli.utils.module_dependency_sync import (
     resolve_embedded_module_install_path as _resolve_install_path_from_dependency_sync,
     sync_project_module_dependencies,
 )
+from quickscale_cli.utils.auth_migration import (
+    assess_auth_migration_state,
+    format_auth_migration_remediation,
+)
+from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 
 from quickscale_core.apply import LedgerError, LedgerManager
 from quickscale_core.config import (
@@ -61,14 +66,7 @@ from quickscale_core.utils.git_utils import (
     validate_tag_name,
 )
 from quickscale_core.utils.poetry_env import build_isolated_poetry_env
-from .module_config import (
-    APPLY_MODULE_EXECUTION_MODE,
-    MODULE_CONFIGURATOR_REGISTRY,
-    STANDALONE_MODULE_EXECUTION_MODE,
-    ModuleExecutionMode,
-    assess_auth_migration_state,
-    format_auth_migration_remediation,
-)
+from .module_config import MODULE_CONFIGURATOR_REGISTRY
 from .module_output import (
     _print_installation_error,
     _report_local_pre_pull_guard_block,
@@ -77,6 +75,11 @@ from .module_output import (
     _resolve_embed_source_ref,
     _validate_embed_theme,
 )
+
+
+ModuleExecutionMode = Literal["standalone", "apply"]
+STANDALONE_MODULE_EXECUTION_MODE: ModuleExecutionMode = "standalone"
+APPLY_MODULE_EXECUTION_MODE: ModuleExecutionMode = "apply"
 
 # ---------------------------------------------------------------------------
 # Lazy module choice for Click (SA109 Phase 2)
@@ -509,27 +512,30 @@ def _perform_module_embed(
             project_path=project_path,
         )
 
-    try:
-        # Apply module-specific configuration
-        configurator_entry = MODULE_CONFIGURATOR_REGISTRY.get(module)
-        if configurator_entry is not None and config:
-            if execution_mode == STANDALONE_MODULE_EXECUTION_MODE:
-                configurator_entry.apply(project_path, config)
-            else:
-                configurator_entry.apply(
-                    project_path, config, execution_mode=execution_mode
-                )
-    except Exception as error:
-        if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-            _cleanup_failed_apply_embed(project_path, module)
+    if execution_mode == STANDALONE_MODULE_EXECUTION_MODE:
+        embedded_modules = {
+            path.name
+            for path in (project_path / "modules").iterdir()
+            if path.is_dir() and not path.name.startswith(".")
+        }
+        embedded_modules.add(module)
+        try:
+            wiring_success, wiring_message = regenerate_managed_wiring(
+                project_path,
+                module_names=sorted(embedded_modules),
+                option_overrides={module: dict(config)},
+            )
+        except Exception as error:
+            wiring_success, wiring_message = False, str(error)
+        if not wiring_success:
             click.secho(
-                f"\n❌ Apply embed failed for {module}: {error}",
+                f"\n❌ Managed module wiring regeneration failed: {wiring_message}",
                 fg="red",
                 err=True,
                 bold=True,
             )
             return False, None
-        raise
+        click.echo("  ✅ Regenerated managed module wiring")
 
     if sync_dependencies:
         if not _sync_module_dependencies(project_path, {module: config}):

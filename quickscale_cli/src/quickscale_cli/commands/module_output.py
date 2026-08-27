@@ -1,8 +1,11 @@
 """Output helpers shared by QuickScale module commands."""
 
+from __future__ import annotations
+
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 
@@ -12,7 +15,8 @@ from quickscale_core.utils.theme_validation import (
     validate_theme_preflight,
 )
 
-from .module_config import ModuleExecutionMode
+if TYPE_CHECKING:
+    from .module_commands import ModuleExecutionMode
 
 
 def _print_installation_error(

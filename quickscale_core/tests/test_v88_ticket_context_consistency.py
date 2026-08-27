@@ -3,8 +3,8 @@
 The roadmap is the sole home for schedulable metadata.  The context page may explain
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
 holds open work only and carries no checked entry.  Completed tickets are archived in the
-changelog.  The shared SA167 umbrella may still
-explain the archived SA167a handoff as settled tree state.
+changelog.  The shared SA167c context may still explain the archived SA167a and SA167d
+handoffs as settled tree state.
 """
 
 from __future__ import annotations
@@ -35,11 +35,11 @@ OPEN_TICKET_RE = re.compile(
 )
 SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
 
-UMBRELLA_TITLE = "SA167a / SA167c / SA167d — module wiring standardization"
-UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167c", "SA167d"})
+UMBRELLA_TITLE = "SA167c — module wiring standardization"
+UMBRELLA_MEMBERS = frozenset({"SA167c"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
 RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset()
-ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a", "SA167b"})
+ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a", "SA167b", "SA167d"})
 SHARED_POSITION_GROUPS = {frozenset({"SA135", "SA163"})}
 
 
@@ -210,7 +210,7 @@ def _assert_consistent(roadmap_text: str, context_text: str) -> None:
             f"actual={sorted(map(sorted, actual_shared_groups))}"
         )
 
-    umbrella = sections["SA167a"]
+    umbrella = sections["SA167c"]
     status_sections = sections | {ticket: umbrella for ticket in UMBRELLA_MEMBERS}
     for ticket, metadata in roadmap.items():
         for dependency in metadata.dependencies:
@@ -241,6 +241,7 @@ def _load_documents() -> tuple[str, str]:
 
 def _number_word(value: int) -> str:
     words = {
+        8: "eight",
         9: "nine",
         10: "ten",
         11: "eleven",
@@ -269,16 +270,18 @@ def _assert_current_status_consumers(
         for metadata in v88.values()
         if metadata.merge_position is not None
     }
-    assert (len(v88), len(positions)) == (10, 9)
+    assert (len(v88), len(positions)) == (9, 8)
     assert "SA151" not in roadmap
     assert "SA142" not in roadmap
     assert "SA167a" not in roadmap
     assert "SA169" not in roadmap
+    assert "SA167d" not in roadmap
     assert 3 not in positions
     assert 8 not in positions
     assert 10 not in positions
     assert 11 not in positions
     assert 17 not in positions
+    assert 18 not in positions
     assert 13 not in positions
     assert 26 not in positions
     assert re.search(r"Positions [^\n]*#3[^\n]*", roadmap_text)
@@ -287,6 +290,7 @@ def _assert_current_status_consumers(
     assert re.search(r"Positions [^\n]*#11[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#13[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#17[^\n]*", roadmap_text)
+    assert re.search(r"Positions [^\n]*#18[^\n]*", roadmap_text)
     assert re.search(r"Positions [^\n]*#26[^\n]*", roadmap_text)
     assert not re.search(r"^## SA151\b", context_text, re.MULTILINE)
     assert not re.search(r"^## SA142\b", context_text, re.MULTILINE)
@@ -297,7 +301,6 @@ def _assert_current_status_consumers(
 
     assert "SA124" not in roadmap
     assert "SA123" not in roadmap
-    assert v88["SA167d"].dependencies == frozenset()
     assert v88["SA118"].dependencies == frozenset()
     assert v88["SA167c"].dependencies == frozenset({"SA118"})
     assert v88["SA164"].dependencies == frozenset({"SA166"})
@@ -310,7 +313,7 @@ def _assert_current_status_consumers(
         roadmap_text,
         re.DOTALL,
     )
-    assert "does not extend the two-leg critical path" in roadmap_text
+    assert "remaining serialized W2 leg" in roadmap_text
     assert "against the four-leg W2 spine" in roadmap_text
 
     current_handoff = re.search(

@@ -747,7 +747,7 @@ class TestEmbedModule:
             patch("quickscale_cli.commands.module_commands.run_git_subtree_add"),
             patch("quickscale_cli.commands.module_commands.add_module"),
             patch(
-                "quickscale_cli.commands.module_config.regenerate_managed_wiring"
+                "quickscale_cli.commands.module_commands.regenerate_managed_wiring"
             ) as mock_regenerate,
         ):
             result = _embed_module(tmp_path, "blog")
@@ -7236,7 +7236,7 @@ class TestCallerParityAcrossProvenancePaths:
         Apply additionally carries the resolved SHA through its provenance
         handoff; standalone keeps its own tracking and wiring behavior.
         """
-        from quickscale_cli.commands.module_config import (
+        from quickscale_cli.commands.module_commands import (
             STANDALONE_MODULE_EXECUTION_MODE,
         )
 

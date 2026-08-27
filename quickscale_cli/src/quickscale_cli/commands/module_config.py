@@ -1,16 +1,12 @@
-"""Module configuration functions for QuickScale modules.
+"""Desired-option configuration functions for QuickScale modules.
 
-This module contains configuration functions for individual QuickScale modules,
-including interactive configuration prompts and settings application.
+This module collects and normalizes desired module options. Module manifests and
+module-owned adapters define wiring specifications; callers invoke the central
+managed-wiring manager for operational work.
 """
 
-import json
-import re
-import subprocess
-import tomllib
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Callable, Literal, Mapping, Optional
+from typing import Any, Callable, Mapping
 
 import click
 
@@ -30,8 +26,6 @@ from quickscale_core.contracts.module_options import (
     NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
     NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
     SOCIAL_EMBEDS_PATH,
-    SOCIAL_INTEGRATION_BASE_PATH,
-    SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LAYOUT_VARIANTS,
     SOCIAL_LINK_TREE_PATH,
 )
@@ -62,45 +56,6 @@ from quickscale_core.contracts.resolvers import (
     resolve_social_module_options,
     validate_social_module_options,
 )
-from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
-from quickscale_core.utils.project_identity import (
-    derive_package_from_slug,
-    resolve_project_identity,
-)
-
-
-ModuleExecutionMode = Literal["standalone", "apply"]
-STANDALONE_MODULE_EXECUTION_MODE: ModuleExecutionMode = "standalone"
-APPLY_MODULE_EXECUTION_MODE: ModuleExecutionMode = "apply"
-
-
-def _is_app_in_installed_apps(settings_content: str, app_name: str) -> bool:
-    """Check if an app is already in INSTALLED_APPS.
-
-    Args:
-        settings_content: The content of settings.py
-        app_name: The app name to check for (e.g., 'django_filters')
-
-    Returns:
-        True if the app is already in INSTALLED_APPS, False otherwise
-    """
-    # Check for app in INSTALLED_APPS list or INSTALLED_APPS +=
-    # Match patterns like: "app_name", 'app_name' in lists
-    pattern = rf'["\']({re.escape(app_name)})["\']'
-    return bool(re.search(pattern, settings_content))
-
-
-def _filter_new_apps(settings_content: str, apps: list[str]) -> list[str]:
-    """Filter out apps that are already in INSTALLED_APPS.
-
-    Args:
-        settings_content: The content of settings.py
-        apps: List of app names to filter
-
-    Returns:
-        List of apps that are NOT already in settings.py
-    """
-    return [app for app in apps if not _is_app_in_installed_apps(settings_content, app)]
 
 
 def _merge_existing_config(
@@ -123,157 +78,6 @@ def _parse_notification_tag_input(raw_value: str, field_name: str) -> list[str]:
     """Normalize comma-separated notification tags using the shared contract."""
     normalized = resolve_notifications_module_options({field_name: raw_value})
     return list(normalized[field_name])
-
-
-@dataclass(frozen=True)
-class AuthMigrationAssessment:
-    """Auth migration safety assessment."""
-
-    status: str  # compatible | incompatible | unverifiable
-    reason: str
-
-    @property
-    def compatible(self) -> bool:
-        return self.status == "compatible"
-
-    @property
-    def incompatible(self) -> bool:
-        return self.status == "incompatible"
-
-    @property
-    def unverifiable(self) -> bool:
-        return self.status == "unverifiable"
-
-
-_CORE_AUTH_APPS = {"auth", "admin", "contenttypes", "sessions"}
-
-
-def _migration_probe_script() -> str:
-    """Return Python snippet for migration recorder probing via manage.py shell."""
-    return (
-        "import json;"
-        "from django.db import connection;"
-        "from django.db.migrations.recorder import MigrationRecorder;"
-        f"core_apps={sorted(_CORE_AUTH_APPS)!r};"
-        "recorder=MigrationRecorder(connection);"
-        "applied=[(m.app,m.name) for m in recorder.migration_qs];"
-        "incompatible=any(app in core_apps for app,_ in applied);"
-        "print(json.dumps({'ok': True, 'incompatible': incompatible, 'count': len(applied)}))"
-    )
-
-
-def assess_auth_migration_state(
-    project_path: Path | None = None,
-) -> AuthMigrationAssessment:
-    """Assess whether auth module can be embedded safely.
-
-    Uses Django's MigrationRecorder through project runtime instead of filesystem
-    heuristics.
-    """
-    if project_path is None:
-        project_path = Path.cwd()
-
-    manage_py = project_path / "manage.py"
-    if not manage_py.exists():
-        return AuthMigrationAssessment(
-            status="unverifiable",
-            reason=f"manage.py not found at {manage_py}",
-        )
-
-    try:
-        result = subprocess.run(
-            ["python", "manage.py", "shell", "-c", _migration_probe_script()],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        return AuthMigrationAssessment(
-            status="unverifiable",
-            reason=f"failed to execute Django runtime check: {e}",
-        )
-
-    if result.returncode != 0:
-        error = (result.stderr or result.stdout or "").strip() or "unknown error"
-        return AuthMigrationAssessment(
-            status="unverifiable",
-            reason=f"migration recorder check failed: {error}",
-        )
-
-    output_lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    if not output_lines:
-        return AuthMigrationAssessment(
-            status="unverifiable",
-            reason="migration recorder check produced no output",
-        )
-
-    try:
-        payload = json.loads(output_lines[-1])
-    except json.JSONDecodeError:
-        return AuthMigrationAssessment(
-            status="unverifiable",
-            reason=f"unexpected migration recorder output: {output_lines[-1]}",
-        )
-
-    if not payload.get("ok"):
-        return AuthMigrationAssessment(
-            status="unverifiable",
-            reason=payload.get("error", "unknown migration recorder error"),
-        )
-
-    if payload.get("incompatible"):
-        return AuthMigrationAssessment(
-            status="incompatible",
-            reason=(
-                "Default Django auth/admin/session/contenttypes migrations are already "
-                "applied in this database."
-            ),
-        )
-
-    return AuthMigrationAssessment(
-        status="compatible",
-        reason="No incompatible core auth migrations were detected.",
-    )
-
-
-def has_migrations_been_run(project_path: Path | None = None) -> bool:
-    """Backward-compatible helper for tests and existing callers."""
-    assessment = assess_auth_migration_state(project_path)
-    return assessment.incompatible
-
-
-def format_auth_migration_remediation(project_path: Path) -> str:
-    """Return actionable remediation commands for incompatible auth state."""
-    try:
-        identity = resolve_project_identity(project_path)
-        package_hint = identity.package
-    except Exception:
-        package_hint = derive_package_from_slug(project_path.name)
-
-    project_abs = project_path.resolve()
-    fresh_db_name = f"{package_hint}_fresh"
-
-    return (
-        "Remediation options (all may involve data loss):\n\n"
-        "1) Fresh disposable local database\n"
-        f"   cd {project_abs}\n"
-        f"   export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/{fresh_db_name}\n"
-        "   poetry run python manage.py migrate\n"
-        "   quickscale apply\n\n"
-        "2) Docker volume reset (destructive)\n"
-        f"   cd {project_abs}\n"
-        "   docker compose down -v\n"
-        "   quickscale up --build\n"
-        "   poetry run python manage.py migrate\n"
-        "   quickscale apply\n\n"
-        "3) Explicitly destructive reset path\n"
-        f"   cd {project_abs}\n"
-        "   poetry run python manage.py flush --no-input\n"
-        "   poetry run python manage.py migrate\n\n"
-        "WARNING: These commands can permanently delete data."
-    )
 
 
 # ============================================================================
@@ -330,156 +134,6 @@ def configure_auth_module(
     return config
 
 
-def _add_django_allauth_dependency(project_path: Path, pyproject_path: Path) -> None:
-    """Add django-allauth dependency to project's pyproject.toml."""
-    with open(pyproject_path) as f:
-        pyproject_content = f.read()
-
-    if "django-allauth" in pyproject_content:
-        return
-
-    # Read django-allauth version from the embedded auth module
-    auth_pyproject_path = project_path / "modules" / "auth" / "pyproject.toml"
-
-    if not auth_pyproject_path.exists():
-        click.secho(
-            "❌ Error: Auth module pyproject.toml not found. "
-            "Cannot determine django-allauth version requirement.",
-            fg="red",
-            err=True,
-        )
-        click.echo(f"Expected file: {auth_pyproject_path}", err=True)
-        click.echo(
-            "This indicates the auth module was not embedded correctly.",
-            err=True,
-        )
-        raise click.Abort()
-
-    # Extract django-allauth version using regex
-    try:
-        with open(auth_pyproject_path) as f:
-            auth_pyproject_content = f.read()
-
-        version_match = re.search(
-            r'django-allauth\s*=\s*["\']([^"\']+)["\']', auth_pyproject_content
-        )
-        if not version_match:
-            click.secho(
-                "❌ Error: Cannot find django-allauth version in auth module's "
-                "pyproject.toml",
-                fg="red",
-                err=True,
-            )
-            click.echo(f"File: {auth_pyproject_path}", err=True)
-            click.echo('Expected format: django-allauth = "^x.x.x"', err=True)
-            click.echo("Please check the auth module's dependencies.", err=True)
-            raise click.Abort()
-        django_allauth_version = version_match.group(1)
-    except (FileNotFoundError, AttributeError) as e:
-        click.secho(
-            f"❌ Error: Failed to parse django-allauth version from auth module: {e}",
-            fg="red",
-            err=True,
-        )
-        click.echo(f"File: {auth_pyproject_path}", err=True)
-        click.echo(
-            "Please ensure the auth module is properly embedded and its "
-            "pyproject.toml is valid.",
-            err=True,
-        )
-        raise click.Abort()
-
-    # Try to add to [tool.poetry.dependencies] section
-    dependencies_pattern = r"(\[tool\.poetry\.dependencies\][^\[]*)"
-    match = re.search(dependencies_pattern, pyproject_content, re.DOTALL)
-    if match:
-        dependencies_section = match.group(1)
-        # Add django-allauth after the python version line
-        updated_dependencies = re.sub(
-            r'(python = "[^"]*")',
-            rf'\1\ndjango-allauth = "{django_allauth_version}"',
-            dependencies_section,
-        )
-        pyproject_content = pyproject_content.replace(
-            dependencies_section, updated_dependencies
-        )
-
-        _write_validated_pyproject_content(pyproject_path, pyproject_content)
-
-        click.secho("  ✅ Added django-allauth to pyproject.toml", fg="green")
-    else:
-        click.secho(
-            "⚠️  Warning: Could not find [tool.poetry.dependencies] section in "
-            "pyproject.toml",
-            fg="yellow",
-        )
-
-
-def _generate_auth_settings_addition(config: dict[str, Any]) -> str:
-    """Generate the settings addition string for auth module."""
-    resolved_config = resolve_auth_module_options(config)
-    registration_enabled = resolved_config["registration_enabled"]
-    session_cookie_age = int(resolved_config["session_cookie_age"])
-
-    settings_addition = """
-# QuickScale Auth Module - Added by quickscale plan/apply
-INSTALLED_APPS += [
-    "django.contrib.sites",  # Required by allauth
-    "quickscale_modules_auth",  # Must be before allauth.account for template overrides
-    "allauth",
-    "allauth.account",
-]
-
-# Allauth Middleware (must be added to MIDDLEWARE)
-MIDDLEWARE += [
-    "allauth.account.middleware.AccountMiddleware",
-]
-
-# Authentication Configuration
-AUTHENTICATION_BACKENDS = [
-    "django.contrib.auth.backends.ModelBackend",
-    "allauth.account.auth_backends.AuthenticationBackend",
-]
-
-# Custom User Model
-AUTH_USER_MODEL = "quickscale_modules_auth.User"
-
-# Site ID (required by django.contrib.sites)
-SITE_ID = 1
-
-# Allauth Settings
-"""
-
-    # Add configuration based on user choices (using new django-allauth 0.62+ format)
-    if resolved_config["authentication_method"] == "email":
-        settings_addition += 'ACCOUNT_LOGIN_METHODS = {"email"}\n'
-        settings_addition += (
-            'ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]\n'
-        )
-    elif resolved_config["authentication_method"] == "username":
-        settings_addition += 'ACCOUNT_LOGIN_METHODS = {"username"}\n'
-        settings_addition += (
-            'ACCOUNT_SIGNUP_FIELDS = ["username*", "password1*", "password2*"]\n'
-        )
-    else:  # both
-        settings_addition += 'ACCOUNT_LOGIN_METHODS = {"email", "username"}\n'
-        settings_addition += 'ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]\n'
-
-    settings_addition += (
-        f'ACCOUNT_EMAIL_VERIFICATION = "{resolved_config["email_verification"]}"\n'
-    )
-    settings_addition += f"ACCOUNT_ALLOW_REGISTRATION = {registration_enabled}\n"
-    settings_addition += 'ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"\n'
-    settings_addition += (
-        'ACCOUNT_SIGNUP_FORM_CLASS = "quickscale_modules_auth.forms.SignupForm"\n'
-    )
-    settings_addition += 'LOGIN_REDIRECT_URL = "/accounts/profile/"\n'
-    settings_addition += 'LOGOUT_REDIRECT_URL = "/"\n'
-    settings_addition += f"SESSION_COOKIE_AGE = {session_cookie_age}  # 2 weeks\n"
-
-    return settings_addition
-
-
 def _normalize_auth_config(config: dict[str, Any]) -> dict[str, Any]:
     """Normalize legacy auth config keys to manifest-aligned keys."""
     normalized = dict(config)
@@ -491,86 +145,6 @@ def _normalize_auth_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized.setdefault("social_providers", [])
     normalized.setdefault("session_cookie_age", 1209600)
     return normalized
-
-
-def _regenerate_wiring_for_execution_mode(
-    project_path: Path,
-    module_name: str,
-    module_config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Route managed wiring regeneration based on the active execution mode."""
-    if execution_mode == STANDALONE_MODULE_EXECUTION_MODE:
-        _regenerate_wiring_for_module(project_path, module_name, module_config)
-        return
-
-    _regenerate_wiring_for_module(
-        project_path,
-        module_name,
-        module_config,
-        execution_mode=execution_mode,
-    )
-
-
-def _regenerate_wiring_for_module(
-    project_path: Path,
-    module_name: str,
-    module_config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Regenerate deterministic managed wiring for module integrations."""
-    if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-        return
-
-    modules_dir = project_path / "modules"
-    discovered_modules = (
-        [p.name for p in modules_dir.iterdir() if p.is_dir()]
-        if modules_dir.exists()
-        else []
-    )
-    selected_modules = sorted(set(discovered_modules + [module_name]))
-
-    success, message = regenerate_managed_wiring(
-        project_path,
-        module_names=selected_modules,
-        option_overrides={module_name: module_config},
-    )
-    if not success:
-        click.secho(
-            f"❌ Managed wiring regeneration failed: {message}",
-            fg="red",
-            err=True,
-        )
-        raise click.Abort()
-
-    click.secho("  ✅ Regenerated managed module wiring", fg="green")
-
-
-def apply_auth_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply auth module configuration via managed wiring files."""
-    normalized_config = resolve_auth_module_options(config)
-
-    # Managed wiring includes django-allauth + auth module URL routes.
-    _regenerate_wiring_for_execution_mode(
-        project_path,
-        "auth",
-        normalized_config,
-        execution_mode=execution_mode,
-    )
-
-    # Show configuration summary
-    click.echo("\n📋 Configuration applied:")
-    registration_enabled = normalized_config["registration_enabled"]
-    click.echo(f"  • Registration: {'Enabled' if registration_enabled else 'Disabled'}")
-    click.echo(f"  • Email verification: {normalized_config['email_verification']}")
-    click.echo(f"  • Authentication: {normalized_config['authentication_method']}")
 
 
 # ============================================================================
@@ -626,29 +200,6 @@ def configure_blog_module(
     }
 
     return config
-
-
-def apply_blog_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply blog module configuration via managed wiring files."""
-    normalized = get_default_blog_config() | config
-
-    _regenerate_wiring_for_execution_mode(
-        project_path,
-        "blog",
-        normalized,
-        execution_mode=execution_mode,
-    )
-
-    # Show configuration summary
-    click.echo("\n📋 Configuration applied:")
-    click.echo(f"  • Posts per page: {normalized['posts_per_page']}")
-    click.echo(f"  • RSS feed: {'Enabled' if normalized['enable_rss'] else 'Disabled'}")
-    click.echo(f"  • API rate limit: {normalized['api_rate_limit']}")
 
 
 # SA6.2: Listings no longer needs a configurator triad — its
@@ -707,56 +258,6 @@ def configure_crm_module(
     )
 
     return config
-
-
-def _get_dependency_version(content: str, package: str) -> Optional[str]:
-    """Extract dependency version from pyproject.toml content."""
-    match = re.search(
-        rf'{package}\s*=\s*["\']([^"\']+)["\']',
-        content,
-    )
-    return match.group(1) if match else None
-
-
-def _write_validated_pyproject_content(pyproject_path: Path, content: str) -> None:
-    """Persist rewritten pyproject content only when it remains valid TOML."""
-    try:
-        tomllib.loads(content)
-    except tomllib.TOMLDecodeError as error:
-        click.secho(
-            "❌ Error: Rewritten pyproject.toml would be invalid TOML.",
-            fg="red",
-            err=True,
-        )
-        click.echo(f"File: {pyproject_path}", err=True)
-        click.echo(f"Parse error: {error}", err=True)
-        raise click.Abort() from error
-
-    with open(pyproject_path, "w") as f:
-        f.write(content)
-
-
-def apply_crm_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply CRM module configuration via managed wiring files."""
-    resolved = resolve_crm_module_options(config)
-
-    _regenerate_wiring_for_execution_mode(
-        project_path,
-        "crm",
-        resolved,
-        execution_mode=execution_mode,
-    )
-
-    # Show configuration summary
-    click.echo("\n📋 Configuration applied:")
-    click.echo(f"  • API: {'Enabled' if resolved['enable_api'] else 'Disabled'}")
-    click.echo(f"  • Deals per page: {resolved['deals_per_page']}")
-    click.echo(f"  • Contacts per page: {resolved['contacts_per_page']}")
 
 
 # ============================================================================
@@ -834,33 +335,6 @@ def configure_forms_module(
     return config
 
 
-def apply_forms_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply forms module configuration to the project."""
-    resolved = resolve_forms_module_options(config)
-    _raise_for_invalid_forms_config(resolved)
-    _regenerate_wiring_for_execution_mode(
-        project_path,
-        "forms",
-        resolved,
-        execution_mode=execution_mode,
-    )
-    click.echo("\n\U0001f4cb Configuration applied:")
-    click.echo(f"  \u2022 Forms per page: {resolved['forms_per_page']}")
-    click.echo(
-        f"  \u2022 Spam protection: {'Enabled' if resolved['spam_protection_enabled'] else 'Disabled'}"
-    )
-    click.echo(f"  \u2022 Rate limit: {resolved['rate_limit']}")
-    click.echo(f"  \u2022 Data retention: {resolved['data_retention_days']} days")
-    click.echo(
-        f"  \u2022 Submissions API: {'Enabled' if resolved['submissions_api_enabled'] else 'Disabled'}"
-    )
-
-
 # ============================================================================
 # LISTINGS MODULE CONFIGURATION
 # ============================================================================
@@ -898,25 +372,6 @@ def configure_listings_module(
     }
     click.echo(f"  \u2022 Listings per page: {config['listings_per_page']}")
     return config
-
-
-def apply_listings_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply listings module configuration.
-
-    This is an apply-time shim that preserves the ModuleConfigurator
-    callable contract.  Listings defaults/normalization/validation are
-    handled by the manifest-driven derivation path in entry_point.py
-    (SA6.2), so this function emits a notice and returns without
-    additional wiring work.
-    """
-    normalized = get_default_listings_config() | config
-    click.echo("\n\U0001f4cb Listings configuration noted (manifest-driven path):")
-    click.echo(f"  \u2022 Listings per page: {normalized['listings_per_page']}")
 
 
 # ============================================================================
@@ -1060,135 +515,6 @@ def configure_storage_module(
         )
 
     return config
-
-
-def _add_storage_dependencies(project_path: Path, pyproject_path: Path) -> None:
-    """Add storage runtime dependencies when cloud backend is enabled."""
-    with open(pyproject_path) as f:
-        pyproject_content = f.read()
-
-    has_storages = "django-storages" in pyproject_content
-    has_boto3 = "boto3" in pyproject_content
-
-    if has_storages and has_boto3:
-        return
-
-    storage_pyproject_path = project_path / "modules" / "storage" / "pyproject.toml"
-    if not storage_pyproject_path.exists():
-        click.secho(
-            "❌ Error: Storage module pyproject.toml not found. "
-            "Cannot determine storage dependency versions.",
-            fg="red",
-            err=True,
-        )
-        click.echo(f"Expected file: {storage_pyproject_path}", err=True)
-        raise click.Abort()
-
-    try:
-        with open(storage_pyproject_path) as f:
-            storage_pyproject_content = f.read()
-
-        storages_version = None
-        if not has_storages:
-            storages_version = _get_dependency_version(
-                storage_pyproject_content, "django-storages"
-            )
-
-        boto3_version = None
-        if not has_boto3:
-            boto3_version = _get_dependency_version(storage_pyproject_content, "boto3")
-    except (FileNotFoundError, AttributeError) as e:
-        click.secho(
-            f"❌ Error: Failed to parse storage dependencies: {e}",
-            fg="red",
-            err=True,
-        )
-        raise click.Abort()
-
-    dependencies_pattern = r"(\[tool\.poetry\.dependencies\][^\[]*)"
-    match = re.search(dependencies_pattern, pyproject_content, re.DOTALL)
-    if not match:
-        click.secho(
-            "⚠️  Warning: Could not find [tool.poetry.dependencies] section in "
-            "pyproject.toml",
-            fg="yellow",
-        )
-        return
-
-    dependencies_section = match.group(1)
-    additions = ""
-    if storages_version:
-        additions += f'\ndjango-storages = "{storages_version}"'
-    if boto3_version:
-        additions += f'\nboto3 = "{boto3_version}"'
-
-    if not additions:
-        return
-
-    updated_dependencies = re.sub(
-        r'(python = "[^"]*")',
-        rf"\1{additions}",
-        dependencies_section,
-    )
-    pyproject_content = pyproject_content.replace(
-        dependencies_section, updated_dependencies
-    )
-
-    _write_validated_pyproject_content(pyproject_path, pyproject_content)
-
-    if storages_version:
-        click.secho("  ✅ Added django-storages to pyproject.toml", fg="green")
-    if boto3_version:
-        click.secho("  ✅ Added boto3 to pyproject.toml", fg="green")
-
-
-def apply_storage_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply storage module configuration via managed wiring files."""
-    normalized = get_default_storage_config() | config
-
-    _regenerate_wiring_for_execution_mode(
-        project_path,
-        "storage",
-        normalized,
-        execution_mode=execution_mode,
-    )
-
-    click.echo("\n📋 Configuration applied:")
-    click.echo(f"  • Backend: {normalized['backend']}")
-    click.echo(f"  • Media URL: {normalized['media_url']}")
-    public_base_url = str(normalized.get("public_base_url") or "").strip()
-    click.echo(
-        "  • Public base URL: "
-        + (public_base_url if public_base_url else "not configured")
-    )
-    if normalized["backend"] in {"s3", "r2"}:
-        click.echo(
-            "  • Bucket: "
-            + (str(normalized.get("bucket_name") or "").strip() or "not configured")
-        )
-        click.echo(
-            "  • Access key ID env var: "
-            + str(
-                normalized.get(
-                    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-                    DEFAULT_STORAGE_ACCESS_KEY_ID_ENV_VAR,
-                )
-            )
-        )
-        click.echo(
-            "  • Secret access key env var: "
-            + str(
-                normalized.get(
-                    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
-                    DEFAULT_STORAGE_SECRET_ACCESS_KEY_ENV_VAR,
-                )
-            )
-        )
 
 
 # ============================================================================
@@ -1444,37 +770,6 @@ def configure_backups_module(
     return config
 
 
-def apply_backups_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply backups module configuration via managed wiring files."""
-    normalized = _resolve_backups_config(config)
-    _raise_for_invalid_backups_config(normalized)
-    _regenerate_wiring_for_execution_mode(
-        project_path,
-        "backups",
-        normalized,
-        execution_mode=execution_mode,
-    )
-
-    click.echo("\n📋 Configuration applied:")
-    click.echo(f"  • Retention days: {normalized['retention_days']}")
-    click.echo(f"  • Naming prefix: {normalized['naming_prefix']}")
-    click.echo(f"  • Target mode: {normalized['target_mode']}")
-    click.echo(
-        "  • Automation: "
-        + ("Enabled" if normalized["automation_enabled"] else "Disabled")
-    )
-    if normalized["target_mode"] == "private_remote":
-        click.echo(
-            "  • Remote bucket: "
-            + (normalized["remote_bucket_name"] or "not configured")
-        )
-
-
 # ============================================================================
 # NOTIFICATIONS MODULE CONFIGURATION
 # ============================================================================
@@ -1621,34 +916,6 @@ def configure_notifications_module(
     return config
 
 
-def apply_notifications_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply notifications module configuration via managed wiring files."""
-    resolved = resolve_notifications_module_options(config)
-    _raise_for_invalid_notifications_config(resolved)
-    _regenerate_wiring_for_execution_mode(
-        project_path,
-        "notifications",
-        resolved,
-        execution_mode=execution_mode,
-    )
-
-    click.echo("\n📋 Configuration applied:")
-    click.echo(f"  • Sender: {resolved['sender_name']} <{resolved['sender_email']}>")
-    click.echo(
-        "  • Live delivery: "
-        + (resolved["resend_domain"] or "configure later (console-safe by default)")
-    )
-    click.echo(
-        "  • Webhook secret env var: "
-        + (resolved[NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION] or "configure later")
-    )
-
-
 # ============================================================================
 # ANALYTICS MODULE CONFIGURATION
 # ============================================================================
@@ -1746,36 +1013,6 @@ def configure_analytics_module(
     return config
 
 
-def apply_analytics_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply analytics module configuration via managed wiring files."""
-    resolved = resolve_analytics_module_options(config)
-    _raise_for_invalid_analytics_config(resolved)
-    _regenerate_wiring_for_execution_mode(
-        project_path,
-        "analytics",
-        resolved,
-        execution_mode=execution_mode,
-    )
-
-    click.echo("\n📋 Configuration applied:")
-    click.echo("  • Runtime: " + ("Enabled" if resolved["enabled"] else "Disabled"))
-    click.echo("  • Provider: " + str(resolved["provider"]))
-    click.echo("  • API key env var: " + str(resolved["posthog_api_key_env_var"]))
-    click.echo("  • Host env var: " + str(resolved["posthog_host_env_var"]))
-    click.echo("  • Host fallback: " + str(resolved["posthog_host"]))
-    click.echo(
-        "  • Exclusions: "
-        + ("debug" if resolved["exclude_debug"] else "debug allowed")
-        + ", "
-        + ("staff excluded" if resolved["exclude_staff"] else "staff included")
-    )
-
-
 # ============================================================================
 # BILLING MODULE CONFIGURATION
 # ============================================================================
@@ -1858,32 +1095,6 @@ def configure_billing_module(
 
     _raise_for_invalid_billing_config(config)
     return config
-
-
-def apply_billing_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply billing module configuration via managed wiring files."""
-    resolved = resolve_billing_module_options(config)
-    _raise_for_invalid_billing_config(resolved)
-    _regenerate_wiring_for_execution_mode(
-        project_path,
-        "billing",
-        resolved,
-        execution_mode=execution_mode,
-    )
-
-    click.echo("\n📋 Configuration applied:")
-    click.echo("  • Runtime: " + ("Enabled" if resolved["enabled"] else "Disabled"))
-    click.echo(
-        "  • Publishable key env var: " + str(resolved["publishable_key_env_var"])
-    )
-    click.echo("  • Secret key env var: " + str(resolved["secret_key_env_var"]))
-    click.echo("  • Webhook secret env var: " + str(resolved["webhook_secret_env_var"]))
-    click.echo("  • Billing currency: " + str(resolved["billing_currency"]))
 
 
 # ============================================================================
@@ -1982,46 +1193,6 @@ def configure_social_module(
     return config
 
 
-def apply_social_configuration(
-    project_path: Path,
-    config: dict[str, Any],
-    *,
-    execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
-) -> None:
-    """Apply social module configuration via managed wiring files."""
-    resolved = resolve_social_module_options(config)
-    _raise_for_invalid_social_config(resolved)
-    _regenerate_wiring_for_execution_mode(
-        project_path,
-        "social",
-        resolved,
-        execution_mode=execution_mode,
-    )
-
-    click.echo("\n📋 Configuration applied:")
-    click.echo(
-        "  • Link tree: "
-        + ("Enabled" if resolved["link_tree_enabled"] else "Disabled")
-        + f" ({SOCIAL_LINK_TREE_PATH})"
-    )
-    click.echo(
-        "  • Embeds: "
-        + ("Enabled" if resolved["embeds_enabled"] else "Disabled")
-        + f" ({SOCIAL_EMBEDS_PATH})"
-    )
-    click.echo(
-        "  • Managed backend transport: "
-        + f"{SOCIAL_INTEGRATION_BASE_PATH} and {SOCIAL_INTEGRATION_EMBEDS_PATH}"
-    )
-    click.echo(
-        "  • Public pages: fresh showcase_react keeps "
-        + f"{SOCIAL_LINK_TREE_PATH} and {SOCIAL_EMBEDS_PATH}; existing "
-        "generated projects require manual theme adoption."
-    )
-    click.echo("  • Layout variant: " + str(resolved["layout_variant"]))
-    click.echo("  • Providers: " + ", ".join(list(resolved["provider_allowlist"])))
-
-
 # ============================================================================
 # ORGS MODULE
 # ============================================================================
@@ -2041,24 +1212,20 @@ def get_default_orgs_config() -> dict[str, Any]:
 class ModuleConfigurator:
     """Manifest-backed configurator entry for a single module.
 
-    Replaces the raw ``(configure, apply)`` tuple dispatch with a structured
-    surface that callers can query by attribute name.  Each entry wraps the
-    module's interactive configurator, its apply-time applier, and an optional
-    non-interactive default factory.
+    Each entry wraps the module's desired-option configurator and an optional
+    non-interactive default factory. Operational wiring is owned by manifests
+    and module adapters and is invoked through the central manager.
 
     Attributes:
         name: Canonical module identifier (e.g. ``"auth"``).
         configure: Interactive or non-interactive configurator callable.
             Signature: ``(non_interactive=False, existing_config=None) -> dict``.
-        apply: Apply-time applier callable.
-            Signature: ``(project_path, config, *, execution_mode) -> None``.
         get_defaults: Optional factory returning the module's non-interactive
             default option dictionary.
     """
 
     name: str
     configure: Callable[..., dict[str, Any]]
-    apply: Callable[..., None]
     get_defaults: Callable[[], dict[str, Any]] | None = None
 
 
@@ -2072,67 +1239,56 @@ def _build_configurator_registry() -> dict[str, ModuleConfigurator]:
         ModuleConfigurator(
             name="auth",
             configure=configure_auth_module,
-            apply=apply_auth_configuration,
             get_defaults=get_default_auth_config,
         ),
         ModuleConfigurator(
             name="blog",
             configure=configure_blog_module,
-            apply=apply_blog_configuration,
             get_defaults=get_default_blog_config,
         ),
         ModuleConfigurator(
             name="crm",
             configure=configure_crm_module,
-            apply=apply_crm_configuration,
             get_defaults=get_default_crm_config,
         ),
         ModuleConfigurator(
             name="forms",
             configure=configure_forms_module,
-            apply=apply_forms_configuration,
             get_defaults=get_default_forms_config,
         ),
         ModuleConfigurator(
             name="listings",
             configure=configure_listings_module,
-            apply=apply_listings_configuration,
             get_defaults=get_default_listings_config,
         ),
         ModuleConfigurator(
             name="storage",
             configure=configure_storage_module,
-            apply=apply_storage_configuration,
             get_defaults=get_default_storage_config,
         ),
         ModuleConfigurator(
             name="backups",
             configure=configure_backups_module,
-            apply=apply_backups_configuration,
             get_defaults=get_default_backups_config,
         ),
         ModuleConfigurator(
             name="billing",
             configure=configure_billing_module,
-            apply=apply_billing_configuration,
             get_defaults=get_default_billing_config,
         ),
         ModuleConfigurator(
             name="notifications",
             configure=configure_notifications_module,
-            apply=apply_notifications_configuration,
             get_defaults=get_default_notifications_config,
         ),
         ModuleConfigurator(
             name="analytics",
             configure=configure_analytics_module,
-            apply=apply_analytics_configuration,
             get_defaults=get_default_analytics_config,
         ),
         ModuleConfigurator(
             name="social",
             configure=configure_social_module,
-            apply=apply_social_configuration,
             get_defaults=get_default_social_config,
         ),
     ]
