@@ -4,6 +4,64 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-27, twentieth pass).** **No ticket closed and
+  no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
+  positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Every open task
+  already carries a track.
+  **A shared repository gate was found red on the integration branch and repaired in-pass.**
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` failed on `v88` HEAD: commit
+  `24cfe174` rewrote the roadmap's W3 state block from *in flight on `wt-track3`* to *partial
+  delivery merged* without re-anchoring the executable test that reads that block, so its
+  `re.search` for the old `**State … in flight on \`wt-track3\`` … `**Next handoff refinement:`
+  span returned `None`. The test is re-anchored to the merged-partial block (`**State … partial
+  delivery merged into \`v88\`.**` … `**Remaining plan`), asserts the accepted-phase ledger, and
+  now asserts the *absence* of the retired *in flight* / *uncommitted working tree* phrasing so the
+  stale text cannot silently return. **20 passed.** The roadmap now records the standing rule this
+  exposed: a roadmap edit touching the W3/W1 state blocks must re-run this test in the same change.
+  **W3 progress archived out of the planner.** SA135+SA163's partial reached `v88` in **two**
+  merges, not one: `0661f55f`, then `f070f39b` carrying `203fcd61` *"remediate lifecycle and module
+  e2e gaps"* (12 files) — installed-wheel storage lifecycle, module discovery and catalog, the
+  manifest `entry_point.py` adapter path, the `storage` module adapter, and a substantial
+  simplification of `scripts/provision_ci_postgres.sh` and its test. Accepted phases P/A/B and C/D
+  cover the hermetic Docker-unavailable probe, the strict no-host-server window (restricted →
+  BYPASSRLS → restricted, isolation, cleanup, canary, dynamic-loopback, immutable-image), the
+  restoration of `pg18-af10` with its container/image/volume, complete catalog, all twelve module
+  databases and `quickscale_test_role` ownership, one provisioning authority across all four
+  workflows at exactly six hosted stations, retirement of the copied PGDG/database/role/grant
+  blocks and the transcribed provisioning oracle, and source-derived E2E triggers. Corrections made
+  after terminal attestation are not independently graded. The roadmap keeps only a pointer.
+  **SA167d A-D evidence archived.** Convergence scoped project-level adapter refresh while
+  preserving strict 12-module authoritative refresh; the focused suite reported **816 passed**,
+  `make lint` and `make typecheck` green, and `make test` green at Core **2,879 passed / 1 skipped**
+  and CLI **2,094 passed**; independent terminal review found no blocking product defect. The
+  roadmap retains those totals only as the restatement target for the ticket's ledger
+  reconciliation, not as a record.
+  **Measured worktree state.** `wt-track2` (`6011044c`) and `wt-track3` (`24cfe174`) are both
+  ancestors of `v88` — merged, clean, idle. `wt-track1` is **six commits ahead** and clean
+  (`810eefd8`), carrying SA167d's A-D-accepted delta. No suite is running; `pg18-af10` is up with
+  all twelve `test_quickscale_*` databases present.
+  **New physical blocker evidence recorded, not a ticket edge.** Two orphaned CLI-E2E containers,
+  `sa142-no-cleanup_backend` (unhealthy) and `sa142-no-cleanup_db`, have been up since `17:30` —
+  the concrete residue of the same Docker resource/concurrency defect that failed
+  `TestDevelopmentCommandsE2E::test_full_development_workflow` and
+  `TestReactThemeDockerIntegration::test_dockerfile_builds_with_react`. Removing them is now the
+  first step of SA135's phase-E remainder.
+  **Rebalance outcome: the four standing moves re-tested, all rejected again.** SA161 (#19) +
+  SA160 (#20) off W3 — SA161's acceptance needs the W3-owned exclusive PostgreSQL/Docker slot.
+  SA166 (#24) / SA164 (#25) off W2 — `scripts/gate_registry.json` never crosses worktrees, and
+  SA164 has a hard content dependency on SA167c. SA160 ahead of SA161 inside W3 — the shared
+  `sa90_emission_manifests.json` rebaseline ordering must not be split. SA165 (#22) off W1 — its
+  `scripts/test_isolation_conformance.sh` contention is now settled merged input, but the move
+  still buys nothing on the critical path. **Critical path unchanged:** `SA167c` (#21) on W2, with
+  SA166 (#24) and SA164 (#25) as band-C tails behind it. W2 remains the only idle lane holding the
+  only critical-path ticket.
+  **Audits re-read, nothing closed.** arch Finding 13 stays live under SA163; Findings 7, 2 and 4
+  stay behind their growth triggers; tech-audit counts remain S3 1 (TA67/SA160), S4 1 (TA68/SA161),
+  **Total 2 open**. Both documents already matched the planner, so neither needed an edit.
+  **One maintainer decision remains open:** whether to release SA165 (#22) from its SA167d ordering
+  on W1. Recommendation unchanged (keep the ordering). It affects **can start** for SA165 only and
+  touches no critical path.
+
 - **Roadmap cleanup and rebalance review (2026-08-27, nineteenth pass).** **No ticket closed and
   no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
   positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Every open task

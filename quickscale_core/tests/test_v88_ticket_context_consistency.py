@@ -315,15 +315,17 @@ def _assert_current_status_consumers(
     assert "against the three-leg W2 spine" in roadmap_text
 
     current_handoff = re.search(
-        r"\*\*State \(measured 2026-08-27\): in flight on `wt-track3`(?P<body>.*?)"
-        r"\*\*Next handoff refinement:",
+        r"\*\*State \(measured 2026-08-27\): partial delivery merged into `v88`\.\*\*"
+        r"(?P<body>.*?)\*\*Remaining plan",
         roadmap_text,
         re.DOTALL,
     )
     assert current_handoff is not None
     handoff_text = current_handoff.group(0)
-    assert "The lane is *active*, not" in handoff_text
-    assert "uncommitted working tree" in handoff_text
+    assert "Phases P/A/B and C/D are accepted" in handoff_text
+    assert "E was\n  dispatched but is not accepted" in handoff_text
+    assert "in flight on `wt-track3`" not in roadmap_text
+    assert "uncommitted working tree" not in roadmap_text
     assert "ready to continue from strict C acceptance" not in handoff_text
     assert "W2 has released the shared PostgreSQL cluster" not in handoff_text
 

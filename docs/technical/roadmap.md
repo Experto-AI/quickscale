@@ -53,6 +53,11 @@ Applying it produces three ranked bands:
 
 - **Band A is clear.** Shared repository gates are green; the completion evidence is archived in
   [CHANGELOG.md](../../CHANGELOG.md). No open ticket may waive them.
+  *Found red and repaired inside this pass:* `quickscale_core/tests/test_v88_ticket_context_consistency.py`
+  was left failing on `v88` HEAD by `24cfe174`, which rewrote the roadmap's W3 state block without
+  re-anchoring the test that reads it. The anchor is corrected here and the gate passes again
+  (20 passed). This is the standing hazard of the shared closeout surface: **a roadmap edit that
+  changes the W3/W1 state blocks must re-run this test in the same change.**
 - **The critical path is on the gate track, not the service track.** W2's `SA167c` is one
   serialized merge leg with no prerequisite outside W2. W3 keeps the exclusive PostgreSQL/Docker
   slot and therefore keeps scheduling priority *while a leg is active*, but it is no longer the
@@ -123,13 +128,15 @@ The manifest-reading `entry_point.py`, the
 fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec seam, and the regenerated migration baseline
 are all merged tree state that open tickets build on, not pending dependencies.
 
-**Parallelism result (measured 2026-08-27): W2 and W3 are merged; W1 carries unmerged work.**
-`wt-track2` is an ancestor of `v88` — merged, clean, idle. **`wt-track1` is six commits ahead**
-(tip `810eefd8`, clean) carrying SA167d's A-D-accepted delta. W3's partial SA135+SA163 delivery is
-merged into `v88` at `0661f55f38cf76e2f9bf8b3210dfdc81bf9d77c3`; no W3 suite is running.
+**Parallelism result (measured 2026-08-27, twentieth pass): W2 and W3 are merged; W1 carries
+unmerged work.** `wt-track2` and `wt-track3` are both ancestors of `v88` — merged, clean, idle.
+**`wt-track1` is six commits ahead** (tip `810eefd8`, clean) carrying SA167d's A-D-accepted delta.
+W3's partial SA135+SA163 delivery reached `v88` in **two** merges — `0661f55f` and then
+`f070f39b`, which carries the `203fcd61` lifecycle/module-E2E remediation. No suite is running and
+`pg18-af10` holds all twelve `test_quickscale_*` databases.
 Each lane still syncs current `v88` before its own exact-candidate validation.
 
-**Rebalance result (nineteenth pass): no track moves.** Every open ticket already has a track, and
+**Rebalance result (twentieth pass): no track moves.** Every open ticket already has a track, and
 the binding constraint is physical — one PostgreSQL 18 cluster on `localhost:5432` holding the
 twelve shared test databases, which W3 needs *empty*. No ticket move relieves that; only
 scheduling does. Moves tested and rejected:
@@ -164,15 +171,20 @@ Shared closeout surfaces (`CHANGELOG.md`, `docs/technical/roadmap.md`,
 sync-before-merge-back procedure.
 
 
-### Track readiness (re-measured 2026-08-27 after W3 partial merge)
+### Track readiness (re-measured 2026-08-27, twentieth pass)
 
 Each track reports three independent states. A track is **truly green** only when all three are
 yes.
 
-**Measured worktree state.** `wt-track2` is an ancestor of `v88` — merged, clean, idle.
-`wt-track1` is **six commits ahead** and clean (tip `810eefd8`). W3's delivered partial is merged
-into `v88` at `0661f55f38cf76e2f9bf8b3210dfdc81bf9d77c3`; `pg18-af10` is running and no W3 suite
-remains in flight.
+**Measured worktree state.** `wt-track2` (tip `6011044c`) and `wt-track3` (tip `24cfe174`) are
+both ancestors of `v88` — merged, clean, idle. `wt-track1` is **six commits ahead** and clean
+(tip `810eefd8`). W3's delivered partial is merged into `v88` through `0661f55f` and `f070f39b`;
+`pg18-af10` is up with the twelve databases intact and no suite is in flight.
+
+**One shared-resource cleanup is outstanding and is not a ticket edge.** Two orphaned E2E
+containers, `sa142-no-cleanup_backend` (unhealthy) and `sa142-no-cleanup_db`, have been up since
+`17:30` from the last CLI E2E run. They are direct evidence for SA135's phase-E resource blocker
+and must be removed before the next E2E campaign so the rerun starts from a clean Docker state.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
@@ -207,10 +219,11 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 
 - **W2 — start SA167c (#21).** This is the only action that shortens the release. W2 is idle and
   the lane is clean.
-- **W3 — continue SA135 + SA163 (#15) from phase E.** Do not redo C or D. Resolve the two current
-  CLI E2E resource failures, then run the exact serial E2E and `ci-e2e` gates on one unchanged
-  tree before F/G closeout. The prior exclusive window is closed: `pg18-af10`, its volume, all
-  twelve databases, and `quickscale_test_role` ownership were restored.
+- **W3 — continue SA135 + SA163 (#15) from phase E.** Do not redo C or D. First remove the two
+  orphaned `sa142-no-cleanup_*` containers so the rerun starts from clean Docker state, then
+  resolve the two CLI E2E resource failures, then run the exact serial E2E and `ci-e2e` gates on
+  one unchanged tree before F/G closeout. The prior exclusive window is closed: `pg18-af10`, its
+  volume, all twelve databases, and `quickscale_test_role` ownership were restored.
 - **W1 — re-run and accept SA167d's phase E (#18)**, then do the ledger reconciliation. Schedule
   its `make test` outside W3's window.
 
@@ -380,13 +393,11 @@ Conceptual background, mental models, and implementation notes for **every** tic
   in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist)
   is retired once the deviation it names is gone.
   **State (measured 2026-08-27): phases A-D accepted, phase E outstanding.** `wt-track1` is **six
-  commits ahead of `v88`** and clean, tip `810eefd8`; the reviewed product delta is `45baa040`.
-  The SA118 synchronization is committed (`ac382da4`). Convergence scoped project-level adapter
-  refresh while preserving strict 12-module authoritative refresh, then reported the focused suite
-  green at **816 passed**, `make lint` and `make typecheck` green, and `make test` green with Core
-  **2,879 passed / 1 skipped** and CLI **2,094 passed**. Independent terminal review found no
-  blocking product defect. **This is not a merge-back-only ticket** — an earlier planner pass
-  recorded it that way and that claim was wrong.
+  commits ahead of `v88`** and clean, tip `810eefd8`; the reviewed product delta is `45baa040` and
+  the SA118 synchronization is `ac382da4`. A-D acceptance evidence is archived in
+  [CHANGELOG.md](../../CHANGELOG.md). The ledger reconciliation in step 2 must restate to the
+  final **Core 2,879 passed / 1 skipped** and **CLI 2,094 passed** totals.
+  **This is not a merge-back-only ticket.**
   **Why E is still open.** Phase E's first pre-close focused sequence failed before convergence
   corrected the defect, and the forward-only workflow cannot retroactively accept it. E must be
   re-run and explicitly accepted on the current tip.
@@ -407,18 +418,14 @@ Conceptual background, mental models, and implementation notes for **every** tic
   Provision and tear down the server used by repository gates; replace the current out-of-band host assumption while retaining an asserted unavailability negative control.
   **Acceptance:** the integration gate provisions its own PostgreSQL 18 server and tears it down, with no reliance on a pre-existing host server; the `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract is preserved; the asserted-unavailability negative control still fails loudly when the server cannot be provisioned, rather than skipping; `make test-integration` passes on a machine with no PostgreSQL running; [validation_policy.md](validation_policy.md) is updated to drop the out-of-band host precondition; image identity follows the settled content-addressed backend-image convention.
   **State (measured 2026-08-27): partial delivery merged into `v88`.** The merge object is
-  `0661f55f38cf76e2f9bf8b3210dfdc81bf9d77c3`. Phases P/A/B and C/D are accepted; E was
+  `f070f39b`, the second of two merges (`0661f55f`, then `f070f39b` carrying the `203fcd61`
+  lifecycle/module-E2E remediation). Phases P/A/B and C/D are accepted; E was
   dispatched but is not accepted, and F/G were not reached. Keep this item unchecked under the
   open-work-only policy.
-  **Completed in the merged partial:** the Docker-unavailable probe is hermetic and exact; the
-  strict no-host-server window passed restricted → BYPASSRLS → restricted, isolation, cleanup,
-  canary, dynamic-loopback, and immutable-image checks; `pg18-af10` was restored with the same
-  container/image/volume, complete database catalog, all twelve module databases, and
-  `quickscale_test_role` ownership. All four workflows now use one profile authority at exactly
-  six hosted stations; copied PGDG/database/role/grant blocks and the transcribed provisioning
-  oracle are retired; E2E triggers are source-derived. Focused module inventory and installed-wheel
-  storage lifecycle defects found during acceptance are corrected. Corrections made after terminal
-  attestation are not independently graded.
+  **Completed in the merged partial:** phases P/A/B and C/D — the hermetic Docker-unavailable
+  probe, the strict no-host-server window, the single four-caller provisioning authority, and the
+  `203fcd61` lifecycle/module-E2E remediation. The evidence is archived in
+  [CHANGELOG.md](../../CHANGELOG.md); do not repeat C or D.
   **Pending:** phase E still needs one unchanged candidate on which
   `QS_E2E_PARALLEL=0 make test-e2e` and `make ci-e2e` both exit 0. The last exact serial E2E run
   finished with 38 Core tests passing and 38 CLI tests passing, but two CLI tests failed. Phase F
@@ -428,8 +435,10 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Blocking:** `TestDevelopmentCommandsE2E::test_full_development_workflow` hit a Docker daemon
   `No such container` race during concurrent startup, and
   `TestReactThemeDockerIntegration::test_dockerfile_builds_with_react` timed out after 300 seconds.
-  Close this block by correcting the CLI E2E resource/concurrency behavior without weakening the
-  assertions, then capturing both exact gates green on the same unchanged tree. `make ci-e2e` was
+  Two orphaned containers from that run — `sa142-no-cleanup_backend` (unhealthy) and
+  `sa142-no-cleanup_db` — are still up and are the concrete residue of the same defect.
+  Close this block by removing them, then correcting the CLI E2E resource/concurrency behavior
+  without weakening the assertions, then capturing both exact gates green on the same unchanged tree. `make ci-e2e` was
   not run after the red prerequisite. No failure is accepted or waived.
   **Decisions needed:** none for SA135+SA163. The exclusive service-window authorization remains
   available if a future strict lifecycle rerun needs it; the prior window is closed and
