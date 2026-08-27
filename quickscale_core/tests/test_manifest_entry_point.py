@@ -652,10 +652,12 @@ class TestRegisteredAdapterPaths:
         assert isinstance(spec, ModuleWiringSpec)
         assert "quickscale_modules_analytics" in spec.apps
 
-    def test_analytics_disabled_returns_empty_spec(self) -> None:
+    def test_analytics_disabled_suppresses_apps_but_retains_settings(self) -> None:
         spec = build_manifest_wiring_spec("analytics", {"enabled": False})
         assert isinstance(spec, ModuleWiringSpec)
         assert spec.apps == ()
+        assert len(spec.settings) == 8
+        assert spec.settings["QUICKSCALE_ANALYTICS_ENABLED"] is False
 
     def test_billing_adapter_returns_spec(self) -> None:
         if "billing" not in MANIFEST_ADAPTER_REGISTRY:
@@ -1722,8 +1724,7 @@ class TestAnalyticsPostHookFailHard:
         assert isinstance(result, ModuleWiringSpec)
 
     def test_disabled_short_circuit_still_works(self) -> None:
-        """The PR-4 disabled short-circuit returns empty spec before
-        reaching the empty-settings check."""
+        """Disabled analytics suppresses wiring before nonempty validation."""
         spec = ModuleWiringSpec(
             settings={
                 "QUICKSCALE_ANALYTICS_ENABLED": False,
@@ -1735,6 +1736,7 @@ class TestAnalyticsPostHookFailHard:
         result = _analytics_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
         assert result.apps == ()
+        assert result.settings == spec.settings
 
 
 # ---------------------------------------------------------------------------

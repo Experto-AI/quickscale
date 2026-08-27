@@ -49,12 +49,16 @@ def test_empty_required_setting_raises_manifest_error(key: str) -> None:
         )
 
 
-def test_disabled_analytics_returns_empty_spec() -> None:
+def test_disabled_analytics_suppresses_apps_but_retains_settings() -> None:
+    settings = _settings(
+        QUICKSCALE_ANALYTICS_ENABLED=False,
+        QUICKSCALE_ANALYTICS_PROVIDER="",
+    )
     result = _analytics_post_hook(
-        ModuleWiringSpec(settings=_settings(QUICKSCALE_ANALYTICS_PROVIDER="")),
+        ModuleWiringSpec(apps=("analytics",), settings=settings),
         {"enabled": False},
     )
-    assert result == ModuleWiringSpec()
+    assert result == ModuleWiringSpec(settings=settings)
 
 
 def test_post_hook_coerces_settings() -> None:
