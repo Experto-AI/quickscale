@@ -594,7 +594,6 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     # Parse list fields
     required_modules = _validate_list_field(data, "required_modules", module_name)
     dependencies = _validate_list_field(data, "dependencies", module_name)
-    django_apps = _validate_list_field(data, "django_apps", module_name)
 
     # Parse managed-files declarations (additive; empty when absent)
     managed_files = _parse_managed_files(data, module_name)
@@ -616,7 +615,6 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
         immutable_options=immutable_options,
         required_modules=required_modules,
         dependencies=dependencies,
-        django_apps=django_apps,
         managed_files=managed_files,
         implies=implies,
         derivation_rules=derivation.get("normalization_rules", []),

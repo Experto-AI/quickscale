@@ -77,9 +77,6 @@ dependencies:
   - boto3>=1.43.58
   - Pillow>=12.3.0,<13.0.0
 
-django_apps:
-  - quickscale_modules_storage
-
 derivation:
   wiring_projections:
     - wiring_field: apps

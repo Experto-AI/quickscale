@@ -55,9 +55,6 @@ config:
 dependencies:
   - posthog>=7.33.0,<8.0.0
 
-django_apps:
-  - quickscale_modules_analytics
-
 # ---------------------------------------------------------------------------
 # Manifest derivation rules (T2.3 Phase 3)
 # ---------------------------------------------------------------------------

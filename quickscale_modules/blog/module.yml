@@ -34,10 +34,6 @@ dependencies:
   - django-markdownx>=4.0.11
   - Pillow>=12.3.0,<13.0.0
 
-django_apps:
-  - markdownx
-  - quickscale_modules_blog
-
 # ---------------------------------------------------------------------------
 # Manifest derivation rules (T2.3 Phase 3)
 # ---------------------------------------------------------------------------

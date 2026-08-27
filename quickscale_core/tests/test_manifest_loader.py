@@ -197,12 +197,6 @@ description: Module without name
 
         assert manifest.required_modules == ["orgs"]
 
-    def test_load_manifest_django_apps_not_list_raises(self) -> None:
-        """django_apps field that is not a list raises ManifestError."""
-        yaml_content = "name: mymod\nversion: '1.0.0'\ndjango_apps: not_a_list\n"
-        with pytest.raises(ManifestError, match="django_apps"):
-            load_manifest(yaml_content, "mymod")
-
     def test_load_manifest_option_none_value_allowed(self) -> None:
         """A config option with null/None value is accepted."""
         yaml_content = (

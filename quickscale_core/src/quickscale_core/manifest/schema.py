@@ -143,7 +143,6 @@ class ModuleManifest:
     immutable_options: dict[str, ConfigOption] = field(default_factory=dict)
     required_modules: list[str] = field(default_factory=list)
     dependencies: list[str] = field(default_factory=list)
-    django_apps: list[str] = field(default_factory=list)
     managed_files: dict[str, ManagedFileDeclaration] = field(default_factory=dict)
     implies: list[ImpliesEntry] = field(default_factory=list)
 
