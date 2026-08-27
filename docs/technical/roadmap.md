@@ -425,27 +425,50 @@ Conceptual background, mental models, and implementation notes for **every** tic
   docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note
   in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist)
   is retired once the deviation it names is gone.
-  **State (measured 2026-08-27): phases A-D accepted, phase E outstanding.** `wt-track1` is **six
-  commits ahead of `v88`** and clean, tip `810eefd8`; the reviewed product delta is `45baa040` and
-  the SA118 synchronization is `ac382da4`. A-D acceptance evidence is archived in
-  [CHANGELOG.md](../../CHANGELOG.md). The ledger reconciliation in step 2 must restate to the
-  final **Core 2,879 passed / 1 skipped** and **CLI 2,094 passed** totals.
-  **This is not a merge-back-only ticket.**
-  **Why E is still open.** Phase E's first pre-close focused sequence failed before convergence
-  corrected the defect, and the forward-only workflow cannot retroactively accept it. E must be
-  re-run and explicitly accepted on the current tip.
-  **Remaining work, in order.** (1) Re-run and explicitly accept phase E. (2) Reconcile every
-  current-status assertion in `CHANGELOG.md`, `docs/index.md`, `docs/others/arch-audit.md`,
-  `docs/technical/decisions.md`, `docs/technical/implementation_contract.md`,
-  `docs/technical/module-extension.md`, `docs/technical/v88_ticket_context.md`, and
-  `quickscale_core/tests/test_v88_ticket_context_consistency.py` to the A-E-accepted ledger and the
-  final 2,879 Core / 2,094 CLI totals — the executable consistency test still carries the obsolete
-  ledger and older totals, and closes only when a restated-value sweep finds no unlabeled current
-  copy and that test passes. (3) Sync current `v88`, resolve the standing closeout trio, run the
-  complete final campaign and independent review over **one unchanged tip**, and merge that exact
-  tip. (4) Archive completion, retire #18, release SA165.
-  **Scheduling note:** step 1's `make test` needs the shared PostgreSQL cluster, which W3 holds
-  while its SA135 leg is active. This is contention, not a dependency.
+  **State (measured 2026-08-27): phases A-D accepted, phase E outstanding.** The retained product
+  tip is `1743871f`; its only working-tree change is this uncommitted roadmap checkpoint. At the
+  checkpoint correction, `v88` was `80ca33b4`, with six commits present only on `v88` and eight
+  present only on `wt-track1`. A-D acceptance evidence is archived in
+  [CHANGELOG.md](../../CHANGELOG.md). Keep this item unchecked: the retained product delta is
+  unmerged and its terminal review produced no grade. **This is not a merge-back-only ticket.**
+  ***corrected after checkpoint attestation — not independently graded***
+  **Completed in the latest resumption.** The worktree synchronized the then-current `v88` at
+  `ca9ecbdc` and preserved strict twelve-module no-argument adapter refresh plus scoped
+  selected-module refresh. E0's focused acceptance surface passed 816 tests, and lint and type
+  checks passed. Its ordered `make test` then failed on the storage package's lazy public API at
+  45% coverage, so E0 was not accepted. Serial convergence retained the intended CLI boundary and
+  corrected that synced coverage seam, the root pytest `scripts` import path, a stale Bandit
+  suppression identity, auth-migration assessment complexity and coverage, and the obsolete quality
+  baseline identity. On the resulting `1743871f` tip, the coupled auth/storage suite passed 31 tests;
+  `make lint`, `make typecheck`, `make test`, `make check`, and `make quality` all passed. The full
+  totals were Core 2,881 passed / 1 skipped, CLI 2,098 passed, and modules 2,554 passed / 85 skipped;
+  quality reported zero warning, critical, and total regressions.
+  **Pending.** E0 remains unaccepted because its scoped sequence was red at return and convergence
+  cannot retroactively accept it. C1 ledger reconciliation and V1 exact-candidate validation were
+  not reached after that halt. Phase E must be rerun and explicitly accepted on the retained delta;
+  then every current-status assertion in `CHANGELOG.md`, `docs/index.md`,
+  `docs/others/arch-audit.md`, `docs/technical/decisions.md`,
+  `docs/technical/implementation_contract.md`, `docs/technical/module-extension.md`,
+  `docs/technical/v88_ticket_context.md`, and
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` must be reconciled to the accepted
+  A-E ledger and the final observed totals.
+  **Blocking.** The terminal review was blocked because it did not receive the complete authoritative
+  diff from the pre-run base through `1743871f`; therefore the product delta is ungraded. Current
+  `v88` also advanced after the last synchronization and was observed at `80ca33b4` during the
+  checkpoint correction. Close both blocks by accepting E0, completing C1, synchronizing the
+  then-current `v88` successor, running the complete final campaign on one unchanged tip, and
+  supplying that tip's complete diff to an independent reviewer before merge-back.
+  ***corrected after checkpoint attestation — not independently graded***
+  **Decisions needed:** none. SA165 remains blocked only by completion of this ticket.
+  **Remaining plan, in order.** (1) Re-run E0's exact ordered acceptance sequence on the retained
+  delta and accept phase E only if it is green. (2) Complete C1's same-fact ledger reconciliation and
+  executable consistency test without archiving SA167d early. (3) Synchronize current `v88`, resolve
+  the standing closeout conflict surface, and run V1's complete validation campaign on one frozen
+  candidate. (4) Independently review the complete authoritative diff for that exact candidate.
+  (5) Only after green acceptance and review, archive completion, remove this open-work entry, retire
+  merge position #18, release SA165, and merge the reviewed tip. Report final changed-line and
+  elapsed-time/lines-per-hour metrics from the original `2026-08-27 18:52:34 +0200` measurement
+  start.
   **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`, plus `CHANGELOG.md`, `docs/index.md`, `docs/others/arch-audit.md`, `docs/technical/{decisions,implementation_contract,roadmap,v88_ticket_context}.md` and `quickscale_core/tests/test_v88_ticket_context_consistency.py` for the ledger reconciliation.
 - [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Band B · Tier 2 · W3 · merge #15 · deps: none · PostgreSQL + Docker slot · carries SA163`
   Provision and tear down the server used by repository gates; replace the current out-of-band host assumption while retaining an asserted unavailability negative control.
