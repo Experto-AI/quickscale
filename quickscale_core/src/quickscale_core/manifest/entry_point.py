@@ -195,22 +195,31 @@ def _load_managed_adapter(module_name: str) -> Callable[..., ModuleWiringSpec]:
 def refresh_managed_adapters() -> None:
     """Atomically refresh every adapter in the discovered shipped inventory.
 
-    Discovery is performed exactly once per refresh.  The resulting inventory
-    must contain the authoritative twelve shipped modules.  All sentinels are
-    resolved before the live registry or origins are changed, preserving
-    registry identity, custom entries, and the prior state on any failure.
+    Active-source discovery is performed exactly once per refresh.  A generated
+    project's embedded modules may be a strict subset of the authoritative
+    twelve-module bundled inventory; only active adapters are loaded.  All
+    sentinels are resolved before the live registry or origins are changed,
+    preserving registry identity, custom entries, and prior state on failure.
     """
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
         ImproperlyConfigured,
+        discover_bundled_module_names,
         discover_shipped_module_names,
     )
 
     discovered_module_names = set(discover_shipped_module_names())
     if len(discovered_module_names) != AUTHORITATIVE_MODULE_COUNT:
-        raise ImproperlyConfigured(
-            "Authoritative module inventory count drift: expected "
-            f"{AUTHORITATIVE_MODULE_COUNT}, found {len(discovered_module_names)}"
-        )
+        bundled_module_names = set(discover_bundled_module_names())
+        if len(
+            bundled_module_names
+        ) != AUTHORITATIVE_MODULE_COUNT or not discovered_module_names.issubset(
+            bundled_module_names
+        ):
+            raise ImproperlyConfigured(
+                "Authoritative module inventory count drift: expected "
+                f"{AUTHORITATIVE_MODULE_COUNT}, found "
+                f"{len(discovered_module_names)}"
+            )
 
     loaded_adapters: dict[str, Callable[..., ModuleWiringSpec]] = {}
     # Resolve every adapter before mutating the live registry.  A failed

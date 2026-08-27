@@ -449,6 +449,27 @@ class TestAuthoritativeModuleNames:
         with pytest.raises(ImproperlyConfigured, match="count drift"):
             authoritative_module_names()
 
+    def test_partial_generated_override_uses_bundled_shipped_inventory(
+        self, tmp_path: Path
+    ) -> None:
+        """A generated module subset must not shrink the product inventory."""
+        from quickscale_core.contracts import module_discovery as _md
+
+        original = _md._modules_base_path
+        try:
+            for module_name in ("auth", "orgs"):
+                module_dir = tmp_path / module_name
+                module_dir.mkdir()
+                (module_dir / "module.yml").write_text(f"name: {module_name}\n")
+            set_modules_base_path(tmp_path)
+
+            assert discover_shipped_module_names() == ["auth", "orgs"]
+            names = authoritative_module_names()
+            assert len(names) == AUTHORITATIVE_MODULE_COUNT == 12
+            assert names == discover_bundled_module_names()
+        finally:
+            set_modules_base_path(original)
+
 
 class TestDiscoverShippedModulePaths:
     """Tests for discover_shipped_module_paths."""

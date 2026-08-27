@@ -114,6 +114,11 @@ def test_immediate_children_preserve_status_and_cleanup(
     tmp_path: Path, command: list[str], expected_status: int
 ) -> None:
     tools, docker_log = fake_local_lifecycle_tools(tmp_path)
+    obsolete_record = tmp_path / "obsolete-record.json"
+    obsolete_record_environment = {
+        "QS_PROVISION_" + "LIFECYCLE_RECORD": str(obsolete_record),
+        "QUICKSCALE_POSTGRES_" + "LIFECYCLE_RECORD": str(obsolete_record),
+    }
     ps_count = tmp_path / "ps-count"
     executable(
         tools / "ps",
@@ -139,6 +144,7 @@ exit 1''',
             "PATH": f"{tools}:/usr/bin",
             "TMPDIR": str(tmp_path),
             "QS_PROVISION_SCOPE": f"immediate_{expected_status}",
+            **obsolete_record_environment,
         },
     )
 
@@ -146,6 +152,8 @@ exit 1''',
     assert "cannot verify the process group of a live child" not in result.stderr
     assert any("rm -f container-id" in call for call in docker_log.read_text().splitlines())
     assert not any(path.name.startswith("quickscale-postgres.") for path in tmp_path.iterdir())
+    assert not obsolete_record.exists()
+    assert "LIFECYCLE_" + "RECORD=" not in result.stderr
 
 
 def test_live_child_probe_failure_still_fails_distinct_group_verification(
@@ -187,32 +195,6 @@ exit 1''',
     assert any("rm -f container-id" in call for call in docker_log.read_text().splitlines())
 
 
-def test_lifecycle_record_rejects_an_existing_directory_before_allocation(
-    tmp_path: Path,
-) -> None:
-    tools, docker_log = fake_local_lifecycle_tools(tmp_path)
-    record = tmp_path / "lifecycle-record"
-    record.mkdir()
-
-    result = invoke(
-        "run",
-        "--profile",
-        "restricted",
-        "--",
-        "/bin/true",
-        env={
-            "PATH": f"{tools}:/usr/bin",
-            "TMPDIR": str(tmp_path),
-            "QS_PROVISION_SCOPE": "invalid_record",
-            "QS_PROVISION_LIFECYCLE_RECORD": str(record),
-        },
-    )
-
-    assert result.returncode != 0
-    assert "must be a regular file path" in result.stderr
-    assert not docker_log.exists()
-
-
 @pytest.mark.parametrize(
     ("signal_number", "signal_name", "expected_status"),
     [
@@ -221,14 +203,28 @@ def test_lifecycle_record_rejects_an_existing_directory_before_allocation(
         (signal.SIGTERM, "TERM", 143),
     ],
 )
-def test_signal_cleanup_waits_for_verified_child_group_and_records_lifecycle(
+def test_pre_readiness_signal_reaps_child_group_and_preserves_status(
     tmp_path: Path,
     signal_number: signal.Signals,
     signal_name: str,
     expected_status: int,
 ) -> None:
-    tools, _ = fake_local_lifecycle_tools(tmp_path)
-    record = tmp_path / "lifecycle.json"
+    tools, docker_log = fake_local_lifecycle_tools(tmp_path)
+    probe_started = tmp_path / "probe-started"
+    release_probe = tmp_path / "release-probe"
+    ps_count = tmp_path / "ps-count"
+    executable(
+        tools / "ps",
+        f'''count=0
+if [[ -f "{ps_count}" ]]; then count=$(<"{ps_count}"); fi
+count=$((count + 1))
+printf "%s" "$count" > "{ps_count}"
+if [[ "$count" -eq 2 ]]; then
+  : > "{probe_started}"
+  while [[ ! -f "{release_probe}" ]]; do /bin/sleep 0.01; done
+fi
+exec /usr/bin/ps "$@"''',
+    )
     descendant_pid_file = tmp_path / "descendant.pid"
     process = spawn(
         "run",
@@ -247,22 +243,22 @@ def test_signal_cleanup_waits_for_verified_child_group_and_records_lifecycle(
             "PATH": f"{tools}:/usr/bin",
             "TMPDIR": str(tmp_path),
             "QS_PROVISION_SCOPE": f"signal_barrier_{signal_name.lower()}",
-            "QS_PROVISION_LIFECYCLE_RECORD": str(record),
         },
     )
     try:
         deadline = time.monotonic() + 10
-        readiness: dict[str, object] | None = None
         while time.monotonic() < deadline:
-            if record.exists():
-                readiness = json.loads(record.read_text())
-                if readiness["readiness"]["event"] == "child_group_verified":
-                    break
+            if probe_started.exists() and descendant_pid_file.exists():
+                break
             time.sleep(0.05)
-        assert readiness is not None
-        assert readiness["readiness"]["verified"] is True
-        assert readiness["readiness"]["child_pid"] == readiness["readiness"]["child_pgid"]
+        assert probe_started.exists(), "child-group probe did not reach its deterministic barrier"
+        assert descendant_pid_file.exists(), (
+            "child descendant did not start before the probe barrier"
+        )
+        descendant_pid = int(descendant_pid_file.read_text())
+        process_group = os.getpgid(descendant_pid)
         process.send_signal(signal_number)
+        release_probe.touch()
         stdout, stderr = process.communicate(timeout=10)
     finally:
         if process.poll() is None:
@@ -271,16 +267,7 @@ def test_signal_cleanup_waits_for_verified_child_group_and_records_lifecycle(
 
     assert process.returncode == expected_status, stderr
     assert stdout == ""
-    final_record = json.loads(record.read_text())
-    assert final_record["profile"] == "restricted"
-    assert final_record["scope"] == f"signal_barrier_{signal_name.lower()}"
-    assert final_record["image_id"] == "sha256:" + "a" * 64
-    assert final_record["endpoint"] == {"host": "localhost", "port": "55432"}
-    assert final_record["readiness"]["event"] == "child_group_verified"
-    assert final_record["child_status"] == expected_status
-    descendant_pid = int(descendant_pid_file.read_text())
     assert subprocess.run(["kill", "-0", str(descendant_pid)], check=False).returncode != 0
-    process_group = int(final_record["readiness"]["child_pgid"])
     process_table = subprocess.run(
         ["ps", "-eo", "pid=,pgid=,stat="], capture_output=True, text=True, check=True
     ).stdout.splitlines()
@@ -289,13 +276,9 @@ def test_signal_cleanup_waits_for_verified_child_group_and_records_lifecycle(
         for line in process_table
         if (fields := line.split()) and len(fields) >= 3
     )
-    assert final_record["cleanup"] == {
-        "container": True,
-        "scope": True,
-        "lease": True,
-        "complete": True,
-    }
-    assert "LIFECYCLE_RECORD=" in stderr
+    assert any("rm -f container-id" in call for call in docker_log.read_text().splitlines())
+    assert not any(path.name.startswith("quickscale-postgres.") for path in tmp_path.iterdir())
+    assert "LIFECYCLE_" + "RECORD=" not in stderr
 
 
 @pytest.mark.parametrize(
@@ -753,6 +736,9 @@ def test_roles_sql_and_safety_contracts_are_explicit() -> None:
     assert "image-contract" in helper and "label=com.quickscale.scope" in helper
     assert "apt.postgresql.org" in helper and "postgresql-client-18" in helper
     assert "GITHUB_PATH" in helper
+    assert "QS_PROVISION_" + "LIFECYCLE_RECORD" not in helper
+    assert "QUICKSCALE_POSTGRES_" + "LIFECYCLE_RECORD" not in helper
+    assert "LIFECYCLE_" + "RECORD=" not in helper
 
 
 def test_hyphenated_docker_container_name_remains_supported(tmp_path: Path) -> None:
