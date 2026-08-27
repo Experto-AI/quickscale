@@ -26,7 +26,7 @@ settings that the declarative resolver cannot express.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 import sys
 from typing import Any, cast
 
@@ -192,12 +192,16 @@ def _load_managed_adapter(module_name: str) -> Callable[..., ModuleWiringSpec]:
         sys.modules.update(original_package_modules)
 
 
-def refresh_managed_adapters() -> None:
-    """Atomically refresh every adapter in the discovered shipped inventory.
+def refresh_managed_adapters(*, module_names: Iterable[str] | None = None) -> None:
+    """Atomically refresh adapters from the active source inventory.
 
-    Discovery is performed exactly once per refresh.  The resulting inventory
-    must contain the authoritative twelve shipped modules.  All sentinels are
-    resolved before the live registry or origins are changed, preserving
+    Discovery is performed exactly once per refresh.  With no explicit
+    ``module_names``, the resulting inventory must contain the authoritative
+    twelve shipped modules.  A project-scoped caller may instead request the
+    intersection of its selected modules and the manifests present at the
+    active embedded base; names without an embedded manifest retain the
+    manager's skip-unknown compatibility behavior.  All requested sentinels
+    are resolved before the live registry or origins are changed, preserving
     registry identity, custom entries, and the prior state on any failure.
     """
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
@@ -206,19 +210,26 @@ def refresh_managed_adapters() -> None:
     )
 
     discovered_module_names = set(discover_shipped_module_names())
-    if len(discovered_module_names) != AUTHORITATIVE_MODULE_COUNT:
+    if module_names is None and (
+        len(discovered_module_names) != AUTHORITATIVE_MODULE_COUNT
+    ):
         raise ImproperlyConfigured(
             "Authoritative module inventory count drift: expected "
             f"{AUTHORITATIVE_MODULE_COUNT}, found {len(discovered_module_names)}"
         )
+    managed_module_names = (
+        discovered_module_names
+        if module_names is None
+        else discovered_module_names & set(module_names)
+    )
 
     loaded_adapters: dict[str, Callable[..., ModuleWiringSpec]] = {}
     # Resolve every adapter before mutating the live registry.  A failed
     # refresh is fail-hard and atomic regardless of iteration order.
-    for module_name in sorted(discovered_module_names):
+    for module_name in sorted(managed_module_names):
         loaded_adapters[module_name] = _load_managed_adapter(module_name)
 
-    if set(loaded_adapters) != discovered_module_names:
+    if set(loaded_adapters) != managed_module_names:
         raise ImproperlyConfigured(
             "Managed adapter resolution did not cover the discovered module "
             "inventory atomically."
@@ -227,10 +238,10 @@ def refresh_managed_adapters() -> None:
     # Commit only after the complete managed set resolved successfully.  Keep
     # custom entries and the registry object itself, while replacing stale
     # managed entries and synchronizing origins at one commit point.
-    for module_name in MANAGED_ADAPTER_ORIGINS - discovered_module_names:
+    for module_name in MANAGED_ADAPTER_ORIGINS - managed_module_names:
         MANIFEST_ADAPTER_REGISTRY.pop(module_name, None)
     MANAGED_ADAPTER_ORIGINS.clear()
-    MANAGED_ADAPTER_ORIGINS.update(discovered_module_names)
+    MANAGED_ADAPTER_ORIGINS.update(managed_module_names)
     MANIFEST_ADAPTER_REGISTRY.update(loaded_adapters)
 
 

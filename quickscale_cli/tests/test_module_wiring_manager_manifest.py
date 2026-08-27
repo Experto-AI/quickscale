@@ -793,7 +793,8 @@ class TestRegenerateManagedWiringAdapterFailure:
         expected_registry = dict(MANIFEST_ADAPTER_REGISTRY)
         expected_origins = set(MANAGED_ADAPTER_ORIGINS)
 
-        def _partially_mutate_then_fail() -> None:
+        def _partially_mutate_then_fail(*, module_names: object = None) -> None:
+            del module_names
             MANIFEST_ADAPTER_REGISTRY.pop("analytics", None)
             MANIFEST_ADAPTER_REGISTRY["_test_leaked"] = custom_adapter
             MANAGED_ADAPTER_ORIGINS.clear()
@@ -946,8 +947,10 @@ class TestRegenerateManagedWiringSkipManifestNotFound:
         (project / "modules" / "blog").mkdir(parents=True)
 
         success, message = regenerate_managed_wiring(project)
-        assert success is False
-        assert "inventory count drift" in message
+        assert success, message
+        content = (project / "myapp" / "settings" / "modules.py").read_text()
+        assert "quickscale_modules_analytics" in content
+        assert "quickscale_modules_blog" not in content
 
     def test_forwarded_registered_module_without_manifest_still_succeeds(
         self, tmp_path: Path
@@ -975,8 +978,10 @@ class TestRegenerateManagedWiringSkipManifestNotFound:
         success, message = regenerate_managed_wiring(
             project, module_names=["analytics", "blog"]
         )
-        assert success is False
-        assert "inventory count drift" in message
+        assert success, message
+        content = (project / "myapp" / "settings" / "modules.py").read_text()
+        assert "quickscale_modules_analytics" in content
+        assert "quickscale_modules_blog" not in content
 
 
 class TestRegenerateManagedWiringPriorBasePath:

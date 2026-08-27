@@ -1096,6 +1096,70 @@ class TestRefreshManagedAdaptersFailure:
     """Managed-adapter import/factory failure at an active base path raises
     ImproperlyConfigured (AF7 fail-hard decision)."""
 
+    def test_default_refresh_rejects_partial_authoritative_inventory(
+        self, tmp_path: Path
+    ) -> None:
+        """The no-argument release refresh still requires all twelve modules."""
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            ImproperlyConfigured,
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        original_base = get_modules_base_path()
+        modules_dir = tmp_path / "modules"
+        (modules_dir / "auth").mkdir(parents=True)
+        (modules_dir / "auth" / "module.yml").write_text("version: '1'\nname: auth\n")
+        set_modules_base_path(modules_dir)
+        try:
+            with pytest.raises(ImproperlyConfigured, match="count drift"):
+                refresh_managed_adapters()
+        finally:
+            set_modules_base_path(original_base)
+
+    def test_scoped_refresh_accepts_selected_embedded_subset_atomically(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Project refresh loads selected manifests without redefining inventory."""
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        original_base = get_modules_base_path()
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        modules_dir = tmp_path / "modules"
+        for module_name in ("auth", "orgs"):
+            module_dir = modules_dir / module_name
+            module_dir.mkdir(parents=True)
+            (module_dir / "module.yml").write_text(
+                f"version: '1'\nname: {module_name}\n"
+            )
+
+        adapters = {
+            name: (lambda options, **kwargs: ModuleWiringSpec())
+            for name in ("auth", "orgs")
+        }
+        monkeypatch.setattr(
+            entry_point_module,
+            "_load_managed_adapter",
+            lambda name: adapters[name],
+        )
+        set_modules_base_path(modules_dir)
+        try:
+            refresh_managed_adapters(module_names=["orgs", "missing"])
+            assert MANAGED_ADAPTER_ORIGINS == {"orgs"}
+            assert MANIFEST_ADAPTER_REGISTRY["orgs"] is adapters["orgs"]
+            assert "auth" not in MANIFEST_ADAPTER_REGISTRY
+            assert "missing" not in MANIFEST_ADAPTER_REGISTRY
+        finally:
+            set_modules_base_path(original_base)
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(original_origins)
+
     def test_source_only_discovery_rejects_bundled_fallback(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

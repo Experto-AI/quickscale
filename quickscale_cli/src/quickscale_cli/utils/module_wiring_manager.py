@@ -158,22 +158,24 @@ def _has_embedded_manifests(project_path: Path) -> bool:
     )
 
 
-def _refresh_adapters() -> str | None:
+def _refresh_adapters(module_names: list[str]) -> str | None:
     try:
-        refresh_managed_adapters()
+        refresh_managed_adapters(module_names=module_names)
     except ImproperlyConfigured as error:
         return f"Managed adapter wiring failed: {error}"
     return None
 
 
 def _prepare_modules_base_path(
-    project_path: Path, prior_base_path: Path | None
+    project_path: Path,
+    prior_base_path: Path | None,
+    module_names: list[str],
 ) -> str | None:
     if _has_embedded_manifests(project_path):
         set_modules_base_path(project_path / "modules")
-        return _refresh_adapters()
+        return _refresh_adapters(module_names)
     if prior_base_path is not None:
-        return _refresh_adapters()
+        return _refresh_adapters(module_names)
     return (
         "Modules base path not configured and no embedded module manifests found. "
         "Run inside the maintainer monorepo, call set_modules_base_path(), or "
@@ -319,7 +321,9 @@ def regenerate_managed_wiring(
     prior_origins = set(MANAGED_ADAPTER_ORIGINS)
     try:
         prior_base_path, prior_base_path_was_override = _get_prior_modules_base_path()
-        error = _prepare_modules_base_path(project_path, prior_base_path)
+        error = _prepare_modules_base_path(
+            project_path, prior_base_path, selected_modules
+        )
         if error is not None:
             return False, error
 
