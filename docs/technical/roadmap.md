@@ -191,7 +191,7 @@ was guessed and no `docker rm` was issued. `pg18-af10`, its volume, all twelve d
 |---|---|---|---|---|---|
 | **W1** | SA167d (#18) — A-D accepted, **E outstanding** | **yes** — re-running phase E is executable today; no decision, no upstream ticket. Contends with W3 for the shared cluster | **yes** — phase E, the ledger reconciliation, and the merge-back are all W1-owned | **yes** — #18 is the W1 queue head with no upstream ticket | **truly green — off the critical path** |
 | **W2** | SA167c (#21) | **yes** — W2 is merged, clean, and idle at the tip; the manifest-default projection it needed is archived | **yes** — W2-owned surfaces only (`module.yml`, `gate_registry.json`, the manifest schema/loader) | **yes** — #21 is the W2 queue head | **truly green — on the critical path** |
-| **W3** | SA135 + SA163 (#15) — C/D accepted, E outstanding | **no** — the next E1 attempt needs the maintainer decision in the ticket block after all required reproduction contexts passed without yielding a cause | **yes, after that decision** — the remaining E/F/G work is W3-owned; the exclusive slot remains authorized when needed | **yes** — #15 is the W3 queue head | **decision-blocked — off the critical path, partial merged** |
+| **W3** | SA135 + SA163 (#15) — C/D accepted, E outstanding | **no** — the next E1 attempt needs the maintainer decision after every executed reproduction context passed without yielding a cause; E1's exact literal `TEST COMMAND` chain was not run and remains outstanding unless that decision expressly supersedes it | **yes, after that decision** — the remaining E/F/G work is W3-owned; the exclusive slot remains authorized when needed | **yes** — #15 is the W3 queue head | **decision-blocked — off the critical path, partial merged** — ***corrected after checkpoint attestation — not independently graded*** |
 
 **W1 and W2 are truly green; W3 is decision-blocked at SA135+SA163 (#15).** Only **SA167c (#21)**
 is on the critical path — it is the one ticket whose progress moves the release date. SA167d and
@@ -221,10 +221,12 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 - **W2 — start SA167c (#21).** This is the only action that shortens the release. W2 is idle and
   the lane is clean.
 - **W3 — pause SA135 + SA163 (#15) at phase E1 for the decision in its ticket block.** Do not redo
-  C or D. The orphan cleanup is already closed and every required reproduction context passed; a
-  new pass either authorizes repeated exact green evidence as sufficient or instruments the
-  generated lane scopes and stress-reproduces the historical boundaries before any correction.
-  Only after E1 is accepted may the unchanged-tree serial E2E and `ci-e2e` acceptance proceed.
+  C or D. The orphan cleanup is already closed and every executed reproduction context passed, but
+  E1's exact literal `TEST COMMAND` chain was not run. A new pass either expressly supersedes that
+  requirement by policy or runs it after instrumenting the generated lane scopes and
+  stress-reproducing the historical boundaries. Only after E1 is accepted may the unchanged-tree
+  serial E2E and `ci-e2e` acceptance proceed. ***corrected after checkpoint attestation — not
+  independently graded***
 - **W1 — re-run and accept SA167d's phase E (#18)**, then do the ledger reconciliation. Schedule
   its `make test` outside W3's window.
 
@@ -412,10 +414,15 @@ Conceptual background, mental models, and implementation notes for **every** tic
   mount, and running identity, and all twelve databases remained owned by `quickscale_test_role`.
   E1 then recorded these green runs without changing a file: the isolated development node (1
   passed), isolated React node (1 passed), synchronized two-node run (2 passed), and exact
-  `QS_E2E_PARALLEL=0 make test-e2e` context (Core 38 passed; CLI 40 passed; cleanup complete).
+  `QS_E2E_PARALLEL=0 make test-e2e` context (Core 38 passed; CLI 40 passed; cleanup complete). E1's
+  exact literal `TEST COMMAND` chain was not run. ***corrected after checkpoint attestation — not
+  independently graded***
   **Pending:** E1 is still unaccepted because the reviewed phase required deterministic causal and
-  red-before/green-after evidence. E2 must then run `QS_E2E_PARALLEL=0 make test-e2e` followed only
-  on green by `make ci-e2e` on one unchanged candidate; `make ci-e2e` was not reached in this pass.
+  red-before/green-after evidence, and its exact literal `TEST COMMAND` chain remains outstanding
+  unless the maintainer's policy decision expressly supersedes it. E2 must then run
+  `QS_E2E_PARALLEL=0 make test-e2e` followed only on green by `make ci-e2e` on one unchanged
+  candidate; `make ci-e2e` was not reached in this pass. ***corrected after checkpoint attestation
+  — not independently graded***
   F must reconcile validation policy, Finding 13, ticket context, roadmap counts/dependencies, and
   changelog evidence. G must sync current `v88`, run the complete campaign and independent review
   on one unchanged tip, and merge only that exact tip.
@@ -445,8 +452,11 @@ Conceptual background, mental models, and implementation notes for **every** tic
   **Remaining plan (all phases serial; P/A/B/C/D and accepted E0 are not repeated):**
   1. **E1 — causal-evidence remainder:** apply the decision above. If Option 2 is chosen, bind the
      runner's emitted lane scopes, add deterministic instrumentation/stress at each historical
-     startup/build boundary, and make only corrections supported by a reproduced cause. Preserve
-     the green isolated/pair/full-run evidence as context, not as retroactive E1 acceptance.
+     startup/build boundary, make only corrections supported by a reproduced cause, and run the
+     exact literal E1 `TEST COMMAND` chain. If Option 1 is chosen, it must expressly say whether it
+     supersedes that unrun chain. Preserve the green isolated/pair/full-run evidence as context,
+     not as retroactive E1 acceptance. ***corrected after checkpoint attestation — not independently
+     graded***
   2. **E2 — unchanged-candidate acceptance:** after E1 is accepted, run exact serial E2E and then
      `make ci-e2e` on one unchanged tree, with exact cleanup and PostgreSQL baseline equality.
   3. **F — policy and status reconciliation:** reconcile validation policy, Finding 13, ticket
