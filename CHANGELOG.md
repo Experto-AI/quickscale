@@ -4,20 +4,119 @@
 
 ## v88 development — 2026-08-21
 
-- **SA167d — CLI per-module wiring cleanup partial delivery retained (2026-08-27; root
-  merge-back not claimed).** The settled product delta leaves `quickscale_cli` responsible for collecting desired
-  configuration while module-owned manifests and adapters remain the wiring authorities.
-  Phases A-C are accepted; Phase D was delivered but remains unaccepted because its exact command
-  `python -m pytest quickscale_core/tests/test_root_pytest_collection_config.py
-  quickscale_core/tests/test_v88_ticket_context_consistency.py -q` exited 1, and Phase E was
-  unreached. The configured Ruff formatter repaired the seven pre-existing product-delta files
-  named by the lint gate. A later convergence gate sequence passed `make lint`, `make typecheck`,
-  and `make test`; that computed evidence does not accept Phase D or E. `make test` observed
-  **2,870 Core passed / 1 skipped**, **2,093 CLI passed**, and
-  **2,544 module-integration tests passed / 86 skipped / 12 deselected**, with **94.53%** mean
-  module coverage. The roadmap retains SA167d at merge position #18, with the complete remaining
-  Phase D/E handoff and SA165 dependency. This entry records observed evidence only and does not
-  claim SA167d completion, publication, root merge-back, or completion of any later ticket.
+- **Roadmap cleanup and rebalance review (2026-08-27, twentieth pass).** **No ticket closed and
+  no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
+  positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Every open task
+  already carries a track.
+  **A shared repository gate was found red on the integration branch and repaired in-pass.**
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` failed on `v88` HEAD: commit
+  `24cfe174` rewrote the roadmap's W3 state block from *in flight on `wt-track3`* to *partial
+  delivery merged* without re-anchoring the executable test that reads that block, so its
+  `re.search` for the old `**State … in flight on \`wt-track3\`` … `**Next handoff refinement:`
+  span returned `None`. The test is re-anchored to the merged-partial block (`**State … partial
+  delivery merged into \`v88\`.**` … `**Remaining plan`), asserts the accepted-phase ledger, and
+  now asserts the *absence* of the retired *in flight* / *uncommitted working tree* phrasing so the
+  stale text cannot silently return. **20 passed.** The roadmap now records the standing rule this
+  exposed: a roadmap edit touching the W3/W1 state blocks must re-run this test in the same change.
+  **W3 progress archived out of the planner.** SA135+SA163's partial reached `v88` in **two**
+  merges, not one: `0661f55f`, then `f070f39b` carrying `203fcd61` *"remediate lifecycle and module
+  e2e gaps"* (12 files) — installed-wheel storage lifecycle, module discovery and catalog, the
+  manifest `entry_point.py` adapter path, the `storage` module adapter, and a substantial
+  simplification of `scripts/provision_ci_postgres.sh` and its test. Accepted phases P/A/B and C/D
+  cover the hermetic Docker-unavailable probe, the strict no-host-server window (restricted →
+  BYPASSRLS → restricted, isolation, cleanup, canary, dynamic-loopback, immutable-image), the
+  restoration of `pg18-af10` with its container/image/volume, complete catalog, all twelve module
+  databases and `quickscale_test_role` ownership, one provisioning authority across all four
+  workflows at exactly six hosted stations, retirement of the copied PGDG/database/role/grant
+  blocks and the transcribed provisioning oracle, and source-derived E2E triggers. Corrections made
+  after terminal attestation are not independently graded. The roadmap keeps only a pointer.
+  **SA167d A-D evidence archived.** Convergence scoped project-level adapter refresh while
+  preserving strict 12-module authoritative refresh; the focused suite reported **816 passed**,
+  `make lint` and `make typecheck` green, and `make test` green at Core **2,879 passed / 1 skipped**
+  and CLI **2,094 passed**; independent terminal review found no blocking product defect. The
+  roadmap retains those totals only as the restatement target for the ticket's ledger
+  reconciliation, not as a record.
+  **Measured worktree state.** `wt-track2` (`6011044c`) and `wt-track3` (`24cfe174`) are both
+  ancestors of `v88` — merged, clean, idle. `wt-track1` is **six commits ahead** and clean
+  (`810eefd8`), carrying SA167d's A-D-accepted delta. No suite is running; `pg18-af10` is up with
+  all twelve `test_quickscale_*` databases present.
+  **New physical blocker evidence recorded, not a ticket edge.** Two orphaned CLI-E2E containers,
+  `sa142-no-cleanup_backend` (unhealthy) and `sa142-no-cleanup_db`, have been up since `17:30` —
+  the concrete residue of the same Docker resource/concurrency defect that failed
+  `TestDevelopmentCommandsE2E::test_full_development_workflow` and
+  `TestReactThemeDockerIntegration::test_dockerfile_builds_with_react`. Removing them is now the
+  first step of SA135's phase-E remainder.
+  **Rebalance outcome: the four standing moves re-tested, all rejected again.** SA161 (#19) +
+  SA160 (#20) off W3 — SA161's acceptance needs the W3-owned exclusive PostgreSQL/Docker slot.
+  SA166 (#24) / SA164 (#25) off W2 — `scripts/gate_registry.json` never crosses worktrees, and
+  SA164 has a hard content dependency on SA167c. SA160 ahead of SA161 inside W3 — the shared
+  `sa90_emission_manifests.json` rebaseline ordering must not be split. SA165 (#22) off W1 — its
+  `scripts/test_isolation_conformance.sh` contention is now settled merged input, but the move
+  still buys nothing on the critical path. **Critical path unchanged:** `SA167c` (#21) on W2, with
+  SA166 (#24) and SA164 (#25) as band-C tails behind it. W2 remains the only idle lane holding the
+  only critical-path ticket.
+  **Audits re-read, nothing closed.** arch Finding 13 stays live under SA163; Findings 7, 2 and 4
+  stay behind their growth triggers; tech-audit counts remain S3 1 (TA67/SA160), S4 1 (TA68/SA161),
+  **Total 2 open**. Both documents already matched the planner, so neither needed an edit.
+  **The last open maintainer decision is closed.** Whether to release SA165 (#22) from its SA167d
+  ordering on W1 was put to the maintainer with both alternatives and a recommendation, and
+  answered **A — keep the ordering** (2026-08-27). Rationale: W1 runs one reviewed child at a
+  time, and band-C filler does not preempt an open band-B acceptance even when the two share no
+  file; running SA165 concurrently would also put a second doc-touching ticket on the lane while
+  SA167d's ledger reconciliation rewrites eight documents. The rejected alternative B would have
+  stopped W1 idling at the cost of promoting filler over release work and letting SA167d's
+  accepted-but-unmerged delta age against a moving `v88`. Effect: SA165's **can start** stays *no*
+  until SA167d merges; **can finish**, **can merge**, and the critical path are untouched. The
+  decision block is removed from the planner and carried as a standing rule; SA165's blocker row
+  is restated from *decision-or-upstream* to **upstream work only**. **No maintainer decision is
+  now open anywhere in the v88 plan.**
+
+- **Roadmap cleanup and rebalance review (2026-08-27, nineteenth pass).** **No ticket closed and
+  no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
+  positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Every open task
+  already carries a track.
+  **Two false claims corrected against measured worktree state.** The planner recorded W3 as
+  *merged and idle* and SA167d as *implemented, accepted, merge-back only*. Re-measured:
+  `wt-track2` is an ancestor of `v88` (merged, clean, idle), but **`wt-track3` is three commits
+  ahead** (`202a4a00`, `50afb8e8`, `6cdff32c`) with an **uncommitted working tree** and a
+  `make test-e2e` run executing — SA135+SA163 is *in flight*, not idle — and **`wt-track1` is six
+  commits ahead**, not one. SA167d's own checkpoint on that branch records **phases A-D accepted
+  and phase E outstanding**, because E's first pre-close focused sequence failed before convergence
+  corrected the defect and the forward-only workflow cannot retroactively accept it. SA167d's scope
+  is restated from "merge back" to "re-run and accept phase E, reconcile the eight-document ledger
+  and the executable consistency test to the A-E-accepted state and the final 2,879 Core / 2,094
+  CLI totals, then sync-verify-merge".
+  **New cross-worktree conflict surface identified.** `wt-track3` `6cdff32c` edits
+  `scripts/test_isolation_conformance.sh`, which **SA165 (#22, W1)** also owns. Merge order #15
+  before #22 makes the contention one-directional, and the standing sync-before-merge-back
+  procedure covers it; the roadmap now names the surface explicitly.
+  **Rebalance outcome: four moves tested, all rejected.** SA161 (#19) + SA160 (#20) off W3 —
+  rejected, SA161's acceptance needs the W3-owned exclusive PostgreSQL/Docker slot. SA166 (#24) /
+  SA164 (#25) off W2 — rejected on the standing invariant that `scripts/gate_registry.json` never
+  crosses worktrees. SA160 ahead of SA161 inside W3 — rejected on the shared
+  `sa90_emission_manifests.json` rebaseline ordering. **SA165 (#22) off W1 — newly rejected** on
+  the freshly measured `test_isolation_conformance.sh` contention with in-flight W3 work.
+  **Critical path unchanged and now the only lever:** `SA167c` (#21) on W2, with SA166 (#24) and
+  SA164 (#25) as band-C tails behind it. **W2 is the one idle lane and holds the only
+  critical-path ticket**, so starting SA167c is the only action that shortens the release; W1's
+  and W3's green tickets are real band-B work but do not move the date. The binding constraint
+  across all three heads is the single shared PostgreSQL 18 cluster, not any ticket edge.
+  **Audits re-read, nothing closed.** arch Finding 13 stays live under SA163; Findings 7, 2, and 4
+  stay behind their growth triggers; tech-audit counts remain S3 1 (TA67/SA160), S4 1 (TA68/SA161),
+  total 2 open. No red flag is open in either document, and both counts already matched the
+  planner, so neither audit needed an edit.
+  **Archived out of the planner (context no longer needed to execute).** The 2026-08-21
+  prioritization-decision prose is reduced to the standing **"neither"** rule. The SA123
+  coupled-test authority decision block is removed; only the surviving obligation on SA135+SA163
+  (#15) — preserve SA123's hosted-job, `needs`-edge, run-value, publish/E2E-path, and generator
+  expectations and the regenerated 24-entry publish oracle — is retained, inside that ticket. The
+  W3 exclusive PostgreSQL/Docker window decision is reduced to a standing slot rule: the window was
+  authorized 2026-08-26, **has been exercised once**, and `pg18-af10` is up again. The multi-pass
+  rebalance narrative and the repeated `make quality` baseline restatements are dropped as log.
+  **One maintainer decision is open:** whether to release SA165 (#22) from its SA167d ordering on
+  W1. The roadmap records the context, both alternatives, and the recommendation (keep the
+  ordering). It affects **can start** for SA165 only, and touches no critical path.
+
 - **Roadmap cleanup and rebalance review (2026-08-27, eighteenth pass).** **No ticket closed and
   no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
   positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries.
@@ -90,6 +189,7 @@
   and attest this status-only checkpoint, merge the exact W2 tip into `v88`, then begin SA167c from
   the resulting integration state; the advisory rename may be taken separately. At checkpoint
   creation the reviewed product state was committed on `wt-track2` but had not yet landed on `v88`.
+
 - **Roadmap cleanup and rebalance review (2026-08-27, seventeenth pass).** **No ticket closed and
   no track moved** — the queue then stood at **ten open v88 ticket entries across nine open merge
   positions** (#15, #16, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Track 3 was

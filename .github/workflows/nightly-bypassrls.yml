@@ -76,78 +76,9 @@ jobs:
       run: |
         poetry install --with dev
 
-    - name: Create test databases in PostgreSQL
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq --no-install-recommends postgresql-client
-        for db in \
-          test_quickscale_smoke \
-          test_quickscale_analytics \
-          test_quickscale_auth \
-          test_quickscale_backups \
-          test_quickscale_billing \
-          test_quickscale_blog \
-          test_quickscale_crm \
-          test_quickscale_forms \
-          test_quickscale_listings \
-          test_quickscale_notifications \
-          test_quickscale_orgs \
-          test_quickscale_social \
-          test_quickscale_storage; do
-          createdb -h localhost -U postgres "$db" 2>/dev/null || echo "Database $db already exists"
-        done
-
-    - name: Provision a BYPASSRLS test role
-      run: |
-        # Dedicated role WITH BYPASSRLS (the standard provision_test_roles.sh
-        # roles are all NOBYPASSRLS by contract). LOGIN + CREATEDB let Django's
-        # test runner create the transient test_* databases; BYPASSRLS lets the
-        # bypass_rls-marked migration tests exercise privileged DDL.
-        ROLE="quickscale_bypassrls_test_role"
-        psql -h localhost -U postgres -c \
-          "DO \$\$ BEGIN
-             IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${ROLE}') THEN
-               CREATE ROLE ${ROLE} LOGIN CREATEDB BYPASSRLS NOINHERIT NOSUPERUSER NOCREATEROLE;
-             ELSE
-               ALTER ROLE ${ROLE} LOGIN CREATEDB BYPASSRLS NOINHERIT NOSUPERUSER NOCREATEROLE;
-             END IF;
-           END \$\$;"
-
-        # Give the role ownership of every test database template so it can
-        # create the test_* databases and manage their schemas.
-        for db in \
-          test_quickscale_analytics \
-          test_quickscale_auth \
-          test_quickscale_backups \
-          test_quickscale_billing \
-          test_quickscale_blog \
-          test_quickscale_crm \
-          test_quickscale_forms \
-          test_quickscale_listings \
-          test_quickscale_notifications \
-          test_quickscale_orgs \
-          test_quickscale_social \
-          test_quickscale_storage; do
-          psql -h localhost -U postgres -c "ALTER DATABASE \"$db\" OWNER TO ${ROLE};"
-          psql -h localhost -U postgres -d "$db" -c "GRANT ALL ON SCHEMA public TO ${ROLE};"
-        done
-        echo "✓ BYPASSRLS role provisioned and granted database ownership"
+    - name: Provision hosted PostgreSQL BYPASSRLS profile
+      run: scripts/provision_ci_postgres.sh hosted-setup --profile bypassrls
 
     - name: Run BYPASSRLS-privileged tests (make test-bypassrls)
-      env:
-        # test-bypassrls sets QUICKSCALE_ALLOW_BYPASSRLS=1 itself; point every
-        # module's DB user at the BYPASSRLS role.
-        QS_ANALYTICS_DB_USER: quickscale_bypassrls_test_role
-        QS_AUTH_DB_USER: quickscale_bypassrls_test_role
-        QS_BACKUPS_DB_USER: quickscale_bypassrls_test_role
-        QS_BILLING_DB_USER: quickscale_bypassrls_test_role
-        QS_BLOG_DB_USER: quickscale_bypassrls_test_role
-        QS_CRM_DB_USER: quickscale_bypassrls_test_role
-        QS_FORMS_DB_USER: quickscale_bypassrls_test_role
-        QS_LISTINGS_DB_USER: quickscale_bypassrls_test_role
-        QS_NOTIFICATIONS_DB_USER: quickscale_bypassrls_test_role
-        QS_ORGS_DB_USER: quickscale_bypassrls_test_role
-        QS_SOCIAL_DB_USER: quickscale_bypassrls_test_role
-        QS_STORAGE_DB_USER: quickscale_bypassrls_test_role
       run: |
         make test-bypassrls

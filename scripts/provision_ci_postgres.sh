@@ -36,7 +36,8 @@ LEASE_TOKEN=""
 CONTAINER_ID=""
 CHILD_PID=""
 CHILD_PGID=""
-CLEANUP_ARMED=false
+PENDING_CHILD_SIGNAL=""
+PENDING_CHILD_STATUS=""
 
 die() {
   printf 'ERROR: %s\n' "$*" >&2
@@ -439,18 +440,24 @@ cleanup() {
   local status=$?
   trap - EXIT HUP INT TERM
   if [[ -n "$CHILD_PGID" && "$CHILD_PGID" != "0" ]]; then
-    kill -TERM -- "-$CHILD_PGID" 2>/dev/null || true
+    kill -TERM -- "-$CHILD_PGID" 2>/dev/null \
+      || { [[ -z "$CHILD_PID" ]] || kill -TERM "$CHILD_PID" 2>/dev/null || true; }
   elif [[ -n "$CHILD_PID" ]]; then
     kill -TERM "$CHILD_PID" 2>/dev/null || true
   fi
   [[ -z "$CHILD_PID" ]] || wait "$CHILD_PID" 2>/dev/null || true
-  if [[ -n "$CONTAINER_ID" ]]; then docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true; fi
+  if [[ -n "$CONTAINER_ID" ]]; then
+    docker rm -f "$CONTAINER_ID" >/dev/null 2>&1 || true
+  fi
   if [[ -n "$SCOPE" ]]; then
     local ids id; local -a owned_ids=()
-    ids=$(docker ps -aq --filter "$OWNER_LABEL" --filter "$LIFECYCLE_LABEL" --filter "label=com.quickscale.scope=$SCOPE" 2>/dev/null || true)
-    if [[ -n "$ids" ]]; then
-      while IFS= read -r id; do [[ -n "$id" ]] && owned_ids+=("$id"); done <<< "$ids"
-      ((${#owned_ids[@]} == 0)) || docker rm -f "${owned_ids[@]}" >/dev/null 2>&1 || true
+    if ids=$(docker ps -aq --filter "$OWNER_LABEL" --filter "$LIFECYCLE_LABEL" --filter "label=com.quickscale.scope=$SCOPE" 2>/dev/null); then
+      if [[ -n "$ids" ]]; then
+        while IFS= read -r id; do [[ -n "$id" ]] && owned_ids+=("$id"); done <<< "$ids"
+        if ((${#owned_ids[@]} > 0)); then
+          docker rm -f "${owned_ids[@]}" >/dev/null 2>&1 || true
+        fi
+      fi
     fi
   fi
   [[ -z "$LEASE_DIR" ]] || rm -rf -- "$LEASE_DIR"
@@ -476,7 +483,6 @@ run_local() {
   local temp_base="${TMPDIR:-/tmp}" image_id published_port
   [[ -d "$temp_base" ]] || die "temporary directory is unavailable"
   profile_scope
-  CLEANUP_ARMED=true
   trap cleanup EXIT HUP INT TERM
   trap 'forward_signal HUP 129' HUP
   trap 'forward_signal INT 130' INT
@@ -518,11 +524,24 @@ run_local() {
   # child immune to the signal group used by this lifecycle.  Reset the three
   # lifecycle signals at the exec boundary while retaining the verified new
   # session/process-group semantics.
-  local child_sid="" parent_pgid result=0 probe_failed=false active_pid
+  local child_sid="" observed_child_pgid="" parent_pgid result=0 probe_failed=false active_pid
   parent_pgid=$(ps -o pgid= -p $$ | tr -d ' ') || die "cannot inspect the lifecycle process group"
   [[ "$parent_pgid" =~ ^[0-9]+$ ]] || die "lifecycle process group is invalid"
-  setsid -- env --default-signal=HUP --default-signal=INT --default-signal=TERM "$@" & CHILD_PID=$!
-  CHILD_PGID=$(ps -o pgid= -p "$CHILD_PID" | tr -d ' ') || probe_failed=true
+  # Defer lifecycle signals across the launch-to-ownership window.  The shell
+  # records the first signal, binds both the child PID and its setsid-defined
+  # process-group identity in one assignment command, then forwards the signal
+  # before any verification can declare the child ready.
+  trap 'defer_signal HUP 129' HUP
+  trap 'defer_signal INT 130' INT
+  trap 'defer_signal TERM 143' TERM
+  setsid -- env --default-signal=HUP --default-signal=INT --default-signal=TERM "$@" & CHILD_PID=$! CHILD_PGID=$!
+  trap 'forward_signal HUP 129' HUP
+  trap 'forward_signal INT 130' INT
+  trap 'forward_signal TERM 143' TERM
+  if [[ -n "$PENDING_CHILD_SIGNAL" ]]; then
+    forward_signal "$PENDING_CHILD_SIGNAL" "$PENDING_CHILD_STATUS"
+  fi
+  observed_child_pgid=$(ps -o pgid= -p "$CHILD_PID" | tr -d ' ') || probe_failed=true
   if [[ "$probe_failed" == false ]]; then
     child_sid=$(ps -o sid= -p "$CHILD_PID" | tr -d ' ') || probe_failed=true
   fi
@@ -535,18 +554,29 @@ run_local() {
     CHILD_PGID=""
     exit "$result"
   fi
-  [[ "$CHILD_PGID" =~ ^[0-9]+$ && "$CHILD_PGID" == "$CHILD_PID" ]] || die "child process group is not distinct"
-  [[ "$child_sid" == "$CHILD_PID" && "$CHILD_PGID" != "$parent_pgid" ]] || die "child session is not distinct"
+  [[ "$observed_child_pgid" =~ ^[0-9]+$ && "$observed_child_pgid" == "$CHILD_PID" ]] || die "child process group is not distinct"
+  [[ "$child_sid" == "$CHILD_PID" && "$observed_child_pgid" != "$parent_pgid" ]] || die "child session is not distinct"
   wait "$CHILD_PID" || result=$?
   CHILD_PID=""
   CHILD_PGID=""
   exit "$result"
 }
 
+defer_signal() {
+  if [[ -z "$PENDING_CHILD_SIGNAL" ]]; then
+    PENDING_CHILD_SIGNAL="$1"
+    PENDING_CHILD_STATUS="$2"
+  fi
+}
+
 forward_signal() {
   local signal="$1" status="$2"
   if [[ -n "$CHILD_PGID" && "$CHILD_PGID" != "0" ]]; then
-    kill -"$signal" -- "-$CHILD_PGID" 2>/dev/null || true
+    kill -"$signal" -- "-$CHILD_PGID" 2>/dev/null \
+      || { [[ -z "$CHILD_PID" ]] || kill -"$signal" "$CHILD_PID" 2>/dev/null || true; }
+    wait "$CHILD_PID" 2>/dev/null || true
+  elif [[ -n "$CHILD_PID" ]]; then
+    kill -"$signal" "$CHILD_PID" 2>/dev/null || true
     wait "$CHILD_PID" 2>/dev/null || true
   fi
   exit "$status"

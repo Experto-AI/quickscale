@@ -18,9 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from quickscale_core.contracts.module_discovery import (
-    ImproperlyConfigured,
-    discover_bundled_module_names,
-    discover_shipped_module_names,
+    authoritative_module_names,
     get_placeholder_rejection_reason,
     is_placeholder_module,
 )
@@ -159,12 +157,7 @@ def get_discovered_module_names() -> list[str]:
     Raises:
         ImproperlyConfigured: If no module inventory is available.
     """
-    try:
-        return discover_shipped_module_names()
-    except ImproperlyConfigured:
-        pass
-
-    return discover_bundled_module_names()
+    return authoritative_module_names()
 
 
 def get_discovered_module_entries() -> list[ModuleCatalogEntry]:

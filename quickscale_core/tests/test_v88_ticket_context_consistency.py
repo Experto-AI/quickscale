@@ -325,17 +325,23 @@ def _assert_current_status_consumers(
     assert "against the three-leg W2 spine" in roadmap_text
 
     current_handoff = re.search(
-        r"\*\*Current handoff \(2026-08-26\):(?P<body>.*?)"
-        r"\*\*Next handoff refinement:",
+        r"\*\*State \(measured 2026-08-27\): partial delivery merged into `v88`\.\*\*"
+        r"(?P<body>.*?)\*\*Remaining plan",
         roadmap_text,
         re.DOTALL,
     )
     assert current_handoff is not None
     handoff_text = current_handoff.group(0)
-    assert "ready to continue from strict C acceptance" in handoff_text
-    assert "W2 has released the shared PostgreSQL cluster" in handoff_text
-    assert "blocked before source or service mutation" not in handoff_text
-    assert "until W2 releases the cluster" not in handoff_text
+    assert "Phases P/A/B and C/D are accepted" in handoff_text
+    assert "E was\n  dispatched but is not accepted" in handoff_text
+    assert "in flight on `wt-track3`" not in roadmap_text
+    assert "uncommitted working tree" not in roadmap_text
+    assert "ready to continue from strict C acceptance" not in handoff_text
+    assert "W2 has released the shared PostgreSQL cluster" not in handoff_text
+
+    # W1: SA167d is a phase-E acceptance, not a merge-back-only ticket.
+    assert "phases A-D accepted, phase E outstanding" in roadmap_text
+    assert "This is not a merge-back-only ticket" in roadmap_text
 
     entry_word = _number_word(len(v88))
     position_word = _number_word(len(positions))

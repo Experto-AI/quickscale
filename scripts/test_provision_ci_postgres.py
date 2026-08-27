@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import stat
 import subprocess
 import sys
@@ -16,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts/provision_ci_postgres.sh"
 
 
-def invoke(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _invoke_environment(env: dict[str, str] | None = None) -> dict[str, str]:
     variables = os.environ.copy()
     # The suite is also run inside the restricted local-CI lease. Each case
     # must start with an intentionally independent lifecycle environment so a
@@ -39,13 +40,28 @@ def invoke(*args: str, env: dict[str, str] | None = None) -> subprocess.Complete
     variables.update({"PYTHON": sys.executable, "PYTHONPATH": str(ROOT / "quickscale_core/src")})
     if env:
         variables.update(env)
+    return variables
+
+
+def invoke(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["/bin/bash", str(HELPER), *args],
         cwd=ROOT,
-        env=variables,
+        env=_invoke_environment(env),
         text=True,
         capture_output=True,
         check=False,
+    )
+
+
+def spawn(*args: str, env: dict[str, str] | None = None) -> subprocess.Popen[str]:
+    return subprocess.Popen(
+        ["/bin/bash", str(HELPER), *args],
+        cwd=ROOT,
+        env=_invoke_environment(env),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
 
 
@@ -98,6 +114,11 @@ def test_immediate_children_preserve_status_and_cleanup(
     tmp_path: Path, command: list[str], expected_status: int
 ) -> None:
     tools, docker_log = fake_local_lifecycle_tools(tmp_path)
+    obsolete_record = tmp_path / "obsolete-record.json"
+    obsolete_record_environment = {
+        "QS_PROVISION_" + "LIFECYCLE_RECORD": str(obsolete_record),
+        "QUICKSCALE_POSTGRES_" + "LIFECYCLE_RECORD": str(obsolete_record),
+    }
     ps_count = tmp_path / "ps-count"
     executable(
         tools / "ps",
@@ -123,6 +144,7 @@ exit 1''',
             "PATH": f"{tools}:/usr/bin",
             "TMPDIR": str(tmp_path),
             "QS_PROVISION_SCOPE": f"immediate_{expected_status}",
+            **obsolete_record_environment,
         },
     )
 
@@ -130,6 +152,8 @@ exit 1''',
     assert "cannot verify the process group of a live child" not in result.stderr
     assert any("rm -f container-id" in call for call in docker_log.read_text().splitlines())
     assert not any(path.name.startswith("quickscale-postgres.") for path in tmp_path.iterdir())
+    assert not obsolete_record.exists()
+    assert "LIFECYCLE_" + "RECORD=" not in result.stderr
 
 
 def test_live_child_probe_failure_still_fails_distinct_group_verification(
@@ -169,6 +193,92 @@ exit 1''',
     assert time.monotonic() - started < 5
     assert "cannot verify the process group of a live child" in result.stderr
     assert any("rm -f container-id" in call for call in docker_log.read_text().splitlines())
+
+
+@pytest.mark.parametrize(
+    ("signal_number", "signal_name", "expected_status"),
+    [
+        (signal.SIGHUP, "HUP", 129),
+        (signal.SIGINT, "INT", 130),
+        (signal.SIGTERM, "TERM", 143),
+    ],
+)
+def test_pre_readiness_signal_reaps_child_group_and_preserves_status(
+    tmp_path: Path,
+    signal_number: signal.Signals,
+    signal_name: str,
+    expected_status: int,
+) -> None:
+    tools, docker_log = fake_local_lifecycle_tools(tmp_path)
+    probe_started = tmp_path / "probe-started"
+    release_probe = tmp_path / "release-probe"
+    ps_count = tmp_path / "ps-count"
+    executable(
+        tools / "ps",
+        f'''count=0
+if [[ -f "{ps_count}" ]]; then count=$(<"{ps_count}"); fi
+count=$((count + 1))
+printf "%s" "$count" > "{ps_count}"
+if [[ "$count" -eq 2 ]]; then
+  : > "{probe_started}"
+  while [[ ! -f "{release_probe}" ]]; do /bin/sleep 0.01; done
+fi
+exec /usr/bin/ps "$@"''',
+    )
+    descendant_pid_file = tmp_path / "descendant.pid"
+    process = spawn(
+        "run",
+        "--profile",
+        "restricted",
+        "--",
+        "/bin/bash",
+        "-c",
+        (
+            'trap \'kill "$descendant" 2>/dev/null; '
+            f'wait "$descendant" 2>/dev/null; exit {expected_status}\' {signal_name}; '
+            f"sleep 30 & descendant=$!; printf '%s\\n' \"$descendant\" > {descendant_pid_file!s}; "
+            'wait "$descendant"'
+        ),
+        env={
+            "PATH": f"{tools}:/usr/bin",
+            "TMPDIR": str(tmp_path),
+            "QS_PROVISION_SCOPE": f"signal_barrier_{signal_name.lower()}",
+        },
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if probe_started.exists() and descendant_pid_file.exists():
+                break
+            time.sleep(0.05)
+        assert probe_started.exists(), "child-group probe did not reach its deterministic barrier"
+        assert descendant_pid_file.exists(), (
+            "child descendant did not start before the probe barrier"
+        )
+        descendant_pid = int(descendant_pid_file.read_text())
+        process_group = os.getpgid(descendant_pid)
+        process.send_signal(signal_number)
+        release_probe.touch()
+        stdout, stderr = process.communicate(timeout=10)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+
+    assert process.returncode == expected_status, stderr
+    assert stdout == ""
+    assert subprocess.run(["kill", "-0", str(descendant_pid)], check=False).returncode != 0
+    process_table = subprocess.run(
+        ["ps", "-eo", "pid=,pgid=,stat="], capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    assert not any(
+        fields[1] == str(process_group) and not fields[2].startswith("Z")
+        for line in process_table
+        if (fields := line.split()) and len(fields) >= 3
+    )
+    assert any("rm -f container-id" in call for call in docker_log.read_text().splitlines())
+    assert not any(path.name.startswith("quickscale-postgres.") for path in tmp_path.iterdir())
+    assert "LIFECYCLE_" + "RECORD=" not in stderr
 
 
 @pytest.mark.parametrize(
@@ -306,7 +416,7 @@ def test_all_profiles_have_exact_database_and_environment_contract(profile: str)
     assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)
     if profile == "backups":
-        assert [entry["name"] for entry in data["databases"]] == ["test_quickscale_backups"]
+        assert [entry["key"] for entry in data["databases"]] == ["backups"]
         assert set(data["environment"]) == {
             "QS_BACKUPS_DB_" + suffix for suffix in ("NAME", "USER", "HOST", "PORT")
         }
@@ -316,13 +426,20 @@ def test_all_profiles_have_exact_database_and_environment_contract(profile: str)
         modules = data["discovery"]["modules"]
         expected = ["smoke", *modules]
         if profile == "isolation":
-            expected.remove("backups")
+            expected = [key for key in expected if key != "backups"]
         assert [entry["key"] for entry in data["databases"]] == expected
-        mapped = (
-            modules
-            if profile != "isolation"
-            else ["orgs", "billing", "blog", "crm", "forms", "listings"]
-        )
+        if profile == "isolation":
+            mapped = sorted(
+                {
+                    key.removeprefix("QS_").split("_DB_", 1)[0].lower()
+                    for key in data["environment"]
+                    if key.startswith("QS_")
+                }
+            )
+            assert len(mapped) == 6
+            assert "backups" not in mapped
+        else:
+            mapped = [entry["module"] for entry in data["databases"] if entry["module"]]
         assert set(data["environment"]) == {
             f"QS_{module.upper()}_DB_{suffix}"
             for module in mapped
@@ -334,6 +451,30 @@ def test_all_profiles_have_exact_database_and_environment_contract(profile: str)
     elif profile in {"restricted", "isolation"}:
         assert data["role"]["name"] == "quickscale_test_role"
         assert data["environment"]["QUICKSCALE_ALLOW_BYPASSRLS"] == "0"
+
+
+def test_profile_descriptions_are_complete_source_bindings() -> None:
+    """Every hosted profile exposes all facts consumed by workflow callers."""
+    for profile in ("backups", "restricted", "isolation", "bypassrls", "client-only"):
+        result = invoke(
+            "describe",
+            "--profile",
+            profile,
+            "--format",
+            "json",
+            env={"QS_PROVISION_HOSTED": "1"},
+        )
+        assert result.returncode == 0, result.stderr
+        data = json.loads(result.stdout)
+        assert data["profile"] == profile
+        assert data["discovery"]["modules"] == sorted(data["discovery"]["modules"])
+        assert len(data["discovery"]["modules"]) == 12
+        if profile == "client-only":
+            assert data["databases"] == []
+            assert data["environment"] == {}
+        else:
+            assert data["databases"]
+            assert data["role"]["flags"]
 
 
 def test_local_profile_names_are_qualified_and_disjoint() -> None:
@@ -393,6 +534,7 @@ def test_host_and_port_are_validated_before_mutation(variables: dict[str, str]) 
 
 
 def test_local_never_installs_clients_and_requires_docker(tmp_path: Path) -> None:
+    """The Docker prerequisite is checked after clients, without host fallbacks."""
     only_bash = tmp_path / "only-bash"
     only_bash.mkdir()
     (only_bash / "dirname").symlink_to("/usr/bin/dirname")
@@ -407,22 +549,35 @@ def test_local_never_installs_clients_and_requires_docker(tmp_path: Path) -> Non
     assert result.returncode != 0 and "required PostgreSQL client" in result.stderr
     tools = tmp_path / "tools"
     tools.mkdir()
+    # Keep this branch hermetic: the host has both Docker and apt-get, so a
+    # PATH containing /usr/bin would turn a negative prerequisite test into a
+    # real allocation or an installation attempt.  The client scripts use an
+    # env-based shebang, while the helper needs dirname before it reaches its
+    # Docker guard; expose only those utilities and the PostgreSQL shims.
+    (tools / "bash").symlink_to("/bin/bash")
+    (tools / "dirname").symlink_to("/usr/bin/dirname")
     for tool in ("psql", "pg_dump", "pg_restore"):
         executable(tools / tool, f'echo "{tool} (PostgreSQL) 18.1"')
+    docker_log = tmp_path / "docker.log"
+    apt_log = tmp_path / "apt-get.log"
     result = invoke(
         "run",
         "--profile",
         "restricted",
         "--",
         "true",
-        env={"PATH": f"{tools}:/usr/bin", "TMPDIR": str(tmp_path)},
+        env={
+            "PATH": str(tools),
+            "TMPDIR": str(tmp_path),
+            "QS_DOCKER_LOG": str(docker_log),
+            "QS_APT_LOG": str(apt_log),
+        },
     )
-    # A real daemon may be available even though the PATH intentionally omits
-    # the PostgreSQL client installation path. In that case the fake clients
-    # reach the server-major guard rather than the Docker prerequisite guard.
     assert result.returncode != 0
-    assert "Docker" in result.stderr or "server did not report" in result.stderr
-    assert "apt-get" not in result.stderr
+    assert result.stderr == "ERROR: Docker is required for local PostgreSQL\n"
+    assert not docker_log.exists()
+    assert not apt_log.exists()
+    assert not any(path.name.startswith("quickscale-postgres.") for path in tmp_path.iterdir())
 
 
 def test_hosted_setup_is_github_only_and_client_only_writes_lease(tmp_path: Path) -> None:
@@ -581,6 +736,9 @@ def test_roles_sql_and_safety_contracts_are_explicit() -> None:
     assert "image-contract" in helper and "label=com.quickscale.scope" in helper
     assert "apt.postgresql.org" in helper and "postgresql-client-18" in helper
     assert "GITHUB_PATH" in helper
+    assert "QS_PROVISION_" + "LIFECYCLE_RECORD" not in helper
+    assert "QUICKSCALE_POSTGRES_" + "LIFECYCLE_RECORD" not in helper
+    assert "LIFECYCLE_" + "RECORD=" not in helper
 
 
 def test_hyphenated_docker_container_name_remains_supported(tmp_path: Path) -> None:

@@ -37,6 +37,7 @@ on:
       - 'quickscale_core/tests/conftest.py'
       - 'Makefile'
       - 'scripts/check_ci_locally.sh'
+      - 'scripts/provision_ci_postgres.sh'
       - 'scripts/_qs_jobs.sh'
       - 'scripts/test_e2e.sh'
       - 'scripts/test_e2e_parallel.py'
@@ -82,33 +83,8 @@ jobs:
         virtualenvs-create: true
         virtualenvs-in-project: true
 
-    - name: Install system dependencies and PostgreSQL 18 client tooling
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          ca-certificates \
-          curl
-        distro_codename="$(
-          . /etc/os-release
-          echo "$VERSION_CODENAME"
-        )"
-        sudo install -d /usr/share/postgresql-common/pgdg
-        sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-          -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
-        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \
-          | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
-        sudo apt-get update
-        sudo apt-get install -y postgresql-client-18
-        echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
-
-    - name: Verify PostgreSQL 18 client tooling
-      run: |
-        test -x /usr/lib/postgresql/18/bin/pg_dump
-        test -x /usr/lib/postgresql/18/bin/pg_restore
-        test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"
-        test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"
-        /usr/lib/postgresql/18/bin/pg_dump --version | grep -F "(PostgreSQL) 18"
-        /usr/lib/postgresql/18/bin/pg_restore --version | grep -F "(PostgreSQL) 18"
+    - name: Provision hosted PostgreSQL client-only profile
+      run: scripts/provision_ci_postgres.sh hosted-setup --profile client-only
 
     - name: Cache Poetry dependencies
       uses: actions/cache@v5

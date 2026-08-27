@@ -528,7 +528,8 @@ def test_installed_wheel_plan_apply_up_all_modules(tmp_path: Path) -> None:
 
         ps = _run_bounded([quickscale, "ps"], cwd=project_dir, env=env, timeout=120)
         _require_success(ps, "installed external-cwd ps")
-        assert f"{project_slug}_backend" in ps.stdout
+        resource_prefix = str(env["QUICKSCALE_RESOURCE_PREFIX"])
+        assert f"{resource_prefix}_backend" in ps.stdout
 
         migrate = _run_bounded(
             [quickscale, "manage", "migrate", "--noinput"],
@@ -595,6 +596,9 @@ def test_sa142_worker_resources_do_not_change_project_inputs(
         Path("/venv"), Path("/wheels"), _scoped_name(), 8123
     )
     assert environment["QUICKSCALE_RESOURCE_PREFIX"] == "run-scope-gw0"
+    assert f"{environment['QUICKSCALE_RESOURCE_PREFIX']}_backend" == (
+        "run-scope-gw0_backend"
+    )
 
 
 class _SetupFailure(RuntimeError):

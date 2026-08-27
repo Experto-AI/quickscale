@@ -1,4 +1,4 @@
-"""Module-owned storage manifest adapter."""
+"""Dependency-light storage adapter for pre-install managed wiring."""
 
 from __future__ import annotations
 

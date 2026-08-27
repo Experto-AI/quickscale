@@ -141,6 +141,7 @@
             "trigger_inputs": [
                 "Makefile",
                 "scripts/check_ci_locally.sh",
+                "scripts/provision_ci_postgres.sh",
                 "scripts/_qs_jobs.sh",
                 "scripts/test_e2e.sh",
                 "scripts/test_e2e_parallel.py",
