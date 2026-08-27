@@ -4,6 +4,46 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-27, seventeenth pass).** **No ticket closed and
+  no track moved** — the queue still stands at **ten open v88 ticket entries across nine open merge
+  positions** (#15, #16, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Track 3 was
+  confirmed integrated: `wt-track1`, `wt-track2`, and `wt-track3` are each verified ancestors of
+  `v88`, W3 having merged at `d650cf26`.
+  **Rebalance outcome: four moves tested, all rejected, and one of them for the first time.**
+  SA161 (#19) + SA160 (#20) **from W3 to W1** was evaluated on this pass and rejected: the move is
+  mechanically legal — SA161's only edge is a lane-ordering position behind SA135, the pair shares
+  no file with SA167d, and co-locating them with SA165 would gather the whole SA90 emission surface
+  onto one serialized lane — but both tickets are band C and off the critical path, so the move
+  cannot change the release date while loading W1 to four legs against W3's one. The W3→W2 move,
+  moving SA166/SA164 off W2, and splitting SA160 ahead of SA161 remain rejected on their standing
+  grounds. **Nothing can shorten the release:** `SA118 → SA167c` is pinned to W2 by
+  `quickscale_modules/*/module.yml` and `scripts/gate_registry.json` ownership, and no move removes
+  a leg from that path or lets one start earlier.
+  **One previously unnamed cross-lane conflict surface was recorded:**
+  `templates/project_name/settings/production.py.j2` is edited by SA161 (#19, W3) at the dead
+  `get_client_ip` definition and by SA164 (#25, W2) at the privileged-command frozenset — different
+  regions, no ordering edge, merge order #19 before #25, covered by the standing
+  sync-before-merge-back procedure. The roadmap's contended-surface list moves from six to seven.
+  **Closed-ticket history archived out of the planner:** the SA123 coupled-test authority decision
+  was reduced to the one obligation that survives it — SA135+SA163 (#15) must preserve SA123's
+  settled `test_gate_parity.py` expectation lines and the regenerated 24-entry publish oracle when
+  it retires or derives the transcribed provisioning shell literal — and the duplicated
+  parallelism/rebalance/irreducibility prose in the dependency-graph section was consolidated.
+  **Three-state result.** All three lanes are truly green on can-start, can-finish, and can-merge:
+  W2 SA118 (#16), W1 SA167d (#18), and W3 SA135+SA163 (#15). SA118 is the only truly green ticket
+  **on** the critical path; the other two are real band-B work off it. Every remaining blocker is
+  classified in the roadmap as either a hard upstream edge or a deliberately retained lane-ordering
+  edge. **No maintainer decision is open anywhere in the v88 plan** — the last one, W3's exclusive
+  PostgreSQL/Docker window, was decided on 2026-08-26 and remains recorded in the roadmap because
+  the window has not yet been used.
+  **One tech-audit watch item retired.** The *quality baseline* item recorded two warning
+  regressions (`development_commands.py::up` at complexity 15, and `_social_manifest_apps` newly
+  above threshold). Both are resolved — `_social_manifest_apps` was split into
+  `_select_social_manifest_apps_projection` / `_validate_social_manifest_apps_projection`
+  (`2cb391f2`) — and the shared baseline now reports zero warning, zero critical, and zero total
+  regressions with monotonicity passing, per the SA123 and SA167b acceptance campaigns above. No
+  numbered finding changed: arch Finding 13 stays live behind SA163, and tech TA67 and TA68 stay
+  live behind SA160 and SA161, leaving the tech-audit inventory at S3: 1 · S4: 1 · total 2.
 - **SA167b adapter relocation accepted and merged into `v88` (2026-08-26).** All twelve
   shipped modules expose `get_manifest_adapter()`
   from their module packages, while `quickscale_core/src/quickscale_core/manifest/entry_point.py`

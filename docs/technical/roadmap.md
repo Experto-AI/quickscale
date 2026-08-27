@@ -138,46 +138,55 @@ The manifest-reading `entry_point.py`, the
 fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec seam, and the regenerated migration baseline
 are all merged tree state that open tickets build on, not pending dependencies.
 
-**Parallelism result: all three worktrees are merged into `v88` and all three queue heads are
+**Parallelism result: all three lanes are merged into `v88` and all three queue heads are
 executable.** `wt-track1`, `wt-track2`, and `wt-track3` are each verified ancestors of the
-integration branch, so no lane carries unmerged work and every lane starts from the integration tip.
-All twelve modules own an adapter and `entry_point.py` is drained to generic registry/dispatch
-logic; SA123's scanner implementation and exact-tree acceptance are merged; SA135+SA163's P/A/B
-and partial C implementation is merged and W3 resumes at the strict C
-no-host acceptance remainder rather than restarting. Each lane still syncs current `v88` before its
-own exact-candidate validation; the roadmap does not preserve worktree-object pointers after their
-scheduling purpose expires.
+integration branch (W3 merged at `d650cf26`), so no lane carries unmerged work and every lane
+starts from the integration tip. Each lane still syncs current `v88` before its own
+exact-candidate validation.
 
-**Rebalance result: no track moves, and the binding constraint is no longer merge debt.** With
-every lane merged and idle, the one contended resource is physical: a single PostgreSQL 18 cluster
-holding `localhost:5432` and the twelve shared test databases. W1's and W2's remaining campaigns
-and W3's strict-C proof need it, and W3 needs it *empty* — no ticket move can
-relieve that, only scheduling. W2 stays the binding lane because SA118 and SA167c follow its first
-leg. Moving SA161/SA160 from W3 to W2 would put band-C filler on that lane and land the pair later
-than it would on W3; moving SA166 or SA164 off W2 would split the gate-registry ownership invariant.
-Move SA161 and SA160 together if a later rebalance is ever approved, because their shared
-emission-parity fixture is an ordering edge.
+**Rebalance result (2026-08-27): no track moves. The binding constraint is physical, not merge
+debt.** With every lane merged and idle, the one contended resource is a single PostgreSQL 18
+cluster holding `localhost:5432` and the twelve shared test databases — and W3 needs it *empty*.
+No ticket move can relieve that; only scheduling can. Four moves were tested and rejected:
 
-**W2 is irreducible, and now also thinner than it looks.** It still holds four open legs. SA166 and
-SA164 own `scripts/gate_registry.json`, which by standing invariant never crosses worktrees; SA123's
-merged scanner entries remain preserved as settled tree state. SA118 and SA167c
-must rewrite `quickscale_modules/*/module.yml` in that order on that same lane. Nothing may be pulled forward from
-W3 because the PostgreSQL/Docker slot is exclusive — and W3 can now take it for SA135+SA163, which
-will regain scheduling priority while active. SA165 stays on W1 because it edits `scripts/test_isolation_conformance.sh`
-and the SA90 emission gate's `_HOST_DEPENDENT_PATHS`, which W3's SA163/SA161/SA160 legs read or
-rebaseline.
+- **SA161 (#19) + SA160 (#20) from W3 to W2** — rejected again. On W2 the pair would queue behind
+  SA118 and SA167c, arriving later than on W3, and would put band-C filler on the lane that sets
+  the release date.
+- **SA161 + SA160 from W3 to W1 — tested for the first time this pass, and rejected.** The move is
+  mechanically legal: SA161's only edge is a lane-ordering position behind SA135, the pair shares
+  no file with SA167d, and co-locating them with SA165 would put the whole SA90 emission surface
+  (`sa90_emission_manifests.json` rebaseline plus `_HOST_DEPENDENT_PATHS`) on one serialized lane.
+  It is rejected because it buys nothing that matters: both tickets are band C, off the critical
+  path, and cannot move the release date, while the move would load W1 to four legs against W3's
+  one and give SA161's generated-project boot proof the same shared-cluster contention it has
+  today. Revisit only if W3's window slips far enough that band-C availability starts to matter.
+- **SA166 (#24) or SA164 (#25) off W2** — rejected on the standing invariant that
+  `scripts/gate_registry.json` never crosses worktrees.
+- **SA160 ahead of SA161 inside W3** — rejected: they share the emission-parity rebaseline
+  ordering and must not be split.
+
+**Nothing can shorten the release.** The critical path is `SA118 → SA167c`, both pinned to W2 by
+`quickscale_modules/*/module.yml` and `scripts/gate_registry.json` ownership, and neither has a
+prerequisite outside W2. SA166 (#24) and SA164 (#25) are band-C tails *behind* the spine, so they
+add nothing to it. There is no move that removes a leg from the path or lets one start earlier.
+
+**W2 is irreducible.** SA166 and SA164 own `scripts/gate_registry.json`, a W2-only surface. SA118
+and SA167c must rewrite every `quickscale_modules/*/module.yml`, in that order, on that same lane.
+Nothing may be pulled forward from W3 because the PostgreSQL/Docker slot is exclusive. SA165 stays
+on W1 because it edits `scripts/test_isolation_conformance.sh` and the SA90 emission gate's
+`_HOST_DEPENDENT_PATHS`, which W3's SA163/SA161/SA160 legs read or rebaseline.
 
 **Standing serialization constraint between lanes.** W3's database-backed legs and any W1/W2 run of
 `make check` / `make test-integration` contend for the *ownership* of the twelve local test
-databases, not just for the Docker slot. This is a local-cluster artifact
-that hosted CI does not have, and retiring it is **SA135**/**SA163** work.
+databases, not just for the Docker slot. This is a local-cluster artifact that hosted CI does not
+have, and retiring it is **SA135**/**SA163** work.
 
-The remaining critical path is `SA118 → SA167c`: two serialized implementation legs on W2.
-Shared closeout surfaces (`CHANGELOG.md`,
-`docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md`, and both audit docs)
-remain covered by the standing sync-before-merge-back procedure.
+Shared closeout surfaces (`CHANGELOG.md`, `docs/technical/roadmap.md`,
+`docs/technical/v88_ticket_context.md`, and both audit docs) remain covered by the standing
+sync-before-merge-back procedure.
 
-### Track readiness (reconciled 2026-08-26; all three worktrees merged into `v88`)
+
+### Track readiness (reconciled 2026-08-27; all three worktrees merged into `v88`)
 
 Each track reports three independent states. A track is **truly green** only when all three
 are yes. The queue and track states below were re-tested for rebalance opportunities; no move is
@@ -189,8 +198,9 @@ needed.
 | **W2** | SA118 (#16) | **yes** — SA123's acceptance and closeout are complete, leaving the manifest-default implementation unblocked | **yes** — the phase is W2-owned and starts from a green shared baseline | **yes** — #16 is the W2 queue head | **truly green — on the critical path** |
 | **W3** | SA135 + SA163 (#15) | **yes to continue** — P/A/B and the local C implementation are merged into `v88`, and the exclusive PostgreSQL/Docker window is authorized | **yes** — strict C acceptance and phases D-G are W3-owned; the `pg18-af10` stop/restart that gated them is granted | **yes in order** — #15 is the W3 queue head and has no upstream ticket ahead of it | **truly green — off the critical path** |
 
-**All three tracks are truly green.** W2's SA118 is the only truly green ticket **on** the critical
-path and should run first, because it heads `SA118 → SA167c`. W1's SA167d and
+**All three tracks are truly green — SA118 (#16), SA167d (#18), and SA135+SA163 (#15).** W2's
+SA118 is the only truly green ticket **on** the critical path and should run first, because it
+heads `SA118 → SA167c`. W1's SA167d and
 W3's SA135+SA163 are real band-B work but sit off the path, so neither moves the release date.
 **Scheduling, not dependency, is now the only thing separating them:** all three need the shared
 PostgreSQL cluster and W3 needs it empty, so W3 takes priority while its owned-lifecycle leg is
@@ -252,29 +262,14 @@ while its owned-lifecycle leg is active, per the standing serialization rule, an
 exact-candidate runtime window must not overlap it. **W3 owns the restore**: the window is not
 closed until `pg18-af10` is running again and the restricted-role lane is verified green.
 
-**SA123 coupled-test authority — decided 2026-08-25: option 1, narrow authority.** Adding the
-ticket's two hosted scanner gates changes generator/parity expectations in
-`scripts/test_gate_parity.py`, which the ownership rule at
-[Shared conflict surfaces](#shared-conflict-surfaces) otherwise reserves to SA135+SA163.
-
-**What is authorized.** SA123/W2 may update `scripts/test_gate_parity.py` **only** for the
-hosted-job set, `needs` edges, run values, publish/E2E paths, and generator expectations directly
-coupled to its two new gates — concretely, the 12→14 hosted-job and 6→8 `test`-barrier
-expectations. Generic parity-checker semantics, the 24-entry publish oracle, and the transcribed
-provisioning shell literal stay unchanged. Anything beyond that remains SA135+SA163's, and a need
-to go further is a scope finding that gets its own ticket rather than an in-place widening.
-
-**Why this option.** It matches the standing ordering rule — a ticket that makes a gate tell the
-truth outranks one that makes the product better — and it keeps the gate lane, not the service
-lane, as the critical path. The two rejected alternatives are recorded so the choice is legible:
-splitting SA123 into local-then-hosted would have left both scanners non-blocking in hosted CI
-until #15 merged and grown the heaviest W3 leg; reversing the merge order would have put the
-release date behind the exclusive PostgreSQL/Docker slot.
-
-**Cost accepted, and who carries it.** Two lanes now touch one file this release. **SA135+SA163
-(#15) owns the reconciliation**: when it later retires or derives the transcribed shell literal it
-must preserve SA123's expectation lines, and because #13 precedes #15 in the lane order the
-contention is one-directional. The standing sync-before-merge-back procedure covers it.
+**SA123 coupled-test authority — decided 2026-08-25; SA123 is closed, one obligation survives.**
+The decision authorized SA123 to change `scripts/test_gate_parity.py` only for the hosted-job set,
+`needs` edges, run values, publish/E2E paths, and generator expectations coupled to its two gates
+(the 12→14 hosted-job and 6→8 `test`-barrier expectations). Those changes are merged tree state.
+**What remains open is an inherited obligation on SA135+SA163 (#15):** when it retires or derives
+the transcribed provisioning shell literal it must preserve those settled expectation lines and the
+regenerated 24-entry publish oracle. The rationale and rejected alternatives are archived in
+[CHANGELOG.md](../../CHANGELOG.md).
 
 Roadmap documentation ownership remains **Option A** — the roadmap holds open work only, and
 completed work is archived rather than marked done.
@@ -328,7 +323,7 @@ Additional per-ticket surfaces:
 | SA165 | `docs/others/tech-audit.md`, `quickscale_core/.../state_schema.py`, `scripts/test_isolation_conformance.sh`, `quickscale_core/tests/test_generator/test_generator.py`, `OPERATIONS.md.j2` | watchlist discharge; W1-isolated |
 | SA166 | `scripts/gate_registry.json`, `Makefile`, CI workflow, `docs/others/tech-audit.md` | new process gate |
 
-**Six surfaces are contended and need naming explicitly:**
+**Seven surfaces are contended and need naming explicitly:**
 
 - `scripts/gate_registry.json` — SA167c, SA166, and SA164 own this W2-only surface. SA123's two
   scanner entries are settled tree state and remain preserved while the registry never crosses
@@ -354,6 +349,13 @@ Additional per-ticket surfaces:
   `_migdir()` fallback and re-anchors its parity backstop. Both are on W2 and merge in that
   order, so this surface no longer crosses worktrees; SA164's migration-baseline work is a
   content dependency on the regenerated migrations rather than a file dependency.
+- `quickscale_core/.../templates/project_name/settings/production.py.j2` — SA161 (#19, W3)
+  deletes or annotates the dead `get_client_ip` definition and removes the misleading rebind
+  comment at `:119-123`; SA164 (#25, W2) makes the privileged-command frozenset at `:185` stop
+  claiming an authority it does not hold. Different regions of one file on **two lanes**, with no
+  ordering edge between them. Merge order is #19 before #25, so the contention is one-directional
+  and the standing sync-before-merge-back procedure covers it; neither ticket may widen into the
+  other's region.
 - `quickscale_core/tests/fixtures/sa90_emission_manifests.json` — SA118, SA161,
   SA160. SA118 is on W2 and the other two on W3, so this **does** cross worktrees. Each
   rebaseline appends its own `baseline_evidence` entry with per-file rationale; the
