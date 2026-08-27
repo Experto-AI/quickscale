@@ -36,6 +36,23 @@
   The open-only roadmap removes SA118 and retires merge position **#16**; SA167c is now the W2
   queue head with no SA118 dependency.
 
+- **SA118 truthful handoff checkpoint (2026-08-27; recorded after terminal review).**
+  **Completed:** the product implementation, manifest-derived managed-output proof, standalone
+  runtime proof, same-fact documentation reconciliation, convergence corrections, and full
+  repository gates are complete at reviewed W2 product state
+  `b02f5609db9cdde02737943eec921784c4440f03`. Terminal review found no blocking defect and judged
+  that state functionally merge-ready. **Pending:** plan phase SA118-3 remains formally unaccepted
+  because its implementation handback was partial when two current-count consumers were still
+  outside that phase's scope; convergence subsequently corrected those consumers and made the
+  focused and full gates green, but the phase ledger is not retroactively rewritten. No product or
+  documentation correction remains for that phase. **Blocking:** none for merge. **Advisory:** one
+  test function name still says disabled analytics omits managed settings even though its docstring
+  and assertions correctly retain all eight settings and omit only app wiring; closure is to rename
+  that test without changing its assertions. **Decisions needed:** none. **Remaining plan:** commit
+  and attest this status-only checkpoint, merge the exact W2 tip into `v88`, then begin SA167c from
+  the resulting integration state; the advisory rename may be taken separately. At checkpoint
+  creation the reviewed product state was committed on `wt-track2` but had not yet landed on `v88`.
+
 - **Roadmap cleanup and rebalance review (2026-08-27, seventeenth pass).** **No ticket closed and
   no track moved** — the queue then stood at **ten open v88 ticket entries across nine open merge
   positions** (#15, #16, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Track 3 was
