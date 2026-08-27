@@ -213,7 +213,7 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 | SA160 (#20) | SA161 (#19) | **hard content** — emission-parity ordering on the shared `sa90_emission_manifests.json` rebaseline | Only SA161. No decision clears it; the pair must not be split. |
 | SA166 (#24) | SA167c (#21) | **lane-ordering** — W2 queue position behind the spine; SA166 also owns `scripts/gate_registry.json` | Upstream work, or a maintainer reordering W2. Not recommended: it would put band-C filler ahead of the critical path. |
 | SA164 (#25) | SA166 (#24) | **lane-ordering** for the queue position, **hard content** for its substance — its `test_sa92_migration_squash_guardrail.py` work depends on SA167c having retired `django_apps:` | The content half only SA167c clears. The SA166 position is reorderable by decision, but not recommended. |
-| SA165 (#22) | SA167d (#18) | **lane-ordering only** — W1 queue position; SA165 shares no file with SA167d, and its `scripts/test_isolation_conformance.sh` edit is contended with SA163 (#15), not with #18 | Either upstream work or **a maintainer decision to reorder W1**. See the open decision below. |
+| SA165 (#22) | SA167d (#18) | **lane-ordering only** — W1 queue position; SA165 shares no file with SA167d, and its `scripts/test_isolation_conformance.sh` edit is contended with SA163 (#15), not with #18 | **Upstream work only.** The reorder decision was put to the maintainer on 2026-08-27 and answered *keep the ordering*; it is now a standing rule below, so no decision remains that clears this. |
 
 **Recommended concurrency right now:**
 
@@ -227,36 +227,9 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 - **W1 — re-run and accept SA167d's phase E (#18)**, then do the ledger reconciliation. Schedule
   its `make test` outside W3's window.
 
-**One maintainer decision is open** — SA165's W1 queue position. See below. No other decision is
-open anywhere in the v88 plan.
-
-#### Open decision — should SA165 (#22) be released from its SA167d ordering?
-
-**Context.** SA165 is band-C filler on W1: four small tech-audit watch items (a silent
-`yaml.YAMLError` swallow, a message-keyed skip allowlist, a rationale for the SA90 emission
-exception list, and a credentials note in generated `OPERATIONS.md`). It sits behind SA167d purely
-because W1 runs one reviewed child at a time. It shares **no file** with SA167d. SA167d has now
-churned through three checkpoint commits without closing phase E, so the ordering is starting to
-cost real idle time on W1.
-
-**Alternative A — keep the ordering (status quo).** *Pro:* preserves the one-child-per-worktree
-rule that keeps each merge-back a single coherent review unit; SA167d's ledger reconciliation
-already rewrites eight documents, and running SA165 concurrently would put a second doc-touching
-ticket on the same lane. *Con:* W1 does nothing else until phase E is accepted.
-
-**Alternative B — run SA165 first on W1, park SA167d.** *Pro:* W1 stops idling. *Con:* SA167d is
-band B and SA165 is band C, so this promotes filler over release work, and SA167d's accepted-but-
-unmerged state ages against a moving `v88` — every `v88` advance widens its resolve.
-  SA163's edit to `scripts/test_isolation_conformance.sh` is now merged, so a future SA165 run
-  starts from that settled byte state rather than colliding with live W3 work.
-
-**Recommendation: A.** It fits the standing ordering rule ("a ticket that makes a gate tell the
-truth outranks a ticket that makes the product better"). The former W3 file contention is settled,
-but that removes only one cost of reordering; it does not make band-C filler outrank SA167d's open
-band-B acceptance.
-**What a decision unblocks:** choosing B flips SA165's **can start** from no to yes. It changes
-nothing about **can finish** or **can merge** for any ticket, and it does not touch the critical
-path either way.
+**No maintainer decision is open anywhere in the v88 plan.** SA165's W1 queue position — the
+last open decision — was resolved on 2026-08-27 in favour of keeping the ordering; it is now a
+standing rule below and the rationale is archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 
 #### Standing rules carried from closed decisions
@@ -275,6 +248,11 @@ path either way.
   completed work is archived rather than marked done.
 - **Local database-lane ownership flip** — whichever of `make test-integration` and
   `make test-bypassrls` is about to run must own the twelve test databases first.
+- **SA165 (#22) stays behind SA167d (#18) on W1.** Decided 2026-08-27. W1 runs one reviewed
+  child at a time, so band-C filler does not preempt an open band-B acceptance even when the two
+  share no file. SA165's **can start** stays *no* until SA167d is accepted and merged; its **can
+  finish** and **can merge** were never affected, and the critical path is untouched either way.
+  Revisit only if SA167d is abandoned rather than merged.
 - **SA123's coupled-test authority is closed;** the one surviving obligation is stated inside
   SA135+SA163 (#15).
 

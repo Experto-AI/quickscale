@@ -58,9 +58,18 @@
   **Audits re-read, nothing closed.** arch Finding 13 stays live under SA163; Findings 7, 2 and 4
   stay behind their growth triggers; tech-audit counts remain S3 1 (TA67/SA160), S4 1 (TA68/SA161),
   **Total 2 open**. Both documents already matched the planner, so neither needed an edit.
-  **One maintainer decision remains open:** whether to release SA165 (#22) from its SA167d ordering
-  on W1. Recommendation unchanged (keep the ordering). It affects **can start** for SA165 only and
-  touches no critical path.
+  **The last open maintainer decision is closed.** Whether to release SA165 (#22) from its SA167d
+  ordering on W1 was put to the maintainer with both alternatives and a recommendation, and
+  answered **A — keep the ordering** (2026-08-27). Rationale: W1 runs one reviewed child at a
+  time, and band-C filler does not preempt an open band-B acceptance even when the two share no
+  file; running SA165 concurrently would also put a second doc-touching ticket on the lane while
+  SA167d's ledger reconciliation rewrites eight documents. The rejected alternative B would have
+  stopped W1 idling at the cost of promoting filler over release work and letting SA167d's
+  accepted-but-unmerged delta age against a moving `v88`. Effect: SA165's **can start** stays *no*
+  until SA167d merges; **can finish**, **can merge**, and the critical path are untouched. The
+  decision block is removed from the planner and carried as a standing rule; SA165's blocker row
+  is restated from *decision-or-upstream* to **upstream work only**. **No maintainer decision is
+  now open anywhere in the v88 plan.**
 
 - **Roadmap cleanup and rebalance review (2026-08-27, nineteenth pass).** **No ticket closed and
   no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
