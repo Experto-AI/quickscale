@@ -131,12 +131,12 @@ fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec seam, and the regenerated m
 are all merged tree state that open tickets build on, not pending dependencies.
 
 **Parallelism result (measured 2026-08-27, twenty-first pass): W2 and W3 product tips are merged;
-W1 carries unmerged work.** `wt-track2` and `wt-track3` are both ancestors of `v88`. W2's product
-HEAD is `f6f3bbce`, with SA167c's reviewed manifest-retirement slice merged but its acceptance and
-phases B-F still open; the roadmap checkpoint itself was uncommitted at measurement time, so W2 was
-not yet clean. W3 is merged, clean, and idle. ***corrected after checkpoint attestation — not
-independently graded***
-**`wt-track1` is six commits ahead** (tip `810eefd8`, clean) carrying SA167d's A-D-accepted delta.
+W1 carries unmerged work.** W2's product HEAD `f6f3bbce` and `wt-track3` tip `0aabb4a0` are both
+ancestors of `v88`. SA167c's reviewed manifest-retirement slice is merged, but its acceptance and
+phases B-F remain open; the roadmap checkpoint is still being reconciled in W2, so that worktree is
+not yet clean. W3 is merged, clean, and decision-blocked. ***corrected after checkpoint attestation
+— not independently graded***
+**`wt-track1` is eight commits ahead** (tip `1743871f`, clean) carrying SA167d's A-D-accepted delta.
 W3's partial SA135+SA163 delivery reached `v88` in **two** merges — `0661f55f` and then
 `f070f39b`, which carries the `203fcd61` lifecycle/module-E2E remediation. No suite is running and
 `pg18-af10` holds all twelve `test_quickscale_*` databases.
@@ -182,28 +182,29 @@ sync-before-merge-back procedure.
 Each track reports three independent states. A track is **truly green** only when all three are
 yes.
 
-**Measured worktree state.** `wt-track2` product HEAD `f6f3bbce` and `wt-track3` tip `9bf4946f` are
-both ancestors of `v88`. W2 carries SA167c's merged partial and an uncommitted roadmap checkpoint,
-so it is not yet clean or idle; W3 is clean and idle. `wt-track1` is **six commits ahead** and clean.
-***corrected after checkpoint attestation — not independently graded***
-(tip `810eefd8`). W3's delivered partial is merged into `v88` through `0661f55f` and `f070f39b`;
+**Measured worktree state.** W2 product HEAD `f6f3bbce` and `wt-track3` tip `0aabb4a0` are ancestors
+of `v88`. W2 carries SA167c's merged partial plus this in-progress roadmap reconciliation, so it is
+not yet clean or idle; W3 is clean and decision-blocked. `wt-track1` is **eight commits ahead** and
+clean (tip `1743871f`). ***corrected after checkpoint attestation — not independently graded***
+W3's delivered product partial is merged into `v88` through `0661f55f` and `f070f39b`;
 `pg18-af10` is up with the twelve databases intact and no suite is in flight.
 
-**One shared-resource cleanup is outstanding and is not a ticket edge.** Two orphaned E2E
-containers, `sa142-no-cleanup_backend` (unhealthy) and `sa142-no-cleanup_db`, have been up since
-`17:30` from the last CLI E2E run. They are direct evidence for SA135's phase-E resource blocker
-and must be removed before the next E2E campaign so the rerun starts from a clean Docker state.
+**The prior shared-resource cleanup is closed and was not a ticket edge.** Before the next E2E
+campaign, `sa142-no-cleanup_backend` and `sa142-no-cleanup_db` disappeared without an action from
+the W3 pass. A renewed fail-closed inspection confirmed both names absent, so no substitute name
+was guessed and no `docker rm` was issued. `pg18-af10`, its volume, all twelve databases, and
+`quickscale_test_role` ownership remained identical before and after the campaign.
 
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
 | **W1** | SA167d (#18) — A-D accepted, **E outstanding** | **yes** — re-running phase E is executable today; no decision, no upstream ticket. Contends with W3 for the shared cluster | **yes** — phase E, the ledger reconciliation, and the merge-back are all W1-owned | **yes** — #18 is the W1 queue head with no upstream ticket | **truly green — off the critical path** |
 | **W2** | SA167c (#21) — retirement slice merged, **A unaccepted; B-F outstanding** | **yes** — resume acceptance on the merged bytes; no decision or upstream ticket blocks it | **yes** — remaining gate, proof, closeout, and frozen-candidate work is W2-owned | **yes** — #21 remains the W2 queue head | **truly green — on the critical path, partial merged** |
-| **W3** | SA135 + SA163 (#15) — C/D accepted, E outstanding | **yes** — resume from the merged partial; no decision or upstream ticket blocks it | **yes** — the remaining E/F/G work is W3-owned; the exclusive slot remains authorized when needed | **yes** — #15 is the W3 queue head | **truly green — off the critical path, partial merged** |
+| **W3** | SA135 + SA163 (#15) — C/D accepted, E outstanding | **no** — the next E1 attempt needs the maintainer decision after every executed reproduction context passed without yielding a cause; E1's exact literal `TEST COMMAND` chain was not run and remains outstanding unless that decision expressly supersedes it | **yes, after that decision** — the remaining E/F/G work is W3-owned; the exclusive slot remains authorized when needed | **yes** — #15 is the W3 queue head | **decision-blocked — off the critical path, partial merged** — ***corrected after checkpoint attestation — not independently graded*** |
 
-**All three tracks are truly green: SA167c (#21), SA167d (#18), and SA135+SA163 (#15).**
-Only **SA167c (#21) is on the critical path** — it is the one ticket whose progress moves the
-release date, and W2 now has a merged partial to resume. SA167d and SA135+SA163 are real band-B work but
-are **filler with respect to the release date**: finishing either does not shorten the chain.
+**W1 and W2 are truly green; W3 is decision-blocked at SA135+SA163 (#15).** Only **SA167c (#21)**
+is on the critical path — it is the one ticket whose progress moves the release date. SA167d and
+SA135+SA163 are real band-B work but are **filler with respect to the release date**: finishing
+either does not shorten the chain.
 
 **The binding constraint is the shared PostgreSQL cluster, not any ticket edge.** No W3 suite is
 currently holding it. W1's phase-E `make test`, W2's SA167c campaign, and the next W3 E2E rerun
@@ -216,7 +217,7 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 |---|---|---|---|
 | SA167c (#21) | — | **queue head; partial merged** | No dependency or decision blocks it. Acceptance must first use a focused command that does not inherit whole-package coverage, with the restricted PostgreSQL role; then continue B-F. |
 | SA167d (#18) | — | **queue head** | Nothing blocks it. Startable today; competes with W3 for the cluster. |
-| SA135 + SA163 (#15) | — | **queue head; partial merged** | No upstream ticket or decision blocks it. Product acceptance remains blocked by two CLI E2E failures described in the ticket block below. |
+| SA135 + SA163 (#15) | — | **queue head; partial merged; decision-blocked** | No upstream ticket blocks it. The maintainer must choose whether repeated exact green evidence may replace deterministic red-before/green-after evidence, or whether a new E1 attempt must instrument the runner-generated scope and stress the historical failure boundaries. |
 | SA161 (#19) | SA135 (#15) | **lane-ordering** — W3 queue position; SA161 also needs the PostgreSQL/Docker slot SA135 holds | Upstream work, or a maintainer reordering W3. Not recommended: SA135 is band B and SA161 is band-C filler. |
 | SA160 (#20) | SA161 (#19) | **hard content** — emission-parity ordering on the shared `sa90_emission_manifests.json` rebaseline | Only SA161. No decision clears it; the pair must not be split. |
 | SA166 (#24) | SA167c (#21) | **lane-ordering** — W2 queue position behind the spine; SA166 also owns `scripts/gate_registry.json` | Upstream work, or a maintainer reordering W2. Not recommended: it would put band-C filler ahead of the critical path. |
@@ -228,17 +229,20 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 - **W2 — continue SA167c (#21).** Do not redo the merged manifest-retirement bytes. First accept
   them with the corrected focused command and restricted PostgreSQL role, then implement B-F.
   This remains the only action that shortens the release.
-- **W3 — continue SA135 + SA163 (#15) from phase E.** Do not redo C or D. First remove the two
-  orphaned `sa142-no-cleanup_*` containers so the rerun starts from clean Docker state, then
-  resolve the two CLI E2E resource failures, then run the exact serial E2E and `ci-e2e` gates on
-  one unchanged tree before F/G closeout. The prior exclusive window is closed: `pg18-af10`, its
-  volume, all twelve databases, and `quickscale_test_role` ownership were restored.
+- **W3 — pause SA135 + SA163 (#15) at phase E1 for the decision in its ticket block.** Do not redo
+  C or D. The orphan cleanup is already closed and every executed reproduction context passed, but
+  E1's exact literal `TEST COMMAND` chain was not run. A new pass either expressly supersedes that
+  requirement by policy or runs it after instrumenting the generated lane scopes and
+  stress-reproducing the historical boundaries. Only after E1 is accepted may the unchanged-tree
+  serial E2E and `ci-e2e` acceptance proceed. ***corrected after checkpoint attestation — not
+  independently graded***
 - **W1 — re-run and accept SA167d's phase E (#18)**, then do the ledger reconciliation. Schedule
   its `make test` outside W3's window.
 
-**No maintainer decision is open anywhere in the v88 plan.** SA165's W1 queue position — the
-last open decision — was resolved on 2026-08-27 in favour of keeping the ordering; it is now a
-standing rule below and the rationale is archived in [CHANGELOG.md](../../CHANGELOG.md).
+**One maintainer decision is open in the v88 plan, inside SA135+SA163 (#15).** It was raised after
+the isolated development and React nodes, their synchronized pair, and the exact serial full-E2E
+context all passed without reproducing either historical failure. SA165's W1 queue position remains
+a closed decision governed by the standing rule below.
 
 
 #### Standing rules carried from closed decisions
@@ -450,28 +454,43 @@ Conceptual background, mental models, and implementation notes for **every** tic
   `f070f39b`, the second of two merges (`0661f55f`, then `f070f39b` carrying the `203fcd61`
   lifecycle/module-E2E remediation). Phases P/A/B and C/D are accepted; E was
   dispatched but is not accepted, and F/G were not reached. Keep this item unchecked under the
-  open-work-only policy.
+  open-work-only policy. In the latest resumption, E0 accepted the unchanged external-state
+  baseline; E1 returned partial with no file change because no deterministic cause reproduced.
   **Completed in the merged partial:** phases P/A/B and C/D — the hermetic Docker-unavailable
   probe, the strict no-host-server window, the single four-caller provisioning authority, and the
   `203fcd61` lifecycle/module-E2E remediation. The evidence is archived in
   [CHANGELOG.md](../../CHANGELOG.md); do not repeat C or D.
-  **Pending:** phase E still needs one unchanged candidate on which
-  `QS_E2E_PARALLEL=0 make test-e2e` and `make ci-e2e` both exit 0. The last exact serial E2E run
-  finished with 38 Core tests passing and 38 CLI tests passing, but two CLI tests failed. Phase F
-  must then reconcile validation policy, Finding 13, ticket context, roadmap counts/dependencies,
-  and changelog evidence. Phase G must sync current `v88`, run the complete campaign and independent
-  review on one unchanged tip, and merge only that exact tip.
-  **Blocking:** `TestDevelopmentCommandsE2E::test_full_development_workflow` hit a Docker daemon
-  `No such container` race during concurrent startup, and
-  `TestReactThemeDockerIntegration::test_dockerfile_builds_with_react` timed out after 300 seconds.
-  Two orphaned containers from that run — `sa142-no-cleanup_backend` (unhealthy) and
-  `sa142-no-cleanup_db` — are still up and are the concrete residue of the same defect.
-  Close this block by removing them, then correcting the CLI E2E resource/concurrency behavior
-  without weakening the assertions, then capturing both exact gates green on the same unchanged tree. `make ci-e2e` was
-  not run after the red prerequisite. No failure is accepted or waived.
-  **Decisions needed:** none for SA135+SA163. The exclusive service-window authorization remains
-  available if a future strict lifecycle rerun needs it; the prior window is closed and
-  `pg18-af10` is running.
+  **Completed in the latest resumption:** E0 confirmed both former SA142 orphan names and
+  `quickscale-react-test` absent, with no deletion; `pg18-af10` retained its exact container, image,
+  mount, and running identity, and all twelve databases remained owned by `quickscale_test_role`.
+  E1 then recorded these green runs without changing a file: the isolated development node (1
+  passed), isolated React node (1 passed), synchronized two-node run (2 passed), and exact
+  `QS_E2E_PARALLEL=0 make test-e2e` context (Core 38 passed; CLI 40 passed; cleanup complete). E1's
+  exact literal `TEST COMMAND` chain was not run. ***corrected after checkpoint attestation — not
+  independently graded***
+  **Pending:** E1 is still unaccepted because the reviewed phase required deterministic causal and
+  red-before/green-after evidence, and its exact literal `TEST COMMAND` chain remains outstanding
+  unless the maintainer's policy decision expressly supersedes it. E2 must then run
+  `QS_E2E_PARALLEL=0 make test-e2e` followed only on green by `make ci-e2e` on one unchanged
+  candidate; `make ci-e2e` was not reached in this pass. ***corrected after checkpoint attestation
+  — not independently graded***
+  F must reconcile validation policy, Finding 13, ticket context, roadmap counts/dependencies, and
+  changelog evidence. G must sync current `v88`, run the complete campaign and independent review
+  on one unchanged tip, and merge only that exact tip.
+  **Blocking:** the historical Docker `No such container` startup race and 300-second React build
+  timeout remain unclosed because neither reproduced in isolated, synchronized, or exact serial
+  full-E2E contexts. The exact runner generated `qs_e2e_tmp_*` lane scopes rather than the requested
+  fixed E1 label, so fixed-scope ownership was not independently proved even though cleanup left no
+  residual resource. Close the block either by an explicitly authorized evidence-policy change or
+  by deterministic instrumentation/stress reproduction of each historical boundary; never guess a
+  correction, weaken an assertion, or treat the old failures as waived.
+  **Decisions needed:** choose one before another E1 attempt. **Option 1:** accept repeated isolated,
+  paired, and exact-context green evidence in place of deterministic red-before/green-after evidence;
+  this permits E2 but leaves the historical causes unknown. **Option 2 (recommended):** keep the
+  causal-evidence requirement, first establish whether generated `qs_e2e_tmp_*` scopes are the
+  intended harness contract, then instrument/stress the startup and build-time boundaries under
+  those emitted scopes; this costs another E1 pass but preserves fail-closed ownership evidence.
+  The exclusive service-window authorization remains available; `pg18-af10` is running.
   **Inherited obligation from the closed SA123.** When this ticket retires or derives the
   transcribed provisioning shell literal in `scripts/test_gate_parity.py`, it must preserve SA123's
   settled hosted-job, `needs`-edge, run-value, publish/E2E-path, and generator expectations (the
@@ -481,20 +500,27 @@ Conceptual background, mental models, and implementation notes for **every** tic
   which **SA165 (#22, W1) also owns**. See
   [Shared conflict surfaces](#shared-conflict-surfaces) — merge order #15 before #22 means SA165
   starts from the settled SA163 bytes, and the sync-before-merge-back procedure covers it.
-  **Remaining plan (all phases serial; C and D are not repeated):**
-  1. **E-acceptance remainder:** start from the merged partial, reproduce the two current CLI E2E
-     failures in isolation, correct their shared Docker resource/concurrency causes, rerun
-     `QS_E2E_PARALLEL=0 make test-e2e`, and only after it is green run `make ci-e2e`. Re-run any
-     earlier focused/full gate invalidated by the correction; retain zero warning/critical quality
-     regressions and monotonicity passing.
-  2. **F-closeout:** only after E is green, reconcile validation policy, Finding 13, ticket context,
-     roadmap counts/dependencies, and changelog evidence under the open-work-only policy. Archive
-     actual evidence and keep the ticket open if any required gate is red.
-  3. **G-post-sync:** sync current `v88`, rerun the complete acceptance on one clean frozen tree,
-     perform independent convergence and terminal attestation, and merge only that exact tip.
-  4. **Standing closeout obligations:** remove SA135 and SA163 only after full completion, retire
-     Finding 13 only with passing evidence, and report final changed-line and elapsed-time/
-     lines-per-hour metrics from the original `2026-08-26 16:07:35 +0200` measurement start.
+  **Remaining plan (all phases serial; P/A/B/C/D and accepted E0 are not repeated):**
+  1. **E1 — causal-evidence remainder:** apply the decision above. If Option 2 is chosen, bind the
+     runner's emitted lane scopes, add deterministic instrumentation/stress at each historical
+     startup/build boundary, make only corrections supported by a reproduced cause, and run the
+     exact literal E1 `TEST COMMAND` chain. If Option 1 is chosen, it must expressly say whether it
+     supersedes that unrun chain. Preserve the green isolated/pair/full-run evidence as context,
+     not as retroactive E1 acceptance. ***corrected after checkpoint attestation — not independently
+     graded***
+  2. **E2 — unchanged-candidate acceptance:** after E1 is accepted, run exact serial E2E and then
+     `make ci-e2e` on one unchanged tree, with exact cleanup and PostgreSQL baseline equality.
+  3. **F — policy and status reconciliation:** reconcile validation policy, Finding 13, ticket
+     context, roadmap counts/dependencies, changelog evidence, docs navigation, and the executable
+     consistency consumer. Keep the ticket open if any required gate is red.
+  4. **G-sync / G-validate:** sync current `v88` in W3, preserve concurrent closeout entries, and run
+     the complete focused, provisioning, parity, lint, type, check, integration, BYPASSRLS,
+     isolation, test, quality, serial-E2E, and CI-E2E campaign on one frozen candidate.
+  5. **G-closeout / G-final:** only after the complete campaign and independent convergence are
+     green, archive and remove SA135/SA163 from this open-work-only roadmap, retire Finding 13,
+     rerun the final frozen-tip campaign, terminally attest, and merge that exact tip. Report final
+     changed lines and elapsed-time/lines-per-hour metrics from the original
+     `2026-08-26 16:07:35 +0200` measurement start.
 
 ---
 
