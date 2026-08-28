@@ -42,17 +42,17 @@ Audit-derived prerequisites and implementation tickets share one ranked queue.
 | Band | Rule | Tickets |
 |---|---|---|
 | **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | — (clear; shared repository gates are green, evidence archived in the changelog) |
-| **B — Release work on the critical paths** | The two longest serialized chains, one holding the exclusive service slot. | SA167c (critical path); SA135; SA170; SA167d |
+| **B — Release work on the critical paths** | The two longest serialized chains, one holding the exclusive service slot. | SA173 then SA167c (critical path); SA135; SA170; SA167d |
 | **C — Bounded independent fixes** | No dependants, small blast radius; absorbed as slack filler. | SA160, SA161, SA164, SA165, SA166, SA171, SA172 |
 
 ### Dependency graph and critical path
 
 ```text
-v88 — three worktrees, eleven open merge positions carrying eleven open ticket entries, one merge queue
+v88 — three worktrees, twelve open merge positions carrying twelve open ticket entries, one merge queue
 
 W2 (gates & declared wiring)   ★ CRITICAL PATH
-  SA167c ─► SA166 ─► SA164          #21, #24, #25
-  (Phase-A slice merged; A retry blocked on D3; B-F open)
+  SA173 ─► SA167c ─► SA166 ─► SA164     #30, #21, #24, #25
+  (SA173 opened by decision D3; SA167c's Phase-A slice merged, A retry gated on SA173, B-F open)
 
 W1 (module wiring + generated-output fixes)
   SA167d ─► SA165 ─► SA161 ─► SA160     #18, #22, #19, #20
@@ -61,10 +61,14 @@ W3 (service lifecycle — exclusive PostgreSQL/Docker slot)
   SA135 ─► SA170 ─► SA171 ─► SA172      #15, #27, #28, #29
 ```
 
-**W2 sets the release date.** `SA167c` is the longest open chain with no prerequisite outside W2;
-SA166 and SA164 are band-C tails behind it. W3 holds the exclusive slot and therefore takes
-scheduling priority while one of its legs is active, but at four positions it is the longest
-*queue*, not the longest *chain*. Finishing SA167d or SA135 does not shorten the release.
+**W2 sets the release date, and D3 lengthened it.** The critical path is now four positions:
+`SA173 ─► SA167c ─► SA166 ─► SA164`, entirely inside W2 with no prerequisite outside it. Choosing
+Option 3 for D3 (see the settled-decision record below) deliberately added `SA173` ahead of
+`SA167c` rather than editing two test assertions — the release is one ticket longer and the
+contract is stated once instead of reconstructed by counting. W3 holds the exclusive slot and
+therefore takes scheduling priority while one of its legs is active, but its four positions are a
+*queue*, not a *chain*. **Finishing SA167d or SA135 does not shorten the release; finishing SA173
+does.**
 
 **No cross-worktree dependency edges remain.** Two cross-worktree *shared files* do, both made
 one-directional by merge order:
@@ -73,6 +77,15 @@ one-directional by merge order:
   narrows one line over those settled bytes. #15 merges before #22.
 - `.../settings/production.py.j2` — SA161 (#19, W1) and SA164 (#25, W2) edit **different regions**
   with no ordering edge. #19 merges before #25; neither may widen into the other's region.
+
+**One cross-lane hazard already fired, and is recorded here so it is not repeated.** W3's merged
+SA135 remediation `203fcd61` added the `OVERRIDE`→bundled fallback in
+`quickscale_core/.../contracts/module_discovery.py`, which changed inventory behaviour and turned
+**W2's** SA167c caller suite red two days later. Neither ticket's file allowlist named the other's
+surface, because the coupling is behavioural rather than textual: `quickscale_core/contracts/` and
+`quickscale_core/manifest/` are read by every lane. **Treat any edit under those two packages as
+cross-lane**: announce it in the merge queue and re-run the other lanes' focused caller suites
+before merging, even when no file is shared. SA173 owns both packages for the rest of v88.
 
 The manifest-reading `entry_point.py`, the fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec
 seam, the regenerated migration baseline, and `scripts/provision_ci_postgres.sh` (the single
@@ -97,8 +110,14 @@ new lane was shorter or idle. Neither creates a merge hazard.
   conformance suite — so they belong on the lane that owns the exclusive slot. Neither shares a file
   with SA135 or SA170.
 
-Result: **W1 4 · W2 3 · W3 4.** The critical-path lane is deliberately the shortest so it clears
-first; band-C filler is never added to W2.
+**SA173 (#30) then opened on W2** as decision D3's implementation. It was not placed on an idle
+lane despite W1 and W3 being available: it blocks SA167c's Phase-A acceptance, W2 runs one reviewed
+child at a time, and splitting a blocker from the ticket it blocks across two lanes would force a
+cross-lane sync in the middle of an acceptance chain. It is band B, so it does not fall under the
+band-C-filler rule.
+
+Result: **W1 4 · W2 4 · W3 4.** Even lanes. The critical path is W2's full chain, so W2 carries no
+band-C filler beyond the two tails it already owned.
 
 ### Lane state
 
@@ -117,16 +136,18 @@ for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-r
 
 The binding constraint is physical, not a ticket edge: one PostgreSQL 18 cluster on
 `localhost:5432` holding the twelve shared `test_quickscale_*` databases, which W3 needs *empty*.
-W1's SA167d phase-E `make test` and W2's SA167c campaign must be scheduled serially around it. No
-ticket move relieves that; only scheduling does. The SA161/SA160 move reduces the number of tickets
-that ever contend for it.
+W1's SA167d phase-E `make test`, W2's SA173 step-5 `make test`, and W2's SA167c campaign must be
+scheduled serially around it. No ticket move relieves that; only scheduling does. The SA161/SA160
+move reduces the number of tickets that ever contend for it.
 
 ### Next action per lane
 
-- **W2 — settle D3, then resume SA167c (#21).** Do not redo the merged manifest-retirement bytes.
-  Correct the losing caller-test or runtime surface under fresh plan authority, rerun A's full
-  ordered acceptance chain, and implement B-F only after A is accepted. **This is the only action
-  that shortens the release.**
+- **W2 — start SA173 (#30).** D3 is settled; the contract is written in
+  [decisions.md → Module Presence States](decisions.md#module-presence-states). Implement the
+  three-state discovery contract, then resume SA167c (#21) — do not redo SA167c's merged
+  manifest-retirement bytes, and do not edit its two failing caller tests directly: they are
+  answered by SA173's contract, and SA167c's Phase-A chain is rerun unchanged afterwards.
+  **This is the only action that shortens the release.**
 - **W3 — resume SA135 (#15) at the re-scoped phase E1.** Do not redo C or D, and do not attempt the
   two E2E Docker failures — they are SA170's. SA163's work is merged and archived; SA135's
   remaining scope is the PostgreSQL-lifecycle evidence and the `validation_policy.md` precondition
@@ -134,46 +155,93 @@ that ever contend for it.
 - **W1 — re-run and accept SA167d's phase E (#18)**, then the ledger reconciliation and merge-back.
   This is the release's only unmerged delta; schedule its `make test` outside W3's window.
 
-W1 and W3 remain startable. W2 is blocked on one maintainer decision.
+### Track readiness — the three states
 
-#### Open decision D3 — embedded inventory contract
+A lane is **truly green** only when all three are yes. *Can start* = the next action is executable
+today. *Can finish* = the ticket can reach a checked box using only work on its own lane. *Can
+merge* = merge-back is not order-gated behind another lane.
 
-**The one decision on the board.** It is the only thing standing between the release and its
-critical path.
+| Lane | Head | Can start | Can finish | Can merge | On the critical path |
+|---|---|---|---|---|---|
+| **W2** | SA173 (#30) | **yes** — contract written, nothing to decide | **yes** — self-contained in two core packages plus one CLI file | **yes** — merges after nothing | **yes** — the only lane that shortens the release |
+| **W1** | SA167d (#18) | **yes** | **yes** | **yes** | no |
+| **W3** | SA135 (#15) | **yes** | **yes** | **yes** | no |
 
-*Background, in plain terms.* Each shipped module carries a `module.yml` manifest. Some of those
-manifests are also **bundled** into the installed package as an embedded copy, so the CLI can work
-without the source tree. `regenerate_managed_wiring` asks "which modules exist?" and then reads
-each one's manifest. The question is what it should do when the registered inventory and the
-manifests it can actually find disagree.
+**All three lanes are truly green, and no open maintainer decision remains anywhere in this plan.**
+Of the three, only **W2 is real progress**; W1 and W3 are off the critical path and their tickets
+are filler in the release-date sense, though W1's SA167d is the release's only unmerged product
+delta and must land regardless.
 
-Two callers disagree today. The implemented runtime accepts a **bundled twelve-module fallback**
-and returns success. Two tests
-(`quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`) assert the opposite: that an
-embedded registered module with no manifest must return `success is False` with `inventory count
-drift`. One of the two is wrong, and nothing else in the corrected Phase-A chain is red.
+Downstream positions are lane-ordering only and clear by the upstream work or by a maintainer
+reordering the lane, with three exceptions that no reorder clears: **SA167c after SA173**,
+**SA160 after SA161**, and **SA164's substance after SA167c**.
 
-> **Option 1 — update the two stale expectations to the current bundled-inventory contract
-> (recommended).** Keep the implemented fail-hard twelve-module fallback and change the two tests.
-> *Pro:* no runtime behavior changes, so no caller-parity sweep is needed; it matches how every
-> other manifest consumer already behaves, and the fallback itself is fail-hard (it does not
-> silently guess — it fails when the bundled set is absent). *Con:* it accepts that a missing
-> embedded manifest is survivable, which is a small step away from the Fail-Hard Principle's
-> strictest reading. *Requires:* a fresh plan confirming no authoritative policy makes embedded
-> inventory drift a hard failure.
-> *Fits previous decisions:* yes — it is the same "derive from the bundled inventory, fail hard only
-> when the inventory itself is unavailable" shape the closed SA150 wheelhouse seam and the merged
-> `entry_point.py` manifest-read behavior already use.
->
-> **Option 2 — restore runtime failure on embedded inventory drift.** Keep the two tests and change
-> the runtime. *Pro:* the strictest Fail-Hard reading; drift can never pass unnoticed. *Con:* it
-> changes shipped runtime behavior, so it needs caller-parity review across **every**
-> `regenerate_managed_wiring` consumer, and it risks turning a recoverable packaging state into a
-> hard CLI failure for users on a partial install. *Cost:* materially larger, on the critical path.
+### Handoff checklist — applies to all three lanes
 
-**What it unblocks:** W2's *can finish* and therefore *can merge*. W2 *can start* today either way
-— the correction work is executable the moment the contract is named. Until D3 is settled, Phase A
-is unaccepted and phases B-F remain unreached. No product or test byte changed in the failed phase.
+Every lane's worktree lags `v88`. Before any ticket work:
+
+1. **Sync.** Merge `v88` into the worktree and resolve there, never on the integration branch.
+   Expect a conflict in `docs/technical/roadmap.md`; keep this file's structure.
+2. **Re-run the consistency test in the same change** if a W1/W2/W3 state block moved:
+   `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`.
+3. **Claim the cluster.** `make test`, `make test-integration`, and `make test-bypassrls` all use
+   the twelve shared `test_quickscale_*` databases. Drive the lane flip through
+   `scripts/provision_ci_postgres.sh run --profile {restricted,bypassrls}` and leave
+   `quickscale_test_role` owning all twelve afterwards. **W3 has priority whenever one of its legs
+   is active.**
+4. **Announce core-package edits.** A change under `quickscale_core/contracts/` or
+   `quickscale_core/manifest/` can turn another lane red without sharing a file — see the recorded
+   `203fcd61` precedent. Only SA173 should be touching them in v88.
+5. **Reproduce the ticket's measured starting state** before changing anything. Every open ticket
+   below states one.
+6. **Merge back** by re-running the ticket's own verification on the exact reviewed tip, then
+   merging that tip.
+
+#### Settled decision D3 — module presence is a three-state fact (2026-08-28)
+
+**Chosen: Option 3 — split the question at the layer that loses it.** The policy is now written in
+[decisions.md → Module Presence States](decisions.md#module-presence-states) and implemented by
+**SA173 (#30)**. This record exists so the W2 handoff carries the reasoning; the changelog holds the
+full investigation.
+
+*What was actually failing.* SA167c's Phase-A chain ended with two red tests in
+`quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`, which assert that an embedded
+registered module with no manifest fails with `inventory count drift`, while the runtime returns
+success.
+
+*What the investigation found.* `authoritative_module_names` is **not** on that path — a traced run
+of the failing scenario calls `discover_shipped_module_names` (×3), `refresh_managed_adapters`, and
+`discover_bundled_module_names`, and never `authoritative_module_names`. The decider is
+`refresh_managed_adapters` (`quickscale_core/.../manifest/entry_point.py:210-227`) and its
+subset check. Deleting the `OVERRIDE` fallback in `module_discovery.py` — the change the earlier
+framing of this decision proposed — leaves both tests red, measured. So making drift fail would have
+required weakening the **subset rule itself**, which is what allows a generated project to ship
+fewer than twelve modules: the normal case for the entire product.
+
+*Why the tests and the runtime disagree at all.* Three decisions that were never reconciled:
+`a1fce1eb` (2026-07-04, SA18.2) wrote the tests asserting skip-and-succeed — still the class name
+`TestRegenerateManagedWiringSkipManifestNotFound` and still both docstrings; `e8581800`
+(2026-08-25) flipped only the two assertion lines, leaving the docstrings contradicting them;
+`203fcd61` (2026-08-27, **an SA135/W3 commit**) added the `OVERRIDE` fallback and flipped the
+runtime back.
+
+*The structural defect.* Discovery collapses "module absent" and "directory present but no
+manifest" into one output — `discover_shipped_module_names`'s own docstring says manifest-less
+directories are "silently excluded". Downstream consumers then reconstruct the discarded fact by
+**counting** against `AUTHORITATIVE_MODULE_COUNT` and testing for a subset, and that proxy is
+implemented twice with a hand-copied diagnostic string. The proof is
+`PLACEHOLDER_MODULE_NAMES = frozenset({"teams"})`: `quickscale_modules/teams/` is a `README.md` with
+no `module.yml` — structurally identical to a half-installed module — and only a hardcoded name
+separates them.
+
+*Why Option 3 over the alternatives.* Editing the two tests (Option 1) ratifies by test-edit a
+behaviour introduced as a side effect of another lane's ticket, and leaves three silent fallbacks in
+one path. Making drift fail (Option 2) operates downstream of where the information was lost, so it
+can only make the proxy stricter, and it must constrain the rule the product depends on. Option 3
+restores the distinction where it is created; the subset rule and fail-hard-on-incomplete then stop
+being in tension, because one signal stops carrying two meanings.
+
+*Cost, stated plainly.* The critical path grew by one ticket. That was accepted deliberately.
 
 #### Standing rules carried from closed decisions
 
@@ -194,6 +262,13 @@ is unaccepted and phases B-F remain unreached. No product or test byte changed i
   file. Revisit only if SA167d is abandoned rather than merged.
 - **SA123's coupled-test authority is closed;** its provisioning-literal obligation was discharged
   by the closed SA163.
+- **Module presence is a three-state fact** (D3, 2026-08-28). Discovery reports ABSENT / ACTIVE /
+  INCOMPLETE; consumers own their policy; the subset-validity rule has one implementation; nothing
+  classifies module presence by string-matching an exception message. Binding on every lane —
+  see [decisions.md](decisions.md#module-presence-states).
+- **`quickscale_core/contracts/` and `quickscale_core/manifest/` are cross-lane surfaces.** Every
+  lane reads them, so a behavioural change there can turn another lane red without sharing a file.
+  SA173 owns both for the rest of v88; anyone else touching them announces it in the merge queue.
 - **Band-C filler must not displace a band-B leg.**
 
 ### Merge order
@@ -207,28 +282,32 @@ into its worktree, resolves there, reruns its own verification, then merges its 
 | 18 | **SA167d** | B | 3 | W1 | — | no |
 | 19 | **SA161** | C | 3 | W1 | SA165 | no |
 | 20 | **SA160** | C | 2 | W1 | SA161 | no |
-| 21 | **SA167c** | B | 2 | W2 | — | no |
+| 21 | **SA167c** | B | 2 | W2 | SA173 | no |
 | 22 | **SA165** | C | 3 | W1 | SA167d | no |
 | 24 | **SA166** | C | 3 | W2 | SA167c | no |
 | 25 | **SA164** | C | 3 | W2 | SA166 | no |
 | 27 | **SA170** | B | 2 | W3 | SA135 | **yes** — Docker |
 | 28 | **SA171** | C | 2 | W3 | SA170 | no |
 | 29 | **SA172** | C | 3 | W3 | SA171 | no |
+| 30 | **SA173** | B | 1 | W2 | — | no |
 
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16, #17, #23, and #26 are **retired and not
 reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Gaps carry no meaning. Position
 #15 was shared with SA163 until that ticket closed on 2026-08-28; it now carries SA135 alone.
 
-#15, #18, and #21 are the per-lane heads, all partial: #21 has a merged Phase-A slice at `f6f3bbce`
-with A unaccepted after the D3 caller-suite failure and B-F outstanding; #18 is a stalled phase-E acceptance on `wt-track1` product
+The per-lane heads are **#30 (W2, not started), #18 (W1, partial), and #15 (W3, partial)**. #21 is
+no longer a lane head — it now merges after #30. Of the partials: #21 has a merged Phase-A slice at `f6f3bbce`
+with A unaccepted pending SA173's contract and B-F outstanding; #18 is a stalled phase-E acceptance on `wt-track1` product
 tip `1743871f`; #15 has a merged partial with C/D accepted and E outstanding after SA163's share of it
 closed.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable only by the upstream work
 or by a maintainer reordering the lane. Two are **hard content dependencies** that no reorder
 clears: **SA160 after SA161** (shared emission-parity rebaseline of `sa90_emission_manifests.json`;
-the pair must not be split), and **SA164's substance after SA167c** (its
-`test_sa92_migration_squash_guardrail.py` work needs `django_apps:` retired). Band-C positions
+the pair must not be split), **SA164's substance after SA167c** (its
+`test_sa92_migration_squash_guardrail.py` work needs `django_apps:` retired), and **SA167c's
+Phase-A acceptance after SA173** (two of its four caller tests are answered by the presence
+contract; rerunning A before SA173 lands reproduces the same red). Band-C positions
 (19, 20, 22, 24, 25, 28, 29) are *earliest-eligible*, not commitments, and may slip past the
 release. #27 is band B — it discharges an obligation lifted out of #15 and may not be dropped.
 
@@ -239,6 +318,7 @@ Standing surface for every ticket: `CHANGELOG.md`, `docs/technical/roadmap.md`, 
 
 | Ticket | Additional shared surface | Why |
 |---|---|---|
+| SA173 | `quickscale_core/.../contracts/module_discovery.py`, `quickscale_core/.../manifest/entry_point.py`, `quickscale_cli/.../utils/module_wiring_manager.py`, `quickscale_cli/tests/test_module_wiring_manager_manifest.py`, `docs/technical/decisions.md` | the module-presence contract; **cross-lane by behaviour** — every lane reads these two core packages |
 | SA167c | every `quickscale_modules/*/module.yml`, `quickscale_core/.../manifest/{schema,loader}.py`, `scripts/gate_registry.json`, `Makefile`, CI workflow, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py` | retires the inert key and registers the declaration gate; **registry membership is why this is W2** |
 | SA167d | `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md` | CLI wiring drain; touched by no other v88 ticket |
 | SA135 | `scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, `scripts/provision_ci_postgres.sh`, `Makefile`, `docs/technical/validation_policy.md` | changes the documented local DB precondition |
@@ -255,9 +335,13 @@ Surfaces needing an explicit ordering note beyond the table:
 - `scripts/gate_registry.json` — SA167c, SA166, SA164, all W2. **This surface never crosses
   worktrees**; that invariant is why SA167c could not move to W1 with the other wiring legs, and it
   applies equally to `quickscale_modules/*/module.yml`.
-- `quickscale_core/.../manifest/entry_point.py` — no open ticket owns it. Its manifest-read
-  behaviour and module-owned adapter registry are settled tree state; future changes must preserve
-  the generic-only boundary rather than reinstating any literal.
+- `quickscale_core/contracts/` and `quickscale_core/manifest/` — **SA173 (#30, W2) is the sole open
+  owner**, and it is the one surface on this list that is shared by *behaviour* rather than by
+  filename: every lane imports it. `entry_point.py`'s manifest-read behaviour and module-owned
+  adapter registry stay settled tree state — SA173 changes how presence is reported and where the
+  subset rule lives, and must preserve the generic-only boundary rather than reinstating any
+  literal. `203fcd61` is the recorded precedent for what happens when this surface moves without a
+  cross-lane announcement.
 - `scripts/test_gate_parity.py` — **no open ticket owns it.** The closed SA163 replaced its
   transcribed provisioning shell literal with a `describe --format json` binding plus an
   absence-of-the-old-shape assertion. That binding, the regenerated 24-entry publish oracle, and
@@ -300,7 +384,69 @@ section and the [audit-derived backlog](#audit-derived-backlog) below are **one 
 merge-order table is the authority for scope, worktrees, and sequencing. Conceptual background and
 implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket_context.md).
 
-- [ ] **SA167c — Retire `django_apps:` and gate the app declaration.** `Band B · Tier 2 · W2 · merge #21 · deps: none · closes the SA167 family`
+- [ ] **SA173 — Make module presence a three-state fact.** `Band B · Tier 1 · W2 · merge #30 · deps: none · settles decision D3 · unblocks SA167c Phase-A`
+  Discovery collapses *"module absent"* and *"directory present but no `module.yml`"* into one
+  output — `discover_shipped_module_names`'s own docstring records that manifest-less directories
+  are "silently excluded". Downstream consumers reconstruct that discarded fact by **counting**
+  against `AUTHORITATIVE_MODULE_COUNT` and testing for a subset, and the proxy is implemented twice
+  with a hand-copied `"Authoritative module inventory count drift"` string. The policy chosen by
+  decision D3 is written in
+  [decisions.md → Module Presence States](decisions.md#module-presence-states); this ticket
+  implements it.
+  **Measured starting state (2026-08-28), reproduce before changing anything:**
+  - `poetry run pytest "quickscale_cli/tests/test_module_wiring_manager_manifest.py::TestRegenerateManagedWiringSkipManifestNotFound" -q -o addopts= --no-cov`
+    — **2 failed**, at `:767` and `:796`; both expect `success is False` with `inventory count
+    drift`, both observe `True`.
+  - A traced run of that scenario calls `discover_shipped_module_names` (×3),
+    `refresh_managed_adapters`, then `discover_bundled_module_names` — and **never**
+    `authoritative_module_names`. The decider is `refresh_managed_adapters`
+    (`quickscale_core/.../manifest/entry_point.py:210-227`).
+  - Deleting the `OVERRIDE` fallback at `module_discovery.py:231-248` leaves **both tests still
+    red** (measured on the full `quickscale_cli/tests` + `quickscale_core/tests` run). Do not start
+    there.
+  - `quickscale_modules/teams/` contains a `README.md` and no `module.yml` — structurally identical
+    to the test's half-installed `blog/`. Only `PLACEHOLDER_MODULE_NAMES` separates them.
+  **Acceptance:**
+  1. Discovery reports the three states of
+     [Module Presence States](decisions.md#module-presence-states) distinctly — ABSENT, ACTIVE,
+     INCOMPLETE — and no code path silently drops a manifest-less directory.
+  2. `refresh_managed_adapters` loads the **subset** present (ABSENT stays legitimate; a generated
+     project with fewer than twelve modules keeps working) **and** fails hard on INCOMPLETE, naming
+     the directory and the missing manifest. Both behaviours, proved by separate tests.
+  3. The subset-validity rule and its diagnostic text exist **once**. The duplicate in
+     `authoritative_module_names` and the copy in `refresh_managed_adapters` are reduced to one
+     shared implementation, and `grep -rn "inventory count drift" --include=*.py` outside tests
+     returns a single production site.
+  4. `authoritative_module_names` answers the *release inventory* question only; its
+     `OVERRIDE`→bundled substitution at `module_discovery.py:231-248` is removed as unnecessary
+     rather than retained, or its retention is justified in writing against rule 2 of the decision.
+  5. The CLI stops classifying presence: `if "Manifest file not found" in str(error)` at
+     `quickscale_cli/.../utils/module_wiring_manager.py:201` is **deleted**, with the decision made
+     in core. A test asserts the CLI contributes no presence policy.
+  6. `PLACEHOLDER_MODULE_NAMES` is retired, or reduced to a *declaration* mechanism rather than a
+     name-matched literal set — `teams` must stay fail-closed either way, asserted by the existing
+     placeholder-rejection tests.
+  7. The two tests at `test_module_wiring_manager_manifest.py:767,796` are made consistent with the
+     chosen contract **and** their class name and both docstrings are corrected — they currently
+     assert the opposite of what they describe. Whichever way they land, the prose and the
+     assertions must agree.
+  8. Negative proof: temporarily empty one module's `module.yml`, observe the INCOMPLETE fail-hard
+     for the intended reason, restore the exact bytes, prove green.
+  **Verification (ordered; stop at the first unexpected red):**
+  1. `poetry run pytest quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_core/tests/test_manifest_entry_point.py quickscale_cli/tests/test_module_lifecycle_cycle.py quickscale_core/tests/test_module_migration_topology.py -q -o addopts= --no-cov` — expect exit 0. **216 collected at the measurement start (214 passed / 2 failed);** the two failures are this ticket's target.
+  2. `poetry run pytest quickscale_cli/tests quickscale_core/tests -q -o addopts= --no-cov` — expect exit 0.
+  3. `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` — expect exit 0; `publish_module.py` and `check_sa117_scope.py` are release-inventory consumers of the changed contract.
+  4. `make check-manifest-sync` and `make check-gate-parity` — expect exit 0.
+  5. `make lint`, `make typecheck`, `make test`, `make check`, `make quality` — `make quality` no worse than found. **Schedule `make test` outside W3's cluster window.**
+  **Rollback:** the ticket is unstarted; `git reset --hard` to the lane's sync point discards it
+  without touching `v88`.
+  **Cross-lane obligation.** These two core packages are read by every lane, and `203fcd61` is the
+  recorded precedent for a behavioural change here turning another lane red with no shared file.
+  Before merging, announce in the merge queue and re-run W1's and W3's focused caller suites against
+  the candidate.
+  **Shared conflict surface:** `quickscale_core/src/quickscale_core/contracts/module_discovery.py`, `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_cli/src/quickscale_cli/utils/module_wiring_manager.py`, `quickscale_cli/tests/test_module_wiring_manager_manifest.py`, `docs/technical/decisions.md`.
+
+- [ ] **SA167c — Retire `django_apps:` and gate the app declaration.** `Band B · Tier 2 · W2 · merge #21 · deps: SA173 · closes the SA167 family`
   `django_apps:` was inert declarative surface: eleven manifests carried it, the loader parsed it,
   no production path read it, and one SA92 helper used it before falling back to a guessed path.
   **Acceptance:** `django_apps:` is either derived from the `apps` wiring projection or removed from all manifests, `ModuleManifest`, and the loader, with no key parsed-but-unread remaining; a conformance gate fails when a module ships models or a migration without declaring at least one Django app, registered in `scripts/gate_registry.json` and passing `scripts/check_gate_parity.py`; the gate is proved by deleting a module's app declaration and observing red, reverted before merge; `test_sa92_migration_squash_guardrail.py` no longer depends on the retired key.
@@ -316,19 +462,23 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   `make check-manifest-sync` exited 0; and `make check-gate-parity` exited 0. The required
   four-caller command then exited 1 with 256 passed and 2 failed in
   `TestRegenerateManagedWiringSkipManifestNotFound`, at
-  `quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`: both expect embedded
-  inventory drift to fail, while the current bundled twelve-module fallback succeeds. Under the
-  required stop-at-first-unexpected-red rule, neither the literal twelve-module source-bound caller
-  probe nor the final `git diff --exit-code` unchanged-tree oracle was run. No tracked file changed,
-  and this green prefix is not Phase-A acceptance.
-  **Blocking:** D3 must select the authoritative embedded-inventory contract. Correct the losing
-  test or runtime surface under fresh plan authority, rerun all of A in order, and retain broad
-  coverage in the final campaign.
-  **Decisions needed:** D3 under [Open decision D3](#open-decision-d3--embedded-inventory-contract).
+  `quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`. Under the required
+  stop-at-first-unexpected-red rule, neither the literal twelve-module source-bound caller probe nor
+  the final `git diff --exit-code` unchanged-tree oracle was run. No tracked file changed, and this
+  green prefix is not Phase-A acceptance.
+  **Not this ticket's defect.** Decision D3 (2026-08-28) established that those two failures are a
+  module-presence contract question, not a `django_apps:` question: the deciding code is
+  `refresh_managed_adapters`, the tests contradict their own docstrings, and the runtime was flipped
+  by W3's `203fcd61`. **SA173 (#30) owns the fix and the two tests.** SA167c must not edit them, and
+  must not touch `quickscale_core/contracts/` or `quickscale_core/manifest/`.
+  **Blocking:** SA173's contract must be merged. Nothing else blocks Phase A — the other three
+  commands in the chain were green on this exact candidate.
+  **Decisions needed:** none. D3 is settled; see
+  [Settled decision D3](#settled-decision-d3-module-presence-is-a-three-state-fact-2026-08-28).
   **Remaining plan (serial; do not redo the merged retirement bytes):**
-  0. **Pre-existing caller mismatch:** settle D3 and correct the losing test/runtime surface under a
-     fresh reviewed plan, including caller-parity evidence if runtime behavior changes.
-  1. **A-acceptance:** after the D3 correction is reviewed and the candidate starts with no tracked
+  0. **Wait for SA173.** No SA167c work is required for the caller mismatch. When SA173 merges, sync
+     it into `wt-track2` before rerunning A.
+  1. **A-acceptance:** on a candidate carrying SA173's contract and no tracked
      diff, rerun the exact chain below in order. Stop at the first command whose observed result does
      not match its expected result; do not run any later command after that red, and do not treat a
      green prefix as acceptance.
@@ -342,7 +492,8 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
      4. `make check-gate-parity`
         — expect exit 0 through Make's blocking parity wrapper.
      5. `poetry run pytest quickscale_cli/tests/commands/test_module_config_extended.py quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_cli/tests/test_orgs_contract.py quickscale_cli/tests/test_manifest_entry_point_integration.py -q -o addopts= --no-cov`
-        — expect exit 0 after the D3-selected contract correction.
+        — expect exit 0 once SA173's presence contract is present. This is the command that was red;
+        the other four were green on this candidate.
      6. Run this literal read-only source-bound probe; expect exit 0 and exactly
         `verified 12 source-bound module app projections`:
 

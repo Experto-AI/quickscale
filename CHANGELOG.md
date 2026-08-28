@@ -4,6 +4,58 @@
 
 ## v88 development — 2026-08-21
 
+- **Decision D3 settled — module presence is a three-state fact; SA173 opened (2026-08-28).**
+  SA167c's Phase-A acceptance had stalled on two red tests at
+  `quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`, which assert an embedded
+  registered module with no manifest fails with `inventory count drift` while the runtime returns
+  success. The decision was framed as a two-way choice between updating the tests and restoring a
+  runtime failure. **Both framings were wrong about where the code is**, and measuring rather than
+  reading settled it.
+  **What the measurement showed.** A traced run of the failing scenario calls
+  `discover_shipped_module_names` (x3), `refresh_managed_adapters`, then
+  `discover_bundled_module_names` — and **never** `authoritative_module_names`. The decider is
+  `refresh_managed_adapters` (`quickscale_core/.../manifest/entry_point.py:210-227`) and its subset
+  check. Deleting the `OVERRIDE` fallback at `module_discovery.py:231-248` — the change the prior
+  framing proposed as "restore the failure" — leaves **both tests still red**, confirmed on a full
+  `quickscale_cli/tests` + `quickscale_core/tests` run. Making drift fail would therefore have
+  required weakening the **subset rule**, which is what lets a generated project ship fewer than
+  twelve modules: the normal case for the entire product.
+  **Why the tests and the runtime disagreed at all — three unreconciled decisions.** `a1fce1eb`
+  (2026-07-04, SA18.2) wrote the tests asserting skip-and-succeed, which is still the class name
+  `TestRegenerateManagedWiringSkipManifestNotFound` and still both method docstrings; `e8581800`
+  (2026-08-25) flipped only the two assertion lines, leaving the prose contradicting them;
+  `203fcd61` (2026-08-27, **an SA135/W3 commit**) added the `OVERRIDE` fallback and flipped the
+  runtime back. **W3's merged partial is what turned W2's caller suite red**, across lanes that
+  shared no file — recorded in the roadmap as a standing cross-lane rule for
+  `quickscale_core/contracts/` and `quickscale_core/manifest/`.
+  **The structural defect.** `discover_shipped_module_names` collapses *module absent* and
+  *directory present with no `module.yml`* into one output — its own docstring records that
+  manifest-less directories are "silently excluded". Downstream consumers reconstruct the discarded
+  fact by **counting** against `AUTHORITATIVE_MODULE_COUNT` and testing for a subset, and that proxy
+  is implemented twice with a hand-copied `"Authoritative module inventory count drift"` string. The
+  proof that the state model is incomplete is `PLACEHOLDER_MODULE_NAMES = frozenset({"teams"})`:
+  `quickscale_modules/teams/` is a `README.md` with no `module.yml`, structurally identical to a
+  half-installed module, and only a hardcoded name separates them.
+  **Resolution — a third option.** Restore the distinction at the layer that loses it: discovery
+  reports ABSENT / ACTIVE / INCOMPLETE, each consumer owns its own policy, the subset-validity rule
+  has one implementation, and nothing classifies module presence by string-matching an exception
+  message. Adapter loading then tolerates a subset **and** fails hard on an incomplete install
+  without tension, because one signal stops carrying two meanings. This also removes three
+  simultaneous Fail-Hard violations in one path — discovery's silent exclusion, the CLI's
+  `"Manifest file not found"` substring skip at `module_wiring_manager.py:201`, and
+  `authoritative_module_names`'s bundled substitution under an override — and lets
+  `PLACEHOLDER_MODULE_NAMES` retire.
+  **Policy.** Written as
+  [decisions.md -> Module Presence States](docs/technical/decisions.md#module-presence-states),
+  refining rather than replacing the AF7/SA109 bundled-inventory precedence: AF7 answers *where
+  inventory came from*, the presence states answer *what was found there*.
+  **Planner changes.** **SA173 — Make module presence a three-state fact** opens at Band B · Tier 1
+  · **W2** · **merge #30** · deps: none, and **SA167c (#21) now merges after it**. The critical path
+  becomes `SA173 -> SA167c -> SA166 -> SA164`, one ticket longer than before — accepted deliberately
+  as the cost of stating the contract once instead of reconstructing it by counting. Lanes are even
+  at **W1 4 · W2 4 · W3 4**. Counts move to **twelve open v88 ticket entries across twelve open
+  merge positions**. All three lanes are truly green and **no open maintainer decision remains**.
+
 - **SA163 closed — the CI PostgreSQL environment now has one authoritative source (2026-08-28).**
   Archived from the roadmap on the independent structural pass at `a2dfdd9f`, which scored the
   arch-audit finding `ci-environment-hand-replicated` (the prior pass's rank-1 `now`-horizon

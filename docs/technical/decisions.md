@@ -1231,6 +1231,63 @@ catchers import Django's.
 
 ---
 
+### Module Presence States (SA173) {#module-presence-states}
+
+**Architectural Decision (2026-08-28, settling roadmap decision D3):** Module discovery
+reports **what it observed**, and each consumer applies its own policy. Presence is a
+three-state fact, not a count.
+
+**The three states.** A directory under the active modules base path is exactly one of:
+
+| State | Physical shape | Meaning |
+|---|---|---|
+| **ABSENT** | no directory | Legitimate subset — a generated project selected fewer modules |
+| **ACTIVE** | directory + valid ``module.yml`` | A shipped module available for wiring |
+| **INCOMPLETE** | directory present, **no** ``module.yml`` | Ambiguous on its face: placeholder scaffolding, or a corrupt/partial install |
+
+**Why this is a decision and not an implementation detail.** Before SA173,
+``discover_shipped_module_names()`` collapsed ABSENT and INCOMPLETE into the same output —
+its own docstring recorded that manifest-less directories are "silently excluded". The
+distinguishing fact was discarded at the discovery layer, so every downstream consumer had
+to reconstruct it by **counting** against ``AUTHORITATIVE_MODULE_COUNT`` and testing for a
+subset. A count is a proxy for information that was thrown away, and the proxy was
+implemented twice — in ``refresh_managed_adapters()`` and in
+``authoritative_module_names()`` — with a hand-copied ``"Authoritative module inventory
+count drift"`` message.
+
+``PLACEHOLDER_MODULE_NAMES = frozenset({"teams"})`` was the proof: ``quickscale_modules/teams/``
+(a ``README.md``, no ``module.yml``) is **structurally identical** to a half-installed module,
+and the only thing separating them was a hardcoded name. A hand-maintained list of names
+standing in for a state the model cannot express is the state model's missing case, written
+out by hand.
+
+**The rule.**
+
+1. Discovery **must** report INCOMPLETE distinctly. It may not silently exclude a
+   manifest-less directory.
+2. Consumers own their policy over the three states, and the policies differ legitimately:
+   - **Adapter loading** (``refresh_managed_adapters``) — ABSENT is fine (subset projects are
+     the normal case); INCOMPLETE is **fail-hard**.
+   - **Release inventory** (``authoritative_module_names``) — the shipped count is authoritative;
+     a project subset is not a release inventory and must not be answered with one.
+3. The subset-validity rule has **one** implementation. No consumer may hand-copy it or its
+   diagnostic text.
+4. A placeholder is an INCOMPLETE directory that is **declared** as such, not a name matched
+   against a literal set.
+5. No consumer may classify module presence by string-matching an exception message.
+
+**Cross-reference.** This is a direct application of the
+`Fail-Hard Principle <#fail-hard-principle>`_. The prior shape carried three silent
+fallbacks in one path: discovery silently excluding manifest-less directories, the CLI
+silently skipping on a ``"Manifest file not found"`` substring, and
+``authoritative_module_names`` silently substituting the bundled inventory under an override.
+Reporting the observed state removes all three. It refines, and does not replace,
+`§Bundled Module Inventory and Source-Required Paths (AF7) <#bundled-module-inventory-and-source-required-paths-af7>`_:
+the OVERRIDE / MONOREPO / BUNDLED precedence answers *where inventory came from*; these states
+answer *what was found there*.
+
+---
+
 ### Module Version Lockstep and Embed Compatibility {#module-version-lockstep}
 
 **Architectural Decision (SA117):** Shipped modules are versioned in lockstep with the

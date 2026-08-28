@@ -147,6 +147,77 @@ and the Testing Standards section describes the precondition in prose. Both need
 
 ---
 
+## SA173 — Make module presence a three-state fact
+
+### The mental model
+
+Ask the filesystem "is module `blog` here?" and there are three honest answers, not two:
+
+```text
+  no directory at all          -> ABSENT      a project simply did not select it
+  directory + module.yml       -> ACTIVE      a shipped module, ready to wire
+  directory, no module.yml     -> INCOMPLETE  placeholder, or a half-finished install
+```
+
+Discovery only ever returned two. `discover_shipped_module_names` skips a directory without a
+manifest and says nothing — its docstring calls this "silently excluded". ABSENT and INCOMPLETE
+come back looking identical.
+
+### Why that costs so much downstream
+
+Once the distinction is gone, the only way to notice something is wrong is to **count**. So the code
+counts: is the number of modules twelve? If not, is what I found at least a subset of the twelve the
+wheel ships? That question gets asked in two different places, with the same diagnostic string typed
+out twice.
+
+Counting is a proxy for a fact that was thrown away one layer earlier. It is a proxy that cannot
+distinguish the two cases that matter, because a project missing `blog` entirely and a project with
+a broken `blog` produce the same count.
+
+### The tell
+
+```text
+PLACEHOLDER_MODULE_NAMES = frozenset({"teams"})
+```
+
+`quickscale_modules/teams/` is a `README.md` and no `module.yml`. That is *exactly* the shape of a
+half-installed module. The system cannot tell them apart structurally, so it separates them by
+hardcoding a name.
+
+When a codebase needs a hand-maintained list of names to distinguish two instances of the same
+physical state, that list is the missing state, written out by hand. Retiring it is how you know
+the model is now complete.
+
+### Why the subset rule is not the bug
+
+It is tempting to read "a project with two modules passed a check expecting twelve" as the defect
+and tighten the check. It is not. A generated project selecting fewer than twelve modules is the
+**normal** case — that is the product. `refresh_managed_adapters` tolerating a subset is correct and
+must survive.
+
+The bug is that one signal is carrying two meanings, so tolerating a legitimate subset and rejecting
+a broken install look like the same decision. Separate the states and they stop competing: load the
+subset, and fail hard on the broken one, in the same function, with no tension.
+
+### Three silent fallbacks in one path
+
+The repository's Fail-Hard Principle says never substitute a plausible answer for a missing one.
+This path carried three at once: discovery dropping manifest-less directories, the CLI deciding a
+module does not count by matching the substring `"Manifest file not found"` against an exception
+message, and the release-inventory helper substituting the wheel's bundled list when asked about a
+project. All three exist to paper over the same discarded fact, and reporting the observed state
+removes all three together.
+
+### Where the boundary sits
+
+"What does module X wire?" is the module's own business, answered by its manifest — that is the
+module-wiring authority the SA167 family is enforcing. "Which modules are here?" cannot be
+module-owned, because no module can see its siblings; it is a core contract question and it belongs
+in `quickscale_core/contracts/`. What does *not* belong anywhere near the CLI is the judgement about
+whether a directory counts as a module, which is why the substring check comes out.
+
+---
+
 # Bounded independent fixes
 
 Each has a small, well-understood blast radius and remains bounded to its stated concern.
