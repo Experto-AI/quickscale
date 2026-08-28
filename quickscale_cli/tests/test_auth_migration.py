@@ -78,5 +78,7 @@ def test_probe_output_failures_are_unverifiable(
 def test_remediation_keeps_project_identity_and_commands(tmp_path: Path) -> None:
     remediation = format_auth_migration_remediation(tmp_path)
     assert f"cd {tmp_path.resolve()}" in remediation
+    assert "PGPASSWORD=postgres createdb -h localhost -U postgres" in remediation
     assert "docker compose down -v" in remediation
-    assert "poetry run python manage.py flush --no-input" in remediation
+    assert "poetry run python manage.py flush --no-input" not in remediation
+    assert remediation.count("quickscale apply") == 2

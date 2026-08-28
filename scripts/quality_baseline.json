@@ -125,12 +125,6 @@
         "symbol": "update",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/module_config.py::_add_storage_dependencies": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/module_config.py",
-        "max_complexity": 13,
-        "symbol": "_add_storage_dependencies",
-        "type": "function"
-      },
       "quickscale_cli/src/quickscale_cli/commands/module_config.py::configure_backups_module": {
         "file": "quickscale_cli/src/quickscale_cli/commands/module_config.py",
         "max_complexity": 11,
@@ -411,18 +405,6 @@
         "file": "quickscale_core/src/quickscale_core/manifest/derivation.py",
         "max_complexity": 13,
         "symbol": "build_schema_from_manifest",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/manifest/entry_point.py::_backups_manifest_adapter": {
-        "file": "quickscale_core/src/quickscale_core/manifest/entry_point.py",
-        "max_complexity": 11,
-        "symbol": "_backups_manifest_adapter",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/manifest/entry_point.py::_storage_manifest_adapter": {
-        "file": "quickscale_core/src/quickscale_core/manifest/entry_point.py",
-        "max_complexity": 14,
-        "symbol": "_storage_manifest_adapter",
         "type": "function"
       },
       "quickscale_core/src/quickscale_core/manifest/loader.py::_parse_contract_vintage": {

@@ -155,6 +155,7 @@ def format_auth_migration_remediation(project_path: Path) -> str:
         "Remediation options (all may involve data loss):\n\n"
         "1) Fresh disposable local database\n"
         f"   cd {project_abs}\n"
+        f"   PGPASSWORD=postgres createdb -h localhost -U postgres {fresh_db_name}\n"
         f"   export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/{fresh_db_name}\n"
         "   poetry run python manage.py migrate\n"
         "   quickscale apply\n\n"
@@ -164,9 +165,5 @@ def format_auth_migration_remediation(project_path: Path) -> str:
         "   quickscale up --build\n"
         "   poetry run python manage.py migrate\n"
         "   quickscale apply\n\n"
-        "3) Explicitly destructive reset path\n"
-        f"   cd {project_abs}\n"
-        "   poetry run python manage.py flush --no-input\n"
-        "   poetry run python manage.py migrate\n\n"
         "WARNING: These commands can permanently delete data."
     )
