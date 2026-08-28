@@ -42,11 +42,14 @@ The open release work is one principle with four failure modes. Every ticket is 
             │             │               │              │
            SA160         SA165           SA135          SA166
            SA164         SA152           SA161          SA172
-           SA172         SA172           SA170            │
-             │             │             SA171      (testimony
+           SA172         SA172           SA170          SA175
+           SA174           │             SA171            │
+             │             │               │        (testimony
        (cookies,      (state/tool     (DB, locks,      trail,
         watchlists,    fallbacks,      dead code,    policy-text
-        RLS docstring)  silent skips)   Docker)      assertions)
+        command sets,  silent skips)    Docker)      assertions,
+        RLS docstring)                              file-group
+                                                     coherence)
 ```
 
 **The one sentence:** *Every fact should have exactly one home, and every consumer should
@@ -59,10 +62,10 @@ and SA162 correction are now complete, with their evidence archived in the chang
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners; two hand-rolled file locks with one shared race | SA160, SA164, SA171 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks with one shared race | SA160, SA164, SA171, SA174 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
 | **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | the integration gate assumes a PostgreSQL server someone else started; a fixed-tag Docker image outside the scope contract; dead code nobody deletes | SA135, SA161, SA170 |
-| **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail; RLS gates assert a policy exists but never what it says | SA166, SA172 |
+| **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail; RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA166, SA172, SA175 |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
 context. Its closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md), so the
@@ -470,6 +473,126 @@ This edits generated-project templates, so the SA90 emission-parity fixture need
 
 ---
 
+## SA174 — Give the sanctioned privileged-command set one owner
+
+### The mental model — a contract with two endpoints and four declarations
+
+A generated project decides, at boot, **which database role serves traffic**. The launcher sets
+`QUICKSCALE_PRIVILEGED_COMMAND` as an inline prefix; the settings module reads it and hands back
+either the superuser `DATABASE_URL` or the restricted `RUNTIME_DATABASE_URL`; the `orgs` module
+reads it too, and skips its RLS boot guard when the value is sanctioned.
+
+That is one contract with two endpoints. It is written down four times.
+
+### The four declarations, and what each one decides
+
+| Station | Role | Upgrade class |
+|---|---|---|
+| `templates/project_name/settings/production.py.j2:185` | **validator** — selects the role | **frozen** into the user's project at generation vintage |
+| `quickscale_modules/orgs/.../apps.py:36` | **guard bypass** — `ready()` returns before `_check_rls_role()` | upgradable, module wheel |
+| `quickscale_cli/.../development_commands.py:44` | **producer** — decides whether to inject the env var | upgradable, CLI wheel |
+| `quickscale_core/tests/test_generator/test_templates.py:4278` | **oracle** — a literal string transcribing the first station's source text | repo-only |
+
+`templates/start.sh.j2:50,61` is a fifth by inline literal.
+
+### Why this is worth a ticket when nothing is currently broken
+
+All four sets hold `{"migrate", "createcachetable"}` and every divergence direction **fails closed**.
+The tech audit adjudicated exactly that question and recorded no defect. So the honest framing is
+not *"this is a bug"* but *"this is a structure that already produced silent drift and has no
+detector."*
+
+Two facts carry it. First, `apps.py:52` states that its frozenset *"is the single source of truth
+for which values are sanctioned"* — **false when written, and still false.** A governance comment
+claiming exclusivity beside three other copies is worse than silence, because it stops the next
+reader from checking. Second, the CLI copy arrived in `3523f9f8` under the message
+*"test: add installed-wheel lifecycle e2e"* — a test-labeled commit that minted a new production
+decider on the privilege seam. Nobody reviewed it as such, and no gate noticed.
+
+### The contrast that proves this is not inherent
+
+The **sibling** contract in the same file is single-owner and coherent:
+`_KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})` at
+`production.py.j2:186` is defined **once**, and its only producer is `Dockerfile.j2:191` — both
+template-side, both frozen at the same vintage, so they cannot drift. Same file, same release, same
+pattern. The privileged set is the one that grew extra owners.
+
+### Implementation shape — reuse the seam that already exists
+
+`generator/runtime_pins.py` already does this job for Python, Django, and PostgreSQL versions: one
+declaration, rendered into templates through `generator.py:521-526`, read by tests rather than
+transcribed. Put the command set there.
+
+The emitted copy **stays** — a generated project must render standalone with no import back into
+QuickScale, and "100% yours, no vendor lock-in" is the product's central promise. What changes is
+its status: a *rendering* of the declaration rather than a restatement of it. The CLI and module
+copies, which ship on the same release line as core, become imports. The oracle stops matching a
+literal and starts comparing the rendered set against the imported ones — the same move made for the
+planning documents when literal ticket IDs were replaced by derived counts.
+
+### The one thing that must not be simplified away
+
+The `orgs` module keeps its **own independent fail-closed guard**. Collapsing to a single decider —
+letting settings be the sole authority and having the module key off a published outcome — looks
+tidier and is a recorded sound decision to reject: it deletes the module's independent backstop and
+requires a runtime handshake that does not exist. Reading one declaration is not the same as trusting
+one decider.
+
+### Emission parity
+
+This changes emitted bytes, so the SA90 emission-parity fixture needs a rebaseline with per-file
+rationale, following the established convention and preserving every prior `baseline_evidence` entry.
+
+---
+
+## SA175 — Assert disposition coherence for the launcher↔settings contract
+
+### The mental model — a taxonomy that classifies files, for a problem that is about pairs
+
+Beta migration decides, for every emitted path, whether an upgrade **carries the user's copy
+forward** or **replaces it with the new one**. The decision is recorded per file, across seven
+hand-authored categories, and a conformance test proves every emitted path lands in one of them.
+
+That test asks *"is this file classified?"* It cannot ask *"do these files still agree?"* — because
+nothing anywhere records that two files belong to one contract.
+
+### The concrete split
+
+The privileged-command contract lands on **both sides** of the line:
+
+- `settings/production.py` — the **validator**, holding the fail-closed privilege guard — sits in
+  `FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES` (`beta_migration.py:59`) and
+  `FRESH_FIRST_DONOR_DJANGO_FILES` (`:92`). It is copied **from the donor**: the user's existing
+  project wins over the freshly generated one.
+- `start.sh` and `Dockerfile` — the **producers** of the env vars that file validates — sit in
+  `IN_PLACE_INFRASTRUCTURE_TARGETS` (`:109,121`) and
+  `IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS` (`:125,128`). They are copied with substitution at
+  the **new** vintage.
+
+Producer new, validator old. Membership is perfect; coherence is unexamined.
+
+### Why the donor-wins choice is not the defect
+
+It is defensible on its own terms, and this work must preserve it: `settings/production.py` is where
+users put their real deployment configuration, and overwriting it would be worse than carrying it
+forward. The defect is that the *pairing* is invisible — the split is a decision nobody made, sitting
+in a place that cannot express it.
+
+### Scope discipline — this is one assertion, not a redesign
+
+The deferred finding behind this has two real options: derive the taxonomy from generator emission,
+or emit a versioned ownership manifest supporting vintage negotiation against the `project_contract`
+version that already exists in state. **Neither is in scope.** Both stay behind the growth trigger —
+a third generated-project consumer, a public updater, an emitted-file expansion, or a second theme —
+and the blast radius stays small meanwhile because `quickscale_devtools` is maintainer-only, excluded
+by name from the publish scripts.
+
+What is in scope: name the contract's participating paths once, sourced from the single declaration
+rather than re-listed, and assert that members of one named group cannot take dispositions from
+opposite families. One assertion, one named group, and a red-then-green proof.
+
+---
+
 ## SA165 — Discharge the tech-audit watch items that carry an action
 
 ### The mental model
@@ -536,8 +659,11 @@ A watch item is a bet: *"this is not a problem yet, and here is the trigger that
 it one."* A watch item whose trigger **cannot be evaluated** has stopped being a bet and
 become debt — it costs a read every audit pass and can never fire.
 
-Five items are carried. Three are simply not fired and need no work. Two carry explicit
-actions, and one is a naming question that becomes load-bearing on a specific trigger.
+The watchlist was rewritten by the 2026-08-28 pass: one item's parent finding was resolved, one
+item fired and was promoted, and three new ones were minted inside the landed provisioning
+derivation. What remains here is one item carrying an explicit action, one naming question that
+becomes load-bearing on a specific trigger, and the restatement of the three new items so their
+triggers survive the next pass.
 
 ### 1. The SA92 migration-squash tuple — artifact found, re-anchor remains open work
 
@@ -550,20 +676,16 @@ backstop still names the retired `v87` baseline. The current regenerated migrati
 discharged S4 BYPASSRLS prerequisite are settled; SA164 owns the `_migdir()` helper
 correction and parity-backstop re-anchoring.
 
-### 2. Privileged-command pair — values agree, claimed authority does not
+### 2. Privileged-command pair — the watch item fired, and left this ticket
 
-`production.py.j2:185` and
-`quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:36` both hold
-`frozenset({"migrate", "createcachetable"})`. The values are **verified equal**.
+This was carried for two passes as *"values agree, claimed authority does not"*. The 2026-08-28
+structural pass re-counted the owners and found **four**, not two — the trigger fired, and the item
+was promoted out of the watchlist into a ranked finding. It is no longer adjudication work and no
+longer belongs here; **SA174** carries it, with the full census and the chosen shape.
 
-But the `apps.py` docstring calls itself *"the single source of truth for which commands are
-privileged"* while the template holds an independent copy. The defect is the **claim**, not
-the value.
-
-Make the claim true — either the template reads the runtime frozenset, or the docstring
-stops claiming sole authority — **with a test asserting the two cannot diverge.** A
-governance artifact that says "single source of truth" beside a second copy is worse than
-silence, because it stops the next reader from checking.
+What survives in this ticket is the shape of the lesson, which the remaining items share: a watch
+item is a bet, and when the bet resolves, the item stops being a watch item. Restating it here as a
+watch item a third time would be the error.
 
 ### 3. `trigger_inputs` has drifted from its name
 
@@ -581,9 +703,16 @@ schema description.
 
 ### And restate the three that are not fired
 
-Module universe in environment lists, frontend runtime module keys, and the environment-schema
-watch item absorbed when the CI-environment finding was resolved. Keep their triggers intact —
-restating is the work, not removing.
+The **current** three, not the superseded pre-resolution list: the two hand-pinned literals minted
+inside the new provisioning derivation (`provision_ci_postgres.sh:93,96` — `!= teams` and `== 12`,
+re-introducing a module name and a module count into a script whose whole point is deriving them);
+the second copy of the PostgreSQL major (`provision_ci_postgres.sh:15` against `runtime_pins.py:30`,
+two values that are arguably correct because the repo toolchain and the generated project are
+genuinely independent); and the roughly six count-pinned oracles in `scripts/test_gate_parity.py`.
+
+Each is not fired, each fails loudly, and each has a written trigger. Keep the triggers intact —
+restating is the work, not removing. Note the shape: all three were **created by a fix**, which is
+the ordinary cost of centralization and the reason the fix-regression question is asked every pass.
 
 ---
 

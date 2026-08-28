@@ -26,6 +26,17 @@ from here rather than marked done. No checked entry is permitted.
   separate ephemeral servers; this applies to the shared local cluster only.
 - **W1's wiring leg (SA167d) may not touch `scripts/gate_registry.json` or any `module.yml`.** Those are W2-owned surfaces.
 - A ticket whose deliverable is Git ref state cannot be delegated to a file-editing worker. Route it to a maintainer session with ref authority and push credentials.
+- **Long gates must be run detached, not merely with a raised timeout.** `make check` measures
+  **601 s green** on `v88` (41 s when it fails fast — a red run is not a timing sample). That
+  exceeds the 600 s ceiling of a single foreground tool call, so waiting on it inline is killed by
+  construction. Launch with `nohup`, write the exit code to a file, poll for the file. Same for
+  `make test` and `make quality`. A run killed by a cutoff returns no exit code and is **not
+  evidence** — neither of green nor of red. One recorded acceptance stall was caused by exactly this,
+  and the gate underneath turned out to be red.
+- **Terminal attestation must be handed its input.** Generate the complete base-to-tip patch to a
+  file (`git diff <base>..<tip> > <name>.patch`) and supply it together with a clean-byte binding
+  (`git status --porcelain` empty at the exact tip). A reviewer that cannot obtain the patch returns
+  *no grade*, which costs a full attestation cycle and proves nothing.
 
 ---
 
@@ -41,21 +52,128 @@ Audit-derived prerequisites and implementation tickets share one ranked queue.
 
 | Band | Rule | Tickets |
 |---|---|---|
-| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | — (clear; shared repository gates are green, evidence archived in the changelog) |
-| **B — Release work on the critical paths** | The two longest serialized chains, one holding the exclusive service slot. | SA173 then SA167c (critical path); SA135; SA170; SA167d |
-| **C — Bounded independent fixes** | No dependants, small blast radius; absorbed as slack filler. | SA160, SA161, SA164, SA165, SA166, SA171, SA172 |
+| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **SA173** — `make check` runs red on `v88` HEAD (measured 2026-08-28; see below) |
+| **B — Release work on the critical paths** | The two longest serialized chains, one holding the exclusive service slot. | SA167c (critical path, after SA173); SA135; SA170; SA167d |
+| **C — Bounded independent fixes** | No dependants, small blast radius; absorbed as slack filler. | SA160, SA161, SA164, SA165, SA166, SA171, SA172, SA174, SA175 |
+
+### Band A is open — `make check` runs red on `v88` HEAD
+
+**Measured 2026-08-28 on `v88` at `ee8fd825`, from a clean tree:**
+
+```text
+✅ Linting passed!     ✅ Type checking passed!
+quickscale_core:  2878 passed, 1 skipped
+quickscale_cli:      2 failed, 2143 passed
+FAILED tests/test_module_wiring_manager_manifest.py::TestRegenerateManagedWiringSkipManifestNotFound::test_registered_module_without_manifest_skipped_when_embedded
+FAILED tests/test_module_wiring_manager_manifest.py::TestRegenerateManagedWiringSkipManifestNotFound::test_forwarded_registered_module_without_manifest_still_succeeds
+make: *** [Makefile:1181: check] Error 2
+```
+
+Those are exactly **SA173's two target tests**. Three consequences, none of which the plan
+previously stated:
+
+1. **SA173 is band A, not band B.** The band-A rule is "gate layer … runs red on HEAD", and it does.
+   By the ordering rule, this outranks every other ticket in the release.
+2. **W1 and W3 cannot finish on their own lanes.** SA167d's and SA135's closeout campaigns both
+   require `make check` green on a candidate synced to current `v88`. That is unreachable by any work
+   those lanes can do. The prior readiness table asserted the opposite for both.
+3. **The recorded V0 blocker was misdiagnosed, and the real budget is far larger than anyone
+   assumed.** SA167d's checkpoint attributes V0's stop to `make check` "terminated by the
+   120-second execution limit". Measured on `v88` at `ee8fd825`:
+   - **Red path: 41 s, exit 2.** It fails fast at `test-unit` (`Makefile:377`) and never reaches the
+     later stages. This is the number a red run produces, and it is why the gate looked cheap.
+   - **Green path (under the exclusion): 601 s, exit 0.** Every stage runs. The Python suites are a
+     small fraction of it — the dominant cost is `lint-frontend`, which renders the theme variants,
+     installs their dependencies, and runs ESLint plus `tsc` **twice** (default and no-social).
+   So the cutoff was real *and* the gate underneath was red: the timeout hid the failure rather than
+   causing it, and every subsequent "it timed out" reading reinforced the wrong diagnosis.
+   **`make check` must be run detached — a raised timeout is not enough.** At 601 s it exceeds the
+   600 s ceiling of a single foreground tool call, so any attempt to wait on it inline is killed by
+   construction. Launch it with `nohup`, write the exit code to a file, and poll for that file. A run
+   killed by a cutoff returns no exit code and is evidence of nothing — not green, not red. The same
+   applies to `make test` and `make quality`.
+
+#### Full-suite baseline — seven failures, only two of which gate `make check`
+
+`make check` filters with `-m "not integration and not e2e"`. The unfiltered combined suite does not,
+and it is a different animal. **Measured 2026-08-28 on `v88` at `ee8fd825`:**
+
+```text
+poetry run pytest quickscale_cli/tests quickscale_core/tests -q -o addopts= --no-cov
+7 failed, 5134 passed, 16 skipped in 4699.01s (1:18:19)
+```
+
+Attribution of all seven, so no lane chases a failure it does not own:
+
+| Failure | Marked `e2e`? | In `make check`? | Owner |
+|---|---|---|---|
+| `test_module_wiring_manager_manifest.py::…::test_registered_module_without_manifest_skipped_when_embedded` | no | **yes** | **SA173** |
+| `test_module_wiring_manager_manifest.py::…::test_forwarded_registered_module_without_manifest_still_succeeds` | no | **yes** | **SA173** |
+| `test_e2e_development_workflow.py::TestDevelopmentCommandsE2E::test_logs_with_options` | yes | no | **SA170** |
+| `test_e2e_development_workflow.py::TestDevelopmentCommandsE2E::test_manage_test_command` | yes | no | **SA170** |
+| `test_e2e_installed_wheel_lifecycle.py::test_installed_wheel_plan_apply_up_all_modules` | yes | no | **SA170** |
+| `test_e2e_full_workflow.py::TestDockerIntegration::test_sa142_no_cleanup_diagnostic_probe` | yes | no | **SA170** |
+| `test_module_discovery.py::TestAuthoritativeModuleNames::test_partial_generated_override_uses_bundled_shipped_inventory` | no | yes | **order-dependent — not a defect** |
+
+**The last row is a trap, and it sits on SA173's exact surface.** It fails in the full combined run
+with `ImproperlyConfigured: Authoritative module inventory count drift: expected 12, found 2` at
+`module_discovery.py:232` — the very OVERRIDE→bundled path SA173 acceptance criterion 4 removes. It
+**passes in isolation** (verified: `1 passed in 9.25s`), and it does not fail under `make check`,
+whose core suite is green at 2878 passed / 1 skipped. It is contaminated by an earlier `e2e` test
+that `make check` never runs. **Do not read it as evidence that an SA173 change broke discovery, and
+do not "fix" it** — it is a pollution artifact whose trigger SA173 deletes anyway.
+
+**Consequence for W2:** SA173's verification step 2 cannot reach exit 0, and never could — see the
+corrected expectation in the ticket. Four `e2e` failures are SA170's and one is pollution.
+
+#### Interim known-red protocol (decided 2026-08-28)
+
+So that W1 and W3 keep moving while SA173 is implemented, both lanes may run their campaigns with
+**exactly these two tests excluded, by name**, and no others. The mechanism is `PYTEST_ADDOPTS`,
+which needs no Makefile change and reaches every pytest invocation `make` makes:
+
+```bash
+export PYTEST_ADDOPTS='--deselect tests/test_module_wiring_manager_manifest.py::TestRegenerateManagedWiringSkipManifestNotFound::test_registered_module_without_manifest_skipped_when_embedded --deselect tests/test_module_wiring_manager_manifest.py::TestRegenerateManagedWiringSkipManifestNotFound::test_forwarded_registered_module_without_manifest_still_succeeds'
+```
+
+**The node ids are rootdir-relative.** `quickscale_cli` is its own pytest rootdir, so the prefix is
+`tests/…`, **not** `quickscale_cli/tests/…`. A repo-root-relative path silently matches nothing, the
+two tests still run, and the exclusion appears to work while doing nothing — verified 2026-08-28,
+and the reason this invocation is written out here rather than left to be reconstructed.
+
+Verified under this exclusion on `v88` at `ee8fd825`: **`make check` exits 0** — lint clean,
+typecheck clean, `quickscale_core` 2878 passed / 1 skipped, `quickscale_cli` 2143 passed, React theme
+lint green, zero failures. Those are the stages that are red without it.
+
+The recorded **601 s** was measured while an unrelated long-lived pytest process held part of the
+machine, so treat it as an upper-ish bound rather than a clean figure — but budget against it, not
+against something smaller. Under-budgeting this gate is the exact mistake that produced a
+misdiagnosed blocker once already.
+
+**Four binding conditions.**
+
+- The exclusion is **only** for these two node ids. Adding a third is a scope finding, not a
+  judgement call.
+- Every campaign run under it is **provisional evidence**. It can accept a lane's own work; it can
+  never accept a merge.
+- **No lane merges under the exclusion.** Before merge-back, sync the post-SA173 `v88`, unset
+  `PYTEST_ADDOPTS`, and re-run the lane's full campaign to green with **nothing** deselected. That
+  re-run is the merge evidence.
+- The protocol **expires when SA173 merges**. It is not a waiver, carries no ledger entry, and must
+  leave no trace in any committed file — if a deselect ever appears in the Makefile, CI, or a
+  `pyproject.toml`, that is the failure this protocol was written to prevent.
 
 ### Dependency graph and critical path
 
 ```text
-v88 — three worktrees, twelve open merge positions carrying twelve open ticket entries, one merge queue
+v88 — three worktrees, fourteen open merge positions carrying fourteen open ticket entries, one merge queue
 
 W2 (gates & declared wiring)   ★ CRITICAL PATH
   SA173 ─► SA167c ─► SA166 ─► SA164     #30, #21, #24, #25
   (SA173 opened by decision D3; SA167c's Phase-A slice merged, A retry gated on SA173, B-F open)
 
 W1 (module wiring + generated-output fixes)
-  SA167d ─► SA165 ─► SA161 ─► SA160     #18, #22, #19, #20
+  SA167d ─► SA165 ─► SA161 ─► SA160 ─► SA174 ─► SA175     #18, #22, #19, #20, #31, #32
 
 W3 (service lifecycle — exclusive PostgreSQL/Docker slot)
   SA135 ─► SA170 ─► SA171 ─► SA172      #15, #27, #28, #29
@@ -68,15 +186,17 @@ Option 3 for D3 (see the settled-decision record below) deliberately added `SA17
 contract is stated once instead of reconstructed by counting. W3 holds the exclusive slot and
 therefore takes scheduling priority while one of its legs is active, but its four positions are a
 *queue*, not a *chain*. **Finishing SA167d or SA135 does not shorten the release; finishing SA173
-does.**
+does.** This pass added two positions, both to **W1** — the lane off the critical path — so the
+release date is unchanged and no band-B leg is displaced.
 
 **No cross-worktree dependency edges remain.** Two cross-worktree *shared files* do, both made
 one-directional by merge order:
 
 - `scripts/test_isolation_conformance.sh` — SA135's merged partial wrote it; SA165 (#22, W1)
   narrows one line over those settled bytes. #15 merges before #22.
-- `.../settings/production.py.j2` — SA161 (#19, W1) and SA164 (#25, W2) edit **different regions**
-  with no ordering edge. #19 merges before #25; neither may widen into the other's region.
+- `.../settings/production.py.j2` — **no longer cross-worktree.** Moving the privileged-command
+  finding off SA164 (W2) onto SA174 (#31, W1) leaves this file with two W1 owners, SA161 (#19) then
+  SA174 (#31), sequenced on one lane. The prior #19-before-#25 caution is retired.
 
 **One cross-lane hazard already fired, and is recorded here so it is not repeated.** W3's merged
 SA135 remediation `203fcd61` added the `OVERRIDE`→bundled fallback in
@@ -110,22 +230,41 @@ new lane was shorter or idle. Neither creates a merge hazard.
   conformance suite — so they belong on the lane that owns the exclusive slot. Neither shares a file
   with SA135 or SA170.
 
+**SA174 (#31) and SA175 (#32) opened on W1 this pass**, integrating the 2026-08-28 structural
+audit's two ranked findings that the plan had not yet expressed as schedulable work. SA174 carries
+the arch audit's **rank-1** finding, which had been sitting as a sub-bullet of SA164 — a Tier-3
+watchlist ticket at the **tail of the critical-path lane**, behind SA173, SA167c and SA166. That
+placement was wrong on both axes the audit names: the finding is independent of everything else,
+needs no PostgreSQL or Docker slot, and the audit explicitly nominates it as slack filler; and its
+file surface is generated-output plus module wiring, which is W1's charter, not W2's. Moving it also
+**removes a cross-worktree surface** — `production.py.j2` had W1 and W2 editing disjoint regions, and
+is now W1-only. SA175 is the audit's trigger-independent first step on the rank-2 deferred finding;
+it stays behind SA174 because the audit says to consolidate the command set first and let the
+disposition work reference the single declaration. Both are band C, so neither may displace a band-B
+leg. **Conflict surface:** `production.py.j2` against SA161 — same lane, sequenced #19 then #31;
+`orgs/apps.py` and `development_commands.py`, which no other open ticket touches; and the standing
+closeout files.
+
 **SA173 (#30) then opened on W2** as decision D3's implementation. It was not placed on an idle
 lane despite W1 and W3 being available: it blocks SA167c's Phase-A acceptance, W2 runs one reviewed
 child at a time, and splitting a blocker from the ticket it blocks across two lanes would force a
 cross-lane sync in the middle of an acceptance chain. It is band B, so it does not fall under the
 band-C-filler rule.
 
-Result: **W1 4 · W2 4 · W3 4.** Even lanes. The critical path is W2's full chain, so W2 carries no
-band-C filler beyond the two tails it already owned.
+Result: **W1 6 · W2 4 · W3 4.** W1 is deliberately the long lane: it is off the critical path, so
+band-C work accumulates there rather than behind the release-setting chain. W2 carries no band-C
+filler beyond the two tails it already owned, and this pass **removed** work from its tail rather
+than adding any.
 
 ### Lane state
 
-`wt-track2` and `wt-track3` are ancestors of `v88` — merged, clean, and idle. **`wt-track1` holds
-the release's only unmerged product delta:** SA167d's A-D-accepted work at product tip `1743871f`,
-under one docs-only checkpoint at `467714cb`. Every worktree lags `v88` and must sync before its
-ticket starts; W1's sync will conflict in `docs/technical/roadmap.md`, which is expected — resolve
-in the worktree keeping this file's structure, and re-run the consistency test in the same change.
+**Verified 2026-08-28.** `wt-track2` and `wt-track3` are ancestors of `v88` — merged, clean, and
+idle, each 0 ahead / 3 behind. **`wt-track1` holds the release's only unmerged product delta:**
+SA167d's **A-E-accepted** work, clean at `f392641c`, 15 ahead / 3 behind, with the accepted E0 tip
+and convergence corrections retained at `8b20800d`. All three worktrees are clean. Every worktree
+lags `v88` and must sync before its ticket starts; W1's sync will conflict in
+`docs/technical/roadmap.md`, which is expected — resolve in the worktree keeping this file's
+structure, and re-run the consistency test in the same change.
 
 Ahead/behind counts are not transcribed here because they go stale with every commit to this file.
 Measure them instead:
@@ -142,18 +281,28 @@ move reduces the number of tickets that ever contend for it.
 
 ### Next action per lane
 
-- **W2 — start SA173 (#30).** D3 is settled; the contract is written in
+- **W2 — start SA173 (#30). Band A: this is the only work that restores a green `v88`.** D3 is
+  settled; the contract is written in
   [decisions.md → Module Presence States](decisions.md#module-presence-states). Implement the
   three-state discovery contract, then resume SA167c (#21) — do not redo SA167c's merged
   manifest-retirement bytes, and do not edit its two failing caller tests directly: they are
   answered by SA173's contract, and SA167c's Phase-A chain is rerun unchanged afterwards.
-  **This is the only action that shortens the release.**
-- **W3 — resume SA135 (#15) at the re-scoped phase E1.** Do not redo C or D, and do not attempt the
-  two E2E Docker failures — they are SA170's. SA163's work is merged and archived; SA135's
-  remaining scope is the PostgreSQL-lifecycle evidence and the `validation_policy.md` precondition
-  update only.
-- **W1 — re-run and accept SA167d's phase E (#18)**, then the ledger reconciliation and merge-back.
-  This is the release's only unmerged delta; schedule its `make test` outside W3's window.
+  **It shortens the release and it unblocks the other two lanes' merges.** Run SA173 with **no**
+  exclusion — its acceptance is precisely that those two tests stop failing.
+- **W3 — resume SA135 (#15) at phase E1, under the known-red protocol.** Do not redo C or D, and do
+  not attempt the two E2E Docker failures — they are SA170's. SA163's work is merged and archived.
+  SA135's remaining scope is now **the PostgreSQL-lifecycle evidence and the
+  `validation_policy.md` precondition update only** — stage E2's full E2E campaign moved to SA170 on
+  2026-08-28 (see the ticket). An executable plan replacing the invalid one is written into the
+  ticket below; no plan-authoring step remains before dispatch.
+- **W1 — SA167d's phase E is already accepted; the lane needs closeout, not re-implementation.**
+  The prior entry here was stale by six commits. `wt-track1` is clean at `f392641c`, carrying the
+  accepted E0 tip and convergence corrections at `8b20800d`. What remains is one full validation
+  campaign on a synced frozen candidate and one terminal attestation supplied with the complete
+  base-to-tip patch — the input whose absence, not any finding, ungraded the last attempt. Run under
+  the known-red protocol; schedule `make test` outside W3's window. W1's tail runs six positions
+  (#18, #22, #19, #20, #31, #32); the last four are band C and may slip, with **SA174 (#31)** the
+  one worth pulling forward if slack appears.
 
 ### Track readiness — the three states
 
@@ -163,18 +312,20 @@ merge* = merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W2** | SA173 (#30) | **yes** — contract written, nothing to decide | **yes** — self-contained in two core packages plus one CLI file | **yes** — merges after nothing | **yes** — the only lane that shortens the release |
-| **W1** | SA167d (#18) | **yes** | **yes** | **yes** | no |
-| **W3** | SA135 (#15) | **yes** | **yes** | **yes** | no |
+| **W2** | SA173 (#30) | **yes** — contract written, nothing to decide | **yes** — self-contained in two core packages plus one CLI file | **yes** — merges after nothing | **yes** — band A; shortens the release *and* unblocks both other lanes |
+| **W1** | SA167d (#18) | **yes** — under the known-red protocol | **provisionally** — its own work can reach green, but final acceptance needs a green `v88` | **no — gated on SA173** | no — and it is the lane that absorbed this pass's two new positions |
+| **W3** | SA135 (#15) | **yes** — under the known-red protocol; the plan blocker is cleared | **provisionally** — same gate | **no — gated on SA173** | no |
 
-**All three lanes are truly green, and no open maintainer decision remains anywhere in this plan.**
-Of the three, only **W2 is real progress**; W1 and W3 are off the critical path and their tickets
-are filler in the release-date sense, though W1's SA167d is the release's only unmerged product
-delta and must land regardless.
+**All three lanes can start today. Only W2 can merge.** W1 and W3 run to provisional green under the
+known-red protocol and then wait for SA173, because `make check` is red on `v88` for two tests
+neither lane owns. This is a change from the prior pass, which recorded all three lanes as able to
+finish and merge independently; that was measured against the tickets rather than against the
+branch. No open maintainer decision remains anywhere in this plan.
 
 Downstream positions are lane-ordering only and clear by the upstream work or by a maintainer
-reordering the lane, with three exceptions that no reorder clears: **SA167c after SA173**,
-**SA160 after SA161**, and **SA164's substance after SA167c**.
+reordering the lane, with four exceptions that no reorder clears: **SA167c after SA173**,
+**SA160 after SA161**, **SA174 after SA160** (the emission-parity rebaseline run of three), and
+**SA164's substance after SA167c**.
 
 ### Handoff checklist — applies to all three lanes
 
@@ -252,7 +403,12 @@ being in tension, because one signal stops carrying two meanings.
 - **Neither `teams` nor a third generated-project updater is in v88.** The arch audit's
   `generated-file-ownership-unmodeled`, `deletion-invariants-per-boundary-reimplementation`, and
   `org-model-universe-hand-enumerated` stay behind their growth triggers. A v88 ticket may not
-  widen into them; a fired trigger is a scope finding and gets its own ticket.
+  widen into them; a fired trigger is a scope finding and gets its own ticket. **One narrow
+  carve-out, added 2026-08-28:** where the audit itself marks a step as *independent of the trigger*,
+  that step alone may be ticketed, and only as written. SA175 (#32) is the sole instance — a
+  coherence assertion over the existing taxonomy. It does not derive the taxonomy, add typed
+  disposition metadata, emit an ownership manifest, or change any file's current disposition, and
+  the finding stays open with its trigger intact.
 - **Roadmap documentation ownership is Option A** — open work only; completed work is archived.
 - **Local database-lane ownership flip** — whichever of `make test-integration` and
   `make test-bypassrls` is about to run must own the twelve test databases first. The closed SA163
@@ -289,7 +445,15 @@ into its worktree, resolves there, reruns its own verification, then merges its 
 | 27 | **SA170** | B | 2 | W3 | SA135 | **yes** — Docker |
 | 28 | **SA171** | C | 2 | W3 | SA170 | no |
 | 29 | **SA172** | C | 3 | W3 | SA171 | no |
-| 30 | **SA173** | B | 1 | W2 | — | no |
+| 30 | **SA173** | **A** | 1 | W2 | — | no |
+| 31 | **SA174** | C | 2 | W1 | SA160 | no |
+| 32 | **SA175** | C | 3 | W1 | SA174 | no |
+
+**Branch-state gate, not a queue edge: nothing merges before SA173.** `make check` is red on `v88`
+(see *Band A*), so every lane's merge evidence is unobtainable until #30 lands. This is deliberately
+**not** recorded as a `deps:` edge on #15 and #18 — it is not a content dependency between tickets,
+it is the state of the integration branch, and it clears for all lanes at once the moment SA173
+merges. The merge-order table below is otherwise unchanged.
 
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16, #17, #23, and #26 are **retired and not
 reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Gaps carry no meaning. Position
@@ -302,14 +466,17 @@ tip `1743871f`; #15 has a merged partial with C/D accepted and E outstanding aft
 closed.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable only by the upstream work
-or by a maintainer reordering the lane. Two are **hard content dependencies** that no reorder
+or by a maintainer reordering the lane. Three are **hard content dependencies** that no reorder
 clears: **SA160 after SA161** (shared emission-parity rebaseline of `sa90_emission_manifests.json`;
-the pair must not be split), **SA164's substance after SA167c** (its
+the pair must not be split, and **SA174 appends the third rebaseline entry** after them, so the run
+of three is ordered #19, #20, #31), **SA164's substance after SA167c** (its
 `test_sa92_migration_squash_guardrail.py` work needs `django_apps:` retired), and **SA167c's
 Phase-A acceptance after SA173** (two of its four caller tests are answered by the presence
 contract; rerunning A before SA173 lands reproduces the same red). Band-C positions
-(19, 20, 22, 24, 25, 28, 29) are *earliest-eligible*, not commitments, and may slip past the
-release. #27 is band B — it discharges an obligation lifted out of #15 and may not be dropped.
+(19, 20, 22, 24, 25, 28, 29, 31, 32) are *earliest-eligible*, not commitments, and may slip past the
+release. **SA174 (#31) is the one band-C position worth pulling forward if slack appears**: it
+carries the structural audit's rank-1 finding, needs no exclusive slot, and its drift mechanism has
+already fired once unobserved. #27 is band B — it discharges an obligation lifted out of #15 and may not be dropped.
 
 ### Shared conflict surfaces
 
@@ -329,6 +496,8 @@ Standing surface for every ticket: `CHANGELOG.md`, `docs/technical/roadmap.md`, 
 | SA170 | `quickscale_cli/src/quickscale_cli/utils/docker_utils.py`, `quickscale_cli/tests/test_e2e_development_workflow.py`, `quickscale_cli/tests/test_react_theme_e2e.py`, `scripts/test_e2e.sh`, `docs/others/tech-audit.md` | E2E Docker resource contract and failure diagnostics; **W3** — needs the exclusive Docker slot |
 | SA171 | `quickscale_core/.../dr_engine/_lock.py`, `quickscale_core/.../advisory_lock.py`, `docs/others/tech-audit.md` | two hand-rolled file locks share one TOCTOU; **W3** — the backups suite needs the cluster |
 | SA172 | `quickscale_modules/orgs/.../tenancy.py`, `scripts/test_isolation_conformance.sh`, `docs/others/tech-audit.md` | RLS policy templates and their conformance assertion; **W3** — proved against a live PostgreSQL |
+| SA174 | `quickscale_core/.../generator/runtime_pins.py`, `.../generator/generator.py`, `.../templates/project_name/settings/production.py.j2`, `.../templates/start.sh.j2`, `quickscale_core/tests/test_generator/test_templates.py`, `quickscale_modules/orgs/.../apps.py`, `quickscale_cli/.../development_commands.py`, **SA90 emission-parity fixture**, `docs/others/arch-audit.md` | one privileged-command declaration replacing four; **W1** — generated output plus module wiring, and it touches `generator/` only, never `contracts/` or `manifest/` |
+| SA175 | `quickscale_cli/tests/test_beta_migration_ownership_conformance.py`, `quickscale_devtools/.../beta_migration.py`, `docs/others/arch-audit.md` | disposition-coherence assertion for the launcher↔settings contract; **W1** — no other open ticket touches either file |
 
 Surfaces needing an explicit ordering note beyond the table:
 
@@ -361,15 +530,20 @@ Surfaces needing an explicit ordering note beyond the table:
 - `scripts/test_e2e.sh` — SA170 (#27, W3) is the only open owner, and touches the scope/cleanup side
   that SA135's merged provisioning work did not.
 
-`docs/others/arch-audit.md` is on the surface of SA164 only, which adjudicates the watchlist and the
-rank-1 `privileged-command-set-multi-owner` finding. The prior rank-1
-`ci-environment-hand-replicated` is resolved and archived. The three deferred findings
-(`generated-file-ownership-unmodeled`, `deletion-invariants-per-boundary-reimplementation`,
-`org-model-universe-hand-enumerated`) remain untouched, per the standing "neither" rule.
+`docs/others/arch-audit.md` is now on three surfaces: **SA174** (retires the rank-1
+`privileged-command-set-multi-owner` finding), **SA175** (records rank-2's first step as discharged
+without closing the finding), and **SA164** (adjudicates the watchlist). None of the three merges
+adjacent to another, so the file resolves through the standard sync-resolve-rerun-review step. The
+prior rank-1 `ci-environment-hand-replicated` is resolved and archived. The rank-3 and rank-4
+findings (`deletion-invariants-per-boundary-reimplementation`, `org-model-universe-hand-enumerated`)
+remain untouched per the standing "neither" rule, as does the **substance** of rank-2
+(`generated-file-ownership-unmodeled`) — SA175 takes only the bounded first step the audit itself
+marks as trigger-independent.
 
 **Closeout conflict surface.** Every ticket writes `CHANGELOG.md`, this file, and
-`docs/technical/v88_ticket_context.md` at closeout, and `docs/others/tech-audit.md` is now shared by
-SA160, SA161, SA165, SA166, SA170, SA171, and SA172. That is by design and is covered by the merge
+`docs/technical/v88_ticket_context.md` at closeout; `docs/others/tech-audit.md` is shared by
+SA160, SA161, SA165, SA166, SA170, SA171, and SA172, and `docs/others/arch-audit.md` by SA164,
+SA174, and SA175. That is by design and is covered by the merge
 procedure in the execution rules: sync the integration branch into the worktree, resolve there,
 re-run the ticket's verification (including
 `quickscale_core/tests/test_v88_ticket_context_consistency.py` whenever a state block changes),
@@ -384,7 +558,7 @@ section and the [audit-derived backlog](#audit-derived-backlog) below are **one 
 merge-order table is the authority for scope, worktrees, and sequencing. Conceptual background and
 implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket_context.md).
 
-- [ ] **SA173 — Make module presence a three-state fact.** `Band B · Tier 1 · W2 · merge #30 · deps: none · settles decision D3 · unblocks SA167c Phase-A`
+- [ ] **SA173 — Make module presence a three-state fact.** `Band A · Tier 1 · W2 · merge #30 · deps: none · settles decision D3 · unblocks SA167c Phase-A and both other lanes' merges`
   Discovery collapses *"module absent"* and *"directory present but no `module.yml`"* into one
   output — `discover_shipped_module_names`'s own docstring records that manifest-less directories
   are "silently excluded". Downstream consumers reconstruct that discarded fact by **counting**
@@ -434,7 +608,13 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
      for the intended reason, restore the exact bytes, prove green.
   **Verification (ordered; stop at the first unexpected red):**
   1. `poetry run pytest quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_core/tests/test_manifest_entry_point.py quickscale_cli/tests/test_module_lifecycle_cycle.py quickscale_core/tests/test_module_migration_topology.py -q -o addopts= --no-cov` — expect exit 0. **216 collected at the measurement start (214 passed / 2 failed);** the two failures are this ticket's target.
-  2. `poetry run pytest quickscale_cli/tests quickscale_core/tests -q -o addopts= --no-cov` — expect exit 0.
+  2. `poetry run pytest quickscale_cli/tests quickscale_core/tests -q -o addopts= --no-cov` —
+     **do not expect exit 0; it is unreachable and always was.** Measured baseline on `v88`:
+     **7 failed / 5134 passed / 16 skipped in 1:18:19.** The acceptance condition is that
+     **this ticket's two failures are gone and the other five are unchanged** — four `e2e` failures
+     owned by SA170 and one order-dependent artifact, all enumerated in the full-suite baseline
+     table above. **Budget ~80 minutes and run it detached.** If it is cheaper to prove the same
+     fact, `-m "not e2e"` isolates this ticket's surface without the SA170 noise.
   3. `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` — expect exit 0; `publish_module.py` and `check_sa117_scope.py` are release-inventory consumers of the changed contract.
   4. `make check-manifest-sync` and `make check-gate-parity` — expect exit 0.
   5. `make lint`, `make typecheck`, `make test`, `make check`, `make quality` — `make quality` no worse than found. **Schedule `make test` outside W3's cluster window.**
@@ -572,36 +752,57 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note
   in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist)
   is retired once the deviation it names is gone.
-  **State (measured 2026-08-27): phases A-D accepted, phase E outstanding.** Retained product tip
-  `1743871f`, carried under one docs-only checkpoint at `wt-track1` tip `467714cb`; worktree clean.
-  **This is the release's only unmerged product delta.** A-D evidence is archived in
-  [CHANGELOG.md](../../CHANGELOG.md). **This is not a merge-back-only ticket.**
-  On `1743871f`, `make lint`, `make typecheck`, `make test`, `make check`, and `make quality` all
-  passed (Core 2,881 passed / 1 skipped, CLI 2,098 passed, modules 2,554 passed / 85 skipped; zero
-  quality regressions). Phase E is nonetheless **unaccepted**: E0's scoped sequence was red at
-  return and convergence cannot retroactively accept it, so C1 ledger reconciliation and V1
-  exact-candidate validation were never reached. The terminal review was also blocked — it never
-  received the complete authoritative diff from the pre-run base through `1743871f` — so the
-  product delta is ungraded.
-  **E0's ordered acceptance sequence.** Run on the retained delta, stopping at the first red:
-  1. `poetry run pytest quickscale_cli/tests/commands/test_module_config.py quickscale_cli/tests/commands/test_module_config_extended.py quickscale_cli/tests/commands/test_module_commands.py quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_cli/tests/test_module_manifest_contract.py -q -o addopts= --no-cov`
-     — the CLI wiring-boundary surface; expect green and the recorded **816** focused total.
-  2. `make lint` and `make typecheck` — expect exit 0.
-  3. `make test` — the ordered combined gate. **This is the step E0 failed on** (storage package's
-     lazy public API at 45% coverage) and the one that must now be green.
-  4. `make check` and `make quality` — expect `make quality` no worse than found.
-  **Rollback:** `git reset --hard 1743871f` in `wt-track1` discards any correction attempt without
-  touching `v88`. Schedule steps 1-4 outside W3's cluster window.
-  **Remaining plan.** (1) Run the sequence above and accept phase E only if every step is green.
-  (2) Complete C1's same-fact ledger reconciliation across `CHANGELOG.md`, `docs/index.md`,
-  `docs/others/arch-audit.md`, `docs/technical/{decisions,implementation_contract,module-extension,v88_ticket_context}.md`,
-  and `quickscale_core/tests/test_v88_ticket_context_consistency.py`, plus its executable
-  consistency test, without archiving SA167d early. (3) Sync current `v88`, resolve the standing
-  closeout conflict surface, and run V1's complete campaign on one frozen candidate.
-  (4) Independently review that candidate's complete authoritative diff. (5) Only then archive
-  completion, remove this entry, retire merge position #18, release SA165, and merge the reviewed
-  tip. Report final changed-line and lines-per-hour metrics from the `2026-08-27 18:52:34 +0200`
-  measurement start.
+  **State (re-measured 2026-08-28 from `wt-track1` itself): phases A-E accepted; closeout is all
+  that remains.** The prior entry here described a lane six commits behind reality and instructed a
+  rerun of work already accepted. Corrected against the branch:
+  - `wt-track1` is **clean** at `f392641c`, 15 ahead / 3 behind `v88`, and is the release's only
+    unmerged product delta.
+  - Phase E **is accepted** at E0 tip `bd2c291b`, retained inside `8b20800d` — the clean committed
+    product tip. E0 made no tracked edits and recorded **282 focused tests passed**, with `make lint`,
+    `make typecheck`, `make test`, `make check`, and `make quality` all at exit 0 and `make check`
+    reporting **1,318 passed**.
+  - Independent convergence then ran and **corrected real defects**: ineffective auth-migration flush
+    guidance, a non-operational fresh-database recovery path, and three stale quality-baseline
+    identities. Those corrections are `8b20800d`.
+  - The measured product delta `c50de1c1..8b20800d` is **30 files, 1,012 insertions, 2,228
+    deletions**.
+  **Why the last attempt did not close, precisely.** Terminal attestation was attempted once and
+  **returned no grade**. Its read-only surface could resolve the exact tip but could not obtain the
+  complete `c50de1c1..8b20800d` patch or independently exclude uncommitted-byte drift. That is a
+  **review-input failure, not an attestation finding** — nothing was found wrong with the delta.
+  Separately, V0 stopped when `make check` hit a 120-second cutoff before returning an exit code.
+  Both causes are now removed: the patch is producible in one command, and `make check`'s real
+  behaviour is measured above under *Band A*.
+  **Closeout shape (decided 2026-08-28): validate, then attest.** The recorded five-stage
+  V0/C2/V1/convergence/attestation pipeline is **not** required. Convergence has already run and
+  corrected this delta, every gate has been green on it once, and the single unmet step failed for a
+  reason that no longer applies. Re-running the full staging would re-prove passed work.
+  **Remaining plan (serial; do not re-implement anything):**
+  1. **Sync.** Merge current `v88` into `wt-track1` and resolve there, preserving the retained
+     candidate and the closeout checkpoint. Expect a conflict in this file — keep its structure.
+  2. **Validate on one frozen candidate,** under the known-red protocol (export `PYTEST_ADDOPTS`
+     exactly as given in *Band A*; the node ids are rootdir-relative). Ordered, stopping at the first
+     unexpected red:
+     - `poetry run pytest quickscale_cli/tests/commands/test_module_config.py quickscale_cli/tests/commands/test_module_config_extended.py quickscale_cli/tests/commands/test_module_commands.py quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_cli/tests/test_module_manifest_contract.py -q -o addopts= --no-cov` — expect the recorded **816** focused total, less the two excluded.
+     - `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov` — expect **21 passed**.
+     - `make lint`, `make typecheck` — exit 0.
+     - `make test`, `make check`, `make quality` — **run detached and poll for an exit-code file;
+       `make check` alone measures ~601 s green and cannot complete inside one foreground call.** A
+       truncated run is not evidence. `make quality` no worse than found.
+  3. **Ledger reconciliation** across `CHANGELOG.md`, `docs/index.md`, `docs/others/arch-audit.md`,
+     `docs/technical/{decisions,implementation_contract,module-extension,v88_ticket_context}.md`,
+     and the executable consistency test. Do not archive SA167d early: keep it open, #18 active, and
+     SA165 dependent until the exact tip merges.
+  4. **Attest once, with the input supplied.** Generate the complete patch first —
+     `git diff <frozen-base>..<frozen-tip> > sa167d.patch` — and hand the attesting reviewer that
+     file plus a clean-byte binding (`git status --porcelain` empty at the exact tip). The
+     2026-08-28 measurement of `c50de1c1..8b20800d` is **4,274 lines / 183 KB**, comfortably
+     readable; there is no reason for a second ungraded attempt.
+  5. **Merge only the attested exact tip** — and only after SA173 has landed and step 2 has been
+     re-run with `PYTEST_ADDOPTS` unset and **nothing** deselected. That unexcluded re-run is the
+     merge evidence; the provisional run is not.
+  **Rollback:** `git reset --hard f392641c` in `wt-track1` discards any closeout attempt without
+  touching `v88`.
   **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`, plus the ledger-reconciliation files listed above.
 
 - [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Band B · Tier 2 · W3 · merge #15 · deps: none · PostgreSQL + Docker slot`
@@ -617,54 +818,62 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   its exact container, image, mount, and running identity; all twelve databases owned by
   `quickscale_test_role`). E1 recorded green runs without changing a file but could not produce the
   deterministic red-before/green-after evidence it was asked for.
-  **Latest attempt (2026-08-28): implementation did not start.** The task prerequisites and
-  open-decision gate were clear, but the mandatory reviewed plan was not executable: it required a
-  disinterested review inside G-sync/G-validate and then resumed authored documentation mutation in
-  G-closeout/G-final. The strictly forward review pipeline cannot resume implementation after
-  terminal review, so no E1 command ran and no product or policy file changed.
-  **Blocking:** replace that plan with one that keeps every implementation and authored closeout
-  mutation before serial convergence and the single terminal attestation. Preserve the five
-  remaining phase ids and their scope below; do not use the invalid intermediate-review ordering.
-  **Why E1's old blocker is retired, not waived.** E1 demanded deterministic evidence for a Docker
-  `No such container` startup race and a 300-second React build timeout. Neither reproduced in
-  isolated, paired, or exact serial full-E2E contexts. Root-causing the harness showed **the
-  criterion was unsatisfiable as written and both symptoms have a readable structural cause that is
-  not in SA135's provisioning code** — see **SA170 (#27)**, which takes the obligation with a proof
-  that is actually deterministic. Re-running SA135's phase E could never have produced it. E1's
-  historical literal `TEST COMMAND` chain belonged to that superseded scope and is discharged by
-  SA170. The emitted `qs_e2e_tmp_*` scope is the harness's intended per-run isolation contract
-  (`scripts/test_e2e.sh:557` derives it from `mktemp -d`), not a deviation.
-  **Scope narrowed 2026-08-28.** SA163 closed and was archived; the CI environment centralization,
-  the derived module universe, the BYPASSRLS provisioning station, and SA123's inherited
-  provisioning-literal obligation are all discharged there. **What remains here is the local
-  PostgreSQL lifecycle and its documented precondition, nothing else.** Do not reopen
-  `.github/workflows/`, `scripts/provision_ci_postgres.sh`, or `scripts/test_gate_parity.py`.
-  **Remaining plan (serial; P/A/B/C/D and accepted E0 are not repeated):**
-  Before dispatch, obtain one complete reviewed plan whose stage order is E1, E2, F,
-  G-sync/G-validate, G-closeout/G-final, serial convergence, then one terminal attestation. The plan
-  must not place a final-review dispatch between G-sync/G-validate and G-closeout/G-final.
-  1. **E1 — PostgreSQL-lifecycle evidence only:** accept E1 on the provisioning surface this ticket
-     owns — `make test-integration` on a host with no PostgreSQL running, the
-     `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract, the hermetic
-     Docker-unavailable probe, and the asserted-unavailability negative control failing loudly
-     rather than skipping. Each is deterministic today and needs no flake reproduction. Do **not**
-     attempt the two E2E Docker failures here; they are SA170's.
-  2. **E2 — unchanged-candidate acceptance:** run `QS_E2E_PARALLEL=0 make test-e2e`, then only on
-     green `make ci-e2e`, on one unchanged tree, with exact cleanup and PostgreSQL baseline equality.
-  3. **F — policy and status reconciliation:** `validation_policy.md` (drop the out-of-band host
-     precondition at `:41` and `:94`, which still states "No local PostgreSQL provisioning is
-     implied by this target or policy" against a Makefile that now provisions), ticket context,
-     roadmap counts/dependencies, changelog evidence, docs navigation, and the executable
-     consistency consumer. Keep the ticket open if any required gate is red.
-  4. **G-sync / G-validate:** sync current `v88` in W3, preserve concurrent closeout entries, and run
-     the complete focused, provisioning, parity, lint, type, check, integration, BYPASSRLS,
-     isolation, test, quality, serial-E2E, and CI-E2E campaign on one frozen candidate.
-  5. **G-closeout / G-final:** after the complete G-sync/G-validate campaign is green, archive and
-     remove SA135 from this open-work-only roadmap, and rerun the final
-     frozen-tip campaign. Then run serial convergence over the complete product-and-closeout delta,
-     followed by exactly one terminal attestation, and merge only that exact attested tip. Report
-     final changed lines and lines-per-hour metrics from the `2026-08-26 16:07:35 +0200`
-     measurement start.
+  **Prior blocker (2026-08-28) — cleared.** The last attempt never ran a command: its mandatory
+  reviewed plan required a disinterested review inside G-sync/G-validate and then resumed authored
+  documentation mutation in G-closeout/G-final. The strictly forward pipeline cannot resume
+  implementation after terminal review, so the plan was not executable. **A compliant plan is now
+  written below and no plan-authoring step remains before dispatch** — every implementation and
+  authored closeout mutation happens before serial convergence, and exactly one terminal attestation
+  ends the ticket.
+  **Scope narrowed again 2026-08-28 — stage E2 moved to SA170.** E2 required a full
+  `QS_E2E_PARALLEL=0 make test-e2e` followed by `make ci-e2e`. That re-coupled SA135's acceptance to
+  the very E2E harness whose fixed-tag collision, uncaught `subprocess.TimeoutExpired`, and
+  blind readiness poll are **SA170's open defects** — the same harness that stalled phase E once
+  already. Requiring a green full-E2E campaign from the lane that does not own those defects repeats
+  the mistake E1 was rescoped to escape. **SA170 (#27) takes the full E2E campaign**, which it can
+  run once its own fixes make the result mean something. This is the same lift that moved E1's flake
+  obligation, and it leaves SA135 holding only evidence it can deterministically produce.
+  **What remains here is the local PostgreSQL lifecycle and its documented precondition, nothing
+  else.** Do not reopen `.github/workflows/`, `scripts/provision_ci_postgres.sh`, or
+  `scripts/test_gate_parity.py`.
+  **Remaining plan (serial; P/A/B/C/D and accepted E0 are not repeated). Stage order is E1, F,
+  G-sync/G-validate, G-closeout/G-final, serial convergence, one terminal attestation — no review
+  dispatch may be placed between G-sync/G-validate and G-closeout/G-final.**
+  1. **E1 — PostgreSQL-lifecycle evidence only.** All four items are deterministic today and need no
+     flake reproduction. Take the exclusive slot first; W3 has priority.
+     - `make test-integration` on a host with **no** PostgreSQL running — the gate provisions its own
+       server and tears it down. Stop `pg18-af10` for the window and **restart it afterwards**
+       (`docker start pg18-af10`); do not remove the container or prune its volume.
+     - The `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract is preserved.
+     - The hermetic Docker-unavailable probe still passes.
+     - The asserted-unavailability negative control **fails loudly rather than skipping** when the
+       server cannot be provisioned. Prove it by denying provisioning and observing the loud failure,
+       then restore.
+     - Leave `quickscale_test_role` owning all twelve `test_quickscale_*` databases, and drive any
+       lane flip through `scripts/provision_ci_postgres.sh run --profile {restricted,bypassrls}`.
+     Do **not** attempt the two E2E Docker failures, and do not run the full E2E campaign — both are
+     SA170's.
+  2. **F — policy and status reconciliation.** Update `validation_policy.md` at `:41` and `:94`,
+     which still state "No local PostgreSQL provisioning is implied by this target or policy" against
+     a Makefile that now provisions. Then ticket context, roadmap counts and dependencies, changelog
+     evidence, docs navigation, and the executable consistency consumer. Keep the ticket open if any
+     required gate is red.
+  3. **G-sync / G-validate.** Sync current `v88` into W3, preserve concurrent closeout entries, and
+     run the complete focused, provisioning, parity, lint, type, check, integration, BYPASSRLS,
+     isolation, test, and quality campaign on **one frozen candidate**, under the known-red protocol
+     (export `PYTEST_ADDOPTS` exactly as given in *Band A*). **Run `make check`, `make test`, and
+     `make quality` detached, polling for an exit-code file — `make check` alone measures ~601 s
+     green and cannot complete inside one foreground call.** A truncated run is not evidence. The
+     serial and CI E2E campaigns are **not** part of this stage any more.
+  4. **G-closeout / G-final.** Only after G-validate is green: archive and remove SA135 from this
+     open-work-only roadmap, then rerun the final frozen-tip campaign.
+  5. **Serial convergence** over the complete product-and-closeout delta, then **exactly one terminal
+     attestation**. Supply it with the complete base-to-tip patch as a file and a clean-byte binding
+     (`git status --porcelain` empty at the exact tip) — SA167d's attestation returned no grade for
+     want of exactly that input, and the same mistake must not be paid twice.
+  6. **Merge only that attested exact tip** — and only after SA173 has landed and G-validate has been
+     re-run with `PYTEST_ADDOPTS` unset and **nothing** deselected. Report final changed lines and
+     lines-per-hour metrics from the `2026-08-26 16:07:35 +0200` measurement start.
   **Cross-worktree surface:** the merged partial edits `scripts/test_isolation_conformance.sh`,
   which SA165 (#22, W1) also owns; merge order #15 before #22 covers it.
 
@@ -679,7 +888,15 @@ remains the sequencing authority. **These are not follow-on work** — they are 
 implementation section. Any ticket here that closes or changes a live finding takes its audit
 document onto its shared conflict surface.
 
-- [ ] **SA170 — Give the E2E Docker harness a closed resource contract and a truthful failure report.** `Band B · Tier 2 · W3 · merge #27 · deps: SA135 (worktree ordering) · PostgreSQL + Docker slot · absorbs SA135's stalled E1 flake obligation`
+The 2026-08-28 pass changed what this section owes. On the tech side it is unchanged in substance:
+TA67, TA68, TA70, TA71 and TA72 map one-to-one onto SA160, SA161, SA170, SA171 and SA172, and every
+tooling gap and actionable watch item is claimed. On the structural side the pass **resolved** the
+prior rank-1 finding, **promoted** the privileged-command pair out of the watchlist into rank 1, and
+added new evidence under rank 2. Those two movements are what **SA174 (#31)** and **SA175 (#32)**
+integrate; the deferred rank-3 and rank-4 findings, and rank-2's substance, stay behind their
+triggers.
+
+- [ ] **SA170 — Give the E2E Docker harness a closed resource contract and a truthful failure report.** `Band B · Tier 2 · W3 · merge #27 · deps: SA135 (worktree ordering) · PostgreSQL + Docker slot · absorbs SA135's stalled E1 flake obligation and its full E2E campaign`
   Closes tech-audit **TA70** (`container-status-substring-match`, S4) and the carried tooling gap
   *"no test exercises the E2E harness's own failure paths"*. Opened 2026-08-27 by root-causing the
   two historical failures that stalled SA135's phase E1. Neither is a SA135 provisioning defect, and
@@ -725,6 +942,14 @@ document onto its shared conflict surface.
   green after; (2) a labelled-resource assertion that `cleanup_scoped_resources <scope>` removes the
   React build image — red today because the image is unlabelled, green after; (3) a two-scope test
   proving the fixed-tag collision is gone.
+  **Also absorbed 2026-08-28 — SA135's stage E2, the full E2E campaign.** SA135's plan required
+  `QS_E2E_PARALLEL=0 make test-e2e` followed by `make ci-e2e` on an unchanged tree, with exact
+  cleanup and PostgreSQL baseline equality. That campaign is now **SA170's**, and runs after the
+  three fixes above rather than before them. The reason is the same one that moved E1's flake
+  obligation: a green full-E2E run against a harness with a fixed-tag collision, an uncaught
+  `subprocess.TimeoutExpired`, and a readiness poll that cannot report a crash is not evidence of
+  anything, and a red one cannot be attributed. Run it as SA170's final acceptance, where the result
+  is interpretable — and where the two-scope and cleanup assertions above give it something to mean.
   **Why this is a separate ticket rather than a widening of SA135.** SA135 owns the PostgreSQL
   lifecycle; these are E2E Docker-harness defects in CLI test code and `docker_utils.py`, files
   SA135 does not touch. Per the execution rules, a scope finding is ticketed rather than fixed in
@@ -741,13 +966,122 @@ document onto its shared conflict surface.
   **Acceptance:** both definitions are deleted, or each carries a comment pointing at the orgs helper as the live implementation; the uppercase settings and the `REST_FRAMEWORK["NUM_PROXIES"]` recomputation are retained unchanged; the misleading behavioural comment at `production.py.j2:119-122` is removed either way; a generated project boots and proxy-aware client-IP resolution is unchanged, asserted by a test; emission parity is rebaselined with rationale; the tech-audit finding is retired.
   **Shared conflict surface:** `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/`, emission parity baselines, `docs/others/tech-audit.md`.
 
+- [ ] **SA174 — Give the sanctioned privileged-command set one owner.** `Band C · Tier 2 · W1 · merge #31 · deps: SA160 (emission-parity ordering) · closes the arch audit's rank-1 finding`
+  Closes arch-audit **`privileged-command-set-multi-owner`** (rank 1, promoted 2026-08-28, size S).
+  The set of Django commands sanctioned to run with superuser privileges is a single runtime
+  contract between the generated launcher and the generated settings, but it is *declared* four
+  times with no derivation and no gate holding the copies equal: the frozen template
+  `templates/project_name/settings/production.py.j2:185` `_KNOWN_PRIVILEGED_COMMANDS` (the
+  **validator** — it selects superuser `DATABASE_URL` vs restricted `RUNTIME_DATABASE_URL`), the
+  upgradable module `quickscale_modules/orgs/.../apps.py:36` `_PRIVILEGED_COMMANDS` (the **guard
+  bypass** — `ready()` returns early and skips `_check_rls_role()`), the upgradable CLI
+  `quickscale_cli/.../development_commands.py:44` `_PRIVILEGED_DJANGO_COMMANDS` (the **producer**),
+  and a literal-string **oracle** at `quickscale_core/tests/test_generator/test_templates.py:4278`.
+  `templates/start.sh.j2:50,61` is a fifth, by inline literal prefix.
+  **The drift mechanism has already fired once, silently.** Stations 1 and 2 landed together in
+  `52144290` (SA68); station 3 was added independently in `3523f9f8` (2026-08-18) under the message
+  *"test: add installed-wheel lifecycle e2e"* — a test-labeled commit that introduced a new
+  production decider on the privilege seam without touching the docstring at `apps.py:52` that
+  claims `_PRIVILEGED_COMMANDS` is "the single source of truth". **That claim is false and was
+  already false when written.**
+  **Why this is not a defect and not a vulnerability.** All four sets currently hold exactly
+  `{"migrate", "createcachetable"}`, and every divergence direction fails closed — a narrower module
+  set means the RLS guard runs and rejects the superuser role; a narrower template set raises
+  `ValueError` at settings import. The tech audit adjudicated the behavioural question separately and
+  recorded **no finding**. The cost is structural and it is paid on the next change: the audit's
+  change-cost probe for a third sanctioned command measures **seven stations, four of them executable
+  code plus one oracle**, none derived, none gated, and station 1 unreachable in already-generated
+  projects because the updater carries `settings/production.py` forward from the donor.
+  **Chosen shape — the audit's Option 1, extend the existing `runtime_pins` seam.** This is the
+  repository's own proven pattern: `generator/runtime_pins.py` already declares Python, Django, and
+  PostgreSQL pins once and renders them into templates through `generator.py:521-526`, and tests read
+  them rather than transcribing them. Option 2 (an AST parity gate over four retained copies) is the
+  fallback only if rendering the set into the template proves awkward; it leaves four owners and pays
+  the gate-registration tax. Option 3 (collapse to one decider) is **rejected** — it would delete the
+  module's independent fail-closed backstop, which is a recorded sound decision.
+  **Acceptance:**
+  1. The sanctioned set is declared **once**, in `quickscale_core` alongside the existing runtime
+     pins, by the component that owns the launcher↔settings contract.
+  2. `production.py.j2`'s frozenset is **rendered** from that declaration exactly as
+     `POSTGRES_VERSION` already is — the emitted copy remains, honestly frozen, but as a *rendering*
+     rather than a restatement.
+  3. The CLI copy at `development_commands.py:44` is deleted in favour of an import; the `orgs`
+     copy reads the declaration through `quickscale_core.runtime`, the one import path the
+     module-core-imports gate permits, **and keeps its own independent fail-closed guard** — the
+     module must not start trusting the settings layer.
+  4. The station-4 oracle **derives**: it compares the rendered template's set against the imported
+     CLI and module sets instead of matching a literal string. It must be red if any two disagree,
+     proved by temporarily widening one set and restoring the exact bytes.
+  5. The false SSOT docstring at `apps.py:52` names the real owner.
+  6. `start.sh.j2`'s inline literals, `OPERATIONS.md.j2`, `README.md.j2`, and
+     `docs/deployment/railway.md` are reconciled with the single declaration, or their divergence is
+     stated in writing.
+  7. Emission parity is rebaselined with per-file rationale — this changes emitted bytes.
+  8. `docs/others/arch-audit.md` retires the finding in the same change.
+  **Verification:** `poetry run pytest quickscale_core/tests/test_generator quickscale_cli/tests quickscale_modules/orgs/tests -q -o addopts= --no-cov`; `make check-module-core-imports`; `make lint`, `make typecheck`, `make check`, `make quality` no worse than found. Schedule any `make test` outside W3's cluster window.
+  **Why W1, and why it *reduces* the cross-lane surface.** This is generated-output plus module
+  wiring — W1's charter exactly. It touches `quickscale_core/generator/`, never
+  `quickscale_core/contracts/` or `quickscale_core/manifest/`, so it does not collide with SA173's
+  cross-lane ownership. Moving this work off SA164 makes
+  `.../settings/production.py.j2` a **W1-only surface** (SA161 then SA174) instead of a two-lane
+  one, which removes the standing #19-before-#25 one-directional caution.
+  **Shared conflict surface:** `quickscale_core/src/quickscale_core/generator/runtime_pins.py`, `quickscale_core/src/quickscale_core/generator/generator.py`, `quickscale_core/.../templates/project_name/settings/production.py.j2`, `quickscale_core/.../templates/start.sh.j2`, `quickscale_core/tests/test_generator/test_templates.py`, `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py`, `quickscale_cli/src/quickscale_cli/commands/development_commands.py`, emission parity baselines, `docs/others/arch-audit.md`.
+
+- [ ] **SA175 — Assert disposition coherence for the launcher↔settings contract.** `Band C · Tier 3 · W1 · merge #32 · deps: SA174 · bounded first step only; does not widen into the deferred finding`
+  Discharges the **trigger-independent first step** the arch audit attaches to
+  `generated-file-ownership-unmodeled` (rank 2, deferred): *"independently of the trigger, add a
+  cheap coherence assertion for the one contract now known to straddle the line, so `start.sh` and
+  `settings/production.py` cannot silently take opposite dispositions."*
+  **The new evidence this discharges.** Beta migration assigns upgrade behaviour **per file**, with
+  no model of which files participate in a shared runtime contract — and the privileged-command
+  contract lands on both sides of the line. `settings/production.py`, the **validator** holding the
+  fail-closed privilege guard, is in `FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES`
+  (`beta_migration.py:59`) and `FRESH_FIRST_DONOR_DJANGO_FILES` (`:92`), so it is copied **from the
+  donor** — the user's existing project — over the freshly generated one. `start.sh` and
+  `Dockerfile`, the **producers** of the very env vars that file validates, are in
+  `IN_PLACE_INFRASTRUCTURE_TARGETS` (`:109,121`) and
+  `IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS` (`:125,128`) and are copied with substitution. The
+  producer is updated to the new vintage; the validator is carried forward at the old one.
+  `quickscale_cli/tests/test_beta_migration_ownership_conformance.py` cannot see this: it checks
+  **membership** of the taxonomy, not **coherence** across it.
+  **Scope discipline — this is deliberately not the finding's fix.** The standing "neither" rule
+  holds: no typed disposition metadata, no derivation of the taxonomy from emission, no versioned
+  ownership manifest, no vintage negotiation against `project_contract`. Those are the finding's
+  Options 1 and 2 and stay behind their trigger (a third generated-project consumer, a public
+  updater, an emitted-file expansion, or a second theme). This ticket adds **one assertion and a
+  named contract group**, nothing more. Widening is a scope finding and gets its own ticket.
+  **Why after SA174.** The audit records the interaction directly: do the command-set consolidation
+  first, then let the coherence work reference the now-single declaration rather than re-deriving
+  which files participate in the contract. Ordering only — no shared file.
+  **Acceptance:** the launcher↔settings contract is named once as a group of participating emitted
+  paths (`settings/production.py`, `start.sh`, `Dockerfile`), sourced from SA174's single
+  declaration rather than re-listed; a conformance assertion in
+  `test_beta_migration_ownership_conformance.py` fails when members of one named group are assigned
+  dispositions from opposite families (donor-carried vs in-place-substituted); the assertion is
+  proved by temporarily moving one member across the line, observing red for the intended reason,
+  and restoring the exact bytes; the **existing** donor-wins disposition for `settings/production.py`
+  is **preserved unchanged** — the audit argues it is defensible on its own terms, so this ticket
+  makes the split *visible*, not different; the deferred finding stays open with its trigger intact
+  and `docs/others/arch-audit.md` records the first step as discharged without closing it.
+  **Shared conflict surface:** `quickscale_cli/tests/test_beta_migration_ownership_conformance.py`, `quickscale_devtools/src/quickscale_devtools/beta_migration.py`, `docs/others/arch-audit.md`.
+
 - [ ] **SA164 — Adjudicate the arch-audit watchlist's unevaluable and drifted items.** `Band C · Tier 3 · W2 · merge #25 · deps: SA166 (worktree ordering)`
-  The arch audit carries five watch items; three are simply not fired and need no work, but two carry explicit actions and one is a naming question that becomes load-bearing on a specific trigger.
+  The 2026-08-28 pass rewrote this watchlist: the prior rank-1 `ci-environment-hand-replicated`
+  resolved (retiring the environment-schema item), the privileged-command pair **fired and was
+  promoted to a ranked finding** — now SA174's — and three new items were minted inside the landed
+  provisioning derivation. What remains for SA164 is one item carrying an explicit action, one naming
+  question that becomes load-bearing on a specific trigger, and the restatement of the three new
+  not-fired items so their triggers survive the next pass.
   - **SA92 migration-squash discovery tuple — artifact located 2026-08-21, now evaluable.** The audit recorded this as unlocatable, but the artifact is `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py` — a bounded literal tripwire for cross-table `UPDATE … SET organization_id` DML in migrations. The prior search missed it because it grepped for `squash` in source rather than in test filenames. SA167c's merged partial removed the helper's dependency on the retired `django_apps:` key; `_migdir()` still uses the conventional path and returns `None` when it is absent, so SA164 must make that lookup fail hard rather than silently skipping a module. Its authoritative backstop is also still a catalog/data parity gate anchored to `v87`, a retired release ref no longer resolved by the quality gate.
-  - **Privileged-command set — now the arch audit's rank-1 finding (`privileged-command-set-multi-owner`, promoted 2026-08-28), no longer a watch item.** The 2026-08-28 structural pass counts **four** independent owners of one security-relevant command set across the frozen-template / upgradable-runtime boundary: `orgs/apps.py:34` `_PRIVILEGED_COMMANDS`, `quickscale_cli/.../development_commands.py:44` `_PRIVILEGED_DJANGO_COMMANDS`, the generated `production.py.j2:185` `_KNOWN_PRIVILEGED_COMMANDS`, and the launcher contract in `start.sh.j2`. All four currently hold exactly `{"migrate", "createcachetable"}` and unknown values fail closed in both enforcing owners, so the tech audit correctly records **no behavioural defect** — the divergence risk is structural and lives here. The `apps.py` docstring claiming to be "the single source of truth" is false as written, and there is no gate.
+  - **Privileged-command set — promoted out of the watchlist and out of this ticket.** The
+    2026-08-28 structural pass promoted it to the arch audit's **rank-1 finding**
+    (`privileged-command-set-multi-owner`), counting four independent owners of one security-relevant
+    command set. It is no longer a watch item and is no longer SA164's: **SA174 (#31, W1)** owns it.
+    SA164 must not edit `.../settings/production.py.j2`, `orgs/apps.py`, or
+    `development_commands.py` — that removes this ticket's only cross-lane file surface.
   - **`trigger_inputs` has drifted from its name.** `check_gate_parity.py:2652-2690` uses the field as a bidirectional partition of `e2e.yml`'s path allowlist, not as "what changes should trigger this gate" — which is why `check-core-compat`'s trigger is `quickscale_modules/backups/**`. Not a defect; the check it performs is real and exact. Becomes load-bearing only if a gate is ever *skipped* on the basis of `trigger_inputs`.
-  **Acceptance:** the SA92 item is re-anchored to `test_sa92_migration_squash_guardrail.py` with a stated trigger, its `_migdir()` fallback fails loudly instead of guessing the path, and its `v87`-anchored parity backstop is re-anchored to the current regenerated migrations; the privileged-command SSOT claim is made true across **all four** owners — either they derive from one authority or the docstring stops claiming sole authority — with a gate asserting the four sets cannot diverge, which is the mechanical check the arch finding says is missing; `trigger_inputs` is either renamed to describe what it does or its docstring/schema description records the actual semantics plus the skip-based promotion trigger; the three not-fired items (module universe in environment lists, frontend runtime module keys, and the environment-schema watch item absorbed when `ci-environment-hand-replicated` was resolved) are re-stated with their triggers intact; `docs/others/arch-audit.md` is updated in the same change.
-  **Shared conflict surface:** `docs/others/arch-audit.md`, `quickscale_core/.../templates/project_name/settings/production.py.j2`, `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py`, `scripts/gate_registry.json`, `scripts/check_gate_parity.py`.
+  **Acceptance:** the SA92 item is re-anchored to `test_sa92_migration_squash_guardrail.py` with a stated trigger, its `_migdir()` fallback fails loudly instead of guessing the path, and its `v87`-anchored parity backstop is re-anchored to the current regenerated migrations; `trigger_inputs` is either renamed to describe what it does or its docstring/schema description records the actual semantics plus the skip-based promotion trigger; the arch audit's **current** watchlist is re-stated with its triggers intact rather than the superseded pre-resolution list — the two hand-pinned literals minted inside the new provisioning derivation (`provision_ci_postgres.sh:93,96`, `!= teams` and `== 12`, trigger: a thirteenth shipped module or `teams` graduating), the second copy of the PostgreSQL major (`provision_ci_postgres.sh:15` against `runtime_pins.py:30`, trigger: the DR engine's `pg_dump`/`pg_restore` major-version contract coming to depend on the two agreeing), and the roughly six count-pinned oracles in `scripts/test_gate_parity.py` (trigger: the next gate addition paying more than two oracle edits, or two oracles disagreeing) — noting for each that it is **not fired**; `docs/others/arch-audit.md` is updated in the same change.
+  **Shared conflict surface:** `docs/others/arch-audit.md`, `scripts/gate_registry.json`, `scripts/check_gate_parity.py`, `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`.
 
 - [ ] **SA165 — Discharge the tech-audit watch items that carry an action.** `Band C · Tier 3 · W1 · merge #22 · deps: SA167d (worktree ordering)`
   Of the remaining items in the tech audit's *Notes*, most are accepted trade-offs or are owned elsewhere (the local-wheelhouse seam is discharged by the closed SA150; integration-branch CI, generator lock generation, the DB-free healthcheck, the CRM count fallbacks, and non-durable atomic state writes are each recorded as deliberate and are **not** in this ticket's scope). Four carry a concrete action:
@@ -817,7 +1151,7 @@ Recorded so the absence is a decision rather than an oversight.
 
 | Item | Source | Why no ticket |
 |---|---|---|
-| `generated-file-ownership-unmodeled` (arch rank 2) | arch, deferred | Held by the standing **"neither"** rule. Trigger: a third generated-project consumer, public updater, emitted-file expansion, or second theme. Related weakness tracked in SA152. |
+| `generated-file-ownership-unmodeled` (arch rank 2) — **substance only** | arch, deferred | Held by the standing **"neither"** rule. Trigger: a third generated-project consumer, public updater, emitted-file expansion, or second theme. Options 1 and 2 (typed disposition metadata; a versioned ownership manifest with vintage negotiation) stay behind it. Its **trigger-independent first step is ticketed as SA175 (#32)** under the carve-out in the standing rules. Related weakness tracked in SA152. |
 | `deletion-invariants-per-boundary-reimplementation` (arch rank 3) | arch, deferred | Same rule. Trigger: `teams`, a GDPR erasure command, bulk-admin deletion, or a second deletion boundary. Design together with `org-model-universe-hand-enumerated` at `teams` kickoff. |
 | `org-model-universe-hand-enumerated` (arch rank 4) | arch, deferred | Same rule. Trigger: `teams` adds a tenant model, or a module adds a `PROTECT`/non-deferrable dependency among purge-owned rows. |
 | Tooling gaps — dependency-vulnerability scanner, security static analysis | tech | Closed by SA123's implemented and accepted Trivy/Bandit gates; evidence archived in [CHANGELOG.md](../../CHANGELOG.md). |
