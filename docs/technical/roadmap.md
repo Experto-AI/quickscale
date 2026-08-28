@@ -74,10 +74,11 @@ regenerated migration baseline are settled tree state that open tickets build on
 ### Lane state
 
 `wt-track2` and `wt-track3` are ancestors of `v88` — merged, clean, and idle. **`wt-track1` holds
-the release's only unmerged product delta:** SA167d's A-D-accepted work at product tip `1743871f`,
-under one docs-only checkpoint at `467714cb`. Every worktree lags `v88` and must sync before its
-ticket starts; W1's sync will conflict in `docs/technical/roadmap.md`, which is expected — resolve
-in the worktree keeping this file's structure, and re-run the consistency test in the same change.
+the release's only unmerged product delta:** SA167d's A-E-accepted candidate at
+`E0_ACCEPTED_TIP` `bd2c291ba2d40494970464741ac51bfd45445a19`. E0 made no tracked edits and the
+candidate is committed; no unresolved sync conflict remains. C1's accepted-open ledger
+reconciliation is current, while independent review, terminal attestation, and merge-back
+remain pending. Every worktree must still sync before its next ticket action.
 
 Ahead/behind counts are not transcribed here because they go stale with every commit to this file.
 Measure them instead:
@@ -98,7 +99,8 @@ serially around it. No ticket move relieves that; only scheduling does.
   **This is the only action that shortens the release.**
 - **W3 — resume SA135 + SA163 (#15) at the re-scoped phase E1.** Do not redo C or D, and do not
   attempt the two E2E Docker failures — they are SA170's.
-- **W1 — re-run and accept SA167d's phase E (#18)**, then the ledger reconciliation and merge-back.
+- **W1 — reconcile SA167d's accepted-open A-E ledger (#18)**, then complete independent review,
+  terminal attestation, and exact-tip merge-back without closing the ticket early.
   This is the release's only unmerged delta; schedule its `make test` outside W3's window.
 
 All three lane heads are startable today and blocked by no decision. **No maintainer decision is
@@ -143,9 +145,11 @@ into its worktree, resolves there, reruns its own verification, then merges its 
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16, #17, #23, and #26 are **retired and not
 reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Gaps carry no meaning.
 
-#15, #18, and #21 are the per-lane heads, all partial: #21 has a merged Phase-A slice at `f6f3bbce`
-with A unaccepted and B-F outstanding; #18 is a stalled phase-E acceptance on `wt-track1` product
-tip `1743871f`; #15 has a merged partial with C/D accepted and E outstanding.
+#15, #18, and #21 are the per-lane heads: #21 has a merged Phase-A slice at `f6f3bbce` with A
+unaccepted and B-F outstanding; #18 has phases A-E accepted at E0 tip
+`bd2c291ba2d40494970464741ac51bfd45445a19` and remains open pending independent review,
+terminal attestation, and merge-back; #15 has a merged partial with C/D accepted and E
+outstanding.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable only by the upstream work
 or by a maintainer reordering the lane. Two are **hard content dependencies** that no reorder
@@ -250,41 +254,31 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note
   in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist)
   is retired once the deviation it names is gone.
-  **State (measured 2026-08-27): phases A-D accepted, phase E outstanding.** Retained product tip
-  `1743871f`, carried under one docs-only checkpoint at `wt-track1` tip `467714cb`; worktree clean.
-  **This is the release's only unmerged product delta.** A-D evidence is archived in
-  [CHANGELOG.md](../../CHANGELOG.md). **This is not a merge-back-only ticket.**
-  From root pre-sync tip `817690b44688e03df01c4d87e5758b5f52b28434`, the starting sync with
-  current local `v88` (`74ba3c55e287ba0b1e7c42f9cb1d85debb60f8df`) is unresolved in `wt-track1`
-  because this file conflicted; the executable consistency test auto-merged. No root sync merge
-  commit is claimed here.
-  On `1743871f`, `make lint`, `make typecheck`, `make test`, `make check`, and `make quality` all
-  passed (Core 2,881 passed / 1 skipped, CLI 2,098 passed, modules 2,554 passed / 85 skipped; zero
-  quality regressions). Phase E is nonetheless **unaccepted**: E0's scoped sequence was red at
-  return and convergence cannot retroactively accept it, so C1 ledger reconciliation and V1
-  exact-candidate validation were never reached. The terminal review was also blocked — it never
-  received the complete authoritative diff from the pre-run base through `1743871f` — so the
-  product delta is ungraded. **Decisions needed:** none. SA165 remains downstream of SA167d and is
-  blocked only by completion of this ticket.
-  **E0's ordered acceptance sequence.** Run on the retained delta, stopping at the first red:
-  1. `poetry run pytest quickscale_cli/tests/commands/test_module_config.py quickscale_cli/tests/commands/test_module_config_extended.py quickscale_cli/tests/commands/test_module_commands.py quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_cli/tests/test_module_manifest_contract.py -q -o addopts= --no-cov`
-     — the CLI wiring-boundary surface; expect green and the recorded **816** focused total.
-  2. `make lint` and `make typecheck` — expect exit 0.
-  3. `make test` — the ordered combined gate. **This is the step E0 failed on** (storage package's
-     lazy public API at 45% coverage) and the one that must now be green.
-  4. `make check` and `make quality` — expect `make quality` no worse than found.
-  **Rollback:** `git reset --hard 1743871f` in `wt-track1` discards any correction attempt without
-  touching `v88`. Schedule steps 1-4 outside W3's cluster window.
-  **Remaining plan.** (1) Run the sequence above and accept phase E only if every step is green.
-  (2) Complete C1's same-fact ledger reconciliation across `CHANGELOG.md`, `docs/index.md`,
-  `docs/others/arch-audit.md`, `docs/technical/{decisions,implementation_contract,module-extension,v88_ticket_context}.md`,
+  **State (measured 2026-08-28): phases A-E accepted at E0_ACCEPTED_TIP**
+  `bd2c291ba2d40494970464741ac51bfd45445a19`; the candidate is clean and committed. E0 made no
+  tracked edits. The focused wiring-boundary command passed **282 tests**; `make lint` and
+  `make typecheck` exited 0; `make test` exited 0 with **2,880 Core passed / 1 skipped** at
+  **90.43%** and **2,098 CLI passed** at **91.53%**; all module integration suites passed with
+  documented skips/warnings and **94.54% overall mean coverage**; `make check` exited 0 with
+  **1,318 passed** and zero unsuppressed findings; and `make quality` exited 0 with the baseline
+  loaded, zero warning/critical/total regressions, monotonicity passing, and waiver count 0.
+  The first two `make check` attempts hit host time limits before an unchanged third attempt
+  passed. No module pass total is asserted because E0 did not return one. Caller parity passed
+  across `module_config`, `module_commands` embed/update/apply/remove, `regenerate_managed_wiring`,
+  module-owned adapters, and the protected `entry_point.py` seam.
+  The starting-sync conflict is settled in the committed candidate; no unresolved sync conflict
+  remains. C1 is the current accepted-open ledger reconciliation. **This is not a merge-back-only
+  ticket.** SA167d remains open at active merge position **#18**, SA165 remains dependent, and
+  independent review, terminal attestation, and merge-back are pending. This checkpoint claims
+  neither convergence nor completion.
+  **Remaining plan.** (1) Complete C1's same-fact ledger reconciliation across `CHANGELOG.md`,
+  `docs/index.md`, `docs/others/arch-audit.md`, `docs/technical/{decisions,implementation_contract,module-extension,v88_ticket_context}.md`,
   and `quickscale_core/tests/test_v88_ticket_context_consistency.py`, plus its executable
-  consistency test, without archiving SA167d early. (3) Sync current `v88`, resolve the standing
-  closeout conflict surface, and run V1's complete campaign on one frozen candidate.
-  (4) Independently review that candidate's complete authoritative diff. (5) Only then archive
-  completion, remove this entry, retire merge position #18, release SA165, and merge the reviewed
-  tip. Report final changed-line and lines-per-hour metrics from the `2026-08-27 18:52:34 +0200`
-  measurement start.
+  consistency test, without archiving SA167d early. (2) Sync current `v88`, resolve the standing
+  closeout conflict surface, and run the complete frozen-candidate campaign. (3) Independently
+  review that candidate's complete authoritative diff. (4) Only then archive completion, remove
+  this entry, retire merge position #18, release SA165, and merge the reviewed tip. Report final
+  changed-line and lines-per-hour metrics from the `2026-08-27 18:52:34 +0200` measurement start.
   **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`, plus the ledger-reconciliation files listed above.
 
 - [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Band B · Tier 2 · W3 · merge #15 · deps: none · PostgreSQL + Docker slot · carries SA163`

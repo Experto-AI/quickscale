@@ -4,6 +4,24 @@
 
 ## v88 development — 2026-08-21
 
+- **SA167d phase E accepted; accepted-open ledger pending final closeout (2026-08-28).** The
+  retained CLI wiring-drain candidate reached `E0_ACCEPTED_TIP`
+  `bd2c291ba2d40494970464741ac51bfd45445a19` with no tracked edits in E0. The focused
+  wiring-boundary command passed **282 tests**; `make lint` and `make typecheck` exited 0;
+  `make test` exited 0 with **2,880 Core passed / 1 skipped** at **90.43%** and **2,098 CLI
+  passed** at **91.53%**; all module integration suites passed with documented skips/warnings
+  and **94.54% overall mean coverage** (no module pass total is asserted because E0 did not
+  return one); `make check` exited 0 with **1,318 passed** and zero unsuppressed findings;
+  and `make quality` exited 0 with the baseline loaded, zero warning/critical/total
+  regressions, monotonicity passing, and waiver count 0. The first two `make check` attempts
+  hit host time limits before an unchanged third attempt passed. Caller parity passed across
+  `module_config`, `module_commands` embed/update/apply/remove, `regenerate_managed_wiring`,
+  module-owned adapters, and the protected `entry_point.py` seam.
+  SA167d remains open at active merge position **#18**, the queue remains **ten open v88
+  ticket entries across nine open merge positions**, and SA165 remains dependent on it.
+  Independent review, terminal attestation, and merge-back are pending; this entry records
+  accepted E0 evidence and does not claim convergence or completion.
+
 - **W3 blocker root-caused; SA170 opened and SA135 unblocked (2026-08-27).** The v88 plan carried
   **no open maintainer decision** after this pass. SA135+SA163's phase E1 had been stalled across
   several passes on a requirement for deterministic red-before/green-after evidence for two

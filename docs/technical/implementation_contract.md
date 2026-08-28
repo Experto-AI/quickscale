@@ -283,9 +283,11 @@ state, not an alternate wiring path.
 The "compatibility fallback for bundled/installed contexts" rationale previously recorded
 here was retired by the AF7 fail-hard decision, which removed the context it described. The
 inert ``django_apps:`` surface remains parsed-but-unread pending **`SA167c`** (v88, merge
-#21). The settled product bytes no longer carry CLI per-module wiring logic, but **`SA167d`**
-(v88, merge #18) remains open: phases A-C are accepted, Phase D was delivered but remains
-unaccepted after its exact command exited 1, and Phase E was unreached.
+#21). The settled product bytes no longer carry CLI per-module wiring logic. **`SA167d`**
+(v88, active merge #18) remains open while its accepted-open E0 candidate is independently
+reviewed and merged: phases A-E are accepted at
+`bd2c291ba2d40494970464741ac51bfd45445a19`, with no tracked E0 edits; SA165 remains dependent
+on the ticket. This status does not claim convergence, terminal attestation, or merge-back.
 The SA167a ownership guard checks executable source rather than one constructor shape,
 including helper, variable, and alternate-constructor forms.
 

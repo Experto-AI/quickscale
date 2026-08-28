@@ -4,7 +4,7 @@ The roadmap is the sole home for schedulable metadata.  The context page may exp
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167c context may still explain the archived SA167a handoff as
-settled tree state.  SA167d remains open until its D/E handoff is accepted.
+settled tree state.  SA167d remains open after A-E acceptance until final closeout.
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ OPEN_TICKET_RE = re.compile(
     re.MULTILINE,
 )
 SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
+E0_ACCEPTED_TIP = "bd2c291ba2d40494970464741ac51bfd45445a19"
 
 UMBRELLA_TITLE = "SA167c — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167c", "SA167d"})
@@ -258,6 +259,10 @@ def _assert_current_status_consumers(
     docs_index_text: str,
     arch_audit_text: str,
     tech_audit_text: str,
+    changelog_text: str,
+    decisions_text: str,
+    implementation_contract_text: str,
+    module_extension_text: str,
 ) -> None:
     roadmap = _roadmap_tickets(roadmap_text)
     v88 = {
@@ -342,9 +347,34 @@ def _assert_current_status_consumers(
     assert "ready to continue from strict C acceptance" not in handoff_text
     assert "W2 has released the shared PostgreSQL cluster" not in handoff_text
 
-    # W1: SA167d is a phase-E acceptance, not a merge-back-only ticket.
-    assert "phases A-D accepted, phase E outstanding" in roadmap_text
-    assert "This is not a merge-back-only ticket" in roadmap_text
+    # SA167d: phases A-E are accepted, but the ticket remains open pending final closeout.
+    assert "phases A-E accepted at E0_ACCEPTED_TIP" in roadmap_text
+    assert E0_ACCEPTED_TIP in roadmap_text
+    assert "active merge position **#18**" in roadmap_text
+    assert "SA165 remains dependent" in roadmap_text
+    assert re.search(r"This is not a merge-back-only\s+ticket", roadmap_text)
+
+    # Every named same-fact consumer carries the exact accepted E0 tip. Keep this
+    # inventory explicit so a future status edit cannot silently leave one stale.
+    status_consumers = {
+        "CHANGELOG.md": changelog_text,
+        "docs/index.md": docs_index_text,
+        "docs/others/arch-audit.md": arch_audit_text,
+        "docs/technical/decisions.md": decisions_text,
+        "docs/technical/implementation_contract.md": implementation_contract_text,
+        "docs/technical/module-extension.md": module_extension_text,
+        "docs/technical/roadmap.md": roadmap_text,
+        "docs/technical/v88_ticket_context.md": context_text,
+    }
+    for path, text in status_consumers.items():
+        assert E0_ACCEPTED_TIP in text, path
+        assert "SA167d" in text, path
+    assert "282 tests" in changelog_text
+    assert "2,880 Core passed / 1 skipped" in changelog_text
+    assert "2,098 CLI" in changelog_text
+    assert "94.54% overall mean coverage" in changelog_text
+    assert "1,318 passed" in changelog_text
+    assert "zero warning/critical/total" in changelog_text
 
     entry_word = _number_word(len(v88))
     position_word = _number_word(len(positions))
@@ -377,6 +407,12 @@ def test_v88_live_status_consumers_derive_current_counts_and_dependencies() -> N
         DOCS_INDEX.read_text(encoding="utf-8"),
         ARCH_AUDIT.read_text(encoding="utf-8"),
         TECH_AUDIT.read_text(encoding="utf-8"),
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+        (ROOT / "docs/technical/decisions.md").read_text(encoding="utf-8"),
+        (ROOT / "docs/technical/implementation_contract.md").read_text(
+            encoding="utf-8"
+        ),
+        (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
     )
 
 

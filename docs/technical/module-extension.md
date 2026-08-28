@@ -333,8 +333,11 @@ yourself editing either to register a module, the module's own declaration is in
 > exists. Wiring is declared in `module.yml` and executed by the module's `adapter.py`.
 > The per-module `apply_<name>_configuration()` functions formerly present in
 > `module_config.py` are absent from the settled product bytes and remain a pattern not to copy.
-> **`SA167d`** (v88, merge #18) is still open: phases A-C are accepted, Phase D was
-> delivered but remains unaccepted after its exact command exited 1, and Phase E was unreached.
+> The former CLI wiring deviation is retired: the desired-configuration-only boundary is
+> implemented and accepted through phase E at E0 tip
+> `bd2c291ba2d40494970464741ac51bfd45445a19`. **`SA167d`** remains open at active merge
+> position #18 pending independent review and merge-back; SA165 remains dependent. This is an
+> accepted-open checkpoint, not a completion claim.
 
 **5. Template Integration (showcase_react theme):**
 - [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure

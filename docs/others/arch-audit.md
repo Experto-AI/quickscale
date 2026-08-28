@@ -1,6 +1,6 @@
 # Structural Autopsy: QuickScale
 
-> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-27 · **Branch:** `v88`
+> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-28 · **Branch:** `v88`
 
 ## Orientation summary
 
@@ -9,6 +9,15 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 **Commit delta since the last pass** (`e40762a0..HEAD`, 7 commits, all 2026-08-20). *Housekeeping:* `309b8b7a` (doc links), `3de43250` (social subtree split, no tree change), `ed8bb9b4` and `10d6bfe2` (release notes and v88 roadmap). *Unlabeled-behavioral — read at full depth:* `be5cf024` "fix(ci): unbind hosted gates from one machine's environment" (adds restricted-role provisioning to the isolation job; relaxes the SA90 emission byte-parity gate for `.env`; moves the managed-adapter completeness assertion out of `_refresh_session_managed_adapters`), `d4b0e834` and `d3d4c633`, both titled "v0.87.0: QuickScale 0.87.0" but in fact changing hosted and publish provisioning (PGDG PostgreSQL 18 client install) and isolation-gate skip semantics. Two release-shaped messages carrying CI-topology changes is exactly the class this audit reads closely, and it paid: `d3d4c633` left a repository conformance test red (see Red flags).
 
 **Growth direction (from the planning surface, authoritative).** The v88 roadmap records the prioritization decision as **"neither"** — no `teams` domain work and no third generated-project updater. Ten open v88 ticket entries run on three tracks across nine open merge positions. SA123's Trivy/Bandit implementation and exact-tree acceptance are complete, the current registry has eight hosted gates, and its tooling gap is closed. **SA135** (give test suites an owned PostgreSQL lifecycle, merge #15) also touches this audit's CI/governance seam, where Finding 13 remains live.
+
+**Accepted-open SA167d checkpoint (2026-08-28).** SA167d remains open and active at merge position
+**#18**, with SA165 still dependent on it. Phases A-E are accepted at E0 tip
+`bd2c291ba2d40494970464741ac51bfd45445a19`; E0 made no tracked edits. The focused command
+passed **282 tests**, Core/CLI passed **2,880 / 2,098** with **1 skipped** on Core, all module
+integration suites passed with documented skips/warnings at **94.54% overall mean coverage**,
+`make check` passed **1,318** with zero unsuppressed findings, and quality passed with zero
+regressions and monotonicity. Independent review and merge-back remain pending; this is not a
+completion or convergence claim.
 
 **Read fully:** the four workflows, `scripts/gate_registry.json`, `scripts/check_gate_parity.py` (context extraction and comparison), `scripts/sync_ci_gate_jobs.py` (generation and job-set validation), the `Makefile` test/gate targets, `scripts/check_ci_locally.sh` gate stations, `scripts/test_isolation_conformance.sh`, and the three behavioral diffs. **Sampled:** module sources, generator, beta migration, orgs tenancy (prior-finding anchor re-verification only). **Skipped:** generated-project template internals, frontend theme sources.
 
