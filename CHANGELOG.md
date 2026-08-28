@@ -4,6 +4,54 @@
 
 ## v88 development — 2026-08-21
 
+- **SA163 closed — the CI PostgreSQL environment now has one authoritative source (2026-08-28).**
+  Archived from the roadmap on the independent structural pass at `a2dfdd9f`, which scored the
+  arch-audit finding `ci-environment-hand-replicated` (the prior pass's rank-1 `now`-horizon
+  finding, formerly numbered 13) **resolved with the mechanism removed, not relocated**.
+  `scripts/provision_ci_postgres.sh` (649 lines) is the single PostgreSQL environment contract,
+  exposing `describe` / `hosted-setup` / `run` / `validate` over five profiles — `backups`,
+  `restricted`, `isolation`, `bypassrls`, `client-only`. All six hosted stations call it
+  (`ci.yml:93,458,539`, `publish.yml:170`, `e2e.yml:87`, `nightly-bypassrls.yml:80`) and five
+  Makefile targets consume it (`Makefile:415,435,1010,1296,1300`).
+  `grep -rn "createdb\|GRANT \|CREATE ROLE\|apt-get install" .github/workflows/` returns **zero
+  hits**, against thirteen hand-replicated stations plus a literal oracle before.
+  **Every acceptance criterion discharged.** The module universe is derived — `load_inventory()`
+  shells out to `contracts/module_discovery.py --list-modules` and hard-fails on absence, empty
+  output, duplicates, or unsorted input (`:79-97`) — with no hand-maintained module list among the
+  provisioning stations. PG18 client verification is identical in all four contexts including
+  `e2e.yml`. The **BYPASSRLS provisioning station** that previously lived only inside
+  `nightly-bypassrls.yml` and was reachable by no repository script is now the named `bypassrls`
+  profile (`:153`), creating `quickscale_bypassrls_test_role` with
+  `LOGIN CREATEDB BYPASSRLS NOINHERIT NOSUPERUSER NOCREATEROLE` **asserted as a postcondition**
+  (`:392-393`) the way the three `NOBYPASSRLS` contracts already are, with its database list derived
+  rather than hand-listed. Because each profile owns its own role/database mapping and validates it
+  (`:267`, `:391`), the two database lanes coexist on one cluster: `make test-bypassrls` no longer
+  breaks the next `make test-integration`. `QUICKSCALE_ALLOW_BYPASSRLS` survives as a
+  profile-validated value rather than a hand-set literal, and the restricted-role isolation
+  connection is unchanged. Both deliberate divergences are preserved — the isolation profile's
+  six-module `QS_*_DB_USER` mapping (`:152`) and its omission of `backups`.
+  **The transcribed oracle became a binding.** `scripts/test_gate_parity.py:332`
+  (`test_profiles_are_bound_by_helper_describe_json`) executes `describe --format json` and asserts
+  against the helper's *output*, replacing the verbatim shell-as-Python-literal at the old
+  `:1125-1180`; `test_exactly_six_stations_use_expected_profiles` (`:297`) additionally asserts the
+  **absence** of the old shape in every station's run text (`"apt-get"`, `"createdb"`,
+  `"ALTER DATABASE"`, `"provision_test_roles.sh"` all not in the job text). That is an
+  anti-regression gate rather than a copy-pin, and it is why the finding is scored resolved.
+  This also discharges **SA123's inherited obligation** on the transcribed provisioning shell
+  literal, with SA123's settled hosted-job, `needs`-edge, run-value, publish/E2E-path, and generator
+  expectations and the regenerated 24-entry publish oracle preserved.
+  **Two new hand-pinned literals were minted inside the derivation** — `((${#MODULES[@]} == 12))`
+  and `[[ "$item" != teams ]]` (`:93,96`) — plus a second copy of the PostgreSQL major
+  (`POSTGRES_MAJOR=18` at `:15`, against `runtime_pins.POSTGRES_VERSION = "18"`). All three fail
+  loudly and are carried to the arch-audit watchlist rather than promoted; they are not a reason to
+  hold the ticket open.
+  **Planner changes.** SA163 is removed from the roadmap and its context section retired. Merge
+  position #15 is no longer shared and now carries **SA135 alone**; `SHARED_POSITION_GROUPS` in
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` drops to empty. SA135 keeps its own
+  outstanding phase-E PostgreSQL-lifecycle evidence and the `validation_policy.md` precondition
+  update — those are SA135's, not SA163's. `docs/others/arch-audit.md` no longer carries the
+  finding, so no roadmap ticket takes that document onto its conflict surface for it.
+
 - **W3 blocker root-caused; SA170 opened and SA135 unblocked (2026-08-27).** The v88 plan carried
   **no open maintainer decision** after this pass. SA135+SA163's phase E1 had been stalled across
   several passes on a requirement for deterministic red-before/green-after evidence for two

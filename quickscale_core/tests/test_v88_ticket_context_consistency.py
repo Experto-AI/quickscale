@@ -38,7 +38,7 @@ UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167c", "SA167d"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
 RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset()
 ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a", "SA167b"})
-SHARED_POSITION_GROUPS = {frozenset({"SA135", "SA163"})}
+SHARED_POSITION_GROUPS: frozenset[frozenset[str]] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -201,7 +201,7 @@ def _assert_consistent(roadmap_text: str, context_text: str) -> None:
         )
 
     actual_shared_groups = _shared_position_groups(roadmap)
-    if actual_shared_groups != SHARED_POSITION_GROUPS:
+    if actual_shared_groups != set(SHARED_POSITION_GROUPS):
         raise AssertionError(
             "shared-position roadmap classification drift: "
             f"expected={sorted(map(sorted, SHARED_POSITION_GROUPS))}, "
@@ -417,10 +417,17 @@ def test_v88_unsupported_roadmap_entry_shape_is_expected_red_canary() -> None:
 
 
 def test_v88_missing_roadmap_dependency_metadata_is_expected_red_canary() -> None:
+    """Strip the ``deps:`` clause off whichever ticket the roadmap lists first."""
     roadmap, context = _load_documents()
-    mutated = roadmap.replace("merge #15 · deps: SA135", "merge #15", 1)
+    entry = OPEN_TICKET_RE.search(roadmap)
+    assert entry is not None
+    ticket, metadata = entry.groups()
+    mutated = roadmap.replace(
+        metadata, re.sub(r"\s*·?\s*deps:[^·`]*", "", metadata, count=1), 1
+    )
+    assert mutated != roadmap
     with pytest.raises(
-        AssertionError, match="missing roadmap dependency metadata: SA163"
+        AssertionError, match=rf"missing roadmap dependency metadata: {ticket}"
     ):
         _assert_consistent(mutated, context)
 
@@ -453,12 +460,32 @@ def test_v88_dependency_status_contradiction_is_expected_red_canary() -> None:
 
 
 def test_v88_shared_merge_position_drift_is_expected_red_canary() -> None:
+    """Point one v88 ticket at another's merge position and expect the drift error.
+
+    Derived from whatever the roadmap currently holds, so no ticket ID, position, or
+    shared-group literal is pinned here.
+    """
     roadmap, context = _load_documents()
+    v88 = [
+        (ticket, metadata)
+        for ticket, metadata in _roadmap_tickets(roadmap).items()
+        if metadata.kind == "v88" and metadata.merge_position is not None
+    ]
+    assert len(v88) >= 2
+    (victim, victim_metadata), (_, donor_metadata) = v88[0], v88[1]
+    entry = re.search(
+        rf"^\s*- \[ \] \*\*{victim}\b.*?`((?:Band|Post-v88)[^`]*)`",
+        roadmap,
+        re.MULTILINE,
+    )
+    assert entry is not None
     mutated_roadmap = roadmap.replace(
-        "SA163 — Derive the CI PostgreSQL environment from one authoritative source.** "
-        "`Band B · Tier 2 · W3 · merge #15",
-        "SA163 — Derive the CI PostgreSQL environment from one authoritative source.** "
-        "`Band B · Tier 2 · W3 · merge #26",
+        entry.group(1),
+        entry.group(1).replace(
+            f"merge #{victim_metadata.merge_position}",
+            f"merge #{donor_metadata.merge_position}",
+            1,
+        ),
         1,
     )
     assert mutated_roadmap != roadmap

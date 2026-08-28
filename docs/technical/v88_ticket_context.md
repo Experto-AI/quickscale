@@ -40,13 +40,13 @@ The open release work is one principle with four failure modes. Every ticket is 
         DUPLICATED      SILENT         UNOWNED       UNENFORCED
          AUTHORITY     FALLBACK       LIFECYCLE       POLICY
             │             │               │              │
-           SA163         SA165           SA135          SA166
-           SA160         SA152           SA161            │
-           SA164           │               │         (testimony
-                         (state/tool      (DB, dead       trail)
-            │          fallbacks)       code)
-       (CI env, cookies,
-        watchlists)
+           SA160         SA165           SA135          SA166
+           SA164         SA152           SA161          SA172
+           SA172         SA172           SA170            │
+             │             │             SA171      (testimony
+       (cookies,      (state/tool     (DB, locks,      trail,
+        watchlists,    fallbacks,      dead code,    policy-text
+        RLS docstring)  silent skips)   Docker)      assertions)
 ```
 
 **The one sentence:** *Every fact should have exactly one home, and every consumer should
@@ -59,10 +59,10 @@ and SA162 correction are now complete, with their evidence archived in the chang
 
 | Failure mode | What it looks like | Tickets |
 |---|---|---|
-| **Duplicated authority** — the same fact is written down in two or more places, so they drift | the PGDG install copied across 14 stations; duplicated cookies and watchlist authority | SA163, SA160, SA164 |
+| **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners; two hand-rolled file locks with one shared race | SA160, SA164, SA171 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
-| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | the integration gate assumes a PostgreSQL server someone else started; dead code nobody deletes | SA135, SA161 |
-| **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail | SA166 |
+| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | the integration gate assumes a PostgreSQL server someone else started; a fixed-tag Docker image outside the scope contract; dead code nobody deletes | SA135, SA161, SA170 |
+| **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail; RLS gates assert a policy exists but never what it says | SA166, SA172 |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
 context. Its closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md), so the
@@ -147,70 +147,98 @@ and the Testing Standards section describes the precondition in prose. Both need
 
 ---
 
-## SA163 — Derive the CI PostgreSQL environment from one authoritative source
-
-### The mental model
-
-The gate registry answers *which* gates run in *which* contexts. It does **not** answer
-*what environment those gates require*. That second question is answered nowhere
-declaratively — it is hand-replicated as shell.
-
-### The census
-
-Thirteen stations state the same environment:
-
-| Thing | Copies | Where |
-|---|---|---|
-| PGDG PG18 install | 4 | `ci.yml:92-107`, `ci.yml:408-427`, `publish.yml:161-187`, `e2e.yml:74-91` |
-| PG18 verification | 4, **divergent** | three check `command -v` *and* `--version \| grep "(PostgreSQL) 18"`; `e2e.yml:92` checks only `test -x` |
-| `createdb` lists | 4 | across the same workflows |
-| grant loops | 4 | ditto |
-| `QS_*_DB_USER` blocks | 5 | ditto |
-| the whole thing **as a Python literal** | 1 | `scripts/test_gate_parity.py:1125-1180` transcribes the shell verbatim |
-
-That fourteenth station is the tell: a parity test that *transcribes* what it checks is not
-an independent oracle — it is a fifteenth copy wearing a test's clothes.
-
-### The live question this ticket must settle
-
-`nightly-bypassrls.yml:81-82` installs plain `postgresql-client` — Ubuntu 16.x, **no
-PGDG** — while creating `test_quickscale_backups` and setting `QS_BACKUPS_DB_USER`. That
-runs against `ci.yml:93-95`'s own statement that the backups DR engine enforces a
-PostgreSQL 18 `pg_dump`/`pg_restore` contract which 16.x fails.
-
-Determine whether `make test-bypassrls` actually reaches a `pg_dump`/`pg_restore` path. If
-it does, this is a **live defect**, not a cosmetic divergence, and it gets fixed here.
-
-### Two divergences that are correct — do not "fix" them
-
-Both were verified this audit pass. Refactoring blindly will break them:
-
-1. The 6-entry `QS_*_DB_USER` block at `ci.yml:627-632` is **exactly** `orgs` plus
-   `RLS_MODULES` from `test_isolation_conformance.sh:141`. It is derived, not truncated.
-2. The isolation job's 11-database list **omits `backups`** because that job runs no
-   backups tests.
-
-Document both as deliberate in the refactor, or the next reader will "unify" them away.
-
-### The option choice, already made
-
-**Selected shape**: one `scripts/provision_ci_postgres.sh`, four callers, and a module list
-derived from the discovery shim exactly as `check_sa117_scope.py:48` already does. The SA135
-surface includes `scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, the
-`Makefile`, and the documented database precondition; SA163 addresses the same provisioning
-contract.
-
-### Non-negotiable invariants across the refactor
-
-`QUICKSCALE_ALLOW_BYPASSRLS: "0"` at `ci.yml:626` and the restricted-role isolation
-connection must survive **unchanged**. These are the same RLS-meaningfulness guarantees
-SA135's role contract protects; losing them here loses them everywhere.
-
----
-
 # Bounded independent fixes
 
 Each has a small, well-understood blast radius and remains bounded to its stated concern.
+
+## SA171 — Make stale-lock clearing atomic in both file locks
+
+### The mental model
+
+A "stale lock" reclaim is a decision followed by an action:
+
+```python
+# _lock.py:119-137 — the check and the act are two separate syscalls
+if _is_stale(path):        # stat: who holds it, how old is it
+    path.unlink()          # act: take it away
+```
+
+Between those two lines the world can change. Two backup runs both stat the same abandoned lock,
+both conclude it is stale, both unlink it, and both then create their own lock file. Each believes
+it is the exclusive holder. The lock file still exists, so nothing looks wrong.
+
+The repository owns **two** hand-rolled implementations of this shape — the DR backup lock and
+`advisory_lock.py` — and both carry it.
+
+### Why the fix is a shape change, not a patch
+
+Adding another check does not help: any sequence of *check* then *act* has the same window. The fix
+is to make reclamation one operation. `flock` gives that directly — the kernel serializes the
+critical section, and the stale decision happens with the lock held. `os.rename` or `O_EXCL`
+creation keyed on the observed lock identity gives it too, at the cost of more code.
+
+### Why the test is cheap here
+
+This is one of the rare races that is deterministic to reproduce: a two-thread barrier parked
+exactly between the stat and the unlink turns the window into a certainty rather than a probability.
+No stress loop, no flake hunting — which is why this ticket carries an ordinary red-before /
+green-after obligation rather than the softened evidence policy SA170 needed.
+
+### The boundary
+
+The audit's structural question — why two hand-rolled locks exist at all — is deliberately **not**
+in scope. Fixing the shape twice is bounded; unifying them is a design change that would widen a
+band-C ticket into an architectural one.
+
+---
+
+## SA172 — Make `apply_force_rls`'s idempotency claim true
+
+### The mental model
+
+PostgreSQL row-level security is switched on per table by a small SQL sequence: enable RLS, force it
+(so even the table owner is subject to it), then create the policies that say which rows a session
+may see and write. `apply_force_rls` runs that sequence and its docstring says it is **idempotent** —
+safe to run twice.
+
+It is not. PostgreSQL has no `CREATE POLICY IF NOT EXISTS`, so the second run raises
+`42710 duplicate_object` and aborts the migration that called it.
+
+### Why nothing is broken today
+
+Exactly one caller re-applies: `refresh_force_rls_policies`. It calls `revert_force_rls` first, and
+the reverse SQL correctly uses `DROP POLICY IF EXISTS`. So the only path that could hit the defect
+already avoids it — by accident of ordering, not by contract.
+
+The hazard is the next module migration. Its author reads "idempotent", calls the helper on an
+already-enrolled table, and the migration fails in production rather than in review.
+
+### The two honest resolutions
+
+Either make the documentation match the code (say it is not idempotent and must be preceded by
+`revert_force_rls`), or make the code match the documentation by prefixing the forward template with
+the same `DROP POLICY IF EXISTS` pair the reverse template already carries. The second is two lines
+and leaves the repository with a true contract instead of a warning, which is why the acceptance
+criteria prefer it while permitting either.
+
+### The assertion that is actually missing
+
+The conformance gates check that a policy *exists* — `relrowsecurity` and `relforcerowsecurity` true,
+and at least one row in `pg_policies`. A table carrying a permissive `USING (true)` policy would pass
+every isolation check the repository runs. Comparing the stored `qual` / `with_check` text against
+the template turns the operator-read / tenant-write split from a comment into a gate, and it is the
+natural place to prove whichever idempotency contract is chosen.
+
+### The watch item folded in
+
+`refresh_force_rls_policies` derives each table name from the Django default convention and drops
+any name it cannot resolve, silently. All 21 enrolled tables happen to match the convention today,
+so this is latent rather than live — but the moment an enrolled model declares its own `db_table`,
+its policy refresh becomes a no-op with no warning, on the most security-critical helper in the
+tree. The model's real table name is available from `apps.get_model(...)._meta.db_table`, which the
+sibling conformance helper already uses.
+
+---
 
 ## SA170 — Give the E2E Docker harness a closed resource contract
 
@@ -482,8 +510,9 @@ schema description.
 
 ### And restate the three that are not fired
 
-Module universe in environment lists, frontend runtime module keys, and the now-absorbed
-watch half of Finding 13. Keep their triggers intact — restating is the work, not removing.
+Module universe in environment lists, frontend runtime module keys, and the environment-schema
+watch item absorbed when the CI-environment finding was resolved. Keep their triggers intact —
+restating is the work, not removing.
 
 ---
 
