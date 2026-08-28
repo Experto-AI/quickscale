@@ -43,13 +43,6 @@ config:
 dependencies:
   - django-allauth>=65.18.0,<66.0.0
 
-# Django apps that must be in INSTALLED_APPS
-django_apps:
-  - django.contrib.sites
-  - allauth
-  - allauth.account
-  - quickscale_modules_auth
-
 # Required first-party modules with minimum versions
 required_modules:
   - orgs>=0.86.0

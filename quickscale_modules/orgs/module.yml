@@ -19,9 +19,6 @@ required_modules:
 dependencies:
   - django-allauth>=65.18.0,<66.0.0
 
-django_apps:
-  - quickscale_modules_orgs
-
 implies:
   - name: notifications
 

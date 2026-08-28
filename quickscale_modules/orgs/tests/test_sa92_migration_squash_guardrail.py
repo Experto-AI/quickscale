@@ -49,12 +49,7 @@ def _manifest() -> dict[str, dict[str, Any]]:
     return result
 
 
-def _migdir(name: str, data: dict[str, Any]) -> Path | None:
-    for label in data.get("django_apps") or []:
-        if label.startswith("quickscale_modules_"):
-            d = MODS / name / "src" / label / "migrations"
-            if d.is_dir():
-                return d
+def _migdir(name: str) -> Path | None:
     d = MODS / name / "src" / f"quickscale_modules_{name}" / "migrations"
     return d if d.is_dir() else None
 
@@ -77,7 +72,7 @@ def test_discovery() -> None:
         "notifications",
         "backups",
     ):
-        assert name in m and _migdir(name, m[name]) is not None
+        assert name in m and _migdir(name) is not None
     assert len(m) >= 12
 
 
@@ -85,10 +80,10 @@ def test_no_cross_table_org_dml() -> None:
     """Bounded tripwire: no migration contains cross-table organization_id DML."""
     findings: list[str] = []
     scanned = 0
-    for name, data in _manifest().items():
+    for name in _manifest():
         if name in ("analytics", "storage", "teams"):
             continue
-        d = _migdir(name, data)
+        d = _migdir(name)
         if d is None:
             continue
         for pf in sorted(d.iterdir()):

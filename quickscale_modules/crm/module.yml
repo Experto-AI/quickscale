@@ -41,12 +41,6 @@ dependencies:
   - djangorestframework>=3.17.1
   - django-filter>=26.1
 
-# Django apps that must be in INSTALLED_APPS
-django_apps:
-  - rest_framework
-  - django_filters
-  - quickscale_modules_crm
-
 # ---------------------------------------------------------------------------
 # Manifest derivation rules (T2.3 Phase 3)
 # ---------------------------------------------------------------------------

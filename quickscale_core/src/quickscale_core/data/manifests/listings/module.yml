@@ -21,11 +21,6 @@ dependencies:
   - django-markdownx>=4.0.11
   - Pillow>=12.3.0,<13.0.0
 
-django_apps:
-  - django_filters
-  - markdownx
-  - quickscale_modules_listings
-
 implies:
   - name: orgs
 

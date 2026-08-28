@@ -59,12 +59,13 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 |---|---|---|---|---|---|---|
 | `spa-csrf-token-duplicate-cookie` (TA67) | **S3** | Correctness (frontend) | `getCsrfToken` returns `''` whenever two `csrftoken` cookies are present — every SPA write 403s | Trivial ⚡ | High | new |
 | `generated-settings-dead-client-ip` (TA68) | S4 | Dead code (generated output) | Two `get_client_ip` definitions in generated settings are unreachable | Trivial | High | new |
+| `container-status-substring-match` (TA70) | S4 | Correctness (shipped CLI utility) | `get_container_status` matches container names by substring over dead containers, so callers cannot tell "starting" from "crashed" | Trivial ⚡ | High | new 2026-08-27 |
 
-**Counts:** S1 **0** · S2 **0** · S3 **1** · S4 **1** · **Total 2 open**. Quick win (⚡ Trivial-effort S3): TA67.
+**Counts:** S1 **0** · S2 **0** · S3 **1** · S4 **2** · **Total 3 open**. Quick win (⚡ Trivial-effort S3): TA67.
 
-These are the current live-finding counts, derived from the two open summary rows above:
-TA67 (S3) and TA68 (S4). Older TA69-inclusive totals (S3: 1, S4: 2, total 3) remain dated
-historical reconciliation evidence and are not part of the current inventory.
+These are the current live-finding counts, derived from the three open summary rows above:
+TA67 (S3), TA68 (S4), and TA70 (S4). Older TA69-inclusive totals are dated historical
+reconciliation evidence and are not part of the current inventory.
 
 ---
 
@@ -110,6 +111,33 @@ function getCsrfToken(): string {
 **Deliberate?** None found. The `parts.length === 2` idiom is a widely copied snippet; nothing in either file acknowledges the multi-cookie case.
 
 ---
+
+### TA70 — `get_container_status` matches by substring over dead containers
+
+`quickscale_cli/src/quickscale_cli/utils/docker_utils.py:328-348` runs
+`docker ps -a --filter name=<container_name>` and returns `result.stdout.strip()`. Two problems
+compound:
+
+- Docker's `name` filter is a **substring regex**, not an exact match, so `<scope>_backend` also
+  matches `<scope>_backend_1` or any longer name containing it. With several matches,
+  `--format {{.Status}}` emits one line each and `.strip()` returns a multi-line blob that no caller
+  can attribute to a container.
+- `-a` includes containers that have already exited, so the function returns a status for a dead
+  container indistinguishable — to a substring test — from one that has not started yet.
+
+The sole caller today is the E2E readiness poll at
+`quickscale_cli/tests/test_e2e_development_workflow.py:157-168`, which accepts
+`"up" in status.lower()`. A container that crashes on startup yields `Exited (1) …`, the predicate
+reads "not up *yet*", and the poll waits out its full 40 s before reporting the generic *"Backend
+container did not become running within 40s"*. **The exit code and cause are discarded**, which is
+why repeated E2E reruns produced greens that identified nothing. The function is public shipped CLI
+surface with no production caller, so the blast radius today is diagnostic quality rather than
+runtime behaviour — but it is the reason a stalled ticket stayed stalled across several passes.
+
+**Fix:** filter on an anchored exact name (`name=^<name>$`), return a structured state that
+distinguishes *absent* / *created* / *running* / *exited(code)* rather than a display string, and
+make the readiness poll fail immediately and loudly on *exited*. Owned by **SA170** (roadmap
+merge #27).
 
 ### S4
 
@@ -168,6 +196,7 @@ function getCsrfToken(): string {
 |---|---|---|
 | Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The theme has an eslint config — a `no-duplicate-imports`-style rule will not catch copied functions; the shared-helper fix is the real prevention |
 | No gate requires a changelog/ticket trail for behavioural commits | **SA166** | **Carried.** `d3d4c633` shipped a CI-topology change under a release-shaped message and left a conformance test red. Remains maintainer-process risk rather than a source finding |
+| No test exercises the E2E harness's own failure paths | **TA70** | The readiness predicate and `get_container_status`'s argv are pure functions of a status string and a name; a table test over `Exited (1) …`, `Created`, `Up 3 seconds`, a multi-container blob, and `None` costs minutes and is what makes the defect provable. Owned by SA170 |
 | ~~`scripts/` suites are in no execution context~~ | Arch Finding 12 | **Closed by SA155:** the green suite population is registered through `check-gate-suites`; detailed evidence is retained in [CHANGELOG.md](../../CHANGELOG.md) |
 
 ---
@@ -200,9 +229,8 @@ function getCsrfToken(): string {
 ## Reconciliation log
 
 - 2026-08-21 — **TA1–TA62**: closure detail, later structural-cause closure, and superseded cross-reference notes remain archived in [CHANGELOG.md](../../CHANGELOG.md) and version control, as recorded by the prior pass. No prior ID was reopened this pass; none was re-verified in code, because the prior document carried none forward as open.
-- 2026-08-21 — Prior watch item *quality baseline*: **regressed → promoted to TA63 → closed by SA156**. The prior pass recorded "monotonicity is enforced and `make quality` reports `total_regressions: 0`". It was falsified by execution: the gate exited 2 with `MERGE_BASE_ERROR` and `make quality` aborted before any analyzer ran. SA156 replaced the retired release-ref fallback with durable `main`, proved origin/local probing and missing-default remediation in hermetic tests, and verified a real `make quality` run with fresh reports. The current broader run reports the unrelated pre-existing `development_commands.py::up` C901 complexity regression (15 versus allowed 14): `scripts/check_quality.sh` exits 1 and GNU Make reports `make quality` exit 2, exactly matching the authorized no-worse-than-found oracle. **Full TA63 defect and closure detail is archived in [CHANGELOG.md](../../CHANGELOG.md); no closed-findings section is carried here.**
 - 2026-08-21 — Prior watch items *integration-branch CI* and *generator lock generation*: **still-open, accepted / owned**. Re-verified at their anchors; carried forward unchanged in *Notes*. Not re-argued — no severity context changed.
-- 2026-08-24 — **SA150 closed the local-wheelhouse watch item.** `docs/technical/local-wheelhouse.md` documents the explicit environment override, accepted values, implicit `sys.prefix/quickscale_wheels` choice, and failure modes. `_resolve_local_wheel_dependency()` now raises `DependencySyncError` for an explicit unmatched `quickscale-core` artifact with the environment variable, searched directory, attempted pattern, and available wheels in the message; published third-party dependencies remain manifest-derived, and an empty explicit value is rejected. Regression tests cover both production call sites, normalized matching, public-dependency fallback, and preserved unset/implicit fallback. This retires a live watch item only: the summary table remains S3: one, S4: one, total two, with no numbered finding closed by SA150.
+- 2026-08-27 — **Closed-item closure narratives are archived.** TA63 (quality baseline), TA65 (bare-`python3` repo sources), TA69 (CSRF gate bool inversion), the SA150 local-wheelhouse watch item, the dependency-vulnerability and security-static-analysis tooling gaps, and the six adjudicated arch-audit red-flag leads are all closed; their defect detail and closure evidence live in [CHANGELOG.md](../../CHANGELOG.md) and are no longer restated here.
 - 2026-08-27 — **Quality-baseline watch item retired.** Its two recorded warning regressions are
 gone: `development_commands.py::up` is back at its baseline complexity and
 `_social_manifest_apps` was split into `_select_social_manifest_apps_projection` /
@@ -211,12 +239,8 @@ baseline now reports zero warning, zero critical, and zero total regressions wit
 passing, evidenced by the SA123 and SA167b acceptance campaigns archived in
 [CHANGELOG.md](../../CHANGELOG.md). No numbered finding changed: the live inventory remains
 S3: 1 (TA67) · S4: 1 (TA68) · total 2.
-- 2026-08-26 — **Dependency-vulnerability and security-static-analysis tooling gaps closed by SA123's implemented gates.** The accepted design uses Trivy v0.74.0 rather than the earlier proposed `pip-audit`, because Trivy audits both committed Poetry locks directly, plus focused Bandit 1.9.4. Both are blocking registered gates; eight registry-bound hosted jobs are generated and checked, suppressions are identity-bound with owner/rationale/expiry, and negative probes cover vulnerable-lock, Bandit, checksum, archive-safety, and stale-database failure. At that checkpoint, SA123 remained open because unrelated SA169 failures stopped its repository-wide acceptance; the later baseline closure is archived in [CHANGELOG.md](../../CHANGELOG.md), and no root merge-back is claimed here.
-- 2026-08-21 — **Arch-audit red-flag hand-off, all six adjudicated** (§2f.1 — leads, not pre-approved findings): *red `test_gate_parity` oracle* → **promoted, TA66** (reproduced; closed by SA158 below). *`test_check_sa117_scope.py:640` interpreter-bound* → **covered by SA157 and TA65 (both closed)**, and the investigation found a second, worse defect at `:601` the red flag did not name — a test that passed on the interpreter's exit code; both are closed by the evidence above. *72 quality-baseline failures, "needs triage"* → **triaged: not environment sensitivity — TA63**, the same hard-coded ref, reproduced from a clean environment. *`quickscale_devtools` version drift* → **not promoted**; owned by SA137, whose closure and publication exclusion are recorded in [CHANGELOG.md](../../CHANGELOG.md) and the roadmap. *Deprecated bool inversion in the CSRF gate* → **promoted as TA69 and later closed by SA162** with the semantics-preserving `~int(val) != 0` correction; the suggested `not val` substitution was rejected because it changes the gate's verdict. *`tech-audit.md` header reads `Branch: v87`* → **resolved** by this regeneration.
 - 2026-08-21 — **Fix-regression pass (§3.6)** over the delta's three behavioural commits. `be5cf024`: the managed-adapter assertion relocation is a correct narrowing with its guard test updated in step; the SA90 `.env` exception is sound but is a new hand-maintained exception station, carried as a watch item. `d3d4c633`: the isolation-gate skip narrowing is correct (verified against the registry's construction), but the same commit left `test_gate_parity`'s oracle stale — TA66, now closed by SA158. `d4b0e834`/`d3d4c633` PGDG provisioning: no defect found in the added steps themselves; their four-way duplication is arch Finding 13's territory, not re-filed here.
 - 2026-08-21 — **Test-integrity diff (§3.7)**: no test was weakened in the delta. Assertions were not removed or inverted, no tolerance was widened, no `skip`/`xfail` was added, no mock replaced a real dependency. The two changes that *look* like weakenings (`_HOST_DEPENDENT_PATHS`, the empty-parameter-set allowlist) were each traced to the invariant they leave standing and cleared; both are carried as watch items rather than findings.
-- 2026-08-22 — **TA65 (`repo-sources-run-under-bare-python`) and arch red flag #2 closed by SA159.** Defect detail, closure evidence, and the deliberate `check_ci_locally.sh` adjacency are archived in [CHANGELOG.md](../../CHANGELOG.md); no closed-finding section is carried here.
-- 2026-08-24 — **SA162 closed TA69 (`csrf-gate-bool-invert-deprecated`).** The gate now evaluates analyzed `~True` and `~False` operands with `~int(val) != 0`, preserving bitwise-invert truthiness without the deprecated bool inversion. Focused analyzed-source regression tests cover both verdicts, and the warning-as-error gate is clean. TA69 is retired from the live finding table; completion evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 - 2026-08-21 — **Chain pass (§3.9) ran** and produced two chains, both recorded on their lead findings: TA63 × arch Finding 12 (the monotonicity invariant has been unenforced for the whole `v88` branch with no signal, while two live audit documents recorded it as enforced) and the SA117 false-green × arch Finding 12 × roadmap SA124 (SA124's acceptance test lands in a suite nothing executes, beside a false-green pattern it was likely to be copied from). SA157 now closes the false-green leg. Pairing the remaining findings against each other and against the watch-item list produced no third chain.
 
 *Categories swept with no qualifying finding this pass: concurrency and TOCTOU, resources and I/O, performance, data handling and serialization, injection sinks of every kind, authentication and authorization, secrets handling, cryptographic use, multi-tenant isolation, CLI destructive-path safety, dependency and build hygiene, and the frontend, library/SDK, and infrastructure-as-code archetype lenses.*

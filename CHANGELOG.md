@@ -4,6 +4,112 @@
 
 ## v88 development — 2026-08-21
 
+- **W3 blocker root-caused; SA170 opened and SA135 unblocked (2026-08-27).** The v88 plan carried
+  **no open maintainer decision** after this pass. SA135+SA163's phase E1 had been stalled across
+  several passes on a requirement for deterministic red-before/green-after evidence for two
+  historical E2E failures — a Docker `No such container` startup race and a 300-second React build
+  timeout — neither of which would reproduce. Reading the harness rather than re-running it showed
+  **the criterion was unsatisfiable as written and both symptoms have one readable structural
+  cause**, none of it in SA135's provisioning code.
+  **What the harness actually does.** `scripts/test_e2e.sh:557` mints `RUN_SCOPE` from `mktemp -d`
+  and `:596` appends `$BASHPID` per lane; `docker-compose.yml.j2` stamps
+  `com.quickscale.{owner,lifecycle,scope}` on every container and volume; `cleanup_scoped_resources`
+  reclaims by label. **The emitted `qs_e2e_tmp_*` scopes the phase flagged as a deviation are that
+  design working correctly** — `sanitize_scope` lowercases and maps non-alphanumerics to `_`, so
+  `qs-e2e-tmp.XXXX` becomes `qs_e2e_tmp_xxxx`. There is no supported way to pin the scope from
+  outside, so the phase's "fixed E1 label" requirement was unfulfillable.
+  **Three defects, one shape.** (1) `quickscale_cli/tests/test_react_theme_e2e.py:657` hardcodes
+  `image_tag = "quickscale-react-test"` with no `--label` and no scope prefix, so two concurrent
+  runs on one daemon share the tag and one test's `finally: docker rmi` removes the image the other
+  is about to `docker run` — the `No such container`/`No such image` class; and because the image is
+  unlabelled **and tagged rather than dangling**, `cleanup_scoped_images` (`test_e2e.sh:401-420`)
+  cannot see it by construction, which is why the prior pass had to hunt it by literal name.
+  (2) The same call budgets `timeout=300` for a cold build that compiles a React frontend and
+  installs a PostgreSQL 18 client — a measurement of Docker layer-cache state, not of the product —
+  and does not catch `subprocess.TimeoutExpired`. (3) **The finding that explains the stall:**
+  `docker_utils.py:328-348` runs `docker ps -a --filter name=<name>`, a **substring** regex over
+  **dead** containers, and the readiness poll at `test_e2e_development_workflow.py:157-168` accepts
+  `"up" in status.lower()`. A container that crashes on startup reads as "not up *yet*", so the poll
+  burns its full 40 s and reports a generic timeout that names no cause. **When this harness fails
+  it cannot say why**, so re-running it was never going to produce the demanded evidence.
+  **Resolution — a third option, not either of the two on the table.** Neither accepting green
+  re-runs (leaves live defects) nor stress-hunting the collision (unbounded) was right. The defects
+  are repaired under a new ticket and proved where determinism exists: a unit test over the
+  readiness predicate and the `docker ps` argv, a labelled-resource assertion that
+  `cleanup_scoped_resources` reclaims the build image, and a two-scope collision test — all genuine
+  red-before/green-after, none requiring a flake to reproduce. **Nothing is waived**; the obligation
+  moved to a ticket that can discharge it.
+  **Planner changes.** **SA170 — Give the E2E Docker harness a closed resource contract and a
+  truthful failure report** is opened at Band B · Tier 2 · **W3** · **merge #27** ·
+  deps: SA135 (worktree ordering), holding the exclusive Docker slot. SA135's phase E1 is re-scoped
+  to the PostgreSQL-lifecycle evidence it owns and **W3's *can start* moves from no to yes** — all
+  three tracks are now truly green at their queue heads, with SA167c (#21) still the sole
+  critical-path ticket. The previously raised D2 (running SA161/SA160 ahead of a stalled SA135) is
+  **withdrawn**: the idle window it was written to fill no longer exists. Counts move to **ten open
+  v88 ticket entries across nine open merge positions**, reconciled in `docs/technical/roadmap.md`,
+  `docs/index.md`, `docs/others/arch-audit.md`, `docs/technical/v88_ticket_context.md` (new SA170
+  concept section), and the executable ledger in
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` (`(9, 8)` → `(10, 9)`, plus SA170's
+  dependency assertion). **20 passed.**
+  **New live tech-audit finding.** **TA70 — `container-status-substring-match` (S4)** records defect
+  (3) against shipped CLI surface: `get_container_status` is public in
+  `quickscale_cli/src/`, has no production caller today, and its substring-over-`-a` matching is why
+  a stalled ticket stayed stalled. The tooling gap *"no test exercises the E2E harness's own failure
+  paths"* is recorded alongside it. Live inventory moves to **S3: 1 (TA67) · S4: 2 (TA68, TA70) ·
+  Total 3 open**, reconciled in the tech-audit summary table and the executable consumer.
+
+- **Roadmap cleanup and rebalance review (2026-08-27, twenty-second pass).** **No ticket closed
+  and no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
+  positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Every open task
+  already carries a track.
+  **A shared repository gate was found red on the integration branch and repaired in-pass.**
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` failed on `v88` HEAD `713bd4a7`.
+  Commit `7db1b633` gave SA167c a state header byte-identical to SA135's
+  (`**State (measured 2026-08-27): partial delivery merged into `v88`.**`), so the test's
+  non-greedy W3 anchor bound to the earlier SA167c block and its accepted-phase ledger assertions
+  failed. SA167c's header is restated as *Phase-A product slice merged*, making both anchors
+  unambiguous; **20 passed**. The roadmap's standing rule is widened accordingly: a roadmap edit
+  touching any W1/W2/W3 state block must re-run this test in the same change, and two state blocks
+  must never share a header.
+  **Merge-back audit — two of three tracks are merged back, one is not.** `wt-track2` (`80ca33b4`,
+  0 ahead / 1 behind) and `wt-track3` (`0aabb4a0`, 0 ahead / 4 behind) are both ancestors of `v88`:
+  merged, clean, idle. **`wt-track1` is nine commits ahead and seven behind** (tip `467714cb` over
+  product tip `1743871f`, clean) and holds **the release's only unmerged product delta**, SA167d's
+  A-D-accepted CLI wiring drain. The planner previously recorded W2 as *not yet clean* and W1 as
+  *eight commits ahead of `1743871f`*; both are corrected, and the roadmap now carries an explicit
+  per-worktree merge-back table instead of prose.
+  **Rebalance outcome: no track moves, one intra-lane reorder newly raised as a decision.** The
+  four standing moves are re-tested and rejected again for unchanged reasons (SA161/SA160 off W3 —
+  the exclusive PostgreSQL/Docker slot is W3-owned; SA166/SA164 off W2 — `scripts/gate_registry.json`
+  never crosses worktrees and SA164 has a hard content dependency on SA167c; SA160 ahead of SA161 —
+  the shared `sa90_emission_manifests.json` rebaseline ordering must not be split; SA165 off W1 —
+  buys nothing on the critical path). **Newly raised:** running SA161 (#19) then SA160 (#20) ahead
+  of the stalled SA135 (#15) *inside* W3. It is a lane reorder, not a track move, so it creates no
+  new conflict surface — the pair touches generator templates and the emission fixture, which
+  SA135+SA163 does not touch at all. It is raised as decision **D2** rather than applied, because
+  the standing rule forbids band-C displacing band-B; the rule was written for a *running* band-B
+  leg, and SA135 cannot run until D1 is answered. **Critical path unchanged:** `SA167c` (#21) on
+  W2, now clean, idle, and fully merged back.
+  **Two maintainer decisions are open, both gathered into a new *Open decisions* section.** **D1**
+  (SA135+SA163 phase-E1 evidence policy) blocks W3's *can start* and is decision-clearable, not
+  upstream-clearable. **D2** (W3 queue order while D1 is unanswered) converts W3 idle time into
+  band-C progress and touches nothing on the critical path. SA165's W1 ordering remains a closed
+  decision carried as a standing rule.
+  **Planner fluff removed.** Five repetitions of the *corrected after checkpoint attestation — not
+  independently graded* marker are collapsed into one statement in Track readiness; the closed
+  `sa142-no-cleanup_*` orphan-container inspection is dropped from the planner (it was already
+  closed and was never a ticket edge); stale commit identities `810eefd8`, `f6f3bbce`-as-HEAD, and
+  the *six commits present only on `v88`* checkpoint arithmetic are replaced by measured values.
+  **Audit closure narratives archived out of the live audits.** `docs/others/arch-audit.md` drops
+  five reconciliation entries that only restated closed history (prior red flags, the
+  SA156/SA157/SA158 closure reconciliation, SA158's pre-edit `make quality` discrepancy, SA168/SA159
+  closure, SA162/TA69 closure) and its Red-flags section now leads with *no red flag is open*.
+  `docs/others/tech-audit.md` drops six equivalent entries (TA63/quality baseline, SA150
+  local-wheelhouse, the two tooling gaps, the six adjudicated arch red-flag leads, TA65/SA159,
+  TA69/SA162) and replaces them with one pointer line. No live finding, count, watch item, or
+  severity changed: arch Finding 13 stays live under SA163, Findings 7/2/4 stay behind their growth
+  triggers, and the tech-audit inventory remains **S3: 1 (TA67) · S4: 1 (TA68) · Total 2 open**.
+
 - **Roadmap cleanup and rebalance review (2026-08-27, twentieth pass).** **No ticket closed and
   no track moved.** The queue stands at **nine open v88 ticket entries across eight open merge
   positions** (#15, #18, #19, #20, #21, #22, #24, #25) with zero checked entries. Every open task

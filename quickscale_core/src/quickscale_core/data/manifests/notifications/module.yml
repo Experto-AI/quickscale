@@ -67,9 +67,6 @@ config:
 dependencies:
   - django-anymail>=15.0,<16.0
 
-django_apps:
-  - quickscale_modules_notifications
-
 derivation:
   wiring_projections:
     - wiring_field: apps

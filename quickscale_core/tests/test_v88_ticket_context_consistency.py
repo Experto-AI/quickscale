@@ -270,7 +270,7 @@ def _assert_current_status_consumers(
         for metadata in v88.values()
         if metadata.merge_position is not None
     }
-    assert (len(v88), len(positions)) == (9, 8)
+    assert (len(v88), len(positions)) == (10, 9)
     assert "SA151" not in roadmap
     assert "SA142" not in roadmap
     assert "SA167a" not in roadmap
@@ -315,6 +315,7 @@ def _assert_current_status_consumers(
     assert roadmap["SA152"].dependencies == frozenset()
     assert v88["SA135"].dependencies == frozenset()
     assert v88["SA163"].dependencies == frozenset({"SA135"})
+    assert v88["SA170"].dependencies == frozenset({"SA135"})
     assert "use the same twelve databases" in roadmap_text
     assert re.search(
         r"own all twelve databases first.*?ownership must be restored",
@@ -359,9 +360,9 @@ def _assert_current_status_consumers(
         summary,
         re.MULTILINE,
     )
-    assert Counter(severities) == Counter({"S3": 1, "S4": 1})
+    assert Counter(severities) == Counter({"S3": 1, "S4": 2})
     assert re.search(
-        r"S1 \*\*0\*\*.*S2 \*\*0\*\*.*S3 \*\*1\*\*.*S4 \*\*1\*\*.*Total 2 open",
+        r"S1 \*\*0\*\*.*S2 \*\*0\*\*.*S3 \*\*1\*\*.*S4 \*\*2\*\*.*Total 3 open",
         summary,
         re.DOTALL,
     )

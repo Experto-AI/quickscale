@@ -88,9 +88,6 @@ dependencies:
   - boto3>=1.43.58
   - quickscale-core>=0.87.0,<0.88.0
 
-django_apps:
-  - quickscale_modules_backups
-
 derivation:
   wiring_projections:
     - wiring_field: apps
