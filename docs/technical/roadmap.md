@@ -73,12 +73,20 @@ regenerated migration baseline are settled tree state that open tickets build on
 
 ### Lane state
 
-`wt-track2` and `wt-track3` are ancestors of `v88` — merged, clean, and idle. **`wt-track1` holds
-the release's only unmerged product delta:** SA167d's A-E-accepted candidate at
-`E0_ACCEPTED_TIP` `bd2c291ba2d40494970464741ac51bfd45445a19`. E0 made no tracked edits and the
-candidate is committed; no unresolved sync conflict remains. C1's accepted-open ledger
-reconciliation is current, while independent review, terminal attestation, and merge-back
-remain pending. Every worktree must still sync before its next ticket action.
+**`wt-track1` holds the release's only unmerged product delta:** SA167d's retained accepted-open
+candidate at
+`8b20800d1e059d97893dcacfd7888850f212a269`, synchronized against
+`c50de1c191077cdd8b75da1f963f3d3c2bfe2410`. Phases A-E and the accepted-open ledger are
+settled; convergence corrected the auth-migration recovery instructions and removed three stale
+quality exemptions. Closeout remains partial: V0 stopped when `make check` exceeded the 120-second
+host limit, C2/V1 were not reached, and terminal attestation returned no grade because its
+read-only surface did not receive the complete historical patch or independent clean-byte proof.
+The earlier accepted-open phrase “independent review, terminal attestation, and merge-back are
+pending” is therefore historical, not the current checkpoint: review ran, while a successful
+terminal attestation and merge-back remain pending. `v88` has since advanced to
+`a2dfdd9fb0f98145d6b16292df684f8cfb248363`, so W1 must sync again before resuming. Every
+worktree must still sync before its next ticket action.
+***corrected after checkpoint attestation — not independently graded***
 
 Ahead/behind counts are not transcribed here because they go stale with every commit to this file.
 Measure them instead:
@@ -100,9 +108,11 @@ serially around it. No ticket move relieves that; only scheduling does.
   that shortens the release.**
 - **W3 — resume SA135 + SA163 (#15) at the re-scoped phase E1.** Do not redo C or D, and do not
   attempt the two E2E Docker failures — they are SA170's.
-- **W1 — reconcile SA167d's accepted-open A-E ledger (#18)**, then complete independent review,
-  terminal attestation, and exact-tip merge-back without closing the ticket early.
-  This is the release's only unmerged delta; schedule its `make test` outside W3's window.
+- **W1 — resume SA167d (#18) from its recorded partial checkpoint.** Sync current `v88`, rerun the
+  complete V0 campaign with a sufficient foreground timeout, then reach C2/V1, convergence, one
+  terminal attestation supplied with the complete exact patch, and exact-tip merge-back. Do not
+  close the ticket or release SA165 before that sequence is green. This is the release's only
+  unmerged delta; schedule its `make test` outside W3's window.
 
 W1 and W3 remain startable. W2 is blocked on one maintainer decision:
 
@@ -168,11 +178,11 @@ into its worktree, resolves there, reruns its own verification, then merges its 
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16, #17, #23, and #26 are **retired and not
 reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Gaps carry no meaning.
 
-#15, #18, and #21 are the per-lane heads: #21 has a merged Phase-A slice at `f6f3bbce` with A
-unaccepted and B-F outstanding; #18 has phases A-E accepted at E0 tip
-`bd2c291ba2d40494970464741ac51bfd45445a19` and remains open pending independent review,
-terminal attestation, and merge-back; #15 has a merged partial with C/D accepted and E
-outstanding.
+For W1, #18 has phases A-E accepted at E0 tip
+`bd2c291ba2d40494970464741ac51bfd45445a19` and a retained reviewed candidate at
+`8b20800d1e059d97893dcacfd7888850f212a269`, but remains open because V0 is incomplete, C2/V1
+are outstanding, terminal attestation produced no grade, and nothing merged back.
+***corrected after checkpoint attestation — not independently graded***
 
 Most "Merges after" edges are lane ordering — a queue position, clearable only by the upstream work
 or by a maintainer reordering the lane. Two are **hard content dependencies** that no reorder
@@ -354,31 +364,59 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note
   in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist)
   is retired once the deviation it names is gone.
-  **State (measured 2026-08-28): phases A-E accepted at E0_ACCEPTED_TIP**
-  `bd2c291ba2d40494970464741ac51bfd45445a19`; the candidate is clean and committed. E0 made no
-  tracked edits. The focused wiring-boundary command passed **282 tests**; `make lint` and
-  `make typecheck` exited 0; `make test` exited 0 with **2,880 Core passed / 1 skipped** at
-  **90.43%** and **2,098 CLI passed** at **91.53%**; all module integration suites passed with
-  documented skips/warnings and **94.54% overall mean coverage**; `make check` exited 0 with
-  **1,318 passed** and zero unsuppressed findings; and `make quality` exited 0 with the baseline
-  loaded, zero warning/critical/total regressions, monotonicity passing, and waiver count 0.
-  The first two `make check` attempts hit host time limits before an unchanged third attempt
-  passed. No module pass total is asserted because E0 did not return one. Caller parity passed
-  across `module_config`, `module_commands` embed/update/apply/remove, `regenerate_managed_wiring`,
-  module-owned adapters, and the protected `entry_point.py` seam.
-  The starting-sync conflict is settled in the committed candidate; no unresolved sync conflict
-  remains. C1 is the current accepted-open ledger reconciliation. **This is not a merge-back-only
-  ticket.** SA167d remains open at active merge position **#18**, SA165 remains dependent, and
-  independent review, terminal attestation, and merge-back are pending. This checkpoint claims
-  neither convergence nor completion.
-  **Remaining plan.** (1) Complete C1's same-fact ledger reconciliation across `CHANGELOG.md`,
-  `docs/index.md`, `docs/others/arch-audit.md`, `docs/technical/{decisions,implementation_contract,module-extension,v88_ticket_context}.md`,
-  and `quickscale_core/tests/test_v88_ticket_context_consistency.py`, plus its executable
-  consistency test, without archiving SA167d early. (2) Sync current `v88`, resolve the standing
-  closeout conflict surface, and run the complete frozen-candidate campaign. (3) Independently
-  review that candidate's complete authoritative diff. (4) Only then archive completion, remove
-  this entry, retire merge position #18, release SA165, and merge the reviewed tip. Report final
-  changed-line and lines-per-hour metrics from the `2026-08-27 18:52:34 +0200` measurement start.
+  **State (measured 2026-08-28): phases A-E accepted at E0_ACCEPTED_TIP; closeout partial.**
+  E0 tip `bd2c291ba2d40494970464741ac51bfd45445a19` is retained inside
+  `8b20800d1e059d97893dcacfd7888850f212a269`, the clean committed product tip immediately before
+  this separate roadmap-checkpoint delta. E0 made no tracked edits. The supplied E0 record establishes
+  **282 focused tests passed**, `make lint`, `make typecheck`, `make test`, `make check`, and
+  `make quality` at exit 0, with `make check` reporting **1,318 passed**. More precise package,
+  coverage, waiver, and caller-parity details are intentionally not promoted into this checkpoint.
+  ***corrected after checkpoint attestation — not independently graded***
+  **Completed in this attempt.** SR0, E0, C1, and SR1 are accepted. The final sync was against
+  `c50de1c191077cdd8b75da1f963f3d3c2bfe2410`. Independent convergence then corrected the
+  ineffective auth-migration flush guidance, made the fresh-database recovery path operational,
+  removed three stale quality-baseline identities, and validated the focused auth and wiring suites,
+  the ledger suite, lint, typecheck, full tests, and quality. Those corrections are committed in
+  `8b20800d1e059d97893dcacfd7888850f212a269`.
+  **Pending.** Phase coverage is 7 planned (`SR0`, `E0`, `C1`, `SR1`, `V0`, `C2`, `V1`), 5
+  dispatched, 4 accepted, and 3 outstanding. V0 passed the 21-test consistency suite, the 282-test
+  focused suite, lint, typecheck, and `make test` (**2,881 Core passed / 1 skipped**, **2,098 CLI
+  passed**, **94.54% overall mean coverage**), then stopped when `make check` was terminated by the
+  120-second execution limit before returning an exit code. Its following `make quality` was not
+  run. C2 and V1 were not dispatched. The later convergence-owned `make quality` success does not
+  retroactively accept V0.
+  **Blocking.** Terminal attestation was attempted once and returned no grade: its read-only surface
+  could resolve the exact tip but could not inspect the complete
+  `c50de1c191077cdd8b75da1f963f3d3c2bfe2410...8b20800d1e059d97893dcacfd7888850f212a269`
+  patch or independently exclude uncommitted-byte drift. This was a review-input failure, not an
+  attestation finding. No merge is authorized. `v88` has since advanced to
+  `a2dfdd9fb0f98145d6b16292df684f8cfb248363`, which also requires a fresh sync and validation.
+  **Decisions needed:** none. **This is not a merge-back-only ticket.** SA167d remains open at
+  active merge position **#18**, and SA165 remains dependent. The historical accepted-open phrase
+  “independent review, terminal attestation, and merge-back are pending” is retained here only for
+  executable checkpoint compatibility; current truth is that convergence review ran, terminal
+  attestation is ungraded, and merge-back is pending.
+  **Checkpoint metrics (ending 2026-08-28 11:28:19 +0200).**
+  `8b20800d1e059d97893dcacfd7888850f212a269` is the pre-checkpoint committed product tip; this
+  roadmap checkpoint is a separate working delta layered over it. The exact post-correction state,
+  measured against frozen base `c50de1c191077cdd8b75da1f963f3d3c2bfe2410`, spans
+  **30 files, 1,053 insertions, 2,231 deletions, and 3,284 changed lines**. From the roadmap start at
+  `2026-08-27 18:52:34 +0200`, elapsed time is **16 h 35 m 45 s** at **197.88 changed lines/hour**;
+  from the session start at `2026-08-28 09:07:50 +0200`, it is **2 h 20 m 29 s** at **1,402.59**.
+  ***corrected after checkpoint attestation — not independently graded***
+  **Remaining plan (start cold from this record).** (1) Reconfirm a clean W1 tip and sync current
+  `v88` into W1, preserving the retained candidate and this checkpoint. (2) Rerun V0's complete
+  ordered campaign from its first command with enough time for `make check`, then run `make quality`;
+  do not accept a green prefix. (3) Only after green V0, prepare C2's archive/removal, retired-#18,
+  9-entry/8-position, and SA165-release bytes as a provisional closeout candidate; operationally
+  keep SA167d open, #18 active, and SA165 dependent until the exact tip merges. Then execute V1's
+  complete frozen-candidate campaign. (4) Run serial convergence over the complete
+  product-and-closeout delta, then one terminal attestation supplied with the complete exact
+  base-to-tip patch and clean-byte binding. (5) Merge only that attested exact tip into a
+  still-matching clean `v88`; only that merge makes C2's retirement and release effective. Report
+  final changed-line and lines-per-hour metrics from the `2026-08-27 18:52:34 +0200` measurement
+  start.
+  ***corrected after checkpoint attestation — not independently graded***
   **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`, plus the ledger-reconciliation files listed above.
 
 - [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Band B · Tier 2 · W3 · merge #15 · deps: none · PostgreSQL + Docker slot · carries SA163`
