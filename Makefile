@@ -70,7 +70,7 @@
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
         sa117-capture sa117-verify sa117-authorize sa117-rollback \
         sa117-apply sa117-check-origin sa117-check-containers \
-        help
+        help help-release
 
 # Default Python command (uses root Poetry environment)
 PYTHON ?= poetry run python
@@ -246,12 +246,23 @@ help:
 	@echo "  make check-gate-parity            - SA122a: verify declared gates match every execution context (exit 0 = parity, 1 = JSONL diffs)"
 	@echo "  make check-ci-gate-generation     - SA122b: verify registry-bound hosted CI jobs are generated and current"
 	@echo ""
-	@$(PYTHON) scripts/check_sa117_scope.py --render-make-help --profile make
+	@echo "Release-only tooling (maintainers):"
+	@echo "  make help-release         - SA117 scope, publication, and module-apply gates"
 	@echo ""
 	@echo "Version Management:"
 	@echo "  make version-check        - Verify VERSION matches all pyproject.toml files"
 	@echo "  make version-update       - Update all versioned files from VERSION"
 	@echo "  make bump-version X.Y.Z   - Set new version and update all files"
+
+# Maintainer-only help.  The SA117 scope/publication/apply targets are run by hand
+# on release day and by nothing else -- no CI workflow, no gate_registry.json entry,
+# and their scripts' only callers are their own tests.  Keeping eleven of them in
+# `make help` gave release ceremony the same visual weight as `make test` for a
+# developer reading the list daily, so they live here instead.  The block itself is
+# still rendered from scripts/sa117_scope.json, which SA124 made the strict authority
+# over the help facts; Make owns placement only, and this changes placement alone.
+help-release:
+	@$(PYTHON) scripts/check_sa117_scope.py --render-make-help --profile make
 
 # --- Setup ---
 
@@ -918,6 +929,14 @@ security-negative-probes:
 # and kernel-observed Make recipe ownership all agree.  The EXIT trap is armed
 # before allocating the sentinel so
 # every allocation path cleans up, including signal exits.
+# Runs every scripts/test_*.py conformance suite, cache-free and without product coverage.
+# Parallelised with `-n auto --dist loadfile` (measured 2026-08-28, 24 cores):
+#   serial                  299 s -> 5 failed, 1313 passed
+#   -n auto --dist loadfile  94 s -> 5 failed, 1313 passed  (identical outcomes)
+#   -n auto (default loadscan) 34 s -> 20 failed (15 spurious)  <- do NOT use
+# loadfile keeps every test in a file on one worker, so the intra-file shared state in
+# test_quality_baseline_monotonicity.py cannot race.  Collection and outcomes are
+# unchanged; only wall time moves.  Retain --dist loadfile if worker count is tuned.
 check-gate-suites:
 	@set -e; \
 	check_gate_recipe_identity=quickscale-check-gate-suites-v1; \
@@ -999,7 +1018,7 @@ check-gate-suites:
 	printf '%s\n%s\n' "$$check_gate_token" "$$$$" > "$$check_gate_sentinel"; \
 	export QUICKSCALE_CHECK_GATE_SUITES_TOKEN="$$check_gate_token"; \
 	export QUICKSCALE_CHECK_GATE_SUITES_SENTINEL="$$check_gate_sentinel"; \
-	$(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
+	$(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q -n auto --dist loadfile
 
 # The isolation runner owns its full behavior and prerequisites.  Keep this
 # target as a thin Make delegation; hosted CI uses the same caller.
