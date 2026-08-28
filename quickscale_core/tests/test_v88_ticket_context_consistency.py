@@ -322,8 +322,10 @@ def _assert_current_status_consumers(
         roadmap_text,
         re.DOTALL,
     )
-    assert "does not extend the one-leg critical path" in roadmap_text
-    assert "against the three-leg W2 spine" in roadmap_text
+    # Structural facts only.  Do not add assertions that pin the roadmap's narrative
+    # prose: they force the planner to carry sentences it would otherwise retire, which
+    # is how this document previously grew past 850 lines.
+    assert "W2 sets the release date" in roadmap_text
 
     current_handoff = re.search(
         r"\*\*State \(measured 2026-08-27\): partial delivery merged into `v88`\.\*\*"
