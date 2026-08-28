@@ -4,6 +4,34 @@
 
 ## v88 development — 2026-08-21
 
+- **SA117's maintainer targets moved out of `make help` into `make help-release` (2026-08-28).**
+  Eleven `sa117-*` targets rendered inline in the help a developer reads daily, at the same visual
+  weight as `make test`. They are release-day tooling: **no CI workflow and no `gate_registry.json`
+  entry invokes any of them**, `make publish-modules-outdated` is already marked
+  *[DISABLED SA117 Phase 4]*, and the only callers of the three underlying scripts are their own
+  tests. `make help` now carries one pointer line; `make help-release` renders the block.
+  **Placement only — the authority is untouched.** SA124 made `scripts/sa117_scope.json` the strict
+  authority over the help facts, with Make as one of six declared consumers and an AST probe
+  rejecting a seventh. The block is still rendered by
+  `check_sa117_scope.py --render-make-help`; only the Make target it hangs from changed, so no
+  consumer was added and no fact was transcribed.
+  **The tooling itself is deliberately kept, not retired.** It guards publishing module split
+  branches with force-with-lease — an irreversible operation — and SA117 is a completed ten-phase
+  project, not abandoned scaffolding.
+  **A test-partitioning proposal was evaluated and rejected on measurement.** Moving SA117's
+  product-decoupled suites (`test_verify_sa117_publication.py` 34 tests/1 s,
+  `test_verify_public_module_apply.py` 70 tests/44 s — neither imports any product module) out of
+  `check-gate-suites` would have cut 15% of that gate's *serial* 299 s. After the `--dist loadfile`
+  parallelisation the gate is bounded by its slowest file, and at 44 s the largest of these sits well
+  under the 94 s wall time, so the remaining gain did not justify a ticket against a registered gate
+  carrying SA124's consumer guard. **`test_check_sa117_scope.py` (86 tests) stays in the default gate
+  regardless:** it reads `_authoritative_module_names` and imports `quickscale_core.manifest.loader`,
+  making it a live regression net over the module-discovery contract SA173 is changing.
+  Verification: `make help-release` renders all eleven; `make help` shows one pointer;
+  `make sa117-emit` and `make sa117-check PATHS="Makefile"` exit 0;
+  `test_check_sa117_scope.py` 86 passed; `make check-gate-parity` exit 0; `check-gate-suites`
+  unchanged at 5 failed / 1313 passed in 94 s — the same pre-existing SA173 failures, nothing new.
+
 - **`make check`'s cost profiled; `check-gate-suites` parallelised 3.2x (2026-08-28).**
   A prior planning pass recorded that *"the dominant cost is `lint-frontend`"*. **Measured, that is
   wrong.** Warm, on 24 cores, `make lint-frontend` is **13.89 s** — it already caches `node_modules`

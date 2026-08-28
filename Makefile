@@ -70,7 +70,7 @@
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
         sa117-capture sa117-verify sa117-authorize sa117-rollback \
         sa117-apply sa117-check-origin sa117-check-containers \
-        help
+        help help-release
 
 # Default Python command (uses root Poetry environment)
 PYTHON ?= poetry run python
@@ -246,12 +246,23 @@ help:
 	@echo "  make check-gate-parity            - SA122a: verify declared gates match every execution context (exit 0 = parity, 1 = JSONL diffs)"
 	@echo "  make check-ci-gate-generation     - SA122b: verify registry-bound hosted CI jobs are generated and current"
 	@echo ""
-	@$(PYTHON) scripts/check_sa117_scope.py --render-make-help --profile make
+	@echo "Release-only tooling (maintainers):"
+	@echo "  make help-release         - SA117 scope, publication, and module-apply gates"
 	@echo ""
 	@echo "Version Management:"
 	@echo "  make version-check        - Verify VERSION matches all pyproject.toml files"
 	@echo "  make version-update       - Update all versioned files from VERSION"
 	@echo "  make bump-version X.Y.Z   - Set new version and update all files"
+
+# Maintainer-only help.  The SA117 scope/publication/apply targets are run by hand
+# on release day and by nothing else -- no CI workflow, no gate_registry.json entry,
+# and their scripts' only callers are their own tests.  Keeping eleven of them in
+# `make help` gave release ceremony the same visual weight as `make test` for a
+# developer reading the list daily, so they live here instead.  The block itself is
+# still rendered from scripts/sa117_scope.json, which SA124 made the strict authority
+# over the help facts; Make owns placement only, and this changes placement alone.
+help-release:
+	@$(PYTHON) scripts/check_sa117_scope.py --render-make-help --profile make
 
 # --- Setup ---
 
