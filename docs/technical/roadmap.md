@@ -570,6 +570,15 @@ Conceptual background, mental models, and implementation notes for **every** tic
   dispatched but is not accepted, and F/G were not reached. Keep this item unchecked under the
   open-work-only policy. In the latest resumption, E0 accepted the unchanged external-state
   baseline; E1 returned partial with no file change because no deterministic cause reproduced.
+  **Latest attempt (2026-08-28): implementation did not start.** The task prerequisites and
+  open-decision gate were clear, but the mandatory reviewed plan was not executable: it required a
+  disinterested review inside G-sync/G-validate and then resumed authored documentation mutation in
+  G-closeout/G-final. The strictly forward review pipeline cannot resume implementation after
+  terminal review, so no E1 command ran and no product or policy file changed.
+  ***corrected after checkpoint attestation — not independently graded***
+  **Blocking:** replace that plan with one that keeps every implementation and authored closeout
+  mutation before serial convergence and the single terminal attestation. Preserve the five
+  remaining phase ids and their scope below; do not use the invalid intermediate-review ordering.
   **Completed in the merged partial:** phases P/A/B and C/D — the hermetic Docker-unavailable
   probe, the strict no-host-server window, the single four-caller provisioning authority, and the
   `203fcd61` lifecycle/module-E2E remediation. The evidence is archived in
@@ -614,6 +623,9 @@ Conceptual background, mental models, and implementation notes for **every** tic
   [Shared conflict surfaces](#shared-conflict-surfaces) — merge order #15 before #22 means SA165
   starts from the settled SA163 bytes, and the sync-before-merge-back procedure covers it.
   **Remaining plan (all phases serial; P/A/B/C/D and accepted E0 are not repeated):**
+  Before dispatch, obtain one complete reviewed plan whose stage order is E1, E2, F,
+  G-sync/G-validate, G-closeout/G-final, serial convergence, then one terminal attestation. The plan
+  must not place a final-review dispatch between G-sync/G-validate and G-closeout/G-final.
   1. **E1 — PostgreSQL-lifecycle evidence only:** accept E1 on the provisioning surface this
      ticket owns — `make test-integration` on a host with no PostgreSQL running, the
      `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract, the hermetic
@@ -630,11 +642,13 @@ Conceptual background, mental models, and implementation notes for **every** tic
   4. **G-sync / G-validate:** sync current `v88` in W3, preserve concurrent closeout entries, and run
      the complete focused, provisioning, parity, lint, type, check, integration, BYPASSRLS,
      isolation, test, quality, serial-E2E, and CI-E2E campaign on one frozen candidate.
-  5. **G-closeout / G-final:** only after the complete campaign and independent convergence are
-     green, archive and remove SA135/SA163 from this open-work-only roadmap, retire Finding 13,
-     rerun the final frozen-tip campaign, terminally attest, and merge that exact tip. Report final
+  5. **G-closeout / G-final:** after the complete G-sync/G-validate campaign is green, archive and
+     remove SA135/SA163 from this open-work-only roadmap, retire Finding 13, and rerun the final
+     frozen-tip campaign. Then run serial convergence over the complete product-and-closeout delta,
+     followed by exactly one terminal attestation, and merge only that exact attested tip. Report final
      changed lines and elapsed-time/lines-per-hour metrics from the original
      `2026-08-26 16:07:35 +0200` measurement start.
+     ***corrected after checkpoint attestation — not independently graded***
 
 ---
 
