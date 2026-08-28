@@ -258,13 +258,14 @@ than adding any.
 
 ### Lane state
 
-**Verified 2026-08-28.** `wt-track2` and `wt-track3` are ancestors of `v88` — merged, clean, and
-idle, each 0 ahead / 3 behind. **`wt-track1` holds the release's only unmerged product delta:**
-SA167d's **A-E-accepted** work, clean at `f392641c`, 15 ahead / 3 behind, with the accepted E0 tip
-and convergence corrections retained at `8b20800d`. All three worktrees are clean. Every worktree
-lags `v88` and must sync before its ticket starts; W1's sync will conflict in
-`docs/technical/roadmap.md`, which is expected — resolve in the worktree keeping this file's
-structure, and re-run the consistency test in the same change.
+**Verified 2026-08-28.** `wt-track3` is an ancestor of `v88`, merged and idle. `wt-track2` now
+carries SA173's partial product commit `e0730ae9`; this handoff merges that retained product delta
+and its truthful checkpoint to `v88`, but SA173 remains open. **`wt-track1` holds SA167d's separate
+unmerged product delta:** its **A-E-accepted** work is clean at `f392641c`, 15 ahead / 3 behind, with
+the accepted E0 tip and convergence corrections retained at `8b20800d`. Measure current ahead/behind
+state rather than relying on these historical counts. W1's next sync may conflict in
+`docs/technical/roadmap.md`; resolve in the worktree keeping this file's structure, and re-run the
+consistency test in the same change.
 
 Ahead/behind counts are not transcribed here because they go stale with every commit to this file.
 Measure them instead:
@@ -281,14 +282,13 @@ move reduces the number of tickets that ever contend for it.
 
 ### Next action per lane
 
-- **W2 — start SA173 (#30). Band A: this is the only work that restores a green `v88`.** D3 is
-  settled; the contract is written in
-  [decisions.md → Module Presence States](decisions.md#module-presence-states). Implement the
-  three-state discovery contract, then resume SA167c (#21) — do not redo SA167c's merged
-  manifest-retirement bytes, and do not edit its two failing caller tests directly: they are
-  answered by SA173's contract, and SA167c's Phase-A chain is rerun unchanged afterwards.
-  **It shortens the release and it unblocks the other two lanes' merges.** Run SA173 with **no**
-  exclusion — its acceptance is precisely that those two tests stop failing.
+- **W2 — resume SA173 (#30) from partial product commit `e0730ae9`; do not redo the implemented
+  contract.** D3's three-state discovery, strict loader/adapter policy, CLI consumption, and focused
+  regressions are retained. Finish the open validation, placeholder-consistency, independent-review,
+  and closeout work recorded in the ticket block below. SA167c (#21) remains blocked until SA173 is
+  fully accepted; do not redo SA167c's merged manifest-retirement bytes. Run SA173 with **no**
+  exclusion — its acceptance is precisely that the two original caller failures are gone and the
+  complete ordered campaign returns evidence.
 - **W3 — resume SA135 (#15) at phase E1, under the known-red protocol.** Do not redo C or D, and do
   not attempt the two E2E Docker failures — they are SA170's. SA163's work is merged and archived.
   SA135's remaining scope is now **the PostgreSQL-lifecycle evidence and the
@@ -312,15 +312,15 @@ merge* = merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W2** | SA173 (#30) | **yes** — contract written, nothing to decide | **yes** — self-contained in two core packages plus one CLI file | **yes** — merges after nothing | **yes** — band A; shortens the release *and* unblocks both other lanes |
+| **W2** | SA173 (#30, partial) | **yes** — resume from `e0730ae9`; no policy decision remains | **not yet** — broad CLI validation has no verdict, one advisory consistency edge remains, and closeout was not reached | **no as a completed ticket** — this requested handoff merges a recorded partial only | **yes** — band A remains open and still gates both other lanes |
 | **W1** | SA167d (#18) | **yes** — under the known-red protocol | **provisionally** — its own work can reach green, but final acceptance needs a green `v88` | **no — gated on SA173** | no — and it is the lane that absorbed this pass's two new positions |
 | **W3** | SA135 (#15) | **yes** — under the known-red protocol; the plan blocker is cleared | **provisionally** — same gate | **no — gated on SA173** | no |
 
-**All three lanes can start today. Only W2 can merge.** W1 and W3 run to provisional green under the
-known-red protocol and then wait for SA173, because `make check` is red on `v88` for two tests
-neither lane owns. This is a change from the prior pass, which recorded all three lanes as able to
-finish and merge independently; that was measured against the tickets rather than against the
-branch. No open maintainer decision remains anywhere in this plan.
+**All three lanes can start today, but no ticket can claim a completion merge until SA173 finishes.**
+This handoff merges W2's recorded partial product state; it does not close SA173, expire the known-red
+protocol, or unblock W1/W3 completion merges. No open maintainer policy decision remains anywhere in
+this plan; the W2 remainder is validation, the required advisory consistency correction, and the
+normal closeout campaign. ***corrected after checkpoint attestation — not independently graded***
 
 Downstream positions are lane-ordering only and clear by the upstream work or by a maintainer
 reordering the lane, with four exceptions that no reorder clears: **SA167c after SA173**,
@@ -459,8 +459,8 @@ Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16,
 reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Gaps carry no meaning. Position
 #15 was shared with SA163 until that ticket closed on 2026-08-28; it now carries SA135 alone.
 
-The per-lane heads are **#30 (W2, not started), #18 (W1, partial), and #15 (W3, partial)**. #21 is
-no longer a lane head — it now merges after #30. Of the partials: #21 has a merged Phase-A slice at `f6f3bbce`
+The per-lane heads are **#30 (W2, partial at product commit `e0730ae9`), #18 (W1, partial), and #15
+(W3, partial)**. #21 is no longer a lane head — it now merges after #30. Of the partials: #21 has a merged Phase-A slice at `f6f3bbce`
 with A unaccepted pending SA173's contract and B-F outstanding; #18 is a stalled phase-E acceptance on `wt-track1` product
 tip `1743871f`; #15 has a merged partial with C/D accepted and E outstanding after SA163's share of it
 closed.
@@ -567,6 +567,65 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   decision D3 is written in
   [decisions.md → Module Presence States](decisions.md#module-presence-states); this ticket
   implements it.
+  **State (recorded 2026-08-28): partial product delivery retained on `wt-track2` at commit
+  `e0730ae9`; SA173 remains open.** The product commit contains one correction applied after terminal
+  attestation, so that correction is **not independently graded**.
+  **Completed:**
+  - `core-presence-contract` is accepted: discovery reports ABSENT / ACTIVE / INCOMPLETE, catalog
+    metadata declares the `teams` placeholder, one shared subset validator owns the production
+    diagnostic, the release inventory remains twelve, and direct plus broader core callers passed.
+  - `core-consumer-policy` is accepted: loader and adapter refresh enforce typed presence, legitimate
+    subsets remain valid, failure is atomic, and the missing-manifest negative proof restored exact
+    bytes.
+  - The product work for `cli-and-caller-parity` is present: CLI/apply/status message classification
+    is removed, strict callers and focused script consumers pass, lifecycle fixtures now embed
+    source-valid manifests, and the two original contradictory tests and prose agree with fail-hard
+    INCOMPLETE behavior. The phase itself is not accepted because its handback carried two blockers
+    and therefore failed the phase-adjudication contract.
+  - Independent convergence reviewed the complete product delta in two passes and closed its only
+    blocking lifecycle-fixture finding. Terminal review then found an all-INCOMPLETE project could
+    select maintainer source metadata; a once-only remediation corrected default and explicit
+    selection and passed 43 focused wiring tests. That correction stands ungraded by an independent
+    successor review.
+  **Pending:**
+  - `cli-and-caller-parity` remains outstanding in the phase ledger; do not infer acceptance from the
+    later convergence corrections. Re-establish its complete validation evidence on the retained
+    product commit rather than reimplementing the contract.
+  - `closeout-and-integration` was never dispatched. The full ordered campaign, cross-lane caller
+    reruns, same-fact updates to `CHANGELOG.md`, `docs/technical/implementation_contract.md`,
+    `docs/technical/v88_ticket_context.md`, and `docs/index.md`, ticket archival/removal, and final
+    frozen-candidate review still remain. ***corrected after checkpoint attestation — not
+    independently graded***
+  **Blocking / open findings:**
+  - `poetry run pytest quickscale_cli/tests -q -o addopts= --no-cov` returned no verdict at 120000 ms
+    and again at 360000 ms, both near 55%. It is neither green nor red. Diagnose the apparent stall
+    or run it detached with a budget above 360000 ms before claiming broad CLI merge readiness.
+  - Adapter refresh still silently excludes an ACTIVE catalog-declared placeholder while discovery
+    projections reject that same state. Close it by making ACTIVE placeholder state fail atomically
+    with an actionable pre-import error while preserving the intentional declared-INCOMPLETE
+    placeholder behavior before ticket closure; settled D3 does not authorize accepting this
+    deviation. ***corrected after checkpoint attestation — not independently graded***
+  - The complete `make test`, `make check`, and `make quality` acceptance campaign, the full scripts
+    suite, and the final cross-lane caller reruns were not reached. Focused, Ruff, type, manifest-sync,
+    and gate-parity evidence is green but does not substitute for those gates.
+  **Decisions needed:** none. D3 and placeholder declaration policy are settled; the remaining inputs
+  are execution budget, independent review, and acceptance evidence.
+  **Remaining plan (serial; start from `e0730ae9` and do not redo accepted product work):**
+  1. Independently review the post-attestation all-INCOMPLETE wiring correction and resolve the
+     ACTIVE-placeholder consistency edge above; settled D3 does not authorize accepting it.
+     ***corrected after checkpoint attestation — not independently graded***
+  2. Run the ticket's ordered focused command, the no-E2E combined CLI/core command, the complete
+     scripts suite, manifest sync, gate parity, lint, and typecheck. Run long gates detached, outside
+     W3's database window, preserving a terminal exit artifact rather than a foreground timeout.
+  3. Run `make test`, `make check`, and `make quality` on one frozen candidate, then rerun the W1
+     lifecycle and W3 provisioning caller checks. No `PYTEST_ADDOPTS`, deselection, or waiver is
+     authorized.
+  4. Only after every required result is green, update and reconcile the changelog,
+     `docs/technical/implementation_contract.md`, ticket context, docs index, roadmap
+     queue/counts/dependencies, and consistency test; then archive/remove SA173 from this
+     open-work-only roadmap. ***corrected after checkpoint attestation — not independently graded***
+  5. Materialize the complete base-to-tip patch, perform serial convergence and one terminal
+     attestation over the final candidate, and merge only that exact accepted tip.
   **Measured starting state (2026-08-28), reproduce before changing anything:**
   - `poetry run pytest "quickscale_cli/tests/test_module_wiring_manager_manifest.py::TestRegenerateManagedWiringSkipManifestNotFound" -q -o addopts= --no-cov`
     — **2 failed**, at `:767` and `:796`; both expect `success is False` with `inventory count
