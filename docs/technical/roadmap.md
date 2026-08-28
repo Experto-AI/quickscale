@@ -91,7 +91,8 @@ W2 (gates & declared wiring)   ★ CRITICAL PATH — 3 open legs, 1 on the path 
   django_   trail      items
   apps+gate
   (retirement bytes merged;
-   A acceptance + B-F open)
+   A acceptance retried:
+   2 caller tests red; B-F open)
     #21       #24       #25
 
 W1 (module-wiring migration + watch items)   2 open legs, no cross-worktree dependency
@@ -217,14 +218,15 @@ independently graded; the affected claims are marked once here rather than repea
 | Track | Next ticket | Can start | Can finish on its own track | Can merge in order | Verdict |
 |---|---|---|---|---|---|
 | **W1** | SA167d (#18) — A-D accepted, **E outstanding** | **yes** — re-running phase E is executable today; no decision, no upstream ticket. Contends with W3 for the shared cluster | **yes** — phase E, the ledger reconciliation, and the merge-back are all W1-owned | **yes** — #18 is the W1 queue head with no upstream ticket | **truly green — off the critical path** |
-| **W2** | SA167c (#21) — Phase-A slice merged, **A unaccepted; B-F outstanding** | **yes** — worktree is clean, idle, and fully merged back; resume acceptance on the merged bytes. No decision or upstream ticket blocks it | **yes** — remaining gate, proof, closeout, and frozen-candidate work is W2-owned | **yes** — #21 remains the W2 queue head | **truly green — on the critical path** |
+| **W2** | SA167c (#21) — Phase-A slice merged, **A unaccepted; B-F outstanding** | **no** — corrected acceptance exposed a pre-existing caller-test/runtime contract mismatch: two tests expect embedded inventory drift to fail while the bundled twelve-module fallback succeeds. D3 below must settle which contract is authoritative | **yes, after D3** — the correction, remaining gate, proof, closeout, and frozen-candidate work are W2-owned | **yes** — #21 remains the W2 queue head | **blocked on one contract decision — on the critical path** |
 | **W3** | SA135 + SA163 (#15) — C/D accepted, E outstanding | **yes** — E1 is re-scoped to the PostgreSQL-lifecycle evidence SA135 owns, which is deterministic today. The two E2E Docker failures that stalled it are re-ticketed as SA170 (#27); no decision or upstream ticket blocks #15 | **yes** — the remaining E/F/G work is W3-owned; the exclusive slot remains authorized when needed | **yes** — #15 is the W3 queue head | **truly green — off the critical path; worktree merged, clean, and idle** |
 | **W3 (queue tail)** | SA170 (#27) — newly opened | **yes** — the root cause is identified and its proofs are pure unit tests plus one labelled-resource assertion; none needs the cluster | **yes** — every file it touches is W3-owned CLI test/util and harness code | **no** — merges after SA135 (#15) | **blocked on merge order only** |
 
-**All three tracks are now truly green at their queue heads.** W3's block is cleared by this pass:
-SA135's phase E1 was stalled on an acceptance criterion that could not be satisfied, not on missing
-work — see [Open decisions](#open-decisions). Only **SA167c (#21)**
-is on the critical path — it is the one ticket whose progress moves the release date. SA167d and
+**W1 and W3 remain truly green at their queue heads; W2 is blocked on D3.** W3's earlier block is
+cleared: SA135's phase E1 was stalled on an acceptance criterion that could not be satisfied, not on
+missing work. **SA167c (#21)** remains the critical path and the one ticket whose progress moves the
+release date, but its corrected Phase-A acceptance exposed a caller-test/runtime contract mismatch
+that the verification-only phase was not authorized to change. SA167d and
 SA135+SA163 are real band-B work but are **filler with respect to the release date**: finishing
 either does not shorten the chain. W1 is additionally the only track with an unmerged product
 delta, so its merge-back is the one outstanding integration risk. SA170 (#27) is band-B work behind
@@ -239,7 +241,7 @@ is ambiguous between "a maintainer decision clears it" and "only the upstream wo
 
 | Ticket | Blocking ticket | Edge kind | What clears it |
 |---|---|---|---|
-| SA167c (#21) | — | **queue head; Phase-A slice merged** | No dependency or decision blocks it. Acceptance must first use a focused command that does not inherit whole-package coverage, with the restricted PostgreSQL role; then continue B-F. |
+| SA167c (#21) | D3 below | **queue head; Phase-A slice merged; acceptance retry red** | Settle whether the bundled twelve-module fallback or the two failing embedded-inventory-drift expectations own the contract. Then correct the losing surface under fresh plan authority, rerun A from the beginning, and continue B-F only after A is accepted. |
 | SA167d (#18) | — | **queue head** | Nothing blocks it. Startable today; competes with W3 for the cluster. |
 | SA135 + SA163 (#15) | — | **queue head; partial merged; unblocked this pass** | Nothing blocks it. The former decision block is retired: the two E2E Docker failures were root-caused out of this ticket into SA170 (#27), and E1 is re-scoped to the deterministic PostgreSQL-lifecycle evidence SA135 owns. |
 | SA170 (#27) | SA135 (#15) | **lane-ordering** — W3 queue position; SA170 also needs the Docker slot SA135 holds | **Upstream work only.** No decision clears it. It is deliberately behind SA135 so it starts from the settled provisioning bytes. |
@@ -260,9 +262,10 @@ standing rule.
 
 **Recommended concurrency right now:**
 
-- **W2 — continue SA167c (#21).** Do not redo the merged manifest-retirement bytes. First accept
-  them with the corrected focused command and restricted PostgreSQL role, then implement B-F.
-  This remains the only action that shortens the release.
+- **W2 — settle D3, then resume SA167c (#21).** Do not redo the merged manifest-retirement bytes.
+  Correct the losing caller-test or runtime surface under fresh plan authority, rerun A's full
+  ordered acceptance chain, and implement B-F only after A is accepted. This remains the only
+  action that shortens the release.
 - **W3 — resume SA135 + SA163 (#15) at the re-scoped phase E1.** Do not redo C or D, and do not
   attempt the two E2E Docker failures here — they are SA170's. Accept E1 on the provisioning
   evidence this ticket owns, then run E2's unchanged-tree serial E2E and `ci-e2e`.
@@ -273,10 +276,35 @@ standing rule.
 
 #### Open decisions
 
-**No maintainer decision is open in the v88 plan.** The one that was open — SA135's phase-E1
-evidence policy, carried as **D1** — is closed by this pass on engineering grounds rather than by a
-judgement call, and **D2 is withdrawn** because the idle window it was written to fill no longer
-exists. Both are recorded here until SA170 merges.
+**One maintainer decision is open in the v88 plan: D3.** The earlier SA135 phase-E1 evidence policy,
+carried as **D1**, remains closed on engineering grounds, and **D2 remains withdrawn** because the
+idle window it was written to fill no longer exists. D1 and D2 stay recorded until SA170 merges.
+
+**D3 — open: which embedded-inventory contract owns the two red SA167c caller tests?** The corrected
+Phase-A chain's loader suite exited 0 with 112 passed; the restricted-role orgs suite exited 0 with
+884 passed, 11 skipped, and 2 warnings; manifest sync exited 0; and gate parity exited 0. Its
+four-caller command then exited 1 with 256 passed and 2 failed in
+`TestRegenerateManagedWiringSkipManifestNotFound`, at
+`quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`: both tests expect an embedded
+registered module with no manifest to return `success is False` with `inventory count drift`, while
+the current `authoritative_module_names` / `regenerate_managed_wiring` path accepts the bundled
+twelve-module fallback and returns success. The verification-only phase made no tracked edit and,
+under the required stop-at-first-unexpected-red rule, did not run either the literal twelve-module
+source-bound projection probe or the final `git diff --exit-code` unchanged-tree oracle.
+
+> **Option 1 — update the two stale expectations to the current bundled-inventory contract
+> (recommended).** This preserves the implemented fail-hard twelve-module fallback used by current
+> discovery and limits the pre-existing repair to caller tests, but a fresh plan must first confirm
+> that no authoritative policy requires embedded inventory drift to fail in this scenario.
+>
+> **Option 2 — restore runtime failure on embedded inventory drift.** This preserves the two test
+> expectations but changes live fallback behavior and therefore requires caller-parity review across
+> every `regenerate_managed_wiring` consumer.
+
+Until D3 is settled, Phase A is unaccepted and phases B-F remain unreached. The exact failure
+signature is the two assertions at
+`quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`; no product or test byte was
+changed in the failed phase.
 
 **D1 — closed: the criterion was unsatisfiable, and the cause was findable by reading the harness.**
 The phase demanded deterministic red-before/green-after evidence for a Docker `No such container`
@@ -357,7 +385,8 @@ Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16,
 reused**; #27 is newly allocated to SA170 (opened 2026-08-27); the tickets that held them are closed and archived in
 [CHANGELOG.md](../../CHANGELOG.md). Gaps in the numbering are expected and carry no meaning.
 #15, #18, and #21 are the per-lane heads. #21 has a merged Phase-A slice at `f6f3bbce`: its product
-bytes are reviewed, but A is unaccepted and B-F are outstanding. #18 is a stalled acceptance on
+bytes are reviewed, but A remains unaccepted after the caller-suite failure recorded in D3 and B-F
+are outstanding. #18 is a stalled acceptance on
 `wt-track1` product tip `1743871f` (phases A-D accepted, E outstanding) and is the only unmerged
 delta in the release; #15 has a merged partial with C/D accepted and E outstanding. All three remain
 serialized by the shared PostgreSQL cluster, not by any ticket edge. #27 is newly opened behind #15
@@ -447,29 +476,100 @@ Conceptual background, mental models, and implementation notes for **every** tic
   The merged partial below removes that redundant surface; SA164 still owns making the remaining
   conventional migration-path lookup fail hard and re-anchoring its parity backstop.
   **Acceptance:** `django_apps:` is either derived from the `apps` wiring projection or removed from all manifests, `ModuleManifest`, and the loader, with no key parsed-but-unread remaining; a conformance gate fails when a module ships models or a migration without declaring at least one Django app, registered in `scripts/gate_registry.json` and passing `scripts/check_gate_parity.py`; the gate is proved by deleting a module's app declaration and observing red, reverted before merge; `test_sa92_migration_squash_guardrail.py` no longer depends on the retired key.
-  **State (measured 2026-08-27): Phase-A product slice merged into `v88`.** `wt-track2` product
-  commit `f6f3bbce` is merged and `wt-track2` (`80ca33b4`) is now an ancestor of `v88` — clean and
-  idle. Phase A was dispatched but is **not accepted**; phases B-F were not reached.
+  **State (measured 2026-08-28): Phase-A product slice merged; corrected acceptance partial.**
+  Product commit `f6f3bbce` remains merged. `wt-track2` synchronized cleanly to `v88` at
+  `8a8f364b` before this attempt. Phase A is **not accepted**; phases B-F were not reached.
   Keep this item unchecked under the open-work-only policy.
   **Completed in the merged partial:** removed `django_apps:` from `ModuleManifest`, the loader,
   the obsolete loader test, all eleven source declarations and their eleven byte-identical core
   snapshots; removed the SA92 helper's retired-key dependency and stale payload plumbing; preserved
   all twelve non-empty `apps` wiring projections and public adapter outputs. Independent convergence
   fixed the stale helper plumbing, and terminal review found no product-slice defect.
-  **Blocking:** Phase A's literal focused loader command ran 112 passing tests but exited 1 because
-  the package configuration measured only 36.59% of the whole core package against `fail-under=90`.
-  The default orgs command also selected a privileged PostgreSQL role. Close this by explicitly
-  accepting the already-merged bytes with
-  `poetry run pytest quickscale_core/tests/test_manifest_loader.py -q -o addopts= --no-cov` and
-  `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules`, while retaining the
-  broad coverage obligation in the final campaign. Do not treat the prior green substitute runs as
-  retroactive Phase-A acceptance.
-  **Decisions needed:** none. The focused acceptance command must isolate behavior from the
-  whole-package coverage gate; the final broad campaign remains mandatory.
+  **Latest acceptance evidence.** The coverage-isolated loader command exited 0 with 112 passed;
+  the restricted-role orgs command exited 0 with 884 passed, 11 skipped, and 2 warnings;
+  `make check-manifest-sync` exited 0; and `make check-gate-parity` exited 0. The required
+  four-caller command then exited 1 with 256 passed and 2 failed in
+  `TestRegenerateManagedWiringSkipManifestNotFound`, at
+  `quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`: both expect embedded
+  inventory drift to fail, while the current bundled twelve-module fallback succeeds. Under the
+  required stop-at-first-unexpected-red rule, neither the literal twelve-module source-bound caller
+  probe nor the final `git diff --exit-code` unchanged-tree oracle was run. No tracked file changed,
+  and this green prefix is not Phase-A acceptance.
+  **Blocking:** D3 must select the authoritative embedded-inventory contract. Correct the losing
+  test or runtime surface under fresh plan authority, rerun all of A in order, and retain broad
+  coverage in the final campaign. Do not treat the green prefix as retroactive Phase-A acceptance.
+  **Decisions needed:** D3 under [Open decisions](#open-decisions).
   **Remaining plan (all phases serial; do not redo the merged retirement bytes):**
-  1. **A-acceptance remainder:** explicitly accept the merged Phase-A slice with the corrected
-     focused commands above, manifest sync/parity, the four caller-projection suites, and unchanged
-     apps-projection evidence.
+  0. **Pre-existing caller mismatch:** settle D3 and correct the losing test/runtime surface under a
+     fresh reviewed plan, including caller-parity evidence if runtime behavior changes.
+  1. **A-acceptance:** after the D3 correction is reviewed and the candidate starts with no tracked
+     diff, rerun the exact chain below in order. Stop at the first command whose observed result does
+     not match its expected result; do not run any later command after that red, and do not treat a
+     green prefix as acceptance.
+
+     1. `poetry run pytest quickscale_core/tests/test_manifest_loader.py -q -o addopts= --no-cov`
+        — expect exit 0.
+     2. `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules`
+        — expect exit 0 under the restricted PostgreSQL role.
+     3. `make check-manifest-sync`
+        — expect exit 0 with all twelve source and bundled manifests in sync.
+     4. `make check-gate-parity`
+        — expect exit 0 through Make's blocking parity wrapper.
+     5. `poetry run pytest quickscale_cli/tests/commands/test_module_config_extended.py quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_cli/tests/test_orgs_contract.py quickscale_cli/tests/test_manifest_entry_point_integration.py -q -o addopts= --no-cov`
+        — expect exit 0 after the D3-selected contract correction.
+     6. Run this literal read-only source-bound probe; expect exit 0 and exactly
+        `verified 12 source-bound module app projections`:
+
+        ```bash
+        poetry run python - <<'PY'
+        from quickscale_core.contracts.module_discovery import (
+            authoritative_module_names,
+            get_modules_base_path,
+        )
+        from quickscale_core.manifest.entry_point import (
+            build_manifest_wiring_spec,
+            refresh_managed_adapters,
+        )
+        from quickscale_core.manifest.loader import load_manifest_from_path
+
+        base = get_modules_base_path()
+        source_apps = {}
+        defaults = {}
+        for name in authoritative_module_names():
+            manifest = load_manifest_from_path(base / name / "module.yml")
+            projections = [
+                item
+                for item in manifest.wiring_projections
+                if isinstance(item, dict) and item.get("wiring_field") == "apps"
+            ]
+            assert len(projections) == 1, (name, projections)
+            projection = projections[0]
+            assert projection.get("derivation_type") == "static", name
+            expression = projection.get("expression")
+            assert isinstance(expression, dict), name
+            values = expression.get("value")
+            assert isinstance(values, list) and values, name
+            assert all(isinstance(value, str) and value.strip() for value in values), name
+            source_apps[name] = tuple(values)
+            defaults[name] = manifest.get_defaults()
+
+        refresh_managed_adapters()
+        caller_apps = {
+            name: build_manifest_wiring_spec(
+                name,
+                defaults[name],
+                project_package="sa167_acceptance",
+            ).apps
+            for name in source_apps
+        }
+        assert caller_apps == source_apps, (source_apps, caller_apps)
+        print(f"verified {len(source_apps)} source-bound module app projections")
+        PY
+        ```
+
+     7. `git diff --exit-code`
+        — expect exit 0 as the final unchanged-tracked-tree oracle. Only all seven expected results,
+        on this one ordered run and one unchanged candidate, accept Phase A.
   2. **B-gate:** add a fail-hard `check_module_app_declaration` checker and hermetic tests covering
      model/migration evidence, empty or malformed projections, malformed manifests, inventory and
      filesystem failures, evidence-free modules, deterministic diagnostics, and current tree state.
