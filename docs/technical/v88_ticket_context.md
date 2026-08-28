@@ -219,6 +219,28 @@ module-owned, because no module can see its siblings; it is a core contract ques
 in `quickscale_core/contracts/`. What does *not* belong anywhere near the CLI is the judgement about
 whether a directory counts as a module, which is why the substring check comes out.
 
+### Classifying is not reacting — and only one of them leaves the CLI
+
+This is the distinction the first implementation pass collapsed, and it is worth stating on its own.
+Two different questions live at that boundary:
+
+```text
+  "is this directory a module, and in what state?"   -> classification -> core's job, always
+  "what should I do about INCOMPLETE?"               -> reaction       -> the consumer's job
+```
+
+Core answers the first once, for everybody. The second has **no single right answer**, which is why
+it cannot be centralized: `apply` is a mutating command and must refuse to build on a broken tree,
+while `status` is a *diagnostic* and must report exactly the drift it found. Same fact, opposite
+correct behaviours.
+
+So removing the CLI's substring check removes the CLI's *classification*, not its *reaction*. A
+consumer stripped of both has no behaviour left — it inherits whatever the core call does, which for
+`status` means aborting on the very condition it exists to report. **Deleting a wrong policy and
+writing the right one are one change, not two.** The general shape: when you centralize a decision,
+check whether you have centralized one question or accidentally two, and ask what each caller is
+*for* before letting it inherit the new default.
+
 ---
 
 # Bounded independent fixes

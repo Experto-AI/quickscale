@@ -4,6 +4,77 @@
 
 ## v88 development — 2026-08-21
 
+- **SA173's module-presence contract landed on `v88`; the ticket stays open on one consumer policy (2026-08-28).**
+  Product commit `e0730ae9` merged into the integration branch at `4e410c09` and implements decision
+  D3's contract. Verified on HEAD: `discover_module_presence` reports ABSENT / ACTIVE / INCOMPLETE
+  distinctly; the subset-validity rule and its diagnostic exist **once** —
+  `grep -rn "inventory count drift" --include=*.py` outside tests returns a single production site at
+  `contracts/module_discovery.py:309`; the loader and `refresh_managed_adapters` enforce typed
+  presence atomically, tolerating a legitimate subset and failing hard on INCOMPLETE with the
+  directory and missing manifest named; `PLACEHOLDER_MODULE_NAMES` is **retired** in favour of a
+  catalog `placeholder` flag, with `teams` still fail-closed; the `OVERRIDE`→bundled substitution in
+  `authoritative_module_names` is **removed**; and the CLI's
+  `if "Manifest file not found" in str(error)` classification at `module_wiring_manager.py:201` is
+  **deleted**. SA173 acceptance criteria 1, 3, 4, 6 and 7 are discharged, and criterion 2's
+  subset-plus-fail-hard pair is discharged at the core boundary. Delta: 19 files, +850 / -282.
+  **Two prior blockers closed by measurement rather than by work.** The recorded *"broad CLI
+  validation returned no verdict at 120 s and again at 360 s, both near 55%"* was a **foreground
+  cutoff, not a stall** — run detached the suite completes in seconds. And
+  `test_module_discovery.py::TestAuthoritativeModuleNames::test_partial_generated_override_uses_bundled_shipped_inventory`,
+  carried in the full-suite baseline as an order-dependent pollution artifact, **no longer exists**:
+  `e0730ae9` deleted the OVERRIDE path and the test with it.
+  **The interim known-red protocol is retired.** Its two `--deselect` node ids
+  (`TestRegenerateManagedWiringSkipManifestNotFound::test_registered_module_without_manifest_skipped_when_embedded`
+  and `::test_forwarded_registered_module_without_manifest_still_succeeds`) now **pass** —
+  `test_module_wiring_manager_manifest.py` is 43 passed and the ticket's ordered verification step 1
+  is 221 passed — so the exclusion excludes nothing. It was never revived or widened; the generalized
+  rule replacing it is recorded in the roadmap's execution rules: *a gate that is red on the
+  integration branch is attributed to exactly one ticket, and is never deselected.*
+  **Why SA173 did not close, stated precisely.** `make check` on `v88` at `4e410c09`, measured
+  detached, **exits 2**: lint and typecheck green, `quickscale_core` 2886 passed / 1 skipped,
+  `quickscale_cli` **18 failed** / 2135 passed. Reproducible in isolation as `18 failed, 149 passed`
+  over just the two files — no pollution, no `e2e`, no ordering dependency — and they are **two
+  distinct causes**, which matters because conflating them gets one fixed wrongly.
+  **Cause A, 11 failures in `quickscale_cli/tests/test_status_command.py` — a product defect.**
+  Deleting the CLI's presence classification was correct; **the replacement reaction was never
+  written**, so `_abort_for_manifest_error` (`status_command.py:229`, reached from `:845`) now aborts
+  on a module that `.quickscale/state.yml` registers and the project tree does not carry. `status` is
+  the diagnostic command — three of the eleven are `test_status_detects_missing_modules`,
+  `test_module_tracking_completeness`, and `test_json_drift_filesystem_drift_populated` — so aborting
+  is the one reaction it must not have. D3 already prescribes the fix: consumers own their reaction,
+  `status` **reports drift**, `apply` **fails hard**. These eleven are the correct oracle and are not
+  to be edited.
+  **Cause B, 7 failures in `quickscale_cli/tests/commands/test_module_config_extended.py` — stale
+  fixtures.** These fail at `module_config.py:546` with `Module presence is incomplete`. The fixtures
+  at `:961,983` and the CRM equivalents build `modules/<name>/` holding only a `pyproject.toml`;
+  under the new contract that is INCOMPLETE, and `apply` refusing to wire it is precisely the
+  behaviour SA173 was opened to produce. The same file already carries the right helper —
+  `_write_module_package` (`:139-150`) — and `e0730ae9` gave the lifecycle fixtures that treatment
+  without extending it here. Fixture-only repair; no assertion changes and `apply` does not become
+  tolerant. **The generalizable lesson: deleting a wrong policy and writing the right one
+  are one change, not two** — a half-applied D3 left one consumer with no behaviour at all, and it is
+  the second instance in this release of a `quickscale_core/contracts/` change turning another
+  surface red without touching a shared file (`203fcd61` was the first).
+  **Cause C, outside `make check` — the standalone discovery shim.** `poetry run pytest scripts/`
+  returns **5 failed, 1313 passed**, all five in `test_version_tool.py::TestUpdateWithTempRepo`.
+  `contracts/module_discovery.py` is contracted to run as a lone file in a tree with no importable
+  `quickscale_core` package — `scripts/version_tool.sh:14,34` copies it and calls `--list-modules` to
+  enumerate the modules it version-bumps. `e0730ae9` put `_declared_module_names()` on that path
+  behind a `ModuleNotFoundError` guard that only tolerates
+  `exc.name == "quickscale_core.contracts.module_catalog"`; a shim tree fails at the *root* package
+  and raises `exc.name == "quickscale_core"`, so the guard re-raises. Widening it exposes a second
+  defect: with an empty catalog the shim enforces the twelve-module release count against a hermetic
+  tree that legitimately holds fewer. Both are SA173's, and `version_tool.sh` is a release-inventory
+  consumer the ticket had not enumerated alongside `publish_module.py` and `check_sa117_scope.py`.
+  Invisible from the repo root, where the same command prints twelve names and exits 0 — which is
+  why `make check` alone is not the gate picture for a contract change of this shape.
+  **Planner effect.** SA173 stays **band A** and **#30**; the band-A cause changes from *"the two
+  caller tests are red"* to *"the CLI consumer policy is missing"*. No ticket opened, closed, or
+  changed lanes: counts hold at fourteen open v88 ticket entries across fourteen open merge
+  positions, W1 6 · W2 4 · W3 4. `wt-track2` is now identical to `v88`, so W2 resumes with no sync
+  and needs no PostgreSQL slot. W1 and W3 run **unexcluded** from here and can start and finish their
+  own work, but neither can merge until #30 lands. No open maintainer decision remains.
+
 - **Decision D3 settled — module presence is a three-state fact; SA173 opened (2026-08-28).**
   SA167c's Phase-A acceptance had stalled on two red tests at
   `quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`, which assert an embedded
