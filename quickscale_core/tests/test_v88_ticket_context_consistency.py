@@ -21,8 +21,6 @@ ROOT = Path(__file__).parents[2]
 ROADMAP = ROOT / "docs/technical/roadmap.md"
 CONTEXT = ROOT / "docs/technical/v88_ticket_context.md"
 DOCS_INDEX = ROOT / "docs/index.md"
-ARCH_AUDIT = ROOT / "docs/others/arch-audit.md"
-TECH_AUDIT = ROOT / "docs/others/tech-audit.md"
 TICKET_RE = re.compile(r"\bSA\d+[a-z]?\b")
 TICKET_ENTRY_RE = re.compile(
     r"^\s*-\s+\[[^\]]*\]\s+\*\*(SA\d+[a-z]?)\b[^\n]*$", re.MULTILINE
@@ -239,26 +237,53 @@ def _load_documents() -> tuple[str, str]:
     return ROADMAP.read_text(encoding="utf-8"), CONTEXT.read_text(encoding="utf-8")
 
 
+_NUMBER_WORDS = {
+    1: "one",
+    2: "two",
+    3: "three",
+    4: "four",
+    5: "five",
+    6: "six",
+    7: "seven",
+    8: "eight",
+    9: "nine",
+    10: "ten",
+    11: "eleven",
+    12: "twelve",
+    13: "thirteen",
+    14: "fourteen",
+    15: "fifteen",
+    16: "sixteen",
+    17: "seventeen",
+    18: "eighteen",
+    19: "nineteen",
+    20: "twenty",
+}
+
+
 def _number_word(value: int) -> str:
-    words = {
-        8: "eight",
-        9: "nine",
-        10: "ten",
-        11: "eleven",
-        12: "twelve",
-        13: "thirteen",
-        14: "fourteen",
-    }
-    return words[value]
+    if value not in _NUMBER_WORDS:
+        raise AssertionError(f"no spelled form for count {value}; extend _NUMBER_WORDS")
+    return _NUMBER_WORDS[value]
 
 
-def _assert_current_status_consumers(
-    roadmap_text: str,
-    context_text: str,
-    docs_index_text: str,
-    arch_audit_text: str,
-    tech_audit_text: str,
-) -> None:
+def _assert_status_consumers_agree(roadmap_text: str, docs_index_text: str) -> None:
+    """Live counts are *derived* from the roadmap, never pinned to a literal.
+
+    Only the roadmap owns the open-ticket universe.  This check proves the docs hub
+    restates whatever the roadmap currently says, so both move together and neither
+    needs editing to match a fixture.
+
+    Deliberately absent: any assertion over `docs/others/arch-audit.md` or
+    `docs/others/tech-audit.md`.  Those documents are live findings, not a ledger
+    (see decisions.md -> Document Responsibilities).  Pinning their counts, finding
+    IDs, or prose here forces every regenerated audit to reproduce the previous
+    pass's conclusions, which is the opposite of an audit.  Do not add them back.
+
+    Equally absent: literal ticket counts, merge positions, ticket IDs, dates, and
+    roadmap prose.  Every one of those goes stale on the next planning pass and is
+    paid for by an unrelated edit to this file.
+    """
     roadmap = _roadmap_tickets(roadmap_text)
     v88 = {
         ticket: metadata
@@ -270,102 +295,39 @@ def _assert_current_status_consumers(
         for metadata in v88.values()
         if metadata.merge_position is not None
     }
-    assert (len(v88), len(positions)) == (10, 9)
-    assert "SA151" not in roadmap
-    assert "SA142" not in roadmap
-    assert "SA167a" not in roadmap
-    assert "SA169" not in roadmap
-    assert 3 not in positions
-    assert 8 not in positions
-    assert 10 not in positions
-    assert 11 not in positions
-    assert 17 not in positions
-    assert 13 not in positions
-    assert 26 not in positions
-    assert re.search(r"Positions [^\n]*#3[^\n]*", roadmap_text)
-    assert re.search(r"Positions [^\n]*#8[^\n]*", roadmap_text)
-    assert re.search(r"Positions [^\n]*#10[^\n]*", roadmap_text)
-    assert re.search(r"Positions [^\n]*#11[^\n]*", roadmap_text)
-    assert re.search(r"Positions [^\n]*#13[^\n]*", roadmap_text)
-    assert re.search(r"Positions [^\n]*#17[^\n]*", roadmap_text)
-    assert re.search(r"Positions [^\n]*#26[^\n]*", roadmap_text)
-    assert not re.search(r"^## SA151\b", context_text, re.MULTILINE)
-    assert not re.search(r"^## SA142\b", context_text, re.MULTILINE)
-    assert not re.search(r"^## SA169\b", context_text, re.MULTILINE)
-    assert "SA167b" not in _context_sections(context_text)
-    assert "SA124" not in _context_sections(context_text)
-    assert set(CLOSED_ENTRY_RE.findall(roadmap_text)) == set()
-
-    assert "SA124" not in roadmap
-    assert "SA123" not in roadmap
-    assert v88["SA167d"].dependencies == frozenset()
-    assert "SA118" not in v88
-    assert v88["SA167c"].dependencies == frozenset()
-    assert v88["SA164"].dependencies == frozenset({"SA166"})
-    assert roadmap["SA152"].dependencies == frozenset()
-    assert v88["SA135"].dependencies == frozenset()
-    assert v88["SA163"].dependencies == frozenset({"SA135"})
-    assert v88["SA170"].dependencies == frozenset({"SA135"})
-    assert "use the same twelve databases" in roadmap_text
-    assert re.search(
-        r"own all twelve databases first.*?ownership must be restored",
-        roadmap_text,
-        re.DOTALL,
-    )
-    assert "does not extend the one-leg critical path" in roadmap_text
-    assert "against the three-leg W2 spine" in roadmap_text
-
-    current_handoff = re.search(
-        r"\*\*State \(measured 2026-08-27\): partial delivery merged into `v88`\.\*\*"
-        r"(?P<body>.*?)\*\*Remaining plan",
-        roadmap_text,
-        re.DOTALL,
-    )
-    assert current_handoff is not None
-    handoff_text = current_handoff.group(0)
-    assert "Phases P/A/B and C/D are accepted" in handoff_text
-    assert "E was\n  dispatched but is not accepted" in handoff_text
-    assert "in flight on `wt-track3`" not in roadmap_text
-    assert "uncommitted working tree" not in roadmap_text
-    assert "ready to continue from strict C acceptance" not in handoff_text
-    assert "W2 has released the shared PostgreSQL cluster" not in handoff_text
-
-    # W1: SA167d is a phase-E acceptance, not a merge-back-only ticket.
-    assert "phases A-D accepted, phase E outstanding" in roadmap_text
-    assert "This is not a merge-back-only ticket" in roadmap_text
-
     entry_word = _number_word(len(v88))
     position_word = _number_word(len(positions))
+
     expected_phrases = {
-        docs_index_text: rf"{entry_word} open v88 ticket entries across {position_word} open merge positions",
-        arch_audit_text: rf"{entry_word} open v88 ticket entries[^\n]*{position_word} open merge positions",
-        roadmap_text: rf"{position_word} open merge positions carrying {entry_word} open ticket entries",
+        "docs/index.md": (
+            docs_index_text,
+            rf"{entry_word} open v88 ticket entries across {position_word} open merge positions",
+        ),
+        "docs/technical/roadmap.md": (
+            roadmap_text,
+            rf"{position_word} open merge positions carrying {entry_word} open ticket entries",
+        ),
     }
-    for text, pattern in expected_phrases.items():
-        assert re.search(pattern, text, re.IGNORECASE), pattern
-
-    summary = tech_audit_text.split("## Summary table", 1)[1].split("## Findings", 1)[0]
-    severities = re.findall(
-        r"^\| `[^`]+` \(TA\d+\) \| \*{0,2}(S[1-4])\*{0,2} \|",
-        summary,
-        re.MULTILINE,
-    )
-    assert Counter(severities) == Counter({"S3": 1, "S4": 2})
-    assert re.search(
-        r"S1 \*\*0\*\*.*S2 \*\*0\*\*.*S3 \*\*1\*\*.*S4 \*\*2\*\*.*Total 3 open",
-        summary,
-        re.DOTALL,
-    )
+    for name, (text, pattern) in expected_phrases.items():
+        if not re.search(pattern, text, re.IGNORECASE):
+            raise AssertionError(
+                f"{name} does not restate the roadmap's derived counts "
+                f"({len(v88)} entries / {len(positions)} positions): expected {pattern!r}"
+            )
 
 
-def test_v88_live_status_consumers_derive_current_counts_and_dependencies() -> None:
-    _assert_current_status_consumers(
+def test_v88_live_status_consumers_derive_current_counts() -> None:
+    _assert_status_consumers_agree(
         ROADMAP.read_text(encoding="utf-8"),
-        CONTEXT.read_text(encoding="utf-8"),
         DOCS_INDEX.read_text(encoding="utf-8"),
-        ARCH_AUDIT.read_text(encoding="utf-8"),
-        TECH_AUDIT.read_text(encoding="utf-8"),
     )
+
+
+def test_v88_status_consumer_count_drift_is_expected_red_canary() -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    mutated_index = "The queue holds forty open v88 ticket entries across two open merge positions.\n"
+    with pytest.raises(AssertionError, match="does not restate the roadmap"):
+        _assert_status_consumers_agree(roadmap, mutated_index)
 
 
 def test_v88_current_context_covers_roadmap_open_tickets() -> None:

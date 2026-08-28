@@ -148,11 +148,11 @@ Adding or swapping a frontend dependency requires a decision entry here.
 
 **Teams tie-breaker:** `quickscale_modules/teams/` is a README-only placeholder.
 It is **not next** and **not planned** — no committed timeline, no kickoff date.
-[arch-audit.md](../others/arch-audit.md) findings whose horizon keys off "teams
-kickoff" (e.g. `deletion-invariants-per-boundary-reimplementation`,
-`org-model-universe-hand-enumerated`) describe conditions that apply *if and when*
-teams is scheduled. Treat them as open-ended and deferred — not roadmap items on a
-clock — until a scheduling decision is recorded here.
+Any [arch-audit.md](../others/arch-audit.md) finding whose horizon keys off "teams
+kickoff" describes a condition that applies *if and when* teams is scheduled. Treat
+every such finding as open-ended and deferred — not a roadmap item on a clock —
+until a scheduling decision is recorded here. This rule is stated by trigger, not by
+finding ID, so it survives audit regeneration.
 
 #### Multi-org membership and org-switch
 
@@ -666,6 +666,9 @@ implicit env-var/stdout-JSON coupling.
 - **docs/releases/**: Single public release notes, whether they are clearly labeled prepared artifacts awaiting publish or notes already linked from GitHub tags and release PRs
 - **docs/technical/release_summary_template.md**: Template for public release notes and release-prepared artifacts
 - **roadmap.md**: Timeline, phases, tasks, and active or unreleased release closeout status
+- **docs/others/arch-audit.md**: Live structural findings only — the current open set, each with its promotion trigger. Not a ledger: closed findings, prior-pass narratives, and reconciliation history belong in CHANGELOG.md. Finding numbers are pass-local and MUST NOT be cited as stable identifiers from any other document, test, or source comment
+- **docs/others/tech-audit.md**: Live defect posture only, and the SSOT for found-not-yet-fixed fail-hard violations. Same rule as above: remediated findings are dropped, not archived in place, and no other artifact may pin its finding counts or IDs
+- **v88_ticket_context.md**: Per-ticket conceptual explanation for the current release only — why a problem exists, what mental model to hold, where the code lives. Carries no schedulable metadata (the roadmap owns bands, positions, dependencies, and readiness). Release-scoped by name and disposable at release close: durable rules graduate into decisions.md or the narrow owner doc, spent context is dropped rather than carried into the next release's page
 - **README.md**: Project overview, user guide, repo-level navigation
 - **package README.md files**: Package-local installation and responsibility summaries (informational only)
 - **commercial.md**: Commercial distribution background and constraints
@@ -1038,7 +1041,7 @@ and asserts every emitted file is classified.
    gate (rule 6) also checks ``MODE_REQUIRED_SPECS`` entries against
    ``INTENTIONALLY_UNMANAGED``.
 
-**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md Finding 7](../others/arch-audit.md)
+**Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../others/arch-audit.md) (generated-file ownership finding, if currently open)
 
 ---
 
