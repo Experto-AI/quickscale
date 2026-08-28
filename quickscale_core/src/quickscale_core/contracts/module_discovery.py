@@ -5,11 +5,10 @@ discovery that enumerates shipped modules by scanning for valid
 ``module.yml`` files under the repository's ``quickscale_modules/``
 workspace.
 
-Discovered modules are shipped modules only — every directory that contains
-a valid ``module.yml`` is a shipped module.  Known placeholder directories
-(such as ``teams``) that lack a ``module.yml`` are **excluded** from
-discovery and must be rejected via a separate fail-closed path
-(:data:`PLACEHOLDER_MODULE_NAMES`).
+Discovery reports the filesystem observation for every module directory:
+``ACTIVE`` when its manifest is present, ``INCOMPLETE`` when its manifest is
+missing, and ``ABSENT`` when an expected directory is missing.  Consumers
+decide which observations are valid for their operation.
 
 This module is the canonical seam where later phases can add richer
 manifest-derived metadata (readiness flags, version constraints, etc.)
@@ -19,6 +18,8 @@ without altering the core discovery contract.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 import sys
@@ -36,16 +37,6 @@ class ImproperlyConfigured(Exception):
     this module rather than from ``django.core.exceptions``.
     """
 
-
-# ---------------------------------------------------------------------------
-# Known placeholder module names
-# ---------------------------------------------------------------------------
-
-#: Module names that exist as repository directories but are **not** shipped
-#: modules — they are placeholder scaffolding for future work.  These names
-#: must stay fail-closed even though they are not discovered via the manifest
-#: scan.
-PLACEHOLDER_MODULE_NAMES: Final[frozenset[str]] = frozenset({"teams"})
 
 #: The number of source modules in the shipped contract.  The inventory is
 #: discovered from manifests at runtime, while this count keeps additions and
@@ -87,6 +78,33 @@ class ModuleResolutionSource(Enum):
     OVERRIDE = "override"
     MONOREPO = "monorepo"
     BUNDLED = "bundled"
+
+
+class ModulePresenceState(Enum):
+    """Filesystem presence observed for one declared or discovered module."""
+
+    ABSENT = "absent"
+    ACTIVE = "active"
+    INCOMPLETE = "incomplete"
+
+
+@dataclass(frozen=True)
+class ModulePresenceRecord:
+    """Immutable observation of one module directory and its manifest state."""
+
+    name: str
+    state: ModulePresenceState
+    path: Path | None
+
+    @property
+    def module_path(self) -> Path | None:
+        """Return the observed module directory, when it exists."""
+        return self.path
+
+    @property
+    def manifest_path(self) -> Path | None:
+        """Return the observed manifest path, when the directory exists."""
+        return self.path / "module.yml" if self.path is not None else None
 
 
 # ---------------------------------------------------------------------------
@@ -162,14 +180,102 @@ def get_modules_base_path() -> Path:
 # ---------------------------------------------------------------------------
 
 
+def discover_module_presence(
+    base_path: str | Path | None = None,
+    expected_names: Iterable[str] = (),
+) -> list[ModulePresenceRecord]:
+    """Report manifest presence for actual directories and expected names.
+
+    A directory containing ``module.yml`` is ``ACTIVE``.  A directory without
+    that file is ``INCOMPLETE``.  An expected name without a directory is
+    ``ABSENT``.  Results are sorted by module name and never parse manifests;
+    parsing remains the manifest loader's responsibility.
+    """
+    modules_base = Path(base_path) if base_path is not None else get_modules_base_path()
+    expected = set(expected_names)
+    records: dict[str, ModulePresenceRecord] = {}
+
+    if modules_base.is_dir():
+        for entry in sorted(modules_base.iterdir()):
+            if not entry.is_dir():
+                continue
+            path = entry.resolve()
+            state = (
+                ModulePresenceState.ACTIVE
+                if (entry / "module.yml").is_file()
+                else ModulePresenceState.INCOMPLETE
+            )
+            records[entry.name] = ModulePresenceRecord(entry.name, state, path)
+
+    for name in expected:
+        if name not in records:
+            records[name] = ModulePresenceRecord(name, ModulePresenceState.ABSENT, None)
+
+    return [records[name] for name in sorted(records)]
+
+
+def _declared_module_names() -> tuple[str, ...]:
+    """Return catalog names without creating a module-discovery import cycle."""
+    try:
+        from quickscale_core.contracts.module_catalog import MODULE_CATALOG
+    except ModuleNotFoundError as exc:
+        # The standalone discovery shim is also used by hermetic release
+        # tooling, which supplies only this contract module and fake manifests.
+        if exc.name != "quickscale_core.contracts.module_catalog":
+            raise
+        return ()
+
+    return tuple(entry.name for entry in MODULE_CATALOG)
+
+
+def _declared_placeholder_names() -> frozenset[str]:
+    """Return placeholder names from the catalog when the catalog is present."""
+    try:
+        from quickscale_core.contracts.module_catalog import MODULE_CATALOG
+    except ModuleNotFoundError as exc:
+        if exc.name != "quickscale_core.contracts.module_catalog":
+            raise
+        return frozenset()
+    return frozenset(entry.name for entry in MODULE_CATALOG if entry.placeholder)
+
+
+def _presence_records_for_projection(
+    base_path: str | Path | None = None,
+) -> list[ModulePresenceRecord]:
+    """Return observations and reject unsafe projection inputs."""
+    records = discover_module_presence(
+        base_path=base_path,
+        expected_names=_declared_module_names(),
+    )
+    placeholder_names = _declared_placeholder_names()
+    invalid: list[str] = []
+    for record in records:
+        if (
+            record.state is ModulePresenceState.ACTIVE
+            and record.name in placeholder_names
+        ):
+            invalid.append(f"{record.name} is a declared placeholder")
+        elif (
+            record.state is ModulePresenceState.INCOMPLETE
+            and record.name not in placeholder_names
+        ):
+            invalid.append(f"{record.name} is missing module.yml")
+    if invalid:
+        raise ImproperlyConfigured(
+            "Module presence is incomplete or contains a placeholder: "
+            + "; ".join(invalid)
+        )
+    return records
+
+
 def discover_shipped_module_names() -> list[str]:
     """Return alphabetically sorted names of shipped modules discovered by
     scanning the configured modules base path for ``*/module.yml`` files.
 
-    Only directories that contain a valid ``module.yml`` are included.
-    Placeholder directories (e.g. ``teams``) with no ``module.yml`` are
-    silently excluded.  Returns an empty list when the workspace contains
-    no valid manifests.
+    Only active directories are included.  Declared placeholders remain
+    observable as incomplete records but are excluded from this projection.
+    Undeclared incomplete directories fail closed instead of being silently
+    dropped.  Returns an empty list when the workspace contains no manifests.
 
     The modules base path is configurable at runtime via
     :func:`set_modules_base_path` — see :func:`get_modules_base_path`.
@@ -180,19 +286,41 @@ def discover_shipped_module_names() -> list[str]:
     Returns:
         Sorted list of shipped module names.
     """
-    modules_base = get_modules_base_path()
-    if not modules_base.is_dir():
-        return []
+    return [
+        record.name
+        for record in _presence_records_for_projection()
+        if record.state is ModulePresenceState.ACTIVE
+    ]
 
-    discovered: list[str] = []
-    for entry in sorted(modules_base.iterdir()):
-        if not entry.is_dir():
-            continue
-        manifest_path = entry / "module.yml"
-        if manifest_path.is_file():
-            discovered.append(entry.name)
 
-    return discovered
+def validate_active_module_subset(
+    active_names: Iterable[str], release_names: Iterable[str]
+) -> None:
+    """Validate an active module set against the twelve-module release set.
+
+    Generated projects may legitimately provide a subset, but every active
+    name must belong to the release inventory.  The release inventory itself
+    must retain its authoritative count and uniqueness.
+    """
+    active = list(active_names)
+    release = list(release_names)
+    if len(release) != AUTHORITATIVE_MODULE_COUNT or len(set(release)) != len(release):
+        raise ImproperlyConfigured(
+            "Module inventory count drift: expected "
+            f"{AUTHORITATIVE_MODULE_COUNT} unique release modules, found "
+            f"{len(release)}"
+        )
+    if len(set(active)) != len(active):
+        raise ImproperlyConfigured(
+            "Active module subset contains duplicate module names: "
+            + ", ".join(sorted(name for name in set(active) if active.count(name) > 1))
+        )
+    unknown = sorted(set(active) - set(release))
+    if unknown:
+        raise ImproperlyConfigured(
+            "Active module subset contains names outside the release inventory: "
+            + ", ".join(unknown)
+        )
 
 
 def authoritative_module_names() -> list[str]:
@@ -210,48 +338,23 @@ def authoritative_module_names() -> list[str]:
             discovered modules differs from :data:`AUTHORITATIVE_MODULE_COUNT`.
     """
     if _modules_base_path is not None:
-        resolution_source = ModuleResolutionSource.OVERRIDE
         names = discover_shipped_module_names()
-    else:
-        try:
-            names = discover_shipped_module_names()
-            resolution_source = ModuleResolutionSource.MONOREPO
-        except ImproperlyConfigured:
-            names = discover_bundled_module_names()
-            resolution_source = ModuleResolutionSource.BUNDLED
-    placeholders = sorted(set(names) & PLACEHOLDER_MODULE_NAMES)
-    if placeholders:
-        raise ImproperlyConfigured(
-            "Authoritative module inventory contains placeholder module(s): "
-            + ", ".join(placeholders)
-        )
-    if len(names) == AUTHORITATIVE_MODULE_COUNT:
+        release_names = discover_bundled_module_names()
+        validate_active_module_subset(names, release_names)
+        if names != release_names:
+            raise ImproperlyConfigured(
+                "Authoritative module inventory is incomplete: active override "
+                "does not contain the complete release inventory"
+            )
         return names
 
-    # An override commonly points at a generated project's selected embedded
-    # modules.  That source subset is authoritative for adapter loading, but it
-    # is not the shipped product inventory shown by plan/status or validated by
-    # source-free E2E nodes.  Resolve that inventory from the wheel's bundled
-    # manifests while preserving fail-hard source drift in the monorepo.
-    if resolution_source is ModuleResolutionSource.OVERRIDE:
-        bundled_names = discover_bundled_module_names()
-        bundled_placeholders = sorted(set(bundled_names) & PLACEHOLDER_MODULE_NAMES)
-        if bundled_placeholders:
-            raise ImproperlyConfigured(
-                "Authoritative bundled module inventory contains placeholder "
-                "module(s): " + ", ".join(bundled_placeholders)
-            )
-        if (
-            set(names).issubset(bundled_names)
-            and len(bundled_names) == AUTHORITATIVE_MODULE_COUNT
-        ):
-            return bundled_names
-
-    if len(names) != AUTHORITATIVE_MODULE_COUNT:
-        raise ImproperlyConfigured(
-            "Authoritative module inventory count drift: expected "
-            f"{AUTHORITATIVE_MODULE_COUNT}, found {len(names)}"
-        )
+    try:
+        get_modules_base_path()
+    except ImproperlyConfigured:
+        names = discover_bundled_module_names()
+    else:
+        names = discover_shipped_module_names()
+    validate_active_module_subset(names, names)
     return names
 
 
@@ -270,19 +373,11 @@ def discover_shipped_module_paths() -> dict[str, Path]:
         Dict mapping module name to its absolute ``Path``.  Empty when the
         workspace contains no valid manifests.
     """
-    modules_base = get_modules_base_path()
-    if not modules_base.is_dir():
-        return {}
-
-    result: dict[str, Path] = {}
-    for entry in sorted(modules_base.iterdir()):
-        if not entry.is_dir():
-            continue
-        manifest_path = entry / "module.yml"
-        if manifest_path.is_file():
-            result[entry.name] = entry.resolve()
-
-    return result
+    return {
+        record.name: record.path
+        for record in _presence_records_for_projection()
+        if record.state is ModulePresenceState.ACTIVE and record.path is not None
+    }
 
 
 def is_placeholder_module(name: str) -> bool:
@@ -298,7 +393,10 @@ def is_placeholder_module(name: str) -> bool:
     Returns:
         ``True`` if the name is a known placeholder.
     """
-    return name in PLACEHOLDER_MODULE_NAMES
+    from quickscale_core.contracts.module_catalog import get_module_entry
+
+    entry = get_module_entry(name)
+    return entry is not None and entry.placeholder
 
 
 def get_placeholder_rejection_reason(name: str) -> str | None:
@@ -311,7 +409,7 @@ def get_placeholder_rejection_reason(name: str) -> str | None:
     Returns:
         A human-readable rejection string, or ``None``.
     """
-    if name not in PLACEHOLDER_MODULE_NAMES:
+    if not is_placeholder_module(name):
         return None
     display_name = name.replace("_", " ").title()
     return _PLACEHOLDER_REASON_TEMPLATE.format(
@@ -496,10 +594,12 @@ def discover_bundled_module_names() -> list[str]:
 
 __all__ = [
     "AUTHORITATIVE_MODULE_COUNT",
+    "ModulePresenceRecord",
+    "ModulePresenceState",
     "ModuleResolutionSource",
-    "PLACEHOLDER_MODULE_NAMES",
     "authoritative_module_names",
     "discover_bundled_module_names",
+    "discover_module_presence",
     "discover_shipped_module_names",
     "discover_shipped_module_paths",
     "get_bundled_manifests_path",
@@ -508,6 +608,7 @@ __all__ = [
     "get_resolution_source",
     "is_placeholder_module",
     "set_modules_base_path",
+    "validate_active_module_subset",
 ]
 
 

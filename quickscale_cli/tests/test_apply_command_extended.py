@@ -942,6 +942,15 @@ class TestLoadModuleManifests:
         with pytest.raises(ManifestError, match="auth"):
             _load_module_manifests(Path("/tmp"), ["auth"], strict=True)
 
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_incomplete_manifest_errors_propagate_in_all_modes(self, tmp_path, strict):
+        """A present module directory without module.yml is never treated as absent."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+
+        with pytest.raises(ManifestError, match="module.yml"):
+            _load_module_manifests(tmp_path, ["auth"], strict=strict)
+
 
 # ============================================================================
 # _update_module_config_in_state
@@ -3530,6 +3539,14 @@ class TestBackupsApplyHelpers:
 
 class TestExecuteApplySteps:
     """Tests for _execute_apply_steps module-selection matrix."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_post_embed_manifest_load(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Downstream step tests use mocked embeds, so bypass disk manifest I/O."""
+        monkeypatch.setattr(
+            "quickscale_cli.commands.apply_command._load_module_manifests",
+            lambda *args, **kwargs: {},
+        )
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
     @patch("quickscale_cli.commands.apply_command._save_project_state")
@@ -6469,6 +6486,54 @@ class TestPhase3NoOpProvenanceRepair:
         # Verify existing state still has missing commit_sha
         assert existing_state.modules["auth"].commit_sha is None
 
+    def test_incomplete_manifest_repair_keeps_state_unchanged(self, tmp_path):
+        """Best-effort repair must not partially mutate state on loader failure."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        existing_state = QuickScaleState(
+            version="1",
+            project=ProjectState(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_react",
+            ),
+            modules={
+                "auth": ModuleState(
+                    name="auth",
+                    version="0.82.0",
+                    commit_sha=None,
+                    embedded_at="original-time",
+                    branch="splits/auth-module",
+                ),
+            },
+        )
+        qs_config = Mock()
+        qs_config.project.package = "myapp"
+        qs_config.modules = {"auth": Mock(options={})}
+        delta = Mock(has_changes=False)
+        ctx = ApplyContext(
+            config_path=tmp_path / "quickscale.yml",
+            qs_config=qs_config,
+            output_path=tmp_path,
+            state_manager=StateManager(tmp_path),
+            existing_state=existing_state,
+            manifests={},
+            delta=delta,
+            had_existing_state=True,
+        )
+
+        with patch(
+            "quickscale_cli.commands.apply_command.resolve_remote_ref",
+            return_value="b" * 40,
+        ):
+            _attempt_provenance_repair_if_needed(ctx)
+
+        module_state = existing_state.modules["auth"]
+        assert module_state.commit_sha is None
+        assert module_state.embedded_at == "original-time"
+        assert module_state.version == "0.82.0"
+        assert not (tmp_path / ".quickscale" / "state.yml").exists()
+
     def test_no_repair_attempted_when_no_missing_commit_sha(self, tmp_path):
         """Phase 3: repair is skipped when all modules have commit_sha."""
         # Build state with commit_sha already present
@@ -7312,6 +7377,14 @@ class TestApplyFailureSummaryParity:
     failure branches through :func:`_execute_apply_steps_locked` with
     exact byte-identical line-by-line parity (F12.1c-closeout).
     """
+
+    @pytest.fixture(autouse=True)
+    def _stub_post_embed_manifest_load(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Downstream step tests use mocked embeds, so bypass disk manifest I/O."""
+        monkeypatch.setattr(
+            "quickscale_cli.commands.apply_command._load_module_manifests",
+            lambda *args, **kwargs: {},
+        )
 
     @pytest.mark.parametrize("failed_step,reason", _F12_1C_UNIQUE_FAILED_STEP_LABELS)
     def test_failure_summary_exact_output(self, capsys, failed_step, reason):

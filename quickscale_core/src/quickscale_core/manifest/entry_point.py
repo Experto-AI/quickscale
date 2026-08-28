@@ -31,7 +31,6 @@ import sys
 from typing import Any, cast
 
 from quickscale_core.contracts.module_discovery import (
-    AUTHORITATIVE_MODULE_COUNT,
     get_modules_base_path,
 )
 from quickscale_core.manifest.assembler import (
@@ -193,41 +192,57 @@ def _load_managed_adapter(module_name: str) -> Callable[..., ModuleWiringSpec]:
 
 
 def refresh_managed_adapters() -> None:
-    """Atomically refresh every adapter in the discovered shipped inventory.
+    """Atomically refresh every adapter in the active module subset.
 
-    Active-source discovery is performed exactly once per refresh.  A generated
+    Presence discovery is performed exactly once per refresh.  A generated
     project's embedded modules may be a strict subset of the authoritative
-    twelve-module bundled inventory; only active adapters are loaded.  All
+    bundled inventory; only active adapters are loaded.  Incomplete non-
+    placeholder module directories fail before any adapter import.  All
     sentinels are resolved before the live registry or origins are changed,
     preserving registry identity, custom entries, and prior state on failure.
     """
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
         ImproperlyConfigured,
+        ModulePresenceState,
         discover_bundled_module_names,
-        discover_shipped_module_names,
+        discover_module_presence,
+        is_placeholder_module,
+        validate_active_module_subset,
     )
 
-    discovered_module_names = set(discover_shipped_module_names())
-    if len(discovered_module_names) != AUTHORITATIVE_MODULE_COUNT:
-        bundled_module_names = set(discover_bundled_module_names())
-        if len(
-            bundled_module_names
-        ) != AUTHORITATIVE_MODULE_COUNT or not discovered_module_names.issubset(
-            bundled_module_names
-        ):
-            raise ImproperlyConfigured(
-                "Authoritative module inventory count drift: expected "
-                f"{AUTHORITATIVE_MODULE_COUNT}, found "
-                f"{len(discovered_module_names)}"
-            )
+    bundled_module_names = discover_bundled_module_names()
+    presence = discover_module_presence(
+        base_path=get_modules_base_path(),
+        expected_names=bundled_module_names,
+    )
+    incomplete = [
+        record
+        for record in presence
+        if record.state is ModulePresenceState.INCOMPLETE
+        and not is_placeholder_module(record.name)
+    ]
+    if incomplete:
+        details = "; ".join(
+            f"module '{record.name}' is missing manifest '{record.manifest_path}'"
+            for record in incomplete
+        )
+        raise ImproperlyConfigured(f"Module presence is incomplete: {details}")
+
+    active_module_names = {
+        record.name
+        for record in presence
+        if record.state is ModulePresenceState.ACTIVE
+        and not is_placeholder_module(record.name)
+    }
+    validate_active_module_subset(active_module_names, bundled_module_names)
 
     loaded_adapters: dict[str, Callable[..., ModuleWiringSpec]] = {}
     # Resolve every adapter before mutating the live registry.  A failed
     # refresh is fail-hard and atomic regardless of iteration order.
-    for module_name in sorted(discovered_module_names):
+    for module_name in sorted(active_module_names):
         loaded_adapters[module_name] = _load_managed_adapter(module_name)
 
-    if set(loaded_adapters) != discovered_module_names:
+    if set(loaded_adapters) != active_module_names:
         raise ImproperlyConfigured(
             "Managed adapter resolution did not cover the discovered module "
             "inventory atomically."
@@ -236,10 +251,10 @@ def refresh_managed_adapters() -> None:
     # Commit only after the complete managed set resolved successfully.  Keep
     # custom entries and the registry object itself, while replacing stale
     # managed entries and synchronizing origins at one commit point.
-    for module_name in MANAGED_ADAPTER_ORIGINS - discovered_module_names:
+    for module_name in MANAGED_ADAPTER_ORIGINS - active_module_names:
         MANIFEST_ADAPTER_REGISTRY.pop(module_name, None)
     MANAGED_ADAPTER_ORIGINS.clear()
-    MANAGED_ADAPTER_ORIGINS.update(discovered_module_names)
+    MANAGED_ADAPTER_ORIGINS.update(active_module_names)
     MANIFEST_ADAPTER_REGISTRY.update(loaded_adapters)
 
 

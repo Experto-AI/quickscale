@@ -492,6 +492,9 @@ class TestValidateRequiredModuleVersions:
         (billing_dir / "module.yml").write_text(
             'name: billing\nversion: "0.85.0"\nrequired_modules:\n  - orgs>=0.86.0\n'
         )
+        auth_dir = project / "modules" / "auth"
+        auth_dir.mkdir(parents=True)
+        (auth_dir / "module.yml").write_text('name: auth\nversion: "0.85.0"\n')
 
         manifests = _load_module_manifests(
             project,
@@ -1232,6 +1235,8 @@ docker:
 
             # Create minimal project structure
             os.makedirs("testapp/modules/auth", exist_ok=True)
+            with open("testapp/modules/auth/module.yml", "w") as f:
+                f.write('name: auth\nversion: "0.87.0"\n')
             with open("testapp/manage.py", "w") as f:
                 f.write("# Django manage.py")
 

@@ -18,11 +18,11 @@ from typing import Mapping
 import pytest
 
 from quickscale_core.contracts.module_discovery import (
-    PLACEHOLDER_MODULE_NAMES,
     authoritative_module_names,
     discover_shipped_module_paths,
     is_placeholder_module,
 )
+from quickscale_core.contracts.module_catalog import get_module_entry
 
 
 EXPECTED_MODEL_MODULE_COUNT = 10
@@ -837,7 +837,10 @@ def test_repository_module_migration_topology() -> None:
     assert "analytics" in inventory.service_modules
     assert "storage" in inventory.service_modules
     assert "teams" not in inventory.names
-    assert "teams" in PLACEHOLDER_MODULE_NAMES
+    teams_entry = get_module_entry("teams")
+    assert teams_entry is not None
+    assert teams_entry.placeholder is True
+    assert teams_entry.ready is False
     assert is_placeholder_module("teams")
 
     assert len(inventory.app_configs) == len(inventory.names)

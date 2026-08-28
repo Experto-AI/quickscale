@@ -336,15 +336,29 @@ version: "0.71.0"
         assert manifest is not None
         assert manifest.name == "auth"
 
-    def test_get_manifest_returns_none_on_manifest_error(self, tmp_path: Path) -> None:
-        """If the manifest file exists but is invalid, None is returned silently."""
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_get_manifest_raises_on_manifest_error(
+        self, tmp_path: Path, strict: bool
+    ) -> None:
+        """A present but malformed manifest is never treated as absence."""
         project_path = tmp_path / "project"
         module_dir = project_path / "modules" / "broken"
         module_dir.mkdir(parents=True)
         (module_dir / "module.yml").write_text("- invalid\n- list\n")
 
-        result = get_manifest_for_module(project_path, "broken")
-        assert result is None
+        with pytest.raises(ManifestError, match="broken"):
+            get_manifest_for_module(project_path, "broken", strict=strict)
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_get_manifest_incomplete_module_raises(
+        self, tmp_path: Path, strict: bool
+    ) -> None:
+        """A module directory without module.yml is an incomplete install."""
+        project_path = tmp_path / "project"
+        (project_path / "modules" / "incomplete").mkdir(parents=True)
+
+        with pytest.raises(ManifestError, match="module.yml"):
+            get_manifest_for_module(project_path, "incomplete", strict=strict)
 
 
 # ---------------------------------------------------------------------------

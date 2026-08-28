@@ -882,12 +882,7 @@ def _load_module_manifests(
     """Load manifests for all installed modules"""
     manifests: dict[str, ModuleManifest] = {}
     for module_name in module_names:
-        try:
-            manifest = get_manifest_for_module(project_path, module_name, strict=strict)
-        except ManifestError as error:
-            if strict and "Manifest file not found:" not in str(error):
-                raise
-            manifest = None
+        manifest = get_manifest_for_module(project_path, module_name, strict=strict)
         if manifest:
             manifests[module_name] = manifest
     return manifests
@@ -1898,16 +1893,18 @@ def _attempt_provenance_repair_if_needed(ctx: ApplyContext) -> None:
 
         try:
             resolved_sha = resolve_remote_ref(remote, branch)
-            module_state.commit_sha = resolved_sha
-            # Backfill the full provenance triple: also refresh embedded_at
-            # to the repair timestamp and ensure version is populated from
-            # the embedded manifest when available.
-            module_state.embedded_at = repair_timestamp
             manifest = get_manifest_for_module(ctx.output_path, module_name)
+            repaired_version = module_state.version
             if manifest is not None:
                 normalized_version = normalize_installed_version(manifest.version)
                 if normalized_version is not None:
-                    module_state.version = normalized_version
+                    repaired_version = normalized_version
+            # Commit the complete repair only after every lookup succeeds.
+            # An incomplete embedded module must not leave partially repaired
+            # state that can later be persisted.
+            module_state.commit_sha = resolved_sha
+            module_state.embedded_at = repair_timestamp
+            module_state.version = repaired_version
             repaired_any = True
             click.secho(f"✅ Repaired {module_name}: {resolved_sha[:8]}", fg="green")
         except Exception as e:
@@ -3183,8 +3180,8 @@ def _refresh_context_after_lock(ctx: ApplyContext) -> None:
                 list(merged_state.modules.keys()),
                 strict=True,
             )
-        except ManifestError:
-            manifests = {}
+        except ManifestError as error:
+            _abort_for_manifest_error(error, command_name="apply")
 
         # SA7.4: re-validate required-module version constraints with
         # fresh manifests so a concurrent module update is not missed.
@@ -3589,11 +3586,14 @@ def _execute_apply_steps_locked(
     # the full post-embed module set before continuing to wiring, dependency
     # sync, or migration steps.
     if embedded_modules:
-        post_embed_manifests = _load_module_manifests(
-            ctx.output_path,
-            list(ctx.qs_config.modules.keys()),
-            strict=True,
-        )
+        try:
+            post_embed_manifests = _load_module_manifests(
+                ctx.output_path,
+                list(ctx.qs_config.modules.keys()),
+                strict=True,
+            )
+        except ManifestError as error:
+            _abort_for_manifest_error(error, command_name="apply")
         try:
             check_required_module_versions(post_embed_manifests)
         except ManifestError as error:

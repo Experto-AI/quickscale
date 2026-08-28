@@ -606,6 +606,34 @@ class TestStatusCommandExtended:
             assert "manifest" in result.output.lower()
             assert "auth" in result.output
 
+    @pytest.mark.parametrize("json_output", [False, True])
+    def test_status_fails_for_incomplete_installed_manifest(self, json_output):
+        """Status text and JSON paths must reject a manifestless module directory."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale")
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_react",
+                        },
+                        "modules": {"auth": {"version": "0.87.0"}},
+                    },
+                    f,
+                )
+            os.makedirs("modules/auth")
+
+            args = ["--json"] if json_output else []
+            result = runner.invoke(status, args)
+
+            assert result.exit_code != 0
+            assert "manifest" in result.output.lower()
+            assert "auth" in result.output
+
 
 # ============================================================================
 # Phase 4: _state_file_has_consolidated_sections

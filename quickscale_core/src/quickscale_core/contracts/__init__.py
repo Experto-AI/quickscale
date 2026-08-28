@@ -85,11 +85,16 @@ from quickscale_core.contracts.resolvers import (  # noqa: F401
     validate_storage_module_options,
 )
 from quickscale_core.contracts.module_discovery import (
-    PLACEHOLDER_MODULE_NAMES,
+    AUTHORITATIVE_MODULE_COUNT,
+    ModulePresenceRecord,
+    ModulePresenceState,
+    authoritative_module_names,
+    discover_module_presence,
     discover_shipped_module_names,
     discover_shipped_module_paths,
     get_placeholder_rejection_reason,
     is_placeholder_module,
+    validate_active_module_subset,
 )
 from quickscale_core.contracts.module_options import (
     ANALYTICS_PROVIDER_POSTHOG,
@@ -206,11 +211,16 @@ __all__ = [
     "validate_social_module_options",
     "validate_storage_module_options",
     # Module discovery
-    "PLACEHOLDER_MODULE_NAMES",
+    "AUTHORITATIVE_MODULE_COUNT",
+    "ModulePresenceRecord",
+    "ModulePresenceState",
+    "authoritative_module_names",
+    "discover_module_presence",
     "discover_shipped_module_names",
     "discover_shipped_module_paths",
     "get_placeholder_rejection_reason",
     "is_placeholder_module",
+    "validate_active_module_subset",
     # Imperative-logic inventory
     "ADAPTER_ONLY",
     "ADAPTER_ONLY_SYMBOLS",

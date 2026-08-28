@@ -325,8 +325,10 @@ class TestRegenerateManagedWiringSkipUnknown:
         assert success, f"regenerate_managed_wiring failed: {message}"
         assert "regenerated" in message.lower()
 
-    def test_mix_of_known_and_unknown_discovered_modules(self, tmp_path: Path) -> None:
-        """Known discovered modules should be wired; unknown ones skipped."""
+    def test_mix_of_known_and_unknown_incomplete_modules_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """A discovered unknown directory is incomplete and must fail closed."""
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
         _write_complete_embedded_inventory(project)
@@ -347,13 +349,14 @@ class TestRegenerateManagedWiringSkipUnknown:
         (project / "modules" / "totally_unknown").mkdir(parents=True)
 
         success, message = regenerate_managed_wiring(project)
-        assert success, f"regenerate_managed_wiring failed: {message}"
+        assert success is False
+        assert "totally_unknown" in message
+        assert "module.yml" in message
 
-        content = (project / "myapp" / "settings" / "modules.py").read_text()
-        assert "quickscale_modules_analytics" in content
-
-    def test_discovered_modules_dir_with_unknown_module(self, tmp_path: Path) -> None:
-        """Discovery from modules/ should skip entries without a manifest adapter."""
+    def test_discovered_modules_dir_with_unknown_incomplete_module_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """Discovery from modules/ must reject manifestless directories."""
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
         _write_complete_embedded_inventory(project)
@@ -374,15 +377,14 @@ class TestRegenerateManagedWiringSkipUnknown:
         (project / "modules" / "custom_unknown").mkdir(parents=True)
 
         success, message = regenerate_managed_wiring(project)
-        assert success, f"regenerate_managed_wiring failed: {message}"
-
-        content = (project / "myapp" / "settings" / "modules.py").read_text()
-        assert "quickscale_modules_analytics" in content
+        assert success is False
+        assert "custom_unknown" in message
+        assert "module.yml" in message
 
     def test_all_discovered_unknown_modules_still_succeeds(
         self, tmp_path: Path
     ) -> None:
-        """When all discovered modules are unknown, regeneration still succeeds."""
+        """Unknown-only discovery remains a safe no-op without a base path."""
         project = tmp_path / "myapp"
         _write_minimal_project(project)
 
@@ -393,7 +395,6 @@ class TestRegenerateManagedWiringSkipUnknown:
         success, message = regenerate_managed_wiring(project)
         assert success, f"regenerate_managed_wiring failed: {message}"
 
-        # Settings file should still be written (empty module wiring).
         settings_modules = project / "myapp" / "settings" / "modules.py"
         assert settings_modules.exists()
 
@@ -558,10 +559,9 @@ class TestRegenerateManagedWiringAdapterFailure:
             _write_minimal_project(project, modules={"analytics": {"enabled": True}})
             _write_complete_embedded_inventory(project, exclude={"analytics"})
 
-            # Create an embedded module.yml for the missing module so
-            # _has_real_manifests is True and refresh_managed_adapters
-            # is called with _test_missing_adapter's module.yml at the
-            # base path.
+            # Create an embedded module.yml for the missing module so the
+            # embedded project source is selected and refresh_managed_adapters
+            # is called with _test_missing_adapter's module.yml at the base path.
             (project / "modules" / "_test_missing_adapter").mkdir(parents=True)
             (project / "modules" / "_test_missing_adapter" / "module.yml").write_text(
                 "version: '1'\nname: _test_missing_adapter\n"
@@ -730,26 +730,24 @@ class TestRegenerateManagedWiringFailHard:
         assert "modules.backups.target_mode must be one of" in message
 
 
-class TestRegenerateManagedWiringSkipManifestNotFound:
-    """SA18.2 regression (CR-SA18.2-003): when _has_real_manifests is True,
-    a registered module whose module.yml is missing from the embedded modules
-    directory triggers ManifestError("Manifest file not found") which is
-    silently skipped (continue), preserving the skip behaviour for legitimate
-    embedded missing-manifest cases while non-"Manifest file not found"
-    ManifestError cases still fail (validated in
-    TestRegenerateManagedWiringFailHard)."""
+class TestRegenerateManagedWiringIncompleteManifest:
+    """Registered incomplete modules fail wiring with actionable context.
 
-    def test_registered_module_without_manifest_skipped_when_embedded(
+    A directory without ``module.yml`` is an incomplete installed module, not
+    an unknown module. The core loader owns that distinction; the CLI must
+    preserve its typed failure instead of classifying the exception message.
+    """
+
+    def test_registered_module_without_manifest_fails_when_embedded(
         self, tmp_path: Path
     ) -> None:
-        """When _has_real_manifests is True and a registered module's
-        module.yml is absent from the embedded directory, the ManifestError
-        is caught and silently skipped, preserving the skip-unknown contract."""
+        """A registered directory missing module.yml fails as incomplete."""
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
 
         # Create modules/ with analytics (has module.yml) and blog (no module.yml).
-        # At least one real manifest is needed for _has_real_manifests == True.
+        # The ACTIVE analytics directory selects the embedded project source;
+        # refresh then rejects the INCOMPLETE blog directory.
         analytics_yml = (
             Path(__file__).resolve().parents[2]
             / "quickscale_modules"
@@ -765,14 +763,64 @@ class TestRegenerateManagedWiringSkipManifestNotFound:
 
         success, message = regenerate_managed_wiring(project)
         assert success is False
-        assert "inventory count drift" in message
+        assert "blog" in message
+        assert "module.yml" in message
 
-    def test_forwarded_registered_module_without_manifest_still_succeeds(
+    def test_only_registered_incomplete_module_fails_default_discovery(
         self, tmp_path: Path
     ) -> None:
-        """When _has_real_manifests is True and a registered module name is
-        explicitly forwarded but its module.yml is absent, regeneration still
-        succeeds (the ManifestError is silently skipped)."""
+        """Default discovery must not fall back from an incomplete project."""
+        from quickscale_core.contracts import module_discovery as _md
+        from quickscale_core.contracts.module_discovery import (
+            ModuleResolutionSource,
+        )
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        (project / "modules" / "analytics").mkdir(parents=True)
+
+        original_override = _md._modules_base_path
+        _md._modules_base_path = None
+        try:
+            assert _md.get_resolution_source() is ModuleResolutionSource.MONOREPO
+
+            success, message = regenerate_managed_wiring(project)
+
+            assert success is False
+            assert "analytics" in message
+            assert "module.yml" in message
+        finally:
+            _md._modules_base_path = original_override
+
+    def test_only_registered_incomplete_module_fails_explicit_selection(
+        self, tmp_path: Path
+    ) -> None:
+        """Explicit selection must not use an available prior source base."""
+        from quickscale_core.contracts import module_discovery as _md
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"analytics": {"enabled": True}})
+        (project / "modules" / "analytics").mkdir(parents=True)
+
+        monorepo_path = Path(__file__).resolve().parents[2] / "quickscale_modules"
+        original_override = _md._modules_base_path
+        _md._modules_base_path = monorepo_path
+        try:
+            success, message = regenerate_managed_wiring(
+                project, module_names=["analytics"]
+            )
+
+            assert success is False
+            assert "analytics" in message
+            assert "module.yml" in message
+            assert _md._modules_base_path == monorepo_path
+        finally:
+            _md._modules_base_path = original_override
+
+    def test_forwarded_registered_module_without_manifest_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """An explicitly selected registered incomplete module still fails."""
         project = tmp_path / "myapp"
         _write_minimal_project(project, modules={"analytics": {"enabled": True}})
 
@@ -794,7 +842,41 @@ class TestRegenerateManagedWiringSkipManifestNotFound:
             project, module_names=["analytics", "blog"]
         )
         assert success is False
-        assert "inventory count drift" in message
+        assert "blog" in message
+        assert "module.yml" in message
+
+
+def test_cli_manifest_error_handlers_do_not_classify_presence_by_message() -> None:
+    """CLI production handlers must not infer presence from exception text."""
+
+    source_paths = [
+        Path(__file__).resolve().parents[1]
+        / "src/quickscale_cli/utils/module_wiring_manager.py",
+        Path(__file__).resolve().parents[1]
+        / "src/quickscale_cli/commands/apply_command.py",
+        Path(__file__).resolve().parents[1]
+        / "src/quickscale_cli/commands/status_command.py",
+    ]
+
+    for source_path in source_paths:
+        source = source_path.read_text()
+        assert "Manifest file not found" not in source
+        tree = ast.parse(source, filename=str(source_path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ExceptHandler):
+                continue
+            handler_type = node.type
+            catches_manifest_error = handler_type is not None and any(
+                isinstance(candidate, ast.Name) and candidate.id == "ManifestError"
+                for candidate in ast.walk(handler_type)
+            )
+            if not catches_manifest_error:
+                continue
+            assert not any(
+                isinstance(candidate, ast.Compare)
+                and any(isinstance(op, (ast.In, ast.NotIn)) for op in candidate.ops)
+                for candidate in ast.walk(node)
+            ), f"message-based ManifestError classifier found in {source_path}"
 
 
 class TestRegenerateManagedWiringPriorBasePath:
@@ -826,8 +908,8 @@ class TestRegenerateManagedWiringPriorBasePath:
         )
 
         # Set the modules base path to the maintainer monorepo so that
-        # _prior_base_path is not None and _has_real_manifests is False
-        # (the test project has no modules/<name>/module.yml).
+        # _prior_base_path is not None and no embedded module source is
+        # selected (the test project has no modules/ directory).
         monorepo_path = Path(__file__).resolve().parents[2] / "quickscale_modules"
         assert monorepo_path.is_dir(), "Maintainer monorepo must exist for this test"
 

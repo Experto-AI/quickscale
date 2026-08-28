@@ -13,7 +13,6 @@ from quickscale_core.contracts.module_catalog import (
     get_module_readiness_reason,
 )
 from quickscale_core.contracts.module_discovery import (
-    PLACEHOLDER_MODULE_NAMES,
     discover_shipped_module_names,
     get_placeholder_rejection_reason,
     is_placeholder_module,
@@ -147,9 +146,12 @@ class TestPlaceholderModuleRejection:
         """Unknown modules should not be placeholders."""
         assert not is_placeholder_module("nonexistent")
 
-    def test_placeholder_in_set(self) -> None:
-        """PLACEHOLDER_MODULE_NAMES should contain teams."""
-        assert "teams" in PLACEHOLDER_MODULE_NAMES
+    def test_teams_placeholder_is_declared_in_catalog(self) -> None:
+        """The catalog is the sole source of placeholder declarations."""
+        entry = get_module_entry("teams")
+        assert entry is not None
+        assert entry.placeholder is True
+        assert entry.ready is False
 
     def test_placeholder_rejection_reason(self) -> None:
         """get_placeholder_rejection_reason should return a reason for teams."""

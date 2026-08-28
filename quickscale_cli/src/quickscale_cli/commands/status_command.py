@@ -180,12 +180,7 @@ def _load_module_manifests(
     """
     manifests: dict[str, ModuleManifest] = {}
     for module_name in module_names:
-        try:
-            manifest = get_manifest_for_module(project_path, module_name, strict=strict)
-        except ManifestError as error:
-            if strict and "Manifest file not found:" not in str(error):
-                raise
-            manifest = None
+        manifest = get_manifest_for_module(project_path, module_name, strict=strict)
         if manifest:
             manifests[module_name] = manifest
     return manifests

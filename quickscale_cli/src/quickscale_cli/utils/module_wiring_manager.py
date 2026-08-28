@@ -7,7 +7,10 @@ from typing import Any, Mapping
 
 from quickscale_core.contracts.module_discovery import (
     ImproperlyConfigured,
+    ModulePresenceState,
     ModuleResolutionSource,
+    discover_bundled_module_names,
+    discover_module_presence,
     get_modules_base_path,
     get_resolution_source,
     set_modules_base_path,
@@ -150,11 +153,20 @@ def _get_prior_modules_base_path() -> tuple[Path | None, bool]:
         return None, False
 
 
-def _has_embedded_manifests(project_path: Path) -> bool:
+def _has_embedded_module_source(project_path: Path) -> bool:
     modules_dir = project_path / "modules"
-    return modules_dir.is_dir() and any(
-        (modules_dir / entry.name / "module.yml").exists()
-        for entry in modules_dir.iterdir()
+    if not modules_dir.is_dir():
+        return False
+
+    presence = discover_module_presence(base_path=modules_dir)
+    registered_names = set(discover_bundled_module_names())
+    return any(
+        record.state is ModulePresenceState.ACTIVE
+        or (
+            record.state is ModulePresenceState.INCOMPLETE
+            and record.name in registered_names
+        )
+        for record in presence
     )
 
 
@@ -169,7 +181,11 @@ def _refresh_adapters() -> str | None:
 def _prepare_modules_base_path(
     project_path: Path, prior_base_path: Path | None
 ) -> str | None:
-    if _has_embedded_manifests(project_path):
+    try:
+        has_embedded_module_source = _has_embedded_module_source(project_path)
+    except ImproperlyConfigured as error:
+        return f"Managed adapter wiring failed: {error}"
+    if has_embedded_module_source:
         set_modules_base_path(project_path / "modules")
         return _refresh_adapters()
     if prior_base_path is not None:
@@ -198,8 +214,6 @@ def _build_one_wiring_spec(
     except (ManifestAdapterNotFound, ManifestError) as error:
         if isinstance(error, ManifestAdapterNotFound):
             return None, None
-        if "Manifest file not found" in str(error):
-            return None, None
         return None, str(error)
     except ValueError as error:
         return None, f"Unable to build managed wiring specs: {error}"
@@ -226,10 +240,6 @@ def _build_wiring_specs(
         try:
             manifest = load_module_manifest(module_name)
             assert_manifest_version_matches_core(manifest.version, module_name)
-        except ManifestError:
-            # Missing or unreadable manifest — let the spec builder handle
-            # it with the existing skip-unknown logic.
-            continue
         except ModuleVersionMismatchError as exc:
             return None, str(exc)
 
