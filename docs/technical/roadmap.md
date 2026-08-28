@@ -51,7 +51,7 @@ v88 — three worktrees, nine open merge positions carrying ten open ticket entr
 
 W2 (gates & declared wiring)   ★ CRITICAL PATH
   SA167c ─► SA166 ─► SA164          #21, #24, #25
-  (Phase-A slice merged; A acceptance + B-F open)
+  (Phase-A slice merged; A retry: 2 caller tests red; B-F open)
 
 W1 (module-wiring migration + watch items)
   SA167d ─► SA165                   #18, #22
@@ -94,17 +94,40 @@ serially around it. No ticket move relieves that; only scheduling does.
 
 ### Next action per lane
 
-- **W2 — continue SA167c (#21).** Do not redo the merged manifest-retirement bytes. Accept them
-  with the corrected focused command and restricted PostgreSQL role, then implement B-F.
-  **This is the only action that shortens the release.**
+- **W2 — settle D3, then resume SA167c (#21).** Do not redo the merged manifest-retirement bytes.
+  Correct the losing caller-test or runtime surface under fresh plan authority, rerun A's full
+  ordered acceptance chain, and implement B-F only after A is accepted. **This is the only action
+  that shortens the release.**
 - **W3 — resume SA135 + SA163 (#15) at the re-scoped phase E1.** Do not redo C or D, and do not
   attempt the two E2E Docker failures — they are SA170's.
 - **W1 — reconcile SA167d's accepted-open A-E ledger (#18)**, then complete independent review,
   terminal attestation, and exact-tip merge-back without closing the ticket early.
   This is the release's only unmerged delta; schedule its `make test` outside W3's window.
 
-All three lane heads are startable today and blocked by no decision. **No maintainer decision is
-open in the v88 plan.**
+W1 and W3 remain startable. W2 is blocked on one maintainer decision:
+
+#### Open decision D3 — embedded inventory contract
+
+The corrected Phase-A chain's loader suite exited 0 with 112 passed; the restricted-role orgs suite
+exited 0 with 884 passed, 11 skipped, and 2 warnings; manifest sync exited 0; and gate parity exited
+0. Its four-caller command then exited 1 with 256 passed and 2 failed in
+`TestRegenerateManagedWiringSkipManifestNotFound`, at
+`quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`: both tests expect an embedded
+registered module with no manifest to return `success is False` with `inventory count drift`, while
+the current `authoritative_module_names` / `regenerate_managed_wiring` path accepts the bundled
+twelve-module fallback and returns success. The verification-only phase made no tracked edit and,
+under the required stop-at-first-unexpected-red rule, did not run either the literal twelve-module
+source-bound projection probe or the final `git diff --exit-code` unchanged-tree oracle.
+
+> **Option 1 — update the two stale expectations to the current bundled-inventory contract
+> (recommended).** Preserve the implemented fail-hard twelve-module fallback, after a fresh plan
+> confirms that no authoritative policy requires embedded inventory drift to fail here.
+>
+> **Option 2 — restore runtime failure on embedded inventory drift.** Preserve the two test
+> expectations, with caller-parity review across every `regenerate_managed_wiring` consumer.
+
+Until D3 is settled, Phase A is unaccepted and phases B-F remain unreached. No product or test byte
+changed in the failed phase.
 
 #### Standing rules carried from closed decisions
 
@@ -212,23 +235,100 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   `django_apps:` was inert declarative surface: eleven manifests carried it, the loader parsed it,
   no production path read it, and one SA92 helper used it before falling back to a guessed path.
   **Acceptance:** `django_apps:` is either derived from the `apps` wiring projection or removed from all manifests, `ModuleManifest`, and the loader, with no key parsed-but-unread remaining; a conformance gate fails when a module ships models or a migration without declaring at least one Django app, registered in `scripts/gate_registry.json` and passing `scripts/check_gate_parity.py`; the gate is proved by deleting a module's app declaration and observing red, reverted before merge; `test_sa92_migration_squash_guardrail.py` no longer depends on the retired key.
-  **State (measured 2026-08-27): Phase-A product slice merged into `v88`** at `f6f3bbce`;
-  `wt-track2` is clean and idle. Phase A was dispatched but is **not accepted**; B-F were not
-  reached. The merged bytes removed `django_apps:` from `ModuleManifest`, the loader, the obsolete
-  loader test, all eleven source declarations and their core snapshots, and removed the SA92
-  helper's retired-key dependency, while preserving all twelve `apps` wiring projections and public
-  adapter outputs. Terminal review found no product-slice defect.
-  **Blocking.** Phase A's focused loader command ran 112 passing tests but exited 1 because the
-  package configuration measured only 36.59% of the whole core package against `fail-under=90`, and
-  the default orgs command selected a privileged PostgreSQL role. Accept the already-merged bytes
-  explicitly with
-  `poetry run pytest quickscale_core/tests/test_manifest_loader.py -q -o addopts= --no-cov` and
-  `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules`. The broad coverage
-  obligation is retained in the final campaign. Prior green substitute runs are not retroactive
-  Phase-A acceptance.
+  **State (measured 2026-08-28): Phase-A product slice merged; corrected acceptance partial.**
+  Product commit `f6f3bbce` remains merged. `wt-track2` synchronized cleanly to `v88` at
+  `8a8f364b` before this attempt. Phase A is **not accepted**; phases B-F were not reached. The
+  merged bytes removed `django_apps:` from `ModuleManifest`, the loader, the obsolete loader test,
+  all eleven source declarations and their core snapshots, and removed the SA92 helper's retired-key
+  dependency, while preserving all twelve `apps` wiring projections and public adapter outputs.
+  Terminal review found no product-slice defect.
+  **Latest acceptance evidence.** The coverage-isolated loader command exited 0 with 112 passed;
+  the restricted-role orgs command exited 0 with 884 passed, 11 skipped, and 2 warnings;
+  `make check-manifest-sync` exited 0; and `make check-gate-parity` exited 0. The required
+  four-caller command then exited 1 with 256 passed and 2 failed in
+  `TestRegenerateManagedWiringSkipManifestNotFound`, at
+  `quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`: both expect embedded
+  inventory drift to fail, while the current bundled twelve-module fallback succeeds. Under the
+  required stop-at-first-unexpected-red rule, neither the literal twelve-module source-bound caller
+  probe nor the final `git diff --exit-code` unchanged-tree oracle was run. No tracked file changed,
+  and this green prefix is not Phase-A acceptance.
+  **Blocking:** D3 must select the authoritative embedded-inventory contract. Correct the losing
+  test or runtime surface under fresh plan authority, rerun all of A in order, and retain broad
+  coverage in the final campaign.
+  **Decisions needed:** D3 under [Open decision D3](#open-decision-d3--embedded-inventory-contract).
+  ***applied after terminal attestation — not independently graded***
   **Remaining plan (serial; do not redo the merged retirement bytes):**
-  1. **A-acceptance remainder:** accept the merged slice with the corrected focused commands,
-     manifest sync/parity, the four caller-projection suites, and unchanged apps-projection evidence.
+  0. **Pre-existing caller mismatch:** settle D3 and correct the losing test/runtime surface under a
+     fresh reviewed plan, including caller-parity evidence if runtime behavior changes.
+  1. **A-acceptance:** after the D3 correction is reviewed and the candidate starts with no tracked
+     diff, rerun the exact chain below in order. Stop at the first command whose observed result does
+     not match its expected result; do not run any later command after that red, and do not treat a
+     green prefix as acceptance.
+
+     1. `poetry run pytest quickscale_core/tests/test_manifest_loader.py -q -o addopts= --no-cov`
+        — expect exit 0.
+     2. `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules`
+        — expect exit 0 under the restricted PostgreSQL role.
+     3. `make check-manifest-sync`
+        — expect exit 0 with all twelve source and bundled manifests in sync.
+     4. `make check-gate-parity`
+        — expect exit 0 through Make's blocking parity wrapper.
+     5. `poetry run pytest quickscale_cli/tests/commands/test_module_config_extended.py quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_cli/tests/test_orgs_contract.py quickscale_cli/tests/test_manifest_entry_point_integration.py -q -o addopts= --no-cov`
+        — expect exit 0 after the D3-selected contract correction.
+     6. Run this literal read-only source-bound probe; expect exit 0 and exactly
+        `verified 12 source-bound module app projections`:
+
+        ```bash
+        poetry run python - <<'PY'
+        from quickscale_core.contracts.module_discovery import (
+            authoritative_module_names,
+            get_modules_base_path,
+        )
+        from quickscale_core.manifest.entry_point import (
+            build_manifest_wiring_spec,
+            refresh_managed_adapters,
+        )
+        from quickscale_core.manifest.loader import load_manifest_from_path
+
+        base = get_modules_base_path()
+        source_apps = {}
+        defaults = {}
+        for name in authoritative_module_names():
+            manifest = load_manifest_from_path(base / name / "module.yml")
+            projections = [
+                item
+                for item in manifest.wiring_projections
+                if isinstance(item, dict) and item.get("wiring_field") == "apps"
+            ]
+            assert len(projections) == 1, (name, projections)
+            projection = projections[0]
+            assert projection.get("derivation_type") == "static", name
+            expression = projection.get("expression")
+            assert isinstance(expression, dict), name
+            values = expression.get("value")
+            assert isinstance(values, list) and values, name
+            assert all(isinstance(value, str) and value.strip() for value in values), name
+            source_apps[name] = tuple(values)
+            defaults[name] = manifest.get_defaults()
+
+        refresh_managed_adapters()
+        caller_apps = {
+            name: build_manifest_wiring_spec(
+                name,
+                defaults[name],
+                project_package="sa167_acceptance",
+            ).apps
+            for name in source_apps
+        }
+        assert caller_apps == source_apps, (source_apps, caller_apps)
+        print(f"verified {len(source_apps)} source-bound module app projections")
+        PY
+        ```
+
+     7. `git diff --exit-code`
+        — expect exit 0 as the final unchanged-tracked-tree oracle. Only all seven expected results,
+        on this one ordered run and one unchanged candidate, accept Phase A.
+     ***applied after terminal attestation — not independently graded***
   2. **B-gate:** add a fail-hard `check_module_app_declaration` checker with hermetic tests covering
      model/migration evidence, empty or malformed projections, malformed manifests, inventory and
      filesystem failures, evidence-free modules, deterministic diagnostics, and current tree state.
