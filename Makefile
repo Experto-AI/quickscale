@@ -918,6 +918,14 @@ security-negative-probes:
 # and kernel-observed Make recipe ownership all agree.  The EXIT trap is armed
 # before allocating the sentinel so
 # every allocation path cleans up, including signal exits.
+# Runs every scripts/test_*.py conformance suite, cache-free and without product coverage.
+# Parallelised with `-n auto --dist loadfile` (measured 2026-08-28, 24 cores):
+#   serial                  299 s -> 5 failed, 1313 passed
+#   -n auto --dist loadfile  94 s -> 5 failed, 1313 passed  (identical outcomes)
+#   -n auto (default loadscan) 34 s -> 20 failed (15 spurious)  <- do NOT use
+# loadfile keeps every test in a file on one worker, so the intra-file shared state in
+# test_quality_baseline_monotonicity.py cannot race.  Collection and outcomes are
+# unchanged; only wall time moves.  Retain --dist loadfile if worker count is tuned.
 check-gate-suites:
 	@set -e; \
 	check_gate_recipe_identity=quickscale-check-gate-suites-v1; \
@@ -999,7 +1007,7 @@ check-gate-suites:
 	printf '%s\n%s\n' "$$check_gate_token" "$$$$" > "$$check_gate_sentinel"; \
 	export QUICKSCALE_CHECK_GATE_SUITES_TOKEN="$$check_gate_token"; \
 	export QUICKSCALE_CHECK_GATE_SUITES_SENTINEL="$$check_gate_sentinel"; \
-	$(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
+	$(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q -n auto --dist loadfile
 
 # The isolation runner owns its full behavior and prerequisites.  Keep this
 # target as a thin Make delegation; hosted CI uses the same caller.

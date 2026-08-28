@@ -123,7 +123,8 @@ the real embed path writes `module.yml` before wiring regeneration runs. If it d
 fixtures. If it does not, this is a second product defect and gets its own entry rather than a
 fixture edit.
 
-**A third regression, outside `make check` entirely.** `poetry run pytest scripts/` returns
+**A third regression — inside `make check`, at a stage the red path never reaches.**
+`poetry run pytest scripts/` returns
 **5 failed, 1313 passed**, all five in `test_version_tool.py::TestUpdateWithTempRepo`.
 `quickscale_core/.../contracts/module_discovery.py` is contracted to run as a **standalone shim** —
 `scripts/version_tool.sh:14,34` copies that one file into a tree with no importable
@@ -133,8 +134,16 @@ fixture edit.
 and raises `exc.name == "quickscale_core"`. Widening the guard then exposes a second defect: the
 twelve-module release count is enforced against a hermetic tree that legitimately holds fewer.
 **Both belong to SA173** (open item 1c) — it is the same contract change, and `version_tool.sh` is a
-release-inventory consumer the ticket did not enumerate. This one is invisible from the repo root,
-where `--list-modules` prints the twelve names and exits 0.
+release-inventory consumer the ticket did not enumerate.
+
+**This is a second blocker on `make check`, not a side issue.** `make check` runs `pytest scripts/`
+as the registered `check-gate-suites` gate (`Makefile:1262`, via `CHECK_GATE_TARGETS`), and that gate
+returns **rc=2** today. The red path fails fast at `test-unit` (41 s) and never reaches it, which is
+exactly why this stayed invisible: **fixing the eighteen CLI failures alone will not turn `make check`
+green.** Causes A, B, and C must all land before the branch-state gate clears.
+
+The defect is also invisible from the repo root, where `--list-modules` prints the twelve names and
+exits 0 — it only appears in a tree where `quickscale_core` is not importable.
 
 **Consequences.**
 

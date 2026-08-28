@@ -4,6 +4,48 @@
 
 ## v88 development — 2026-08-21
 
+- **`make check`'s cost profiled; `check-gate-suites` parallelised 3.2x (2026-08-28).**
+  A prior planning pass recorded that *"the dominant cost is `lint-frontend`"*. **Measured, that is
+  wrong.** Warm, on 24 cores, `make lint-frontend` is **13.89 s** — it already caches `node_modules`
+  behind a `package.json` hash in `.quickscale/frontend_lint_cache`. The actual green-path profile of
+  `make check`:
+
+  | Stage | Time | Share |
+  |---|---|---|
+  | lint + typecheck + core (2886) + cli (2135) unit tests | 41 s | 10% |
+  | core-compat, module-core-imports, manifest-sync, org-context, csrf-exempt | 5 s | 1% |
+  | **check-gate-suites** (`pytest scripts/`) | **299 s** | **72%** |
+  | check-dependency-vulnerabilities (Trivy) | 50 s | 12% |
+  | check-security-static-analysis (Bandit) | 3 s | <1% |
+  | gate parity + CI gate generation | ~5 s | 1% |
+  | lint-frontend | 14 s | 3% |
+  | **Total** | **~417 s** | |
+
+  The recorded 601 s was measured on a loaded machine; the composition is the same. The 41 s red path
+  is unchanged — it fails fast at `test-unit` and never reaches the gate block, which is why this
+  distribution was never visible from a red run.
+  **Change: `check-gate-suites` now runs `-n auto --dist loadfile`.** Measured, three consecutive
+  runs: **94 s, 5 failed / 1313 passed — byte-identical outcomes to the 299 s serial run.**
+  `--dist loadfile` is **load-bearing, not a tuning knob**: default `loadscan` distribution splits
+  `test_quality_baseline_monotonicity.py` across workers, whose intra-file shared state then races
+  and produces **15 spurious failures** (34 s, 20 failed). That variant is recorded in the Makefile
+  comment as explicitly not to be used.
+  **Oracle updated, deliberately still exact.**
+  `test_ci_coverage_policy.py::TestRegisteredScriptGateTarget::test_exact_cache_free_argv_and_cleanup`
+  pins the gate's exact argv and went red on the new flags — correctly. It was updated to the new
+  argv rather than loosened to a subset check: the exactness is what protects the `-p no:cacheprovider`
+  cache-free guarantee and the `--no-cov` / no-`--cov` coverage-free guarantee sitting beside it.
+  98 passed after the update.
+  **Watch item, recorded rather than smoothed over.** One run in five produced a sixth failure at
+  `test_provision_ci_postgres.py::test_reused_local_lease_corrects_profile_environment_and_consumers_reject_repoisoning[isolation]`,
+  which passes in isolation (2 passed) and did not recur across three consecutive repeats. It
+  contends for the shared local PostgreSQL lease, and the machine was running other cluster-touching
+  work at that moment. **Not a blocker, not dismissed:** if it recurs, the file needs an
+  `xdist_group` pinning it against the other cluster-touching suites, not a wider distribution mode.
+  Gate parity, CI gate generation, and the ticket-context consistency test are green after the
+  change; `scripts/gate_registry.json` pins the target name, not its argv, so registry parity is
+  unaffected.
+
 - **SA173's module-presence contract landed on `v88`; the ticket stays open on one consumer policy (2026-08-28).**
   Product commit `e0730ae9` merged into the integration branch at `4e410c09` and implements decision
   D3's contract. Verified on HEAD: `discover_module_presence` reports ABSENT / ACTIVE / INCOMPLETE
@@ -55,7 +97,8 @@
   are one change, not two** — a half-applied D3 left one consumer with no behaviour at all, and it is
   the second instance in this release of a `quickscale_core/contracts/` change turning another
   surface red without touching a shared file (`203fcd61` was the first).
-  **Cause C, outside `make check` — the standalone discovery shim.** `poetry run pytest scripts/`
+  **Cause C, inside `make check` at a stage the red path never reaches — the standalone discovery
+  shim.** `poetry run pytest scripts/`
   returns **5 failed, 1313 passed**, all five in `test_version_tool.py::TestUpdateWithTempRepo`.
   `contracts/module_discovery.py` is contracted to run as a lone file in a tree with no importable
   `quickscale_core` package — `scripts/version_tool.sh:14,34` copies it and calls `--list-modules` to
@@ -66,8 +109,13 @@
   defect: with an empty catalog the shim enforces the twelve-module release count against a hermetic
   tree that legitimately holds fewer. Both are SA173's, and `version_tool.sh` is a release-inventory
   consumer the ticket had not enumerated alongside `publish_module.py` and `check_sa117_scope.py`.
-  Invisible from the repo root, where the same command prints twelve names and exits 0 — which is
-  why `make check` alone is not the gate picture for a contract change of this shape.
+  Invisible from the repo root, where the same command prints twelve names and exits 0.
+  **Correcting an earlier reading in this entry's first draft:** this is *not* outside `make check`.
+  `pytest scripts/` is the registered `check-gate-suites` gate inside `CHECK_GATE_TARGETS`
+  (`Makefile:1262`), and it returns rc=2. `make check`'s red path fails fast at `test-unit` in 41 s
+  and never reaches that stage, which is why the failure was attributed to a separate command.
+  **Fixing the eighteen CLI failures alone will not turn `make check` green** — all three causes gate
+  it.
   **Planner effect.** SA173 stays **band A** and **#30**; the band-A cause changes from *"the two
   caller tests are red"* to *"the CLI consumer policy is missing"*. No ticket opened, closed, or
   changed lanes: counts hold at fourteen open v88 ticket entries across fourteen open merge
