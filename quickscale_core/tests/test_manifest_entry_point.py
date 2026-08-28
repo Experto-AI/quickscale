@@ -1155,6 +1155,97 @@ class TestDiscoveredInventoryRegistryTransition:
             MANAGED_ADAPTER_ORIGINS.clear()
             MANAGED_ADAPTER_ORIGINS.update(original_origins)
 
+    def test_active_declared_placeholder_fails_before_import_atomically(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An active catalog placeholder is rejected before any import or commit."""
+        from quickscale_core.contracts.module_discovery import (
+            ImproperlyConfigured,
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        module_name = "teams"
+        package_name = f"quickscale_modules_{module_name}"
+        modules_dir = tmp_path / "modules"
+        module_dir = modules_dir / module_name
+        module_dir.mkdir(parents=True)
+        manifest_path = module_dir / "module.yml"
+        manifest_path.write_text(f"version: '1'\nname: {module_name}\n")
+
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_base = get_modules_base_path()
+        original_sys_path = sys.path.copy()
+        original_package_modules = {
+            name: module
+            for name, module in sys.modules.items()
+            if name == package_name or name.startswith(f"{package_name}.")
+        }
+        registry_identity = id(MANIFEST_ADAPTER_REGISTRY)
+        origins_identity = id(MANAGED_ADAPTER_ORIGINS)
+
+        def prior_adapter(*_args: object, **_kwargs: object) -> ModuleWiringSpec:
+            return ModuleWiringSpec(apps=("prior",))
+
+        prior_registry = {"_test_custom": prior_adapter}
+        prior_origins = {"_test_custom"}
+        prior_package = ModuleType(package_name)
+        prior_child = ModuleType(f"{package_name}.prior")
+        expected_package_modules = dict(original_package_modules)
+        expected_package_modules.update(
+            {
+                package_name: prior_package,
+                f"{package_name}.prior": prior_child,
+            }
+        )
+        imports: list[str] = []
+
+        def fail_if_imported(name: str) -> object:
+            imports.append(name)
+            raise AssertionError("active placeholders must fail before adapter import")
+
+        try:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(prior_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(prior_origins)
+            sys.modules[package_name] = prior_package
+            sys.modules[f"{package_name}.prior"] = prior_child
+            set_modules_base_path(modules_dir)
+            monkeypatch.setattr(
+                entry_point_module, "_load_managed_adapter", fail_if_imported
+            )
+
+            with pytest.raises(
+                ImproperlyConfigured, match="teams.*placeholder"
+            ) as exc_info:
+                refresh_managed_adapters()
+
+            assert str(manifest_path) in str(exc_info.value)
+            assert imports == []
+            assert id(MANIFEST_ADAPTER_REGISTRY) == registry_identity
+            assert id(MANAGED_ADAPTER_ORIGINS) == origins_identity
+            assert MANIFEST_ADAPTER_REGISTRY == prior_registry
+            assert MANAGED_ADAPTER_ORIGINS == prior_origins
+            assert sys.path == original_sys_path
+            assert {
+                name: module
+                for name, module in sys.modules.items()
+                if name == package_name or name.startswith(f"{package_name}.")
+            } == expected_package_modules
+        finally:
+            set_modules_base_path(original_base)
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(original_origins)
+            for name in list(sys.modules):
+                if name == package_name or name.startswith(f"{package_name}."):
+                    sys.modules.pop(name, None)
+            sys.modules.update(original_package_modules)
+            sys.path[:] = original_sys_path
+
     def test_failed_resolution_preserves_registry_and_origins_atomically(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

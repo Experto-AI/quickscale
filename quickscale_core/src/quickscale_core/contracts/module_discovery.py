@@ -21,6 +21,7 @@ import argparse
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
+import importlib
 from pathlib import Path
 import sys
 from typing import Final
@@ -214,40 +215,70 @@ def discover_module_presence(
     return [records[name] for name in sorted(records)]
 
 
-def _declared_module_names() -> tuple[str, ...]:
-    """Return catalog names without creating a module-discovery import cycle."""
+def _declared_catalog() -> tuple[tuple[str, ...], frozenset[str], bool]:
+    """Return catalog names, placeholders, and whether the catalog is available.
+
+    The discovery file is copied into hermetic release-tool trees where the
+    surrounding ``quickscale_core`` package is intentionally absent.  Only
+    absence of the catalog itself (or one of its package prefixes) is an
+    expected standalone condition.  A ``ModuleNotFoundError`` raised by code
+    imported by the catalog is unrelated and must remain visible.
+    """
+    catalog_module = "quickscale_core.contracts.module_catalog"
     try:
         from quickscale_core.contracts.module_catalog import MODULE_CATALOG
     except ModuleNotFoundError as exc:
         # The standalone discovery shim is also used by hermetic release
         # tooling, which supplies only this contract module and fake manifests.
-        if exc.name != "quickscale_core.contracts.module_catalog":
+        # ``exc.name`` identifies the missing import; only the catalog module
+        # itself and its package prefixes are valid standalone absence.
+        if exc.name is None or (
+            exc.name != catalog_module and not catalog_module.startswith(f"{exc.name}.")
+        ):
             raise
-        return ()
 
-    return tuple(entry.name for entry in MODULE_CATALOG)
+        # Direct-file repository consumers execute this shim by path, so the
+        # package root is not necessarily importable even though the sibling
+        # catalog source is present.  Resolve that exact direct-file context
+        # before falling back to the intentionally catalog-free lone-shim
+        # contract used by hermetic release fixtures.
+        sibling_catalog_module = "module_catalog"
+        try:
+            sibling_catalog = importlib.import_module(sibling_catalog_module)
+        except ModuleNotFoundError as sibling_exc:
+            if sibling_exc.name != sibling_catalog_module:
+                raise
+            return (), frozenset(), False
+        MODULE_CATALOG = sibling_catalog.MODULE_CATALOG
+
+    names = tuple(entry.name for entry in MODULE_CATALOG)
+    placeholders = frozenset(
+        entry.name for entry in MODULE_CATALOG if entry.placeholder
+    )
+    return names, placeholders, True
+
+
+def _declared_module_names() -> tuple[str, ...]:
+    """Return catalog names without creating a module-discovery import cycle."""
+    names, _placeholders, _available = _declared_catalog()
+    return names
 
 
 def _declared_placeholder_names() -> frozenset[str]:
     """Return placeholder names from the catalog when the catalog is present."""
-    try:
-        from quickscale_core.contracts.module_catalog import MODULE_CATALOG
-    except ModuleNotFoundError as exc:
-        if exc.name != "quickscale_core.contracts.module_catalog":
-            raise
-        return frozenset()
-    return frozenset(entry.name for entry in MODULE_CATALOG if entry.placeholder)
+    _names, placeholders, _available = _declared_catalog()
+    return placeholders
 
 
 def _presence_records_for_projection(
     base_path: str | Path | None = None,
 ) -> list[ModulePresenceRecord]:
     """Return observations and reject unsafe projection inputs."""
+    declared_names, placeholder_names, _catalog_available = _declared_catalog()
     records = discover_module_presence(
         base_path=base_path,
-        expected_names=_declared_module_names(),
+        expected_names=declared_names,
     )
-    placeholder_names = _declared_placeholder_names()
     invalid: list[str] = []
     for record in records:
         if (
@@ -337,6 +368,19 @@ def authoritative_module_names() -> list[str]:
         ImproperlyConfigured: If a placeholder is discovered or the number of
             discovered modules differs from :data:`AUTHORITATIVE_MODULE_COUNT`.
     """
+    _declared_names, _placeholder_names, catalog_available = _declared_catalog()
+
+    if not catalog_available:
+        # A copied lone shim has no package catalog to define a release
+        # inventory.  Its authoritative projection is the active set present
+        # in the hermetic modules tree; presence validation still rejects
+        # incomplete directories rather than dropping them silently.
+        return [
+            record.name
+            for record in _presence_records_for_projection()
+            if record.state is ModulePresenceState.ACTIVE
+        ]
+
     if _modules_base_path is not None:
         names = discover_shipped_module_names()
         release_names = discover_bundled_module_names()

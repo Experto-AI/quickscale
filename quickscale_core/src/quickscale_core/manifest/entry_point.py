@@ -191,6 +191,73 @@ def _load_managed_adapter(module_name: str) -> Callable[..., ModuleWiringSpec]:
         sys.modules.update(original_package_modules)
 
 
+def _active_placeholder_records(presence: list[Any]) -> list[Any]:
+    """Return active records whose names are declared catalog placeholders."""
+    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        ModulePresenceState,
+        is_placeholder_module,
+    )
+
+    return [
+        record
+        for record in presence
+        if record.state is ModulePresenceState.ACTIVE
+        and is_placeholder_module(record.name)
+    ]
+
+
+def _non_placeholder_incomplete_records(presence: list[Any]) -> list[Any]:
+    """Return incomplete records that cannot be safely ignored."""
+    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        ModulePresenceState,
+        is_placeholder_module,
+    )
+
+    return [
+        record
+        for record in presence
+        if record.state is ModulePresenceState.INCOMPLETE
+        and not is_placeholder_module(record.name)
+    ]
+
+
+def _validate_managed_presence(
+    presence: list[Any], bundled_module_names: list[str]
+) -> set[str]:
+    """Validate one presence snapshot and return its active module names."""
+    from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+        ImproperlyConfigured,
+        ModulePresenceState,
+        validate_active_module_subset,
+    )
+
+    active_placeholders = _active_placeholder_records(presence)
+    if active_placeholders:
+        details = "; ".join(
+            f"module '{record.name}' has declared placeholder manifest "
+            f"'{record.manifest_path}'"
+            for record in active_placeholders
+        )
+        raise ImproperlyConfigured(
+            "Cannot refresh managed adapters: active placeholder modules must "
+            f"remain unloaded ({details})."
+        )
+
+    incomplete = _non_placeholder_incomplete_records(presence)
+    if incomplete:
+        details = "; ".join(
+            f"module '{record.name}' is missing manifest '{record.manifest_path}'"
+            for record in incomplete
+        )
+        raise ImproperlyConfigured(f"Module presence is incomplete: {details}")
+
+    active_module_names = {
+        record.name for record in presence if record.state is ModulePresenceState.ACTIVE
+    }
+    validate_active_module_subset(active_module_names, bundled_module_names)
+    return active_module_names
+
+
 def refresh_managed_adapters() -> None:
     """Atomically refresh every adapter in the active module subset.
 
@@ -202,12 +269,8 @@ def refresh_managed_adapters() -> None:
     preserving registry identity, custom entries, and prior state on failure.
     """
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
-        ImproperlyConfigured,
-        ModulePresenceState,
         discover_bundled_module_names,
         discover_module_presence,
-        is_placeholder_module,
-        validate_active_module_subset,
     )
 
     bundled_module_names = discover_bundled_module_names()
@@ -215,26 +278,7 @@ def refresh_managed_adapters() -> None:
         base_path=get_modules_base_path(),
         expected_names=bundled_module_names,
     )
-    incomplete = [
-        record
-        for record in presence
-        if record.state is ModulePresenceState.INCOMPLETE
-        and not is_placeholder_module(record.name)
-    ]
-    if incomplete:
-        details = "; ".join(
-            f"module '{record.name}' is missing manifest '{record.manifest_path}'"
-            for record in incomplete
-        )
-        raise ImproperlyConfigured(f"Module presence is incomplete: {details}")
-
-    active_module_names = {
-        record.name
-        for record in presence
-        if record.state is ModulePresenceState.ACTIVE
-        and not is_placeholder_module(record.name)
-    }
-    validate_active_module_subset(active_module_names, bundled_module_names)
+    active_module_names = _validate_managed_presence(presence, bundled_module_names)
 
     loaded_adapters: dict[str, Callable[..., ModuleWiringSpec]] = {}
     # Resolve every adapter before mutating the live registry.  A failed
@@ -243,6 +287,10 @@ def refresh_managed_adapters() -> None:
         loaded_adapters[module_name] = _load_managed_adapter(module_name)
 
     if set(loaded_adapters) != active_module_names:
+        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
+            ImproperlyConfigured,
+        )
+
         raise ImproperlyConfigured(
             "Managed adapter resolution did not cover the discovered module "
             "inventory atomically."

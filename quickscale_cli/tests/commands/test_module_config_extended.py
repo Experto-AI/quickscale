@@ -150,6 +150,16 @@ def _write_module_package(
     (module_dir / "pyproject.toml").write_text(pyproject_content)
 
 
+def _read_source_manifest(module_name: str) -> str:
+    """Load the repository manifest used by standalone wiring fixtures."""
+    return (
+        Path(__file__).resolve().parents[3]
+        / "quickscale_modules"
+        / module_name
+        / "module.yml"
+    ).read_text()
+
+
 class TestSharedModuleDependencySync:
     """Tests for the shared CLI dependency-sync helper."""
 
@@ -957,10 +967,13 @@ class TestApplyAuthConfiguration:
     def test_already_configured(self, tmp_path):
         """Managed wiring remains idempotent when auth reapplied."""
         project = _make_project(tmp_path)
-        auth_dir = project / "modules" / "auth"
-        auth_dir.mkdir(parents=True)
-        (auth_dir / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\ndjango-allauth = "^0.60.0"\n'
+        _write_module_package(
+            project,
+            "auth",
+            manifest_content=_read_source_manifest("auth"),
+            pyproject_content=(
+                '[tool.poetry.dependencies]\ndjango-allauth = "^0.60.0"\n'
+            ),
         )
         config = {
             "registration_enabled": True,
@@ -978,11 +991,13 @@ class TestApplyAuthConfiguration:
     def test_full_apply_auth(self, tmp_path):
         """Full auth configuration with all file writes"""
         project = _make_project(tmp_path)
-        # Create auth module pyproject for dependency resolution
-        auth_dir = project / "modules" / "auth"
-        auth_dir.mkdir(parents=True)
-        (auth_dir / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\ndjango-allauth = "^0.60.0"\n'
+        _write_module_package(
+            project,
+            "auth",
+            manifest_content=_read_source_manifest("auth"),
+            pyproject_content=(
+                '[tool.poetry.dependencies]\ndjango-allauth = "^0.60.0"\n'
+            ),
         )
 
         config = {
@@ -1006,10 +1021,13 @@ class TestApplyAuthConfiguration:
     def test_urls_already_has_allauth(self, tmp_path):
         """Skip URL update when allauth already in urls"""
         project = _make_project(tmp_path)
-        auth_dir = project / "modules" / "auth"
-        auth_dir.mkdir(parents=True)
-        (auth_dir / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\ndjango-allauth = "^0.60.0"\n'
+        _write_module_package(
+            project,
+            "auth",
+            manifest_content=_read_source_manifest("auth"),
+            pyproject_content=(
+                '[tool.poetry.dependencies]\ndjango-allauth = "^0.60.0"\n'
+            ),
         )
         (project / "myproject" / "urls.py").write_text("allauth already here\n")
 
@@ -2634,12 +2652,15 @@ class TestApplyCRMConfiguration:
     def test_already_configured(self, tmp_path):
         """Managed wiring remains idempotent when CRM reapplied."""
         project = _make_project(tmp_path)
-        crm_dir = project / "modules" / "crm"
-        crm_dir.mkdir(parents=True)
-        (crm_dir / "pyproject.toml").write_text(
-            "[tool.poetry.dependencies]\n"
-            'djangorestframework = "^3.15.0"\n'
-            'django-filter = "^23.0"\n'
+        _write_module_package(
+            project,
+            "crm",
+            manifest_content=_read_source_manifest("crm"),
+            pyproject_content=(
+                "[tool.poetry.dependencies]\n"
+                'djangorestframework = "^3.15.0"\n'
+                'django-filter = "^23.0"\n'
+            ),
         )
         config = get_default_crm_config()
         apply_crm_configuration(project, config)
@@ -2676,12 +2697,15 @@ class TestApplyCRMConfiguration:
     def test_full_apply_crm_with_api(self, tmp_path):
         """Full CRM config apply with API enabled"""
         project = _make_project(tmp_path)
-        crm_dir = project / "modules" / "crm"
-        crm_dir.mkdir(parents=True)
-        (crm_dir / "pyproject.toml").write_text(
-            "[tool.poetry.dependencies]\n"
-            'djangorestframework = "^3.15.0"\n'
-            'django-filter = "^23.0"\n'
+        _write_module_package(
+            project,
+            "crm",
+            manifest_content=_read_source_manifest("crm"),
+            pyproject_content=(
+                "[tool.poetry.dependencies]\n"
+                'djangorestframework = "^3.15.0"\n'
+                'django-filter = "^23.0"\n'
+            ),
         )
 
         config = {"enable_api": True, "deals_per_page": 25, "contacts_per_page": 50}
@@ -2700,12 +2724,15 @@ class TestApplyCRMConfiguration:
     def test_full_apply_crm_without_api(self, tmp_path):
         """Full CRM config apply with API disabled"""
         project = _make_project(tmp_path)
-        crm_dir = project / "modules" / "crm"
-        crm_dir.mkdir(parents=True)
-        (crm_dir / "pyproject.toml").write_text(
-            "[tool.poetry.dependencies]\n"
-            'djangorestframework = "^3.15.0"\n'
-            'django-filter = "^23.0"\n'
+        _write_module_package(
+            project,
+            "crm",
+            manifest_content=_read_source_manifest("crm"),
+            pyproject_content=(
+                "[tool.poetry.dependencies]\n"
+                'djangorestframework = "^3.15.0"\n'
+                'django-filter = "^23.0"\n'
+            ),
         )
 
         config = {"enable_api": False, "deals_per_page": 10, "contacts_per_page": 20}
@@ -2720,12 +2747,15 @@ class TestApplyCRMConfiguration:
         project = _make_project(tmp_path)
         settings = project / "myproject" / "settings" / "base.py"
         settings.write_text('INSTALLED_APPS = ["rest_framework", "django_filters"]\n')
-        crm_dir = project / "modules" / "crm"
-        crm_dir.mkdir(parents=True)
-        (crm_dir / "pyproject.toml").write_text(
-            "[tool.poetry.dependencies]\n"
-            'djangorestframework = "^3.15.0"\n'
-            'django-filter = "^23.0"\n'
+        _write_module_package(
+            project,
+            "crm",
+            manifest_content=_read_source_manifest("crm"),
+            pyproject_content=(
+                "[tool.poetry.dependencies]\n"
+                'djangorestframework = "^3.15.0"\n'
+                'django-filter = "^23.0"\n'
+            ),
         )
 
         config = {"enable_api": True, "deals_per_page": 25, "contacts_per_page": 50}
@@ -2738,9 +2768,12 @@ class TestApplyCRMConfiguration:
         """Skip URL update when CRM URLs already present"""
         project = _make_project(tmp_path)
         (project / "myproject" / "urls.py").write_text("quickscale_modules_crm\n")
-        crm_dir = project / "modules" / "crm"
-        crm_dir.mkdir(parents=True)
-        (crm_dir / "pyproject.toml").write_text("[tool.poetry.dependencies]\n")
+        _write_module_package(
+            project,
+            "crm",
+            manifest_content=_read_source_manifest("crm"),
+            pyproject_content="[tool.poetry.dependencies]\n",
+        )
 
         config = get_default_crm_config()
         apply_crm_configuration(project, config)

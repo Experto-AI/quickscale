@@ -25,6 +25,11 @@ from quickscale_core.schema.state_schema import (
     StateManager,
 )
 from quickscale_core.config import ConfigError
+from quickscale_core.contracts.module_discovery import (
+    ModulePresenceRecord,
+    ModulePresenceState,
+    discover_module_presence,
+)
 from quickscale_core.manifest import ModuleManifest, parse_version_tuple
 from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
 from quickscale_core.project_state import (
@@ -184,6 +189,17 @@ def _load_module_manifests(
         if manifest:
             manifests[module_name] = manifest
     return manifests
+
+
+def _discover_project_module_presence(
+    project_path: Path,
+    module_names: list[str],
+) -> list[ModulePresenceRecord]:
+    """Capture typed filesystem presence for state-owned modules."""
+    return discover_module_presence(
+        base_path=project_path / "modules",
+        expected_names=module_names,
+    )
 
 
 def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> None:
@@ -399,6 +415,7 @@ def _compute_drift_diagnostics(
     project_state_manager: ProjectStateManager,
     state_manager: StateManager,
     manifests: dict[str, ModuleManifest] | None = None,
+    presence_records: list[ModulePresenceRecord] | None = None,
 ) -> dict:
     """Compute M2 drift and compatibility diagnostics.
 
@@ -413,7 +430,7 @@ def _compute_drift_diagnostics(
     * ``module_tracking`` — per-module consolidated tracking status.
     * ``managed_files_consolidated`` — whether the ``managed_files`` section
       is populated in state.
-    * ``filesystem_drift`` — orphaned and missing modules.
+    * ``filesystem_drift`` — orphaned, missing, and incomplete modules.
     * ``managed_file_drift`` — managed files that drifted since last apply.
     * ``version_drift`` — version disagreements between state and config.
     """
@@ -447,6 +464,26 @@ def _compute_drift_diagnostics(
 
     # Filesystem drift (orphaned/missing modules).
     fs_drift = state_manager.verify_filesystem()
+    presence_records = (
+        presence_records
+        if presence_records is not None
+        else _discover_project_module_presence(project_path, list(modules))
+    )
+    state_module_names = set(modules)
+    incomplete_modules = sorted(
+        record.name
+        for record in presence_records
+        if (
+            record.name in state_module_names
+            and record.state is ModulePresenceState.INCOMPLETE
+        )
+    )
+    missing_modules = sorted(
+        record.name
+        for record in presence_records
+        if record.name in state_module_names
+        and record.state is ModulePresenceState.ABSENT
+    )
 
     # Managed file drift.
     managed_drift_records = project_state_manager.detect_managed_file_drift()
@@ -489,7 +526,8 @@ def _compute_drift_diagnostics(
         "managed_files_consolidated": managed_files_consolidated,
         "filesystem_drift": {
             "orphaned_modules": sorted(fs_drift.get("orphaned_modules", [])),
-            "missing_modules": sorted(fs_drift.get("missing_modules", [])),
+            "missing_modules": missing_modules,
+            "incomplete_modules": incomplete_modules,
         },
         "managed_file_drift": managed_file_drift,
         "version_drift": version_drift,
@@ -557,7 +595,8 @@ def _display_drift_diagnostics(diagnostics: dict) -> None:
     fs = diagnostics["filesystem_drift"]
     orphaned = fs["orphaned_modules"]
     missing = fs["missing_modules"]
-    if not orphaned and not missing:
+    incomplete = fs.get("incomplete_modules", [])
+    if not orphaned and not missing and not incomplete:
         click.secho("   Filesystem drift: ✅ clean", fg="green")
     else:
         parts: list[str] = []
@@ -565,7 +604,19 @@ def _display_drift_diagnostics(diagnostics: dict) -> None:
             parts.append(f"{len(orphaned)} orphaned ({', '.join(orphaned)})")
         if missing:
             parts.append(f"{len(missing)} missing ({', '.join(missing)})")
+        if incomplete:
+            parts.append(f"{len(incomplete)} incomplete ({', '.join(incomplete)})")
         click.secho(f"   Filesystem drift: ⚠️  {'; '.join(parts)}", fg="yellow")
+
+    if incomplete:
+        click.echo(
+            "\n⚠️  Incomplete Modules (directory present but module.yml missing):"
+        )
+        for module in incomplete:
+            click.secho(f"   • {module}", fg="yellow")
+        click.echo(
+            "   These modules need a valid module.yml before they can be applied."
+        )
 
     # Managed file drift.
     mf_drift = diagnostics["managed_file_drift"]
@@ -834,11 +885,21 @@ def status(json_output: bool) -> None:
         )
 
     manifests: dict[str, ModuleManifest] | None = None
+    presence_records: list[ModulePresenceRecord] = []
     if state and state.modules:
+        presence_records = _discover_project_module_presence(
+            project_path,
+            list(state.modules.keys()),
+        )
+        active_module_names = [
+            record.name
+            for record in presence_records
+            if record.state is ModulePresenceState.ACTIVE
+        ]
         try:
             manifests = _load_module_manifests(
                 project_path,
-                list(state.modules.keys()),
+                active_module_names,
                 strict=True,
             )
         except ManifestError as error:
@@ -852,6 +913,7 @@ def status(json_output: bool) -> None:
             project_state_manager,
             state_manager,
             manifests=manifests,
+            presence_records=presence_records,
         )
         output = _build_json_output(
             project_path,
@@ -871,6 +933,7 @@ def status(json_output: bool) -> None:
         project_state_manager,
         state_manager,
         manifests=manifests,
+        presence_records=presence_records,
     )
 
     # Display text status
