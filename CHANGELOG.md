@@ -4,6 +4,94 @@
 
 ## v88 development — 2026-08-21
 
+- **Storage lazy-export coverage gate closed; the last red row on `make test` is gone (2026-08-29).**
+  Retained implementation commit `1edb9538`, ancestor of both `v88` and `wt-track2`, adds only
+  `quickscale_modules/storage/tests/test_init.py`. **The red it closed, measured exactly:** two detached
+  runs on `v88` at `7818ab0c`, clean tree — `make check` exit 0 in 184 s (`pytest scripts/` 1319 passed
+  in 92 s), and `make test` exit 2 in 82 s failing at `test-integration` for exactly one reason,
+  `→ Files below 80% coverage: quickscale_modules_storage/__init__.py  11  6  45%  28-35`. Nothing else
+  in the run was red; every module cleared the 90% overall floor (storage 94.88%, overall mean 94.31%).
+  Lines 28-35 were the **entire body of `__getattr__`** — the lazy re-export shim that keeps package
+  initialization dependency-free so the manifest adapter can load during `quickscale apply` before module
+  dependencies are installed. The shim is load-bearing; the fix was a unit test over it, not a deletion,
+  waiver, exclusion, or threshold change. Two tests cover every runtime `__all__` export, package caching,
+  helper identity, and the unknown-name `AttributeError` path; the storage suite then reported **41 passed,
+  `__init__.py` at 100%, package coverage 97.67%**, with no product or coverage-policy edit. Serial
+  convergence independently approved that one-file delta and reproduced the same result.
+
+- **Gate cost profiled and the `check-gate-suites` parallelisation banked (2026-08-29).**
+  `-n auto --dist loadfile` (`Makefile:1021`) cut that stage from **299 s to 94 s** with byte-identical
+  outcomes. `lint-frontend`, previously recorded as the dominant cost, measures **13.89 s** — that figure
+  was wrong. Profiled green path: lint + typecheck + core (2886) + cli (2135) unit tests 41 s; core-compat,
+  module-core-imports, manifest-sync, org-context, csrf-exempt 5 s; **check-gate-suites 94 s**;
+  Trivy 50 s; Bandit 3 s; gate parity + CI gate generation ~5 s; lint-frontend 14 s — composed ~212 s,
+  **measured end-to-end 184 s exit 0 on `v88`**. Consequence carried forward as an execution rule:
+  `make check` now fits inside one foreground call, while `make test` and `make quality` are still
+  launched detached. `--dist loadfile` is load-bearing, not a tuning knob — the default `loadscan` splits
+  `test_quality_baseline_monotonicity.py` across workers and produces spurious failures.
+
+- **SA173 Phases A-C evidence archived; the ticket stays open on Phase D onward (2026-08-29).**
+  Phase A reproduced the source-bound starting state (39 storage tests passed, `__init__.py` at 45%).
+  Phase B is the coverage fix above. Phase C observed 41 storage tests with `__init__.py` at 100%,
+  167 CLI callers, 222 four-file contract callers, and 5,096 CLI/core non-E2E tests green; it was accepted
+  under the unreturned-gate rule rather than described as fully validated, because its `pytest scripts/`
+  command returned no verdict at 120 s and again at the one permitted 300 s retry (1,318 passed before
+  `scripts/test_version_tool.py::TestUpdateWithTempRepo::test_make_version_update` failed to return),
+  leaving `make check-manifest-sync` and `make check-gate-parity` unreached. Revised reviewed-plan
+  authority `EV-6` bound the intentional four-file collection to **222**: `-o addopts=` admits the
+  E2E-marked `test_module_lifecycle_cycle.py::test_update_auto_commits_each_module_e2e`; without that node
+  the total is 221. Phase D's clean-tree prerequisite `make test-integration` exited 0 and left all twelve
+  `test_quickscale_*` databases owned by `quickscale_test_role`, with an equal before/after census.
+  The open Phase-D oracle drift stays on the roadmap.
+
+- **SA167c's Phase-A product slice merged and terminally reviewed (2026-08-29).**
+  Commit `f6f3bbce` is on `v88`. It removed `django_apps:` from `ModuleManifest`, the loader, the obsolete
+  loader test, all eleven source declarations and their core snapshots, and removed the SA92 helper's
+  retired-key dependency, while preserving all twelve `apps` wiring projections and public adapter outputs.
+  Terminal review found no product-slice defect. The acceptance attempt was green on four of five commands
+  (loader 112 passed; restricted-role orgs 884 passed / 11 skipped; `make check-manifest-sync` and
+  `make check-gate-parity` exit 0); the four-caller command exited 1 on two tests in
+  `TestRegenerateManagedWiringSkipManifestNotFound` (`test_module_wiring_manager_manifest.py:767,796`).
+  Decision D3 established those as a module-presence question owned by SA173, and they are **green on
+  `v88` today** (`test_module_wiring_manager_manifest.py` 43 passed), as are the seven former
+  `commands/test_module_config_extended.py` fixture failures. Phase-A *acceptance* remains open only
+  because a green prefix is not acceptance under the stop-at-first-unexpected-red rule.
+
+- **SA167d's ungraded attestation root-caused; both causes are removed (2026-08-29).**
+  Phases A-E are accepted at E0 tip `bd2c291b`, retained inside `8b20800d`. E0 made no tracked edits and
+  recorded **282 focused tests passed** with `make lint`, `make typecheck`, `make test`, `make check`, and
+  `make quality` all exit 0. Independent convergence then corrected real defects — ineffective
+  auth-migration flush guidance, a non-operational fresh-database recovery path, and three stale
+  quality-baseline identities — as `8b20800d`; measured product delta `c50de1c1..8b20800d` is **30 files,
+  1,012 insertions, 2,228 deletions**. Terminal attestation returned **no grade**: its read-only surface
+  could resolve the exact tip but could not obtain the complete patch or independently exclude
+  uncommitted-byte drift. That was a **review-input failure, not an attestation finding** — nothing was
+  found wrong with the delta. Separately, V0 stopped when `make check` hit a 120 s foreground cutoff.
+  Both causes are gone: the patch is producible in one command (`git diff <base>..<tip> > <name>.patch`,
+  measured 4,274 lines / 183 KB), and `make check` is measured at 184 s green. The generalized rule —
+  *terminal attestation must be handed its input* — is now an execution rule.
+
+- **SA135's stage E2 transferred to SA170, and the reason recorded (2026-08-28).**
+  E2 required `QS_E2E_PARALLEL=0 make test-e2e` followed by `make ci-e2e`. That re-coupled SA135's
+  acceptance to the very E2E harness whose fixed-tag collision, uncaught `subprocess.TimeoutExpired`, and
+  blind readiness poll are **SA170's** open defects — the same harness that stalled phase E once already.
+  A green full-E2E run against that harness is not evidence of anything and a red one cannot be attributed.
+  SA170 now owns the full E2E campaign and runs it after its own three fixes, where the result is
+  interpretable. This is the same lift that moved E1's flake obligation, and it leaves SA135 holding only
+  evidence it can deterministically produce. Its prior blocker is also cleared: the last attempt never ran
+  a command because its reviewed plan placed a review dispatch inside G-sync/G-validate and then resumed
+  authored mutation in G-closeout/G-final, which the strictly forward pipeline cannot do; a compliant plan
+  is written into the open ticket and no plan-authoring step remains before dispatch.
+
+- **Decision D3's roadmap restatement retired (2026-08-29).**
+  *Module presence is a three-state fact* — Option 3, chosen 2026-08-28 — is implemented and merged, and
+  its policy authority is [decisions.md → Module Presence States](docs/technical/decisions.md#module-presence-states).
+  The clause *each consumer owns its own reaction* is half of the decision, not a footnote: the merged work
+  writes `status`'s report-as-drift policy while preserving `apply`'s fail-hard reaction. The roadmap's
+  duplicate narration of the choice, the rejected Options 1 and 2, and the cost note (the critical path grew
+  by one ticket, accepted deliberately) are archived here; the roadmap keeps only the binding standing rule.
+  SA173 remains open for validation and closeout, not because D3 lacks an implementation.
+
 - **SA173's consumer, fixture, shim, and placeholder work integrated into `v88`; the ticket stays open on one coverage gate (2026-08-29).**
   Product commit `4c311a73` merged through `5bf03b40`/`b5b84ca9`. This archives the full 2026-08-28
   failure diagnosis, which is now closed by the merged bytes and is no longer planner scope.
