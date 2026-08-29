@@ -547,7 +547,7 @@ Keep this anchor in place for compatibility. Update the companion doc when the s
 - ❌ `skipif(not postgres)` / `QUICKSCALE_TEST_DB` env-var guards on isolation tests are prohibited — isolation tests must run against PostgreSQL unconditionally; a job that cannot provision Postgres is misconfigured, not a valid reason to skip
 - ❌ No backward compatibility layer, migration shim, or fallback mode for SQLite-based setups
 
-**Validation and Automation Entry Points:** See [validation_policy.md](./validation_policy.md#repository-command-reference) for the authoritative repository command baseline and assistant guidance.
+**Validation and Automation Entry Points:** See [validation_policy.md](./validation_policy.md#repository-command-reference) for the authoritative repository command baseline and assistant guidance, and [§Validation Tiers](./validation_policy.md#validation-tiers) for which of those commands a given change owes.
 
 **Security gate tooling:**
 - ✅ Dependency vulnerability scanning uses Trivy v0.74.0 against both committed
@@ -652,7 +652,7 @@ implicit env-var/stdout-JSON coupling.
 
 - **decisions.md**: Repo-wide policy, tie-breakers, prohibitions, and document ownership map (authoritative)
 - **implementation_contract.md**: Current shipped implementation contract, CLI surface, and architecture-boundary reference
-- **validation_policy.md**: Validation entrypoints, testing standards, coverage expectations, and E2E guidance
+- **validation_policy.md**: Validation entrypoints, validation tiers, testing standards, coverage expectations, and E2E guidance
 - **generated_project_structure.md**: Generated-project layout, artifact placement, and generation guardrails
 - **repository_layout.md**: Maintainer-repository layout and naming/import matrix
 - **scaffolding.md**: Concise structure hub plus compatibility anchors and backlinks into the structure companions
@@ -695,6 +695,8 @@ and a PostgreSQL 18 integration gate.
 
 Gate scopes, make targets, and role grants:
 [validation_policy.md §Testing Standards](./validation_policy.md#testing-standards).
+Which gate a given change owes is decided by tier, not by habit:
+[validation_policy.md §Validation Tiers](./validation_policy.md#validation-tiers).
 
 ## Testing Standards
 

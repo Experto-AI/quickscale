@@ -35,8 +35,10 @@ merge_strategy: append
 # Quality Gate
 <!-- Add rules for testing, linting, and quality enforcement here -->
 [include](#shared)
-- Run `make test-unit` to validate after changes.
-- After any template change, verify generated project structure against `docs/technical/generated_project_structure.md`.
+- Tier commands for this domain (see `docs/technical/validation_policy.md#validation-tiers`):
+  `change` — `make lint`, `make typecheck`, and `poetry run pytest quickscale_core/tests/<file-or-node> --tb=short -m "not e2e" -o addopts= --no-cov`;
+  `task` — `make test-unit -- --core`; `release` — `make ci` (`make ci-e2e` after a template change).
+- A template change under `src/quickscale_core/generator/` is user-facing generated-project output, so it escalates to `release`: verify generated project structure against `docs/technical/generated_project_structure.md`.
 
 # Change Review
 <!-- Add rules for PR review and change management here -->
