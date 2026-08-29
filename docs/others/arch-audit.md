@@ -92,52 +92,18 @@ reconciliation log. No finding sits at the `now` horizon this pass.
 
 ## Fix-regression audit
 
-Two remediations are in scope: the landed environment centralization, and the delta's gate edits.
+Two remediations were in scope this pass: the landed environment centralization and the delta's gate
+edits. Both were re-audited and scored **resolved with the mechanism removed rather than relocated**;
+the full narrative — station counts, the `describe --format json` binding that replaced the literal
+oracle, the absence-of-the-old-shape anti-regression assertion, and the `990f660f`/`48e0a62a`
+de-compounding of the conformance gate — is archived in [CHANGELOG.md](../../CHANGELOG.md) and is not
+restated here.
 
-**`ci-environment-hand-replicated` → resolved, mechanism removed.** `scripts/provision_ci_postgres.sh`
-(649 lines) is now "the single PostgreSQL environment contract", exposing `describe` / `hosted-setup`
-/ `run` / `validate` over five profiles (`backups`, `restricted`, `isolation`, `bypassrls`,
-`client-only`). All six hosted stations call it (`ci.yml:93,458,539`, `publish.yml:170`,
-`e2e.yml:87`, `nightly-bypassrls.yml:80`) and five Makefile targets consume it
-(`Makefile:415,435,1010,1296,1300`). The prior pass measured thirteen hand-replicated stations plus a
-literal oracle; `grep -rn "createdb\|GRANT \|CREATE ROLE\|apt-get install" .github/workflows/` now
-returns **zero hits**. Three checks against relocation:
-
-1. *Mechanism removed, not moved.* The module list is derived, not re-listed:
-   `load_inventory()` shells out to `contracts/module_discovery.py --list-modules` and hard-fails on
-   absence, empty output, duplicates, or unsorted input (`provision_ci_postgres.sh:79-97`) — the
-   repository's own established pattern, and precisely what the prior recommendation asked for.
-2. *The oracle became a binding, not a transcript.* `scripts/test_gate_parity.py:332`
-   (`test_profiles_are_bound_by_helper_describe_json`) executes the helper's `describe --format json`
-   and asserts against **its output**, replacing the previous verbatim shell-as-Python-literal.
-   Better still, `test_exactly_six_stations_use_expected_profiles` (line 297) asserts the *absence* of
-   the old shape in every station's run text — `assert "apt-get" not in job_text`, `"createdb" not in
-   job_text`, `"ALTER DATABASE" not in job_text`, `"provision_test_roles.sh" not in job_text`. That is
-   an anti-regression gate, not a copy-pin, and it is the reason this is scored resolved rather than
-   relocated.
-3. *Prior sound decisions preserved.* The restricted-role posture survives — profiles carry
-   `ROLE_FLAGS`/`ALLOW_BYPASS`, and `bypassrls` is a named, explicit profile rather than an ambient
-   default.
-
-*New commitments minted:* two hand-pinned literals inside the new derivation —
-`((${#MODULES[@]} == 12))` and `[[ "$item" != teams ]]` (`provision_ci_postgres.sh:93,96`) — and a
-second copy of the PostgreSQL major (`POSTGRES_MAJOR=18` at line 15, against
-`runtime_pins.POSTGRES_VERSION = "18"`). Both are small, fail loudly, and are carried to the
-watchlist rather than promoted.
-
-**`990f660f` + `48e0a62a` → compounding removed.** These deleted, from a conformance gate, the
-literal ticket IDs (`assert "SA151" not in roadmap`), merge positions (`assert 3 not in positions`),
-dependency edges, measured dates, and roadmap prose that every planning pass had to edit in step —
-and replaced them with counts **derived** from `roadmap.md` and asserted against `docs/index.md`,
-guarded by a new red-canary test (`test_v88_status_consumer_count_drift_is_expected_red_canary`).
-The structural invariants survive as derived checks with their own canaries: no checked entries
-(`CLOSED_ENTRY_RE`, line 194), dependencies naming open tickets (line 121), context restating no
-schedulable metadata, and merge-position uniqueness. The commit also removed this audit and
-`tech-audit.md` from the gate's inputs, with the rationale written into the docstring: "Pinning
-their counts, finding IDs, or prose here forces every regenerated audit to reproduce the previous
-pass's conclusions, which is the opposite of an audit." That is the correct call, and `48e0a62a`
-propagated it into `decisions.md` as a rule stated by trigger rather than by finding ID. No
-invariant was weakened; no new station was minted.
+*New commitments minted, carried to the [watchlist](#watchlist) and owned by SA164:* two hand-pinned
+literals inside the new derivation — `((${#MODULES[@]} == 12))` and `[[ "$item" != teams ]]`
+(`provision_ci_postgres.sh:93,96`) — and a second copy of the PostgreSQL major (`POSTGRES_MAJOR=18` at
+`:15`, against `runtime_pins.POSTGRES_VERSION = "18"`). Both are small and fail loudly, so they were
+carried rather than promoted.
 
 ---
 

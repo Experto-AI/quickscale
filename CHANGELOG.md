@@ -4,6 +4,113 @@
 
 ## v88 development — 2026-08-21
 
+- **SA173's consumer, fixture, shim, and placeholder work integrated into `v88`; the ticket stays open on one coverage gate (2026-08-29).**
+  Product commit `4c311a73` merged through `5bf03b40`/`b5b84ca9`. This archives the full 2026-08-28
+  failure diagnosis, which is now closed by the merged bytes and is no longer planner scope.
+  **Starting state, measured detached on `v88` at `4e410c09`, clean tree, `make check` exit 2:**
+  lint and typecheck green; `quickscale_core` 2886 passed / 1 skipped; `quickscale_cli`
+  **18 failed / 2135 passed**; and, at a stage the fail-fast red path never reached,
+  `poetry run pytest scripts/` at **5 failed / 1313 passed**.
+  **Cause A — `status` aborted on the drift it exists to report (11 tests, product defect).**
+  Acceptance criterion 5 deleted the CLI's `if "Manifest file not found" in str(error)` skip at
+  `module_wiring_manager.py:201` and moved classification into core. Correct — but the replacement
+  *reaction* was never written, so `_abort_for_manifest_error` (`status_command.py:229`, reached from
+  `:845`) aborted with exit 1 on any module that `.quickscale/state.yml` registers and the project
+  tree does not carry. Three of the eleven were literally `test_status_detects_missing_modules`,
+  `test_module_tracking_completeness`, and `test_json_drift_filesystem_drift_populated`. D3 already
+  prescribed the answer — `status` **reports** and exits 0, `apply` **fails hard** — and the merged
+  work writes the missing half while preserving the written one. The eleven tests were the correct
+  oracle and were **not** edited.
+  **Cause B — seven stale fixtures, not an `apply` regression.** These failed differently, at
+  `module_config.py:546` with `Module presence is incomplete: module 'auth' is missing manifest`.
+  The fixtures at `commands/test_module_config_extended.py:961,983` and their CRM equivalents built
+  `modules/<name>/` holding only a `pyproject.toml`; under the new contract that is INCOMPLETE, and
+  refusing to wire it is the behaviour SA173 was opened to produce. They were routed through the
+  file's own `_write_module_package` helper (`:139-150`) — the treatment `e0730ae9` had already
+  applied to the lifecycle fixtures and not extended here. **No assertion changed and `apply` did not
+  become tolerant.** The real embed path was confirmed, not assumed, to write `module.yml` before
+  wiring regeneration.
+  **Cause C — the standalone discovery shim, which took `scripts/` red with it (5 tests).**
+  `contracts/module_discovery.py` is contracted to run **alone**: `scripts/version_tool.sh:14,34`
+  copies that one file into a tree with no importable `quickscale_core` and calls `--list-modules` to
+  enumerate the modules it must version-bump. `e0730ae9` put `_declared_module_names()` (`:217-229`)
+  on that path behind a guard comparing `exc.name != "quickscale_core.contracts.module_catalog"`,
+  while a shim tree fails at the *root* package and raises `exc.name == "quickscale_core"`, so the
+  guard re-raised and `--list-modules` exited 1. `_declared_placeholder_names` (`:231-239`) carried
+  the same too-narrow comparison. **A second defect sat behind the first:** widening the guard got
+  past the import and then failed with `Module inventory count drift: expected 12 unique release
+  modules, found 1` — the twelve-module release count enforced against a hermetic tree that
+  legitimately carries fewer. Both were fixed, and a hermetic test now pins the contract. The defect
+  was invisible from the repo root, where `--list-modules` prints twelve names and exits 0.
+  **Also completed on the same candidate:** ACTIVE catalog-declared placeholders now fail atomically
+  with a pre-import error instead of being silently excluded by `refresh_managed_adapters`
+  (`manifest/entry_point.py:218-236`), while declared-INCOMPLETE placeholders keep `teams`
+  fail-closed; repository direct-file consumers resolve the sibling catalog; the lone-file discovery
+  shim supports hermetic inventories; criterion 8's missing-manifest negative proof ran and restored
+  exact bytes; and the `refresh_managed_adapters` complexity warning was removed.
+  Verification on the candidate: `test_status_command.py` + `commands/test_module_config_extended.py`
+  **167 passed** with no test file edited; the four-file contract chain **221 passed**;
+  `test_module_wiring_manager_manifest.py` **43 passed**; roadmap consistency **21 passed**; plus
+  broad non-E2E, parity, lint, type, provisioning and static checks. Independent terminal review found
+  no defect in these product bytes.
+  **What kept the ticket open:** the required `make test` chain stops at
+  `quickscale_modules/storage/src/quickscale_modules_storage/__init__.py` at **45% per-file coverage
+  against the required 80%**. That is the whole remaining blocker; it is tracked on the open SA173
+  entry in [roadmap.md](docs/technical/roadmap.md).
+
+- **Two planning artefacts retired as closed-by-diagnosis (2026-08-29).**
+  **The interim known-red protocol is void and must not be revived.** The two-node-id
+  `PYTEST_ADDOPTS` deselect recorded on 2026-08-27 excluded none of the eighteen real failures — both
+  node ids passed — and deselecting a ticket's own oracle is the exact failure the protocol was
+  written to prevent. A gate that is red on the integration branch is attributed to one ticket and
+  never deselected.
+  **The "broad CLI validation returned no verdict at 120 s and again at 360 s" blocker was never a
+  stall.** Run detached, the suite completes in seconds; the verdict was the eighteen failures above.
+  It was a foreground cutoff on a run that also happened to be red — one recorded acceptance stall
+  traced to exactly this shape.
+  **The order-dependent pollution row is gone with its code path.**
+  `test_module_discovery.py::TestAuthoritativeModuleNames::test_partial_generated_override_uses_bundled_shipped_inventory`
+  was an artifact of the `OVERRIDE`→bundled substitution; `e0730ae9` removed the path and the test,
+  so the trap is retired rather than carried. The 2026-08-28 unfiltered full-suite baseline
+  (**7 failed / 5134 passed / 16 skipped in 1:18:19**) is superseded: two rows were SA173's and are
+  green, one was this pollution artifact, and the remaining four `e2e` rows are SA170's and are
+  carried on that ticket.
+
+- **Arch-audit `ci-environment-hand-replicated` fix-regression narrative archived (2026-08-29).**
+  The finding was scored **resolved** on 2026-08-28 and its remediation re-audited; the detail is
+  archived here so the audit carries live findings only.
+  **Mechanism removed, not moved.** `scripts/provision_ci_postgres.sh` (649 lines) is now the single
+  PostgreSQL environment contract, exposing `describe` / `hosted-setup` / `run` / `validate` over five
+  profiles (`backups`, `restricted`, `isolation`, `bypassrls`, `client-only`). All six hosted stations
+  call it (`ci.yml:93,458,539`, `publish.yml:170`, `e2e.yml:87`, `nightly-bypassrls.yml:80`) and five
+  Makefile targets consume it (`Makefile:415,435,1010,1296,1300`). Against the prior pass's thirteen
+  hand-replicated stations plus a literal oracle,
+  `grep -rn "createdb\|GRANT \|CREATE ROLE\|apt-get install" .github/workflows/` now returns **zero
+  hits**. The module list is *derived*, not re-listed: `load_inventory()` shells out to
+  `contracts/module_discovery.py --list-modules` and hard-fails on absence, empty output, duplicates,
+  or unsorted input (`:79-97`).
+  **The oracle became a binding, not a transcript.** `scripts/test_gate_parity.py:332`
+  (`test_profiles_are_bound_by_helper_describe_json`) executes `describe --format json` and asserts
+  against its output, replacing a verbatim shell-as-Python literal; and
+  `test_exactly_six_stations_use_expected_profiles` (`:297`) asserts the **absence** of the old shape
+  in every station's run text (`"apt-get"`, `"createdb"`, `"ALTER DATABASE"`,
+  `"provision_test_roles.sh"` all absent). That anti-regression assertion is why this scored resolved
+  rather than relocated. The restricted-role posture survives: profiles carry `ROLE_FLAGS`/
+  `ALLOW_BYPASS`, and `bypassrls` is a named explicit profile rather than an ambient default.
+  **`990f660f` + `48e0a62a` — compounding removed.** These deleted literal ticket IDs
+  (`assert "SA151" not in roadmap`), merge positions, dependency edges, measured dates, and roadmap
+  prose from a conformance gate, replacing them with counts **derived** from `roadmap.md` and asserted
+  against `docs/index.md`, guarded by a red-canary test. The structural invariants survive as derived
+  checks with their own canaries: no checked entries, dependencies naming open tickets, context
+  restating no schedulable metadata, and merge-position uniqueness. The commit also removed both audit
+  documents from the gate's inputs — "pinning their counts, finding IDs, or prose here forces every
+  regenerated audit to reproduce the previous pass's conclusions, which is the opposite of an audit" —
+  and `48e0a62a` propagated that into `decisions.md` as a rule stated by trigger rather than by
+  finding ID. No invariant weakened, no new station minted.
+  **Still live, carried to the arch-audit watchlist and owned by SA164:** the two hand-pinned literals
+  minted inside the new derivation (`provision_ci_postgres.sh:93,96`) and the second copy of the
+  PostgreSQL major (`:15` against `runtime_pins.POSTGRES_VERSION`).
+
 - **SA117's maintainer targets moved out of `make help` into `make help-release` (2026-08-28).**
   Eleven `sa117-*` targets rendered inline in the help a developer reads daily, at the same visual
   weight as `make test`. They are release-day tooling: **no CI workflow and no `gate_registry.json`

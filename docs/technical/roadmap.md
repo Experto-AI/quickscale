@@ -26,13 +26,12 @@ from here rather than marked done. No checked entry is permitted.
   separate ephemeral servers; this applies to the shared local cluster only.
 - **W1's wiring leg (SA167d) may not touch `scripts/gate_registry.json` or any `module.yml`.** Those are W2-owned surfaces.
 - A ticket whose deliverable is Git ref state cannot be delegated to a file-editing worker. Route it to a maintainer session with ref authority and push credentials.
-- **Long gates must be run detached, not merely with a raised timeout.** `make check` measures
-  **601 s green** on `v88` (41 s when it fails fast — a red run is not a timing sample). That
-  exceeds the 600 s ceiling of a single foreground tool call, so waiting on it inline is killed by
-  construction. Launch with `nohup`, write the exit code to a file, poll for the file. Same for
-  `make test` and `make quality`. A run killed by a cutoff returns no exit code and is **not
-  evidence** — neither of green nor of red. One recorded acceptance stall was caused by exactly this,
-  and the gate underneath turned out to be red.
+- **A run killed by a cutoff returns no exit code and is not evidence** — neither of green nor of
+  red. One recorded acceptance stall was caused by exactly this, and the gate underneath turned out
+  to be red. `make test` and `make quality` must therefore be launched detached (`nohup`, exit code
+  written to a file, poll for the file). `make check` no longer needs it: measured at **184 s
+  green** on `v88` after the `check-gate-suites` parallelisation, it fits inside a single foreground call —
+  see [Gate cost](#gate-cost--re-measured-2026-08-29).
 - **A gate that is red on the integration branch is attributed to exactly one ticket, and is never
   deselected.** Test exclusion via `PYTEST_ADDOPTS`, `--deselect`, or a Makefile/CI edit is not a
   scheduling tool: it removes the oracle for the defect the owning ticket exists to fix. Name the
@@ -59,166 +58,98 @@ Audit-derived prerequisites and implementation tickets share one ranked queue.
 
 | Band | Rule | Tickets |
 |---|---|---|
-| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **SA173** — its retained partial candidate reaches the storage per-file coverage gate at 45% against the required 80%; ticket acceptance remains red (see below) |
+| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **SA173** — its product work is merged, but `quickscale_modules_storage/__init__.py` measures 45% per-file coverage against the required 80%, so the `make test` chain and ticket acceptance stay red (see below) |
 | **B — Release work on the critical paths** | The two longest serialized chains, one holding the exclusive service slot. | SA167c (critical path, after SA173); SA135; SA170; SA167d |
 | **C — Bounded independent fixes** | No dependants, small blast radius; absorbed as slack filler. | SA160, SA161, SA164, SA165, SA166, SA171, SA172, SA174, SA175 |
 
-### Band A is open — the product regressions are fixed, but the storage coverage gate is red
+### Band A — one coverage gate is red, and it is the whole blocker
 
-**Current checkpoint (2026-08-29).** The retained SA173 product candidate fixes the eighteen CLI
-failures and the five standalone-shim failures diagnosed below. Its focused, broad non-E2E, scripts,
-parity, lint, type, provisioning, and static checks passed. The required `make test` chain instead
-stops at `quickscale_modules/storage/src/quickscale_modules_storage/__init__.py`: **45% coverage
-against the required 80%**. `make check` and `make quality` were not run after that stop. The older
-failure account below is retained as the measured starting diagnosis, not as the current failure
-set. Post-sync reruns passed the roadmap consistency test (**21**), the status/fixture surface
-(**167**), and the manifest/lifecycle surface (**222**). The scripts suite returned no verdict at
-120 seconds or on its one 300-second retry; the retry reached 1,318 passes before SIGTERM interrupted
-the final test, so that surface still requires a detached budget greater than 300 seconds.
+**Measured 2026-08-29 on `v88`.** SA173's product work is merged (`e0730ae9`, then the checkpoint
+`4c311a73` integrated through `5bf03b40`/`b5b84ca9`). The eighteen CLI failures, the seven stale
+fixtures, the standalone-shim breakage, the ACTIVE-placeholder edge, and criterion 8's negative proof
+are all closed on the integration branch; that diagnosis is archived in
+[CHANGELOG.md](../../CHANGELOG.md) and is not planner scope any more.
 
-**Starting diagnosis, measured 2026-08-28 on `v88` at `4e410c09`, detached, from a clean tree —
-`make check` exited 2:**
+**What is left is one file, and it is now measured exactly.** Two detached runs on `v88` at
+`7818ab0c`, clean tree, 2026-08-29:
 
-```text
-✅ Linting passed!     ✅ Type checking passed!
-quickscale_core:  2886 passed, 1 skipped
-quickscale_cli:     18 failed, 2135 passed
-```
+- **`make check` — exit 0 in 184 s.** The branch-state gate that W1's and W3's acceptance criteria
+  name is **green**; `pytest scripts/` inside it is 1319 passed in 92 s.
+- **`make test` — exit 2 in 82 s**, failing at `test-integration` for **exactly one reason**:
+  `→ Files below 80% coverage: quickscale_modules_storage/__init__.py  11  6  45%  28-35`.
+  Nothing else in the run is red. Every module clears the 90% overall floor (storage itself at
+  **94.88%**, overall mean **94.31%**).
 
-**The two original SA173 target tests now pass.** `quickscale_cli/tests/test_module_wiring_manager_manifest.py`
-is **43 passed**, and the ticket's ordered verification step 1 is **221 passed**. The merged product
-commit `e0730ae9` discharged them. Band A did not close, though — it changed shape.
-
-**What was red at that starting point.** Eighteen failures, reproducible in isolation as
-`18 failed, 149 passed` over
-just the two files — no pollution, no `e2e`, no ordering dependency. They are **two distinct causes
-with different remedies**, and conflating them would get one of them fixed wrongly:
-
-| Cause | Where | Count | Remedy |
-|---|---|---|---|
-| **A — missing consumer policy (product defect)** | `quickscale_cli/tests/test_status_command.py` | 11 | fix the CLI; **do not edit the tests** |
-| **B — stale test fixtures** | `quickscale_cli/tests/commands/test_module_config_extended.py` | 7 | fix the fixtures; **do not weaken `apply`** |
-
-**Cause A — `status` aborts on the drift it exists to report.** SA173 acceptance criterion 5 deleted
-the CLI's `if "Manifest file not found" in str(error)` skip at `module_wiring_manager.py:201` and
-moved the decision into core. That was correct. But the CLI's **reaction was never written to
-replace it**, so `status` now aborts on a module that `.quickscale/state.yml` registers and the
-project tree does not carry:
+So the branch-state gate is **one per-file coverage threshold on six statements**. Reproduced
+directly:
 
 ```text
-❌ Installed module manifest error during 'status':
-  • [auth] Manifest file not found for module 'auth': <project>/modules/auth/module.yml
-Aborted!    (exit 1, via _abort_for_manifest_error at status_command.py:229, from :845)
+$ poetry run pytest quickscale_modules/storage/tests -q -o addopts= --cov=quickscale_modules_storage
+Name                                                       Stmts  Miss  Cover  Missing
+.../quickscale_modules_storage/__init__.py                    11     6    45%  28-35
+.../adapter.py  31 1 97%   .../apps.py  6 0 100%   .../helpers.py  167 4 98%
+39 passed
 ```
 
-Three of the eleven are literally `test_status_detects_missing_modules`,
-`test_module_tracking_completeness`, and `test_json_drift_filesystem_drift_populated`. `status` is
-the *diagnostic* command; aborting is the one reaction it must not have when it finds drift. D3
-already prescribes the answer — consumers own their reaction, `status` **reports**, `apply` **fails
-hard**. One policy was written, the other was deleted and left empty. **These eleven tests are the
-correct oracle and must not be edited.**
-
-**Cause B — `apply`'s fail-hard is correct; seven fixtures predate it.** These fail differently, at
-`module_config.py:546`:
-
-```text
-❌ Managed wiring regeneration failed: Managed adapter wiring failed:
-   Module presence is incomplete: module 'auth' is missing manifest '<tmp>/myproject/modules/auth/module.yml'
-```
-
-The fixtures at `test_module_config_extended.py:961,983` (and the CRM equivalents) create
-`modules/<name>/` containing only a `pyproject.toml`. Under the new contract that is INCOMPLETE, and
-refusing to wire it is the behaviour SA173 was opened to produce. **The same file already has the
-right helper** — `_write_module_package` (`:139-150`) writes `module.yml` alongside `pyproject.toml`
-— and `e0730ae9` already gave the lifecycle fixtures this treatment; this file was simply not
-included. Route these seven through the helper. **Assertions do not change, and `apply` does not
-become tolerant.** One thing to confirm while doing it, so the classification is not assumed: that
-the real embed path writes `module.yml` before wiring regeneration runs. If it does, these are
-fixtures. If it does not, this is a second product defect and gets its own entry rather than a
-fixture edit.
-
-**A third regression — inside `make check`, at a stage the red path never reaches.**
-`poetry run pytest scripts/` returns
-**5 failed, 1313 passed**, all five in `test_version_tool.py::TestUpdateWithTempRepo`.
-`quickscale_core/.../contracts/module_discovery.py` is contracted to run as a **standalone shim** —
-`scripts/version_tool.sh:14,34` copies that one file into a tree with no importable
-`quickscale_core` package and calls `--list-modules` to enumerate the modules it must version-bump.
-`e0730ae9` put a catalog import on that path behind a guard that only tolerates
-`exc.name == "quickscale_core.contracts.module_catalog"`, while a shim tree fails at the root package
-and raises `exc.name == "quickscale_core"`. Widening the guard then exposes a second defect: the
-twelve-module release count is enforced against a hermetic tree that legitimately holds fewer.
-**Both belong to SA173** (open item 1c) — it is the same contract change, and `version_tool.sh` is a
-release-inventory consumer the ticket did not enumerate.
-
-**This was a second blocker on `make check`, not a side issue.** `make check` runs `pytest scripts/`
-as the registered `check-gate-suites` gate (`Makefile:1262`, via `CHECK_GATE_TARGETS`), and that gate
-returned **rc=2** at the starting checkpoint. The red path failed fast at `test-unit` (41 s) and never reached it, which is
-exactly why this stayed invisible: **fixing the eighteen CLI failures alone will not turn `make check`
-green.** Causes A, B, and C must all land before the branch-state gate clears.
-
-The defect is also invisible from the repo root, where `--list-modules` prints the twelve names and
-exits 0 — it only appears in a tree where `quickscale_core` is not importable.
+Lines 28-35 are the **entire body of `__getattr__`** — the lazy re-export shim that keeps package
+initialization dependency-free so the manifest adapter can load during `quickscale apply` before
+module dependencies are installed. Nothing else in the package is under-covered. The shim is
+load-bearing and must not be deleted; the gate must not be weakened or excluded. The fix is a small
+unit test over `__getattr__`: one assertion per exported name in `__all__` resolving through
+`helpers`, and one asserting `AttributeError` for a name outside `__all__`. **This is bounded, DB-free,
+W2-local work — not a campaign.**
 
 **Consequences.**
 
-1. **SA173 stays band A.** Its product regressions are fixed, but the required storage coverage gate
-   is red; by the ordering rule this still outranks every other ticket.
-2. **W1 and W3 still cannot finish on their own lanes.** SA167d's and SA135's closeout campaigns
-   both require `make check` green on a candidate synced to current `v88`.
-3. **The remaining scope is small and named:** raise the storage package from 45% to 80% per-file
-   coverage, run the final unexcluded campaign, and perform authoritative documentation closeout.
-4. **SA167d (#18, W1) no longer inherits cause B's seven.** They are fixed on SA173's retained
-   candidate; W1 must preserve that repair rather than reimplement or deselect it.
+0. **`make check` is already green, so W1's and W3's `make check` acceptance criteria are satisfiable
+   on `v88` today.** What they cannot obtain is a green `make test`, which is the remaining half of
+   their merge evidence.
+1. **SA173 stays band A.** By the ordering rule a ticket that makes a gate tell the truth outranks
+   every other ticket, and this is the branch-state gate all three lanes' merge evidence waits on.
+2. **W1 and W3 can implement and validate but cannot complete a merge.** Their acceptance requires a
+   green `make check`/`make test` on a candidate synced to current `v88`.
+3. **After the coverage fix**, SA173 owes the unexcluded frozen-candidate campaign, authoritative
+   documentation closeout, and one terminal attestation — then the gate clears for all three lanes at
+   once.
 
-#### Interim known-red protocol — **retired 2026-08-28, superseded**
+#### Gate cost — re-measured 2026-08-29
 
-The two-node-id `PYTEST_ADDOPTS` deselect recorded in the previous pass is **void**: both node ids
-pass. At the starting checkpoint it excluded none of the eighteen real failures; those eighteen are
-now fixed on the retained candidate. **Do not carry the exclusion forward or widen it** — that would
-deselect the ticket's oracle, which is the exact failure the original protocol was written to prevent.
+The `check-gate-suites` parallelisation (`-n auto --dist loadfile`, `Makefile:1021`) cut that stage
+from 299 s to 94 s with byte-identical outcomes, and `lint-frontend` was measured at 13.89 s — it is
+**not** the dominant cost, contrary to the figure this file previously carried. Profiled green path:
 
-**W1 and W3 run unexcluded from here.** Their own campaigns are green on their own surfaces; what
-they cannot obtain is a green `v88` for merge evidence, and no deselect can manufacture that. Both
-lanes may run their *provisional* campaigns today knowing the integration branch's required gate is
-red for a cause neither lane owns and neither lane may touch — SA173's storage coverage blocker.
-Provisional evidence accepts a lane's own work; it never
-accepts a completed merge. The explicitly authorized SA173 partial checkpoint may be retained on
-`v88`, but no dependent lane merges until SA173 is accepted and closed.
+| Stage | Time |
+|---|---|
+| lint + typecheck + core (2886) + cli (2135) unit tests | 41 s |
+| core-compat, module-core-imports, manifest-sync, org-context, csrf-exempt | 5 s |
+| **check-gate-suites** (`pytest scripts/`, parallel) | **94 s** |
+| check-dependency-vulnerabilities (Trivy) | 50 s |
+| check-security-static-analysis (Bandit) | 3 s |
+| gate parity + CI gate generation | ~5 s |
+| lint-frontend | 14 s |
+| **Total (composed)** | **~212 s** |
+| **Measured end-to-end, `v88`, 2026-08-29** | **184 s, exit 0** |
 
-#### Gate cost — budget against these, run detached
+`make check` therefore now fits comfortably inside a single foreground tool call. **`make test` and
+`make quality` are still to be launched detached** — write the exit code to a file and poll it. The
+rule that survives unchanged is the important one: **a run killed by a cutoff returns no exit code and
+is not evidence**, neither of green nor of red. One recorded acceptance stall was caused by exactly
+that, and the gate underneath turned out to be red. `--dist loadfile` is load-bearing, not a tuning
+knob; the default `loadscan` splits `test_quality_baseline_monotonicity.py` across workers and
+produces spurious failures.
 
-`make check` measures **~601 s green** and **~40 s when it fails fast at `test-unit`** (`Makefile:377`);
-a red run is not a timing sample. The green figure exceeds the 600 s ceiling of a single foreground
-tool call, so `make check`, `make test`, and `make quality` must be launched with `nohup`, writing
-the exit code to a file that is then polled. A run killed by a cutoff returns no exit code and is
-**not evidence** — neither of green nor of red. One recorded acceptance stall was caused by exactly
-this, and the gate underneath turned out to be red. The dominant cost is `lint-frontend`, which
-renders the theme variants, installs their dependencies, and runs ESLint plus `tsc` twice.
+#### Full-suite baseline — SA170's four rows only
 
-The previously recorded *"broad CLI validation returned no verdict at 120 s and again at 360 s"*
-blocker is **closed by diagnosis**: run detached, the suite completes in seconds and the verdict is
-the eighteen failures above. It was never a stall; it was a foreground cutoff on a run that also
-happened to be red.
+`make check` filters with `-m "not integration and not e2e"`; the unfiltered combined suite does not
+and costs ~80 minutes. The 2026-08-28 measurement's SA173 rows are green and its pollution row is
+retired with the code path that caused it (archived in [CHANGELOG.md](../../CHANGELOG.md)). What
+remains is four `e2e` rows, all **SA170's**, carried forward unre-measured — an 80-minute run is not
+repeated to restate an attribution no ticket disputes:
 
-#### Full-suite baseline
-
-`make check` filters with `-m "not integration and not e2e"`. The unfiltered combined suite does not.
-The 2026-08-28 pre-`e0730ae9` measurement was **7 failed / 5134 passed / 16 skipped in 1:18:19**;
-its two SA173 rows are now green, and the four `e2e` rows below are **SA170's** and are carried
-forward unre-measured — an 80-minute run is not repeated to restate an attribution no ticket disputes.
-
-| Starting failure | Marked `e2e`? | In `make check`? | Owner |
-|---|---|---|---|
-| `test_status_command.py` × 11, `commands/test_module_config_extended.py` × 7 | no | **yes** | **SA173** (new, measured at `4e410c09`) |
-| `test_e2e_development_workflow.py::…::test_logs_with_options` | yes | no | **SA170** |
-| `test_e2e_development_workflow.py::…::test_manage_test_command` | yes | no | **SA170** |
-| `test_e2e_installed_wheel_lifecycle.py::test_installed_wheel_plan_apply_up_all_modules` | yes | no | **SA170** |
-| `test_e2e_full_workflow.py::TestDockerIntegration::test_sa142_no_cleanup_diagnostic_probe` | yes | no | **SA170** |
-
-The prior baseline's seventh row —
-`test_module_discovery.py::TestAuthoritativeModuleNames::test_partial_generated_override_uses_bundled_shipped_inventory`
-— was an order-dependent pollution artifact on the OVERRIDE→bundled path. SA173's merged commit
-**removed that path**, so the trap is gone and the row is retired rather than carried.
+- `test_e2e_development_workflow.py::…::test_logs_with_options`
+- `test_e2e_development_workflow.py::…::test_manage_test_command`
+- `test_e2e_installed_wheel_lifecycle.py::test_installed_wheel_plan_apply_up_all_modules`
+- `test_e2e_full_workflow.py::TestDockerIntegration::test_sa142_no_cleanup_diagnostic_probe`
 
 ### Dependency graph and critical path
 
@@ -227,9 +158,8 @@ v88 — three worktrees, fourteen open merge positions carrying fourteen open ti
 
 W2 (gates & declared wiring)   ★ CRITICAL PATH
   SA173 ─► SA167c ─► SA166 ─► SA164     #30, #21, #24, #25
-  (SA173's contract merged at `e0730ae9`; its retained partial checkpoint also fixes the CLI
-   consumer, fixture, shim, and placeholder work. Storage coverage and final acceptance remain open.
-   SA167c's Phase-A slice merged, A retry gated on SA173 acceptance, B-F open)
+  (SA173: product merged; storage coverage + closeout open.
+   SA167c: Phase-A slice merged, A retry gated on SA173 acceptance, B-F open)
 
 W1 (module wiring + generated-output fixes)
   SA167d ─► SA165 ─► SA161 ─► SA160 ─► SA174 ─► SA175     #18, #22, #19, #20, #31, #32
@@ -238,149 +168,135 @@ W3 (service lifecycle — exclusive PostgreSQL/Docker slot)
   SA135 ─► SA170 ─► SA171 ─► SA172      #15, #27, #28, #29
 ```
 
-**W2 sets the release date.** The critical path is four positions —
-`SA173 ─► SA167c ─► SA166 ─► SA164` — entirely inside W2 with no prerequisite outside it. W3 holds
-the exclusive slot and therefore takes scheduling priority while one of its legs is active, but its
-four positions are a *queue*, not a *chain*. **Finishing SA167d or SA135 does not shorten the
-release; finishing SA173 does** — and SA173 is additionally the branch-state gate that every lane's
-merge evidence waits on, so it remains the only work on the board that is both a branch-state gate
-and on the critical path. W1 is the longest lane at six positions, but its four tails are band C and may slip
-past the release, so it does not set the date.
+**W2 sets the release date.** The critical path is four positions — `SA173 ─► SA167c ─► SA166 ─►
+SA164` — entirely inside W2 with no prerequisite outside it. W3 holds the exclusive slot and takes
+scheduling priority while one of its legs is active, but its four positions are a *queue*, not a
+chain. **Finishing SA167d or SA135 does not shorten the release; finishing SA173 does** — it is the
+only work on the board that is both a branch-state gate and on the critical path. W1 is the longest
+lane at six positions, but its four tails are band C and may slip past the release, so it does not set
+the date.
 
-**Position count is unchanged this pass.** No ticket opened, closed, or moved lanes; the change is
-that SA173's scope was re-measured and narrowed to a named defect.
+**No cross-worktree dependency edges remain.** One cross-worktree *shared file* does, made
+one-directional by merge order: `scripts/test_isolation_conformance.sh` — SA135's merged partial wrote
+it; SA165 (#22, W1) narrows one line over those settled bytes; #15 merges before #22.
+`.../settings/production.py.j2` is no longer cross-worktree: moving the privileged-command finding off
+SA164 (W2) onto SA174 (#31, W1) left it with two W1 owners, SA161 (#19) then SA174 (#31), sequenced on
+one lane.
 
-**No cross-worktree dependency edges remain.** Two cross-worktree *shared files* do, both made
-one-directional by merge order:
+**One cross-lane hazard already fired, and is recorded so it is not repeated.** W3's merged SA135
+remediation `203fcd61` added the `OVERRIDE`→bundled fallback in
+`quickscale_core/.../contracts/module_discovery.py`, which turned **W2's** SA167c caller suite red two
+days later. Neither ticket's allowlist named the other's surface, because the coupling is behavioural
+rather than textual: `quickscale_core/contracts/` and `quickscale_core/manifest/` are read by every
+lane. **Treat any edit under those two packages as cross-lane** — announce it in the merge queue and
+re-run the other lanes' focused caller suites before merging, even when no file is shared. SA173 owns
+both packages for the rest of v88, and its own regression was the second instance of the same shape.
 
-- `scripts/test_isolation_conformance.sh` — SA135's merged partial wrote it; SA165 (#22, W1)
-  narrows one line over those settled bytes. #15 merges before #22.
-- `.../settings/production.py.j2` — **no longer cross-worktree.** Moving the privileged-command
-  finding off SA164 (W2) onto SA174 (#31, W1) leaves this file with two W1 owners, SA161 (#19) then
-  SA174 (#31), sequenced on one lane. The prior #19-before-#25 caution is retired.
+The manifest-reading `entry_point.py`, the fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec seam,
+the regenerated migration baseline, and `scripts/provision_ci_postgres.sh` are settled tree state that
+open tickets build on rather than re-open.
 
-**One cross-lane hazard already fired, and is recorded here so it is not repeated.** W3's merged
-SA135 remediation `203fcd61` added the `OVERRIDE`→bundled fallback in
-`quickscale_core/.../contracts/module_discovery.py`, which changed inventory behaviour and turned
-**W2's** SA167c caller suite red two days later. Neither ticket's file allowlist named the other's
-surface, because the coupling is behavioural rather than textual: `quickscale_core/contracts/` and
-`quickscale_core/manifest/` are read by every lane. **Treat any edit under those two packages as
-cross-lane**: announce it in the merge queue and re-run the other lanes' focused caller suites
-before merging, even when no file is shared. SA173 owns both packages for the rest of v88 — and its
-own 2026-08-28 regression is the second instance of the same shape, this time inside one lane: a
-core-contract change that turned eighteen CLI tests red without touching them.
+### Track rebalance — evaluated 2026-08-29, **no move made**
 
-The manifest-reading `entry_point.py`, the fail-hard `QUICKSCALE_LOCAL_WHEELHOUSE` version-spec
-seam, the regenerated migration baseline, and `scripts/provision_ci_postgres.sh` (the single
-PostgreSQL environment contract landed by the closed SA163) are settled tree state that open
-tickets build on rather than re-open.
+Lanes are **W1 6 · W2 4 · W3 4**. Every open ticket was re-tested against the three questions — is it
+independent of the rest of its lane, is another lane idle, and is it on or feeding the critical path.
+**W1 and W3 are both effectively idle**, so question two now passes for the first time; no ticket
+passes all three:
 
-### Track rebalance — evaluated this pass, **no move made**
-
-The prior pass's two moves stand and are not restated here; they are archived in
-[CHANGELOG.md](../../CHANGELOG.md). Lanes are **W1 6 · W2 4 · W3 4**. Each open ticket was re-tested
-against the three rebalance questions — is it independent of the rest of its lane, is another lane
-idle, and is it on or feeding the critical path — and **none passes all three**:
-
+- **The critical path cannot be shortened by moving work off W2.** `scripts/gate_registry.json` and
+  `quickscale_modules/*/module.yml` are W2-owned surfaces that never cross worktrees, and three of
+  W2's four tickets (SA167c, SA166, SA164) register or edit gate-registry entries. Moving any of them
+  would put two lanes into one registry file — a merge hazard on the release-setting chain, which is
+  the one place it is least affordable.
+- **W2's tail is not splittable from its head either.** SA167c's Phase-A acceptance is answered by
+  SA173's presence contract, and SA164's substance needs `django_apps:` retired by SA167c. Splitting
+  SA173 from SA167c would force a cross-lane sync in the middle of an acceptance chain.
 - **W1's four band-C tails (#19, #20, #31, #32) cannot move to W3.** They are DB-free generator and
-  module-wiring work. Putting DB-free tickets on the exclusive-slot lane is the exact defect the
-  previous pass corrected by moving SA161/SA160 the other way; redoing it would re-serialize them
-  behind SA135 and SA170 for nothing. They also form one ordered emission-parity rebaseline run
-  (#19 → #20 → #31), which may not be split.
+  module-wiring work; putting them on the exclusive-slot lane would re-serialize them behind SA135 and
+  SA170 for nothing — the exact defect a previous pass corrected by moving SA161/SA160 the other way.
+  #19 → #20 → #31 is also one ordered emission-parity rebaseline run, which may not be split.
 - **SA165 (#22) looks moveable to W3 and is not.** It shares `scripts/test_isolation_conformance.sh`
   with SA172 (#29, W3), so the move would make that file single-lane — a real gain. But SA165 is
-  DB-free, and moving it would place it *behind* SA135 and SA170 on the slot lane, delaying a ticket
-  that today only waits on lane ordering. The shared file is already one-directional under merge
-  order #15 → #22 → #29. **Cost exceeds benefit; not moved.**
-- **Nothing may move onto or off W2.** `scripts/gate_registry.json` and `quickscale_modules/*/module.yml`
-  are W2-owned surfaces that never cross worktrees, and SA173's remaining storage coverage and
-  closeout scope stays with its retained product checkpoint. Splitting it from SA167c, the ticket it blocks, would force a
-  cross-lane sync in the middle of an acceptance chain.
+  DB-free, and the move would place it *behind* SA135 and SA170 on the slot lane, delaying a ticket
+  that today waits only on lane ordering. The shared file is already one-directional under merge order
+  #15 → #22 → #29. **Cost exceeds benefit.**
+
+**The idleness is not a track-assignment problem and no move fixes it.** W1 and W3 are stopped on a
+*branch-state* gate — one under-covered file on W2 — not on a queue position. The lever is SA173's
+coverage fix, not a rebalance. Meanwhile **neither lane should sit idle**: both can execute their next
+action and bank durable artifacts today (see *Next action per lane*); only the final merge-evidence
+re-run has to wait.
 
 **W1 is the longest lane at six positions and that is deliberate**: it is off the critical path, so
 band-C work accumulates there rather than behind the release-setting chain. Band-C positions are
-*earliest-eligible*, not commitments, and may slip past the release; the four W1 tails are the slip
-budget. **Conflict surface for every lane is unchanged** — the standing closeout files
-(`CHANGELOG.md`, this file, `docs/technical/v88_ticket_context.md`, plus an audit document when a
-ticket closes a live finding), which the merge procedure's sync-resolve-rerun-review step already
-covers.
+*earliest-eligible*, not commitments; the four W1 tails are the slip budget.
+
+**Conflict surface, unchanged by this pass.** No lane move above adds a *code* file to a second lane.
+The standing closeout surface is `CHANGELOG.md`, this file, `docs/technical/v88_ticket_context.md`, and
+an audit document when a ticket closes a live finding — covered by the merge procedure's
+sync-resolve-rerun-review step in the execution rules.
 
 ### Lane state
 
-**Verified 2026-08-29.** `wt-track3` is an ancestor of `v88`, merged and idle.
-**`wt-track2` is synchronized with `v88` at `75d09fc50928f67d121af2c0d21bfc4c368cab3c`
-through merge `5bf03b403ec7069802da7edb8db3703619231991` and retains the SA173 product commit
-`4c311a73ef445dfd48e4b3cda4563ca345259661`.** Its exact checkpoint tip is authorized for partial
-integration into `v88`; that preserves delivered product work but does not accept or close SA173.
-**`wt-track1` holds SA167d's separate unmerged product delta:** clean at `f392641c`,
-carrying the accepted E0 tip and convergence corrections at `8b20800d`. Measure current ahead/behind
-rather than relying on any transcribed count:
+**Verified 2026-08-29 against the branches themselves.** Measure current ahead/behind rather than
+trusting a transcribed count:
 
 ```bash
 for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-right --count v88...$w; done
 ```
 
-W1's next sync may conflict in `docs/technical/roadmap.md`; resolve in the worktree keeping this
-file's structure, and re-run the consistency test in the same change.
+- **`wt-track3`** is an ancestor of `v88` — fully merged, clean, idle.
+- **`wt-track2`** is at `b5b84ca9`, one commit behind `v88` (a docs-only commit). SA173's product
+  checkpoint is **integrated**; the lane resumes from `v88` itself.
+- **`wt-track1`** is clean at `f392641c`, **15 ahead / 14 behind `v88`** — the release's only unmerged
+  product delta, carrying the accepted E0 tip and the convergence corrections at `8b20800d`. It must
+  sync before validating; expect a conflict in this file and keep its structure.
 
-The binding constraint is physical, not a ticket edge: one PostgreSQL 18 cluster on
-`localhost:5432` holding the twelve shared `test_quickscale_*` databases, which W3 needs *empty*.
-W1's SA167d phase-E `make test` and W3's SA135 E1 campaign must be scheduled serially around it. No
-ticket move relieves that; only scheduling does. **SA173's storage-coverage and documentation
-remediation is DB-free, but its mandatory frozen-candidate `make test` and any database-backed caller
-suite must claim the shared cluster and run outside W3's exclusive window.** ***Corrected after
-checkpoint attestation — not independently graded.***
+The binding constraint is physical, not a ticket edge: one PostgreSQL 18 cluster on `localhost:5432`
+holding the twelve shared `test_quickscale_*` databases, which W3 needs *empty*. W1's SA167d `make
+test` and W3's SA135 E1 campaign must be scheduled serially around it. No ticket move relieves that;
+only scheduling does. SA173's remaining coverage work is DB-free, but its frozen-candidate `make test`
+must claim the cluster and run outside W3's exclusive window.
 
 ### Next action per lane
 
-- **W2 — after this partial checkpoint is integrated, resume SA173 (#30) from the retained product
-  commit `4c311a73ef445dfd48e4b3cda4563ca345259661`; do not reimplement its product work.** First raise
-  `quickscale_modules/storage/src/quickscale_modules_storage/__init__.py` from 45% to the required
-  80% per-file coverage with legitimate tests or production simplification. Then sync any newer
-  `v88` into the worktree, run the complete unexcluded frozen-candidate campaign and cross-lane
-  callers, reconcile the authoritative closeout documents, review the exact new tip, and merge the
-  completed ticket. SA167c (#21) stays blocked until that sequence is accepted and SA173 closes.
-- **W3 — resume SA135 (#15) at phase E1, unexcluded.** Do not redo C or D, and do not attempt the
-  E2E Docker failures — they are SA170's. SA135's remaining scope is **the PostgreSQL-lifecycle
-  evidence and the `validation_policy.md` precondition update only**. An executable plan is written
-  into the ticket below; no plan-authoring step remains before dispatch. Its own campaign can go
-  green today; only the merge waits on SA173.
-- **W1 — SA167d's phase E is accepted; the lane needs closeout, not re-implementation.**
-  `wt-track1` is clean at `f392641c`. What remains is one full validation campaign on a synced frozen
-  candidate and one terminal attestation supplied with the complete base-to-tip patch — the input
-  whose absence, not any finding, ungraded the last attempt. Schedule `make test` outside W3's
-  window. W1's tail runs six positions (#18, #22, #19, #20, #31, #32); the last four are band C and
-  may slip, with **SA174 (#31)** the one worth pulling forward if slack appears.
+- **W2 — resume SA173 (#30) from `v88`; do not reimplement its merged product work.** Add the
+  `__getattr__` unit test that raises `quickscale_modules_storage/__init__.py` from 45% to ≥80%
+  per-file coverage, run `make test` to a returned green verdict, then run the complete unexcluded
+  frozen-candidate campaign and cross-lane caller suites, reconcile the authoritative closeout
+  documents, review the exact tip, and merge. SA167c (#21) stays blocked until that closes.
+- **W3 — resume SA135 (#15) at phase E1, unexcluded, today.** Do not redo C or D, and do not attempt
+  the E2E Docker failures — they are SA170's. Remaining scope is **the PostgreSQL-lifecycle evidence
+  and the `validation_policy.md` precondition update only**. An executable plan is written into the
+  ticket below; no plan-authoring step remains. Its own campaign can go green today; only the merge
+  waits on SA173.
+- **W1 — SA167d's phase E is accepted; the lane needs closeout, not re-implementation.** Sync
+  `wt-track1` (14 behind), run one validation campaign on the synced frozen candidate, and perform one
+  terminal attestation **supplied with the complete base-to-tip patch as a file** — the missing input,
+  not any finding, is what ungraded the last attempt. Schedule `make test` outside W3's window.
 
 ### Track readiness — the three states
 
 A lane is **truly green** only when all three are yes. *Can start* = the next action is executable
-today. *Can finish* = the ticket can reach a checked box using only work on its own lane. *Can
-merge* = merge-back is not order-gated behind another lane.
+today. *Can finish* = the ticket can reach a checked box using only work on its own lane. *Can merge* =
+merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W2** | SA173 (#30, retained partial) | **yes** — resume from `4c311a73`; no product reimplementation or decision is pending | **no** — storage coverage, documentation closeout, and final validation remain | **partial checkpoint only** — explicitly authorized for integration; ticket completion remains unmergeable | **yes** — band A, and it gates both other lanes' completed merges |
-| **W1** | SA167d (#18) | **yes** — unexcluded; schedule `make test` outside W3's window | **provisionally** — its own work reaches green, but final acceptance needs a green `v88` | **no — gated on SA173 (#30)** | no |
-| **W3** | SA135 (#15) | **yes** — unexcluded; take the exclusive slot first | **provisionally** — same gate | **no — gated on SA173 (#30)** | no |
+| **W2** | SA173 (#30) | **yes** — resume from `v88`; no decision or authorization pending | **yes** — the storage coverage fix, closeout, and validation are all W2-local and DB-free | **yes** — nothing is ordered ahead of #30 | **yes** — band A, and it gates both other lanes |
+| **W1** | SA167d (#18) | **yes** — sync, validate, attest; schedule `make test` outside W3's window | **no — hard dependency on SA173 (#30)**; its own work reaches green, but final acceptance needs a green `v88` | **no — gated on SA173 (#30)** | no |
+| **W3** | SA135 (#15) | **yes** — take the exclusive slot first; the plan is written | **no — hard dependency on SA173 (#30)**; same gate | **no — gated on SA173 (#30)** | no |
 
-**W2 remains the critical-path lane, but it is not truly green.** Its product candidate is retained,
-synced, and independently reviewed, yet the required storage coverage gate, documentation closeout,
-and final frozen-candidate evidence remain. The authorized partial integration records useful work;
-it is not ticket acceptance and does not clear the branch-state gate. W1 and W3 can start and can
-produce provisional evidence, but neither can close a ticket until #30 closes. No maintainer decision
-is pending; the remaining inputs are implementation, integration, independent review, and acceptance
-evidence.
+**W2 is the one truly green lane, and it is on the critical path** — so it is the only place real
+progress can be made right now. Every "no" above names **SA173 (#30)** and every one of them is a
+**hard dependency**: only the upstream work clears it, no maintainer decision can. W1 and W3 can still
+start and bank provisional evidence; they simply cannot close a ticket until #30 closes, at which point
+the gate clears for all three lanes at once.
 
-**No open maintainer decision remains anywhere in this plan.** D3 and the placeholder-declaration
-policy are settled; the eighteen-failure regression was resolved on the retained product candidate.
-The remaining SA173 blocker is execution against the existing 80% storage coverage policy, followed
-by documentation, independent review, and acceptance evidence.
-
-Downstream positions are lane-ordering only and clear by the upstream work or by a maintainer
-reordering the lane, with four exceptions that no reorder clears: **SA167c after SA173**,
-**SA160 after SA161**, **SA174 after SA160** (the emission-parity rebaseline run of three), and
-**SA164's substance after SA167c**.
+**No open maintainer decision blocks any of the three states.** D3 and the placeholder-declaration
+policy are settled. Two items are flagged for maintainer awareness rather than as blockers: the
+`make check` cost model correction above, and the four `sqlparse` CVE suppressions expiring
+**2026-09-30**, inside the release window (see *Audit items deliberately not ticketed*).
 
 ### Handoff checklist — applies to all three lanes
 
@@ -413,12 +329,11 @@ and implemented by **SA173 (#30)**; the full investigation — the traced run, t
 commits, and the rejected Options 1 and 2 — is archived in [CHANGELOG.md](../../CHANGELOG.md) and is
 not restated here.
 
-**The clause is implemented on the retained candidate.** *Each consumer owns its own reaction* is
-half of the decision, not a footnote to it. The retained product work writes `status`'s
-report-as-drift policy while preserving `apply`'s fail-hard reaction. The ticket remains open because
-its required storage coverage and closeout gates are not green, not because D3 lacks an implementation.
-
-*Cost, stated plainly.* The critical path grew by one ticket. That was accepted deliberately.
+**The clause is implemented and merged.** *Each consumer owns its own reaction* is half of the
+decision, not a footnote to it: the merged work writes `status`'s report-as-drift policy while
+preserving `apply`'s fail-hard reaction. SA173 remains open because one per-file coverage gate is red,
+not because D3 lacks an implementation. *Cost, stated plainly:* the critical path grew by one ticket,
+accepted deliberately.
 
 #### Standing rules carried from closed decisions
 
@@ -475,20 +390,18 @@ into its worktree, resolves there, reruns its own verification, then merges its 
 | 31 | **SA174** | C | 2 | W1 | SA160 | no |
 | 32 | **SA175** | C | 3 | W1 | SA174 | no |
 
-**Branch-state gate, not a queue edge: nothing else completes its merge before SA173 closes.** The
-explicitly authorized SA173 partial checkpoint may be integrated to preserve reviewed product work,
-but its 45% storage coverage result against the required 80% leaves the branch-state gate red. Every
-other lane's completed merge evidence remains unobtainable until #30 is accepted. This is deliberately
-**not** recorded as a `deps:` edge on #15 and #18 — it is not a content dependency between tickets,
-it is the state of the integration branch, and it clears for all lanes at once the moment SA173
-closes green. The merge-order table above is otherwise unchanged.
+**Branch-state gate, not a queue edge: nothing else completes its merge before SA173 closes.**
+SA173's product work is integrated, but its 45% storage per-file coverage against the required 80%
+leaves the `make test` chain red, so every other lane's completed merge evidence stays unobtainable
+until #30 is accepted. This is deliberately **not** recorded as a `deps:` edge on #15 and #18 — it is
+not a content dependency between tickets, it is the state of the integration branch, and it clears for
+all lanes at once the moment SA173 closes green. The merge-order table above is otherwise unchanged.
 
 Positions #1, #2, #3, #4, #5, #6, #6b, #7, #8, #9, #10, #11, #12, #13, #14, #16, #17, #23, and #26 are **retired and not
 reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELOG.md). Gaps carry no meaning. Position
 #15 was shared with SA163 until that ticket closed on 2026-08-28; it now carries SA135 alone.
 
-The per-lane heads are **#30 (W2, partial — contract merged at `e0730ae9`, product checkpoint
-retained, storage coverage and closeout open),
+The per-lane heads are **#30 (W2 — all product work merged, storage coverage and closeout open),
 #18 (W1, partial), and #15 (W3, partial)**. #21 is no longer a lane head — it now merges after #30.
 Of the partials: #21 has a merged Phase-A slice at `f6f3bbce` with A unaccepted pending SA173's
 completed acceptance and B-F outstanding; #18 is a phase-E-accepted candidate on `wt-track1` at `f392641c`
@@ -589,235 +502,124 @@ merge-order table is the authority for scope, worktrees, and sequencing. Concept
 implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket_context.md).
 
 - [ ] **SA173 — Make module presence a three-state fact.** `Band A · Tier 1 · W2 · merge #30 · deps: none · settles decision D3 · unblocks SA167c Phase-A and both other lanes' merges`
-  Discovery collapsed *"module absent"* and *"directory present but no `module.yml`"* into one
-  output, and downstream consumers reconstructed the discarded fact by **counting**. The policy
-  chosen by decision D3 is written in
-  [decisions.md → Module Presence States](decisions.md#module-presence-states); this ticket
-  implements it. The investigation that produced D3 is archived in
-  [CHANGELOG.md](../../CHANGELOG.md) and is not restated here.
-  **State (partial-integration checkpoint prepared 2026-08-29): the reviewed product commit
-  `4c311a73ef445dfd48e4b3cda4563ca345259661` is synchronized with `v88` through
-  `5bf03b403ec7069802da7edb8db3703619231991` and its exact checkpoint tip is authorized for partial
-  integration. SA173 remains open.** This checkpoint supersedes the older open-state wording below;
-  retain that wording only as the measured starting diagnosis and do not redo work recorded as
-  completed here.
-  **Completed on the retained candidate:** `status` reports registered ABSENT/INCOMPLETE modules as
-  drift while `apply` remains fail-hard; all eight runtime-proven auth/CRM fixtures use real
-  manifests without assertion changes; the lone-file discovery shim supports hermetic inventories;
-  repository direct-file consumers resolve the sibling catalog and exclude declared placeholder
-  `teams`; ACTIVE placeholders fail before adapter import with registry/import-state atomicity; the
-  criterion-8 missing-manifest proof restored exact bytes; and the `refresh_managed_adapters`
-  complexity warning was removed. Focused, broad non-E2E, scripts, parity, lint, type, provisioning,
-  and static checks passed. Independent terminal review found no additional defect in these product
-  bytes.
-  **Pending:** phase B4 is not accepted because the required `make test` chain is red; phases B5
-  (authoritative documentation closeout) and B6 (synced frozen-candidate and cross-lane validation)
-  were not reached. `make check` and `make quality` were not run after the stop, and the post-sync
-  scripts rerun did not return a verdict within its 300-second retry budget.
-  **Blocking:** `quickscale_modules/storage/src/quickscale_modules_storage/__init__.py` measures 45%
-  against the required 80% per-file coverage threshold even though the storage tests pass. Close it
-  with legitimate tests or production simplification, then rerun `make test` green. The prior
-  integration divergence is cleared; sync again only if `v88` advances before the completion pass.
-  **Decisions needed:** none.
-  **Remaining plan (serial):**
-  1. Start from the integrated product commit `4c311a73ef445dfd48e4b3cda4563ca345259661` and do not redo
-     the completed SA173 consumer, fixture, shim, placeholder, or criterion-8 work.
-  2. Fix the storage per-file coverage blocker to at least 80% without weakening the gate, then run
-     `make test` to a returned green verdict.
-  3. Sync current `v88` into `wt-track2` only if it has advanced, then run the complete ordered SA173
-     campaign, including detached `make test`, `make check`, and `make quality`, the W1 and W3 caller
-     suites, and the ticket-context consistency test.
-  4. Only after every gate is green, reconcile `CHANGELOG.md`,
-     `docs/technical/implementation_contract.md`, `docs/technical/v88_ticket_context.md`,
-     `docs/index.md`, and this open-work roadmap; then run convergence and one terminal attestation
-     over the exact synced tip and merge that tip into `v88`.
-  **Settled and merged — do not reimplement.** Product commit `e0730ae9` is on `v88`. Verified
-  on HEAD: discovery reports ABSENT / ACTIVE / INCOMPLETE; `grep -rn "inventory count drift"
-  --include=*.py` outside tests returns **one** production site
+  Discovery collapsed *"module absent"* and *"directory present but no `module.yml`"* into one output,
+  and downstream consumers reconstructed the discarded fact by **counting**. The policy chosen by
+  decision D3 is written in
+  [decisions.md → Module Presence States](decisions.md#module-presence-states); this ticket implements
+  it. The investigation that produced D3, and the full 2026-08-28 regression diagnosis this ticket
+  worked through, are archived in [CHANGELOG.md](../../CHANGELOG.md) and are not restated here.
+  **State (2026-08-29): all product work is merged on `v88`; one coverage gate is red.**
+  Contract commit `e0730ae9` plus checkpoint `4c311a73`, integrated through `5bf03b40`/`b5b84ca9`.
+  **Do not reimplement any of it.** Verified on HEAD: discovery reports ABSENT / ACTIVE / INCOMPLETE;
+  `grep -rn "inventory count drift" --include=*.py` outside tests returns **one** production site
   (`module_discovery.py:309`); the CLI's `"Manifest file not found"` substring classification is
-  **gone**; `PLACEHOLDER_MODULE_NAMES` is **retired** in favour of a catalog `placeholder` flag; the
-  `OVERRIDE`→bundled substitution is **removed**; and the loader/adapter refresh enforce typed
-  presence atomically. Acceptance criteria **1, 3, 4, 6, 7 are met**, and criterion 2's
-  subset-plus-fail-hard pair is met at the core boundary. Those settled contract bytes remain the
-  base of the retained candidate.
-  **Historical starting diagnosis — all product items in this block are completed on the retained
-  candidate; preserve the detail as provenance, not as current work.**
-  1. **Criterion 5 is half-written, and it is what makes `make check` red — 11 failures in
-     `quickscale_cli/tests/test_status_command.py`.** Deleting the CLI's classification was correct;
-     **no CLI reaction was written to replace it**, so `status_command.py:229`'s
-     `_abort_for_manifest_error` (reached from `:845`) now aborts on a module that
-     `.quickscale/state.yml` registers and the project tree does not carry.
-     **These eleven tests are the correct oracle and must not be edited to match the abort.** Three
-     of them are `test_status_detects_missing_modules`, `test_module_tracking_completeness`, and
-     `test_json_drift_filesystem_drift_populated`: `status` is the diagnostic command, and aborting
-     is the one reaction it must not have when it finds drift. D3 says consumers own their reaction —
-     **`status` *reports as drift* and exits 0; `apply` *fails hard*.** Write the missing one; keep
-     the written one.
-  1b. **Seven stale fixtures in `quickscale_cli/tests/commands/test_module_config_extended.py`.**
-     A different failure, at `module_config.py:546` with `Module presence is incomplete`. The
-     fixtures at `:961,983` and the CRM equivalents build `modules/<name>/` holding only a
-     `pyproject.toml`; that is INCOMPLETE, and `apply` refusing to wire it is exactly the behaviour
-     this ticket was opened to produce. **Do not weaken `apply`.** Route the seven through the
-     helper the same file already provides — `_write_module_package` (`:139-150`), which writes
-     `module.yml` alongside `pyproject.toml` — the treatment `e0730ae9` already applied to the
-     lifecycle fixtures and did not extend here. Assertions do not change. **Confirm rather than
-     assume** that the real embed path writes `module.yml` before wiring regeneration; if it does
-     not, that is a second product defect and gets its own entry instead of a fixture edit.
-  1c. **The standalone discovery shim is broken, and it takes `scripts/` red with it — 5 failures in
-     `scripts/test_version_tool.py::TestUpdateWithTempRepo`.** `module_discovery.py` is contracted to
-     run **alone**, copied into a tree with no importable `quickscale_core` package:
-     `scripts/version_tool.sh:14,34` copies it as `MODULE_DISCOVERY_SHIM` and calls `--list-modules`
-     to enumerate the release modules it must bump. `e0730ae9` put `_declared_module_names()`
-     (`:217-229`) on that path, and **its `ModuleNotFoundError` guard is too narrow**: it compares
-     `exc.name != "quickscale_core.contracts.module_catalog"`, but in a shim tree the interpreter
-     fails at the *root* package and raises `exc.name == "quickscale_core"`, so the guard re-raises
-     and `--list-modules` exits 1. Measured: `ModuleNotFoundError: No module named 'quickscale_core'`
-     at `:220`. The same too-narrow comparison is in `_declared_placeholder_names` (`:231-239`).
-     **There is a second defect behind the first.** Widening the guard to accept a prefix of the
-     target path (verified in a scratch tree) gets past the import and then fails with
-     `ERROR: Module inventory count drift: expected 12 unique release modules, found 1` — with an
-     empty catalog the shim now enforces the twelve-module release count against a hermetic tree
-     that legitimately carries fewer. Both must be fixed for the shim contract to hold; repairing
-     only the guard converts an import crash into a count crash.
-     **Consequence for this ticket's own verification:** `poetry run pytest scripts/` returns
-     **5 failed, 1313 passed** and cannot reach exit 0 until this is repaired. The ticket already
-     names `publish_module.py` and `check_sa117_scope.py` as release-inventory consumers of the
-     changed contract; `version_tool.sh` is a third that was missed.
-  2. **An ACTIVE catalog-declared placeholder is handled two ways.**
-     `refresh_managed_adapters` (`manifest/entry_point.py:218-236`) filters placeholders out of both
-     the INCOMPLETE check and the active set with `and not is_placeholder_module(...)`, so an ACTIVE
-     placeholder is **silently excluded**; `validate_module_presence`
-     (`contracts/module_discovery.py:250-266`) **rejects that same state**. Make the ACTIVE-placeholder
-     case fail atomically with an actionable pre-import error, while preserving the intentional
-     declared-INCOMPLETE placeholder behaviour that keeps `teams` fail-closed. Settled D3 does not
-     authorize accepting this deviation.
-  3. **Criterion 8's negative proof and the closeout campaign were never reached.** No waiver, no
-     deselection, no `PYTEST_ADDOPTS`.
-  **Closed by diagnosis, not carried forward.** The recorded *"broad CLI validation returned no
-  verdict at 120 s and again at 360 s"* blocker was a foreground cutoff, not a stall: run detached,
-  the suite completes in seconds. Its verdict is the eighteen failures above. The recorded
-  order-dependent `test_partial_generated_override_uses_bundled_shipped_inventory` trap is gone —
-  `e0730ae9` deleted the OVERRIDE path and the test with it. The interim known-red protocol is
-  **retired**; its two node ids pass, and it may not be widened to cover this ticket's own oracle.
-  **Decisions needed:** none. D3 and placeholder-declaration policy are settled; the retained
-  candidate completed the consumer policy, fixture repair, shim restoration, placeholder edge, and
-  negative proof. The remaining inputs are storage coverage, closeout, and acceptance evidence.
-  **Measured starting state (2026-08-28 at `4e410c09`), retained for provenance — do not reproduce
-  it or treat it as the current state:**
-  - `poetry run pytest quickscale_cli/tests/test_status_command.py quickscale_cli/tests/commands/test_module_config_extended.py -q -o addopts= --no-cov -p no:cacheprovider`
-    — **18 failed, 149 passed**; 11 from the first file, 7 from the second, two different causes.
-  - Cause A text, verbatim: `❌ Installed module manifest error during 'status':` /
-    `• [auth] Manifest file not found for module 'auth': <project>/modules/auth/module.yml` /
-    `Aborted!` — raised at `status_command.py:229`, reached from `status_command.py:845`.
-  - Cause B text, verbatim: `❌ Managed wiring regeneration failed: Managed adapter wiring failed:
-    Module presence is incomplete: module 'auth' is missing manifest
-    '<tmp>/myproject/modules/auth/module.yml'` — raised at `module_config.py:546`.
-  - `poetry run pytest quickscale_cli/tests/test_module_wiring_manager_manifest.py -q -o addopts= --no-cov`
-    — **43 passed.** The two original target tests are green; do not reopen them.
-  - `make check` (detached) — **exit 2**, lint and typecheck green, `quickscale_core` 2886 passed /
-    1 skipped, `quickscale_cli` 18 failed / 2135 passed.
-  - `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` — **5 failed, 1313
-    passed**, all five in `test_version_tool.py::TestUpdateWithTempRepo`.
-  - Shim probe: copy `module_discovery.py` alone into an empty tree beside one
-    `quickscale_modules/<name>/module.yml` and run `python3 <path> --list-modules` — observe
-    `ModuleNotFoundError: No module named 'quickscale_core'`. On the real repo the same command
-    prints the twelve names and exits 0, which is why this is invisible from the repo root.
-  **Remaining plan (serial; do not redo the retained product work):**
-  1. Raise the storage package's per-file coverage from 45% to at least 80% with legitimate tests or
-     production simplification; do not weaken or exclude the gate.
-  2. Run the ordered verification below on one frozen candidate. Long gates detached, exit code to a
-     file, polled — a truncated run is not evidence. Schedule `make test` outside W3's window.
+  **gone**; `PLACEHOLDER_MODULE_NAMES` is retired in favour of a catalog `placeholder` flag; the
+  `OVERRIDE`→bundled substitution is removed; `status` reports registered ABSENT/INCOMPLETE modules as
+  drift while `apply` stays fail-hard; the eight auth/CRM fixtures use real manifests with no assertion
+  change; the standalone discovery shim answers `--list-modules` in a hermetic tree; ACTIVE placeholders
+  fail before adapter import with registry/import-state atomicity; and criterion 8's negative proof ran
+  and restored exact bytes. Independent terminal review found no defect in these bytes.
+  **Blocking — the only open item.**
+  `quickscale_modules/storage/src/quickscale_modules_storage/__init__.py` measures **45% per-file
+  coverage against the required 80%**, stopping the required `make test` chain even though all 39
+  storage tests pass. Measured detached on `v88` 2026-08-29: **`make test` exits 2 in 82 s at
+  `test-integration` with this as its only red**, while **`make check` exits 0 in 184 s**. The six
+  uncovered statements are lines **28-35**, the entire body of
+  `__getattr__` — the lazy re-export shim that keeps package initialization dependency-free so the
+  manifest adapter can load during `quickscale apply` before module dependencies are installed. **The
+  shim is load-bearing and must not be deleted, and the gate must not be weakened, lowered, or
+  excluded.** Close it with a unit test over `__getattr__`: resolve each name in `__all__` through
+  `helpers` and assert the module-level cache, and assert `AttributeError` for a name outside `__all__`.
+  **Decisions needed:** none.
+  **Remaining plan (serial; do not redo the merged product work):**
+  1. Add the `__getattr__` coverage test; confirm the file reaches ≥80% and the package total is no
+     worse than the current 95%.
+  2. Run the ordered verification below on one frozen candidate synced to current `v88`. Schedule
+     `make test` outside W3's cluster window; launch `make test` and `make quality` detached with the
+     exit code written to a file. A truncated run is not evidence.
   3. Only after every required result is green, reconcile `CHANGELOG.md`,
      `docs/technical/implementation_contract.md`, `docs/technical/v88_ticket_context.md`,
-     `docs/index.md`, and this file's queue/counts/dependencies, re-run the consistency test in the
-     same change, and archive/remove SA173 from this open-work-only roadmap.
+     `docs/index.md`, and this file's queue/counts/dependencies; re-run the consistency test in the
+     same change; and archive/remove SA173 from this open-work-only roadmap.
   4. Materialize the complete base-to-tip patch to a file, supply it with a clean-byte binding
-     (`git status --porcelain` empty at the exact tip), perform serial convergence and **one**
-     terminal attestation, and merge only that exact accepted tip. Announce the merge in the queue
-     and re-run W1's and W3's focused caller suites first — see the cross-lane obligation below.
+     (`git status --porcelain` empty at the exact tip), perform serial convergence and **one** terminal
+     attestation, and merge only that exact accepted tip. Announce the merge in the queue and re-run
+     W1's and W3's focused caller suites first — see the cross-lane obligation below.
   **Acceptance:**
   1. Discovery reports ABSENT / ACTIVE / INCOMPLETE distinctly and no code path silently drops a
-     manifest-less directory. *(met on HEAD)*
+     manifest-less directory. *(met)*
   2. `refresh_managed_adapters` loads the **subset** present and fails hard on INCOMPLETE, naming the
-     directory and the missing manifest, both proved by separate tests — **and an ACTIVE
+     directory and the missing manifest, both proved by separate tests — and an ACTIVE
      catalog-declared placeholder fails atomically with an actionable pre-import error rather than
-     being silently excluded**, while a declared-INCOMPLETE placeholder stays fail-closed. *(first
-     half met on `e0730ae9`; the placeholder half is met on the retained candidate)*
+     being silently excluded, while a declared-INCOMPLETE placeholder stays fail-closed. *(met)*
   3. The subset-validity rule and its diagnostic text exist **once**;
-     `grep -rn "inventory count drift" --include=*.py` outside tests returns a single production
-     site. *(met on HEAD)*
-  4. `authoritative_module_names` answers the *release inventory* question only; the
-     `OVERRIDE`→bundled substitution is removed. *(met on HEAD)*
+     `grep -rn "inventory count drift" --include=*.py` outside tests returns a single production site.
+     *(met)*
+  4. `authoritative_module_names` answers the *release inventory* question only; the `OVERRIDE`→bundled
+     substitution is removed. *(met)*
   5. The CLI contributes no presence **classification** — the substring test at
-     `module_wiring_manager.py:201` stays deleted — **and each CLI consumer states its own reaction
-     to a typed presence result: `status` reports a registered-but-missing or INCOMPLETE module as
-     drift and exits 0; `apply` fails hard.** The eleven tests in `test_status_command.py` pass
-     **without being edited**, and the seven in `commands/test_module_config_extended.py` pass with
-     **fixture-only** repair and no assertion or `apply` change. *(met on the retained candidate)*
-  9. **The standalone-shim contract holds:** `module_discovery.py`, copied alone into a tree with no
-     importable `quickscale_core`, still answers `--list-modules` for whatever modules that tree
-     carries — no root-package import crash, and no twelve-module release count imposed on a
-     hermetic tree — and a hermetic test asserts it, so `scripts/version_tool.sh` cannot break again
-     unobserved. *(met on the retained candidate)*
+     `module_wiring_manager.py:201` stays deleted — and each CLI consumer states its own reaction to a
+     typed presence result: `status` reports a registered-but-missing or INCOMPLETE module as drift and
+     exits 0; `apply` fails hard. The eleven tests in `test_status_command.py` pass **without being
+     edited**, and the seven in `commands/test_module_config_extended.py` pass with **fixture-only**
+     repair and no assertion or `apply` change. *(met)*
   6. `PLACEHOLDER_MODULE_NAMES` is retired in favour of a declaration mechanism, with `teams` still
-     fail-closed. *(met on HEAD)*
-  7. `test_module_wiring_manager_manifest.py`'s two tests, their class name, and both docstrings
-     agree with the contract. *(met on HEAD — 43 passed)*
-  8. Negative proof: temporarily empty one module's `module.yml`, observe the INCOMPLETE fail-hard
-     for the intended reason, restore the exact bytes, prove green. *(met on the retained candidate)*
+     fail-closed. *(met)*
+  7. `test_module_wiring_manager_manifest.py`'s two tests, their class name, and both docstrings agree
+     with the contract. *(met — 43 passed)*
+  8. Negative proof: temporarily empty one module's `module.yml`, observe the INCOMPLETE fail-hard for
+     the intended reason, restore the exact bytes, prove green. *(met)*
+  9. The standalone-shim contract holds: `module_discovery.py`, copied alone into a tree with no
+     importable `quickscale_core`, still answers `--list-modules` for whatever modules that tree
+     carries — no root-package import crash, and no twelve-module release count imposed on a hermetic
+     tree — and a hermetic test asserts it, so `scripts/version_tool.sh` cannot break again unobserved.
+     *(met)*
+  10. **The required per-file coverage gate is green with no exclusion, waiver, or threshold change.**
+     *(open — the sole remaining criterion)*
   **Verification (ordered; stop at the first unexpected red):**
-  1. `poetry run pytest quickscale_cli/tests/test_status_command.py quickscale_cli/tests/commands/test_module_config_extended.py -q -o addopts= --no-cov -p no:cacheprovider` — expect exit 0 with **167 passed** and no test file edited.
-  2. `poetry run pytest quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_core/tests/test_manifest_entry_point.py quickscale_cli/tests/test_module_lifecycle_cycle.py quickscale_core/tests/test_module_migration_topology.py -q -o addopts= --no-cov` — expect exit 0; **221 passed** at the measurement start.
-  3. `poetry run pytest quickscale_cli/tests quickscale_core/tests -m "not e2e" -q -o addopts= --no-cov` — expect exit 0. This isolates the ticket's surface without SA170's four `e2e` failures; the unfiltered variant costs ~80 minutes and proves nothing extra here.
-  4. `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` — expect exit 0 and **1319 passed**; measured **5 failed, 1313 passed** at the start. The post-sync rerun did not return a verdict at 120 or 300 seconds and must run detached next time. `publish_module.py`, `check_sa117_scope.py`, and `version_tool.sh` are release-inventory consumers of the changed contract.
-  5. `make check-manifest-sync` and `make check-gate-parity` — expect exit 0.
-  6. `make lint`, `make typecheck` — expect exit 0. Then `make test`, `make check`, `make quality` **detached**: `make check` expects exit 0 in ~601 s, and `make quality` no worse than found.
-  **Rollback:** `git reset --hard 4e410c09` discards the resumption without touching the merged
-  contract; the merged `e0730ae9` is not rolled back by this ticket.
-  **Cross-lane obligation.** These two core packages are read by every lane, and `203fcd61` is the
-  recorded precedent for a behavioural change here turning another lane red with no shared file.
-  Before merging, announce in the merge queue and re-run W1's and W3's focused caller suites against
-  the candidate.
-  **Shared conflict surface:** `quickscale_core/src/quickscale_core/contracts/module_discovery.py`, `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_cli/src/quickscale_cli/commands/status_command.py`, `quickscale_cli/src/quickscale_cli/commands/apply_command.py`, `quickscale_cli/src/quickscale_cli/utils/module_wiring_manager.py`, `docs/technical/decisions.md`.
+  1. `poetry run pytest quickscale_modules/storage/tests -q -o addopts= --cov=quickscale_modules_storage --cov-report=term-missing` — expect `__init__.py` at ≥80% and no file regressed.
+  2. `poetry run pytest quickscale_cli/tests/test_status_command.py quickscale_cli/tests/commands/test_module_config_extended.py -q -o addopts= --no-cov -p no:cacheprovider` — expect exit 0 with **167 passed** and no test file edited.
+  3. `poetry run pytest quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_core/tests/test_manifest_entry_point.py quickscale_cli/tests/test_module_lifecycle_cycle.py quickscale_core/tests/test_module_migration_topology.py -q -o addopts= --no-cov` — expect exit 0, **221 passed**.
+  4. `poetry run pytest quickscale_cli/tests quickscale_core/tests -m "not e2e" -q -o addopts= --no-cov` — expect exit 0. This isolates the ticket's surface without SA170's four `e2e` failures; the unfiltered variant costs ~80 minutes and proves nothing extra here.
+  5. `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` — expect exit 0 and **1319 passed** (measured green on `v88` 2026-08-29 in 92 s). `publish_module.py`, `check_sa117_scope.py`, and `version_tool.sh` are release-inventory consumers of the changed contract.
+  6. `make check-manifest-sync` and `make check-gate-parity` — expect exit 0.
+  7. `make lint`, `make typecheck`, `make check` — expect exit 0 (`make check` measured 184 s green on `v88`). Then `make test` (expect exit 0; it exits 2 in 82 s today) and `make quality` **detached**; `make quality` no worse than found.
+  **Rollback:** `git reset --hard b5b84ca9` in `wt-track2` discards the completion attempt without
+  touching the merged product work.
+  **Cross-lane obligation.** `quickscale_core/contracts/` and `quickscale_core/manifest/` are read by
+  every lane, and `203fcd61` is the recorded precedent for a behavioural change here turning another
+  lane red with no shared file. Before merging, announce in the merge queue and re-run W1's and W3's
+  focused caller suites against the candidate.
+  **Shared conflict surface:** `quickscale_modules/storage/`, `quickscale_core/src/quickscale_core/contracts/module_discovery.py`, `quickscale_core/src/quickscale_core/manifest/entry_point.py`, `quickscale_cli/src/quickscale_cli/commands/status_command.py`, `quickscale_cli/src/quickscale_cli/commands/apply_command.py`, `quickscale_cli/src/quickscale_cli/utils/module_wiring_manager.py`, `docs/technical/decisions.md`.
 
 - [ ] **SA167c — Retire `django_apps:` and gate the app declaration.** `Band B · Tier 2 · W2 · merge #21 · deps: SA173 · closes the SA167 family`
   `django_apps:` was inert declarative surface: eleven manifests carried it, the loader parsed it,
   no production path read it, and one SA92 helper used it before falling back to a guessed path.
   **Acceptance:** `django_apps:` is either derived from the `apps` wiring projection or removed from all manifests, `ModuleManifest`, and the loader, with no key parsed-but-unread remaining; a conformance gate fails when a module ships models or a migration without declaring at least one Django app, registered in `scripts/gate_registry.json` and passing `scripts/check_gate_parity.py`; the gate is proved by deleting a module's app declaration and observing red, reverted before merge; `test_sa92_migration_squash_guardrail.py` no longer depends on the retired key.
-  **State (measured 2026-08-28): Phase-A product slice merged; corrected acceptance partial.**
-  Product commit `f6f3bbce` remains merged. `wt-track2` synchronized cleanly to `v88` at
-  `8a8f364b` before this attempt. Phase A is **not accepted**; phases B-F were not reached. The
-  merged bytes removed `django_apps:` from `ModuleManifest`, the loader, the obsolete loader test,
-  all eleven source declarations and their core snapshots, and removed the SA92 helper's retired-key
-  dependency, while preserving all twelve `apps` wiring projections and public adapter outputs.
-  Terminal review found no product-slice defect.
-  **Latest acceptance evidence.** The coverage-isolated loader command exited 0 with 112 passed;
-  the restricted-role orgs command exited 0 with 884 passed, 11 skipped, and 2 warnings;
-  `make check-manifest-sync` exited 0; and `make check-gate-parity` exited 0. The required
-  four-caller command then exited 1 with 256 passed and 2 failed in
-  `TestRegenerateManagedWiringSkipManifestNotFound`, at
-  `quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`. Under the required
-  stop-at-first-unexpected-red rule, neither the literal twelve-module source-bound caller probe nor
-  the final `git diff --exit-code` unchanged-tree oracle was run. No tracked file changed, and this
-  green prefix is not Phase-A acceptance.
-  **Not this ticket's defect.** Decision D3 (2026-08-28) established that those two failures are a
-  module-presence contract question, not a `django_apps:` question: the deciding code is
-  `refresh_managed_adapters`, the tests contradict their own docstrings, and the runtime was flipped
-  by W3's `203fcd61`. **SA173 (#30) owns the fix and the two tests.** SA167c must not edit them, and
-  must not touch `quickscale_core/contracts/` or `quickscale_core/manifest/`.
-  **Blocking:** SA173 must be **accepted and merged**. Its contract commit `e0730ae9` is already on
-  `v88` and the two caller tests it owed are green (43 passed in
-  `test_module_wiring_manager_manifest.py`). SA173's retained partial also fixes its CLI consumer,
-  fixture, shim, and placeholder work, but storage coverage and ticket acceptance remain red — so
-  #30 is still open and #21 is still gated. Nothing else blocks Phase A;
-  the other three commands in the chain were green on this exact candidate. **Note for step 5
-  below:** `commands/test_module_config_extended.py` is not in SA167c's chain; its seven former
-  failures are fixed on SA173's retained candidate and are no longer an oracle for this ticket.
+  **State (2026-08-29): Phase-A product slice merged; Phase A not yet accepted; B-F not reached.**
+  Product commit `f6f3bbce` is on `v88`. The merged bytes removed `django_apps:` from
+  `ModuleManifest`, the loader, the obsolete loader test, all eleven source declarations and their
+  core snapshots, and removed the SA92 helper's retired-key dependency, while preserving all twelve
+  `apps` wiring projections and public adapter outputs. Terminal review found no product-slice defect.
+  On the last acceptance attempt four of the five commands were green (loader 112 passed; restricted-role
+  orgs 884 passed / 11 skipped; `make check-manifest-sync` and `make check-gate-parity` exit 0) and the
+  four-caller command exited 1 on two tests in `TestRegenerateManagedWiringSkipManifestNotFound`
+  (`test_module_wiring_manager_manifest.py:767,796`). Under the stop-at-first-unexpected-red rule the
+  source-bound probe and the `git diff --exit-code` oracle were not run, so this green prefix is **not**
+  Phase-A acceptance.
+  **Not this ticket's defect — and already fixed.** Decision D3 established those two failures as a
+  module-presence question, not a `django_apps:` question, and **SA173 (#30)** owned them. They are
+  green on `v88` today (`test_module_wiring_manager_manifest.py` 43 passed). SA167c must not edit them
+  and must not touch `quickscale_core/contracts/` or `quickscale_core/manifest/`.
+  **Blocking: SA173 must be accepted and closed.** Its product work is merged and the caller tests are
+  green, but its storage per-file coverage gate is red, so #30 is open and #21 is still gated. Nothing
+  else blocks Phase A. **Note for step 5 below:** `commands/test_module_config_extended.py` is no longer
+  an oracle for this ticket; its seven former failures are fixed on `v88`.
   **Decisions needed:** none. D3 is settled; see
-  [Settled decision D3](#settled-decision-d3-module-presence-is-a-three-state-fact-2026-08-28).
+  [Settled decision D3](#settled-decision-d3--module-presence-is-a-three-state-fact-2026-08-28).
   **Remaining plan (serial; do not redo the merged retirement bytes):**
   0. **Wait for SA173 to be accepted.** No SA167c work is required for the caller mismatch, and the
-     contract plus retained partial product work are integrated by the SA173 checkpoint. When #30
+     contract and all its consumer/fixture/shim product work are already on `v88`. When #30
      closes green, sync that completed state into `wt-track2` before rerunning A.
   1. **A-acceptance:** on a candidate carrying SA173's contract and no tracked
      diff, rerun the exact chain below in order. Stop at the first command whose observed result does
@@ -913,41 +715,34 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   docstring; a test asserts the CLI contributes nothing to `ModuleWiringSpec`; the stale-flow note
   in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist)
   is retired once the deviation it names is gone.
-  **State (re-measured 2026-08-28 from `wt-track1` itself): phases A-E accepted; closeout is all
-  that remains.** The prior entry here described a lane six commits behind reality and instructed a
-  rerun of work already accepted. Corrected against the branch:
-  - `wt-track1` is **clean** at `f392641c`, 15 ahead / 3 behind `v88`, and is the release's only
-    unmerged product delta.
-  - Phase E **is accepted** at E0 tip `bd2c291b`, retained inside `8b20800d` — the clean committed
-    product tip. E0 made no tracked edits and recorded **282 focused tests passed**, with `make lint`,
-    `make typecheck`, `make test`, `make check`, and `make quality` all at exit 0 and `make check`
-    reporting **1,318 passed**.
-  - Independent convergence then ran and **corrected real defects**: ineffective auth-migration flush
-    guidance, a non-operational fresh-database recovery path, and three stale quality-baseline
-    identities. Those corrections are `8b20800d`.
-  - The measured product delta `c50de1c1..8b20800d` is **30 files, 1,012 insertions, 2,228
-    deletions**.
+  **State (verified 2026-08-29 against the branch): phases A-E accepted; closeout is all that
+  remains.** `wt-track1` is **clean at `f392641c`, 15 ahead / 14 behind `v88`** — the release's only
+  unmerged product delta. Phase E is accepted at E0 tip `bd2c291b`, retained inside `8b20800d`; E0
+  made no tracked edits and recorded **282 focused tests passed**, with `make lint`, `make typecheck`,
+  `make test`, `make check`, and `make quality` all at exit 0. Independent convergence then ran and
+  **corrected real defects** — ineffective auth-migration flush guidance, a non-operational
+  fresh-database recovery path, and three stale quality-baseline identities — as `8b20800d`. The
+  measured product delta `c50de1c1..8b20800d` is **30 files, 1,012 insertions, 2,228 deletions**.
   **Why the last attempt did not close, precisely.** Terminal attestation was attempted once and
-  **returned no grade**. Its read-only surface could resolve the exact tip but could not obtain the
+  **returned no grade**: its read-only surface could resolve the exact tip but could not obtain the
   complete `c50de1c1..8b20800d` patch or independently exclude uncommitted-byte drift. That is a
   **review-input failure, not an attestation finding** — nothing was found wrong with the delta.
-  Separately, V0 stopped when `make check` hit a 120-second cutoff before returning an exit code.
-  Both causes are now removed: the patch is producible in one command, and `make check`'s real
-  behaviour is measured above under *Band A*.
-  **Closeout shape (decided 2026-08-28): validate, then attest.** The recorded five-stage
-  V0/C2/V1/convergence/attestation pipeline is **not** required. Convergence has already run and
-  corrected this delta, every gate has been green on it once, and the single unmet step failed for a
-  reason that no longer applies. Re-running the full staging would re-prove passed work.
+  Separately, V0 stopped when `make check` hit a 120-second foreground cutoff. Both causes are removed:
+  the patch is producible in one command, and `make check` is now measured at ~184-212 s green.
+  **Closeout shape: validate, then attest.** The recorded five-stage V0/C2/V1/convergence/attestation
+  pipeline is **not** required. Convergence has already run and corrected this delta, every gate has
+  been green on it once, and the single unmet step failed for a reason that no longer applies.
+  Re-running the full staging would re-prove passed work.
   **Remaining plan (serial; do not re-implement anything):**
   1. **Sync.** Merge current `v88` into `wt-track1` and resolve there, preserving the retained
      candidate and the closeout checkpoint. Expect a conflict in this file — keep its structure.
   2. **Validate on one frozen candidate,** unexcluded — the known-red protocol is retired and no
      `PYTEST_ADDOPTS` is authorized. Ordered, stopping at the first unexpected red:
-     - `poetry run pytest quickscale_cli/tests/commands/test_module_config.py quickscale_cli/tests/commands/test_module_config_extended.py quickscale_cli/tests/commands/test_module_commands.py quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_cli/tests/test_module_manifest_contract.py -q -o addopts= --no-cov` — expect the recorded **816** focused total. The seven former SA173 fixture failures in `commands/test_module_config_extended.py` are fixed on the retained partial candidate; they are not W1's work and may not be reintroduced or deselected.
+     - `poetry run pytest quickscale_cli/tests/commands/test_module_config.py quickscale_cli/tests/commands/test_module_config_extended.py quickscale_cli/tests/commands/test_module_commands.py quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_cli/tests/test_module_manifest_contract.py -q -o addopts= --no-cov` — expect the recorded **816** focused total. The seven former SA173 fixture failures in `commands/test_module_config_extended.py` are fixed on `v88`; they are not W1's work and may not be reintroduced or deselected.
      - `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov` — expect **21 passed**.
      - `make lint`, `make typecheck` — exit 0.
-     - `make test`, `make check`, `make quality` — **run detached and poll for an exit-code file;
-       `make check` alone measures ~601 s green and cannot complete inside one foreground call.** A
+     - `make check` — exit 0 (measured ~184 s green on `v88`, 2026-08-29; it fits in one foreground
+       call). Then `make test` and `make quality` **detached, polling for an exit-code file** — a
        truncated run is not evidence. `make quality` no worse than found.
   3. **Ledger reconciliation** across `CHANGELOG.md`, `docs/index.md`, `docs/others/arch-audit.md`,
      `docs/technical/{decisions,implementation_contract,module-extension,v88_ticket_context}.md`,
@@ -978,13 +773,12 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   its exact container, image, mount, and running identity; all twelve databases owned by
   `quickscale_test_role`). E1 recorded green runs without changing a file but could not produce the
   deterministic red-before/green-after evidence it was asked for.
-  **Prior blocker (2026-08-28) — cleared.** The last attempt never ran a command: its mandatory
-  reviewed plan required a disinterested review inside G-sync/G-validate and then resumed authored
-  documentation mutation in G-closeout/G-final. The strictly forward pipeline cannot resume
-  implementation after terminal review, so the plan was not executable. **A compliant plan is now
-  written below and no plan-authoring step remains before dispatch** — every implementation and
-  authored closeout mutation happens before serial convergence, and exactly one terminal attestation
-  ends the ticket.
+  **Prior blocker — cleared.** The last attempt never ran a command: its reviewed plan required a
+  disinterested review inside G-sync/G-validate and then resumed authored documentation mutation in
+  G-closeout/G-final, which the strictly forward pipeline cannot do. **A compliant plan is written
+  below and no plan-authoring step remains before dispatch** — every implementation and authored
+  closeout mutation happens before serial convergence, and exactly one terminal attestation ends the
+  ticket.
   **Scope narrowed again 2026-08-28 — stage E2 moved to SA170.** E2 required a full
   `QS_E2E_PARALLEL=0 make test-e2e` followed by `make ci-e2e`. That re-coupled SA135's acceptance to
   the very E2E harness whose fixed-tag collision, uncaught `subprocess.TimeoutExpired`, and
@@ -1021,13 +815,12 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   3. **G-sync / G-validate.** Sync current `v88` into W3, preserve concurrent closeout entries, and
      run the complete focused, provisioning, parity, lint, type, check, integration, BYPASSRLS,
      isolation, test, and quality campaign on **one frozen candidate**, unexcluded — the known-red
-     protocol is retired and no `PYTEST_ADDOPTS` is authorized. SA173's retained partial fixes its
-     earlier CLI regressions, but storage per-file coverage still leaves the required branch gate
-     red (see *Band A*); W3 neither owns nor may touch it. W3's own stages are unaffected by it.
-     **Run `make check`, `make test`, and
-     `make quality` detached, polling for an exit-code file — `make check` alone measures ~601 s
-     green and cannot complete inside one foreground call.** A truncated run is not evidence. The
-     serial and CI E2E campaigns are **not** part of this stage any more.
+     protocol is retired and no `PYTEST_ADDOPTS` is authorized. SA173's product work is merged, but
+     its storage per-file coverage still leaves the required branch gate red (see *Band A*); W3
+     neither owns nor may touch it, and W3's own stages are unaffected by it. **Run `make test` and
+     `make quality` detached, polling for an exit-code file**; `make check` measures ~184 s green and
+     may run in the foreground. A truncated run is not evidence. The serial and CI E2E campaigns are
+     **not** part of this stage any more.
   4. **G-closeout / G-final.** Only after G-validate is green: archive and remove SA135 from this
      open-work-only roadmap, then rerun the final frozen-tip campaign.
   5. **Serial convergence** over the complete product-and-closeout delta, then **exactly one terminal
