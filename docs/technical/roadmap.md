@@ -508,43 +508,62 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   [decisions.md → Module Presence States](decisions.md#module-presence-states); this ticket implements
   it. The investigation that produced D3, and the full 2026-08-28 regression diagnosis this ticket
   worked through, are archived in [CHANGELOG.md](../../CHANGELOG.md) and are not restated here.
-  **State (2026-08-29): all product work is merged on `v88`; one coverage gate is red.**
-  Contract commit `e0730ae9` plus checkpoint `4c311a73`, integrated through `5bf03b40`/`b5b84ca9`.
-  **Do not reimplement any of it.** Verified on HEAD: discovery reports ABSENT / ACTIVE / INCOMPLETE;
-  `grep -rn "inventory count drift" --include=*.py` outside tests returns **one** production site
-  (`module_discovery.py:309`); the CLI's `"Manifest file not found"` substring classification is
-  **gone**; `PLACEHOLDER_MODULE_NAMES` is retired in favour of a catalog `placeholder` flag; the
-  `OVERRIDE`→bundled substitution is removed; `status` reports registered ABSENT/INCOMPLETE modules as
-  drift while `apply` stays fail-hard; the eight auth/CRM fixtures use real manifests with no assertion
-  change; the standalone discovery shim answers `--list-modules` in a hermetic tree; ACTIVE placeholders
-  fail before adapter import with registry/import-state atomicity; and criterion 8's negative proof ran
-  and restored exact bytes. Independent terminal review found no defect in these bytes.
-  **Blocking — the only open item.**
-  `quickscale_modules/storage/src/quickscale_modules_storage/__init__.py` measures **45% per-file
-  coverage against the required 80%**, stopping the required `make test` chain even though all 39
-  storage tests pass. Measured detached on `v88` 2026-08-29: **`make test` exits 2 in 82 s at
-  `test-integration` with this as its only red**, while **`make check` exits 0 in 184 s**. The six
-  uncovered statements are lines **28-35**, the entire body of
-  `__getattr__` — the lazy re-export shim that keeps package initialization dependency-free so the
-  manifest adapter can load during `quickscale apply` before module dependencies are installed. **The
-  shim is load-bearing and must not be deleted, and the gate must not be weakened, lowered, or
-  excluded.** Close it with a unit test over `__getattr__`: resolve each name in `__all__` through
-  `helpers` and assert the module-level cache, and assert `AttributeError` for a name outside `__all__`.
-  **Decisions needed:** none.
-  **Remaining plan (serial; do not redo the merged product work):**
-  1. Add the `__getattr__` coverage test; confirm the file reaches ≥80% and the package total is no
-     worse than the current 95%.
-  2. Run the ordered verification below on one frozen candidate synced to current `v88`. Schedule
-     `make test` outside W3's cluster window; launch `make test` and `make quality` detached with the
-     exit code written to a file. A truncated run is not evidence.
-  3. Only after every required result is green, reconcile `CHANGELOG.md`,
-     `docs/technical/implementation_contract.md`, `docs/technical/v88_ticket_context.md`,
-     `docs/index.md`, and this file's queue/counts/dependencies; re-run the consistency test in the
-     same change; and archive/remove SA173 from this open-work-only roadmap.
-  4. Materialize the complete base-to-tip patch to a file, supply it with a clean-byte binding
-     (`git status --porcelain` empty at the exact tip), perform serial convergence and **one** terminal
-     attestation, and merge only that exact accepted tip. Announce the merge in the queue and re-run
-     W1's and W3's focused caller suites first — see the cross-lane obligation below.
+  **State (2026-08-29): partial completion retained; coverage fixed, acceptance and closeout open.**
+  The already-integrated product behavior remains unchanged. Track branch `wt-track2` carries retained
+  implementation commit `1edb95381b78b64605bd71116456d67405dc6984`, which adds only
+  `quickscale_modules/storage/tests/test_init.py`; check `v88` history to determine whether that exact
+  object has been integrated. **Do not reimplement the three-state contract or the retained test.**
+
+  **Completed in the retained delivery:**
+  - Phase A reproduced the source-bound starting state: 39 storage tests passed, while
+    `quickscale_modules_storage/__init__.py` remained at 45% because lines 28-35 were uncovered.
+  - Phase B added exactly two tests over every runtime `__all__` export, package caching, helper
+    identity, and the unknown-name `AttributeError` path. The focused pair passed; the storage suite
+    then reported 41 passed, `__init__.py` at 100%, and package coverage at 97.67%, with no product or
+    coverage-policy edit. Serial convergence independently approved that one-file delta and repeated
+    the same green storage result.
+
+  **Pending:**
+  - Phase C is not accepted. Its first two checks were green (41 storage tests and 167 CLI caller
+    tests); its third command exited 0 with **222 passed**, but the recorded oracle required **221**.
+    The ordered stop rule therefore prevented the remaining CLI/core aggregate, scripts suite,
+    manifest/parity checks, lint, typecheck, and `make check` from running.
+  - Phase D's detached `make test` / `make quality` campaign and W1/W3 caller evidence were not
+    reached. Phase E's changelog, implementation-contract, ticket-context, docs-index, roadmap-count,
+    and consistency-test closeout was not reached. SA173 remains open and unmarked.
+
+  **Blocking:**
+  - ***corrected after checkpoint attestation — not independently graded*** The 222-versus-221
+    collection drift must be explained before acceptance, and Phase C is closed to the current run.
+    A new run must first obtain revised reviewed-plan authority and adjudicate the caller-count
+    difference from collected node IDs; only then may it bind the oracle to 222 when the added test is
+    intentional or correct an unintended collection difference and rerun Phase C from command one.
+  - ***corrected after checkpoint attestation — not independently graded*** The retained product
+    delta has no terminal grade. Its attestation was blocked before reading the patch because the
+    review handoff omitted the required validation tier, consuming this run's sole product-attestation
+    budget. No second product attestation is authorized in this run; a future run must explicitly
+    establish a fresh attestation budget before supplying the complete patch, clean exact-tip binding,
+    and validation tier to an independent reviewer.
+
+  **Decisions needed:** ***corrected after checkpoint attestation — not independently graded*** A new
+  run must authorize revised reviewed-plan authority and a fresh product-attestation budget. No
+  product-design decision is currently open; ask the maintainer about the count only if collected-test
+  evidence leaves two policy-valid oracle choices.
+
+  **Remaining plan (serial; reuse the retained implementation and do not redo Phases A-B):**
+  1. ***corrected after checkpoint attestation — not independently graded*** Start a new run, obtain
+     revised reviewed-plan authority, and adjudicate the count from collected node IDs before
+     authorizing any Phase C rerun. Then rerun all Phase C commands in the recorded order, stopping at
+     the first unexpected result.
+  2. Obtain W3's shared-slot grant and run Phase D once: detached `make test`, detached `make quality`,
+     W1's focused caller suite, and W3's provisioning/BYPASSRLS/isolation/restricted caller family,
+     leaving `quickscale_test_role` owning all twelve test databases.
+  3. Only after every gate is green, perform Phase E's five-document closeout and same-change
+     consistency test, then run serial convergence over the complete retained-plus-closeout delta.
+  4. ***corrected after checkpoint attestation — not independently graded*** Only after the new run
+     establishes a fresh product-attestation budget, materialize the complete patch and clean exact-tip
+     binding, run one independent terminal attestation with the validation tier stated explicitly, and
+     merge only that accepted exact tip.
   **Acceptance:**
   1. Discovery reports ABSENT / ACTIVE / INCOMPLETE distinctly and no code path silently drops a
      manifest-less directory. *(met)*
@@ -575,7 +594,7 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
      tree — and a hermetic test asserts it, so `scripts/version_tool.sh` cannot break again unobserved.
      *(met)*
   10. **The required per-file coverage gate is green with no exclusion, waiver, or threshold change.**
-     *(open — the sole remaining criterion)*
+      *(implemented and focused green — the full acceptance campaign remains pending)*
   **Verification (ordered; stop at the first unexpected red):**
   1. `poetry run pytest quickscale_modules/storage/tests -q -o addopts= --cov=quickscale_modules_storage --cov-report=term-missing` — expect `__init__.py` at ≥80% and no file regressed.
   2. `poetry run pytest quickscale_cli/tests/test_status_command.py quickscale_cli/tests/commands/test_module_config_extended.py -q -o addopts= --no-cov -p no:cacheprovider` — expect exit 0 with **167 passed** and no test file edited.
@@ -584,8 +603,9 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   5. `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` — expect exit 0 and **1319 passed** (measured green on `v88` 2026-08-29 in 92 s). `publish_module.py`, `check_sa117_scope.py`, and `version_tool.sh` are release-inventory consumers of the changed contract.
   6. `make check-manifest-sync` and `make check-gate-parity` — expect exit 0.
   7. `make lint`, `make typecheck`, `make check` — expect exit 0 (`make check` measured 184 s green on `v88`). Then `make test` (expect exit 0; it exits 2 in 82 s today) and `make quality` **detached**; `make quality` no worse than found.
-  **Rollback:** `git reset --hard b5b84ca9` in `wt-track2` discards the completion attempt without
-  touching the merged product work.
+  **Rollback:** after the retained delivery is integrated, `git reset --hard
+  1edb95381b78b64605bd71116456d67405dc6984` in `wt-track2` discards a later completion attempt
+  without discarding the accepted coverage test.
   **Cross-lane obligation.** `quickscale_core/contracts/` and `quickscale_core/manifest/` are read by
   every lane, and `203fcd61` is the recorded precedent for a behavioural change here turning another
   lane red with no shared file. Before merging, announce in the merge queue and re-run W1's and W3's
