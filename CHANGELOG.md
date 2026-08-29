@@ -46,6 +46,30 @@
   `__init__.py` at 100%, package coverage 97.67%**, with no product or coverage-policy edit. Serial
   convergence independently approved that one-file delta and reproduced the same result.
 
+- **SA173's two workflow authorities issued: `EV-7` and `AB-1` (2026-08-29).** Both of the ticket's
+  remaining blockers were authorizations, not product defects, and both are now granted; SA173 stands
+  clear to run Phase D from command one.
+  **`EV-7`** is the replacement reviewed-plan authority. It supersedes `EV-6` **solely** as to the W1
+  five-file collection oracle — EV-6's four-file total of **222** is undisturbed and re-affirmed — and
+  binds that command to **342 passed, exit 0**, withdrawing the recorded **816** as disproved. Evidence
+  taken on the clean tree at exact tip `2687b97311b41de1333bfa9696bafb72cf7a6b9c`, `git status
+  --porcelain` empty: **342 collected** in 0.13 s and **342 passed, exit 0** in 2.23 s, decomposing per
+  file as 24 / 144 / 109 / 43 / 22. That is the third independent clean-tree observation and the first at
+  the current tip, settling the discrepancy as **inherited oracle drift, not a regression**; nothing was
+  deselected, skipped, or `PYTEST_ADDOPTS`-filtered. A candidate returning anything other than 342 —
+  including a higher total — halts Phase D for adjudication against the per-file decomposition rather
+  than being auto-accepted. SA167d (#18) carried the same stale 816 and is governed by EV-7, but
+  re-derives on its own synced candidate because `wt-track1` is 15 ahead of `v88`.
+  **`AB-1`** grants one independent terminal attestation of the retained product delta plus its Phase D/E
+  closeout delta. The prior budget was consumed **without the patch ever being read** — refused at handoff
+  for an omitted validation tier, a handoff defect and not an adverse finding — so re-spending is not a
+  retry of a graded review. Four inputs are required at dispatch (complete patch as a file, clean
+  exact-tip binding, validation tier named literally, returned gate verdicts with exit codes), and a
+  handoff missing any one is refused **before** the budget is spent, which does not consume it. Findings
+  returned do not require a new budget. Carried forward as a general rule: size every budget against the
+  **serial** runtime of the command actually being run — the scripts-gate failure below was a 300 s cap on
+  a ~302 s serial run, and the attestation failure was the same class of error.
+
 - **Gate cost profiled and the `check-gate-suites` parallelisation banked (2026-08-29).**
   `-n auto --dist loadfile` (`Makefile:1021`) cut that stage from **299 s to 94 s** with byte-identical
   outcomes. `lint-frontend`, previously recorded as the dominant cost, measures **13.89 s** — that figure

@@ -63,7 +63,7 @@ Audit-derived prerequisites and implementation tickets share one ranked queue.
 
 | Band | Rule | Tickets |
 |---|---|---|
-| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **SA173** — product and storage-coverage fix merged; the scripts gate has no returned verdict, Phase D is halted on a disproved count oracle, and ticket acceptance is open (see below) |
+| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **SA173** — product and storage-coverage fix merged; the scripts gate is green, Phase D is authorized to run under `EV-7`, and ticket acceptance is open pending the Phase D/E campaign and one attestation under `AB-1` (see below) |
 | **B — Release work on the critical paths** | The two longest serialized chains, one holding the exclusive service slot. | SA167c (critical path, after SA173); SA135; SA170; SA167d |
 | **C — Bounded independent fixes** | No dependants, small blast radius; absorbed as slack filler. | SA160, SA161, SA164, SA165, SA166, SA171, SA172, SA174, SA175 |
 
@@ -84,8 +84,9 @@ planner scope.
    every other ticket, and this is the branch-state gate all three lanes' merge evidence waits on.
 2. **W1 and W3 can implement and validate but cannot complete a merge.** Their acceptance requires a
    green `make check`/`make test` on a candidate synced to current `v88`.
-3. **What SA173 still owes:** replacement Phase-D reviewed authority, the unexcluded frozen-candidate
-   campaign, documentation closeout, and one terminal attestation. Its scripts-suite verdict and the two
+3. **What SA173 still owes:** the unexcluded frozen-candidate Phase D/E campaign, documentation
+   closeout, and one terminal attestation under `AB-1`. Its replacement Phase-D reviewed authority is
+   **issued — `EV-7`, 2026-08-29** — and is no longer outstanding. Its scripts-suite verdict and the two
    formerly unreached manifest-sync/gate-parity checks are **returned green as of 2026-08-29** and are no
    longer outstanding. The gate then clears for all three lanes at once.
 
@@ -221,8 +222,9 @@ for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-r
 ```
 
 - **`wt-track3`** is an ancestor of `v88` — **0 ahead / 14 behind**, fully merged, clean, idle.
-- **`wt-track2`** is **0 ahead / 0 behind** — identical to `v88` at `fa4a8985`. SA173's product,
-  storage-test, and checkpoint commits are all integrated; the lane carries no unmerged delta.
+- **`wt-track2`** is clean at `fd42d56c`, **0 ahead / 2 behind `v88`** at `2687b973`; both commits
+  are documentation-only. SA173's product, storage-test, and checkpoint commits are all integrated;
+  the lane carries no unmerged delta and needs only a fast-forward sync before work.
 - **`wt-track1`** is clean at `f392641c`, **15 ahead / 18 behind `v88`** — the release's only unmerged
   product delta, carrying the accepted E0 tip and the convergence corrections at `8b20800d`. It must
   sync before validating; expect a conflict in this file and keep its structure.
@@ -235,11 +237,11 @@ evidence must claim the slot and run outside W3's exclusive window.
 
 ### Next action per lane
 
-- **W2 — resume SA173 (#30) from the retained coverage fix; do not reimplement merged work.** Obtain
-  replacement reviewed authority binding Phase D's W1 five-file command to the observed clean-tree **342**
-  (the reviewed 816 is disproved), obtain a returned scripts-suite verdict under a detached or larger
-  budget, then run the unreached manifest-sync and gate-parity checks, the remaining unexcluded profile
-  and whole-tree campaign, the authoritative closeout, one terminal attestation, and merge. SA167c (#21)
+- **W2 — resume SA173 (#30) from the retained coverage fix; do not reimplement merged work.** Both
+  workflow authorities are issued: fast-forward `wt-track2` (2 behind, documentation-only), then run
+  Phase D from command one under **`EV-7`** (342 oracle), the remaining unexcluded profile and whole-tree
+  campaign, the authoritative closeout, one terminal attestation under **`AB-1`**, and merge. The
+  scripts-suite, manifest-sync, and gate-parity verdicts are already returned green. SA167c (#21)
   stays blocked until that closes.
 - **W3 — resume SA135 (#15) at phase E1, unexcluded, today.** Do not redo C or D, and do not attempt the
   E2E Docker failures — they are SA170's. Remaining scope is **the PostgreSQL-lifecycle evidence and the
@@ -350,8 +352,8 @@ into its worktree, resolves there, reruns its own verification, then merges its 
 | 32 | **SA175** | C | 3 | W1 | SA174 | no |
 
 **Branch-state gate, not a queue edge: nothing else completes its merge before SA173 closes.**
-SA173's product and storage-coverage fix are integrated, but its scripts gate has no returned verdict,
-Phase D is outstanding, and the full `make test` chain has no current verdict, so every other lane's
+SA173's product and storage-coverage fix are integrated and its scripts gate is green, but Phase D is
+outstanding and the full `make test` chain has no current verdict, so every other lane's
 completed merge evidence stays unobtainable until #30 is accepted. This is deliberately **not**
 recorded as a `deps:` edge on #15 and #18 — it is
 not a content dependency between tickets, it is the state of the integration branch, and it clears for
@@ -473,15 +475,42 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   contract or the retained test.** Phase C is accepted under the unreturned-gate rule, not as fully
   validated.
 
-  **Blocking — both are workflow authorities, neither is a maintainer decision:**
-  1. **Phase D has no usable reviewed authority.** `EV-6` binds its W1 five-file command to **816**, which
-     two clean-tree runs disproved at **342** (a root-owned rerun on the unchanged tree reproduced 342, so
-     this is inherited oracle drift, not a regression). Silently rebinding the old plan is prohibited; a
-     new run must obtain replacement authority binding the observed 342 before dispatching command one.
-  2. **The retained product delta has no terminal grade.** Its attestation was blocked before reading the
-     patch because the review handoff omitted the required validation tier, consuming that run's sole
-     product-attestation budget. A future run must establish a fresh attestation budget before supplying
-     the complete patch, clean exact-tip binding, and validation tier to an independent reviewer.
+  **Both former blockers are cleared 2026-08-29 by issued workflow authorities. Nothing now stands
+  between this ticket and Phase D command one.**
+
+  **`EV-7` — replacement reviewed-plan authority for Phase D.** Supersedes `EV-6` **solely** as to the
+  W1 five-file collection oracle; EV-6's four-file total of **222** is undisturbed and re-affirmed.
+  The bound command is the five-file
+  `poetry run pytest … -q -o addopts= --no-cov` at #18 step 2, and its bound expectation is
+  **342 passed, exit 0**. The recorded **816** is withdrawn as disproved. Evidence, taken on the clean
+  tree at exact tip `2687b97311b41de1333bfa9696bafb72cf7a6b9c` with `git status --porcelain` empty:
+  `--collect-only` returned **342 collected** (0.13 s) and the full run **342 passed, exit 0** (2.23 s),
+  decomposing per file as 24 / 144 / 109 / 43 / 22 — `commands/test_module_config.py`,
+  `commands/test_module_config_extended.py`, `commands/test_module_commands.py`,
+  `test_module_wiring_manager_manifest.py`, `test_module_manifest_contract.py`. That is the third
+  independent clean-tree observation and the first at the current tip, confirming **inherited oracle
+  drift, not a regression**; nothing was deselected, skipped, or `PYTEST_ADDOPTS`-filtered.
+  Phase D may dispatch from command one with no further plan-authoring or re-review step. A candidate
+  returning 342 / exit 0 satisfies the oracle; **anything else, including a higher total, halts Phase D**
+  for adjudication against the per-file decomposition rather than being auto-accepted. EV-7 binds this
+  command only and grades no product delta.
+
+  **`AB-1` — fresh terminal-attestation budget.** Grants **one** independent terminal attestation of the
+  retained product delta plus its Phase D/E closeout delta, on the exact tip presented. Warranted
+  because the prior budget was consumed **without the patch ever being read** — the attempt was refused
+  at handoff for an omitted validation tier, a handoff defect and not an adverse finding. Four inputs are
+  required at dispatch, and **a handoff missing any one is refused before the budget is spent, which does
+  not consume it**: (1) the complete patch materialized as a file, `git diff <frozen-base>..<frozen-tip>
+  > sa173.patch`, handed over directly — not a range, summary, or file list; (2) the full 40-character
+  tip SHA with `git status --porcelain` empty, both quoted; (3) the validation tier named literally from
+  [validation_policy.md](validation_policy.md) — the input whose absence voided the last attempt;
+  (4) the returned gate verdicts the tip stands on, each with its exit code. The budget may be spent only
+  after every required Phase D/E gate has **returned** green, serial convergence has run over the
+  retained-plus-closeout delta, and the five-document closeout, same-change consistency test, `make ci`,
+  and final twelve-database census are complete. Size every budget against the **serial** runtime of the
+  command actually being run — the 2026-08-29 scripts-gate failure was a 300 s cap on a ~302 s serial run.
+  On acceptance that exact tip, and only that tip, merges. **Findings returned do not require a new
+  budget**; the grant covers the delta through to a settled verdict.
 
   **Cleared 2026-08-29 — the scripts gate is green and is no longer a blocker.** Run detached, the serial
   suite returned **1319 passed, exit 0, in 301.83 s**; `make check-manifest-sync` (12 manifests in sync)
@@ -496,17 +525,18 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   evidence-backed interpretation.
 
   **Remaining plan (serial; reuse the retained implementation and do not redo Phases A-C):**
-  1. Obtain replacement reviewed authority binding Phase D's W1 five-file command to **342**. Phase C's
-     scripts gate, manifest-sync, and gate-parity are green as of 2026-08-29 and close that validation
-     gap; re-run them detached only if the candidate changes.
-  2. With W3's shared slot clear, run Phase D from command one under the replacement authority, then
+  1. **Done — no action.** Replacement authority `EV-7` binds the five-file command to **342**, and
+     Phase C's scripts gate, manifest-sync, and gate-parity are green as of 2026-08-29, closing that
+     validation gap; re-run them detached only if the candidate changes.
+  2. With W3's shared slot clear, run Phase D from command one under `EV-7`, then
      provisioning, BYPASSRLS, isolation, and restricted profiles in order, with exact-label cleanup and an
      unchanged twelve-database `quickscale_test_role` census.
   3. Only after every required gate returns green, run Phase E's lint/typecheck/check, detached `make test`
      and `make quality`, five-document closeout, same-change consistency test, `make ci`, and final census.
      Then run serial convergence over the retained-plus-closeout delta.
-  4. Materialize the complete patch and clean exact-tip binding, run one independent terminal attestation
-     with the validation tier stated explicitly, and merge only that accepted exact tip.
+  4. Materialize `AB-1`'s four required inputs — complete patch as a file, clean exact-tip binding,
+     explicit validation tier, returned gate verdicts — run the one independent terminal attestation it
+     grants, and merge only that accepted exact tip.
   **Acceptance:**
   1. Discovery reports ABSENT / ACTIVE / INCOMPLETE distinctly and no code path silently drops a
      manifest-less directory. *(met)*
@@ -685,7 +715,7 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
      candidate and the closeout checkpoint. Expect a conflict in this file — keep its structure.
   2. **Validate on one frozen candidate,** unexcluded — the known-red protocol is retired and no
      `PYTEST_ADDOPTS` is authorized. Ordered, stopping at the first unexpected red:
-     - `poetry run pytest quickscale_cli/tests/commands/test_module_config.py quickscale_cli/tests/commands/test_module_config_extended.py quickscale_cli/tests/commands/test_module_commands.py quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_cli/tests/test_module_manifest_contract.py -q -o addopts= --no-cov` — **re-derive the expected total on the synced candidate before treating it as an oracle.** The recorded **816** is the pre-sync figure; SA173 sees the same five-file command return **342** on current `v88` (see #30's blocker 1), so a mismatch here is oracle drift to be adjudicated, not automatically a regression. The seven former SA173 fixture failures in `commands/test_module_config_extended.py` are fixed on `v88`; they are not W1's work and may not be reintroduced or deselected.
+     - `poetry run pytest quickscale_cli/tests/commands/test_module_config.py quickscale_cli/tests/commands/test_module_config_extended.py quickscale_cli/tests/commands/test_module_commands.py quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_cli/tests/test_module_manifest_contract.py -q -o addopts= --no-cov` — **re-derive the expected total on the synced candidate before treating it as an oracle.** `EV-7` (see #30) withdrew the recorded **816** as disproved and binds this command to **342**, observed three times on clean `v88` and decomposing 24 / 144 / 109 / 43 / 22 per file. Because `wt-track1` is 15 ahead of `v88`, W1 re-derives on its own synced candidate rather than inheriting 342 unexamined; a mismatch is oracle drift to be adjudicated against that per-file decomposition, not automatically a regression. The seven former SA173 fixture failures in `commands/test_module_config_extended.py` are fixed on `v88`; they are not W1's work and may not be reintroduced or deselected.
      - `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov` — expect **21 passed**.
      - `make lint`, `make typecheck` — exit 0.
      - `make check` — exit 0 (measured ~184 s green on `v88`, 2026-08-29; it fits in one foreground
