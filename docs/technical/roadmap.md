@@ -39,6 +39,11 @@ from here rather than marked done. No checked entry is permitted.
   no other ticket merge until the owner is green. An authorized partial checkpoint from the owning
   ticket does not clear the gate. The 2026-08-28 interim known-red protocol is retired for exactly
   this reason and must not be revived.
+- **A gate budget must be sized against the same command that will be run.** `pytest scripts/` costs
+  92 s parallel (`check-gate-suites`) and 302 s serial — the same 1319 tests, 3.3× apart. One recorded
+  blocker was a serial run killed 1.8 s short of green under a budget copied from the parallel figure.
+  Quote every timing with its parallelism, and prefer a detached run with a generous budget over a
+  foreground retry.
 - **Terminal attestation must be handed its input.** Generate the complete base-to-tip patch to a
   file (`git diff <base>..<tip> > <name>.patch`) and supply it together with a clean-byte binding
   (`git status --porcelain` empty at the exact tip). A reviewer that cannot obtain the patch returns
@@ -79,22 +84,29 @@ planner scope.
    every other ticket, and this is the branch-state gate all three lanes' merge evidence waits on.
 2. **W1 and W3 can implement and validate but cannot complete a merge.** Their acceptance requires a
    green `make check`/`make test` on a candidate synced to current `v88`.
-3. **What SA173 still owes:** replacement Phase-D reviewed authority, a returned scripts-suite verdict,
-   the two unreached manifest-sync/gate-parity checks, the unexcluded frozen-candidate campaign,
-   documentation closeout, and one terminal attestation. The gate then clears for all three lanes at once.
+3. **What SA173 still owes:** replacement Phase-D reviewed authority, the unexcluded frozen-candidate
+   campaign, documentation closeout, and one terminal attestation. Its scripts-suite verdict and the two
+   formerly unreached manifest-sync/gate-parity checks are **returned green as of 2026-08-29** and are no
+   longer outstanding. The gate then clears for all three lanes at once.
 
 #### Gate budget
 
 | Gate | Cost | How to run |
 |---|---|---|
 | `make check` | **184 s**, measured green on `v88` | one foreground call |
+| `pytest scripts/` **parallel** (as `check-gate-suites` runs it) | **92 s** | inside `make check` |
+| `pytest scripts/` **serial** (as the tickets' verification steps write it) | **302 s**, 1319 passed, measured 2026-08-29 | **detached**, poll an exit-code file |
 | `make test` | 82 s to the former first red; full green run not yet timed | **detached**, poll an exit-code file |
 | `make quality` | not re-measured | **detached**, poll an exit-code file |
 | unfiltered combined suite (`e2e` included) | ~80 min | only when an `e2e` row is the question |
 
-`--dist loadfile` on `check-gate-suites` (`Makefile:1021`) is load-bearing, not a tuning knob: the
-default `loadscan` splits `test_quality_baseline_monotonicity.py` across workers and produces spurious
-failures. The stage profiling behind these figures is archived in [CHANGELOG.md](../../CHANGELOG.md).
+**The two `pytest scripts/` rows are the same 1319 tests and differ by 3.3×.** `check-gate-suites`
+(`Makefile:1021`) appends `-n auto --dist loadfile`; the verification steps written into the tickets do
+not. Sizing a budget against the parallel figure and then running the serial command is what produced
+one recorded false blocker — see [CHANGELOG.md](../../CHANGELOG.md). **Quote the figure with its
+parallelism, or the number is not evidence.** `--dist loadfile` is itself load-bearing, not a tuning
+knob: the default `loadscan` splits `test_quality_baseline_monotonicity.py` across workers and produces
+spurious failures.
 
 #### Unfiltered-suite rows — SA170's four, carried unre-measured
 
@@ -461,28 +473,32 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   contract or the retained test.** Phase C is accepted under the unreturned-gate rule, not as fully
   validated.
 
-  **Blocking — all three are workflow authorities, none is a maintainer decision:**
+  **Blocking — both are workflow authorities, neither is a maintainer decision:**
   1. **Phase D has no usable reviewed authority.** `EV-6` binds its W1 five-file command to **816**, which
      two clean-tree runs disproved at **342** (a root-owned rerun on the unchanged tree reproduced 342, so
      this is inherited oracle drift, not a regression). Silently rebinding the old plan is prohibited; a
      new run must obtain replacement authority binding the observed 342 before dispatching command one.
-  2. **The scripts suite has no returned verdict.** It returned nothing at 120 s and again at the one
-     permitted 300 s retry, the latter showing 1,318 passed before
-     `scripts/test_version_tool.py::TestUpdateWithTempRepo::test_make_version_update` failed to return.
-     `make check-manifest-sync` and `make check-gate-parity` were therefore never reached. It needs an
-     explicit detached or larger budget.
-  3. **The retained product delta has no terminal grade.** Its attestation was blocked before reading the
+  2. **The retained product delta has no terminal grade.** Its attestation was blocked before reading the
      patch because the review handoff omitted the required validation tier, consuming that run's sole
      product-attestation budget. A future run must establish a fresh attestation budget before supplying
      the complete patch, clean exact-tip binding, and validation tier to an independent reviewer.
+
+  **Cleared 2026-08-29 — the scripts gate is green and is no longer a blocker.** Run detached, the serial
+  suite returned **1319 passed, exit 0, in 301.83 s**; `make check-manifest-sync` (12 manifests in sync)
+  and `make check-gate-parity` (all gates present in all required contexts) then both exited 0. The prior
+  "no returned verdict" was a **budget error, not a defect**: the 120 s and 300 s budgets were sized
+  against the 92 s *parallel* `check-gate-suites` figure while the command run was *serial*, and the
+  300 s retry was killed **1.8 s short of a green verdict**. No test hung; the named
+  `test_make_version_update` passes in 0.47 s in isolation. Do not re-litigate this gate — re-run it
+  detached if a candidate changes.
 
   **Decisions needed:** none, at any level. The observed 222 and 342 totals each have one
   evidence-backed interpretation.
 
   **Remaining plan (serial; reuse the retained implementation and do not redo Phases A-C):**
-  1. Obtain replacement reviewed authority binding Phase D's W1 five-file command to **342**. Carry Phase
-     C's unreturned scripts gate as an open validation gap with an explicit detached return path; once it
-     returns green, run the unreached manifest-sync and gate-parity checks.
+  1. Obtain replacement reviewed authority binding Phase D's W1 five-file command to **342**. Phase C's
+     scripts gate, manifest-sync, and gate-parity are green as of 2026-08-29 and close that validation
+     gap; re-run them detached only if the candidate changes.
   2. With W3's shared slot clear, run Phase D from command one under the replacement authority, then
      provisioning, BYPASSRLS, isolation, and restricted profiles in order, with exact-label cleanup and an
      unchanged twelve-database `quickscale_test_role` census.
@@ -526,7 +542,7 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   2. `poetry run pytest quickscale_cli/tests/test_status_command.py quickscale_cli/tests/commands/test_module_config_extended.py -q -o addopts= --no-cov -p no:cacheprovider` — expect exit 0 with **167 passed** and no test file edited.
   3. `poetry run pytest quickscale_cli/tests/test_module_wiring_manager_manifest.py quickscale_core/tests/test_manifest_entry_point.py quickscale_cli/tests/test_module_lifecycle_cycle.py quickscale_core/tests/test_module_migration_topology.py -q -o addopts= --no-cov` — expect exit 0, **222 passed**; `-o addopts=` intentionally collects the one E2E-marked lifecycle node (without it the total is 221).
   4. `poetry run pytest quickscale_cli/tests quickscale_core/tests -m "not e2e" -q -o addopts= --no-cov` — expect exit 0. This isolates the ticket's surface without SA170's four `e2e` failures; the unfiltered variant costs ~80 minutes and proves nothing extra here.
-  5. `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` — expect exit 0 and **1319 passed** (measured green on `v88` 2026-08-29 in 92 s). Run it detached. `publish_module.py`, `check_sa117_scope.py`, and `version_tool.sh` are release-inventory consumers of the changed contract.
+  5. `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` — expect exit 0 and **1319 passed**. **Serial: budget ≥ 360 s and run it detached** (measured green on `v88` 2026-08-29 at 301.83 s; the 92 s figure elsewhere is the *parallel* `check-gate-suites` run and must not be used to size this command). Append `-n auto --dist loadfile` if you want the 92 s path. `publish_module.py`, `check_sa117_scope.py`, and `version_tool.sh` are release-inventory consumers of the changed contract.
   6. `make check-manifest-sync` and `make check-gate-parity` — expect exit 0.
   7. `make lint`, `make typecheck`, `make check` — expect exit 0 (`make check` measured 184 s green). Then `make test` and `make quality` **detached**; `make quality` no worse than found.
   **Rollback:** `git reset --hard 1edb95381b78b64605bd71116456d67405dc6984` in `wt-track2` discards a

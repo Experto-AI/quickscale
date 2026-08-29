@@ -4,6 +4,33 @@
 
 ## v88 development — 2026-08-21
 
+- **SA173's "scripts gate has no returned verdict" blocker was a budget error, and the gate is green (2026-08-29).**
+  Run detached on `v88` at `fd42d56c`, clean tree:
+  `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` returned **1319 passed, exit 0,
+  in 301.83 s**. `make check-manifest-sync` (all 12 module manifests in sync) and `make check-gate-parity`
+  (all gates present in all required contexts) — the two checks the halted phase never reached — then both
+  exited 0.
+  **Root cause: a units error in the plan, not a defect in any test.** `check-gate-suites`
+  (`Makefile:1021`) runs `pytest scripts/` with `-n auto --dist loadfile` and measures **92 s**. The
+  ticket's verification step writes the same suite **serially**, which measures **302 s** — the same 1319
+  tests, 3.3× apart. The 120 s budget and the single permitted 300 s retry were both sized against the
+  parallel figure, so the retry was killed **1.8 s short of a green verdict**.
+  **Nothing hung, and the named test is innocent.**
+  `scripts/test_version_tool.py::TestUpdateWithTempRepo::test_make_version_update` passes in **0.47 s** in
+  isolation. It was simply the test the progress output happened to stop on when the budget expired; with
+  `-q` pytest prints dots and no per-test names, so "1,318 passed before X failed to return" was an
+  inference from the dot count, not an observation. The slowest tests in the suite are ~7 s
+  (`test_gate_parity.py`, `test_verify_public_module_apply.py` timeout-handling tests, which sleep by
+  design); there is no long tail and no hang.
+  **Generalized into an execution rule:** a gate budget must be sized against the same command that will
+  be run, every timing must be quoted with its parallelism, and a detached run with a generous budget beats
+  a foreground retry.
+  **Separately observed, not the cause and not ticketed here:** 90 of the 164 `subprocess` calls under
+  `scripts/` pass no `timeout=`, concentrated in `test_check_sa117_scope.py` (25),
+  `test_quality_baseline_monotonicity.py` (13), and `test_version_tool.py` (10). None of them hung in this
+  run, but each is an unbounded wait that would present exactly as this false blocker did. Recorded as a
+  latent hazard for whoever next opens a testing-hygiene ticket.
+
 - **Storage lazy-export coverage gate closed; the last red row on `make test` is gone (2026-08-29).**
   Retained implementation commit `1edb9538`, ancestor of both `v88` and `wt-track2`, adds only
   `quickscale_modules/storage/tests/test_init.py`. **The red it closed, measured exactly:** two detached
