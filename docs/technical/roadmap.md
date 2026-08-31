@@ -117,9 +117,9 @@ open tickets build on rather than re-open.
 
 Lanes are **W1 6 · W2 3 · W3 4**, and every open ticket already carries a track. Each was re-tested
 against the three questions — is it independent of the rest of its lane, is another lane idle, and is it
-on or feeding the critical path. **W1 and W3 are now in process and W2 is idle and startable**, so
-question two passes only toward W2 — and W2 is the release-setting lane, which its own bullet below
-rules out as a destination. No ticket passes all three.
+on or feeding the critical path. **W1 is in process, W2 is idle and startable, and W3 is halted before
+G-FINAL pending fresh reviewed-plan authority**, so question two passes only toward W2 — and W2 is the
+release-setting lane, which its own bullet below rules out as a destination. No ticket passes all three.
 
 - **The critical path cannot be shortened by moving work off W2.** `scripts/gate_registry.json` and
   `quickscale_modules/*/module.yml` are W2-owned surfaces that never cross worktrees, and all three of
@@ -153,9 +153,9 @@ rules out as a destination. No ticket passes all three.
   closeout surface, and closeout surfaces are what the sync-resolve-rerun-review step exists for.
 
 **The current lane shape is not a track-assignment problem and no move fixes it.** All three lanes
-hold independent queue work, no branch-state gate remains, and each can execute its next action
-today (see *Next action per lane*). The only thing that serializes them is the single PostgreSQL
-cluster, which is a scheduling call, not a track assignment.
+hold independent queue work and no branch-state gate remains. W1 and W2 can execute their next
+actions today; W3 cannot because the future-closeout canary needs fresh reviewed-plan authority (see
+*Next action per lane*). That scope blocker is not relieved by moving SA135 to another lane.
 
 **W1 is the longest lane at six positions and that is deliberate**: it is off the critical path, so
 band-C work accumulates there rather than behind the release-setting chain. Band-C positions are
@@ -182,8 +182,9 @@ worktree, the right column the reverse. It had been read the other way round bef
 - **`wt-track1`** is at `f392641c`, **15 ahead / 26 behind `v88`** — the release's only unmerged
   product delta, carrying SA167d's accepted E0 tip and convergence corrections at `8b20800d`.
   It must sync before validating; expect a conflict in this file and keep its structure. **In process.**
-- **`wt-track3`** is synchronized through current `v88` by SA135's Phase-G sync and carries the
-  accepted E1/F delta ahead of it. **In process.**
+- **`wt-track3`** is synchronized through current `v88` and carries SA135's accepted E1/F delta.
+  Phase G's validation campaign returned green, but the lane halted before G-FINAL on a denied
+  future-closeout canary correction; it is **not in process** under the retained scope.
 
 ### The shared-cluster constraint is narrower than previously recorded
 
@@ -223,12 +224,16 @@ service. W3 retains priority for its later Docker-backed legs.
 - **W1 — SA167d's phase E is accepted; the lane needs closeout, not re-implementation.** Sync
   `wt-track1` (**25 behind**), run one validation campaign on the synced frozen candidate, and perform
   one terminal attestation **supplied with the complete base-to-tip patch as a file** — the missing
-  input, not any finding, is what ungraded the last attempt. Its `make test` needs the cluster, so it
-  contends with W3.
-- **W3 — continue SA135 (#15) at Phase G.** E1 lifecycle evidence and Phase F policy/status
-  reconciliation are accepted and archived; do not repeat E1/F, C, or D, and do not attempt SA170's
-  E2E Docker work. Run the sole synchronized release campaign, then archive and remove SA135 only
-  after every required gate is green.
+  input, not any finding, is what ungraded the last attempt. Its `make test` needs the standing
+  cluster; SA135 has no current cluster claim because E1 and its Phase G validation campaign are
+  already complete.
+- **W3 — keep SA135 (#15) open while Phase G receives fresh reviewed-plan authority.** E1 lifecycle
+  evidence and Phase F policy/status reconciliation are accepted and archived; Phase G's synchronized
+  validation campaign already returned all eleven commands green, so do not repeat it, E1/F, C, or D,
+  and do not attempt SA170's E2E Docker work. G-FINAL did not run because removing SA135 leaves
+  `test_v88_unknown_roadmap_dependency_is_expected_red_canary` without its roadmap dependency
+  mutation source naming SA135, while correcting that future-closeout canary was outside the
+  granted scope. A fresh reviewed plan must authorize that reconciliation before closeout can resume.
 
 ### Track readiness — the three states
 
@@ -240,14 +245,15 @@ merge-back is not order-gated behind another lane.
 |---|---|---|---|---|---|
 | **W2** | SA167c (#21) | **yes** — sync one documentation commit, then resume the retained Phase-A slice with its private restricted profile | **yes** — remaining acceptance and closeout are W2-owned | **yes** — nothing is ordered ahead of #21 | **yes** — release-committed |
 | **W1** | SA167d (#18) | **yes** — sync (26 behind), validate, attest; helper-routed module gates use private profiles | **yes** — its own acceptance and closeout are W1-owned | **yes** — no cross-lane branch-state gate remains | no |
-| **W3** | SA135 (#15) | **yes** — E1/F are accepted and the Phase-G sync is in progress | **yes** — the release campaign and closeout are W3-owned | **yes** — no cross-lane branch-state gate remains | no |
+| **W3** | SA135 (#15) | **no** — Phase G halted before G-FINAL and needs fresh reviewed-plan authority for the future-closeout canary | **no** — the current scope cannot reconcile that canary and close SA135 | **yes** — no cross-lane branch-state gate remains | no |
 
-**All three lanes are truly green.** Of the three, only **SA167c (#21)** is on the critical path and
-therefore constitutes real release progress; **SA167d (#18)** and **SA135 (#15)** are truly green but
-off it — band-B work that must land, and that banks durable artifacts, but that does not move the
-release date. **No lane is blocked by another lane's ticket.** The one remaining cross-lane coupling
-is physical and now involves **two** lanes, not three: W1's bare `make test` and W3's SA135 E1 both
-address `localhost:5432`. W2 is out of that contention entirely.
+**W2 and W1 are truly green; W3 is not.** Of the three, only **SA167c (#21)** is on the critical path
+and therefore constitutes real release progress. **SA167d (#18)** is truly green but off it. SA135
+has banked accepted E1/F evidence and a returned-green Phase G validation campaign, but remains open
+because G-FINAL never ran and the future-closeout canary needs fresh reviewed-plan scope. No lane is
+blocked by another lane's ticket. W1's bare `make test` is the only current lane action here that
+addresses the standing `localhost:5432` service; SA135 E1's strict no-listener window is complete,
+and W2 uses its private restricted profile.
 
 ### Open maintainer decisions
 
@@ -356,7 +362,8 @@ reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELO
 The per-lane heads are **#21 (W2), #18 (W1), and #15 (W3)**, all three partial: #21 has a merged
 Phase-A slice at `f6f3bbce` with acceptance and B-F outstanding, on a lane already at the integration
 state (`7765dd96`, 0/0); #18 is a phase-E-accepted candidate on `wt-track1` at `f392641c` awaiting one validation
-campaign and one attestation; #15 has a merged partial with C/D accepted and E outstanding.
+campaign and one attestation; #15 has accepted P/A/B/C/D/E0/E1/F evidence and a returned-green G
+validation campaign, with G-FINAL outstanding on the future-closeout canary scope blocker.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable only by the upstream work
 or by a maintainer reordering the lane. Three are **hard content dependencies** that no reorder
@@ -617,16 +624,23 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   dynamic-loopback lifecycle with the standing listener absent, the restricted role contract intact,
   exact-scope cleanup, a loud denied-provisioning failure, and exact restoration of the standing
   container, image, mount, twelve database owners, and role tuple. Its external evidence is archived in
-  [CHANGELOG.md](../../CHANGELOG.md). **Phase F is also accepted; G remains pending, so SA135 stays
-  open and unchecked.**
+  [CHANGELOG.md](../../CHANGELOG.md). **Phase F is also accepted. Phase G's synchronized validation
+  campaign returned all eleven commands green, but G-FINAL did not run, so SA135 stays open and
+  unchecked.**
   The E2 scope transfer to SA170 and the earlier plan-shape blocker are archived in the changelog.
-  `wt-track3` has synchronized current `v88` for Phase G; that sync does not reopen accepted evidence.
-  **What remains here is release validation and closeout, nothing else.** Do not
-  reopen `.github/workflows/`, `scripts/provision_ci_postgres.sh`, or `scripts/test_gate_parity.py`,
+  `wt-track3` synchronized current `v88` for Phase G; that sync does not reopen accepted evidence.
+  The attempted closeout exposed that removing SA135 makes
+  `test_v88_unknown_roadmap_dependency_is_expected_red_canary` stale because its mutation source is
+  the roadmap's SA170 dependency metadata. Correcting that future-closeout canary was outside the
+  granted scope, the closeout edits were rolled back, and fresh reviewed-plan authority is required
+  before G can resume. **What remains here is closeout reconciliation and G-FINAL, not another
+  validation campaign.** Do not reopen `.github/workflows/`, `scripts/provision_ci_postgres.sh`, or
+  `scripts/test_gate_parity.py`,
   and do not run the full E2E campaign — it is SA170's.
-  **Remaining plan (serial; P/A/B/C/D/E0/E1/F are not repeated).** G runs the sole release campaign,
-  archives closure only after green, and freezes its final external evidence. Serial convergence and
-  patch-backed terminal attestation follow; no implementation phase is re-entered after convergence.
+  **Remaining plan (serial; P/A/B/C/D/E0/E1/F and the returned-green G validation campaign are not
+  repeated).** Obtain fresh reviewed-plan authority for the future-closeout canary reconciliation,
+  then complete closeout and G-FINAL on the settled candidate. Serial convergence and patch-backed
+  terminal attestation follow; no implementation phase is re-entered after convergence.
   **Cross-worktree surface:** the merged partial edits `scripts/test_isolation_conformance.sh`,
   which SA165 (#22, W1) also owns; merge order #15 before #22 covers it.
 

@@ -110,8 +110,8 @@ its separately provisioned service and lease behavior; it is not a local-host
 precondition.
 
 SA135's accepted E1 evidence proves that ownership boundary against the standing
-environment. The remaining ticket work is documentation and release-closeout truth,
-not a return to the former borrowed-host model.
+environment, and Phase F reconciled the documentation. The remaining ticket work is
+Phase G closeout truth and G-FINAL, not a return to the former borrowed-host model.
 
 ### Why the fix is delicate
 
