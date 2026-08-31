@@ -215,6 +215,34 @@ jobs:
       run: |
         make check-manifest-sync
 
+  module-app-declaration-gate:
+    name: Module App Declaration Gate (SA167c)
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install dependencies
+      run: |
+        poetry install --with dev
+
+    - name: Verify evidence-bearing modules declare Django apps wiring
+      run: |
+        make check-module-app-declaration
+
   org-context-primitives-gate:
     name: Org-Context Primitives Gate (SA13.4)
     runs-on: ubuntu-24.04
@@ -359,7 +387,7 @@ jobs:
   test:
     name: Run Tests (Unit + Integration)
     # BEGIN GENERATED: needs-test
-    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate, org-context-primitives-gate, csrf-exempt-gate, check-gate-suites, dependency-vulnerabilities-gate, security-static-analysis-gate]
+    needs: [backups-validation, module-manifest-contract, module-core-compat, module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, org-context-primitives-gate, csrf-exempt-gate, check-gate-suites, dependency-vulnerabilities-gate, security-static-analysis-gate]
     # END GENERATED: needs-test
     runs-on: ubuntu-latest
     services:
