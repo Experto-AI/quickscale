@@ -61,6 +61,7 @@ HOSTED_GATE_ORDER = (
     "check-core-compat",
     "check-module-core-imports",
     "check-manifest-sync",
+    "check-module-app-declaration",
     "check-org-context-primitives",
     "check-csrf-exempt",
     "check-gate-suites",
@@ -133,6 +134,10 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
         "Manifest Sync Gate (SA16.1)",
         "Verify module manifests match core snapshots",
     ),
+    "check-module-app-declaration": HostedJobSpec(
+        "Module App Declaration Gate (SA167c)",
+        "Verify evidence-bearing modules declare Django apps wiring",
+    ),
     "check-org-context-primitives": HostedJobSpec(
         "Org-Context Primitives Gate (SA13.4)",
         "Verify no external use of privatized org-context primitives",
@@ -192,7 +197,7 @@ def _parse_workflow(text: str, label: str) -> dict[str, Any]:
     """Parse YAML with BaseLoader semantics and duplicate-key rejection."""
     if yaml is None:
         raise GeneratorError("PyYAML is not available")
-    loader_type = type("StrictBaseLoader", (yaml.BaseLoader,), {})
+    loader_type: Any = type("StrictBaseLoader", (yaml.BaseLoader,), {})
     loader_type.add_constructor(
         yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
         _yaml_mapping,
@@ -317,7 +322,7 @@ def _locate_hosted_jobs(
     jobs: dict[str, Any], label: str, *, allow_missing: bool = False
 ) -> dict[str, str]:
     """
-    Locate the eight hosted jobs by their static catalog display names.
+    Locate the nine hosted jobs by their static catalog display names.
 
     Display metadata is helper-owned and static, so the generated job IDs may
     be stale before an edit: a registry ``ci_job`` (F-005) or Make-target
@@ -637,7 +642,7 @@ def _top_level_job_headers(lines: list[str]) -> list[tuple[int, str]]:
 
 def _locate_hosted_job_headers(lines: list[str], *, allow_missing: bool = False) -> list[int]:
     """
-    Locate the eight hosted job header lines by their display names.
+    Locate the nine hosted job header lines by their display names.
 
     Use static display metadata to find the (possibly stale) hosted job IDs;
     this permits a registry ``ci_job`` (F-005) or Make-target edit while

@@ -77,6 +77,22 @@
             ]
         },
         {
+            "id": "check-module-app-declaration",
+            "description": "Evidence-bearing modules declare Django apps wiring",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted"
+            ],
+            "bindings": {
+                "make_target": "check-module-app-declaration",
+                "ci_job": "module-app-declaration-gate",
+                "local_ci_stage": 6
+            },
+            "depends_on": [],
+            "trigger_inputs": []
+        },
+        {
             "id": "check-org-context-primitives",
             "description": "No external use of privatized org-context primitives",
             "required_contexts": [

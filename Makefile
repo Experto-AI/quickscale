@@ -63,7 +63,7 @@
         legacy-mount legacy-unmount legacy-status \
         version-check version-update bump-version \
         check-core-compat check-module-core-imports check-manifest-sync \
-        check-org-context-primitives \
+        check-module-app-declaration check-org-context-primitives \
          check-csrf-exempt check-gate-suites isolation-conformance \
          check-dependency-vulnerabilities check-security-static-analysis security-negative-probes \
          check-gate-parity check-ci-gate-generation \
@@ -236,6 +236,7 @@ help:
 	@echo "  make check-module-core-imports    - Module code imports only from quickscale_core.runtime"
 	@echo "  make check-manifest-sync          - Module-owned module.yml files match their core snapshots"
 	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
+	@echo "  make check-module-app-declaration - Evidence-bearing modules declare Django apps wiring"
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
 	@echo "  make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability scan"
@@ -889,6 +890,13 @@ check-manifest-sync:
 
 manifest-sync:
 	@$(PYTHON) scripts/sync_module_manifests.py --sync
+
+# --- Module App Declaration Gate (SA167c) ---
+
+# Verify that evidence-bearing modules declare exactly one valid Django apps
+# wiring projection in their authoritative source manifest.
+check-module-app-declaration:
+	@$(PYTHON) scripts/check_module_app_declaration.py
 
 # --- Org-Context Primitives Gate (SA13.4) ---
 
