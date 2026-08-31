@@ -1233,7 +1233,7 @@ catchers import Django's.
 
 ---
 
-### Module Presence States (SA173) {#module-presence-states}
+### Module Presence States {#module-presence-states}
 
 **Architectural Decision (2026-08-28, settling roadmap decision D3):** Module discovery
 reports **what it observed**, and each consumer applies its own policy. Presence is a
@@ -1247,8 +1247,8 @@ three-state fact, not a count.
 | **ACTIVE** | directory + valid ``module.yml`` | A shipped module available for wiring |
 | **INCOMPLETE** | directory present, **no** ``module.yml`` | Ambiguous on its face: placeholder scaffolding, or a corrupt/partial install |
 
-**Why this is a decision and not an implementation detail.** Before SA173,
-``discover_shipped_module_names()`` collapsed ABSENT and INCOMPLETE into the same output —
+**Why this is a decision and not an implementation detail.** Before the three-state
+contract, ``discover_shipped_module_names()`` collapsed ABSENT and INCOMPLETE into the same output —
 its own docstring recorded that manifest-less directories are "silently excluded". The
 distinguishing fact was discarded at the discovery layer, so every downstream consumer had
 to reconstruct it by **counting** against ``AUTHORITATIVE_MODULE_COUNT`` and testing for a

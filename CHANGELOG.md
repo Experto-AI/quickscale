@@ -4,6 +4,27 @@
 
 ## v88 development — 2026-08-21
 
+- **SA173 closeout release gate green after convergence repair (2026-08-31; terminal review
+  pending).** The accepted Phase-A candidate `b380f0164f1a9c885271e104b3c8d16a85185de0` was
+  revalidated without reimplementing product work: the focused caller, storage, status,
+  four-file contract, CLI/core, scripts, manifest/parity, provisioning, BYPASSRLS, isolation,
+  and restricted-integration checks passed, including **342**, **41** storage tests with
+  `__init__.py` at **97.67%**, **167**, **222**, **5,096**, and **1,319** tests where exact
+  oracles applied. `make quality` exited 0 with zero warning, critical, and total regressions
+  and passing monotonicity. SA173 was removed from open work and its same-fact closeout
+  consumers were reconciled; the focused context-consistency suite passed **21 tests**. An
+  initial detached release attempt returned **exit 2** when four INT signal-lifecycle tests
+  inherited an ignored disposition from their asynchronous Make parent and reached their
+  unchanged 10-second assertion deadline. Convergence corrected the test launch boundary to
+  reset HUP/INT/TERM before executing `check_ci_locally.sh`; no assertion, deadline, signal
+  expectation, or production handler was weakened. The complete focused suite then returned
+  **27 passed** both directly and detached. The corrected sole release checkpoint,
+  `QS_PROVISION_SCOPE="sa173cv0831b" make ci`, returned **exit 0** from a complete detached log:
+  all eleven local-CI stages passed, including **1,319** registered scripts tests, **5,096**
+  core/CLI tests, restricted PostgreSQL integration, Trivy **0.74.0**, and Bandit **1.9.4**.
+  Exact-label cleanup left no scoped container. Terminal attestation/merge remain root-owned
+  later events and are not claimed here.
+
 - **SA173's "scripts gate has no returned verdict" blocker was a budget error, and the gate is green (2026-08-29).**
   Run detached on `v88` at `fd42d56c`, clean tree:
   `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` returned **1319 passed, exit 0,
