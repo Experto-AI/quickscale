@@ -3,9 +3,20 @@
 The roadmap is the sole home for schedulable metadata.  The context page may explain
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
 holds open work only and carries no checked entry.  Completed tickets are archived in the
-changelog.  The shared SA167c context may explain the archived SA167a handoff as settled tree
-state while SA167c's current retained delivery remains open.  SA167d remains open after A-E
-acceptance until final closeout.
+changelog.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
+tree state.  The accepted-open SA167d retained-partial status is checked as a current consumer
+contract below; those checks are not mutation canaries.
+
+Scope, deliberately narrow (2026-08-31).  This module holds **three** checks and no
+canaries.  It previously carried twelve canaries -- tests asserting these three fail when
+fed mutated input -- across 496 lines, a 4:1 ratio of test-testing-the-test to test.  They
+were removed as overengineering for a planning document.  One of them also mutated a
+hardcoded ``deps:`` literal naming a specific ticket, so archiving that ticket silently
+disarmed the canary, and so did any roadmap prose that happened to spell the same literal
+first; that trap blocked a release ticket's closeout.  The reconciled suite retains expected-red
+checks for still-current roadmap invariants.  The SA167d status contract is also intentionally
+checked below because this merge must preserve its reviewed retained-partial state; it is a current
+consumer contract, not a mutation canary.
 """
 
 from __future__ import annotations
@@ -17,7 +28,6 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-
 
 ROOT = Path(__file__).parents[2]
 ROADMAP = ROOT / "docs/technical/roadmap.md"
@@ -52,7 +62,7 @@ UMBRELLA_TITLE = "SA167a / SA167c / SA167d — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167a", "SA167c", "SA167d"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
 RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset()
-ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a"})
+ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a", "SA167b"})
 SHARED_POSITION_GROUPS: frozenset[frozenset[str]] = frozenset()
 
 

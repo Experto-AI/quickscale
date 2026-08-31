@@ -23,8 +23,73 @@
   not yet occurred. The later retained checkpoint established that retained-partial convergence
   and terminal attestation are complete, and retained-partial-only merge-back is authorized for
   that reviewed partial plus the latest-v88 status reconciliation without closing SA167d.
-  Completion-grade Phase C convergence, terminal attestation, and exact-tip integration remain
-  pending. ***Terminal-remediation wording applied after attestation — not independently graded.***
+   Completion-grade Phase C convergence, terminal attestation, and exact-tip integration remain
+   pending. ***Terminal-remediation wording applied after attestation — not independently graded.***
+
+- **Roadmap consistency test reduced to its three real checks; SA135's closeout blocker dissolved
+  (2026-08-31, maintainer decision 3).** `quickscale_core/tests/test_v88_ticket_context_consistency.py`
+  was **496 lines and 15 test functions, of which 12 were canaries** — tests asserting the other three
+  fail when fed mutated input. A 4:1 ratio of test-testing-the-test to test, policing a markdown
+  planning document. The twelve canaries are deleted and the three real checks kept: docs-hub count
+   agreement, roadmap↔context ticket parity (which also enforces the no-checked-entries policy), and
+   the no-schedulable-metadata-restatement guard. Track 1's reviewed SA167d retained-partial status,
+   historical/current grading-label checks, and expected-red canaries for still-current invariants
+   are preserved in the reconciled file; result: **755 lines, 20 test functions / 29 collected tests,
+   ruff-clean.** The file
+  was registered in **no** gate — not `scripts/gate_registry.json`, not the `Makefile`, not any CI
+  workflow — so nothing was deregistered and no parity oracle moved. **This keeps SA135's closeout
+  blocker dissolved:** the obsolete hardcoded `deps:` literal naming SA135 was removed, while the
+  retained unknown-dependency control now mutates current SA167d metadata. SA135 needs no reviewed-plan
+  scope extension and its *can start* / *can finish* are now yes. The reconciled file's docstring
+  records why retained expected-red controls must follow current invariants rather than a stale
+  SA135-specific mutation source.
+
+- **SA174 shrunk to a comment correction; the privileged-command consolidation is archived
+  unimplemented (2026-08-31, maintainer decision 2a).** The sanctioned privileged-command set is
+  confirmed **permanent at `{"migrate", "createcachetable"}`**, so the drift SA174 existed to prevent
+  cannot occur. `privileged-command-set-multi-owner` **demotes from arch rank 1 to the watchlist**,
+  trigger armed (a third sanctioned command, or any two of the four stations disagreeing), and is not
+  closed. SA174 goes from eight acceptance criteria to three: correct the false *"single source of
+  truth"* docstring at `quickscale_modules/orgs/.../apps.py:52` and the *"add new commands here"*
+  comment at `:34` — both false when written, and following them yields a value the generated
+  project's guard rejects at startup — demote the finding, and change no emitted bytes. **Archived
+  unimplemented and reinstated only if the trigger fires:** the audit's Option 1, rendering the set
+  through the existing `generator/runtime_pins.py` seam exactly as `POSTGRES_VERSION` already is,
+  with the CLI copy deleted in favour of an import, the `orgs` copy reading through
+  `quickscale_core.runtime` while keeping its independent fail-closed guard, and the station-4 literal
+  oracle at `test_templates.py:4278` rewritten to derive. **Cascade reconciled across the roadmap:**
+  SA174 no longer changes emitted bytes, so it leaves the ordered `sa90_emission_manifests.json`
+  rebaseline run (now the pair #19 → #20), stops touching `.../settings/production.py.j2` (which now
+  has SA161 as its only open owner), and drops its SA160 dependency. SA175's only content dependency
+  was SA174's single declaration, which no longer exists,
+  so SA175 now names its own three contract paths and carries `deps: none` too.
+
+- **The SA171 reorder was made and then unwound in the same pass (2026-08-31).** With W3 halted,
+  SA171 (#28) was moved to the lane head under the amended band-C rule, after verifying that its
+  stated reason for needing the exclusive slot was **factually wrong**: `test_advisory_lock.py` (239
+  lines) and `test_dr_engine_lock.py` (280 lines) carry no `django_db` marker and no PostgreSQL
+  reference, so its two-thread barrier test is pure filesystem. Decision 3 then unblocked SA135,
+  restoring a *runnable* band-B head to W3 — which the amended rule protects — so #28 returned to its
+  original position and W3's queue is `#15 → #27 → #28 → #29` again. The two decisions interact and
+  the order matters: had only decision 4 landed, the reorder would stand. What survives is the
+  measurement — SA171's slot-free status is recorded fact, making it W3's fallback without
+  re-analysis if SA135 stalls again.
+
+- **Three maintainer decisions settled (2026-08-31).** *(1)* The four `sqlparse` CVE suppressions are
+  **left as-is by explicit decision**; dependency maintenance stays out of v88 scope. The accepted
+  consequence is recorded rather than discovered: `check_security_gates.py:545` compares `expires`
+  against `date.today()` and raises `GateError` on a stale entry, and because that is a pure date
+  comparison needing no scanner and no network, the security gate fails **locally as well as in CI**
+  from 2026-10-01, on the suppression file rather than on any finding, and it fails even if `sqlparse`
+  is patched. Nothing in the repository pins `sqlparse` — Django's constraint is `>=0.5.0` with no
+  upper bound and 0.6.0 is published — so a lockfile bump plus a rescan remains the cheap exit if the
+  release slips. *(2b)* **`quickscale_devtools` will not be published; maintainer-internal use only.**
+  This confirms the fact that holds `generated-file-ownership-unmodeled` (arch rank 2) down: the
+  beta-migration taxonomy cannot reach a user's project. The finding stays deferred and SA175 (#32)
+  stays at one assertion. Its exclusion from the publish `PACKAGES` list is now a decision, not a
+  default. *(4)* The standing rule **"band-C filler must not displace a band-B leg" is amended to name
+  a *runnable* band-B leg** — a band-B head halted on an open decision no longer holds its lane idle,
+   which is what the rule always intended. This authorizes the SA171 (#28) reorder to W3's head.
 - **SA167c Phases A and B accepted; Phase C's product delta merged as retained delivery
   (2026-08-31).** Phase A's ordered seven-command unchanged-candidate chain passed on a candidate
   carrying the retained presence contract: `test_manifest_loader.py`; `provision_ci_postgres.sh run
