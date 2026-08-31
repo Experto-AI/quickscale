@@ -4,6 +4,24 @@
 
 ## v88 development — 2026-08-21
 
+- **SA135 E1 lifecycle evidence and Phase F policy reconciliation accepted; Phase G remains open
+  (2026-08-31).**
+  The E1 integration run exited **0** with **2,547 passed, 87 skipped, and 12 deselected**;
+  listener sampling on port 5432 was **0/282**. `make test-postgres-provisioning`
+  exited **0** with **33 passed**. A denied-provisioning run exited **1** with the exact
+  terminal error `ERROR: unable to pull postgres:18`, executed no child, and left no resource
+  in its exact scope; the restored scoped run exited **0**. All three E1 scopes were empty after
+  cleanup. Root's restoration check matched the standing container, image, mount, twelve database
+  owners, and the `quickscale_test_role` tuple `t|t|f|f|f|f`. This proves the owned dynamic-loopback
+  lifecycle, restricted-role preservation, loud provisioning denial, exact-scope cleanup, and
+  standing-state restoration. Phase F reconciled the current policy and status consumers. Phase G's
+  validation campaign subsequently returned all eleven commands green, including the focused,
+  provisioning, repository, integration, BYPASSRLS, isolation, test, and quality gates, but G-FINAL
+  did not run. The attempted closeout exposed that removing SA135 makes
+  `test_v88_unknown_roadmap_dependency_is_expected_red_canary` stale; correcting that future-closeout
+  canary lacked reviewed-plan scope, so the closeout edits were rolled back. **SA135 remains open and
+  unchecked.** This entry does not claim Phase G acceptance, terminal attestation, or merge.
+
 - **The shared-PostgreSQL constraint re-derived from the script, and W2 taken out of the slot
   queue (2026-08-31).** The roadmap had recorded "one PostgreSQL 18 cluster on `localhost:5432`" as a
   constraint binding all three lanes. Read against `scripts/provision_ci_postgres.sh` itself, it binds
