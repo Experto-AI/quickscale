@@ -64,7 +64,7 @@ and SA162 correction are now complete, with their evidence archived in the chang
 |---|---|---|
 | **Duplicated authority** — the same fact is written down in two or more places, so they drift | one CSRF parser copied into two components; one privileged-command set with four owners, one of which claims to be the only one; two hand-rolled file locks with one shared race | SA160, SA164, SA171, SA174 |
 | **Silent fallback** — a component cannot find the authoritative answer, so it substitutes a plausible one and continues | The closed SA150 stopped the explicit-wheelhouse → manifest fallback; a corrupt state file still returns silently; a skip where a failure belongs | SA165 |
-| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | the integration gate assumes a PostgreSQL server someone else started; a fixed-tag Docker image outside the scope contract; dead code nobody deletes | SA135, SA161, SA170 |
+| **Unowned lifecycle** — a resource is created but nobody is responsible for its identity or destruction | the integration gate's former borrowed-host assumption; a fixed-tag Docker image outside the scope contract; dead code nobody deletes | SA135, SA161, SA170 |
 | **Unenforced policy** — a rule exists only in a human's head | no requirement that a behavioural commit leave a trail; RLS gates assert a policy exists but never what it says; "these two files belong to one contract" is knowledge no artifact holds | SA166, SA172, SA175 |
 
 The `scripts/test_*.py` conformance population now has an owning registered execution
@@ -101,25 +101,21 @@ services:
 
 Started on demand, health-checked, dynamically ported, torn down after.
 
-**The integration gate borrows one.** `scripts/test_integration.sh`, header:
+**The integration gate now owns its local lifecycle.** `Makefile:422-427` delegates
+local runs to `scripts/provision_ci_postgres.sh run --profile restricted`, whose
+profile resolves the PostgreSQL 18 image, allocates a container with a dynamic
+loopback port, creates scoped databases, validates the restricted role, runs the
+child process, and removes only resources carrying that run's scope. Hosted CI uses
+its separately provisioned service and lease behavior; it is not a local-host
+precondition.
 
-```
-# Requires PostgreSQL 18 running on localhost:5432.
-#
-# Prerequisites:
-#   - PostgreSQL 18 running on localhost:5432
-#   - All test databases pre-created (see ci.yml create-test-databases step)
-#   - A LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER role ... with
-#     ownership + schema grants on all module test databases
-```
-
-Three preconditions that **somebody else** must have satisfied, out of band. On hosted CI a workflow step does it. On a developer machine, a human did it once, months ago, and may not remember how.
-
-SA135 is: make the integration gate own its server the way the E2E gate already does. The pattern is proven and in-tree — this is largely propagation, not invention.
+SA135's accepted E1 evidence proves that ownership boundary against the standing
+environment, and Phase F reconciled the documentation. The remaining ticket work is
+Phase G closeout truth and G-FINAL, not a return to the former borrowed-host model.
 
 ### Why the fix is delicate
 
-The role contract is not incidental. `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` — specifically `NOBYPASSRLS` — is what makes row-level-security tests **meaningful**. A superuser bypasses RLS entirely, so isolation tests running as one would pass without proving anything. `scripts/provision_test_roles.sh` and `scripts/test_isolation_conformance.sh` exist to enforce this.
+The role contract is not incidental. `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` — specifically `NOBYPASSRLS` — is what makes row-level-security tests **meaningful**. A superuser bypasses RLS entirely, so isolation tests running as one would pass without proving anything. The restricted profile in `scripts/provision_ci_postgres.sh` validates this tuple before the child runs; `scripts/test_isolation_conformance.sh` remains the consumer of the validated environment.
 
 A hasty containerised swap that connects as the default `postgres` superuser would leave every integration test green and every multi-tenant isolation guarantee unverified. That is the worst possible outcome for this repository, given the locked child-table RLS policy. **Preserving the role contract is the acceptance criterion that matters most.**
 
@@ -134,19 +130,22 @@ if not postgres_available():
     pytest.skip("PostgreSQL not available")
 ```
 
-That converts an infrastructure failure into a green build with silently zero integration coverage — the same silent-fallback family the closed SA150 addressed, one layer up. If provisioning fails, the gate must fail. There is an existing asserted-unavailability control; it must survive the rewrite.
+That converts an infrastructure failure into a green build with silently zero integration coverage — the same silent-fallback family the closed SA150 addressed, one layer up. If provisioning fails, the gate must fail. The accepted E1 denial run observed the helper's loud `ERROR: unable to pull postgres:18` failure and no child execution; the asserted-unavailability control therefore remains fail-closed.
 
 ### Proof
 
-*"`make test-integration` passes on a machine with no PostgreSQL running"*. Test it honestly — stop any host PostgreSQL, confirm nothing is listening on 5432, run the gate. If it passes because it quietly found a server you forgot about, you have proven nothing.
+*"`make test-integration` passes on a machine with no PostgreSQL running"*. Test it honestly — the E1 run stopped the standing container, observed no listener on port 5432, and let the owned helper allocate its dynamic loopback endpoint. The exact-scope resource set was empty after cleanup and the standing environment was restored byte-for-byte.
 
 ### Documentation
 
-`docs/technical/validation_policy.md` currently encodes the out-of-band assumption:
+`docs/technical/validation_policy.md` records the owned local lifecycle and keeps the
+hosted service/lease path distinct:
 
-> Integration | `make test-integration` | ... | PostgreSQL 18 per-module test DB | `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER`
+> Integration | `make test-integration` | ... | Owned, dynamically scoped PostgreSQL 18 per-module test DB | `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER`
 
-and the Testing Standards section describes the precondition in prose. Both need updating — this ticket changes a documented contract, which is why `validation_policy.md` is on its conflict surface.
+and the Testing Standards section describes the dynamic scoped endpoint and profile
+precondition. The documentation is now aligned with the shipped Make/helper behavior,
+which is why `validation_policy.md` is on its conflict surface.
 
 ---
 
