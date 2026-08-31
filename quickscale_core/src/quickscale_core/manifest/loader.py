@@ -662,23 +662,36 @@ def get_manifest_for_module(
     Args:
         project_path: Path to the project root
         module_name: Name of the module
+        strict: Raise for an absent module directory when true.  A present
+            module directory without a manifest or with an invalid manifest
+            always raises, regardless of this flag.
 
     Returns:
-        ModuleManifest if found, None otherwise
+        ModuleManifest if the module has a valid manifest, or ``None`` for an
+        absent module directory in non-strict mode.
+
+    Raises:
+        ManifestError: If strict mode finds no module directory, or if a
+            present module is incomplete or malformed.
 
     """
-    manifest_path = project_path / "modules" / module_name / "module.yml"
-    if not manifest_path.exists():
+    module_path = project_path / "modules" / module_name
+    manifest_path = module_path / "module.yml"
+    if not module_path.is_dir():
         if strict:
             raise ManifestError(
-                f"Manifest file not found: {manifest_path}",
+                f"Manifest file not found for module '{module_name}': {manifest_path}",
                 module_name,
             )
         return None
 
-    try:
-        return load_manifest_from_path(manifest_path)
-    except ManifestError:
-        if strict:
-            raise
-        return None
+    if not manifest_path.is_file():
+        raise ManifestError(
+            f"Manifest file not found for module '{module_name}': {manifest_path}",
+            module_name,
+        )
+
+    # A present manifest is an active module state.  Structural errors must
+    # remain visible in both strict and best-effort callers; only an absent
+    # module directory may use the non-strict ``None`` result.
+    return load_manifest_from_path(manifest_path)

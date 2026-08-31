@@ -606,6 +606,73 @@ class TestStatusCommandExtended:
             assert "manifest" in result.output.lower()
             assert "auth" in result.output
 
+    @pytest.mark.parametrize("json_output", [False, True])
+    def test_status_reports_incomplete_installed_manifest(self, json_output):
+        """Status reports a manifestless registered module as drift."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale")
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_react",
+                        },
+                        "modules": {"auth": {"version": "0.87.0"}},
+                    },
+                    f,
+                )
+            os.makedirs("modules/auth")
+
+            args = ["--json"] if json_output else []
+            result = runner.invoke(status, args)
+
+            assert result.exit_code == 0
+            if json_output:
+                payload = json.loads(result.output)
+                filesystem_drift = payload["drift"]["filesystem_drift"]
+                assert filesystem_drift["missing_modules"] == []
+                assert filesystem_drift["incomplete_modules"] == ["auth"]
+            else:
+                assert "Incomplete Modules" in result.output
+                assert "auth" in result.output
+
+    @pytest.mark.parametrize("json_output", [False, True])
+    def test_status_reports_absent_installed_module(self, json_output):
+        """Status reports a missing registered module as existing drift."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale")
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_react",
+                        },
+                        "modules": {"auth": {"version": "0.87.0"}},
+                    },
+                    f,
+                )
+
+            args = ["--json"] if json_output else []
+            result = runner.invoke(status, args)
+
+            assert result.exit_code == 0
+            if json_output:
+                payload = json.loads(result.output)
+                filesystem_drift = payload["drift"]["filesystem_drift"]
+                assert filesystem_drift["missing_modules"] == ["auth"]
+                assert filesystem_drift["incomplete_modules"] == []
+            else:
+                assert "Missing Modules" in result.output
+                assert "auth" in result.output
+
 
 # ============================================================================
 # Phase 4: _state_file_has_consolidated_sections

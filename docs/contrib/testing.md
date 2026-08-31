@@ -29,8 +29,27 @@ Complete User Journey (requires running Docker)
 
 ## Running Tests
 
+Pick the command from the validation tier the current work owns —
+[Validation Tiers](../technical/validation_policy.md#validation-tiers) is
+authoritative for tier selection and for what each tier owes. In short:
+`change` runs lint, typecheck, and focused tests over the changed behavior;
+`task` runs the owning section suite; `release` runs the full CI lanes. Each
+tier's command subsumes the narrower ones, so run one command per tier rather
+than a narrow target followed by a wider one repeating it — and do not reach for
+a wider command to establish a baseline.
+
 ```bash
-# Unit + integration tests for all packages (excludes e2e)
+# change tier: focused run over the changed behavior
+poetry run pytest quickscale_core/tests/test_<area>.py --tb=short -m "not e2e" -o addopts= --no-cov
+
+# task tier: the owning section suite
+make test-unit -- --core
+make test-integration MODULE=<name>
+
+# release tier: full CI parity (make ci-e2e instead when an E2E trigger applies)
+make ci
+
+# Unit + integration tests for all packages (excludes e2e); task-tier breadth
 make test
 
 # Unit tests only (no integration tests)
@@ -119,5 +138,6 @@ Before considering a test update complete, confirm that:
 
 - the test category and location match the repo-specific structure above
 - the shared testing standards were followed for behavior focus, isolation, and maintainability
-- the selected commands provide enough evidence for the changed behavior
+- the selected commands provide enough evidence for the changed behavior at the declared validation tier
+- every check deferred to a wider tier is reported with that tier named
 - failures that appear during authoring are handled through root-cause debugging rather than test padding or scope drift

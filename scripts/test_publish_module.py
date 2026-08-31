@@ -22,19 +22,22 @@ def _write_manifests(root: Path, names: list[str]) -> None:
         (module / "module.yml").write_text(f"name: {name}\n")
 
 
-def test_list_modules_uses_authoritative_inventory_and_picks_up_thirteenth(
+def test_list_modules_rejects_unapproved_thirteenth(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A real manifest is picked up while a bare placeholder is excluded."""
-    names = [f"module_{index:02d}" for index in range(12)] + ["reports"]
+    """An extra real manifest cannot silently expand the release inventory."""
+    names = module_discovery.discover_bundled_module_names() + ["reports"]
     _write_manifests(tmp_path, names)
     (tmp_path / "teams").mkdir()
 
     original_base = module_discovery._modules_base_path
     try:
         module_discovery.set_modules_base_path(tmp_path)
-        monkeypatch.setattr(module_discovery, "AUTHORITATIVE_MODULE_COUNT", 13)
-        assert publish_module._list_modules() == sorted(names)
+        with pytest.raises(
+            module_discovery.ImproperlyConfigured,
+            match="outside the release inventory",
+        ):
+            publish_module._list_modules()
     finally:
         module_discovery.set_modules_base_path(original_base)
 
@@ -105,7 +108,7 @@ def test_direct_selector_rejects_placeholder_before_prompts_or_mutation(
     """F-002: 'teams' fails closed before any release/prompt/split/push path."""
     base = tmp_path / "quickscale_modules"
     base.mkdir()
-    _write_manifests(base, [f"module_{index:02d}" for index in range(12)])
+    _write_manifests(base, module_discovery.discover_bundled_module_names())
     (base / "teams").mkdir()
     _patch_selector_surroundings(tmp_path, monkeypatch)
 
@@ -134,10 +137,10 @@ def test_direct_selector_rejects_placeholder_before_prompts_or_mutation(
 def test_direct_selector_rejects_unapproved_thirteenth_before_prompts_or_mutation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """F-002: an unapproved thirteenth real module fails on inventory count drift."""
+    """F-002: an unapproved thirteenth real module fails before mutation."""
     base = tmp_path / "quickscale_modules"
     base.mkdir()
-    _write_manifests(base, [f"module_{index:02d}" for index in range(12)] + ["reports"])
+    _write_manifests(base, module_discovery.discover_bundled_module_names() + ["reports"])
     _patch_selector_surroundings(tmp_path, monkeypatch)
 
     reached: list[str] = []
@@ -156,7 +159,7 @@ def test_direct_selector_rejects_unapproved_thirteenth_before_prompts_or_mutatio
         assert excinfo.value.code == 1
         assert reached == []
         out = capsys.readouterr().out
-        assert "count drift" in out
+        assert "outside the release inventory" in out
     finally:
         module_discovery.set_modules_base_path(original_base)
 
@@ -165,7 +168,7 @@ def test_direct_selector_preserves_valid_authoritative_module_flow(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """F-002: a valid authoritative name proceeds past the guard unchanged."""
-    names = [f"module_{index:02d}" for index in range(12)]
+    names = module_discovery.discover_bundled_module_names()
     base = tmp_path / "quickscale_modules"
     base.mkdir()
     _write_manifests(base, names)

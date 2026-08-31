@@ -19,10 +19,11 @@ import pytest
 from quickscale_core.contracts.module_discovery import (
     AUTHORITATIVE_MODULE_COUNT,
     ImproperlyConfigured,
+    ModulePresenceState,
     ModuleResolutionSource,
-    PLACEHOLDER_MODULE_NAMES,
     authoritative_module_names,
     discover_bundled_module_names,
+    discover_module_presence,
     discover_shipped_module_names,
     discover_shipped_module_paths,
     get_bundled_manifests_path,
@@ -31,6 +32,7 @@ from quickscale_core.contracts.module_discovery import (
     get_resolution_source,
     is_placeholder_module,
     set_modules_base_path,
+    validate_active_module_subset,
 )
 
 
@@ -134,24 +136,68 @@ class TestGetModulesBasePath:
                     "name: mod_beta\nversion: '1'\n"
                 )
 
-                # Create a directory without module.yml — should be excluded.
+                # An undeclared directory without module.yml must fail closed.
                 (tmp / "not_a_module").mkdir()
 
                 set_modules_base_path(tmp)
 
-                names = discover_shipped_module_names()
-                assert "mod_alpha" in names
-                assert "mod_beta" in names
-                assert "not_a_module" not in names
-                assert names == sorted(names)
+                with pytest.raises(ImproperlyConfigured, match="not_a_module"):
+                    discover_shipped_module_names()
 
-                paths = discover_shipped_module_paths()
-                assert "mod_alpha" in paths
-                assert paths["mod_alpha"].is_dir()
-                assert "mod_beta" in paths
-                assert "not_a_module" not in paths
+                with pytest.raises(ImproperlyConfigured, match="not_a_module"):
+                    discover_shipped_module_paths()
         finally:
             set_modules_base_path(original)
+
+
+class TestDiscoverModulePresence:
+    """Tests for the raw ABSENT/ACTIVE/INCOMPLETE observation contract."""
+
+    def test_reports_actual_and_expected_names_in_sorted_order(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "active" / "module.yml").parent.mkdir()
+        (tmp_path / "active" / "module.yml").write_text("name: active\n")
+        (tmp_path / "incomplete").mkdir()
+
+        records = discover_module_presence(
+            tmp_path, expected_names=("missing", "active")
+        )
+
+        assert [record.name for record in records] == [
+            "active",
+            "incomplete",
+            "missing",
+        ]
+        states = {record.name: record.state for record in records}
+        assert states == {
+            "active": ModulePresenceState.ACTIVE,
+            "incomplete": ModulePresenceState.INCOMPLETE,
+            "missing": ModulePresenceState.ABSENT,
+        }
+        assert records[0].path == (tmp_path / "active").resolve()
+        assert records[-1].path is None
+
+    def test_declared_placeholder_is_observable_as_incomplete(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "teams").mkdir()
+
+        records = discover_module_presence(tmp_path, expected_names=("teams",))
+
+        assert len(records) == 1
+        assert records[0].name == "teams"
+        assert records[0].state is ModulePresenceState.INCOMPLETE
+        assert records[0].path == (tmp_path / "teams").resolve()
+
+    def test_missing_base_reports_expected_names_as_absent(
+        self, tmp_path: Path
+    ) -> None:
+        records = discover_module_presence(tmp_path / "missing", ("auth",))
+
+        assert [(record.name, record.state, record.path) for record in records] == [
+            ("auth", ModulePresenceState.ABSENT, None)
+        ]
 
 
 class TestResolutionSource:
@@ -449,7 +495,7 @@ class TestAuthoritativeModuleNames:
         with pytest.raises(ImproperlyConfigured, match="count drift"):
             authoritative_module_names()
 
-    def test_partial_generated_override_uses_bundled_shipped_inventory(
+    def test_partial_generated_override_is_rejected_as_release_inventory(
         self, tmp_path: Path
     ) -> None:
         """A generated module subset must not shrink the product inventory."""
@@ -464,11 +510,29 @@ class TestAuthoritativeModuleNames:
             set_modules_base_path(tmp_path)
 
             assert discover_shipped_module_names() == ["auth", "orgs"]
-            names = authoritative_module_names()
-            assert len(names) == AUTHORITATIVE_MODULE_COUNT == 12
-            assert names == discover_bundled_module_names()
+            with pytest.raises(ImproperlyConfigured, match="incomplete"):
+                authoritative_module_names()
         finally:
             set_modules_base_path(original)
+
+
+class TestValidateActiveModuleSubset:
+    """Tests for the shared release/subset validation rule."""
+
+    def test_accepts_a_legitimate_subset(self) -> None:
+        release = [f"module-{index}" for index in range(12)]
+
+        validate_active_module_subset(release[:2], release)
+
+    def test_rejects_release_count_drift(self) -> None:
+        with pytest.raises(ImproperlyConfigured, match="inventory count drift"):
+            validate_active_module_subset(["auth"], ["auth"])
+
+    def test_rejects_active_name_outside_release(self) -> None:
+        release = [f"module-{index}" for index in range(12)]
+
+        with pytest.raises(ImproperlyConfigured, match="outside the release"):
+            validate_active_module_subset(["unknown"], release)
 
 
 class TestDiscoverShippedModulePaths:
@@ -516,22 +580,6 @@ class TestIsPlaceholderModule:
     def test_empty_string_not_placeholder(self) -> None:
         """Empty string should not be a placeholder."""
         assert not is_placeholder_module("")
-
-
-class TestPlaceholderModuleNames:
-    """Tests for PLACEHOLDER_MODULE_NAMES constant."""
-
-    def test_teams_in_placeholder(self) -> None:
-        """'teams' should be in the placeholder set."""
-        assert "teams" in PLACEHOLDER_MODULE_NAMES
-
-    def test_shipped_not_in_placeholder(self) -> None:
-        """Shipped modules should not be in the placeholder set."""
-        assert "auth" not in PLACEHOLDER_MODULE_NAMES
-
-    def test_placeholder_is_frozenset(self) -> None:
-        """PLACEHOLDER_MODULE_NAMES should be a frozenset."""
-        assert isinstance(PLACEHOLDER_MODULE_NAMES, frozenset)
 
 
 class TestGetPlaceholderRejectionReason:

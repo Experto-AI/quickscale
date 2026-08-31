@@ -401,6 +401,29 @@ def test_describe_is_pure_and_binds_discovery_once(tmp_path: Path) -> None:
     assert not list(tmp_path.iterdir())
 
 
+def test_describe_uses_sibling_catalog_without_importable_package(
+    tmp_path: Path,
+) -> None:
+    """Direct-file discovery still recognizes repository placeholders."""
+    python_no_site = tmp_path / "python-no-site"
+    executable(python_no_site, f'exec {sys.executable} -S "$@"')
+
+    result = invoke(
+        "describe",
+        "--profile",
+        "restricted",
+        "--format",
+        "json",
+        env={"PYTHON": str(python_no_site), "PYTHONPATH": ""},
+    )
+
+    assert result.returncode == 0, result.stderr
+    modules = json.loads(result.stdout)["discovery"]["modules"]
+    assert len(modules) == 12
+    assert modules == sorted(modules)
+    assert "teams" not in modules
+
+
 @pytest.mark.parametrize(
     "profile", ["backups", "restricted", "isolation", "bypassrls", "client-only"]
 )

@@ -469,12 +469,9 @@ def _embed_modules_into_project(
     no_modules: bool,
     existing_state: Any,
 ) -> EmbedModulesResult:
-    """Create embedded module directories without touching git subtrees."""
+    """Create valid embedded modules without touching git subtrees."""
     del no_modules, existing_state
-    for module_name in modules_to_embed:
-        module_dir = output_path / "modules" / module_name
-        module_dir.mkdir(parents=True, exist_ok=True)
-        (module_dir / "__init__.py").write_text("")
+    _write_source_derived_module_manifest_inventory(output_path, modules_to_embed)
     return EmbedModulesResult(success=True, embedded_modules=modules_to_embed)
 
 
@@ -526,6 +523,7 @@ def test_lifecycle_create_apply_remove_readd_apply_e2e_expected_state(
             module_dir = output_path / "modules" / module_name
             module_dir.mkdir(parents=True, exist_ok=True)
             (module_dir / "__init__.py").write_text("")
+        _write_source_derived_module_manifest_inventory(output_path, modules_to_embed)
         return EmbedModulesResult(success=True, embedded_modules=modules_to_embed)
 
     with (
@@ -604,7 +602,9 @@ def test_remove_with_pending_recovery_then_apply_does_not_resurrect_removed_modu
     assert not (project_path / ".quickscale" / "apply-recovery.yml").exists()
     assert not (project_path / "modules" / "auth").exists()
 
-    _write_quickscale_config_with_modules(project_path, ["blog"])
+    # Use a dependency-closed desired subset so this lifecycle test exercises
+    # stale-recovery removal rather than required-module rejection.
+    _write_quickscale_config_with_modules(project_path, ["notifications"])
 
     def _embed_step(
         output_path: Path,
@@ -617,6 +617,7 @@ def test_remove_with_pending_recovery_then_apply_does_not_resurrect_removed_modu
             module_dir = output_path / "modules" / module_name
             module_dir.mkdir(parents=True, exist_ok=True)
             (module_dir / "__init__.py").write_text("")
+        _write_source_derived_module_manifest_inventory(output_path, modules_to_embed)
         return EmbedModulesResult(success=True, embedded_modules=modules_to_embed)
 
     with (
@@ -658,14 +659,14 @@ def test_remove_with_pending_recovery_then_apply_does_not_resurrect_removed_modu
 
     assert apply_result.exit_code == 0
     assert mock_embed_modules_step.call_count == 1
-    assert mock_embed_modules_step.call_args.args[1] == ["blog"]
-    assert (project_path / "modules" / "blog").exists()
+    assert mock_embed_modules_step.call_args.args[1] == ["notifications"]
+    assert (project_path / "modules" / "notifications").exists()
     assert not (project_path / "modules" / "auth").exists()
 
     state_after_apply = yaml.safe_load(
         (project_path / ".quickscale" / "state.yml").read_text()
     )
-    assert set(state_after_apply["modules"]) == {"blog"}
+    assert set(state_after_apply["modules"]) == {"notifications"}
     assert "auth" not in state_after_apply["modules"]
 
 

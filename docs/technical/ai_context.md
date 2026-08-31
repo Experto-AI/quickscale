@@ -38,6 +38,18 @@ Package READMEs, root `README.md`, `START_HERE.md`, and contributor-router docs 
 
 - Prefer repository `make` targets over lower-level helper scripts.
 - Use the narrowest relevant validation first, then widen only as needed.
+- Depth is chosen by tier, and the tier bounds the obligation — see
+  [validation_policy.md §Validation Tiers](./validation_policy.md#validation-tiers),
+  which is authoritative:
+  - `change` (default, one phase or one correction): `make lint`, `make typecheck`,
+    and a focused `pytest` run over the changed behavior.
+  - `task` (completed plan, convergence pass, cross-package delta): the owning
+    section suite, or `make check QUIET=1`.
+  - `release` (closeout, version bump, generator-template change): `make ci`, or
+    `make ci-e2e` when an E2E trigger applies.
+- Each tier's command subsumes the narrower ones; run one command per tier. Never
+  run a wider tier to establish a baseline — a pre-existing failure is discovered
+  at the tier that reaches it.
 - Shared entrypoints:
   - `make lint`
   - `make format`

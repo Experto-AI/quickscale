@@ -14,7 +14,10 @@ Before implementation starts, make sure the plan captures:
 - architecture and stack constraints that limit the solution space
 - where existing patterns or seams can be reused instead of introducing new abstractions
 - explicit failure and validation expectations for the changed behavior
-- the tests, checks, or commands that will show the change is correct
+- the tests, checks, or commands that will show the change is correct, and the
+  [validation tier](../technical/validation_policy.md#validation-tiers) each
+  stage owns — a multi-stage plan validates each stage at its own tier and
+  reaches `release` once, at closeout
 - documentation that may need updates
 - any open questions that still block safe implementation
 
@@ -36,6 +39,7 @@ Planning is ready when:
 
 - scope boundaries are clear enough to avoid drift
 - the proposed change fits the documented architecture
-- validation is defined clearly enough to confirm the outcome
+- validation is defined clearly enough to confirm the outcome, at a tier
+	proportionate to what each stage changes
 - the remaining unknowns are small enough to resolve during execution, or are
 	explicitly surfaced first

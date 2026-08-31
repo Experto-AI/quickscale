@@ -17,12 +17,6 @@ Known placeholder modules (such as ``teams``) that lack a ``module.yml`` are
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from quickscale_core.contracts.module_discovery import (
-    authoritative_module_names,
-    get_placeholder_rejection_reason,
-    is_placeholder_module,
-)
-
 
 @dataclass(frozen=True)
 class ModuleCatalogEntry:
@@ -32,6 +26,7 @@ class ModuleCatalogEntry:
     description: str
     ready: bool
     experimental: bool = False
+    placeholder: bool = False
 
 
 MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
@@ -100,6 +95,7 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
         description="Multi-tenancy and team management",
         ready=False,
         experimental=True,
+        placeholder=True,
     ),
 )
 
@@ -157,6 +153,8 @@ def get_discovered_module_names() -> list[str]:
     Raises:
         ImproperlyConfigured: If no module inventory is available.
     """
+    from quickscale_core.contracts.module_discovery import authoritative_module_names
+
     return authoritative_module_names()
 
 
@@ -211,13 +209,11 @@ def find_not_ready_modules(module_names: Iterable[str]) -> list[str]:
     """
     not_ready: list[str] = []
     for module_name in module_names:
-        if is_placeholder_module(module_name):
+        entry = get_module_entry(module_name)
+        if entry is not None and (entry.placeholder or not entry.ready):
             if module_name not in not_ready:
                 not_ready.append(module_name)
             continue
-        entry = get_module_entry(module_name)
-        if entry is not None and not entry.ready and module_name not in not_ready:
-            not_ready.append(module_name)
     return sorted(not_ready)
 
 
@@ -238,6 +234,10 @@ def get_module_readiness_reason(module_name: str) -> str | None:
         ValueError: If the module name is not recognized.
     """
     # Fail-closed check for known placeholder names outside the catalog.
+    from quickscale_core.contracts.module_discovery import (
+        get_placeholder_rejection_reason,
+    )
+
     placeholder_reason = get_placeholder_rejection_reason(module_name)
     if placeholder_reason is not None:
         return placeholder_reason

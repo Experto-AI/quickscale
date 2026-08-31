@@ -1,55 +1,52 @@
 # Tech Audit — Codebase-Wide Defect Sweep
 
-> **Audit snapshot:** 2026-08-22 · **Prior pass:** 2026-07-26 (reconciled 2026-08-21 at `412d8d20`) · **Branch:** `v88` · **Findings last reconciled:** 2026-08-25 current live inventory
+> **Audit snapshot:** 2026-08-28 · **Prior pass:** 2026-08-22 (reconciled 2026-08-27 at `602f4be3`) · **Branch:** `v88` · **HEAD:** `48e0a62a`
 
 ## Orientation summary
 
-QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**: a Click CLI, a Django-6 project generator, twelve shipped first-party modules, and apply/recovery/DR tooling. First-party Python is ~275k lines across `quickscale_core` (72k), `quickscale_modules` (99k), `quickscale_cli` (64k), `scripts` (36k), `quickscale_devtools` (2.9k).
+QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**: a Click CLI, a Django-6 project generator, twelve shipped first-party modules (`teams` remains a source-less placeholder), and apply/recovery/DR tooling. First-party Python is ~294 non-test modules across `quickscale_core`, `quickscale_modules`, `quickscale_cli`, `scripts`, and `quickscale_devtools`.
 
 **Deployment realities** (every finding names one):
 
-1. **The maintainer workstation** — `make quality`, `make ci`, `scripts/check_ci_locally.sh`, the CLI itself. Solo-maintainer repo; this is where the governance layer actually executes.
-2. **Hosted CI** — `ci.yml` (push to `main`/`develop`, PR to `main`), `publish.yml`, `e2e.yml`, `nightly-bypassrls.yml`.
-3. **The generated project** — Django 6 + PostgreSQL 18 + Vite/React, deployed to Railway behind a proxy, multi-tenant with FORCE RLS under a NOSUPERUSER/NOBYPASSRLS runtime role. Internet-facing.
+1. **The maintainer workstation** — `make quality`, `make ci`, the CLI, `quickscale_devtools`. Solo-maintainer repo.
+2. **Hosted CI** — `ci.yml`, `publish.yml`, `e2e.yml`, `nightly-bypassrls.yml`.
+3. **The generated project** — Django 6 + PostgreSQL 18 + Vite/React on Railway, multi-tenant with FORCE RLS under a NOSUPERUSER/NOBYPASSRLS runtime role. Internet-facing.
 4. **Local generated-project development** — `docker-compose.yml`, `settings/local.py`, `DEBUG=True`, no published database port.
 
-**Entry points and trust boundaries.** Untrusted input reaches the system through: generated-project HTTP routes (DRF viewsets, the blog/forms/social public surfaces, two signed webhook endpoints, three `csrf_exempt` views); markdown authored into `Post.content` / `Listing.description`; operator-supplied restore archives fed to `pg_restore`; and `quickscale.yml` / module manifests consumed by the CLI. The CLI itself is operator-trusted.
+**Entry points and trust boundaries.** Untrusted input reaches the system through generated-project HTTP routes (DRF viewsets, the blog/forms/social public surfaces, two signed webhook endpoints, three `csrf_exempt` views), markdown authored into `Post.content` / `Listing.description`, operator-supplied restore archives fed to `pg_restore`, and `quickscale.yml` / module manifests consumed by the CLI. The Django admin (backup creation, restore, `TenantModelAdmin`) is an authenticated operator surface, not a public one. The CLI and `quickscale_devtools` are operator-trusted.
 
-**Tooling baseline.** ruff (`py314`, E/W/F/I/N/UP/D), mypy, pylint duplication-only, vulture, radon, pytest 9 with `--cov-fail-under=90` over the two `src` trees, pre-commit, a declared gate registry (`scripts/gate_registry.json`, 10 gates, eight hosted), blocking Trivy v0.74.0 dependency scanning, focused Bandit 1.9.4 static analysis, AST gates, and a monotonic quality baseline with a waiver ledger. `scripts/` is deliberately outside `TEST_DIRS` and outside `.coveragerc`.
+**Tooling baseline.** ruff (`py314`, E/W/F/I/N/UP/D), mypy, pylint duplication-only, vulture, radon, pytest 9 with `--cov-fail-under=90`, pre-commit, a declared gate registry, checksum-pinned Trivy v0.74.0 dependency scanning, Bandit 1.9.4, AST gates, and a monotonic quality baseline with a waiver ledger.
 
-**Scope decision (§2e).** The companion structural autopsy scoped its 2026-08-21 pass to the governance/CI layer and explicitly **skipped generated-project template internals and frontend theme sources**. The commit delta since the prior tech pass is 12 files. This sweep therefore spends its depth where the two prior passes did not look: the generated-project templates, the React theme, the module HTTP/render surfaces, and the DR engine — plus full verification of the six red flags handed over by the arch audit.
+**Scope decision (§2e).** The delta since the prior pass is **5 commits / 3 files**, of which the only code change is a test file. A delta-driven sweep would therefore have been nearly empty. This pass instead spends its depth on the surfaces the two prior passes **sampled by signature but never read as code**: the orgs tenancy and request-scoping machinery in full, the `forms` cross-tenant operator surface, the billing credit ledger, the DR engine's lock and orchestration layers, and `quickscale_devtools/beta_migration.py` — which both prior passes explicitly skipped.
 
 **Oracle list (§2g) — the project's own declared invariants, hunted as defect classes:**
 
-- **Fail-Hard Principle** (`decisions.md:634`, `:716-732`) — every configuration error, missing dependency, and invalid runtime state raises; no silent fallbacks, no graceful degradation, never substitute a default. `tech-audit.md` is the declared SSOT for found-not-yet-fixed violations.
-- **Project interpreter only** (`ruff.toml:8-11`) — *"Anything that executes repo sources must therefore use the project interpreter (`sys.executable` / the venv), never a bare `python` off PATH."*
-- **Runtime serving is fail-closed on RLS** — `RUNTIME_DATABASE_URL` required; `QUICKSCALE_ALLOW_BYPASSRLS=1` is an explicit dev/test opt-out only.
-- **Raw credential values MUST NOT be persisted** in `quickscale.yml`, `.quickscale/state.yml`, or `BackupArtifact` rows (`decisions.md:316`); Stripe keys stay environment-only (`:855`).
-- **Quality baseline monotonicity** — complexity maxima never ratchet upward; any positive ceiling delta requires a structured waiver.
-- **CSRF-exempt endpoints carry an alternate integrity check.**
-- **Tenant reads/writes stay organization-scoped**; `all_objects` is an operator escape hatch, not a scoping bypass.
+- **Fail-Hard Principle** (`decisions.md:725`, `:807-831`) — every configuration error, missing dependency, and invalid runtime state raises; no silent fallbacks, never substitute a default. This file is the declared SSOT for found-not-yet-fixed violations (`decisions.md:670`, `:831`).
+- **Tenant reads/writes stay organization-scoped**; `all_objects` is an operator escape hatch, not a scoping bypass; `operator_access` grants **read-only** cross-tenant visibility and requires a verified `is_superuser` caller inside `transaction.atomic()` (`organizations.md:729`).
+- **No shipped runtime BYPASSRLS path**; `QUICKSCALE_ALLOW_BYPASSRLS=1` is an explicit dev/test opt-out only; Django `is_superuser` does not infer database-level access (`organizations.md:587`).
+- **Launcher one-shot command-env contract** — `QUICKSCALE_PRIVILEGED_COMMAND` / `RUNTIME_DATABASE_URL` are set as inline command prefixes, **never** as persistent environment configuration (`decisions.md`, Launcher One-Shot Command-Env Contract).
+- **Project interpreter only** (`ruff.toml:8-11`).
+- **Raw credential values MUST NOT be persisted** in `quickscale.yml`, `.quickscale/state.yml`, or `BackupArtifact` rows; Stripe keys stay environment-only.
+- **Quality baseline monotonicity**; **CSRF-exempt endpoints carry an alternate integrity check**.
 
-**Delta classification (re-run mode, §2f).** `e40762a0..HEAD` = 8 commits, 12 files, 867 insertions. *Review-tracked:* `309b8b7a`, `ed8bb9b4`, `10d6bfe2`, `9dd49c1d` (docs), `3de43250` (subtree split, no tree change). *Side-channel — read in full, production and test hunks:* `be5cf024` "fix(ci)", and `d4b0e834` / `d3d4c633`, both titled "v0.87.0: QuickScale 0.87.0" while in fact changing hosted and publish provisioning. The full first-party production diff was read; the test diff was read against the "did any test get weaker?" question (§3.7) — results in *Clean sweeps* and *Notes*.
+**Delta classification (re-run mode, §2f).** `602f4be3..HEAD` = 5 commits, 3 files, 362 insertions / 705 deletions. *Review-tracked:* `8a8f364b`, `cc80a5f2` (roadmap/handoff docs), `74ba3c55` (merge). *Side-channel — read in full:* `990f660f` "Refactor assertions in ticket context consistency test" and `48e0a62a` "streamline ticket context consistency tests and remove unused variables" — two refactor-shaped messages carrying a **net removal of ~60 assertions** from a conformance test. That is the §4.VIII signature and it was read hunk by hunk; adjudication in *Clean sweeps* and the reconciliation log.
 
 ### Coverage statement (§3.11)
 
-**Read in full:** the entire `e40762a0..HEAD` diff (12 files); `scripts/test_isolation_conformance.sh`; `scripts/check_quality_baseline_monotonicity.py` merge-base resolution and `main`; `scripts/check_quality.sh` gate ordering and failure handling; `scripts/version_tool.sh` interpreter selection; `quickscale_modules/orgs/.../sanitization.py`; `current_org.py` tenant-context and client-IP sections; `quickscale_modules/orgs/tests/test_tenant_table_conformance.py` parametrization; the generated `settings/base.py.j2` and `settings/production.py.j2`, `.env.j2`, `.env.example.j2`, `docker-compose.yml.j2`, `db/init.sql.j2`, `urls.py.j2`, `views.py.j2`; `dr_engine/primitives.py`, `_paths.py`, and the `recovery.py` restore gate; `useApi.ts`; the three `csrf_exempt` surfaces and both webhook verifiers.
+**Read in full:** the entire `602f4be3..HEAD` diff including every test hunk; `quickscale_modules/orgs/.../tenancy.py` (registry, `_FORCE_RLS_FORWARD_SQL`/`_REVERSE_SQL`, `apply_force_rls`, `refresh_force_rls_policies`, the equality-trigger helpers, and the conformance helpers `is_tenant_model` → `check_tenant_model_isolation`); `managers.py`; `middleware.py`; `permissions.py`; `checks.py`; `apps.py`; `public_context.py`; the `current_org.py` GUC layer (`_tenant_context`, `org_scope`, `_make_priming_execute_wrapper`, `install_priming_wrapper`, `operator_access`); `quickscale_modules/forms/.../views.py:140-520` and `throttles.py`; `quickscale_modules/billing/.../services.py` credit-ledger paths; `quickscale_modules/blog/.../feeds.py`; `quickscale_core/.../dr_engine/_lock.py` (entire file); the `dr_engine/orchestration.py` destructive sites, `create_backup` lock section, and admin restore staging pipeline; `advisory_lock.py` acquire/release/stale; `quickscale_devtools/beta_migration.py` mutation and guard sites; `scripts/security_suppressions.json`; the `start.sh.j2` privileged-command contract.
 
-**Sampled:** 326 module source files and 141 core files by signature sweep (injection sinks, broad excepts with fallback assignment, mutable defaults, missing timeouts, `mark_safe`/`|safe`, `all_objects`, `operator_access`, raw SQL, destructive filesystem calls); the CLI remove/module destructive paths; `state_schema.py` atomic write; the 78-file React theme by signature (`innerHTML`, `postMessage`, storage, `fetch`); `poetry.lock` pins for the security-relevant packages.
+**Sampled:** the 53-site `getattr(settings, …, <default>)` census across all modules; subprocess-timeout and `rmtree`/`unlink` censuses across all first-party source; `poetry.lock` pins for the security-relevant packages; CLI destructive paths; generated settings templates at the TA68 anchors.
 
-**Skipped:** `beta_migration.py` and generated-project migrations; the four hosted workflows beyond the delta (the arch audit read them in full this cycle); pylint/radon/vulture internals; generated-project frontend component bodies.
+**Skipped:** the React theme component bodies and `scripts/` gate internals (both read at depth by the prior passes this cycle); generated-project migrations; pylint/radon/vulture internals.
 
-**Historical audit tools run (read-only, 2026-08-21):** `pytest 9.1.x` under `.venv/bin/python` (CPython 3.14.6) over `scripts/` — **74 failed, 1126 passed, 349.64s**; targeted runs of `test_gate_parity.py`, `test_check_sa117_scope.py`, `test_quality_baseline_monotonicity.py`; `git log/blame/rev-parse/branch/tag`. At that audit snapshot no dependency scanner was installed and dependency review was manual. This paragraph is retained as dated audit provenance, not current tooling status: the current gate layer uses checksum-pinned Trivy v0.74.0 and Bandit 1.9.4.
+**Audit tools run (read-only):** `git log` / `git diff` / `git rev-parse` over the delta; CPython 3.14 for the two empirical checks below. No scanner was re-run this pass — the Trivy/Bandit gate is CI-owned and its ledger was read rather than re-executed.
 
-**Empirical checks run (§1e) — 6, all side-effect-free:**
+**Empirical checks run (§1e) — 2, both side-effect-free:**
 
 | # | Check | Result |
 |---|---|---|
-| 1 | Ran the XSS pipeline (`escape` → `markdown[fenced_code,tables,toc]` → `sanitize_rendered_html`) against 15 crafted payloads in a REPL | **Refuted** a suspected stored-XSS finding — see *Clean sweeps* |
-| 2 | Ran `check_quality_baseline_monotonicity.py` with `env -u QUALITY_BASELINE_BASE_REF -u GITHUB_BASE_REF` | **Confirmed TA63** — exit 2, `MERGE_BASE_ERROR`. Artifact backed up and byte-restored |
-| 3 | `git rev-parse --verify v87` / `origin/v87` / `git tag \| grep v87` | Local branch and tag **absent**; `origin/v87` resolves. Confirms TA63's mechanism |
-| 5 | Ran `python3 scripts/check_sa117_scope.py` from a directory without `scripts/` | Interpreter exits **2** on "can't open file" — the former false-green mechanism; SA157's closure proof below now distinguishes tool output from interpreter failure |
-| 6 | Pre-SA162 `~True != 0` under `-W error::DeprecationWarning` on 3.14.6 | Raised before SA162; the closure rerun is clean with `~int(val) != 0`, preserving the arch audit's corrected semantics |
+| 1 | Re-implemented `getCsrfToken`'s exact split-and-count logic in CPython and ran it over five cookie shapes | **Confirmed TA67** — `'csrftoken=A; csrftoken=B'` and `'csrftoken=A; sessionid=x; csrftoken=B'` both return `''`; single and sibling cases return `'A'` |
+| 2 | Parsed `TENANT_TABLE_REGISTRY` and cross-checked every ENROLLED entry's convention-derived table name (`app_label + '_' + model_name.lower()`) against the explicit `db_table` declarations in all module `models.py` | **Refuted** a suspected fail-silent-skip finding in `refresh_force_rls_policies` — 45 entries (21 ENROLLED / 24 EXCLUDED_REVIEWED), 8 explicit `db_table` declarations, **zero divergence** from the convention. Carried as a watch item instead |
 
 ---
 
@@ -57,15 +54,13 @@ QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**
 
 | ID | Sev | Category | Title | Effort | Confidence | Status |
 |---|---|---|---|---|---|---|
-| `spa-csrf-token-duplicate-cookie` (TA67) | **S3** | Correctness (frontend) | `getCsrfToken` returns `''` whenever two `csrftoken` cookies are present — every SPA write 403s | Trivial ⚡ | High | new |
-| `generated-settings-dead-client-ip` (TA68) | S4 | Dead code (generated output) | Two `get_client_ip` definitions in generated settings are unreachable | Trivial | High | new |
-| `container-status-substring-match` (TA70) | S4 | Correctness (shipped CLI utility) | `get_container_status` matches container names by substring over dead containers, so callers cannot tell "starting" from "crashed" | Trivial ⚡ | High | new 2026-08-27 |
+| `spa-csrf-token-duplicate-cookie` (TA67) | **S3** | Correctness (frontend) | `getCsrfToken` returns `''` whenever two `csrftoken` cookies are present — every SPA write 403s | Trivial ⚡ | High | still-open |
+| `backup-lock-stale-clear-toctou` (TA71) | **S3** | Concurrency | Stale-lock clearing is `stat`-then-`unlink`, so two backup runs can both acquire the "exclusive" backup lock | Small | High (race) / Medium (cost) | new |
+| `generated-settings-dead-client-ip` (TA68) | S4 | Dead code (generated output) | Two `get_client_ip` definitions in generated settings are unreachable | Trivial | High | still-open |
+| `container-status-substring-match` (TA70) | S4 | Correctness (shipped CLI utility) | `get_container_status` matches container names by substring over dead containers | Trivial ⚡ | High | still-open |
+| `force-rls-apply-idempotency-claim` (TA72) | S4 | Documentation vs. behaviour (security-adjacent) | `apply_force_rls` documents itself as idempotent; `CREATE POLICY` has no `IF NOT EXISTS`, so a second call raises | Trivial | High | new |
 
-**Counts:** S1 **0** · S2 **0** · S3 **1** · S4 **2** · **Total 3 open**. Quick win (⚡ Trivial-effort S3): TA67.
-
-These are the current live-finding counts, derived from the three open summary rows above:
-TA67 (S3), TA68 (S4), and TA70 (S4). Older TA69-inclusive totals are dated historical
-reconciliation evidence and are not part of the current inventory.
+**Counts:** S1 **0** · S2 **0** · S3 **2** · S4 **3** · **Total 5 open.** Quick wins (⚡ Trivial-effort S3/S4): TA67, TA70.
 
 ---
 
@@ -77,9 +72,9 @@ reconciliation evidence and are not part of the current inventory.
 
 **Severity:** **S3.** A latent bug that needs one precondition — a duplicate `csrftoken` cookie — after which **every** state-changing request from the React SPA fails with 403 and the app is read-only. Deployment reality #3 (the generated project, internet-facing). Fails closed, so it is availability, not a security hole. Reachability drops one notch for the single unverified precondition.
 
-**Category:** §4.I Correctness (§4.X frontend). **Confidence:** High — logic verified by reading; the triggering cookie state is a standard, documented Django deployment condition.
+**Category:** §4.I Correctness (§4.X frontend). **Confidence:** High — logic verified by reading and re-confirmed empirically this pass (check #1).
 
-**Location:** `…/themes/showcase_react/src/hooks/useApi.ts:20-28` and `…/src/components/forms/FormRenderer.tsx:206-211` — the same eleven lines, duplicated.
+**Location:** `…/themes/showcase_react/src/hooks/useApi.ts:20-28` and `…/src/components/forms/FormRenderer.tsx:206-211` — the same eleven lines, duplicated. Both re-verified at HEAD.
 
 **Defect:** The parser splits the cookie string on the delimiter `"; csrftoken="` and accepts the result **only when it yields exactly two parts**, returning `''` otherwise. Two `csrftoken` cookies yield three parts.
 
@@ -110,74 +105,114 @@ function getCsrfToken(): string {
 
 **Deliberate?** None found. The `parts.length === 2` idiom is a widely copied snippet; nothing in either file acknowledges the multi-cookie case.
 
+**Age:** Long-standing; carried unchanged from the 2026-08-22 pass and unmodified in the delta.
+
 ---
 
-### TA70 — `get_container_status` matches by substring over dead containers
+### TA71 — Stale backup-lock clearing is `stat`-then-`unlink`, so two runs can both hold the "exclusive" lock
 
-`quickscale_cli/src/quickscale_cli/utils/docker_utils.py:328-348` runs
-`docker ps -a --filter name=<container_name>` and returns `result.stdout.strip()`. Two problems
-compound:
+**ID:** `backup-lock-stale-clear-toctou`
 
-- Docker's `name` filter is a **substring regex**, not an exact match, so `<scope>_backend` also
-  matches `<scope>_backend_1` or any longer name containing it. With several matches,
-  `--format {{.Status}}` emits one line each and `.strip()` returns a multi-line blob that no caller
-  can attribute to a container.
-- `-a` includes containers that have already exited, so the function returns a status for a dead
-  container indistinguishable — to a substring test — from one that has not started yet.
+**Severity:** **S3.** The guard whose entire stated purpose is to "prevent overlapping backup runs" can fail to do so. Deployment reality #3 (the generated project's backups module). Two preconditions must both hold — a pre-existing stale lock, and a sub-millisecond interleaving between two starts — so reachability drops two notches from the impact ceiling; no data-corruption path was verified (see *Refutation*), which is what holds this at S3 rather than higher.
 
-The sole caller today is the E2E readiness poll at
-`quickscale_cli/tests/test_e2e_development_workflow.py:157-168`, which accepts
-`"up" in status.lower()`. A container that crashes on startup yields `Exited (1) …`, the predicate
-reads "not up *yet*", and the poll waits out its full 40 s before reporting the generic *"Backend
-container did not become running within 40s"*. **The exit code and cause are discarded**, which is
-why repeated E2E reruns produced greens that identified nothing. The function is public shipped CLI
-surface with no production caller, so the blast radius today is diagnostic quality rather than
-runtime behaviour — but it is the reason a stalled ticket stayed stalled across several passes.
+**Category:** §4.II Concurrency (check-then-act / TOCTOU).
 
-**Fix:** filter on an anchored exact name (`name=^<name>$`), return a structured state that
-distinguishes *absent* / *created* / *running* / *exited(code)* rather than a display string, and
-make the readiness poll fail immediately and loudly on *exited*. Owned by **SA170** (roadmap
-merge #27).
+**Confidence:** **High** that the race exists (verified by reading the two functions together and walking the interleaving line by line). **Medium** on its cost, because the worst outcome — a concurrent prune deleting the other run's artifact — is inferred from the prune call site rather than executed.
+
+**Location:** `quickscale_core/src/quickscale_core/dr_engine/_lock.py:119-137` (`_clear_stale_backup_lock`), reached from the acquire loop at `:75-86` (`_acquire_backup_lock`), taken by `_backup_creation_lock` at `dr_engine/orchestration.py:1113` and `:1321`.
+
+**Defect:** `_clear_stale_backup_lock` reads the lock file's mtime, decides staleness, and *then* unlinks — with no atomicity between the two steps. A second process that sampled the same stale mtime a moment earlier can unlink the **fresh** lock a winner has since created, after which both processes successfully `O_EXCL`-create and both believe they hold the lock.
+
+**Failure scenario:** A previous backup crashes (container OOM, Railway redeploy mid-dump), leaving `.quickscale-backup-create.lock` behind with an mtime older than `_LOCK_TIMEOUT_SECONDS` (300 s). An operator clicks **Create backup now** in the `BackupPolicy` admin (`backups/admin.py:694` `create_backup_now`) at the same moment a scheduled `backups_create` management command fires. Both hit `FileExistsError`; both call `_clear_stale_backup_lock`; both `stat()` the old lock and judge it stale. Process A unlinks and re-creates the lock, entering the critical section. Process B — already past its own `stat()` — then executes `unlink()` at `:130`, deleting **A's live lock**, and its own `O_EXCL` create at `:77` succeeds. Two `pg_dump` runs now proceed concurrently against the same PostgreSQL 18 instance. Each mints a distinct `snapshot_id` and `snapshot_root`, so their dump files do not collide, but each run ends in `_complete_capture_after_dump`, whose final step is a prune — a retention pass evaluating a set that now contains another run's just-registered artifact.
+
+**Evidence:**
+
+```python
+# _lock.py:119-137 — the check and the act are two separate syscalls
+def _clear_stale_backup_lock(lock_path: Path, *, now: datetime) -> bool:
+    try:
+        lock_mtime = lock_path.stat().st_mtime      # <-- check
+    except FileNotFoundError:
+        return True
+    if (now.timestamp() - lock_mtime) <= _LOCK_TIMEOUT_SECONDS:
+        return False
+    try:
+        lock_path.unlink()                           # <-- act (may remove a *different*, live lock)
+```
+
+The acquire loop retries exactly twice around it:
+
+```python
+# _lock.py:75-83
+for _ in range(2):
+    try:
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        if not _clear_stale_backup_lock(lock_path, now=lock_time):
+            raise BackupLockError(...)
+```
+
+Note that `now=lock_time` is captured **once** before the loop (`:73`), so the staleness comparison on the second iteration is evaluated against a timestamp taken before the first attempt — widening, not narrowing, the window.
+
+**Refutation:** Attempted three ways, and the finding survived all three, though the third bounds its severity.
+(1) *Is the `O_EXCL` create itself sufficient?* No — `O_EXCL` makes creation atomic, but nothing binds the unlink to the file the caller inspected. The benign interleavings (B stats *after* A re-creates; B stats during the gap and fails on the second `O_EXCL`) were both walked and do terminate correctly with `BackupLockError`; only the stat-before/unlink-after ordering escapes, and nothing excludes it.
+(2) *Is there a second guard one layer up?* Searched `orchestration.py` for a DB-level backstop — no `pg_advisory_lock`, no `select_for_update` on the policy row, and no unique constraint or status check preventing two concurrent `pending` snapshots. `create_backup` at `:1321` goes straight from the filesystem lock into `create_snapshot`.
+(3) *Does the race actually corrupt anything?* This is the argument that partly succeeds and is why the severity is S3, not S2: `_mint_snapshot_id()` gives each run its own id and `_build_snapshot_local_root` its own directory, so the two dumps do not overwrite each other. The residual risk is contention (two simultaneous `pg_dump` runs against one Railway PostgreSQL service) plus the concurrent prune, which is reachable but unproven.
+The sibling implementation `AdvisoryLock.clear_stale` (`advisory_lock.py:272-296`) has the identical `is_stale()`-then-`unlink()` shape; it is documented operator-facing API (module docstring `:17-19`) with no automated caller, so it is folded in here as a second location rather than filed separately.
+
+**Fix:** Replace the stale-file dance with an OS-level lock that cannot go stale: open the lock file `O_CREAT|O_RDWR` (no `O_EXCL`) and take `fcntl.flock(fd, LOCK_EX | LOCK_NB)`, holding the descriptor for the critical section. The kernel releases the lock when the process dies, which deletes the entire stale-detection code path — `_clear_stale_backup_lock`, `_LOCK_TIMEOUT_SECONDS`, and the retry loop all go away. If the file-based scheme must be kept for portability, make the clear atomic instead: `os.open` the existing lock, `os.fstat` **that descriptor** for the mtime, and unlink only after confirming `st_ino` still matches the inode just inspected. Apply the same change to `AdvisoryLock.clear_stale`. **Effort:** Small.
+
+**Verification:** A test that seeds a stale lock file, then drives the documented interleaving with two threads synchronised on a barrier placed between the `stat` and the `unlink` (inject via a seam or `monkeypatch` on `Path.unlink`), asserting exactly one caller reaches the critical section and the other raises `BackupLockError`. With `flock`, the same test passes without any injected barrier.
+
+**Deliberate?** None found. The docstring at `:120` states the intent as "Remove an expired lock file so a new backup run can proceed" with no acknowledgement of concurrent clearing; no comment, suppression, or test addresses the race.
+
+**Age:** Long-standing — present in `_lock.py` since the DR-engine split; untouched by the delta.
+
+---
 
 ### S4
 
-- **TA68 · `generated-settings-dead-client-ip`** · `…/templates/project_name/settings/base.py.j2:61` and `settings/production.py.j2:123` · Both files define a module-level `get_client_ip(request)`, and `production.py.j2` rebinds it with a comment claiming the rebind exists "so that production defaults … are actually in effect at request time". Neither is reachable in a generated project: Django's `Settings` copies only **uppercase** names off the settings module, so `django.conf.settings.get_client_ip` does not exist, and nothing in the generated tree imports either function (grep across all templates returns only the two definitions). The real consumer is `quickscale_modules_orgs.current_org.get_client_ip`, which reads the uppercase `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT` settings dynamically and is correct. · **Fix:** delete both definitions and keep the settings plus the `REST_FRAMEWORK["NUM_PROXIES"]` recomputation, or add a comment pointing at the orgs helper as the live implementation. The behavioural comment in `production.py.j2:119-122` is misleading as written and should go either way.
+- **TA68 · `generated-settings-dead-client-ip`** · `…/templates/project_name/settings/base.py.j2:61` and `settings/production.py.j2:123` · Both files define a module-level `get_client_ip(request)`, and `production.py.j2` rebinds it with a comment claiming the rebind exists "so that production defaults … are actually in effect at request time". Neither is reachable in a generated project: Django's `Settings` copies only **uppercase** names off the settings module, so `django.conf.settings.get_client_ip` does not exist, and nothing in the generated tree imports either function — re-verified at HEAD, a grep across all templates still returns only the two definitions and the comments referring to them. The real consumer is `quickscale_modules_orgs.current_org.get_client_ip`, which reads the uppercase `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT` settings dynamically and is correct. · **Fix:** delete both definitions and keep the settings plus the `REST_FRAMEWORK["NUM_PROXIES"]` recomputation, or add a comment pointing at the orgs helper as the live implementation. The behavioural comment in `production.py.j2:119-122` is misleading as written and should go either way.
+
+- **TA70 · `container-status-substring-match`** · `quickscale_cli/src/quickscale_cli/utils/docker_utils.py:328-348` · Runs `docker ps -a --filter name=<container_name>` and returns `result.stdout.strip()`. Docker's `name` filter is a **substring regex**, so `<scope>_backend` also matches `<scope>_backend_1`; with several matches `--format {{.Status}}` emits one line each and `.strip()` returns a multi-line blob no caller can attribute. `-a` additionally includes exited containers, so a crashed container is indistinguishable from one that has not started. The sole caller is the E2E readiness poll at `quickscale_cli/tests/test_e2e_development_workflow.py:157-168`, which accepts `"up" in status.lower()`; a container that crashes on startup yields `Exited (1) …`, the predicate reads "not up *yet*", and the poll waits out its full 40 s before reporting a generic timeout, discarding the exit code and cause. Public shipped CLI surface with no production caller, so blast radius is diagnostic quality. · **Fix:** filter on an anchored exact name (`name=^<name>$`), return a structured state distinguishing *absent* / *created* / *running* / *exited(code)*, and make the readiness poll fail immediately and loudly on *exited*. Owned by **SA170** (roadmap merge #27).
+
+- **TA72 · `force-rls-apply-idempotency-claim`** · `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py:536-546` · `apply_force_rls`'s docstring states "**Idempotent** — wraps each pair in the identical ENABLE + FORCE + CREATE POLICY sequence." The body executes `_FORCE_RLS_FORWARD_SQL`, which issues bare `CREATE POLICY {policy_name}` and `CREATE POLICY {policy_name}_select` (`:510`, `:521`). PostgreSQL has no `CREATE POLICY IF NOT EXISTS`, so a second application against a table that already carries the policies aborts the migration with `42710 duplicate_object`. The claim is safe today only because the one caller that *does* re-apply — `refresh_force_rls_policies` (`:584`) — calls `revert_force_rls` first, and `_FORCE_RLS_REVERSE_SQL` correctly uses `DROP POLICY IF EXISTS`. The hazard is a future module migration that calls `apply_force_rls` on an already-enrolled table on the documented assurance that doing so is safe. · **Fix:** either correct the docstring to state that the helper is *not* idempotent and must be preceded by `revert_force_rls`, or make it true by prefixing the forward template with the same `DROP POLICY IF EXISTS` pair the reverse template already uses. The second option is two lines and makes the documented contract real. · **Confidence:** High — PostgreSQL's lack of `CREATE POLICY IF NOT EXISTS` is settled behaviour; not executed here because no PostgreSQL instance was started for this read-only pass.
+
 ---
 
 ## Per-subsystem verdicts
 
 | Subsystem | What was read | Verdict |
 |---|---|---|
-| Commit delta `e40762a0..HEAD` | all 12 files, production and test hunks, in full | Clean — no finding. The two test changes are correct narrowings; see *Clean sweeps* and *Notes* |
-| `scripts/` quality-baseline gate | `check_quality_baseline_monotonicity.py` merge-base + `main`; `check_quality.sh` ordering and failure path | **Closed by SA156 (TA63)** |
-| `scripts/` gate conformance suites | executed all 14 — 74F/1126P at audit time; the retained population is now **15 suites / 1,227 passed** after the closure passes; read the failing tests and their fixtures | **Arch Finding 12 closed by SA155:** `check-gate-suites` is registered for local-serial, local-parallel, and hosted execution with cache and product coverage disabled. The former TA66 oracle failure, the historical quality-baseline failures, and the SA117 false-green are also closed (see [CHANGELOG.md](../../CHANGELOG.md)) |
-| `scripts/` shell interpreter selection | `version_tool.sh`, `lint_frontend.sh`, `check_ci_locally.sh`, `_python_requirement.sh` | **Closed by SA159** — repository-source calls use the validated project interpreter; `check_ci_locally.sh` is documented adjacent because its heredoc is stdlib-only |
-| Generated settings templates | `base.py.j2`, `production.py.j2` in full | **TA68**; production hardening otherwise clean |
-| Generated project scaffold | `.env.j2`, `.env.example.j2`, `docker-compose.yml.j2`, `db/init.sql.j2`, `urls.py.j2`, `views.py.j2`, `railway.json.j2` | Clean — see *Notes* for the dev-credential and healthcheck watch items |
-| React theme (`showcase_react`) | 78 files by signature; `useApi.ts` and the social/forms surfaces in full | **TA67** |
-| Blog / listings render path | `views.py` render sites, `sanitization.py`, markdown extension wiring, 15-payload REPL test | Clean — verified, see *Clean sweeps* |
-| Webhooks (billing, notifications) | both views and both verifiers in full | Clean |
-| Blog `csrf_exempt` API | all three exempt views and `authenticate_blog_api_request` | Clean |
-| DR engine | `primitives.py`, `_paths.py`, `recovery.py` restore gate | Clean |
-| Multi-tenant scoping | `all_objects` / `operator_access` / raw-SQL census across all modules; `current_org.py` context machinery | Clean under the supported role; see *Notes* |
-| CLI destructive paths | `remove_command.py`, `module_commands.py` rmtree/unlink sites | Clean (operator-trusted input) |
+| Commit delta `602f4be3..HEAD` | all 3 files, production and test hunks, in full | Clean — the assertion removals are a defensible narrowing; see *Clean sweeps* and the reconciliation log |
+| orgs — tenant registry & RLS SQL | `tenancy.py` registry, both policy templates, `apply_force_rls` / `revert_force_rls` / `refresh_force_rls_policies`, equality-trigger helpers, `is_tenant_model` → `check_tenant_model_isolation` | **TA72**; the write/read policy split is correct — see *Clean sweeps* |
+| orgs — request scoping | `managers.py`, `middleware.py`, `permissions.py`, `current_org.py` GUC layer, `public_context.py` | Clean — fail-closed at every branch examined; see *Clean sweeps* |
+| orgs — boot guards | `apps.py` `ready()`, `checks.py` | Clean — one suspected finding refuted, see *Clean sweeps* |
+| forms — operator surface | `views.py:140-520`, `throttles.py`, `models.py` settings helpers | Clean — superuser gating is consistent across queryset selection and `operator_access` wrapping |
+| billing — credit ledger | `services.py` `debit_user`, `credit_user`, balance helpers | Clean — `transaction.atomic()` + `select_for_update()` + `F()` deltas, integer credits, no float money |
+| blog — public read path | `feeds.py` | Clean (one watch item on the double `get_system_org()` resolution) |
+| DR engine — locking | `_lock.py` in full; `advisory_lock.py` acquire/release/stale | **TA71** |
+| DR engine — orchestration | destructive sites, `create_backup` lock section, admin restore staging/upload pipeline | Clean apart from TA71; the upload path streams via `chunks()` — see *Notes* |
+| devtools — beta migration | `beta_migration.py` mutation sites, TOML writer, identity replacement, git guard | Clean — the clean-worktree blocker at `:1457` is the reversal path; see *Clean sweeps* |
+| Generated settings templates | `base.py.j2`, `production.py.j2` at the TA68 anchors; `start.sh.j2` launcher contract | **TA68**; the launcher contract is correctly honoured — see *Clean sweeps* |
+| Dependency & suppression hygiene | `poetry.lock` security-relevant pins; `scripts/security_suppressions.json` | Clean — pins unchanged, all 11 suppressions unexpired; see *Notes* |
 
 ---
 
 ## Clean sweeps worth recording
 
-- **Stored XSS in the markdown render path is genuinely closed** (empirical check #1). `blog/views.py:855` and `listings/views.py:318` run `markdownify(escape(...))` — escaping *before* markdown — then `sanitize_rendered_html`. Fifteen payloads (raw `<script>`, `img onerror`, `javascript:`/`data:`/`vbscript:` links, tab- and entity-obfuscated schemes, reference links, fenced-lang attribute injection, alt-attribute breakout, autolinks, backslash-prefixed schemes) all rendered inert. `sanitize_href` correctly strips `\t\r\n` before the scheme check, matching WHATWG parsing. Extensions are limited to `fenced_code`, `tables`, `toc` — no `attr_list`, no `md_in_html`.
-- **Both webhook endpoints verify before trusting.** Notifications: HMAC over `timestamp.body`, `hmac.compare_digest`, a TTL replay window, and fail-closed on an unconfigured secret (`services.py:722-753`). Billing: Stripe's `Webhook.construct_event`, plus idempotency via `WebhookEvent.get_or_create` and `select_for_update` (`services.py:938-1022`).
-- **The `csrf_exempt` decorators are compensated at the right layer.** `blog/views.py:376` calls `_enforce_csrf(request)` for session-authenticated requests and exempts only bearer-token automation, with `secrets.compare_digest` on the token and a staff check. The exemption is real but narrow.
-- **PostgreSQL credentials never reach argv.** `_build_pg_dump_command` / `_build_pg_restore_command` pass the password through `PGPASSWORD` in the subprocess environment; the command list that `_run_shell_command` interpolates into its error message (`primitives.py:169`) carries no secret.
-- **The destructive restore path is layered.** Exact-filename confirmation, an export-only rejection, source and compatibility validation, the `QUICKSCALE_BACKUPS_ALLOW_RESTORE` environment gate outside DEBUG, a PostgreSQL 18 contract check, and a magic-bytes plus `pg_restore --list` check on operator-supplied archives — all before `pg_restore` runs (`recovery.py:500-641`).
-- **`social` URL fields cannot carry `javascript:`.** `BaseSocialItem.save()` calls `self.full_clean()` (`models.py:147`) on every write, so `models.URLField`'s scheme allowlist runs on all paths — which is what makes the unsanitized `href={link.url}` in `SocialLinkTreePublicPage.tsx:223` safe, since React does render `javascript:` hrefs.
-- **`QUICKSCALE_ALLOW_BYPASSRLS` hygiene holds.** No blanket export anywhere; `ci.yml:488,626` and `publish.yml:240` pin it to `"0"`; `scripts/test_integration.sh:449` documents the deliberate absence of a blanket enable; all eleven module `tests/settings.py` files carry the same "no module test code automatically primes" note. Only `Makefile:421`'s dedicated `test-bypassrls` target and `nightly-bypassrls.yml` set it to `1`. This is the §4.VIII "test tooling that neuters guards" class, checked and clean.
-- **No shell injection surface.** Zero `shell=True`, zero `os.system`, zero f-string subprocess invocations across `quickscale_core/src`, `quickscale_cli/src`, `quickscale_modules/*/src`, `quickscale_devtools/src`, and `scripts/`.
-- **No unsafe deserialization or dynamic evaluation.** Zero `yaml.load(` (all `safe_load`), `pickle.load`, `eval(`, `exec(`, `marshal.load` in first-party source.
-- **`d3d4c633`'s isolation-gate skip narrowing is correct, not a weakening.** The new allowlist in `test_isolation_conformance.sh:184` suppresses only `got empty parameter set` skips. The parametrized sets are filters over `TENANT_TABLE_REGISTRY`, a static 45-entry literal at `tenancy.py:128`; the only set that is legitimately empty is `PENDING_REMEDIATION`, which `test_exactly_zero_pending_remediation_entries` (`:912`) independently asserts must be empty. An empty ENROLLED set is not reachable without editing the literal, and if the apps were missing the ENROLLED tests would fail on `apps.get_model` rather than skip. One residual caveat is carried in *Notes*.
-- **`be5cf024`'s managed-adapter relocation strengthened the guard.** Moving `_assert_full_adapter_registry_present()` out of `_refresh_session_managed_adapters()` into the session fixture correctly stops tests that deliberately narrow the registry from tripping a completeness check, and the guard test was updated in step to run both steps in order (`test_manifest_entry_point.py:278-290`).
-- **Dependency pins were manually reviewed at the audit snapshot.** Django 6.0.7, DRF 3.17.1, Pillow 12.3.0, urllib3 2.7.0, certifi 2026.6.17, requests 2.34.2, stripe 15.3.1, jinja2 3.1.6, PyYAML 6.0.3, boto3 1.43.58. That historical review is now supplemented by the blocking Trivy lock scan and reviewed suppression ledger; it is no longer the repository's only dependency-vulnerability evidence.
+- **The FORCE-RLS policy split enforces the documented read/write asymmetry.** `_FORCE_RLS_FORWARD_SQL` (`tenancy.py:505-527`) creates a `FOR ALL` policy requiring `current_org_id = organization_id` in both `USING` and `WITH CHECK`, plus a separate `FOR SELECT` policy that adds the `operator_access` OR clause. Because PostgreSQL applies UPDATE/DELETE policies conjunctively with the SELECT visibility check, `operator_access` genuinely cannot widen a write — matching the CR-SA14.5-001 comment and `organizations.md:729`. Both policies use the `NULLIF(current_setting(…, true), '')::uuid` form, so an unprimed GUC yields `NULL`, which never equals `organization_id` — fail-closed.
+- **`TenantManager` is fail-closed by construction.** `managers.py:38-49`: no org in the ContextVar returns `.none()`, and `super_scope=True` is the only bypass. Verified as the default `objects` manager contract.
+- **The GUC priming wrapper handles transaction-boundary reuse correctly.** `_make_priming_execute_wrapper` (`current_org.py:453-563`) memoises per transaction against the **outermost `Atomic` object reference** rather than `id()`, explicitly to defeat CPython address reuse (CR-SA42-001); the autocommit branch clears the memo and wraps each statement in a short `transaction.atomic()` so `SET LOCAL` and the tenant SQL share a scope. `_tenant_context` restores both the ContextVar and the prior GUC on exit via `SET LOCAL` rather than session-scoped `RESET` (CR-AF11-001).
+- **`operator_access` is gated, audited, nesting-safe, and fails loudly outside a transaction.** `_get_operator_access` / `_set_operator_access` (`current_org.py:685-745`) raise `ImproperlyConfigured` on PostgreSQL when `connection.in_atomic_block` is false, so a `SET LOCAL` that would silently no-op is impossible (SA39). The context manager saves and restores the prior GUC. Its only HTTP-reachable consumer, `forms/views.py`, gates every use on `_is_superuser()` at both the queryset (`_get_org_bound_queryset:158-177`) and the wrapping (`_with_superuser_operator_access:180-200`), with non-superusers fail-closed to `.none()` when no org is active.
+- **Org management routes bypass middleware resolution but not authorization.** `TenantMiddleware._is_org_management_path` lets `/orgs/<slug>/…` through unresolved, and `permissions._resolve_request_org` then resolves the org *from the slug* with no implicit trust — `user_has_org_role` performs the membership and role check. Every mutating view (`MemberListView`, `InviteView`, `RevokeInvitationView`, `OrgSettingsView`) declares `min_org_role = OrgRole.ADMIN`, and the MRO places `OrgRoleMixin.dispatch` after `LoginRequiredMixin`. Unknown segments under `/orgs/` fall through to org resolution rather than bypassing.
+- **The `QUICKSCALE_PRIVILEGED_COMMAND` early return was investigated and refuted as a finding.** `apps.py` `ready()` returns before installing the priming wrapper, connecting the SA70 last-owner `pre_delete` backstop, and registering the SA1.3/SA1.4 system checks. Walked each consequence: during `migrate` the connection runs as the BYPASSRLS superuser so priming is moot; data migrations operate on historical model classes, which would not dispatch a `pre_delete` receiver registered against the real `OrganizationMembership` class even if it *were* connected; and the two skipped checks emit `Warning` only. No exposure. The env-var contract itself is honoured — `start.sh.j2:50,61` sets it as an inline command prefix alongside `RUNTIME_DATABASE_URL=""`, and it appears in neither `.env.j2` nor `docker-compose.yml.j2`.
+- **The three owners of the privileged-command set currently agree.** The companion structural pass promoted `privileged-command-set-multi-owner` on 2026-08-28, observing that `orgs/apps.py:34` claims to be the SSOT while other deciders exist. Adjudicated here for a *behavioural* divergence, which is what would make it a defect in this document's scope: `orgs/apps.py:34` `_PRIVILEGED_COMMANDS`, `quickscale_cli/.../development_commands.py:44` `_PRIVILEGED_DJANGO_COMMANDS`, and the generated `production.py.j2:185` `_KNOWN_PRIVILEGED_COMMANDS` all currently hold exactly `{"migrate", "createcachetable"}`. Unknown values fail closed in both enforcing owners (`production.py.j2:198` raises; `apps.py:_is_privileged_command` returns `False` and the BYPASSRLS guard runs). `development_commands.py:696` interpolates a caller-supplied `args[0]` into the env var, but both consumers reject unrecognised values, so it cannot widen the exemption. **No finding here** — the ownership question is structural and stays with the arch audit.
+- **The billing credit ledger has no TOCTOU.** `debit_user` (`services.py:874-900`) opens `transaction.atomic()`, takes the balance row with `select_for_update()`, checks sufficiency, and applies the delta through `F("balance") + delta` — never a read-modify-write of a Python integer. Credits are `int`; no `FloatField` exists anywhere in first-party source and the only `Decimal` use is a display conversion (`billing/views.py:116`).
+- **`beta_migration.py` gates its in-place mutations behind a clean git worktree.** `_check_clean_git_worktree` (`:933-972`) requires both "inside a work tree" and an empty `git status --porcelain`, and `_validate_in_place_report_boundary` (`:1457`) records it as a blocking check. That makes `git checkout` the reversal path for `_replace_text_in_file`'s global identity substitution and `_copy_path`'s `_remove_path`-then-copy, both of which operate on fixed known-file lists. `_write_validated_toml` (`:777-785`) parses the rewritten document before writing, refusing to emit invalid TOML.
+- **Admin restore uploads stream rather than buffer.** `_iter_admin_restore_upload_chunks` (`orchestration.py:2579-2600`) prefers Django's `chunks()` generator and only falls back to a whole-`read()` when `chunks` is absent or yields nothing — not the live path for any real Django upload. `_stage_admin_restore_upload` hashes and sizes incrementally into a quarantined directory and rejects empty files.
+- **Dependency pins are unchanged and the suppression ledger is accountable.** Django 6.0.7, DRF 3.17.1, Pillow 12.3.0, urllib3 2.7.0, certifi 2026.6.17, requests 2.34.2, stripe 15.3.1, jinja2 3.1.6, PyYAML 6.0.3, boto3 1.43.58 — identical to the prior pass. All 11 entries in `security_suppressions.json` carry an owner, a rationale, a `decision_ref`, and an `expires` of 2026-09-30 — unexpired as of this snapshot.
+- **The delta weakened no production invariant.** `990f660f` and `48e0a62a` remove ~60 assertions from `test_v88_ticket_context_consistency.py`, which is the §4.VIII signature — but every removed assertion pinned *documentation* state (roadmap prose, ticket dependency sets, merge positions, and this file's own finding counts and severities), not code behaviour. The removal is required by, not in tension with, `decisions.md:670`: this document is "live findings, not a ledger… no other artifact may pin its finding counts or IDs." The replacement `_assert_status_consumers_agree` **derives** counts from the roadmap instead of pinning literals, raises `AssertionError` with a diagnostic message instead of a bare `assert`, and the commit adds a new red-canary test (`test_v88_status_consumer_count_drift_is_expected_red_canary`) proving the check still fails on drift. Confirmed by grep that no test anywhere still reads `docs/others/tech-audit.md` or `arch-audit.md`.
 
 ---
 
@@ -185,8 +220,9 @@ merge #27).
 
 *(candidate inputs for the companion `deep-architectural-audit` — not findings here)*
 
-- **A gate's base ref was a per-release branch name, hard-coded in the gate.** TA63 is closed by SA156, but the structural lesson remains: a governance tool pinned to an artifact of the release *process* has nothing tying the two lifecycles together. The durable `main` identity and origin/local probe now own the default path.
-- **Frontend helpers are copied rather than shared.** TA67 is one function in two files; the theme has no `src/lib/http` seam, so the next call site that needs a CSRF token will produce a third copy. The contained fix does not create the seam.
+- **Two independent stale-lock implementations, both with the same race.** `AdvisoryLock` (`advisory_lock.py`) and the DR backup lock (`dr_engine/_lock.py`) each hand-roll file locking with mtime/PID staleness detection, and TA71's defect is present in both. Neither uses `flock`. The contained fix repairs the shape twice; the structural question is why the repository owns two filesystem-lock implementations at all.
+- **Frontend helpers are copied rather than shared.** TA67 is one function in two files; the theme has no `src/lib/http` seam, so the next call site that needs a CSRF token will produce a third copy. The contained fix does not create the seam. *(Carried from the prior pass — unchanged.)*
+- **Conformance gates assert policy presence, not policy content.** `table_has_force_rls` (`tenancy.py:1623-1677`) accepts any table where `relrowsecurity` and `relforcerowsecurity` are true and `COUNT(*) FROM pg_policies >= 1`. A table carrying a permissive `USING (true)` policy would pass every isolation check the repository runs. The registry-driven parity tests constrain *which* tables are enrolled but not *what* their policies say.
 
 ---
 
@@ -194,53 +230,51 @@ merge #27).
 
 | Gap | Would have caught | Recommendation |
 |---|---|---|
-| Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The theme has an eslint config — a `no-duplicate-imports`-style rule will not catch copied functions; the shared-helper fix is the real prevention |
-| No gate requires a changelog/ticket trail for behavioural commits | **SA166** | **Carried.** `d3d4c633` shipped a CI-topology change under a release-shaped message and left a conformance test red. Remains maintainer-process risk rather than a source finding |
-| No test exercises the E2E harness's own failure paths | **TA70** | The readiness predicate and `get_container_status`'s argv are pure functions of a status string and a name; a table test over `Exited (1) …`, `Created`, `Up 3 seconds`, a multi-container blob, and `None` costs minutes and is what makes the defect provable. Owned by SA170 |
-| ~~`scripts/` suites are in no execution context~~ | Arch Finding 12 | **Closed by SA155:** the green suite population is registered through `check-gate-suites`; detailed evidence is retained in [CHANGELOG.md](../../CHANGELOG.md) |
+| Frontend suite runs, but no test pins the CSRF helper | **TA67** | `vitest` is already configured; add a table test over `document.cookie` shapes. The shared-helper fix is the real prevention |
+| No concurrency test exercises either lock's stale-clear path | **TA71** | A two-thread barrier test around the `stat`/`unlink` gap, as described in TA71's *Verification*. Moving to `flock` removes the need for the test along with the defect |
+| RLS policy assertions check existence, not predicate text | **TA72**, structural smell #3 | Extend the isolation conformance suite to assert the policy `qual`/`with_check` text from `pg_policies` matches the `_FORCE_RLS_FORWARD_SQL` template for each enrolled table — this pins the operator-read/tenant-write split as a gate rather than a comment |
+| No test exercises the E2E harness's own failure paths | **TA70** | The readiness predicate and `get_container_status`'s argv are pure functions of a status string and a name; a table test over `Exited (1) …`, `Created`, `Up 3 seconds`, a multi-container blob, and `None` costs minutes. Owned by SA170 |
+| No gate requires a changelog/ticket trail for behavioural commits | — | **Carried.** Remains maintainer-process risk rather than a source finding |
 
 ---
 
 ## Notes (watch items)
 
-**Carried forward from the prior pass:**
+**Carried forward from prior passes (re-verified, unchanged):**
 
-- **Integration-branch CI** — hosted CI does not run on pushes to the release branch (`ci.yml` triggers on `main`/`develop` and PRs to `main`). Accepted solo-maintainer workflow choice. *Unchanged.*
-- **Generator lock generation** — missing Poetry, timeout, or nonzero lock generation warns and lets generation finish by explicit usability policy; downstream apply/install stays fail-loud. Deliberate. *Unchanged.*
-  - **Quality baseline** — **retired 2026-08-27.** The claim was falsified, promoted to TA63, and
-    closed by SA156; the two warning regressions it recorded (`development_commands.py::up` and
-    `social/.../adapter.py::_social_manifest_apps`) are both resolved, and the current shared
-    baseline reports zero warning, zero critical, and zero total regressions with monotonicity
-    passing. Closure evidence is archived in [CHANGELOG.md](../../CHANGELOG.md); this item carries
-    no open action.
+- **Integration-branch CI** — hosted CI does not run on pushes to the release branch (`ci.yml` triggers on `main`/`develop` and PRs to `main`). Accepted solo-maintainer workflow choice.
+- **Generator lock generation** — missing Poetry, timeout, or nonzero lock generation warns and lets generation finish by explicit usability policy; downstream apply/install stays fail-loud. Deliberate.
+- **`_HOST_DEPENDENT_PATHS` is an exception station** on the SA90 emission byte-parity gate. Still a single entry (`.env`). Watch for monotonicity: a second entry deserves scrutiny, a third deserves a derivation.
+- **The isolation-gate skip allowlist matches on message, not test identity** (`test_isolation_conformance.sh:184`). Broader than its own justification; narrowing it to the two PENDING_REMEDIATION test names would cost one line.
+- **The generated healthcheck checks nothing** (`urls.py.j2:39-45` returns `HttpResponse("OK")`; `railway.json.j2:11` points Railway's deploy gate at it). Not promoted — the DB-free property is deliberate and documented, and production settings already raise at import when `RUNTIME_DATABASE_URL` is absent. Revisit if a separate readiness endpoint is added.
+- **Generated local-development credentials are predictable by construction** (`generator.py:507-508`). Not promoted — deployment reality #4, no published database port. Worth a line in `OPERATIONS.md`.
+- **Cross-tenant count fallbacks in CRM serializers** (`serializers.py:133-136`, `:311-312`, `:409-410`, `:541-545`) use `all_objects` when the ContextVar is unset. Not a finding: under the supported NOBYPASSRLS role, FORCE RLS with an unset GUC returns zero rows. Re-examine if a BYPASSRLS serving mode is ever supported. **This pass adds:** the identical pattern is pervasive in `billing/services.py`, which uses `all_objects` with explicit `organization=` filters throughout. Same adjudication, same trigger for re-examination.
+- **`flush_empty_consolidated_sections` swallows a corrupt state file** (`state_schema.py:386-388`). A fail-hard deviation with a narrow trigger.
+- **Atomic state writes are rename-atomic but not durable** (`state_schema.py:352-356`, `:405-407`) — no `fsync()`. Standard workstation trade-off.
 
 **New this pass:**
 
-- **`_HOST_DEPENDENT_PATHS` is a new exception station.** `be5cf024` added `frozenset({".env"})` to the SA90 emission byte-parity gate (`test_generator.py:1023`), suppressing hash comparison for `.env` while keeping presence and a normalized mode. The justification is sound (`.env` embeds the invoking user's `DOCKER_UID`/`DOCKER_GID`) and the `755`/`644` mode normalization correctly removes a umask dependency — but it is a hand-maintained exception list on the repository's strictest gate. Watch it for monotonicity: a second entry deserves scrutiny, a third deserves a derivation.
-- **The isolation-gate skip allowlist matches on message, not test identity.** `test_isolation_conformance.sh:184` keys on `message.startswith('got empty parameter set')`, so it silences an empty parameter set on *any* of the eleven parametrized tests in `test_tenant_table_conformance.py`, not only the two PENDING_REMEDIATION ones its comment describes. Not a finding — the ENROLLED sets are filters over a static literal and cannot empty accidentally (see *Clean sweeps*) — but the allowlist is broader than its own justification, and narrowing it to the two test names would cost one line.
-- **The generated healthcheck checks nothing.** `urls.py.j2:39-45` returns `HttpResponse("OK")` unconditionally, and `railway.json.j2:11` points Railway's deploy gate at it. This is the §4.VI "health check that checks nothing" shape, and Railway will keep routing traffic to an instance whose database died after boot. Not promoted: the docstring states the DB-free property deliberately, production settings already raise at import when `RUNTIME_DATABASE_URL` is absent (so a DB-less process never starts), and a DB-touching deploy gate causes rollback loops during database maintenance. Worth revisiting if a separate readiness endpoint is ever added alongside the liveness one.
-- **Generated local-development credentials are predictable by construction.** `generator.py:507-508` derives `runtime_db_role = f"{package_name}_app"` and `runtime_db_password = f"{role}_password"`, rendered into `db/init.sql`, `docker-compose.yml`, and `.env.example` — none of which `.gitignore.j2` excludes (only `.env` is ignored). Not promoted: the compose file publishes no database port, `POSTGRES_PASSWORD` is likewise `postgres`, and this is deployment reality #4 (local dev) where production supplies `RUNTIME_DATABASE_URL` from the environment. Worth a line in `OPERATIONS.md` making explicit that these values must not survive into any shared environment.
-- **Cross-tenant count fallbacks in CRM serializers.** `serializers.py:133-136`, `:311-312`, `:409-410`, `:541-545` follow `if org_id: …filter(…, organization_id=org_id)` with an unscoped `all_objects` fallback when the ContextVar is unset. Not a finding: `all_objects` bypasses only the Python-level manager, and under the supported NOBYPASSRLS runtime role FORCE RLS with an unset `app.current_org_id` GUC returns zero rows (fail-closed, AF11). The fallback is defence-in-depth that has become load-bearing-looking. It would leak only under `QUICKSCALE_ALLOW_BYPASSRLS=1` + serving, a configuration production refuses. Re-examine if a BYPASSRLS serving mode is ever supported.
-- **`flush_empty_consolidated_sections` swallows a corrupt state file.** `state_schema.py:386-388` returns silently on `yaml.YAMLError, OSError`, skipping the explicit `modules: {}` / `managed_files: []` markers that downstream readers use to distinguish "M2 has spoken" from pre-M2 state. A fail-hard-principle deviation with a narrow trigger (the file was just written successfully by `save()`), so not promoted — but it is the exact silent-fallback shape the principle names.
-- **Atomic state writes are rename-atomic but not durable.** `state_schema.py:352-356` and `:405-407` write a temp file and `replace()` without `flush()`/`os.fsync()`. Correct against concurrent readers, not against power loss. Standard trade-off on a developer workstation; recorded so it is not rediscovered.
+- **`refresh_force_rls_policies` silently skips tables it cannot name.** `tenancy.py:596-620` derives each table name from the Django default convention (`app_label + '_' + model_name.lower()`) and then filters through `to_regclass(...) IS NOT NULL`, dropping any miss without a warning — on the repository's most security-critical migration helper. Empirical check #2 confirms the convention currently holds for **all 21** enrolled tables (8 explicit `db_table` declarations exist across the modules and every one matches the convention), so this is latent rather than live, and it is not promoted. The moment an enrolled model declares a non-conventional `db_table`, its policy refresh becomes a silent no-op. Deriving the name from `apps.get_model(...)._meta.db_table` — the same source `check_tenant_model_isolation` already uses — would close it.
+- **`blog/feeds.py` resolves the System org twice, with opposite error handling.** `__call__` (`:31-34`) swallows any exception into `org = None`, but `items()` (`:44-46`) calls `Organization.objects.get_system_org()` again *unguarded*. If the first call failed because of a corrupt System org row — `OrganizationManager._validate_system_org` raises `RuntimeError` by design — the feed enters fail-closed scope and then raises unhandled during item rendering, turning a fail-closed empty feed into a 500. Narrow trigger (a corrupt singleton), and the broad `except Exception` is itself the Fail-Hard shape worth noting.
+- **Four `sqlparse` CVEs are suppressed until 2026-09-30.** `CVE-2026-54284`, `-59893`, `-71491`, `-59894` against `sqlparse` 0.5.5, all with the same "remediation belongs to dependency maintenance" rationale and `SA123-Phase-A-baseline` decision ref. Accountable and unexpired, so not a finding — but the expiry is **33 days** from this snapshot and all four will re-block CI on the same day.
+- **`table_has_force_rls` queries `pg_class` / `pg_policies` without schema qualification** (`tenancy.py:1650-1670`, matching on `relname` and `tablename`). Single-schema deployments are unaffected; recorded so a future schema-per-tenant option does not inherit an ambiguous check.
 
 ---
 
 ## Reconciliation log
 
-- 2026-08-21 — **TA1–TA62**: closure detail, later structural-cause closure, and superseded cross-reference notes remain archived in [CHANGELOG.md](../../CHANGELOG.md) and version control, as recorded by the prior pass. No prior ID was reopened this pass; none was re-verified in code, because the prior document carried none forward as open.
-- 2026-08-21 — Prior watch items *integration-branch CI* and *generator lock generation*: **still-open, accepted / owned**. Re-verified at their anchors; carried forward unchanged in *Notes*. Not re-argued — no severity context changed.
-- 2026-08-27 — **Closed-item closure narratives are archived.** TA63 (quality baseline), TA65 (bare-`python3` repo sources), TA69 (CSRF gate bool inversion), the SA150 local-wheelhouse watch item, the dependency-vulnerability and security-static-analysis tooling gaps, and the six adjudicated arch-audit red-flag leads are all closed; their defect detail and closure evidence live in [CHANGELOG.md](../../CHANGELOG.md) and are no longer restated here.
-- 2026-08-27 — **Quality-baseline watch item retired.** Its two recorded warning regressions are
-gone: `development_commands.py::up` is back at its baseline complexity and
-`_social_manifest_apps` was split into `_select_social_manifest_apps_projection` /
-`_validate_social_manifest_apps_projection` (`2cb391f2`), dropping it below threshold. The shared
-baseline now reports zero warning, zero critical, and zero total regressions with monotonicity
-passing, evidenced by the SA123 and SA167b acceptance campaigns archived in
-[CHANGELOG.md](../../CHANGELOG.md). No numbered finding changed: the live inventory remains
-S3: 1 (TA67) · S4: 1 (TA68) · total 2.
-- 2026-08-21 — **Fix-regression pass (§3.6)** over the delta's three behavioural commits. `be5cf024`: the managed-adapter assertion relocation is a correct narrowing with its guard test updated in step; the SA90 `.env` exception is sound but is a new hand-maintained exception station, carried as a watch item. `d3d4c633`: the isolation-gate skip narrowing is correct (verified against the registry's construction), but the same commit left `test_gate_parity`'s oracle stale — TA66, now closed by SA158. `d4b0e834`/`d3d4c633` PGDG provisioning: no defect found in the added steps themselves; their four-way duplication is arch Finding 13's territory, not re-filed here.
-- 2026-08-21 — **Test-integrity diff (§3.7)**: no test was weakened in the delta. Assertions were not removed or inverted, no tolerance was widened, no `skip`/`xfail` was added, no mock replaced a real dependency. The two changes that *look* like weakenings (`_HOST_DEPENDENT_PATHS`, the empty-parameter-set allowlist) were each traced to the invariant they leave standing and cleared; both are carried as watch items rather than findings.
-- 2026-08-21 — **Chain pass (§3.9) ran** and produced two chains, both recorded on their lead findings: TA63 × arch Finding 12 (the monotonicity invariant has been unenforced for the whole `v88` branch with no signal, while two live audit documents recorded it as enforced) and the SA117 false-green × arch Finding 12 × roadmap SA124 (SA124's acceptance test lands in a suite nothing executes, beside a false-green pattern it was likely to be copied from). SA157 now closes the false-green leg. Pairing the remaining findings against each other and against the watch-item list produced no third chain.
+- 2026-08-21 — **TA1–TA62**: closure detail, later structural-cause closure, and superseded cross-reference notes remain archived in [CHANGELOG.md](../../CHANGELOG.md) and version control, as recorded by the prior pass.
+- 2026-08-21 — Prior watch items *integration-branch CI* and *generator lock generation*: **still-open, accepted / owned**. Carried forward unchanged.
+- 2026-08-27 — **Closed-item closure narratives are archived.** TA63, TA65, TA69, the SA150 local-wheelhouse watch item, the dependency-vulnerability and security-static-analysis tooling gaps, and the six adjudicated arch-audit red-flag leads are all closed; detail lives in [CHANGELOG.md](../../CHANGELOG.md).
+- 2026-08-27 — **Quality-baseline watch item retired.** Both recorded warning regressions are gone; monotonicity passes.
+- 2026-08-28 — **TA67** `spa-csrf-token-duplicate-cookie`: **still-open**. Re-verified in code at both anchors (`useApi.ts:20-28`, `FormRenderer.tsx:206-211`) — byte-identical to the prior pass — and the mechanism re-confirmed empirically (check #1). Severity, fix, and effort unchanged.
+- 2026-08-28 — **TA68** `generated-settings-dead-client-ip`: **still-open**. Re-verified: both definitions present, and a fresh grep across all generator templates still finds no importer.
+- 2026-08-28 — **TA70** `container-status-substring-match`: **still-open**. Re-verified at `docker_utils.py:328-348`; the `-a` flag and unanchored `name=` filter are unchanged. Remains owned by SA170.
+- 2026-08-28 — **TA71** `backup-lock-stale-clear-toctou`: **new (S3).** Found by the §3.3 lifecycle walk over the backups deployable rather than by the delta.
+- 2026-08-28 — **TA72** `force-rls-apply-idempotency-claim`: **new (S4).**
+- 2026-08-28 — **No prior closure claims required verification (§2f.3)**: the prior pass carried three open findings and claimed no new closures in the delta window, so there was no closure testimony to check against code. All three prior IDs were nonetheless re-verified at their anchors, as logged above.
+- 2026-08-28 — **Fix-regression pass (§3.6)**: not applicable — the delta contains no fix for any prior finding. The two behavioural commits are test-only.
+- 2026-08-28 — **Test-integrity diff (§3.7)**: the delta's ~60 removed assertions were read hunk by hunk against the "did any test get weaker?" question and **cleared**. Every removed assertion pinned documentation state, not code behaviour; the removal of the assertions over `arch-audit.md` and `tech-audit.md` is mandated by `decisions.md:670`; the replacement derives its counts from the roadmap rather than pinning literals, upgrades bare `assert`s to diagnostic `AssertionError`s, and adds a red-canary test proving drift still fails. No `skip`/`xfail` was added, no tolerance widened, no mock replaced a real dependency. Full adjudication in *Clean sweeps*.
+- 2026-08-28 — **Chain pass (§3.9) ran** and produced **no chain**. Each of the five open findings was paired with the others, with the ten carried watch items, and with the crown jewels (tenant data, credentials, backups, money). TA67 and TA70 both fail closed and neither widens the other; TA71's window needs a pre-existing stale lock that no other finding creates; TA72 is latent and reachable only through a migration that does not yet exist. The nearest miss is TA71 × the *cross-tenant `all_objects` fallback* watch item — two concurrent backup runs do not change manager scoping, so it does not compose.
 
-*Categories swept with no qualifying finding this pass: concurrency and TOCTOU, resources and I/O, performance, data handling and serialization, injection sinks of every kind, authentication and authorization, secrets handling, cryptographic use, multi-tenant isolation, CLI destructive-path safety, dependency and build hygiene, and the frontend, library/SDK, and infrastructure-as-code archetype lenses.*
+*Categories swept with no qualifying finding this pass: injection sinks of every kind, authentication and authorization, secrets handling, cryptographic use, multi-tenant isolation, data handling and serialization, resources and I/O, performance, dependency and build hygiene, CLI destructive-path safety, and the frontend, library/SDK, code-generator, and infrastructure-as-code archetype lenses.*

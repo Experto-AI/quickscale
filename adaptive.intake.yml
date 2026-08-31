@@ -16,10 +16,24 @@ stack_profile: Poetry / Python 3.14–3.15 (Django)
 quality_gate_authority:
   owner: Make targets
   policy_doc: docs/technical/validation_policy.md
+  # Gates are tiered by VALIDATION TIER: run the tier the work owns and stop
+  # there. Each tier's command subsumes the narrower ones, so a tier is one
+  # command chain, never a narrow target followed by a wider one repeating it.
+  # Never run a wider tier to establish a baseline - a pre-existing failure is
+  # discovered at the tier that reaches it.
+  # docs/technical/validation_policy.md#validation-tiers is authoritative.
   gates:
-    - make lint
-    - make typecheck
-    - make test
+    change:                   # one phase, one correction - the default
+      - make lint
+      - make typecheck
+      - poetry run pytest <path-or-node> --tb=short -m "not e2e" -o addopts= --no-cov
+    task:                     # a completed plan, a convergence pass, a cross-package delta
+      - make test-unit -- --core        # or -- --cli, per the owning section
+      - make test-integration MODULE=<name>
+      - make check QUIET=1              # when repository gates sit in the delta's surface
+    release:                  # closeout, version bump, generator-template change, pre-merge
+      - make ci
+      - make ci-e2e                     # instead of make ci when an E2E trigger applies
 
 review_rule_authority:
   owner: Adaptive independent review

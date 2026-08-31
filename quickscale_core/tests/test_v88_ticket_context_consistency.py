@@ -13,6 +13,7 @@ import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -38,8 +39,12 @@ UMBRELLA_TITLE = "SA167c — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167c", "SA167d"})
 AUXILIARY_SECTIONS = frozenset({"SA160 / SA161 sequencing note"})
 RETAINED_CLOSED_TICKETS: frozenset[str] = frozenset()
-ARCHIVED_CONTEXT_TICKETS = frozenset({"SA167a", "SA167b"})
-SHARED_POSITION_GROUPS = {frozenset({"SA135", "SA163"})}
+ARCHIVED_CONTEXT_TICKETS = frozenset(
+    {"SA167a", "SA167b", "SA167c", "SA164", "SA166", "SA170"}
+)
+SHARED_POSITION_GROUPS: frozenset[frozenset[str]] = frozenset(
+    {frozenset({"SA135", "SA163"})}
+)
 
 
 @dataclass(frozen=True)
@@ -202,7 +207,7 @@ def _assert_consistent(roadmap_text: str, context_text: str) -> None:
         )
 
     actual_shared_groups = _shared_position_groups(roadmap)
-    if actual_shared_groups != SHARED_POSITION_GROUPS:
+    if actual_shared_groups != set(SHARED_POSITION_GROUPS):
         raise AssertionError(
             "shared-position roadmap classification drift: "
             f"expected={sorted(map(sorted, SHARED_POSITION_GROUPS))}, "
@@ -317,7 +322,7 @@ def _assert_status_consumers_agree(roadmap_text: str, docs_index_text: str) -> N
             )
 
 
-def _assert_sa167d_accepted_open_status(
+def _assert_sa167d_status(
     roadmap_text: str,
     context_text: str,
     docs_index_text: str,
@@ -326,8 +331,9 @@ def _assert_sa167d_accepted_open_status(
     decisions_text: str,
     implementation_contract_text: str,
     module_extension_text: str,
+    state: Literal["accepted-open", "integration-ready"],
 ) -> None:
-    """Keep the accepted-open SA167d checkpoint executable until closeout."""
+    """Enforce the accepted-open state and the reviewed future transition state."""
     roadmap = _roadmap_tickets(roadmap_text)
     v88 = {
         ticket: metadata
@@ -340,21 +346,6 @@ def _assert_sa167d_accepted_open_status(
         if metadata.merge_position is not None
     }
 
-    # These are parsed current-state facts, not narrative count literals.
-    assert len(v88) == 10
-    assert len(positions) == 9
-    assert v88["SA167d"].dependencies == frozenset()
-    assert v88["SA167d"].merge_position == 18
-    assert v88["SA165"].dependencies == frozenset({"SA167d"})
-
-    assert "phases A-E accepted at E0_ACCEPTED_TIP" in roadmap_text
-    assert E0_ACCEPTED_TIP in roadmap_text
-    assert "SA165 remains dependent" in roadmap_text
-    assert re.search(
-        r"independent review, terminal attestation, and merge-back are pending",
-        roadmap_text,
-    )
-
     status_consumers = {
         "CHANGELOG.md": changelog_text,
         "docs/index.md": docs_index_text,
@@ -365,25 +356,58 @@ def _assert_sa167d_accepted_open_status(
         "docs/technical/roadmap.md": roadmap_text,
         "docs/technical/v88_ticket_context.md": context_text,
     }
-    for path, text in status_consumers.items():
-        assert E0_ACCEPTED_TIP in text, path
-        assert "SA167d" in text, path
 
-    # The accepted E0 evidence is task-specific and remains required while the
-    # ticket is open; unrelated audit findings are deliberately not pinned here.
-    assert "282 tests" in changelog_text
-    assert "2,880 Core passed / 1 skipped" in changelog_text
-    assert "2,098 CLI" in changelog_text
-    assert "94.54% overall mean coverage" in changelog_text
-    assert "1,318 passed" in changelog_text
-    assert "zero warning/critical/total" in changelog_text
+    if state == "accepted-open":
+        # Counts are derived from the roadmap parser and are checked against the
+        # reviewed state contract, never against a copied prose count.
+        assert len(v88) == 10
+        assert len(positions) == 9
+        assert v88["SA167d"].dependencies == frozenset()
+        assert v88["SA167d"].merge_position == 18
+        assert v88["SA165"].dependencies == frozenset({"SA167d"})
+        assert "phases A-E accepted at E0_ACCEPTED_TIP" in roadmap_text
+        assert E0_ACCEPTED_TIP in roadmap_text
+        assert "SA165 remains dependent" in roadmap_text
+        assert re.search(
+            r"Phase C validation, convergence, terminal attestation, and exact-tip\s+"
+            r"integration remain pending",
+            roadmap_text,
+        )
+        for path, text in status_consumers.items():
+            assert E0_ACCEPTED_TIP in text, path
+            assert "SA167d" in text, path
+        # The accepted E0 evidence is task-specific and remains required while
+        # the ticket is open; unrelated audit findings are deliberately not pinned.
+        assert "282 tests" in changelog_text
+        assert "2,880 Core passed / 1 skipped" in changelog_text
+        assert "2,098 CLI" in changelog_text
+        assert "94.54% overall mean coverage" in changelog_text
+        assert "1,318 passed" in changelog_text
+        assert "zero warning/critical/total" in changelog_text
+        return
+
+    if state != "integration-ready":
+        raise AssertionError(f"unknown SA167d status state: {state}")
+
+    assert "SA167d" not in v88
+    assert 18 not in positions
+    assert len(v88) == 9
+    assert len(positions) == 8
+    assert v88["SA165"].dependencies == frozenset()
+    assert E0_ACCEPTED_TIP in changelog_text
+    assert "SA167d" in changelog_text and re.search(
+        r"archiv(?:e|ed|es)", changelog_text, re.I
+    )
+    for path, text in status_consumers.items():
+        assert "conditional post-integration" in text.lower(), path
+        assert "exact-tip" in text.lower(), path
 
 
 def test_v88_live_status_consumers_derive_current_counts() -> None:
     roadmap = ROADMAP.read_text(encoding="utf-8")
     docs_index = DOCS_INDEX.read_text(encoding="utf-8")
     _assert_status_consumers_agree(roadmap, docs_index)
-    _assert_sa167d_accepted_open_status(
+    _assert_sa167d_status(
         roadmap,
         CONTEXT.read_text(encoding="utf-8"),
         docs_index,
@@ -394,7 +418,27 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
             encoding="utf-8"
         ),
         (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
+        "accepted-open",
     )
+
+
+def test_v88_integration_ready_state_rejects_accepted_open_candidate() -> None:
+    """Keep the future retirement branch strict and explicitly unactivated in B."""
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    with pytest.raises(AssertionError, match="SA167d"):
+        _assert_sa167d_status(
+            roadmap,
+            CONTEXT.read_text(encoding="utf-8"),
+            DOCS_INDEX.read_text(encoding="utf-8"),
+            (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
+            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+            (ROOT / "docs/technical/decisions.md").read_text(encoding="utf-8"),
+            (ROOT / "docs/technical/implementation_contract.md").read_text(
+                encoding="utf-8"
+            ),
+            (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
+            "integration-ready",
+        )
 
 
 def test_v88_status_consumer_count_drift_is_expected_red_canary() -> None:
@@ -491,17 +535,24 @@ def test_v88_unsupported_roadmap_entry_shape_is_expected_red_canary() -> None:
 
 
 def test_v88_missing_roadmap_dependency_metadata_is_expected_red_canary() -> None:
+    """Strip the ``deps:`` clause off whichever ticket the roadmap lists first."""
     roadmap, context = _load_documents()
-    mutated = roadmap.replace("merge #15 · deps: SA135", "merge #15", 1)
+    entry = OPEN_TICKET_RE.search(roadmap)
+    assert entry is not None
+    ticket, metadata = entry.groups()
+    mutated = roadmap.replace(
+        metadata, re.sub(r"\s*·?\s*deps:[^·`]*", "", metadata, count=1), 1
+    )
+    assert mutated != roadmap
     with pytest.raises(
-        AssertionError, match="missing roadmap dependency metadata: SA163"
+        AssertionError, match=rf"missing roadmap dependency metadata: {ticket}"
     ):
         _assert_consistent(mutated, context)
 
 
 def test_v88_unknown_roadmap_dependency_is_expected_red_canary() -> None:
     roadmap, context = _load_documents()
-    mutated = roadmap.replace("deps: SA135", "deps: SA999", 1)
+    mutated = roadmap.replace("deps: SA167d", "deps: SA999", 1)
     with pytest.raises(AssertionError, match="dependencies do not name open tickets"):
         _assert_consistent(mutated, context)
 
@@ -527,12 +578,32 @@ def test_v88_dependency_status_contradiction_is_expected_red_canary() -> None:
 
 
 def test_v88_shared_merge_position_drift_is_expected_red_canary() -> None:
+    """Point one v88 ticket at another's merge position and expect the drift error.
+
+    Derived from whatever the roadmap currently holds, so no ticket ID, position, or
+    shared-group literal is pinned here.
+    """
     roadmap, context = _load_documents()
+    v88 = [
+        (ticket, metadata)
+        for ticket, metadata in _roadmap_tickets(roadmap).items()
+        if metadata.kind == "v88" and metadata.merge_position is not None
+    ]
+    assert len(v88) >= 2
+    (victim, victim_metadata), (_, donor_metadata) = v88[0], v88[1]
+    entry = re.search(
+        rf"^\s*- \[ \] \*\*{victim}\b.*?`((?:Band|Post-v88)[^`]*)`",
+        roadmap,
+        re.MULTILINE,
+    )
+    assert entry is not None
     mutated_roadmap = roadmap.replace(
-        "SA163 — Derive the CI PostgreSQL environment from one authoritative source.** "
-        "`Band B · Tier 2 · W3 · merge #15",
-        "SA163 — Derive the CI PostgreSQL environment from one authoritative source.** "
-        "`Band B · Tier 2 · W3 · merge #26",
+        entry.group(1),
+        entry.group(1).replace(
+            f"merge #{victim_metadata.merge_position}",
+            f"merge #{donor_metadata.merge_position}",
+            1,
+        ),
         1,
     )
     assert mutated_roadmap != roadmap

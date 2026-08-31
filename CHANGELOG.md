@@ -21,6 +21,566 @@
   ticket entries across nine open merge positions**, and SA165 remains dependent on it.
   Independent review, terminal attestation, and merge-back are pending; this entry records
   accepted E0 evidence and does not claim convergence or completion.
+- **SA173 merged; the W2 lane is released and idle (2026-08-31).** The terminally reviewed
+  `wt-track2` tip merged into the `v88` integration branch at `06007624`. Measured after the merge:
+  `wt-track2` is **0 ahead / 0 behind `v88`**, clean, with no unmerged delta — so the next W2 run
+  (SA167c, #21) starts from the integration state directly and needs no fast-forward sync. This
+  discharges the last remaining item on SA173's recorded handoff checkpoint; nothing of SA173's
+  scope stays open. The roadmap's lane-state block, its per-lane next actions, and the
+  track-readiness table were re-measured against the branches on the same date rather than carried
+  forward from the 2026-08-29 transcription.
+
+- **Worktree divergence re-measured, and the reading convention corrected (2026-08-31).**
+  `git rev-list --left-right --count v88...<worktree>` prints *`v88`-only* first and
+  *worktree-only* second, so the left column is **behind** and the right column is **ahead** —
+  the roadmap's snippet had been read the other way round. Measured on 2026-08-31:
+  `wt-track1` **15 ahead / 24 behind** (was recorded as 18 behind on 2026-08-29; `v88` has advanced
+  three commits since), `wt-track2` **0 / 0**, `wt-track3` **0 ahead / 20 behind** (was recorded as
+  14 behind). No lane carries an unmeasured delta: `wt-track1`'s 15 commits are SA167d's accepted
+  product delta and `wt-track3` is an ancestor of `v88`.
+
+- **`ci-environment-hand-replicated` fix-regression narrative archived out of the structural audit
+  (2026-08-31).** The finding resolved on 2026-08-28 and its remediation was re-audited and scored
+  **resolved with the mechanism removed rather than relocated**: the hosted-provisioning module list
+  is derived from the discovery shim rather than re-listed, the restricted-role and `bypassrls`
+  postures survive as named profiles, and the replacement oracle binds to the helper's
+  `describe --format json` output while asserting the absence of the old shell shape. The delta's
+  two behavioural commits (`990f660f`, `48e0a62a`) were audited in the same pass and scored
+  **compounding removed, not relocated**: literal ticket IDs, merge positions, dependency edges,
+  dates and prose were deleted from the planning conformance gate and replaced with roadmap-derived
+  counts plus a red canary, and every structural invariant survived with its own canary. No
+  invariant was weakened and no station was minted. The audit document now carries only the pointer
+  and the *live* residue — the two hand-pinned literals and the second PostgreSQL-major copy minted
+  inside the new derivation, which are restated in full on its watchlist and owned by SA164 (#25).
+
+- **SA173 closeout release gate green after convergence repair (2026-08-31; terminal review
+  pending).** The accepted Phase-A candidate `b380f0164f1a9c885271e104b3c8d16a85185de0` was
+  revalidated without reimplementing product work: the focused caller, storage, status,
+  four-file contract, CLI/core, scripts, manifest/parity, provisioning, BYPASSRLS, isolation,
+  and restricted-integration checks passed, including **342**, **41** storage tests with
+  `__init__.py` at **97.67%**, **167**, **222**, **5,096**, and **1,319** tests where exact
+  oracles applied. `make quality` exited 0 with zero warning, critical, and total regressions
+  and passing monotonicity. SA173 was removed from open work and its same-fact closeout
+  consumers were reconciled; the focused context-consistency suite passed **21 tests**. An
+  initial detached release attempt returned **exit 2** when four INT signal-lifecycle tests
+  inherited an ignored disposition from their asynchronous Make parent and reached their
+  unchanged 10-second assertion deadline. Convergence corrected the test launch boundary to
+  reset HUP/INT/TERM before executing `check_ci_locally.sh`; no assertion, deadline, signal
+  expectation, or production handler was weakened. The complete focused suite then returned
+  **27 passed** both directly and detached. The corrected sole release checkpoint,
+  `QS_PROVISION_SCOPE="sa173cv0831b" make ci`, returned **exit 0** from a complete detached log:
+  all eleven local-CI stages passed, including **1,319** registered scripts tests, **5,096**
+  core/CLI tests, restricted PostgreSQL integration, Trivy **0.74.0**, and Bandit **1.9.4**.
+  Exact-label cleanup left no scoped container. Terminal attestation/merge remain root-owned
+  later events and are not claimed here.
+
+- **SA173 truthful handoff checkpoint (2026-08-31; recorded after terminal review).**
+  **Completed:** the retained three-state module-presence implementation, behavior-preserving
+  status-command complexity repair, detached signal-test correction, same-fact documentation
+  reconciliation, focused/profile campaign, quality gate, and full release gate are complete at
+  terminally reviewed W2 product state `fe4c89f4a138fb0875cacb4ddee94c82104788eb`; terminal review
+  reported no blocking or advisory finding. **Pending:** reviewed-plan phase B remains formally
+  unaccepted because its implementation handback was partial when the first release run was red;
+  convergence subsequently corrected that release-only signal-harness defect and returned the
+  complete release gate green, but the phase ledger is not retroactively rewritten. No product or
+  documentation correction remains for that phase. **Blocking:** none for merge. **Decisions
+  needed:** none. **Remaining plan:** attest this status-only checkpoint, then merge the exact clean
+  `wt-track2` tip into `v88`, which was still at
+  `5678ab2fb39b62490e8445b4890111d0f1e9d670` when the reviewed product state was frozen; the next W2
+  run begins SA167c from the resulting integration state.
+
+- **SA173's "scripts gate has no returned verdict" blocker was a budget error, and the gate is green (2026-08-29).**
+  Run detached on `v88` at `fd42d56c`, clean tree:
+  `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` returned **1319 passed, exit 0,
+  in 301.83 s**. `make check-manifest-sync` (all 12 module manifests in sync) and `make check-gate-parity`
+  (all gates present in all required contexts) — the two checks the halted phase never reached — then both
+  exited 0.
+  **Root cause: a units error in the plan, not a defect in any test.** `check-gate-suites`
+  (`Makefile:1021`) runs `pytest scripts/` with `-n auto --dist loadfile` and measures **92 s**. The
+  ticket's verification step writes the same suite **serially**, which measures **302 s** — the same 1319
+  tests, 3.3× apart. The 120 s budget and the single permitted 300 s retry were both sized against the
+  parallel figure, so the retry was killed **1.8 s short of a green verdict**.
+  **Nothing hung, and the named test is innocent.**
+  `scripts/test_version_tool.py::TestUpdateWithTempRepo::test_make_version_update` passes in **0.47 s** in
+  isolation. It was simply the test the progress output happened to stop on when the budget expired; with
+  `-q` pytest prints dots and no per-test names, so "1,318 passed before X failed to return" was an
+  inference from the dot count, not an observation. The slowest tests in the suite are ~7 s
+  (`test_gate_parity.py`, `test_verify_public_module_apply.py` timeout-handling tests, which sleep by
+  design); there is no long tail and no hang.
+  **Generalized into an execution rule:** a gate budget must be sized against the same command that will
+  be run, every timing must be quoted with its parallelism, and a detached run with a generous budget beats
+  a foreground retry.
+  **Separately observed, not the cause and not ticketed here:** 90 of the 164 `subprocess` calls under
+  `scripts/` pass no `timeout=`, concentrated in `test_check_sa117_scope.py` (25),
+  `test_quality_baseline_monotonicity.py` (13), and `test_version_tool.py` (10). None of them hung in this
+  run, but each is an unbounded wait that would present exactly as this false blocker did. Recorded as a
+  latent hazard for whoever next opens a testing-hygiene ticket.
+
+- **Storage lazy-export coverage gate closed; the last red row on `make test` is gone (2026-08-29).**
+  Retained implementation commit `1edb9538`, ancestor of both `v88` and `wt-track2`, adds only
+  `quickscale_modules/storage/tests/test_init.py`. **The red it closed, measured exactly:** two detached
+  runs on `v88` at `7818ab0c`, clean tree — `make check` exit 0 in 184 s (`pytest scripts/` 1319 passed
+  in 92 s), and `make test` exit 2 in 82 s failing at `test-integration` for exactly one reason,
+  `→ Files below 80% coverage: quickscale_modules_storage/__init__.py  11  6  45%  28-35`. Nothing else
+  in the run was red; every module cleared the 90% overall floor (storage 94.88%, overall mean 94.31%).
+  Lines 28-35 were the **entire body of `__getattr__`** — the lazy re-export shim that keeps package
+  initialization dependency-free so the manifest adapter can load during `quickscale apply` before module
+  dependencies are installed. The shim is load-bearing; the fix was a unit test over it, not a deletion,
+  waiver, exclusion, or threshold change. Two tests cover every runtime `__all__` export, package caching,
+  helper identity, and the unknown-name `AttributeError` path; the storage suite then reported **41 passed,
+  `__init__.py` at 100%, package coverage 97.67%**, with no product or coverage-policy edit. Serial
+  convergence independently approved that one-file delta and reproduced the same result.
+
+- **SA173's two workflow authorities issued: `EV-7` and `AB-1` (2026-08-29).** Both of the ticket's
+  remaining blockers were authorizations, not product defects, and both are now granted; SA173 stands
+  clear to run Phase D from command one.
+  **`EV-7`** is the replacement reviewed-plan authority. It supersedes `EV-6` **solely** as to the W1
+  five-file collection oracle — EV-6's four-file total of **222** is undisturbed and re-affirmed — and
+  binds that command to **342 passed, exit 0**, withdrawing the recorded **816** as disproved. Evidence
+  taken on the clean tree at exact tip `2687b97311b41de1333bfa9696bafb72cf7a6b9c`, `git status
+  --porcelain` empty: **342 collected** in 0.13 s and **342 passed, exit 0** in 2.23 s, decomposing per
+  file as 24 / 144 / 109 / 43 / 22. That is the third independent clean-tree observation and the first at
+  the current tip, settling the discrepancy as **inherited oracle drift, not a regression**; nothing was
+  deselected, skipped, or `PYTEST_ADDOPTS`-filtered. A candidate returning anything other than 342 —
+  including a higher total — halts Phase D for adjudication against the per-file decomposition rather
+  than being auto-accepted. SA167d (#18) carried the same stale 816 and is governed by EV-7, but
+  re-derives on its own synced candidate because `wt-track1` is 15 ahead of `v88`.
+  **`AB-1`** grants one independent terminal attestation of the retained product delta plus its Phase D/E
+  closeout delta. The prior budget was consumed **without the patch ever being read** — refused at handoff
+  for an omitted validation tier, a handoff defect and not an adverse finding — so re-spending is not a
+  retry of a graded review. Four inputs are required at dispatch (complete patch as a file, clean
+  exact-tip binding, validation tier named literally, returned gate verdicts with exit codes), and a
+  handoff missing any one is refused **before** the budget is spent, which does not consume it. Findings
+  returned do not require a new budget. Carried forward as a general rule: size every budget against the
+  **serial** runtime of the command actually being run — the scripts-gate failure below was a 300 s cap on
+  a ~302 s serial run, and the attestation failure was the same class of error.
+
+- **Gate cost profiled and the `check-gate-suites` parallelisation banked (2026-08-29).**
+  `-n auto --dist loadfile` (`Makefile:1021`) cut that stage from **299 s to 94 s** with byte-identical
+  outcomes. `lint-frontend`, previously recorded as the dominant cost, measures **13.89 s** — that figure
+  was wrong. Profiled green path: lint + typecheck + core (2886) + cli (2135) unit tests 41 s; core-compat,
+  module-core-imports, manifest-sync, org-context, csrf-exempt 5 s; **check-gate-suites 94 s**;
+  Trivy 50 s; Bandit 3 s; gate parity + CI gate generation ~5 s; lint-frontend 14 s — composed ~212 s,
+  **measured end-to-end 184 s exit 0 on `v88`**. Consequence carried forward as an execution rule:
+  `make check` now fits inside one foreground call, while `make test` and `make quality` are still
+  launched detached. `--dist loadfile` is load-bearing, not a tuning knob — the default `loadscan` splits
+  `test_quality_baseline_monotonicity.py` across workers and produces spurious failures.
+
+- **SA173 Phases A-C evidence archived; the ticket stays open on Phase D onward (2026-08-29).**
+  Phase A reproduced the source-bound starting state (39 storage tests passed, `__init__.py` at 45%).
+  Phase B is the coverage fix above. Phase C observed 41 storage tests with `__init__.py` at 100%,
+  167 CLI callers, 222 four-file contract callers, and 5,096 CLI/core non-E2E tests green; it was accepted
+  under the unreturned-gate rule rather than described as fully validated, because its `pytest scripts/`
+  command returned no verdict at 120 s and again at the one permitted 300 s retry (1,318 passed before
+  `scripts/test_version_tool.py::TestUpdateWithTempRepo::test_make_version_update` failed to return),
+  leaving `make check-manifest-sync` and `make check-gate-parity` unreached. Revised reviewed-plan
+  authority `EV-6` bound the intentional four-file collection to **222**: `-o addopts=` admits the
+  E2E-marked `test_module_lifecycle_cycle.py::test_update_auto_commits_each_module_e2e`; without that node
+  the total is 221. Phase D's clean-tree prerequisite `make test-integration` exited 0 and left all twelve
+  `test_quickscale_*` databases owned by `quickscale_test_role`, with an equal before/after census.
+  The open Phase-D oracle drift stays on the roadmap.
+
+- **SA167c's Phase-A product slice merged and terminally reviewed (2026-08-29).**
+  Commit `f6f3bbce` is on `v88`. It removed `django_apps:` from `ModuleManifest`, the loader, the obsolete
+  loader test, all eleven source declarations and their core snapshots, and removed the SA92 helper's
+  retired-key dependency, while preserving all twelve `apps` wiring projections and public adapter outputs.
+  Terminal review found no product-slice defect. The acceptance attempt was green on four of five commands
+  (loader 112 passed; restricted-role orgs 884 passed / 11 skipped; `make check-manifest-sync` and
+  `make check-gate-parity` exit 0); the four-caller command exited 1 on two tests in
+  `TestRegenerateManagedWiringSkipManifestNotFound` (`test_module_wiring_manager_manifest.py:767,796`).
+  Decision D3 established those as a module-presence question owned by SA173, and they are **green on
+  `v88` today** (`test_module_wiring_manager_manifest.py` 43 passed), as are the seven former
+  `commands/test_module_config_extended.py` fixture failures. Phase-A *acceptance* remains open only
+  because a green prefix is not acceptance under the stop-at-first-unexpected-red rule.
+
+- **SA167d's ungraded attestation root-caused; both causes are removed (2026-08-29).**
+  Phases A-E are accepted at E0 tip `bd2c291b`, retained inside `8b20800d`. E0 made no tracked edits and
+  recorded **282 focused tests passed** with `make lint`, `make typecheck`, `make test`, `make check`, and
+  `make quality` all exit 0. Independent convergence then corrected real defects — ineffective
+  auth-migration flush guidance, a non-operational fresh-database recovery path, and three stale
+  quality-baseline identities — as `8b20800d`; measured product delta `c50de1c1..8b20800d` is **30 files,
+  1,012 insertions, 2,228 deletions**. Terminal attestation returned **no grade**: its read-only surface
+  could resolve the exact tip but could not obtain the complete patch or independently exclude
+  uncommitted-byte drift. That was a **review-input failure, not an attestation finding** — nothing was
+  found wrong with the delta. Separately, V0 stopped when `make check` hit a 120 s foreground cutoff.
+  Both causes are gone: the patch is producible in one command (`git diff <base>..<tip> > <name>.patch`,
+  measured 4,274 lines / 183 KB), and `make check` is measured at 184 s green. The generalized rule —
+  *terminal attestation must be handed its input* — is now an execution rule.
+
+- **SA135's stage E2 transferred to SA170, and the reason recorded (2026-08-28).**
+  E2 required `QS_E2E_PARALLEL=0 make test-e2e` followed by `make ci-e2e`. That re-coupled SA135's
+  acceptance to the very E2E harness whose fixed-tag collision, uncaught `subprocess.TimeoutExpired`, and
+  blind readiness poll are **SA170's** open defects — the same harness that stalled phase E once already.
+  A green full-E2E run against that harness is not evidence of anything and a red one cannot be attributed.
+  SA170 now owns the full E2E campaign and runs it after its own three fixes, where the result is
+  interpretable. This is the same lift that moved E1's flake obligation, and it leaves SA135 holding only
+  evidence it can deterministically produce. Its prior blocker is also cleared: the last attempt never ran
+  a command because its reviewed plan placed a review dispatch inside G-sync/G-validate and then resumed
+  authored mutation in G-closeout/G-final, which the strictly forward pipeline cannot do; a compliant plan
+  is written into the open ticket and no plan-authoring step remains before dispatch.
+
+- **Decision D3's roadmap restatement retired (2026-08-29).**
+  *Module presence is a three-state fact* — Option 3, chosen 2026-08-28 — is implemented and merged, and
+  its policy authority is [decisions.md → Module Presence States](docs/technical/decisions.md#module-presence-states).
+  The clause *each consumer owns its own reaction* is half of the decision, not a footnote: the merged work
+  writes `status`'s report-as-drift policy while preserving `apply`'s fail-hard reaction. The roadmap's
+  duplicate narration of the choice, the rejected Options 1 and 2, and the cost note (the critical path grew
+  by one ticket, accepted deliberately) are archived here; the roadmap keeps only the binding standing rule.
+  SA173 remains open for validation and closeout, not because D3 lacks an implementation.
+
+- **SA173's consumer, fixture, shim, and placeholder work integrated into `v88`; the ticket stays open on one coverage gate (2026-08-29).**
+  Product commit `4c311a73` merged through `5bf03b40`/`b5b84ca9`. This archives the full 2026-08-28
+  failure diagnosis, which is now closed by the merged bytes and is no longer planner scope.
+  **Starting state, measured detached on `v88` at `4e410c09`, clean tree, `make check` exit 2:**
+  lint and typecheck green; `quickscale_core` 2886 passed / 1 skipped; `quickscale_cli`
+  **18 failed / 2135 passed**; and, at a stage the fail-fast red path never reached,
+  `poetry run pytest scripts/` at **5 failed / 1313 passed**.
+  **Cause A — `status` aborted on the drift it exists to report (11 tests, product defect).**
+  Acceptance criterion 5 deleted the CLI's `if "Manifest file not found" in str(error)` skip at
+  `module_wiring_manager.py:201` and moved classification into core. Correct — but the replacement
+  *reaction* was never written, so `_abort_for_manifest_error` (`status_command.py:229`, reached from
+  `:845`) aborted with exit 1 on any module that `.quickscale/state.yml` registers and the project
+  tree does not carry. Three of the eleven were literally `test_status_detects_missing_modules`,
+  `test_module_tracking_completeness`, and `test_json_drift_filesystem_drift_populated`. D3 already
+  prescribed the answer — `status` **reports** and exits 0, `apply` **fails hard** — and the merged
+  work writes the missing half while preserving the written one. The eleven tests were the correct
+  oracle and were **not** edited.
+  **Cause B — seven stale fixtures, not an `apply` regression.** These failed differently, at
+  `module_config.py:546` with `Module presence is incomplete: module 'auth' is missing manifest`.
+  The fixtures at `commands/test_module_config_extended.py:961,983` and their CRM equivalents built
+  `modules/<name>/` holding only a `pyproject.toml`; under the new contract that is INCOMPLETE, and
+  refusing to wire it is the behaviour SA173 was opened to produce. They were routed through the
+  file's own `_write_module_package` helper (`:139-150`) — the treatment `e0730ae9` had already
+  applied to the lifecycle fixtures and not extended here. **No assertion changed and `apply` did not
+  become tolerant.** The real embed path was confirmed, not assumed, to write `module.yml` before
+  wiring regeneration.
+  **Cause C — the standalone discovery shim, which took `scripts/` red with it (5 tests).**
+  `contracts/module_discovery.py` is contracted to run **alone**: `scripts/version_tool.sh:14,34`
+  copies that one file into a tree with no importable `quickscale_core` and calls `--list-modules` to
+  enumerate the modules it must version-bump. `e0730ae9` put `_declared_module_names()` (`:217-229`)
+  on that path behind a guard comparing `exc.name != "quickscale_core.contracts.module_catalog"`,
+  while a shim tree fails at the *root* package and raises `exc.name == "quickscale_core"`, so the
+  guard re-raised and `--list-modules` exited 1. `_declared_placeholder_names` (`:231-239`) carried
+  the same too-narrow comparison. **A second defect sat behind the first:** widening the guard got
+  past the import and then failed with `Module inventory count drift: expected 12 unique release
+  modules, found 1` — the twelve-module release count enforced against a hermetic tree that
+  legitimately carries fewer. Both were fixed, and a hermetic test now pins the contract. The defect
+  was invisible from the repo root, where `--list-modules` prints twelve names and exits 0.
+  **Also completed on the same candidate:** ACTIVE catalog-declared placeholders now fail atomically
+  with a pre-import error instead of being silently excluded by `refresh_managed_adapters`
+  (`manifest/entry_point.py:218-236`), while declared-INCOMPLETE placeholders keep `teams`
+  fail-closed; repository direct-file consumers resolve the sibling catalog; the lone-file discovery
+  shim supports hermetic inventories; criterion 8's missing-manifest negative proof ran and restored
+  exact bytes; and the `refresh_managed_adapters` complexity warning was removed.
+  Verification on the candidate: `test_status_command.py` + `commands/test_module_config_extended.py`
+  **167 passed** with no test file edited; the four-file contract chain **221 passed**;
+  `test_module_wiring_manager_manifest.py` **43 passed**; roadmap consistency **21 passed**; plus
+  broad non-E2E, parity, lint, type, provisioning and static checks. Independent terminal review found
+  no defect in these product bytes.
+  **What kept the ticket open:** the required `make test` chain stops at
+  `quickscale_modules/storage/src/quickscale_modules_storage/__init__.py` at **45% per-file coverage
+  against the required 80%**. That is the whole remaining blocker; it is tracked on the open SA173
+  entry in [roadmap.md](docs/technical/roadmap.md).
+
+- **Two planning artefacts retired as closed-by-diagnosis (2026-08-29).**
+  **The interim known-red protocol is void and must not be revived.** The two-node-id
+  `PYTEST_ADDOPTS` deselect recorded on 2026-08-27 excluded none of the eighteen real failures — both
+  node ids passed — and deselecting a ticket's own oracle is the exact failure the protocol was
+  written to prevent. A gate that is red on the integration branch is attributed to one ticket and
+  never deselected.
+  **The "broad CLI validation returned no verdict at 120 s and again at 360 s" blocker was never a
+  stall.** Run detached, the suite completes in seconds; the verdict was the eighteen failures above.
+  It was a foreground cutoff on a run that also happened to be red — one recorded acceptance stall
+  traced to exactly this shape.
+  **The order-dependent pollution row is gone with its code path.**
+  `test_module_discovery.py::TestAuthoritativeModuleNames::test_partial_generated_override_uses_bundled_shipped_inventory`
+  was an artifact of the `OVERRIDE`→bundled substitution; `e0730ae9` removed the path and the test,
+  so the trap is retired rather than carried. The 2026-08-28 unfiltered full-suite baseline
+  (**7 failed / 5134 passed / 16 skipped in 1:18:19**) is superseded: two rows were SA173's and are
+  green, one was this pollution artifact, and the remaining four `e2e` rows are SA170's and are
+  carried on that ticket.
+
+- **Arch-audit `ci-environment-hand-replicated` fix-regression narrative archived (2026-08-29).**
+  The finding was scored **resolved** on 2026-08-28 and its remediation re-audited; the detail is
+  archived here so the audit carries live findings only.
+  **Mechanism removed, not moved.** `scripts/provision_ci_postgres.sh` (649 lines) is now the single
+  PostgreSQL environment contract, exposing `describe` / `hosted-setup` / `run` / `validate` over five
+  profiles (`backups`, `restricted`, `isolation`, `bypassrls`, `client-only`). All six hosted stations
+  call it (`ci.yml:93,458,539`, `publish.yml:170`, `e2e.yml:87`, `nightly-bypassrls.yml:80`) and five
+  Makefile targets consume it (`Makefile:415,435,1010,1296,1300`). Against the prior pass's thirteen
+  hand-replicated stations plus a literal oracle,
+  `grep -rn "createdb\|GRANT \|CREATE ROLE\|apt-get install" .github/workflows/` now returns **zero
+  hits**. The module list is *derived*, not re-listed: `load_inventory()` shells out to
+  `contracts/module_discovery.py --list-modules` and hard-fails on absence, empty output, duplicates,
+  or unsorted input (`:79-97`).
+  **The oracle became a binding, not a transcript.** `scripts/test_gate_parity.py:332`
+  (`test_profiles_are_bound_by_helper_describe_json`) executes `describe --format json` and asserts
+  against its output, replacing a verbatim shell-as-Python literal; and
+  `test_exactly_six_stations_use_expected_profiles` (`:297`) asserts the **absence** of the old shape
+  in every station's run text (`"apt-get"`, `"createdb"`, `"ALTER DATABASE"`,
+  `"provision_test_roles.sh"` all absent). That anti-regression assertion is why this scored resolved
+  rather than relocated. The restricted-role posture survives: profiles carry `ROLE_FLAGS`/
+  `ALLOW_BYPASS`, and `bypassrls` is a named explicit profile rather than an ambient default.
+  **`990f660f` + `48e0a62a` — compounding removed.** These deleted literal ticket IDs
+  (`assert "SA151" not in roadmap`), merge positions, dependency edges, measured dates, and roadmap
+  prose from a conformance gate, replacing them with counts **derived** from `roadmap.md` and asserted
+  against `docs/index.md`, guarded by a red-canary test. The structural invariants survive as derived
+  checks with their own canaries: no checked entries, dependencies naming open tickets, context
+  restating no schedulable metadata, and merge-position uniqueness. The commit also removed both audit
+  documents from the gate's inputs — "pinning their counts, finding IDs, or prose here forces every
+  regenerated audit to reproduce the previous pass's conclusions, which is the opposite of an audit" —
+  and `48e0a62a` propagated that into `decisions.md` as a rule stated by trigger rather than by
+  finding ID. No invariant weakened, no new station minted.
+  **Still live, carried to the arch-audit watchlist and owned by SA164:** the two hand-pinned literals
+  minted inside the new derivation (`provision_ci_postgres.sh:93,96`) and the second copy of the
+  PostgreSQL major (`:15` against `runtime_pins.POSTGRES_VERSION`).
+
+- **SA117's maintainer targets moved out of `make help` into `make help-release` (2026-08-28).**
+  Eleven `sa117-*` targets rendered inline in the help a developer reads daily, at the same visual
+  weight as `make test`. They are release-day tooling: **no CI workflow and no `gate_registry.json`
+  entry invokes any of them**, `make publish-modules-outdated` is already marked
+  *[DISABLED SA117 Phase 4]*, and the only callers of the three underlying scripts are their own
+  tests. `make help` now carries one pointer line; `make help-release` renders the block.
+  **Placement only — the authority is untouched.** SA124 made `scripts/sa117_scope.json` the strict
+  authority over the help facts, with Make as one of six declared consumers and an AST probe
+  rejecting a seventh. The block is still rendered by
+  `check_sa117_scope.py --render-make-help`; only the Make target it hangs from changed, so no
+  consumer was added and no fact was transcribed.
+  **The tooling itself is deliberately kept, not retired.** It guards publishing module split
+  branches with force-with-lease — an irreversible operation — and SA117 is a completed ten-phase
+  project, not abandoned scaffolding.
+  **A test-partitioning proposal was evaluated and rejected on measurement.** Moving SA117's
+  product-decoupled suites (`test_verify_sa117_publication.py` 34 tests/1 s,
+  `test_verify_public_module_apply.py` 70 tests/44 s — neither imports any product module) out of
+  `check-gate-suites` would have cut 15% of that gate's *serial* 299 s. After the `--dist loadfile`
+  parallelisation the gate is bounded by its slowest file, and at 44 s the largest of these sits well
+  under the 94 s wall time, so the remaining gain did not justify a ticket against a registered gate
+  carrying SA124's consumer guard. **`test_check_sa117_scope.py` (86 tests) stays in the default gate
+  regardless:** it reads `_authoritative_module_names` and imports `quickscale_core.manifest.loader`,
+  making it a live regression net over the module-discovery contract SA173 is changing.
+  Verification: `make help-release` renders all eleven; `make help` shows one pointer;
+  `make sa117-emit` and `make sa117-check PATHS="Makefile"` exit 0;
+  `test_check_sa117_scope.py` 86 passed; `make check-gate-parity` exit 0; `check-gate-suites`
+  unchanged at 5 failed / 1313 passed in 94 s — the same pre-existing SA173 failures, nothing new.
+
+- **`make check`'s cost profiled; `check-gate-suites` parallelised 3.2x (2026-08-28).**
+  A prior planning pass recorded that *"the dominant cost is `lint-frontend`"*. **Measured, that is
+  wrong.** Warm, on 24 cores, `make lint-frontend` is **13.89 s** — it already caches `node_modules`
+  behind a `package.json` hash in `.quickscale/frontend_lint_cache`. The actual green-path profile of
+  `make check`:
+
+  | Stage | Time | Share |
+  |---|---|---|
+  | lint + typecheck + core (2886) + cli (2135) unit tests | 41 s | 10% |
+  | core-compat, module-core-imports, manifest-sync, org-context, csrf-exempt | 5 s | 1% |
+  | **check-gate-suites** (`pytest scripts/`) | **299 s** | **72%** |
+  | check-dependency-vulnerabilities (Trivy) | 50 s | 12% |
+  | check-security-static-analysis (Bandit) | 3 s | <1% |
+  | gate parity + CI gate generation | ~5 s | 1% |
+  | lint-frontend | 14 s | 3% |
+  | **Total** | **~417 s** | |
+
+  The recorded 601 s was measured on a loaded machine; the composition is the same. The 41 s red path
+  is unchanged — it fails fast at `test-unit` and never reaches the gate block, which is why this
+  distribution was never visible from a red run.
+  **Change: `check-gate-suites` now runs `-n auto --dist loadfile`.** Measured, three consecutive
+  runs: **94 s, 5 failed / 1313 passed — byte-identical outcomes to the 299 s serial run.**
+  `--dist loadfile` is **load-bearing, not a tuning knob**: default `loadscan` distribution splits
+  `test_quality_baseline_monotonicity.py` across workers, whose intra-file shared state then races
+  and produces **15 spurious failures** (34 s, 20 failed). That variant is recorded in the Makefile
+  comment as explicitly not to be used.
+  **Oracle updated, deliberately still exact.**
+  `test_ci_coverage_policy.py::TestRegisteredScriptGateTarget::test_exact_cache_free_argv_and_cleanup`
+  pins the gate's exact argv and went red on the new flags — correctly. It was updated to the new
+  argv rather than loosened to a subset check: the exactness is what protects the `-p no:cacheprovider`
+  cache-free guarantee and the `--no-cov` / no-`--cov` coverage-free guarantee sitting beside it.
+  98 passed after the update.
+  **Watch item, recorded rather than smoothed over.** One run in five produced a sixth failure at
+  `test_provision_ci_postgres.py::test_reused_local_lease_corrects_profile_environment_and_consumers_reject_repoisoning[isolation]`,
+  which passes in isolation (2 passed) and did not recur across three consecutive repeats. It
+  contends for the shared local PostgreSQL lease, and the machine was running other cluster-touching
+  work at that moment. **Not a blocker, not dismissed:** if it recurs, the file needs an
+  `xdist_group` pinning it against the other cluster-touching suites, not a wider distribution mode.
+  Gate parity, CI gate generation, and the ticket-context consistency test are green after the
+  change; `scripts/gate_registry.json` pins the target name, not its argv, so registry parity is
+  unaffected.
+
+- **SA173's module-presence contract landed on `v88`; the ticket stays open on one consumer policy (2026-08-28).**
+  Product commit `e0730ae9` merged into the integration branch at `4e410c09` and implements decision
+  D3's contract. Verified on HEAD: `discover_module_presence` reports ABSENT / ACTIVE / INCOMPLETE
+  distinctly; the subset-validity rule and its diagnostic exist **once** —
+  `grep -rn "inventory count drift" --include=*.py` outside tests returns a single production site at
+  `contracts/module_discovery.py:309`; the loader and `refresh_managed_adapters` enforce typed
+  presence atomically, tolerating a legitimate subset and failing hard on INCOMPLETE with the
+  directory and missing manifest named; `PLACEHOLDER_MODULE_NAMES` is **retired** in favour of a
+  catalog `placeholder` flag, with `teams` still fail-closed; the `OVERRIDE`→bundled substitution in
+  `authoritative_module_names` is **removed**; and the CLI's
+  `if "Manifest file not found" in str(error)` classification at `module_wiring_manager.py:201` is
+  **deleted**. SA173 acceptance criteria 1, 3, 4, 6 and 7 are discharged, and criterion 2's
+  subset-plus-fail-hard pair is discharged at the core boundary. Delta: 19 files, +850 / -282.
+  **Two prior blockers closed by measurement rather than by work.** The recorded *"broad CLI
+  validation returned no verdict at 120 s and again at 360 s, both near 55%"* was a **foreground
+  cutoff, not a stall** — run detached the suite completes in seconds. And
+  `test_module_discovery.py::TestAuthoritativeModuleNames::test_partial_generated_override_uses_bundled_shipped_inventory`,
+  carried in the full-suite baseline as an order-dependent pollution artifact, **no longer exists**:
+  `e0730ae9` deleted the OVERRIDE path and the test with it.
+  **The interim known-red protocol is retired.** Its two `--deselect` node ids
+  (`TestRegenerateManagedWiringSkipManifestNotFound::test_registered_module_without_manifest_skipped_when_embedded`
+  and `::test_forwarded_registered_module_without_manifest_still_succeeds`) now **pass** —
+  `test_module_wiring_manager_manifest.py` is 43 passed and the ticket's ordered verification step 1
+  is 221 passed — so the exclusion excludes nothing. It was never revived or widened; the generalized
+  rule replacing it is recorded in the roadmap's execution rules: *a gate that is red on the
+  integration branch is attributed to exactly one ticket, and is never deselected.*
+  **Why SA173 did not close, stated precisely.** `make check` on `v88` at `4e410c09`, measured
+  detached, **exits 2**: lint and typecheck green, `quickscale_core` 2886 passed / 1 skipped,
+  `quickscale_cli` **18 failed** / 2135 passed. Reproducible in isolation as `18 failed, 149 passed`
+  over just the two files — no pollution, no `e2e`, no ordering dependency — and they are **two
+  distinct causes**, which matters because conflating them gets one fixed wrongly.
+  **Cause A, 11 failures in `quickscale_cli/tests/test_status_command.py` — a product defect.**
+  Deleting the CLI's presence classification was correct; **the replacement reaction was never
+  written**, so `_abort_for_manifest_error` (`status_command.py:229`, reached from `:845`) now aborts
+  on a module that `.quickscale/state.yml` registers and the project tree does not carry. `status` is
+  the diagnostic command — three of the eleven are `test_status_detects_missing_modules`,
+  `test_module_tracking_completeness`, and `test_json_drift_filesystem_drift_populated` — so aborting
+  is the one reaction it must not have. D3 already prescribes the fix: consumers own their reaction,
+  `status` **reports drift**, `apply` **fails hard**. These eleven are the correct oracle and are not
+  to be edited.
+  **Cause B, 7 failures in `quickscale_cli/tests/commands/test_module_config_extended.py` — stale
+  fixtures.** These fail at `module_config.py:546` with `Module presence is incomplete`. The fixtures
+  at `:961,983` and the CRM equivalents build `modules/<name>/` holding only a `pyproject.toml`;
+  under the new contract that is INCOMPLETE, and `apply` refusing to wire it is precisely the
+  behaviour SA173 was opened to produce. The same file already carries the right helper —
+  `_write_module_package` (`:139-150`) — and `e0730ae9` gave the lifecycle fixtures that treatment
+  without extending it here. Fixture-only repair; no assertion changes and `apply` does not become
+  tolerant. **The generalizable lesson: deleting a wrong policy and writing the right one
+  are one change, not two** — a half-applied D3 left one consumer with no behaviour at all, and it is
+  the second instance in this release of a `quickscale_core/contracts/` change turning another
+  surface red without touching a shared file (`203fcd61` was the first).
+  **Cause C, inside `make check` at a stage the red path never reaches — the standalone discovery
+  shim.** `poetry run pytest scripts/`
+  returns **5 failed, 1313 passed**, all five in `test_version_tool.py::TestUpdateWithTempRepo`.
+  `contracts/module_discovery.py` is contracted to run as a lone file in a tree with no importable
+  `quickscale_core` package — `scripts/version_tool.sh:14,34` copies it and calls `--list-modules` to
+  enumerate the modules it version-bumps. `e0730ae9` put `_declared_module_names()` on that path
+  behind a `ModuleNotFoundError` guard that only tolerates
+  `exc.name == "quickscale_core.contracts.module_catalog"`; a shim tree fails at the *root* package
+  and raises `exc.name == "quickscale_core"`, so the guard re-raises. Widening it exposes a second
+  defect: with an empty catalog the shim enforces the twelve-module release count against a hermetic
+  tree that legitimately holds fewer. Both are SA173's, and `version_tool.sh` is a release-inventory
+  consumer the ticket had not enumerated alongside `publish_module.py` and `check_sa117_scope.py`.
+  Invisible from the repo root, where the same command prints twelve names and exits 0.
+  **Correcting an earlier reading in this entry's first draft:** this is *not* outside `make check`.
+  `pytest scripts/` is the registered `check-gate-suites` gate inside `CHECK_GATE_TARGETS`
+  (`Makefile:1262`), and it returns rc=2. `make check`'s red path fails fast at `test-unit` in 41 s
+  and never reaches that stage, which is why the failure was attributed to a separate command.
+  **Fixing the eighteen CLI failures alone will not turn `make check` green** — all three causes gate
+  it.
+  **Planner effect.** SA173 stays **band A** and **#30**; the band-A cause changes from *"the two
+  caller tests are red"* to *"the CLI consumer policy is missing"*. No ticket opened, closed, or
+  changed lanes: counts hold at fourteen open v88 ticket entries across fourteen open merge
+  positions, W1 6 · W2 4 · W3 4. `wt-track2` is now identical to `v88`, so W2 resumes with no sync
+  and needs no PostgreSQL slot. W1 and W3 run **unexcluded** from here and can start and finish their
+  own work, but neither can merge until #30 lands. No open maintainer decision remains.
+
+- **Decision D3 settled — module presence is a three-state fact; SA173 opened (2026-08-28).**
+  SA167c's Phase-A acceptance had stalled on two red tests at
+  `quickscale_cli/tests/test_module_wiring_manager_manifest.py:767,796`, which assert an embedded
+  registered module with no manifest fails with `inventory count drift` while the runtime returns
+  success. The decision was framed as a two-way choice between updating the tests and restoring a
+  runtime failure. **Both framings were wrong about where the code is**, and measuring rather than
+  reading settled it.
+  **What the measurement showed.** A traced run of the failing scenario calls
+  `discover_shipped_module_names` (x3), `refresh_managed_adapters`, then
+  `discover_bundled_module_names` — and **never** `authoritative_module_names`. The decider is
+  `refresh_managed_adapters` (`quickscale_core/.../manifest/entry_point.py:210-227`) and its subset
+  check. Deleting the `OVERRIDE` fallback at `module_discovery.py:231-248` — the change the prior
+  framing proposed as "restore the failure" — leaves **both tests still red**, confirmed on a full
+  `quickscale_cli/tests` + `quickscale_core/tests` run. Making drift fail would therefore have
+  required weakening the **subset rule**, which is what lets a generated project ship fewer than
+  twelve modules: the normal case for the entire product.
+  **Why the tests and the runtime disagreed at all — three unreconciled decisions.** `a1fce1eb`
+  (2026-07-04, SA18.2) wrote the tests asserting skip-and-succeed, which is still the class name
+  `TestRegenerateManagedWiringSkipManifestNotFound` and still both method docstrings; `e8581800`
+  (2026-08-25) flipped only the two assertion lines, leaving the prose contradicting them;
+  `203fcd61` (2026-08-27, **an SA135/W3 commit**) added the `OVERRIDE` fallback and flipped the
+  runtime back. **W3's merged partial is what turned W2's caller suite red**, across lanes that
+  shared no file — recorded in the roadmap as a standing cross-lane rule for
+  `quickscale_core/contracts/` and `quickscale_core/manifest/`.
+  **The structural defect.** `discover_shipped_module_names` collapses *module absent* and
+  *directory present with no `module.yml`* into one output — its own docstring records that
+  manifest-less directories are "silently excluded". Downstream consumers reconstruct the discarded
+  fact by **counting** against `AUTHORITATIVE_MODULE_COUNT` and testing for a subset, and that proxy
+  is implemented twice with a hand-copied `"Authoritative module inventory count drift"` string. The
+  proof that the state model is incomplete is `PLACEHOLDER_MODULE_NAMES = frozenset({"teams"})`:
+  `quickscale_modules/teams/` is a `README.md` with no `module.yml`, structurally identical to a
+  half-installed module, and only a hardcoded name separates them.
+  **Resolution — a third option.** Restore the distinction at the layer that loses it: discovery
+  reports ABSENT / ACTIVE / INCOMPLETE, each consumer owns its own policy, the subset-validity rule
+  has one implementation, and nothing classifies module presence by string-matching an exception
+  message. Adapter loading then tolerates a subset **and** fails hard on an incomplete install
+  without tension, because one signal stops carrying two meanings. This also removes three
+  simultaneous Fail-Hard violations in one path — discovery's silent exclusion, the CLI's
+  `"Manifest file not found"` substring skip at `module_wiring_manager.py:201`, and
+  `authoritative_module_names`'s bundled substitution under an override — and lets
+  `PLACEHOLDER_MODULE_NAMES` retire.
+  **Policy.** Written as
+  [decisions.md -> Module Presence States](docs/technical/decisions.md#module-presence-states),
+  refining rather than replacing the AF7/SA109 bundled-inventory precedence: AF7 answers *where
+  inventory came from*, the presence states answer *what was found there*.
+  **Planner changes.** **SA173 — Make module presence a three-state fact** opens at Band B · Tier 1
+  · **W2** · **merge #30** · deps: none, and **SA167c (#21) now merges after it**. The critical path
+  becomes `SA173 -> SA167c -> SA166 -> SA164`, one ticket longer than before — accepted deliberately
+  as the cost of stating the contract once instead of reconstructing it by counting. Lanes are even
+  at **W1 4 · W2 4 · W3 4**. Counts move to **twelve open v88 ticket entries across twelve open
+  merge positions**. All three lanes are truly green and **no open maintainer decision remains**.
+
+- **SA163 closed — the CI PostgreSQL environment now has one authoritative source (2026-08-28).**
+  Archived from the roadmap on the independent structural pass at `a2dfdd9f`, which scored the
+  arch-audit finding `ci-environment-hand-replicated` (the prior pass's rank-1 `now`-horizon
+  finding, formerly numbered 13) **resolved with the mechanism removed, not relocated**.
+  `scripts/provision_ci_postgres.sh` (649 lines) is the single PostgreSQL environment contract,
+  exposing `describe` / `hosted-setup` / `run` / `validate` over five profiles — `backups`,
+  `restricted`, `isolation`, `bypassrls`, `client-only`. All six hosted stations call it
+  (`ci.yml:93,458,539`, `publish.yml:170`, `e2e.yml:87`, `nightly-bypassrls.yml:80`) and five
+  Makefile targets consume it (`Makefile:415,435,1010,1296,1300`).
+  `grep -rn "createdb\|GRANT \|CREATE ROLE\|apt-get install" .github/workflows/` returns **zero
+  hits**, against thirteen hand-replicated stations plus a literal oracle before.
+  **Every acceptance criterion discharged.** The module universe is derived — `load_inventory()`
+  shells out to `contracts/module_discovery.py --list-modules` and hard-fails on absence, empty
+  output, duplicates, or unsorted input (`:79-97`) — with no hand-maintained module list among the
+  provisioning stations. PG18 client verification is identical in all four contexts including
+  `e2e.yml`. The **BYPASSRLS provisioning station** that previously lived only inside
+  `nightly-bypassrls.yml` and was reachable by no repository script is now the named `bypassrls`
+  profile (`:153`), creating `quickscale_bypassrls_test_role` with
+  `LOGIN CREATEDB BYPASSRLS NOINHERIT NOSUPERUSER NOCREATEROLE` **asserted as a postcondition**
+  (`:392-393`) the way the three `NOBYPASSRLS` contracts already are, with its database list derived
+  rather than hand-listed. Because each profile owns its own role/database mapping and validates it
+  (`:267`, `:391`), the two database lanes coexist on one cluster: `make test-bypassrls` no longer
+  breaks the next `make test-integration`. `QUICKSCALE_ALLOW_BYPASSRLS` survives as a
+  profile-validated value rather than a hand-set literal, and the restricted-role isolation
+  connection is unchanged. Both deliberate divergences are preserved — the isolation profile's
+  six-module `QS_*_DB_USER` mapping (`:152`) and its omission of `backups`.
+  **The transcribed oracle became a binding.** `scripts/test_gate_parity.py:332`
+  (`test_profiles_are_bound_by_helper_describe_json`) executes `describe --format json` and asserts
+  against the helper's *output*, replacing the verbatim shell-as-Python-literal at the old
+  `:1125-1180`; `test_exactly_six_stations_use_expected_profiles` (`:297`) additionally asserts the
+  **absence** of the old shape in every station's run text (`"apt-get"`, `"createdb"`,
+  `"ALTER DATABASE"`, `"provision_test_roles.sh"` all not in the job text). That is an
+  anti-regression gate rather than a copy-pin, and it is why the finding is scored resolved.
+  This also discharges **SA123's inherited obligation** on the transcribed provisioning shell
+  literal, with SA123's settled hosted-job, `needs`-edge, run-value, publish/E2E-path, and generator
+  expectations and the regenerated 24-entry publish oracle preserved.
+  **Two new hand-pinned literals were minted inside the derivation** — `((${#MODULES[@]} == 12))`
+  and `[[ "$item" != teams ]]` (`:93,96`) — plus a second copy of the PostgreSQL major
+  (`POSTGRES_MAJOR=18` at `:15`, against `runtime_pins.POSTGRES_VERSION = "18"`). All three fail
+  loudly and are carried to the arch-audit watchlist rather than promoted; they are not a reason to
+  hold the ticket open.
+  **Planner changes.** SA163 is removed from the roadmap and its context section retired. Merge
+  position #15 is no longer shared and now carries **SA135 alone**; `SHARED_POSITION_GROUPS` in
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` drops to empty. SA135 keeps its own
+  outstanding phase-E PostgreSQL-lifecycle evidence and the `validation_policy.md` precondition
+  update — those are SA135's, not SA163's. `docs/others/arch-audit.md` no longer carries the
+  finding, so no roadmap ticket takes that document onto its conflict surface for it.
 
 - **W3 blocker root-caused; SA170 opened and SA135 unblocked (2026-08-27).** The v88 plan carried
   **no open maintainer decision** after this pass. SA135+SA163's phase E1 had been stalled across

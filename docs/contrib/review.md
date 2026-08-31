@@ -18,8 +18,12 @@ Review the change against these questions:
 
 ## Evidence to Require
 
-- validation commands or checks are explicit
-- changed behavior is covered by tests or an explicit gap is recorded
+- validation commands or checks are explicit, and name the
+  [validation tier](../technical/validation_policy.md#validation-tiers) they
+  were run at
+- changed behavior is covered by tests or an explicit gap is recorded; evidence
+  from a tier below `release` is complete at that tier when every deferred check
+  names the wider tier that owns it
 - documentation impact is handled or intentionally not needed
 - any remaining follow-up work is clearly separated from close blockers
 - security-gate evidence names both blocking scanners (`Trivy v0.74.0` for

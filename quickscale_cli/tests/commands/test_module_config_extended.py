@@ -134,6 +134,16 @@ def _write_module_package(
     (module_dir / "pyproject.toml").write_text(pyproject_content)
 
 
+def _read_source_manifest(module_name: str) -> str:
+    """Load the repository manifest used by standalone wiring fixtures."""
+    return (
+        Path(__file__).resolve().parents[3]
+        / "quickscale_modules"
+        / module_name
+        / "module.yml"
+    ).read_text()
+
+
 class TestSharedModuleDependencySync:
     """Tests for the shared CLI dependency-sync helper."""
 
@@ -1864,7 +1874,6 @@ class TestCRMModuleConfig:
         assert "enable_api" in config
 
 
-# ============================================================================
 # SA9.1-REV-001: repin_existing mode and _update_dependency_entries
 # ============================================================================
 

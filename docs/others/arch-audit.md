@@ -1,14 +1,38 @@
 # Structural Autopsy: QuickScale
 
-> **Audit snapshot:** 2026-07-26 · **Current reconciliation:** 2026-08-28 · **Branch:** `v88`
+> **Audit snapshot:** 2026-08-28 · **Current reconciliation:** 2026-08-28 · **Branch:** `v88` · **Range audited:** `602f4be3..48e0a62a`
+>
+> Live structural findings only. Findings are identified by their **slug**; the ordinal numbering
+> used in earlier passes is pass-local and is not a stable identifier (see
+> [decisions.md → Document Responsibilities](../technical/decisions.md)). Closed findings and
+> prior-pass narratives live in [CHANGELOG.md](../../CHANGELOG.md).
 
 ## Orientation summary
 
-QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**: a Click CLI plus a Django-6 project generator, twelve shipped first-party modules (`teams` remains a README-only placeholder), and apply/recovery tooling. Generated projects use PostgreSQL 18, Vite/React, Docker, and Railway. Its public contracts are the CLI, `quickscale.yml` and applied state, module manifests, generated trees, and upgrade semantics. It is a solo-maintainer repository with a heavy, deliberate governance layer: a declared gate registry, AST gates, conformance tests, monotonic quality baselines, and a scope allowlist.
+QuickScale is a Python 3.14 / Poetry **code-generator and scaffolding platform**: a Click CLI, a
+Django-6 project generator with 117 template files, twelve shipped first-party modules (`teams`
+remains a README-only placeholder — `quickscale_modules/teams/` still contains only `README.md`),
+and apply/recovery tooling. Generated projects use PostgreSQL 18, Vite/React, Docker, and Railway.
+Its public contracts are the CLI, `quickscale.yml` and applied state, module manifests, generated
+trees, and upgrade semantics. It is a solo-maintainer repository (2,895 commits since 2025-03-20,
+one author) with a heavy, deliberate governance layer: a ten-gate registry, AST gates, conformance
+tests, monotonic quality baselines, and a scope allowlist.
 
-**Commit delta since the last pass** (`e40762a0..HEAD`, 7 commits, all 2026-08-20). *Housekeeping:* `309b8b7a` (doc links), `3de43250` (social subtree split, no tree change), `ed8bb9b4` and `10d6bfe2` (release notes and v88 roadmap). *Unlabeled-behavioral — read at full depth:* `be5cf024` "fix(ci): unbind hosted gates from one machine's environment" (adds restricted-role provisioning to the isolation job; relaxes the SA90 emission byte-parity gate for `.env`; moves the managed-adapter completeness assertion out of `_refresh_session_managed_adapters`), `d4b0e834` and `d3d4c633`, both titled "v0.87.0: QuickScale 0.87.0" but in fact changing hosted and publish provisioning (PGDG PostgreSQL 18 client install) and isolation-gate skip semantics. Two release-shaped messages carrying CI-topology changes is exactly the class this audit reads closely, and it paid: `d3d4c633` left a repository conformance test red (see Red flags).
+**Commit delta since the last pass** (`602f4be3..HEAD`, 5 commits, 2026-08-27/28). *Housekeeping:*
+`8a8f364b` and `cc80a5f2` (roadmap handoff records), `74ba3c55` (merge of the two below into
+`wt-track3`). *Unlabeled-behavioral — read at full depth:* `990f660f` "Refactor assertions in ticket
+context consistency test" and `48e0a62a` "refactor(v88): streamline ticket context consistency
+tests and remove unused variables". Both carry housekeeping-shaped messages over a **conformance
+gate**, and between them they delete 618 lines of `roadmap.md` and 114 lines of the gate that
+guards it. Read at depth, they are a genuine de-pinning fix, not an erosion — see *Fix-regression
+audit* below and the sound-decisions entry. `48e0a62a` also amends `decisions.md` to forbid other
+documents pinning this audit's finding IDs or counts, which this pass complies with.
 
-**Growth direction (from the planning surface, authoritative).** The v88 roadmap records the prioritization decision as **"neither"** — no `teams` domain work and no third generated-project updater. Ten open v88 ticket entries run on three tracks across nine open merge positions. SA123's Trivy/Bandit implementation and exact-tree acceptance are complete, the current registry has eight hosted gates, and its tooling gap is closed. **SA135** (give test suites an owned PostgreSQL lifecycle, merge #15) also touches this audit's CI/governance seam, where Finding 13 remains live.
+**Growth direction (from the planning surface, authoritative).** The roadmap's recorded
+prioritization decision remains **"neither"** — no `teams` domain work and no third
+generated-project updater. Ten open v88 ticket entries run on three tracks across nine open merge
+positions; **W2 sets the release date** (SA167c is the longest open chain). W3 holds the exclusive
+PostgreSQL/Docker slot. The prior pass's leading finding rode inside SA135 and has landed.
 
 **Accepted-open SA167d checkpoint (2026-08-28).** SA167d remains open and active at merge position
 **#18**, with SA165 still dependent on it. Phases A-E are accepted at E0 tip
@@ -20,247 +44,525 @@ regressions and monotonicity. Independent review and merge-back remain pending; 
 completion or convergence claim.
 
 **Read fully:** the four workflows, `scripts/gate_registry.json`, `scripts/check_gate_parity.py` (context extraction and comparison), `scripts/sync_ci_gate_jobs.py` (generation and job-set validation), the `Makefile` test/gate targets, `scripts/check_ci_locally.sh` gate stations, `scripts/test_isolation_conformance.sh`, and the three behavioral diffs. **Sampled:** module sources, generator, beta migration, orgs tenancy (prior-finding anchor re-verification only). **Skipped:** generated-project template internals, frontend theme sources.
+**Scope decision.** With the delta this small, the pass's value is re-verification plus depth
+somewhere new. The prior two passes were scoped to the governance/CI layer and explicitly recorded
+"**Skipped:** generated-project template internals". This pass re-verifies every prior anchor, runs
+the fix-regression audit on the delta and on the landed remediation, and then spends its depth on
+the **§6 code-generator lens — the template/runtime boundary** — which is the archetype's core
+seam and had never been walked.
 
-**Scope decision:** this pass is scoped to the **governance and CI layer**, on the §2d evidence that all three roadmap tracks build there this release. The three prior findings were re-verified but not re-investigated at depth, because the roadmap explicitly holds their triggers closed.
+**Read fully:** `scripts/provision_ci_postgres.sh`, the four workflows, `scripts/gate_registry.json`,
+`scripts/sync_ci_gate_jobs.py`, the `TestHostedPostgresProfileParity` suite,
+`quickscale_core/tests/test_v88_ticket_context_consistency.py` (before and after),
+`templates/project_name/settings/production.py.j2`, `templates/start.sh.j2`, `templates/Dockerfile.j2`,
+`quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py`,
+`quickscale_cli/.../development_commands.py`, `generator/runtime_pins.py`, and the ownership
+taxonomy in `quickscale_devtools/.../beta_migration.py`. **Sampled:** module sources, orgs tenancy
+and purge (prior-anchor re-verification, with counts re-derived by AST). **Skipped:** frontend theme
+component internals, dr_engine internals.
 
 ## Enforcement census
 
 | Invariant | Enforcement | Posture | Trend since last pass |
 |---|---|---|---|
 | Tenant reads/writes stay organization-scoped | `TenantManager`, `FORCE RLS`, restricted-role boot guard | Structural and stable | unchanged |
-| Runtime DB role cannot bypass RLS | `rolsuper`/`rolbypassrls` checks; privileged command contract | Structural and stable | unchanged |
+| Runtime DB role cannot bypass RLS | `rolsuper`/`rolbypassrls` checks; privileged command contract | Structural, but the *command set* is multi-owner (see finding) | unchanged |
 | CSRF-exempt endpoints have alternate integrity checks | AST gate plus sanctioned endpoint bases | Structural and gated | unchanged |
 | Core/module dependency direction | Import compatibility and reverse-import gates | Gated | unchanged |
 | Module manifest snapshots equal source manifests | Manifest-sync byte comparison | Gated | unchanged |
-| Manifest readers choose source vs bundled inventory consistently | Shared fallback seam plus direct-caller census | Structural, gated, merged | unchanged |
-| Every emitted path has a migration disposition | Generator-derived conformance test over the ownership taxonomy | Membership gated; ownership hand-authored (Finding 7) | unchanged |
-| Tenant-model universe is classified | Marker-derived overview cross-checked against the 45-entry registry | Gated | unchanged |
-| Purge order respects FK dependencies | 21-entry manual order and three explicit relation checks | Partial gate (Finding 4) | unchanged |
-| Last-owner deletion is rejected through ORM paths | Canonical predicate, locked model delete, `pre_delete` receiver | Structural; other cleanup boundary-owned (Finding 2) | unchanged |
-| Frontend runtime config is complete and typed | `window.__QUICKSCALE__` validation plus frontend proof | Structural and gated | unchanged |
-| Generated emission is byte-identical to the recorded manifest | SA90 fixture hash/mode comparison | Gated, with a new host-dependent exception set | **weakened** — `.env` hash skipped, mode normalized (`be5cf024`) |
-| **Hosted CI job set is closed (no unregistered `ci.yml` job)** | `sync_ci_gate_jobs.py:314` — `registry ∪ UNOWNED_JOB_IDS` must equal the actual job set | **Structural, and the strongest thing in this layer** | unchanged |
-| **Declared gates are present in every required context** | `check_gate_parity.py` registry→context membership | **Gated, one-directional and registry-scoped** | unchanged |
-| **Gate implementations behave as specified** | 15 retained `scripts/test_*.py` suites; registered `check-gate-suites` gate | **Gated, cache/coverage-disabled** | **closed; 1,227 collected and passed** |
-| **CI runtime environment (PG18 client, test DBs, roles, DB users)** | Hand-replicated shell across 4 workflows and 1 script | **Convention only — ungated** | **new row; 4 divergent variants** |
+| Module identity (the twelve-module universe) | `module_discovery.py --list-modules`, shelled out and fail-hard | Structural and derived | unchanged |
+| Every emitted path has a migration disposition | Generator-derived conformance test over the ownership taxonomy | Membership gated; ownership hand-authored | unchanged |
+| Tenant-model universe is classified | Marker-derived overview cross-checked against the tenancy registry | Gated | unchanged |
+| Purge order respects FK dependencies | 21-entry manual order and three explicit relation checks | Partial gate | unchanged |
+| Last-owner deletion is rejected through ORM paths | Canonical predicate, locked model delete, `pre_delete` receiver | Structural; cross-domain cleanup boundary-owned | unchanged |
+| Generated emission is byte-identical to the recorded manifest | SA90 fixture hash/mode comparison, with `_HOST_DEPENDENT_PATHS` exception | Gated, one exception entry | unchanged (still 1 entry — monotonic) |
+| **CI runtime environment (PG18 client, test DBs, roles, DB users)** | `scripts/provision_ci_postgres.sh` — one profile authority, five profiles, module list derived from the discovery shim | **Structural and gated** | **strengthened** — was "convention only, 4 divergent variants" |
+| Hosted CI job set is closed (no unregistered `ci.yml` job) | `sync_ci_gate_jobs.py:365` — `UNOWNED_JOB_IDS ∪ registry-bound` must equal the job set | Structural | unchanged (8 hosted + 6 unowned = 14) |
+| Declared gates are present in every required context | `check_gate_parity.py` registry→context membership | Gated, one-directional and registry-scoped | unchanged |
+| Gate implementations behave as specified | Retained `scripts/test_*.py` suites; registered `check-gate-suites` gate | Gated, cache/coverage-disabled | unchanged |
+| Planning-document counts agree across consumers | Counts **derived** from `roadmap.md`, asserted against `docs/index.md`, with a red-canary test | **Gated and derived** | **strengthened** — literal ticket IDs, dates, positions and prose removed (`48e0a62a`) |
+| **Sanctioned privileged-command set** | Four independent literal definitions; one docstring claims SSOT | **Convention only — ungated** | **new row** |
+| Generated-project runtime pins (Python/Django/PostgreSQL) | `generator/runtime_pins.py`, rendered into every template that needs them | Structural and derived | unchanged |
 | Complexity maxima never ratchet upward | Merge-base monotonicity gate plus structured waiver ledger | Gated | unchanged |
 | Installed artifacts perform their supported lifecycle | Permanent installed-wheel `plan → apply → up` E2E over all modules | Structural and gated | unchanged |
 
 ## Summary table
 
-| Rank | Finding | ID | Horizon | Confidence | Size | Problem in one line |
-|---:|---|---|---|---|---|---|
-| 1 | 13 | `ci-environment-hand-replicated` | **now** / SA135 | High | M | Each workflow hand-replicates the environment its gates need, so "same gate, same result" is a coincidence maintained by copy-paste. |
-| 2 | 7 | `generated-file-ownership-unmodeled` | 6–18 months / next updater consumer | High | M | Beta migration assigns upgrade behavior through a hand-authored taxonomy the generator does not own. |
-| 3 | 2 | `deletion-invariants-per-boundary-reimplementation` | deferred / second deletion boundary | High | S | Cross-domain cleanup is orchestrated by the account-delete view, not by a domain owner. |
-| 4 | 4 | `org-model-universe-hand-enumerated` | deferred / tenant-model growth | High | M | Purge manually orders 21 models against an FK graph it does not derive. |
+| Rank | ID | Horizon | Confidence | Size | Problem in one line |
+|---:|---|---|---|---|---|
+| 1 | `privileged-command-set-multi-owner` | 6–18 months | High | S | One security-relevant command set has four independent definitions across the frozen-template / upgradable-runtime boundary, one of which falsely claims to be the single source of truth. |
+| 2 | `generated-file-ownership-unmodeled` | 6–18 months | High | M | Beta migration assigns upgrade behavior through a hand-authored taxonomy the generator does not own — and which splits one runtime contract's producer and validator across opposite dispositions. |
+| 3 | `deletion-invariants-per-boundary-reimplementation` | deferred | High | S | Cross-domain cleanup is orchestrated by the account-delete view, not by a domain owner. |
+| 4 | `org-model-universe-hand-enumerated` | deferred | High | M | Purge manually orders 21 models against an FK graph it does not derive. |
 
-Finding 13 remains at the `now` horizon. Findings 7, 2 and 4 remain behind the growth triggers the roadmap deliberately left closed.
-
----
-
-## Gate-layer closure evidence
-
-The gate-suite closure is complete. The retained source facts are 15 suite files,
-1,227 collected and passed tests, and a cache/coverage-disabled
-`check-gate-suites` target. The eight registry-bound hosted jobs and six justified
-unowned jobs form the exact 14-job CI set; `isolation-conformance` is Make-exposed but
-remains hosted-unowned because it still requires a PostgreSQL service and restricted role.
-Product sources and the 90% coverage threshold remain unchanged. Durable command,
-registry, generated-workflow, and quality evidence is in [CHANGELOG.md](../../CHANGELOG.md).
-
-The six unowned hosted jobs retain explicit rationales: `lint-frontend` is separately
-owned frontend validation; `backups-validation` is the hosted PostgreSQL 18 contract;
-`module-manifest-contract` is the ready-module contract; `test` owns the service-backed
-unit/integration workflow; `isolation-conformance` remains hosted-only and service-backed
-pending later lifecycle work; and `lint-cli` is separately owned CLI package validation.
+`ci-environment-hand-replicated` — the prior pass's rank-1 finding — is **resolved**; see the
+reconciliation log. No finding sits at the `now` horizon this pass.
 
 ---
 
-## Finding 13 — Each workflow hand-replicates the environment its gates need
+## Fix-regression audit
 
-**ID:** `ci-environment-hand-replicated`
+Both remediations in scope this pass — the landed environment centralization and the delta's gate
+edits — scored **resolved with the mechanism removed rather than relocated**. The narrative is
+archived in [CHANGELOG.md](../../CHANGELOG.md); nothing about it is live.
 
-**Rank rationale (blast radius × likelihood):** Blast radius is every service-backed gate in every context — a divergence makes the same gate mean different things in hosted, publish, e2e, and nightly. Likelihood is high: three of the seven commits in this delta were edits to these blocks, and SA135 will rewrite the model.
+What *is* live is the residue: two hand-pinned literals minted inside the new derivation
+(`((${#MODULES[@]} == 12))` and `[[ "$item" != teams ]]`, `provision_ci_postgres.sh:93,96`) and a
+second copy of the PostgreSQL major (`POSTGRES_MAJOR=18` at `:15`, against
+`runtime_pins.POSTGRES_VERSION = "18"`). Both fail loudly, so both were carried rather than
+promoted. They are stated in full with their triggers on the [watchlist](#watchlist) and owned by
+SA164.
 
-**Horizon & trigger:** `now`. **SA135** (v88 Track 3, merge #15) is specified as "the integration gate provisions its own PostgreSQL 18 server and tears it down, with no reliance on a pre-existing host server" and lists `docs/technical/validation_policy.md` as changing "the documented DB precondition". That work must land consistently across four workflows that today each state the precondition differently.
+---
 
-**Confidence:** High. Every station enumerated and read directly.
+## Finding — One privileged-command set, four owners, no gate
 
-**Context dependence:** `wrong-regardless` at this station count, though it would be unremarkable at two.
+**ID:** `privileged-command-set-multi-owner`
 
-**Problem:** The gate registry declares *which* gates run in *which* contexts, but the environment those gates require — PostgreSQL 18 client provenance, the test-database set, restricted-role grants, and per-module DB-user variables — is expressed nowhere declaratively and is instead hand-replicated as shell in each workflow.
+**Rank rationale (blast radius × likelihood):** Blast radius is the privilege-selection seam of
+every generated project — which database role serves traffic, and whether the RLS boot guard runs at
+all. Likelihood is what places it first: the drift mechanism has **already fired once**, silently,
+and no gate noticed.
 
-**Evidence — station census (13 enumerations of the module universe, 4 variants of client provisioning):**
+**Horizon & trigger:** `6–18 months`. The trigger is a **third sanctioned privileged command, or a
+fourth consumer of `QUICKSCALE_PRIVILEGED_COMMAND`**. This is anticipated in the code itself —
+`orgs/apps.py:34-35` carries the instruction "Add new commands here when the generated launcher
+starts setting QUICKSCALE_PRIVILEGED_COMMAND to additional values" — and the set has already been
+widened once (CR-SA68-001, from `== "migrate"` to a two-element frozenset). Not `now`: the four
+definitions are currently equal, and nothing on the v88 roadmap adds a command.
 
-| Station | Location | Shape |
-|---|---|---|
-| PGDG PG18 install | `ci.yml:92-107`, `ci.yml:408-427`, `publish.yml:161-187`, `e2e.yml:74-91` | ~20 identical shell lines, four copies |
-| PG18 verification | `ci.yml:109`, `ci.yml:429`, `publish.yml:182` vs `e2e.yml:92` | **divergent**: three check `command -v` resolution *and* `--version | grep "(PostgreSQL) 18"`; e2e checks only `test -x` |
-| PG client (nightly) | `nightly-bypassrls.yml:81-82` | **divergent**: plain `postgresql-client` — Ubuntu 16.x, no PGDG, no PG18 |
-| `createdb` list | `ci.yml:436-453`, `ci.yml:576-594`, `publish.yml:189-206`, `nightly-bypassrls.yml:79-98` | 4 copies; ci's isolation job carries 11, the rest carry 12 + smoke |
-| Role/ownership grants | `ci.yml:455-476`, `ci.yml:596-619`, `publish.yml:208-231`, `nightly-bypassrls.yml:100-134` | 4 copies |
-| `QS_*_DB_USER` env | `ci.yml:491-502`, `ci.yml:627-632`, `publish.yml:241-252`, `nightly-bypassrls.yml:140-151`, `test_integration.sh:414-425` | 5 copies; four carry 12 entries, `ci.yml:627` carries 6 |
-| Copy-pinning oracle | `scripts/test_gate_parity.py:1125-1180` | a **14th** station: the shell above transcribed verbatim as a Python literal |
+**Confidence:** High. All four definitions read directly; the fail-closed behaviour of every
+divergence direction traced through `ready()`; the absence of a gate verified against all ten
+registered gates.
 
-Two apparent divergences are **deliberate and correct**, and this pass verified them rather than reporting them: the 6-entry `QS_*_DB_USER` block at `ci.yml:627-632` is exactly `orgs` plus `RLS_MODULES=(billing blog crm forms listings)` from `scripts/test_isolation_conformance.sh:141`, and the isolation job's 11-database list omits `backups` because that job does not run backups tests. The nightly PG16 client is **not** verified as deliberate: `nightly-bypassrls.yml` creates `test_quickscale_backups` (line 87) and sets `QS_BACKUPS_DB_USER` (line 142), while `ci.yml:93-95` states the backups DR engine "enforces a PostgreSQL 18 `pg_dump`/`pg_restore` contract" that 16.x "fails". Runtime confirmation needed: whether `make test-bypassrls` reaches a `pg_dump` path.
+**Context dependence:** `wrong-regardless` at four owners. It would be unremarkable at one.
 
-**Counter-evidence:** Searched for a derivation or gate that would make this a false positive. Checked whether `sync_ci_gate_jobs.py` generates provisioning (it generates only the `hosted-gate-jobs`, three `needs-*` regions, and the `e2e-trigger-paths` region — `JOB_BEGIN`/`NEEDS_BEGIN`/`E2E_PATHS_BEGIN` at `sync_ci_gate_jobs.py:44-58`; provisioning steps are outside every generated marker). Checked whether `gate_registry.json` models environment — it does not; the schema is `id`/`description`/`required_contexts`/`bindings`/`depends_on`/`trigger_inputs`, and `check_gate_parity.py:498-524` validates `trigger_inputs` only as path strings. Checked whether a composite action or reusable workflow exists — `.github/` contains only the four workflow files. Checked whether the module lists are derived like manifests are (`check_sa117_scope.py:48` `_authoritative_module_names()` shells out to the discovery shim and raises on failure) — that pattern exists in the repository and is **not** applied to any of the 13 stations. The only thing holding any copy honest is `test_gate_parity.py`, which pins the shell as a literal; the current registered scripts gate now executes that oracle.
+**Problem:** The set of Django commands sanctioned to run with superuser privileges is a single
+runtime contract between the generated launcher and the generated settings, but it is *declared*
+four times — once in a template frozen into user projects at generation time, once in an upgradable
+module, once in the upgradable CLI, and once as a literal string in a test oracle — with no
+derivation and no gate holding them equal.
 
-**Why it compounds:** Adding a thirteenth module, or changing the pinned PostgreSQL major, requires a coordinated edit at up to 13 shell stations plus the literal oracle, with no derivation and no gate — and the failure mode is not a red build but a *quietly different* one, where a gate passes in hosted and means something else in nightly. Already built on top: every service-backed gate (`test`, `isolation-conformance`, `backups-validation`, `test-bypassrls`, the installed-wheel E2E) depends on this environment being identical, and the census shows it already is not. SA135 will have to change the provisioning model at every one of these stations simultaneously, in a release where `d3d4c633` demonstrated that a two-line provisioning edit can slip through under a release-shaped commit message.
+**Evidence — census of the definition sites (complete; the population is enumerable):**
 
-**Detection signal:** A gate that passes in one context and fails in another with an environment-shaped error (`pg_dump: server version mismatch`, `database "test_quickscale_x" does not exist`, `permission denied for schema public`). Instrument by having each workflow print `pg_dump --version` and the resolved DB user set into the job log, so a divergence is greppable across contexts.
+| # | Station | Line | Role | Upgrade class |
+|---|---|---|---|---|
+| 1 | `templates/project_name/settings/production.py.j2` | `:185` `_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})` | **Validator** — selects superuser `DATABASE_URL` vs restricted `RUNTIME_DATABASE_URL` | **Frozen** at generation vintage |
+| 2 | `quickscale_modules/orgs/.../apps.py` | `:36` `_PRIVILEGED_COMMANDS: frozenset[str] = frozenset({"migrate", "createcachetable"})` | **Guard bypass** — `ready()` returns early, skipping `_check_rls_role()` entirely | Upgradable (module wheel) |
+| 3 | `quickscale_cli/.../development_commands.py` | `:44` `_PRIVILEGED_DJANGO_COMMANDS = frozenset({"migrate", "createcachetable"})` | **Producer** — decides whether `quickscale manage <cmd>` injects the env var | Upgradable (CLI wheel) |
+| 4 | `quickscale_core/tests/test_generator/test_templates.py` | `:4278` `assert 'frozenset({"migrate", "createcachetable"})' in output or (...)` | **Literal oracle** transcribing station 1's source text | Repo-only |
+| — | `templates/start.sh.j2` | `:50,:61` | Producer, by literal inline prefix | **Frozen** at generation vintage |
 
-**Steelman:** GitHub Actions has no first-class include, and the alternatives all cost something real: a composite action adds an indirection that is harder to read in a failed job log, and pushing provisioning into a shell script means the workflow no longer shows what it does. Explicit duplication across four workflows is a defensible, common choice, and `be5cf024`'s message ("unbind hosted gates from one machine's environment") shows the maintainer is actively converging them rather than letting them rot. **Condition not to fix:** if the workflow count stays at four and the module universe stays frozen — which the roadmap's "neither" decision does guarantee for v88. That is why this ranks second rather than first, and why the recommendation below is the smallest possible change.
+Station 2's docstring at `apps.py:52` states: "``_PRIVILEGED_COMMANDS`` is the single source of
+truth for which values are sanctioned." **That claim is false and was already false when written.**
+Station 3 was added later and independently, in commit `3523f9f8` (2026-08-18) titled
+*"test: add installed-wheel lifecycle e2e"* — a test-labeled commit that introduced a new production
+decider on the privilege seam (`development_commands.py:693-697`, `f"QUICKSCALE_PRIVILEGED_COMMAND={args[0]}"`)
+without touching, or reconciling with, the docstring that claims exclusivity. Stations 1 and 2
+landed together in `52144290` (SA68); station 3 did not.
 
-**Correct shape:** The environment a gate requires is part of the gate's declaration, derived from one authoritative source, so that adding a module or bumping a pin changes one place and every context follows.
+**The contrast that proves this is not inherent.** The sibling contract in the same file is
+single-owner and coherent: `_KNOWN_NON_DB_COMMANDS = frozenset({"collectstatic", "compilemessages"})`
+(`production.py.j2:186`) is defined **once**, and its only producer is `Dockerfile.j2:191` — both
+template-side, both frozen at the same vintage, so they cannot drift apart. Same file, same release,
+same pattern; the privileged set is the one that grew extra owners.
+
+**Counter-evidence (falsification pass):** Searched for any mechanism that would disprove this.
+Enumerated all ten entries of `scripts/gate_registry.json` — none covers command-set parity
+(`check-org-context-primitives` is an AST gate over `quickscale_modules/*/src/`, but scoped to three
+named org-context primitives; `check-security-static-analysis` is Bandit; `check-module-core-imports`
+checks import direction only). Grepped `createcachetable` across all `.py`/`.sh`/`.json`: the only
+non-template hits are behavioural end-to-end tests (`test_generated_project_runtime.py:1178-1479`,
+which prove the pair *works*, not that the four sets *agree*) and the station-4 oracle. Checked
+whether `runtime_pins.py` — which does exactly this job for Python/Django/PostgreSQL versions and is
+rendered into templates via `generator.py:521-526` — carries the command sets: it does not. Checked
+whether the divergence could fail open, and it **cannot**: `ready()` calls `_is_privileged_command()`
+before `_check_rls_role()` (`apps.py:179-181`), so a module set that is *narrower* than the template's
+means the RLS guard runs and rejects the superuser role; a template set that is narrower raises
+`ValueError` at settings import. Every divergence direction fails closed. That is the strongest
+counter-evidence found, and it is why this is sized `S` and horizoned at 6–18 months rather than
+called a vulnerability.
+
+**Why it compounds:** Adding a third sanctioned command requires coordinated edits at stations 1–4
+plus `start.sh.j2`, `OPERATIONS.md.j2`, `README.md.j2` and `docs/deployment/railway.md` — see the
+change-cost probe below — with nothing detecting a missed station until a specific command is run in
+a specific deployment. Each new consumer of the env var adds another owner, as station 3 already
+demonstrated. Already built on top: the RLS enforcement posture of every `saas`-mode generated
+project, the `quickscale up` migration path (`development_commands.py:226`), the Railway deploy path
+(`start.sh.j2`), and the frozen copy inside every project already generated — for which station 1 can
+never be corrected in place, because the updater carries `settings/production.py` forward from the
+old project rather than replacing it (see the next finding).
+
+**Detection signal:** A generated project failing at boot with `Unknown QUICKSCALE_PRIVILEGED_COMMAND
+value '<cmd>'. Supported values: createcachetable, migrate` after a CLI or module upgrade — the
+signature of station 3 or 2 having moved ahead of a frozen station 1. There is no signal today for
+the sets merely being unequal; instrument by making station 4 compare the rendered template's set to
+the imported CLI and module sets instead of matching a literal string.
+
+**Steelman:** The template must render standalone into a user-owned project with no import back into
+QuickScale, so *some* copy in the emitted settings is unavoidable — the generated project genuinely
+owns its own settings, which is the product's central promise ("100% yours, no vendor lock-in").
+Every divergence fails closed. And three of the four sets sit in a repository with one maintainer,
+where a mental model substitutes cheaply for a gate. **Condition not to fix:** if the sanctioned set
+is genuinely frozen at two commands forever, the cost is a stale docstring and nothing more.
+
+**Correct shape:** The sanctioned privileged-command set is declared once, by the component that owns
+the launcher↔settings contract, and every decider — emitted template, CLI, module, and test oracle —
+reads that declaration rather than restating it.
 
 **Options:**
 
-1. **One provisioning script, four callers.** Move the PGDG install, `createdb` loop, and grant loop into `scripts/provision_ci_postgres.sh`, deriving the module list from the existing discovery shim (`quickscale_core/.../contracts/module_discovery.py --list-modules`) exactly as `check_sa117_scope.py:48` already does. Each workflow calls it with a role argument. Removes 12 of 13 stations. Low risk, high reversibility; costs log readability.
-2. **Extend the registry with an `environment` block** per gate (client version, database set, role contract), and have `sync_ci_gate_jobs.py` generate the provisioning steps into all four workflows the way it already generates job and `needs` regions. Strongest — it makes environment drift a parity failure — and it is the natural home for SA135's outcome. Costs a schema version bump and extends the generator to `publish.yml`/`e2e.yml`/`nightly-bypassrls.yml`, which it does not currently touch.
-3. **A composite action under `.github/actions/setup-postgres/`.** Idiomatic for GitHub Actions and the least project-specific. But it puts the module list outside the Python discovery shim, so it fixes the shell duplication without fixing the derived-module-universe half.
+1. **Extend the existing `runtime_pins` seam.** Add the command sets to
+   `generator/runtime_pins.py` (or a sibling `command_contract.py` in `quickscale_core.runtime`),
+   render station 1's frozenset from it exactly as `POSTGRES_VERSION` is already rendered
+   (`generator.py:521-526`), import it in the CLI, and have `orgs` read it via
+   `quickscale_core.runtime` — the one import path the module-core-imports gate permits. Station 4
+   then derives instead of matching a literal. Removes three of four owners; the emitted copy remains,
+   but as a *rendering* of the declaration rather than a restatement of it. Uses the repository's own
+   proven pattern.
+2. **An AST parity gate, keeping the copies.** Model it on `scripts/check_org_context_primitives.py`:
+   parse the four sites, assert set equality, register it in `gate_registry.json`. Cheaper and
+   preserves the template's standalone renderability, but leaves four owners and pays the fourteen-station
+   gate-registration tax measured below.
+3. **Collapse to one decider.** Delete stations 2 and 3 and let the settings module be the sole
+   authority, with the module guard keying off an outcome signal the settings layer publishes rather
+   than re-deciding from the env var. Fewest owners, but requires a runtime handshake that does not
+   exist today and would weaken the module's independent fail-closed backstop — which is a listed
+   sound decision.
 
-**Recommendation:** **Option 1 as part of SA135**, not before it. SA135 already owns `scripts/test_integration.sh`, `scripts/provision_test_roles.sh`, the `Makefile`, and the documented DB precondition — it is the one ticket whose allowlist already spans this seam, and doing the extraction inside it avoids a second pass over the same files. The registry now contains the completed eight-hosted-gate schema, so any Option 2 environment extension must preserve that settled contract. · **Size:** `M` · **First step:** extract the PGDG install block — the only piece that is byte-identical across three workflows and outright wrong in the fourth — into `scripts/` and prove the four callers agree, before touching the module-list loops.
-
----
-
-## Finding 7 — Generated-file ownership remains a hand-authored updater taxonomy
-
-**ID:** `generated-file-ownership-unmodeled` · **Horizon:** 6–18 months · **Confidence:** High · **Size:** M · **Context dependence:** `wrong-for-now` (new domain / second consumer)
-
-**Trigger:** Promote when a third generated-project consumer, public updater, emitted-file expansion, or second theme is scheduled. **Not fired this pass** — the roadmap's "neither" decision explicitly schedules no third updater for v88.
-
-**Problem:** The generator knows what it emits, but beta migration independently assigns upgrade behavior through a hand-authored taxonomy of 138 list/map entries across required donor/recipient, identity, infrastructure, protected, substituted, unmanaged, and module-react categories.
-
-**Evidence (re-verified this pass):** `get_generator_emission_mapping()` at `quickscale_core/src/quickscale_core/generator/generator.py:142` is authoritative for emitted membership; `quickscale_devtools/src/quickscale_devtools/beta_migration.py` (2,714 lines) owns disposition; `quickscale_cli/tests/test_beta_migration_ownership_conformance.py` proves every emitted path is classified but not that the ownership decision is generator-owned or semantically correct. One supported theme, byte-parity gates, and two private updater consumers keep the current manual policy defensible.
-
-**Counter-evidence:** Searched for a derivation making the taxonomy generator-owned; found only the membership conformance test. Roadmap SA152 independently confirms the gate's weakness from the other side — `_template_emitted_paths()` skips rather than fails when the template tree is missing, so the conformance proof can go green vacuously. That strengthens rather than disproves the finding, and is tracked as SA152 rather than promoted here because the trigger remains closed.
-
-**Why it compounds:** Every emitted-file change requires a matching taxonomy edit at a second, unowned station; SA114 was a recent paid synchronization of exactly this kind.
-
-**Steelman:** With one theme and two private consumers, an explicit human policy is more honest than a derived one, and deriving disposition from emission would encode a guess where a decision belongs. Do not fix while the trigger stays closed.
-
-**Correct shape:** Upgrade disposition for an emitted path is declared once, by whoever owns emission, and read by every updater.
-
-**Options:** ~~(status quo without a conformance gate)~~ — superseded; the membership gate landed. **1.** Add typed ownership/disposition metadata to generator emission entries and derive the beta-migration collections. **2.** Emit a versioned ownership manifest for generated projects, supporting vintage negotiation but requiring a pre-manifest migration contract. **3.** *(live)* Keep the taxonomy and conformance gate — acceptable only while the growth trigger is false.
-
-**Recommendation:** Hold Option 3. Take Option 1 when the trigger fires; add Option 2 only for a public updater needing vintage negotiation. · **First step:** characterize the existing 138-entry policy before deriving anything.
+**Recommendation:** **Option 1.** It reuses a seam that already exists, already renders into
+templates, and is already gated; it removes the owners that can drift (CLI and module ship on the
+same release line as core) while leaving the emitted copy honestly frozen; and it converts station 4
+from a literal transcript into a derivation, which is precisely the move `48e0a62a` just made for the
+planning documents. Option 2 is the fallback if rendering the set into the template proves awkward.
+· **Size:** `S` · **First step:** move the frozenset into core and render station 1 from it — that
+single change also fixes station 4 — then delete the CLI copy in favour of the import, and correct
+the `apps.py:52` docstring to name the real owner.
 
 ---
 
-## Finding 2 — Cleanup invariants terminate at the account-delete boundary
+## Finding — Generated-file ownership remains a hand-authored updater taxonomy
 
-**ID:** `deletion-invariants-per-boundary-reimplementation` · **Horizon:** deferred · **Confidence:** High · **Size:** S · **Context dependence:** `wrong-for-now` (new domain / compliance)
+**ID:** `generated-file-ownership-unmodeled` · **Horizon:** 6–18 months · **Confidence:** High ·
+**Size:** M · **Context dependence:** `wrong-for-now` (new domain / second consumer)
 
-**Trigger:** Promote when `teams`, a GDPR erasure command, bulk-admin deletion, or another account/organization deletion boundary is scheduled. **Not fired this pass** — the roadmap records no `teams` work for v88.
+**Trigger:** Promote when a third generated-project consumer, a public updater, an emitted-file
+expansion, or a second theme is scheduled. **Not fired this pass** — the roadmap's "neither" decision
+schedules no third updater for v88.
 
-**Problem:** Last-owner safety is structural, but billing cancellation and other cross-domain cleanup are orchestrated only by the account-delete view, so a second boundary would rediscover and reorder those effects.
+**Problem:** The generator knows what it emits, but beta migration independently assigns upgrade
+behavior through a hand-authored taxonomy of list/map entries across required donor/recipient,
+identity, infrastructure, protected, substituted, unmanaged, and module-react categories.
 
-**Evidence (re-verified this pass):** `OrganizationMembership.is_last_owner_with_members()` is defined at `quickscale_modules/orgs/src/quickscale_modules_orgs/models.py:165` and consumed by locked model deletion (`models.py:329`), the orgs `pre_delete` receiver (`signals.py:66`), the HTML and JSON member-deletion views (`orgs/views.py:808`, `orgs/views.py:1161`), and the account-delete view (`auth/views.py:164`) — six callsites, all going through the one predicate. Account deletion alone cancels personal-organization subscriptions; no domain deletion service or billing backstop owns that obligation for a second boundary.
+**Evidence (all anchors re-verified this pass):** `get_generator_emission_mapping()` at
+`quickscale_core/src/quickscale_core/generator/generator.py:142` is authoritative for emitted
+membership; `quickscale_devtools/src/quickscale_devtools/beta_migration.py` (2,714 lines, unchanged)
+owns disposition across the collections declared at lines 55–268;
+`quickscale_cli/tests/test_beta_migration_ownership_conformance.py` proves every emitted path is
+classified, but not that the ownership decision is generator-owned or semantically correct.
 
-**Counter-evidence:** Searched for a domain-level deletion coordinator or billing-side backstop; found none. The last-owner predicate genuinely is structural — the `pre_delete` receiver means even a direct ORM delete is caught — so this finding is scoped to *cross-domain cleanup*, not to last-owner safety, which is sound.
+**New evidence this pass — the taxonomy splits one contract across opposite dispositions.** The
+categories are assigned *per file*, with no model of which files participate in a shared runtime
+contract, and the privileged-command contract lands on both sides of the line:
+`settings/production.py` — the **validator**, holding the fail-closed privilege guard — is listed in
+`FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES` (line 59) and `FRESH_FIRST_DONOR_DJANGO_FILES` (line 92),
+so `_execute_copy_selected_django_files()` (line 1846) copies it **from the donor**, i.e. the user's
+existing project, over the freshly generated one. Meanwhile `start.sh` and `Dockerfile` — the
+**producers** of the very env vars that file validates — are in `IN_PLACE_INFRASTRUCTURE_TARGETS`
+(lines 109, 121) and `IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS` (lines 125, 128), and are copied
+with substitution at line 2098. The producer is updated to the new vintage; the validator is carried
+forward at the old one. Nothing in the conformance test can see this, because it checks membership
+of the taxonomy, not coherence across it.
 
-**Why it compounds:** A second boundary copies the account view's billing cleanup, and the two diverge silently thereafter.
+**Counter-evidence:** Searched for a derivation making the taxonomy generator-owned; found only the
+membership conformance test. Searched for vintage negotiation in generated projects — `ProjectState`
+does carry a `project_contract` version (`schema/state_schema.py:108`), so the *capability* to detect
+vintage exists and is unused by the updater. Crucially, checked whether this reaches public users:
+it does **not** — `quickscale_devtools` is maintainer-only, excluded by name from
+`scripts/publish.sh:17-27` and `scripts/prepare_publish.py:27-40`, so the blast radius today is the
+maintainer's own beta-site migrations, not the user base. That is what holds this at 6–18 months
+rather than promoting it on the new evidence.
 
-**Steelman:** One user-facing deletion flow is fully covered, and putting network calls (payment-provider cancellation) inside Django signals would be a worse structure than the current explicit orchestration. A coordinator built before a second consumer exists would be a premature abstraction.
+**Why it compounds:** Every emitted-file change requires a matching taxonomy edit at a second,
+unowned station; SA114 was a recent paid synchronization of exactly this kind. The producer/validator
+split adds a second compounding axis: each new cross-file runtime contract must have its disposition
+coherence checked by hand, and there is no place where "these files move together" can be stated.
 
-**Correct shape:** Every deletion boundary discharges the same set of cross-domain obligations, declared once by the domains that own them.
+**Steelman:** With one theme, one maintainer-only consumer, and byte-parity gates on emission, an
+explicit human policy is more honest than a derived one — deriving disposition from emission would
+encode a guess where a decision belongs. The donor-wins choice for `production.py` is also defensible
+on its own terms: that file is where users put their real deployment configuration, and overwriting it
+would be worse than carrying it forward. Do not fix while the trigger stays closed.
 
-**Options:** **1.** An explicit account/organization deletion coordinator with idempotent domain contributors. **2.** Local safeguards/outbox records in each domain — safer against bypass, but network effects complicate transactions. **3.** Deletion as a durable lifecycle/job — strongest recovery, excessive until multi-store erasure exists.
+**Correct shape:** Upgrade disposition for an emitted path is declared once, by whoever owns emission,
+and read by every updater — and files that participate in one runtime contract carry a coherent
+disposition, checkably.
 
-**Recommendation:** Option 1 when the trigger fires, preserving the existing last-owner model/signal backstop. Design it together with Finding 4 at `teams` kickoff so the new domain is integrated once. · **First step:** enumerate the account view's cleanup effects as a named obligation list before extracting anything.
+**Options:** **1.** Add typed ownership/disposition metadata to generator emission entries and derive
+the beta-migration collections. **2.** Emit a versioned ownership manifest into generated projects,
+supporting vintage negotiation against the `project_contract` version that already exists in state.
+**3.** *(live)* Keep the taxonomy and conformance gate — acceptable only while the trigger is false.
+
+**Recommendation:** Hold Option 3. Take Option 1 when the trigger fires; add Option 2 only for a
+public updater needing vintage negotiation. · **First step:** characterize the existing policy — and,
+independently of the trigger, add a cheap coherence assertion for the one contract now known to
+straddle the line, so `start.sh` and `settings/production.py` cannot silently take opposite
+dispositions.
 
 ---
 
-## Finding 4 — Organization purge order manually shadows the FK graph
+## Finding — Cleanup invariants terminate at the account-delete boundary
 
-**ID:** `org-model-universe-hand-enumerated` · **Horizon:** deferred · **Confidence:** High · **Size:** M · **Context dependence:** `wrong-for-now` (tenant-model growth)
+**ID:** `deletion-invariants-per-boundary-reimplementation` · **Horizon:** deferred ·
+**Confidence:** High · **Size:** S · **Context dependence:** `wrong-for-now` (new domain / compliance)
 
-**Trigger:** Promote when `teams` adds a tenant model, or any module adds a `PROTECT`/non-deferrable dependency among purge-owned rows. **Not fired this pass.** **SA151** (v88 Track 3) regenerated every module's migrations as a single `0001_initial`. That rewrote the schema history but not the model graph, so it did not fire this trigger — but it does mean the FK edges `_DELETE_SPECS` shadows were re-emitted from current models, which is a natural moment to derive the order rather than re-confirm it by hand. The purge-order finding remains deferred.
+**Trigger:** Promote when `teams`, a GDPR erasure command, bulk-admin deletion, or another
+account/organization deletion boundary is scheduled. **Not fired this pass** — `quickscale_modules/teams/`
+still contains only `README.md`, and `decisions.md` records teams as "not next and not planned".
 
-**Problem:** Tenant-model membership is derived and gated, but `_DELETE_SPECS` manually orders 21 models while tests assert only three CRM relations. Because purge uses `_raw_delete` and composite FKs are `NOT DEFERRABLE`, the list is load-bearing.
+**Problem:** Last-owner safety is structural, but billing cancellation and other cross-domain cleanup
+are orchestrated only by the account-delete view, so a second boundary would rediscover and reorder
+those effects.
 
-**Evidence (re-verified this pass):** `_DELETE_SPECS` is declared at `quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/purge_organization.py:64` and consumed at line 222; `quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py` (62 KB) holds the 45-entry tenant registry cross-checked against marker-derived concrete models. Purge membership is exact, atomic, and fail-loud; database constraints prevent silent partial deletion. The *ordering* is not derived or validated against installed FK edges.
+**Evidence (all six callsites re-verified this pass):** `OrganizationMembership.is_last_owner_with_members()`
+is defined at `quickscale_modules/orgs/src/quickscale_modules_orgs/models.py:165` and consumed by
+locked model deletion (`models.py:329`), the orgs `pre_delete` receiver (`signals.py:66`), the HTML and
+JSON member-deletion views (`orgs/views.py:808`, `orgs/views.py:1161`), and the account-delete view
+(`auth/views.py:164`) — six callsites, all through the one predicate. Account deletion alone cancels
+personal-organization subscriptions; no domain deletion service or billing backstop owns that
+obligation for a second boundary.
 
-**Counter-evidence:** Searched for a topological derivation or a full-graph validator; found membership derivation (gated) but no ordering derivation. The database's own `NOT DEFERRABLE` constraints are a real backstop — a wrong order fails loudly rather than corrupting — which is why this stays `deferred` rather than rising.
+**Counter-evidence:** Searched again for a domain-level deletion coordinator or billing-side backstop;
+found none. The last-owner predicate genuinely is structural — the `pre_delete` receiver is connected
+in `apps.py:ready()` and so catches direct ORM deletes — which scopes this finding to *cross-domain
+cleanup*, not to last-owner safety, which is sound.
 
-**Why it compounds:** Every new tenant model adds an entry whose correct position is decided by hand and proven only by whether the purge happens to run.
+**Why it compounds:** A second boundary copies the account view's billing cleanup, and the two diverge
+silently thereafter.
 
-**Steelman:** Explicit ordering can express semantics model metadata cannot (filter annotations, deliberate overrides), and the failure mode is loud rather than silent. Deriving it would trade a readable list for a derivation that still needs overrides.
+**Steelman:** One user-facing deletion flow is fully covered, and putting network calls
+(payment-provider cancellation) inside Django signals would be a worse structure than the current
+explicit orchestration. A coordinator built before a second consumer exists is a premature abstraction.
 
-**Correct shape:** Purge order is proven against the installed FK graph, whether it is derived from it or merely validated against it.
+**Correct shape:** Every deletion boundary discharges the same set of cross-domain obligations,
+declared once by the domains that own them.
 
-**Options:** **1.** Topologically derive the purge plan from installed model metadata, retaining explicit labels and filter annotations. **2.** Let modules publish purge descriptors and dependencies — clearer domain ownership, still a distributed registry. **3.** Keep the explicit order and add a complete graph validator — lower migration risk, preserves the duplication.
+**Options:** **1.** An explicit account/organization deletion coordinator with idempotent domain
+contributors. **2.** Local safeguards/outbox records in each domain — safer against bypass, but network
+effects complicate transactions. **3.** Deletion as a durable lifecycle/job — strongest recovery,
+excessive until multi-store erasure exists.
 
-**Recommendation:** Option 3 as a characterization gate, then Option 1 when the trigger fires. Preserve deterministic reporting and explicit overrides. · **First step:** add the validator that walks installed FK edges and asserts the existing 21-entry order is a valid topological sort.
+**Recommendation:** Option 1 when the trigger fires, preserving the existing last-owner model/signal
+backstop. Design it together with `org-model-universe-hand-enumerated` at `teams` kickoff so the new
+domain is integrated once. · **First step:** enumerate the account view's cleanup effects as a named
+obligation list before extracting anything.
+
+---
+
+## Finding — Organization purge order manually shadows the FK graph
+
+**ID:** `org-model-universe-hand-enumerated` · **Horizon:** deferred · **Confidence:** High ·
+**Size:** M · **Context dependence:** `wrong-for-now` (tenant-model growth)
+
+**Trigger:** Promote when `teams` adds a tenant model, or any module adds a `PROTECT`/non-deferrable
+dependency among purge-owned rows. **Not fired this pass** — the spec list is byte-identical to the
+prior pass, and the module universe is unchanged at twelve.
+
+**Problem:** Tenant-model membership is derived and gated, but `_DELETE_SPECS` manually orders 21
+models while tests assert only three CRM relations. Because purge uses `_raw_delete` and composite FKs
+are `NOT DEFERRABLE`, the list is load-bearing.
+
+**Evidence (re-verified and re-derived this pass):** `_DELETE_SPECS` is declared at
+`quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/purge_organization.py:64` and
+consumed at line 222. The entry count was re-derived by AST rather than transcribed — **21 specs**,
+spanning social (2), forms (4), listings (1), blog (4), crm (7), billing (3). `tenancy.py` (62 KB)
+holds the tenant registry cross-checked against marker-derived concrete models. Purge membership is
+exact, atomic, and fail-loud; database constraints prevent silent partial deletion. The *ordering* is
+not derived or validated against installed FK edges.
+
+**Counter-evidence:** Searched for a topological derivation or a full-graph validator; found membership
+derivation (gated) but no ordering derivation. The database's own `NOT DEFERRABLE` constraints are a
+real backstop — a wrong order fails loudly rather than corrupting — which is why this stays `deferred`.
+
+**Why it compounds:** Every new tenant model adds an entry whose correct position is decided by hand and
+proven only by whether the purge happens to run.
+
+**Steelman:** Explicit ordering can express semantics model metadata cannot (filter annotations,
+deliberate overrides), and the failure mode is loud. Deriving it would trade a readable list for a
+derivation that still needs overrides.
+
+**Correct shape:** Purge order is proven against the installed FK graph, whether derived from it or
+merely validated against it.
+
+**Options:** **1.** Topologically derive the purge plan from installed model metadata, retaining explicit
+labels and filter annotations. **2.** Let modules publish purge descriptors and dependencies. **3.** Keep
+the explicit order and add a complete graph validator.
+
+**Recommendation:** Option 3 as a characterization gate, then Option 1 when the trigger fires. Preserve
+deterministic reporting and explicit overrides. · **First step:** add the validator that walks installed
+FK edges and asserts the existing 21-entry order is a valid topological sort.
 
 ---
 
 ## Change-cost probe
 
-**Target:** **SA123** — the implemented dependency-vulnerability and security-static-analysis gate change at open position #13. This dry-run was made before implementation and is retained as dated change-cost evidence; at that checkpoint ticket acceptance remained blocked by SA169, and no root merge-back is claimed by this probe.
+**Probe A — target: add a third sanctioned privileged command** (e.g. a future `clearsessions` or a
+data-fix command needing DDL). Chosen because the code itself anticipates it (`apps.py:34-35`) and it
+exercises the seam this pass investigated. Measured station list, in order:
 
-**Measured station list for adding *one* registered gate** (dry-run on paper, in order):
+1. `templates/project_name/settings/production.py.j2:185` — `_KNOWN_PRIVILEGED_COMMANDS`. **Frozen** in
+   every already-generated project; cannot be back-fixed by an upgrade.
+2. `quickscale_modules/orgs/.../apps.py:36` — `_PRIVILEGED_COMMANDS`, or the RLS boot guard rejects it.
+3. `quickscale_cli/.../development_commands.py:44` — `_PRIVILEGED_DJANGO_COMMANDS`, or `quickscale manage`
+   never sets the env var.
+4. `quickscale_core/tests/test_generator/test_templates.py:4278` — literal-string oracle.
+5. `templates/start.sh.j2:50,61` — only if the command runs at deploy.
+6. `templates/OPERATIONS.md.j2:29,41,79,114-119` and `templates/README.md.j2:241,310` — emitted operator docs.
+7. `docs/deployment/railway.md` and `docs/technical/decisions.md` — repository operator docs.
 
-1. `scripts/gate_registry.json` — new gate object (`id`, `description`, `required_contexts`, `bindings`, `depends_on`, `trigger_inputs`).
-2. `Makefile` — new `check-*` recipe.
-3. `Makefile:60-68` — add the target to `.PHONY`.
-4. `Makefile` `check` aggregation — parity requires each `check-*` target be reachable from `check` (`check_gate_parity.py:2551`).
-5. `Makefile:230-231` — help text.
-6. `scripts/sync_ci_gate_jobs.py:60-66` — `HOSTED_GATE_ORDER` tuple.
-7. `scripts/sync_ci_gate_jobs.py:101` — `HOSTED_JOB_CATALOG` display/step metadata.
-8. `scripts/sync_ci_gate_jobs.py:78-88` — `NEEDS_GATE_IDS` for each of the three consumer jobs.
-9. `.github/workflows/ci.yml` — generated job + three generated `needs:` regions (mechanical, via `--write`).
-10. `.github/workflows/publish.yml` — **hand-edited**; `sync_ci_gate_jobs.py` does not generate it.
-11. `.github/workflows/e2e.yml` — `trigger_inputs` must appear as an order-preserving subsequence of the path allowlist (`check_gate_parity.py:2518-2524`).
-12. `scripts/check_ci_locally.sh` — **three** per-gate `case` arms: `describe_local_conformance_gate` (line 262), the serial failure banner in `run_serial_conformance_gate` (line 299, has a `*)` default), `report_static_failure_banner` (line 423).
-13. `scripts/test_gate_parity.py` — the count-pinned literal oracles: `test_all_twenty_four_publish_run_values_are_structural` (1087), `test_all_ten_bound_hosted_run_values_match_current_source` (1064), `test_e2e_extracts_thirty_three_paths` (958, asserts `len(paths) == 33`), plus four `all_five_conformance_gates`-style assertions (803, 809, 815, 847).
-14. A suppression/allowlist file with per-entry rationale and owner.
+**Verdict: finding evidence.** Seven stations, **four of them executable code plus one oracle**, none
+derived, none gated, and station 1 unreachable in deployed projects. Contrast the adjacent `NON_DB`
+contract, whose equivalent probe touches **one** station — same file, same release, single owner.
 
-**Verdict: finding evidence.** Fourteen stations for one gate, of which **eight are hand-maintained** (1–8, 10, 12–14 minus the generated ones). The probe confirms that the remaining environment duplication is a live SA135 seam; the registered scripts gate is no longer a missing validation context.
+**Probe B — target: add one registered gate** (re-measured; the gate layer changed substantially since
+the prior pass). The environment half of the prior 14-station measurement is **gone**: provisioning is
+one call per station and the module list is derived. The registration half is intact — registry entry,
+`Makefile` recipe + `.PHONY` + `check` aggregation + help text, `HOSTED_GATE_ORDER`
+(`sync_ci_gate_jobs.py:60`), `HOSTED_JOB_CATALOG` (line 123), `NEEDS_GATE_IDS` (line 97), hand-edited
+`publish.yml`, three `case` arms in `check_ci_locally.sh` (lines 261, 313, 447), and roughly six
+count-pinned oracles in `test_gate_parity.py` (`..._all_eight_...` ×3, `..._all_seven_...` ×2,
+`..._all_sixteen_...`, `..._exactly_six_...`).
 
-**Counter-probe (exonerating):** the same dry-run for **adding a thirteenth module** sails through the manifest and scope seams — `_authoritative_module_names()` (`check_sa117_scope.py:48`) and `_load_module_inventory()` in `scripts/version_tool.sh` both shell out to the discovery shim and raise on failure, so module *identity* needs no edit. That derivation is real and is listed under sound decisions below. It is also the precise pattern Finding 13's thirteen environment stations fail to use, which is why the recommendation there is to reuse it rather than invent something.
+**Verdict: watchlist, not a finding.** Every one of those stations is protected by the closed-universe
+check at `sync_ci_gate_jobs.py:365`, which raises when `UNOWNED_JOB_IDS ∪ registry-bound` ≠ the actual
+14-job set. A missed station is a **red build, not silent drift** — the decisive difference from the
+resolved environment finding, and from Probe A. The cost is flat per gate, and gates are added rarely.
+
+---
 
 ## Fix order and interactions
 
-Finding 13 should ride inside SA135 rather than preceding it, since SA135 already owns that file surface. Findings 7, 2 and 4 are independent of Finding 13 and of each other, except that 2 and 4 should be designed together at `teams` kickoff.
+`privileged-command-set-multi-owner` is independent of everything else and can land in any release; it
+does not touch the W1/W2/W3 file surfaces and needs no PostgreSQL slot, which makes it good slack
+filler. It has one soft interaction with `generated-file-ownership-unmodeled`: Option 1 there (typed
+disposition metadata) would be the natural place to also record that `start.sh` and
+`settings/production.py` participate in one contract, so if both are ever scheduled together, do the
+command-set consolidation first and let the disposition work reference the now-single declaration.
+`deletion-invariants-per-boundary-reimplementation` and `org-model-universe-hand-enumerated` remain
+independent of the other two and should be designed together at `teams` kickoff.
 
 ## Sound load-bearing decisions
 
-- **The hosted job set is a closed universe.** `sync_ci_gate_jobs.py:314-320` computes `UNOWNED_JOB_IDS | registry-bound jobs` and raises when it does not equal `ci.yml`'s actual job set. Eight registered hosted jobs plus six justified unowned jobs equal the exact 14-job workflow set; a new hosted job cannot ship unnoticed.
-- **Module identity is derived, never re-listed.** `check_sa117_scope.py:48` and `version_tool.sh` both shell out to `contracts/module_discovery.py --list-modules` and fail hard when it is unavailable. This is the repository's own good pattern; Finding 13 recommends reusing it rather than inventing a new one.
-- **Tenant isolation is dual-layer and fails closed.** Ambient `TenantManager` scoping plus restricted-role `FORCE RLS`, with a boot guard that rejects a `rolbypassrls`/`rolsuper` runtime role. `be5cf024` strengthened this by making the hosted isolation job connect as `quickscale_test_role` rather than `postgres` — a superuser would have made the RLS proofs vacuous. Protect the `QUICKSCALE_ALLOW_BYPASSRLS: "0"` posture at `ci.yml:626` in any provisioning refactor.
-- **Last-owner safety is a model/signal backstop, not a view check.** Six callsites, one predicate, plus a `pre_delete` receiver that catches direct ORM deletes. A future deletion coordinator (Finding 2) must not weaken this.
-- **Source-required manifest operations remain fail-hard**, and bundled manifests are inventory metadata rather than module source. The closed v88 SA150 ticket extended this posture to the wheelhouse seam rather than contradicting it.
+- **The PostgreSQL environment is one contract with five profiles.** `scripts/provision_ci_postgres.sh`
+  derives its module universe from the discovery shim and hard-fails on absence, emptiness, duplication
+  or unsorted input; six hosted stations and five Makefile targets consume it; and
+  `test_gate_parity.py:297` asserts the *absence* of the pre-existing hand-rolled shell in every station.
+  This is the prior pass's leading finding closed by construction — protect the absence assertions in
+  particular, since they are what stops the old shape returning.
+- **Module identity is derived, never re-listed.** `check_sa117_scope.py:48`, `version_tool.sh`, and now
+  `provision_ci_postgres.sh:79-97` all shell out to `contracts/module_discovery.py --list-modules` and
+  fail hard when it is unavailable. This is the repository's own good pattern and the basis of the
+  recommendation above.
+- **`runtime_pins.py` is a working single-declaration seam for values that must reach templates.**
+  Pins are rendered into templates through `generator.py:521-526` and read by tests rather than
+  transcribed. It is the proven precedent the privileged-command set should reuse.
+- **Conformance gates assert derived facts, not literals.** `48e0a62a` removed literal ticket IDs,
+  positions, dates, and prose from the planning gate and replaced them with counts derived from the
+  roadmap, each protected by an explicit red-canary test. The principle is now written down in the
+  gate's own docstring; apply it to the remaining count-pinned oracles rather than reverting it.
+- **Tenant isolation is dual-layer and fails closed.** Ambient `TenantManager` scoping plus restricted-role
+  `FORCE RLS`, with a boot guard that rejects a `rolbypassrls`/`rolsuper` runtime role, and
+  `_check_quickscale_mode()` running *before* the privileged-command exemption so no startup path can skip
+  it. Any consolidation of the command set must keep the module's independent guard, not replace it with
+  trust in the settings layer.
+- **Last-owner safety is a model/signal backstop, not a view check.** Six callsites, one predicate, plus a
+  `pre_delete` receiver that catches direct ORM deletes.
 
 ## Watchlist
 
-- **Module universe repeated in environment lists.** Trigger: a thirteenth shipped module must be added to two or more ungated lists. **Not fired** — `teams` is still a README-only placeholder (`quickscale_modules/teams/` contains only `README.md`) and the roadmap's "neither" decision schedules no `teams` work for v88. Now largely absorbed by Finding 13, which measured the station count at 13; carry this item only as the promotion trigger for the *derivation* half.
-- **SA92 migration-squash discovery tuple.** Trigger: another migration-bearing module is added, or the tuple omits one. The exact artifact is `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`. It is a bounded literal tripwire, not a schema-parity proof: `_CROSS_TABLE_ORG_DML` catches the common cross-table `UPDATE … SET organization_id` shape, while the catalog/policy/data parity gate is the authoritative proof. Its `_migdir()` helper reads the inert `django_apps:` key and falls back to a conventional path; its parity backstop still names the retired `v87` baseline. SA151's regenerated migrations and terminal validation are archived; its S4 BYPASSRLS prerequisite was discharged on 2026-08-24 (`make test-bypassrls` exits 0 at 80 passed). **Action:** SA164 owns the `_migdir()` correction and parity-backstop re-anchoring; no SA92 implementation is performed here.
-- **Frontend runtime module keys.** Trigger: a new frontend-bearing module requires edits at three ungated stations. **Not fired** — no module was added this delta; the shipped set is unchanged at twelve.
-- **Privileged-command template/runtime pair.** Trigger: a third sanctioned command, or a mismatch. **Not fired — values verified equal this pass:** `production.py.j2:185` `_KNOWN_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})` and `quickscale_modules/orgs/src/quickscale_modules_orgs/apps.py:36` `_PRIVILEGED_COMMANDS = frozenset({"migrate", "createcachetable"})`. Note for next pass: the `apps.py` docstring calls itself "the single source of truth for which commands are privileged" while the template holds an independent copy — a governance-artifact disagreement even while the values agree.
-- **`trigger_inputs` has drifted from its name.** The field reads as "what changes should trigger this gate", but `check_gate_parity.py:2652-2690` uses it as a bidirectional partition of `e2e.yml`'s path allowlist — which is why `check-core-compat`'s trigger is `quickscale_modules/backups/**` and `smoke-install`'s is the two workflow files. Not a finding: the check it performs is real and exact. Trigger: promote if a gate is ever *skipped* on the basis of `trigger_inputs`, at which point the name's meaning becomes load-bearing.
+- **Hand-pinned literals inside the new provisioning derivation.** `provision_ci_postgres.sh:96`
+  (`== 12`) and `:93` (`!= teams`) re-introduce a module count and a module name into a script whose
+  whole point is deriving them. *Doesn't qualify:* both fail loudly and immediately, and the count check
+  is a deliberate drift tripwire. **Trigger:** a thirteenth shipped module, or `teams` graduating —
+  **not fired**, the universe is unchanged at twelve.
+- **Second copy of the PostgreSQL major.** `provision_ci_postgres.sh:15` `POSTGRES_MAJOR=18` against
+  `runtime_pins.py:30` `POSTGRES_VERSION = "18"`. *Doesn't qualify:* `runtime_pins` is explicitly
+  documented as generated-project-owned and independent of the repo's own toolchain, so two values is
+  arguably correct. **Trigger:** promote if the backups DR engine's `pg_dump`/`pg_restore` major-version
+  contract ever depends on the two agreeing — at that point they are one value wearing two names.
+- **Count-pinned oracles in `test_gate_parity.py`.** Roughly six assertions spell out gate counts
+  (`all_eight`, `all_seven`, `all_sixteen`, `exactly_six`). *Doesn't qualify:* flat cost, fails loudly,
+  and Probe B shows the closed-universe check backstops it. **Trigger:** the next gate addition paying
+  more than two oracle edits, or the counts disagreeing across two oracles — at which point apply the
+  derivation principle `48e0a62a` just established for the planning gate.
+- **SA92 migration-squash discovery tuple.** `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`
+  remains a bounded literal tripwire: `_migdir()` (line 52) still falls back to a conventional path, and the
+  parity backstop comment (line 25) still names the retired `v87` baseline. *Doesn't qualify:* the
+  catalog/policy/data parity gate is the authoritative proof. **Trigger:** another migration-bearing module,
+  or the tuple omitting one — **not fired**. SA164 owns the remediation.
+- **`trigger_inputs` has drifted from its name.** `check_gate_parity.py:2652-2690` uses the field as a
+  bidirectional partition of `e2e.yml`'s path allowlist, not as a trigger condition. *Doesn't qualify:* the
+  check it performs is real and exact. **Trigger:** a gate ever being *skipped* on the basis of
+  `trigger_inputs` — **not fired**; verified this pass that lines 498-524 validate it only as path strings
+  and no skip logic consumes it.
 
 ## Questions that would change the ranking
 
-- **Answered and retired.** *"What is the first post-0.87 domain/consumer: `teams`, a third generated-project updater, or neither?"* — **Answered "neither"**, recorded in `docs/technical/roadmap.md` under "Prioritization decision (recorded 2026-08-21)". Effect on ranking: Findings 7, 2 and 4 all stay behind their triggers and none is a v88 blocker; the audit's attention correctly moves to the governance layer, where all three v88 tracks build. Finding 13 remains the leading live governance finding.
-- **Does `make test-bypassrls` exercise any `pg_dump`/`pg_restore` path?** (`ci-environment-hand-replicated`) — if yes, the nightly workflow's PostgreSQL 16 client is a live defect rather than a harmless divergence, and Finding 13's first step becomes urgent rather than scheduled.
+- **Is the sanctioned privileged-command set intended to stay at two commands permanently?**
+  (`privileged-command-set-multi-owner`) — if yes, the finding downgrades to a watchlist item plus a
+  docstring correction, because the compounding never fires. If a third command is foreseeable, the
+  recommendation should land before it, not with it.
+- **Will `quickscale_devtools` ever be published, or a generated-project updater offered to users?**
+  (`generated-file-ownership-unmodeled`) — a public updater promotes that finding to `now` and makes the
+  producer/validator disposition split a user-facing upgrade hazard rather than a maintainer-side one.
 
-## Red flags (current open items)
+## Red flags (out of scope — fix now)
 
-**No red flag is open.** The former SA156, SA157, TA66/SA158, SA168, repo-source-interpreter (SA159), and TA69/SA162 red flags are closed; their evidence and their per-flag closure narratives are archived in [CHANGELOG.md](../../CHANGELOG.md) and are not restated here.
+**No red flag is open.** One candidate was investigated and dismissed this pass: `except ValueError,
+AttributeError:` at `purge_organization.py:337` parses as a `SyntaxError` on Python ≤3.13 but is valid
+under **PEP 758** and compiles cleanly on the project's pinned Python 3.14.6. It is correct code, and
+`scripts/check_repo_source_interpreters.py` exists precisely to keep tooling on the right interpreter.
+Recorded here only so a future pass using an older interpreter does not re-raise it.
 
 ## Reconciliation log
 
-- 2026-08-21 — `generated-file-ownership-unmodeled` (Finding 7): **still-open**, deferred. Anchors re-verified (`generator.py:142`, `beta_migration.py` 2,714 lines, conformance test present). Trigger not fired; roadmap "neither" decision keeps it closed for v88. Related weakness tracked as roadmap SA152, not promoted.
-- 2026-08-21 — `deletion-invariants-per-boundary-reimplementation` (Finding 2): **still-open**, deferred. Anchors re-verified; six callsites of `is_last_owner_with_members` enumerated (`orgs/models.py:165,329`, `orgs/signals.py:66`, `orgs/views.py:808,1161`, `auth/views.py:164`). Trigger not fired; no `teams` work scheduled.
-- 2026-08-21 — `org-model-universe-hand-enumerated` (Finding 4): **still-open**, deferred. Anchors re-verified (`purge_organization.py:64,222`; `tenancy.py` present). Trigger not fired. SA151 noted as a natural derivation moment for the next pass.
-- 2026-08-21 — `ci-environment-hand-replicated` (Finding 13): **new**. Surfaced by the commit-delta reading of `be5cf024`/`d4b0e834`/`d3d4c633`.
-- 2026-08-21 — Fix-regression audit of the delta's three behavioral commits. `be5cf024` **relocated rather than removed** compounding in one place: the SA90 emission byte-parity gate gained `_HOST_DEPENDENT_PATHS = frozenset({".env"})` (`quickscale_core/tests/test_generator/test_generator.py:1023`), a new hand-maintained exception list that suppresses hash comparison while keeping presence and a normalized mode. The justification (`.env` embeds `DOCKER_UID`/`DOCKER_GID`) is sound and the mode normalization to `755`/`644` correctly removes a umask dependency — but this is a **new exception station to watch for monotonicity**, per §5.XV. The same commit moved the managed-adapter completeness assertion from `_refresh_session_managed_adapters()` into the session fixture (`quickscale_core/tests/test_manifest_entry_point.py:163-180`), correctly narrowing it so deliberately-narrowed registries do not trip it; the guard test was updated in step. No prior sound decision was weakened; the isolation job's restricted-role change strengthened one.
-- 2026-08-21 — Prior watchlist reconciled: *module universe in environment lists* **not fired** (absorbed into Finding 13); *SA92 migration-squash tuple* was recorded as unevaluable pending artifact re-anchoring; *frontend runtime module keys* **not fired**; *privileged-command pair* **not fired, values verified equal**. One item added (`trigger_inputs` name drift).
-- 2026-08-25 — Current reconciliation: Finding 12/SA155 is closed by the registered cache/coverage-disabled `check-gate-suites` context; all 15 retained suite files collected and passed 1,227 tests. SA151's regenerated migrations, terminal records, and fixed-point validation are archived; its S4 BYPASSRLS prerequisite was discharged on 2026-08-24 — the true cause was an entirely absent local PostgreSQL host precondition rather than a missing grant, which is direct field evidence for Finding 13 and for SA135's owned-lifecycle design. The SA92 artifact is located and characterized as the bounded literal tripwire at `quickscale_modules/orgs/tests/test_sa92_migration_squash_guardrail.py`; SA164 owns its `_migdir()` and parity-backstop remediation. Finding 4 remains deferred because its model-graph trigger is still unfired.
+- 2026-08-28 — `ci-environment-hand-replicated`: **resolved** by `202a4a00` "centralize hosted postgres
+  provisioning" and its follow-ups (`9f2878c0`, `6cdff32c`, `203fcd61`), landing the prior pass's
+  recommended Option 1. Fix-regression audit passed all three questions: mechanism removed (module list
+  derived from the discovery shim, not re-listed), prior sound decisions preserved (restricted-role and
+  `bypassrls` postures survive as named profiles), and the replacement oracle binds to the helper's
+  `describe` JSON while asserting the absence of the old shell. Two minor hand-pinned literals minted
+  inside the new derivation; carried to the watchlist, not promoted. The prior pass's document ranked this
+  first without re-verifying its anchors against the landed fix — re-derived from current code this pass.
+- 2026-08-28 — `privileged-command-set-multi-owner`: **new**, promoted from the prior watchlist item
+  "privileged-command template/runtime pair", whose trigger ("a third sanctioned command, or a mismatch")
+  **fired** — not as a value mismatch but as a third and fourth *owner*. `3523f9f8` (2026-08-18, labeled
+  `test:`) added the CLI decider without reconciling the SSOT claim at `apps.py:52`.
+- 2026-08-28 — `generated-file-ownership-unmodeled`: **still-open**, deferred. Anchors re-verified
+  (`generator.py:142`; `beta_migration.py` 2,714 lines; conformance test present). New evidence added: the
+  taxonomy assigns opposite upgrade dispositions to one contract's producer and validator
+  (`beta_migration.py:59,92` donor vs `:109,121,125,128` substituted). Trigger still not fired; severity
+  held down by the verified fact that `quickscale_devtools` is maintainer-only and unpublished.
+- 2026-08-28 — `deletion-invariants-per-boundary-reimplementation`: **still-open**, deferred. All six
+  callsites re-verified. Trigger not fired; `teams` remains README-only.
+- 2026-08-28 — `org-model-universe-hand-enumerated`: **still-open**, deferred. Anchors re-verified and the
+  spec count re-derived by AST rather than transcribed: **21**, matching the prior pass. Trigger not fired.
+- 2026-08-28 — Fix-regression audit of the delta's two behavioral commits (`990f660f`, `48e0a62a`):
+  compounding **removed, not relocated**. Literal ticket IDs, merge positions, dependency edges, dates and
+  prose deleted from the planning conformance gate and replaced with roadmap-derived counts plus a red
+  canary; structural invariants (no checked entries, dependency validity, position uniqueness, no
+  schedulable restatement) all survive with their own canaries. No invariant weakened, no station minted.
+- 2026-08-28 — Prior watchlist reconciled: *module universe in environment lists* **not fired** (and its
+  parent finding resolved); *SA92 migration-squash tuple* **not fired**, still SA164's; *frontend runtime
+  module keys* **not fired** (universe unchanged at twelve); *privileged-command pair* **fired — promoted**;
+  *`trigger_inputs` name drift* **not fired**, verified against `check_gate_parity.py:498-524`. Two items
+  added from the fix-regression audit; one added for the count-pinned oracles.
+- 2026-08-28 — Prior red flags: none were open at the last pass and none opened this pass.
 
-*Lenses scanned with no qualifying finding this pass: data/state model integrity, trust and authorization boundaries, concurrency and state isolation, security architecture, API and contract stability, observability, performance and scalability, and the library/CLI archetype lenses — the governance-layer scope (§2e) deliberately deprioritized re-walking these, and the prior pass's conclusions there were re-verified only at their anchors.*
+*Lenses scanned with no qualifying finding this pass: data/state model integrity, concurrency and state
+isolation, observability, API and contract stability, performance and scalability, build/release and
+supply chain, and the library/CLI archetype lenses. Trust-and-authorization and the code-generator
+archetype lens produced the ranked finding above.*
 
-Closed findings, retired watch items, historical option records, and cross-reference migrations are archived in [CHANGELOG.md](../../CHANGELOG.md) and version control rather than repeated in this live audit.
+Closed findings, retired watch items, historical option records, and cross-reference migrations are
+archived in [CHANGELOG.md](../../CHANGELOG.md) and version control rather than repeated here.

@@ -37,6 +37,9 @@ merge_strategy: append
 # Quality Gate
 <!-- Add rules for testing, linting, and quality enforcement here -->
 [include](#shared)
+- Tier commands for this domain (see `docs/technical/validation_policy.md#validation-tiers`):
+  `change` — `make lint`, `make typecheck`, and `poetry run pytest quickscale_cli/tests/<file-or-node> --tb=short -m "not e2e" -o addopts= --no-cov`;
+  `task` — `make test-unit -- --cli`; `release` — `make ci`.
 
 # Change Review
 <!-- Add rules for PR review and change management here -->

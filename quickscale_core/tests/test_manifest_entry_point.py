@@ -981,6 +981,7 @@ class TestDiscoveredInventoryRegistryTransition:
         from quickscale_core.contracts import module_discovery
 
         discovered = set(module_discovery.discover_shipped_module_names())
+        original_presence = module_discovery.discover_module_presence
         calls: list[object] = []
         original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
         original_origins = set(MANAGED_ADAPTER_ORIGINS)
@@ -988,13 +989,13 @@ class TestDiscoveredInventoryRegistryTransition:
         def custom(options: object, **kwargs: object) -> ModuleWiringSpec:
             return ModuleWiringSpec(apps=("custom",))
 
-        def discover_once() -> list[str]:
+        def discover_once(*args: object, **kwargs: object) -> object:
             calls.append(object())
-            return sorted(discovered)
+            return original_presence(*args, **kwargs)
 
         monkeypatch.setattr(
             module_discovery,
-            "discover_shipped_module_names",
+            "discover_module_presence",
             discover_once,
         )
         try:
@@ -1018,17 +1019,30 @@ class TestDiscoveredInventoryRegistryTransition:
     def test_scoped_refresh_registers_generated_subset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Generated projects load only their selected embedded adapters."""
+        """Generated projects load only their active embedded adapters."""
         from quickscale_core.contracts import module_discovery
 
         active = {"auth", "orgs"}
+        bundled = set(module_discovery.discover_bundled_module_names())
         original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
         original_origins = set(MANAGED_ADAPTER_ORIGINS)
 
         monkeypatch.setattr(
             module_discovery,
-            "discover_shipped_module_names",
-            lambda: sorted(active),
+            "discover_bundled_module_names",
+            lambda: sorted(bundled),
+        )
+        monkeypatch.setattr(
+            module_discovery,
+            "discover_module_presence",
+            lambda **_kwargs: [
+                module_discovery.ModulePresenceRecord(
+                    name,
+                    module_discovery.ModulePresenceState.ACTIVE,
+                    Path("/tmp") / name,
+                )
+                for name in sorted(active)
+            ],
         )
         monkeypatch.setattr(
             entry_point_module,
@@ -1036,7 +1050,7 @@ class TestDiscoveredInventoryRegistryTransition:
             lambda _name: lambda _options, **_kwargs: ModuleWiringSpec(),
         )
         try:
-            refresh_managed_adapters(module_names=sorted(active))
+            refresh_managed_adapters()
 
             assert MANAGED_ADAPTER_ORIGINS == active
             assert active.issubset(MANIFEST_ADAPTER_REGISTRY)
@@ -1045,6 +1059,191 @@ class TestDiscoveredInventoryRegistryTransition:
             MANIFEST_ADAPTER_REGISTRY.update(original_registry)
             MANAGED_ADAPTER_ORIGINS.clear()
             MANAGED_ADAPTER_ORIGINS.update(original_origins)
+
+    def test_incomplete_module_fails_before_adapter_import_atomically(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An incomplete directory cannot partially refresh managed state."""
+        from quickscale_core.contracts.module_discovery import (
+            ImproperlyConfigured,
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        module_name = "_test_incomplete"
+        modules_dir = tmp_path / "modules"
+        (modules_dir / module_name).mkdir(parents=True)
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_base = get_modules_base_path()
+        registry_identity = id(MANIFEST_ADAPTER_REGISTRY)
+        origins_identity = id(MANAGED_ADAPTER_ORIGINS)
+        prior_registry = {"_test_custom": lambda *_args, **_kwargs: ModuleWiringSpec()}
+        prior_origins = {"_test_custom"}
+        imports: list[str] = []
+
+        def fail_if_imported(name: str) -> object:
+            imports.append(name)
+            raise AssertionError("incomplete modules must fail before adapter import")
+
+        try:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(prior_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(prior_origins)
+            set_modules_base_path(modules_dir)
+            monkeypatch.setattr(
+                entry_point_module, "_load_managed_adapter", fail_if_imported
+            )
+
+            with pytest.raises(
+                ImproperlyConfigured, match="_test_incomplete"
+            ) as exc_info:
+                refresh_managed_adapters()
+
+            assert "module.yml" in str(exc_info.value)
+            assert imports == []
+            assert id(MANIFEST_ADAPTER_REGISTRY) == registry_identity
+            assert id(MANAGED_ADAPTER_ORIGINS) == origins_identity
+            assert MANIFEST_ADAPTER_REGISTRY == prior_registry
+            assert MANAGED_ADAPTER_ORIGINS == prior_origins
+            assert get_modules_base_path() == modules_dir
+        finally:
+            set_modules_base_path(original_base)
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(original_origins)
+
+    def test_declared_placeholder_is_observable_but_not_loaded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The catalog placeholder remains excluded from adapter loading."""
+        from quickscale_core.contracts.module_discovery import (
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_base = get_modules_base_path()
+        loaded: list[str] = []
+
+        def record_import(module_name: str) -> object:
+            loaded.append(module_name)
+            raise AssertionError("placeholder adapters must not be imported")
+
+        try:
+            (tmp_path / "modules" / "teams").mkdir(parents=True)
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANAGED_ADAPTER_ORIGINS.clear()
+            set_modules_base_path(tmp_path / "modules")
+            monkeypatch.setattr(
+                entry_point_module, "_load_managed_adapter", record_import
+            )
+
+            refresh_managed_adapters()
+
+            assert loaded == []
+            assert "teams" not in MANIFEST_ADAPTER_REGISTRY
+            assert MANAGED_ADAPTER_ORIGINS == set()
+        finally:
+            set_modules_base_path(original_base)
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(original_origins)
+
+    def test_active_declared_placeholder_fails_before_import_atomically(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An active catalog placeholder is rejected before any import or commit."""
+        from quickscale_core.contracts.module_discovery import (
+            ImproperlyConfigured,
+            get_modules_base_path,
+            set_modules_base_path,
+        )
+
+        module_name = "teams"
+        package_name = f"quickscale_modules_{module_name}"
+        modules_dir = tmp_path / "modules"
+        module_dir = modules_dir / module_name
+        module_dir.mkdir(parents=True)
+        manifest_path = module_dir / "module.yml"
+        manifest_path.write_text(f"version: '1'\nname: {module_name}\n")
+
+        original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
+        original_origins = set(MANAGED_ADAPTER_ORIGINS)
+        original_base = get_modules_base_path()
+        original_sys_path = sys.path.copy()
+        original_package_modules = {
+            name: module
+            for name, module in sys.modules.items()
+            if name == package_name or name.startswith(f"{package_name}.")
+        }
+        registry_identity = id(MANIFEST_ADAPTER_REGISTRY)
+        origins_identity = id(MANAGED_ADAPTER_ORIGINS)
+
+        def prior_adapter(*_args: object, **_kwargs: object) -> ModuleWiringSpec:
+            return ModuleWiringSpec(apps=("prior",))
+
+        prior_registry = {"_test_custom": prior_adapter}
+        prior_origins = {"_test_custom"}
+        prior_package = ModuleType(package_name)
+        prior_child = ModuleType(f"{package_name}.prior")
+        expected_package_modules = dict(original_package_modules)
+        expected_package_modules.update(
+            {
+                package_name: prior_package,
+                f"{package_name}.prior": prior_child,
+            }
+        )
+        imports: list[str] = []
+
+        def fail_if_imported(name: str) -> object:
+            imports.append(name)
+            raise AssertionError("active placeholders must fail before adapter import")
+
+        try:
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(prior_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(prior_origins)
+            sys.modules[package_name] = prior_package
+            sys.modules[f"{package_name}.prior"] = prior_child
+            set_modules_base_path(modules_dir)
+            monkeypatch.setattr(
+                entry_point_module, "_load_managed_adapter", fail_if_imported
+            )
+
+            with pytest.raises(
+                ImproperlyConfigured, match="teams.*placeholder"
+            ) as exc_info:
+                refresh_managed_adapters()
+
+            assert str(manifest_path) in str(exc_info.value)
+            assert imports == []
+            assert id(MANIFEST_ADAPTER_REGISTRY) == registry_identity
+            assert id(MANAGED_ADAPTER_ORIGINS) == origins_identity
+            assert MANIFEST_ADAPTER_REGISTRY == prior_registry
+            assert MANAGED_ADAPTER_ORIGINS == prior_origins
+            assert sys.path == original_sys_path
+            assert {
+                name: module
+                for name, module in sys.modules.items()
+                if name == package_name or name.startswith(f"{package_name}.")
+            } == expected_package_modules
+        finally:
+            set_modules_base_path(original_base)
+            MANIFEST_ADAPTER_REGISTRY.clear()
+            MANIFEST_ADAPTER_REGISTRY.update(original_registry)
+            MANAGED_ADAPTER_ORIGINS.clear()
+            MANAGED_ADAPTER_ORIGINS.update(original_origins)
+            for name in list(sys.modules):
+                if name == package_name or name.startswith(f"{package_name}."):
+                    sys.modules.pop(name, None)
+            sys.modules.update(original_package_modules)
+            sys.path[:] = original_sys_path
 
     def test_failed_resolution_preserves_registry_and_origins_atomically(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1064,8 +1263,15 @@ class TestDiscoveredInventoryRegistryTransition:
 
         monkeypatch.setattr(
             module_discovery,
-            "discover_shipped_module_names",
-            lambda: sorted(discovered),
+            "discover_module_presence",
+            lambda **_kwargs: [
+                module_discovery.ModulePresenceRecord(
+                    name,
+                    module_discovery.ModulePresenceState.ACTIVE,
+                    Path("/tmp") / name,
+                )
+                for name in sorted(discovered)
+            ],
         )
 
         def fail_after_resolution(
@@ -1127,31 +1333,11 @@ class TestRefreshManagedAdaptersFailure:
     """Managed-adapter import/factory failure at an active base path raises
     ImproperlyConfigured (AF7 fail-hard decision)."""
 
-    def test_default_refresh_rejects_partial_authoritative_inventory(
-        self, tmp_path: Path
-    ) -> None:
-        """The no-argument release refresh still requires all twelve modules."""
-        from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
-            ImproperlyConfigured,
-            get_modules_base_path,
-            set_modules_base_path,
-        )
-
-        original_base = get_modules_base_path()
-        modules_dir = tmp_path / "modules"
-        (modules_dir / "auth").mkdir(parents=True)
-        (modules_dir / "auth" / "module.yml").write_text("version: '1'\nname: auth\n")
-        set_modules_base_path(modules_dir)
-        try:
-            with pytest.raises(ImproperlyConfigured, match="count drift"):
-                refresh_managed_adapters()
-        finally:
-            set_modules_base_path(original_base)
-
-    def test_scoped_refresh_accepts_selected_embedded_subset_atomically(
+    def test_no_argument_refresh_accepts_active_embedded_subset_atomically(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Project refresh loads selected manifests without redefining inventory."""
+        """Project refresh loads the active subset from one presence snapshot."""
+        from quickscale_core.contracts import module_discovery
         from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
             get_modules_base_path,
             set_modules_base_path,
@@ -1161,17 +1347,30 @@ class TestRefreshManagedAdaptersFailure:
         original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
         original_origins = set(MANAGED_ADAPTER_ORIGINS)
         modules_dir = tmp_path / "modules"
-        for module_name in ("auth", "orgs"):
-            module_dir = modules_dir / module_name
-            module_dir.mkdir(parents=True)
-            (module_dir / "module.yml").write_text(
-                f"version: '1'\nname: {module_name}\n"
-            )
+        active = {"auth", "orgs"}
+        bundled = set(module_discovery.discover_bundled_module_names())
 
         adapters = {
             name: (lambda options, **kwargs: ModuleWiringSpec())
             for name in ("auth", "orgs")
         }
+        monkeypatch.setattr(
+            module_discovery,
+            "discover_bundled_module_names",
+            lambda: sorted(bundled),
+        )
+        monkeypatch.setattr(
+            module_discovery,
+            "discover_module_presence",
+            lambda **_kwargs: [
+                module_discovery.ModulePresenceRecord(
+                    name,
+                    module_discovery.ModulePresenceState.ACTIVE,
+                    modules_dir / name,
+                )
+                for name in sorted(active)
+            ],
+        )
         monkeypatch.setattr(
             entry_point_module,
             "_load_managed_adapter",
@@ -1179,11 +1378,11 @@ class TestRefreshManagedAdaptersFailure:
         )
         set_modules_base_path(modules_dir)
         try:
-            refresh_managed_adapters(module_names=["orgs", "missing"])
-            assert MANAGED_ADAPTER_ORIGINS == {"orgs"}
+            refresh_managed_adapters()
+            assert MANAGED_ADAPTER_ORIGINS == active
+            assert set(MANIFEST_ADAPTER_REGISTRY) == active
             assert MANIFEST_ADAPTER_REGISTRY["orgs"] is adapters["orgs"]
-            assert "auth" not in MANIFEST_ADAPTER_REGISTRY
-            assert "missing" not in MANIFEST_ADAPTER_REGISTRY
+            assert MANIFEST_ADAPTER_REGISTRY["auth"] is adapters["auth"]
         finally:
             set_modules_base_path(original_base)
             MANIFEST_ADAPTER_REGISTRY.clear()
@@ -1245,7 +1444,14 @@ class TestRefreshManagedAdaptersFailure:
         _orig_origins = set(MANAGED_ADAPTER_ORIGINS)
 
         try:
-            monkeypatch.setattr(entry_point_module, "AUTHORITATIVE_MODULE_COUNT", 1)
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.AUTHORITATIVE_MODULE_COUNT",
+                1,
+            )
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                lambda: ["_test_missing_adapter"],
+            )
             # Clear the registry so we start fresh, then register only
             # billing as a managed origin.
             MANIFEST_ADAPTER_REGISTRY.clear()
@@ -1321,7 +1527,14 @@ class TestRefreshManagedAdaptersFailure:
             return real_import(name, *args, **kwargs)
 
         try:
-            monkeypatch.setattr(entry_point_module, "AUTHORITATIVE_MODULE_COUNT", 2)
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.AUTHORITATIVE_MODULE_COUNT",
+                2,
+            )
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                lambda: [first_name, failing_name],
+            )
             modules_dir = tmp_path / "modules"
             for module_name in (first_name, failing_name):
                 module_dir = modules_dir / module_name
@@ -1420,7 +1633,14 @@ def get_manifest_adapter():
         original_base = get_modules_base_path()
         original_sys_path = sys.path.copy()
         try:
-            monkeypatch.setattr(entry_point_module, "AUTHORITATIVE_MODULE_COUNT", 1)
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.AUTHORITATIVE_MODULE_COUNT",
+                1,
+            )
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                lambda: [module_name],
+            )
             modules_dir = tmp_path / "modules"
             src_dir = self._write_embedded_module(
                 modules_dir, module_name, adapter_source
@@ -1458,7 +1678,14 @@ def get_manifest_adapter():
         original_base = get_modules_base_path()
         original_sys_path = sys.path.copy()
         try:
-            monkeypatch.setattr(entry_point_module, "AUTHORITATIVE_MODULE_COUNT", 1)
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.AUTHORITATIVE_MODULE_COUNT",
+                1,
+            )
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                lambda: [module_name],
+            )
             modules_dir = tmp_path / "modules"
             self._write_embedded_module(
                 modules_dir,
@@ -1504,7 +1731,14 @@ def get_manifest_adapter():
         original_base = get_modules_base_path()
         original_sys_path = sys.path.copy()
         try:
-            monkeypatch.setattr(entry_point_module, "AUTHORITATIVE_MODULE_COUNT", 1)
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.AUTHORITATIVE_MODULE_COUNT",
+                1,
+            )
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                lambda: [module_name],
+            )
             modules_dir = tmp_path / "modules"
             src_dir = self._write_embedded_module(
                 modules_dir, module_name, adapter_source
@@ -1554,7 +1788,14 @@ def get_manifest_adapter():
         original_package = sys.modules.get(package_name)
         import_attempts: list[str] = []
         try:
-            monkeypatch.setattr(entry_point_module, "AUTHORITATIVE_MODULE_COUNT", 1)
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.AUTHORITATIVE_MODULE_COUNT",
+                1,
+            )
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                lambda: [module_name],
+            )
             modules_dir = tmp_path / "modules"
             src_dir = self._write_embedded_module(
                 modules_dir, module_name, adapter_source
@@ -1645,7 +1886,14 @@ def get_manifest_adapter():
 '''
 
         try:
-            monkeypatch.setattr(entry_point_module, "AUTHORITATIVE_MODULE_COUNT", 1)
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.AUTHORITATIVE_MODULE_COUNT",
+                1,
+            )
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                lambda: [module_name],
+            )
             first_base = tmp_path / "first" / "modules"
             second_base = tmp_path / "second" / "modules"
             self._write_embedded_module(
@@ -1700,7 +1948,14 @@ def get_manifest_adapter():
         prior_package = ModuleType(package_name)
         prior_child = ModuleType(child_name)
         try:
-            monkeypatch.setattr(entry_point_module, "AUTHORITATIVE_MODULE_COUNT", 1)
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.AUTHORITATIVE_MODULE_COUNT",
+                1,
+            )
+            monkeypatch.setattr(
+                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                lambda: [module_name],
+            )
             modules_dir = tmp_path / "modules"
             self._write_embedded_module(
                 modules_dir,

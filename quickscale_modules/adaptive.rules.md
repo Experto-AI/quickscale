@@ -38,7 +38,11 @@ merge_strategy: append
 # Quality Gate
 <!-- Add rules for testing, linting, and quality enforcement here -->
 [include](#shared)
-- Each packaged module has its own test suite. Run the module-specific test target (`make MODULE=<name> test -- --modules`) rather than the root test suite for module-scoped work.
+- Each packaged module has its own test suite. Run the module-specific target rather than the root suite for module-scoped work.
+- Tier commands for this domain (see `docs/technical/validation_policy.md#validation-tiers`):
+  `change` — `make lint`, `make typecheck`, and the module's focused pytest node;
+  `task` — `make test-integration MODULE=<name>`; `release` — `make ci`.
+- Module suites need PostgreSQL and live on the integration gate, never on `make test-unit`.
 
 # Change Review
 <!-- Add rules for PR review and change management here -->

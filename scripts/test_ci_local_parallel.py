@@ -14,6 +14,25 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).with_name("check_ci_locally.sh")
+
+
+def _signal_ready_script_command() -> list[str]:
+    """
+    Return the CI script command with lifecycle signals reset to defaults.
+
+    Detached Make invocations can inherit SIGINT as ignored.  A POSIX shell
+    cannot install a trap for a signal ignored when the shell starts, so reset
+    the lifecycle dispositions before the signal tests execute the script.
+    """
+    return [
+        "env",
+        "--default-signal=HUP",
+        "--default-signal=INT",
+        "--default-signal=TERM",
+        str(SCRIPT),
+    ]
+
+
 REGISTRY = SCRIPT.with_name("gate_registry.json")
 
 FIXED_STATIC_WORKER_TARGETS: tuple[str, ...] = (
@@ -590,7 +609,7 @@ def test_signals_terminate_static_workers(
     environment.pop("QS_CI_PARALLEL", None)
     environment["FAKE_CI_DELAY"] = "10"
     process = subprocess.Popen(
-        [str(SCRIPT)],
+        _signal_ready_script_command(),
         cwd=SCRIPT.parents[1],
         env=environment,
         stdout=subprocess.PIPE,
@@ -657,7 +676,7 @@ def test_reap_boundary_signal_skips_unrelated_pid_and_kills_active_workers(
     environment["FAKE_CI_SIGNAL_NAME"] = signum.name.removeprefix("SIG")
     environment["FAKE_CI_UNRELATED_PID_FILE"] = str(unrelated_pid_file)
     process = subprocess.Popen(
-        [str(SCRIPT)],
+        _signal_ready_script_command(),
         cwd=SCRIPT.parents[1],
         env=environment,
         stdout=subprocess.PIPE,
@@ -715,7 +734,7 @@ def test_signals_in_serial_foreground_mode_do_not_use_worker_trap(
     environment["QS_CI_PARALLEL"] = "0"
     environment["FAKE_CI_DELAY_LINT"] = "10"
     process = subprocess.Popen(
-        [str(SCRIPT)],
+        _signal_ready_script_command(),
         cwd=SCRIPT.parents[1],
         env=environment,
         stdout=subprocess.PIPE,
@@ -755,7 +774,7 @@ def test_signals_after_static_fanout_use_foreground_semantics(
     environment["FAKE_CI_DELAY"] = "0.05"
     environment["FAKE_CI_DELAY_TEST_COV"] = "10"
     process = subprocess.Popen(
-        [str(SCRIPT)],
+        _signal_ready_script_command(),
         cwd=SCRIPT.parents[1],
         env=environment,
         stdout=subprocess.PIPE,

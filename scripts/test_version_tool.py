@@ -31,6 +31,7 @@ The temp-repo update tests (``TestUpdateWithTempRepo``) verify:
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -857,7 +858,62 @@ class TestUpdateWithTempRepo:
             assert self.VERSION_AFTER in path.read_text()
 
     def test_direct_update(self, repo: Path) -> None:
-        """Direct ``version_tool.sh update`` mutates the expected file set."""
+        """Direct update and standalone shim probes preserve the contract."""
+        standalone_root = repo / "standalone"
+        shim = standalone_root / (
+            "quickscale_core/src/quickscale_core/contracts/module_discovery.py"
+        )
+        shim.parent.mkdir(parents=True)
+        shutil.copy2(
+            repo / "quickscale_core/src/quickscale_core/contracts/module_discovery.py",
+            shim,
+        )
+
+        for module_name in ("zeta", "alpha", "gamma"):
+            module_dir = standalone_root / "quickscale_modules" / module_name
+            module_dir.mkdir(parents=True)
+            (module_dir / "module.yml").write_text(f"name: {module_name}\n")
+
+        expected = sorted(
+            manifest.parent.name
+            for manifest in (standalone_root / "quickscale_modules").glob("*/module.yml")
+        )
+        result = subprocess.run(
+            [sys.executable, "-S", str(shim), "--list-modules"],
+            cwd=str(standalone_root),
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.stdout.splitlines() == expected
+
+        transitive_root = repo / "transitive-import"
+        transitive_shim = transitive_root / (
+            "quickscale_core/src/quickscale_core/contracts/module_discovery.py"
+        )
+        transitive_shim.parent.mkdir(parents=True)
+        shutil.copy2(
+            repo / "quickscale_core/src/quickscale_core/contracts/module_discovery.py",
+            transitive_shim,
+        )
+        (transitive_root / "quickscale_core/__init__.py").write_text("")
+        (transitive_root / "quickscale_core/contracts").mkdir(parents=True)
+        (transitive_root / "quickscale_core/contracts/__init__.py").write_text("")
+        (transitive_root / "quickscale_core/contracts/module_catalog.py").write_text(
+            "from missing_catalog_dependency import value\nMODULE_CATALOG = ()\n"
+        )
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(transitive_root)
+        result = subprocess.run(
+            [sys.executable, "-S", str(transitive_shim), "--list-modules"],
+            cwd=str(transitive_root),
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+        assert "missing_catalog_dependency" in result.stderr
+
         # Snapshot pre-update state
         before = self._walk_files(repo)
 

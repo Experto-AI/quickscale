@@ -34,12 +34,49 @@ This companion owns repository validation entrypoints, testing standards, covera
 **Assistant guidance:**
 - Prefer `make` targets for shared repository workflows instead of calling lower-level helper scripts directly.
 - Use `make lint` and `make format` for repo-wide lint and format guidance.
-- Use `make test` or targeted `make test-unit` invocations for shared test runs.
+- Select the test command from the validation tier below rather than defaulting to the widest one. `make test` is a `task`/`release`-tier command and is never the per-change check.
 - Use `make ci-e2e` for release-gate validation when the full hardening and release path needs E2E coverage.
 - Use `make version-check` when verifying repository package-version parity.
 - Use `make check-gate-suites` when validating the registry's complete `scripts/` conformance population; it is cache-free and does not contribute product coverage.
 - Use `make isolation-conformance` when PostgreSQL 18, its pre-created test databases, the restricted role, and Poetry dependencies are already available. The target is a thin delegation and does not provision a local database.
 - Do not invent or document nonexistent helper scripts such as `./scripts/test_all.sh`.
+
+<a id="validation-tiers"></a>
+## Validation Tiers
+
+Validation depth is chosen by tier, not by habit. A tier bounds the obligation:
+run the tier the current work owns and stop there.
+
+| Tier | Applies to | Command |
+|------|-----------|---------|
+| `change` | one implementation phase, one correction, one edit session | `make lint`, `make typecheck`, then a focused `poetry run pytest <path-or-node> --tb=short -m "not e2e" -o addopts= --no-cov` over the changed behavior |
+| `task` | a completed plan, a convergence pass, or a delta crossing a package or module boundary | the owning section suite — `make test-unit -- --core` or `-- --cli`, or `make test-integration MODULE=<name>` — or `make check QUIET=1` when repository gates sit in the delta's surface |
+| `release` | plan closeout, version bump, generator-template change, pre-merge | `make ci`, or `make ci-e2e` when an [E2E trigger](#e2e-testing-policy) applies, followed by the closeout lanes in [Clean-Initial Migration Acceptance](#clean-initial-migration-acceptance-sa151) |
+
+**Each tier's command already subsumes the narrower ones.** `make check` covers
+lint, typecheck, the unit gate, and the repository gates; `make ci` covers those
+plus mypy, coverage, and the integration gate. Running a narrower target first and
+then a wider one that repeats it is the duplication this policy exists to remove —
+pick the tier, run its command once.
+
+**Tier selection rules:**
+- Default to `change`. Escalate to `task` when the delta crosses a package or
+  module boundary, touches a file an earlier phase of the same plan already
+  changed, or changes shared or generated surface.
+- Escalate to `release` at plan closeout and whenever an E2E trigger under
+  [E2E Testing Policy](#e2e-testing-policy) fires — notably after generator
+  template changes.
+- A green `change` tier is a complete obligation at that tier. Report every check
+  deferred to a wider tier by naming that tier; a deferral with no named tier is
+  an omission, not a tier choice.
+- `make test-cov` and the [coverage targets](#testing-standards) below are
+  `task`/`release`-tier obligations. A `change`-tier run passes
+  `-o addopts= --no-cov` so the package-level coverage addopts do not fail a
+  scoped run — that is a scoping flag, never a way to avoid the threshold at the
+  tier that owns it.
+- **A wider tier is never run to establish a baseline.** It runs when the delta
+  reaches its surface. A pre-existing failure is discovered at the tier that
+  reaches it, and no baseline run precedes implementation.
 
 <a id="testing-standards"></a>
 ## Testing Standards
@@ -130,7 +167,8 @@ the committed gate/parity checks remain local.
 - A source-free installed-wheel lifecycle from an external working directory that applies current artifacts for all twelve shipped modules and proves collectstatic, migrations, HTTP service, and exact-label cleanup.
 - Separate from fast CI using `@pytest.mark.e2e`.
 
-**When Required:**
+**When Required:** each trigger below escalates the work to the `release` tier
+(see [Validation Tiers](#validation-tiers)).
 - Pre-release validation.
 - Production-readiness verification.
 - Frontend regression testing.
@@ -175,7 +213,8 @@ empty database owned by a `NOSUPERUSER NOBYPASSRLS NOINHERIT` login role,
 checks `makemigrations --check --dry-run`, verifies runtime migration origins
 and recorder parity, and proves database/role cleanup. Release closeout also
 runs `make test-integration`, `make test-bypassrls`, `make typecheck`, and the
-serial `make test-e2e` lanes.
+serial `make test-e2e` lanes. These lanes are the canonical `release` tier for a
+plan closeout; see [Validation Tiers](#validation-tiers).
 
 <a id="e2e-test-infrastructure"></a>
 <a id="13-e2e-test-infrastructure"></a>
