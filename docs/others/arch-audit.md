@@ -1,6 +1,6 @@
 # Structural Autopsy: QuickScale
 
-> **Audit snapshot:** 2026-08-28 · **Current reconciliation:** 2026-08-28 · **Branch:** `v88` · **Range audited:** `602f4be3..48e0a62a`
+> **Audit snapshot:** 2026-08-28 · **Current reconciliation:** 2026-08-31 · **Branch:** `v88` · **Range audited:** `602f4be3..48e0a62a`
 >
 > Live structural findings only. Findings are identified by their **slug**; the ordinal numbering
 > used in earlier passes is pass-local and is not a stable identifier (see
@@ -30,7 +30,7 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Ten open v88 ticket entries run on three tracks across nine open merge
+generated-project updater. Thirteen open v88 ticket entries run on three tracks across thirteen open merge
 positions; **W2 sets the release date** (SA167c is the longest open chain). W3 holds the exclusive
 PostgreSQL/Docker slot. The prior pass's leading finding rode inside SA135 and has landed.
 
@@ -44,8 +44,7 @@ integration suites passed with documented skips/warnings at **94.54% overall mea
 regressions and monotonicity. Retained-partial convergence and terminal attestation are complete,
 and retained-partial-only merge-back is authorized for the reviewed partial plus the latest-v88
 status reconciliation without closing SA167d. Completion-grade Phase C convergence, terminal
-attestation, and exact-tip integration remain pending. ***Terminal-remediation wording applied
-after attestation — not independently graded.***
+attestation, and exact-tip integration remain pending.
 
 **Read fully:** the four workflows, `scripts/gate_registry.json`, `scripts/check_gate_parity.py` (context extraction and comparison), `scripts/sync_ci_gate_jobs.py` (generation and job-set validation), the `Makefile` test/gate targets, `scripts/check_ci_locally.sh` gate stations, `scripts/test_isolation_conformance.sh`, and the three behavioral diffs. **Sampled:** module sources, generator, beta migration, orgs tenancy (prior-finding anchor re-verification only). **Skipped:** generated-project template internals, frontend theme sources.
 **Scope decision.** With the delta this small, the pass's value is re-verification plus depth

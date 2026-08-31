@@ -369,6 +369,7 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
         "check-core-compat": "Running module-vs-core",
         "check-module-core-imports": "Running module-core",
         "check-manifest-sync": "Running manifest",
+        "check-module-app-declaration": "Running module app declaration",
         "check-org-context-primitives": "Running org-context",
         "check-csrf-exempt": "Running CSRF",
         "check-gate-suites": "Running registered scripts",

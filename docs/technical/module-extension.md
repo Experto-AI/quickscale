@@ -340,8 +340,12 @@ yourself editing either to register a module, the module's own declaration is in
 > retained-partial-only merge-back is authorized for the reviewed partial plus the latest-v88
 > status reconciliation without closing the ticket. Completion-grade Phase C convergence,
 > terminal attestation, and exact-tip integration remain pending; SA165 remains dependent.
-> This is an accepted-open checkpoint, not a completion claim. *Terminal-remediation wording
-> applied after attestation — not independently graded.*
+> This is an accepted-open checkpoint, not a completion claim.
+
+The companion declaration-gate work is retained in current `v88` under **`SA167c`** (merge
+#21): phases A and B are accepted, Phase C's product delta is merged as retained delivery, and
+C acceptance plus phases D-F remain pending. This does not alter the module-extension contract
+or authorize edits to the settled manifest implementation.
 
 **5. Template Integration (showcase_react theme):**
 - [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure

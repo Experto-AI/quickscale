@@ -21,15 +21,9 @@ per open roadmap ticket, with no orphans), rejects copied classification rows, a
 prose claiming a roadmap-open dependency is closed.
 
 It covers every open v88 ticket entry plus the post-v88 entries. Closed tickets are not
-covered as open sections; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
-The completed SA167a handoff appears only as historical context in the shared conceptual
-section below. SA167d remains an open member of that section: phases A-E are accepted at E0
-tip `bd2c291ba2d40494970464741ac51bfd45445a19`; retained-partial convergence and terminal
-attestation are complete, and retained-partial-only merge-back is authorized for the reviewed
-partial plus the latest-v88 status reconciliation without closing the ticket. Completion-grade
-Phase C convergence, terminal attestation, and exact-tip integration remain pending. SA165 remains
-dependent on this open ticket. *Terminal-remediation wording applied after attestation — not
-independently graded.*
+described here; their closure evidence lives in [CHANGELOG.md](../../CHANGELOG.md).
+The SA167a name appears only in the shared conceptual umbrella below so its completed handoff
+is explained without creating a closed-ticket section.
 
 ---
 
@@ -160,20 +154,6 @@ which is why `validation_policy.md` is on its conflict surface.
 # Bounded independent fixes
 
 Each has a small, well-understood blast radius and remains bounded to its stated concern.
-
-## SA163 — Centralize the CI PostgreSQL environment contract
-
-### The mental model
-
-The CI database, role, module inventory, and hosted-station setup are one operational
-contract. The provisioning helper is the authoritative implementation; callers consume
-its profiles rather than carrying independent role, database, or module lists.
-
-The accepted-open checkpoint retains this concept alongside SA135's lifecycle work. Its
-historical evidence is preserved in [CHANGELOG.md](../../CHANGELOG.md); this page does
-not add scheduling metadata or claim completion, convergence, attestation, or merge-back.
-
----
 
 ## SA171 — Make stale-lock clearing atomic in both file locks
 
@@ -790,17 +770,19 @@ Worth holding as a set, because each appears in more than one ticket:
 
 ---
 
-## SA167c — module wiring standardization
+## SA167a / SA167c / SA167d — module wiring standardization
 
 These open roadmap entries carry conceptual context for the module-wiring standardization. The
 completed SA167a handoff is retained only as historical context, and SA167b's completed relocation
-and P4 acceptance are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167d remains open:
+and P4 acceptance are archived in [CHANGELOG.md](../../CHANGELOG.md). SA167c remains open in
+current `v88`: phases A and B are accepted, its Phase-C product delta is retained delivery, and
+C acceptance plus phases D-F remain pending. SA167d remains open:
 phases A-E are accepted at E0 tip `bd2c291ba2d40494970464741ac51bfd45445a19`; retained-partial
 convergence and terminal attestation are complete, and retained-partial-only merge-back is
 authorized for the reviewed partial plus the latest-v88 status reconciliation without closing the
 ticket. Completion-grade Phase C convergence, terminal attestation, and exact-tip integration
 remain pending. Ticket metadata and the remaining closeout handoff live in the [roadmap](roadmap.md),
-not here. *Terminal-remediation wording applied after attestation — not independently graded.*
+not here.
 
 **The concept.** A QuickScale module is two things stacked. Underneath is an ordinary
 Django app — `apps.py`, models, migrations — with no QuickScale divergence at all.

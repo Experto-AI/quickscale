@@ -28,14 +28,15 @@ show_help() {
     echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
     echo "  4. Module-core import linter (check_module_core_imports)"
     echo "  5. Manifest sync gate (sync_module_manifests)"
-    echo "  6. Org-context primitives gate (check_org_context_primitives)"
-    echo "  7. CSRF-exempt gate (check_csrf_exempt_gate)"
-    echo "  8. Type check (mypy)"
-    echo "  9. Coverage policy helper tests, worker-pool harness, and rendered frontend lint"
+    echo "  6. Module app declaration gate (check_module_app_declaration)"
+    echo "  7. Org-context primitives gate (check_org_context_primitives)"
+    echo "  8. CSRF-exempt gate (check_csrf_exempt_gate)"
+    echo "  9. Type check (mypy)"
+    echo " 10. Coverage policy helper tests, worker-pool harness, and rendered frontend lint"
     echo "     (frontend lint runs when Node.js and pnpm are available)"
-    echo " 10. Combined coverage checks (core + CLI + backups module with dual-threshold policy)"
-    echo " 11. Integration tests (requires PostgreSQL)"
-    echo " 12. E2E tests (optional, with --e2e flag)"
+    echo " 11. Combined coverage checks (core + CLI + backups module with dual-threshold policy)"
+    echo " 12. Integration tests (requires PostgreSQL)"
+    echo " 13. E2E tests (optional, with --e2e flag)"
     exit 0
 }
 
@@ -277,6 +278,11 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ Manifest snapshots in sync"
             LOCAL_GATE_FAILURE_LABEL="Manifest Sync Gate"
             ;;
+        check-module-app-declaration)
+            LOCAL_GATE_DESCRIPTION="Running module app declaration gate..."
+            LOCAL_GATE_SUCCESS="✓ Evidence-bearing module app declarations are valid"
+            LOCAL_GATE_FAILURE_LABEL="Module App Declaration Gate"
+            ;;
         check-org-context-primitives)
             LOCAL_GATE_DESCRIPTION="Running org-context primitives gate..."
             LOCAL_GATE_SUCCESS="✓ No direct external use of privatized org-context primitives"
@@ -331,6 +337,9 @@ run_serial_conformance_gate() {
                 ;;
             check-manifest-sync)
                 echo "║   ✗ Manifest Sync Gate Failed          ║"
+                ;;
+            check-module-app-declaration)
+                echo "║   ✗ Module App Declaration Gate Failed ║"
                 ;;
             check-org-context-primitives)
                 echo "║   ✗ Org-Context Primitives Gate Failed  ║"
@@ -464,6 +473,11 @@ report_static_failure_banner() {
         manifest-sync|check-manifest-sync)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ Manifest Sync Gate Failed          ║"
+            echo "╚════════════════════════════════════════╝"
+            ;;
+        module-app-declaration|check-module-app-declaration)
+            echo "╔════════════════════════════════════════╗"
+            echo "║   ✗ Module App Declaration Gate Failed ║"
             echo "╚════════════════════════════════════════╝"
             ;;
         org-context|check-org-context-primitives)
