@@ -19,8 +19,56 @@
   module-owned adapters, and the protected `entry_point.py` seam.
   SA167d remains open at active merge position **#18**, the queue remains **ten open v88
   ticket entries across nine open merge positions**, and SA165 remains dependent on it.
-  Independent review, terminal attestation, and merge-back are pending; this entry records
-  accepted E0 evidence and does not claim convergence or completion.
+  At this dated E0 checkpoint, independent review, terminal attestation, and merge-back had
+  not yet occurred. The later retained checkpoint established that retained-partial convergence
+  and terminal attestation are complete, and retained-partial-only merge-back is authorized for
+  that reviewed partial plus the latest-v88 status reconciliation without closing SA167d.
+  Completion-grade Phase C convergence, terminal attestation, and exact-tip integration remain
+  pending. ***Terminal-remediation wording applied after attestation — not independently graded.***
+- **SA135 E1 lifecycle evidence and Phase F policy reconciliation accepted; Phase G remains open
+  (2026-08-31).**
+  The E1 integration run exited **0** with **2,547 passed, 87 skipped, and 12 deselected**;
+  listener sampling on port 5432 was **0/282**. `make test-postgres-provisioning`
+  exited **0** with **33 passed**. A denied-provisioning run exited **1** with the exact
+  terminal error `ERROR: unable to pull postgres:18`, executed no child, and left no resource
+  in its exact scope; the restored scoped run exited **0**. All three E1 scopes were empty after
+  cleanup. Root's restoration check matched the standing container, image, mount, twelve database
+  owners, and the `quickscale_test_role` tuple `t|t|f|f|f|f`. This proves the owned dynamic-loopback
+  lifecycle, restricted-role preservation, loud provisioning denial, exact-scope cleanup, and
+  standing-state restoration. Phase F reconciled the current policy and status consumers. Phase G's
+  validation campaign subsequently returned all eleven commands green, including the focused,
+  provisioning, repository, integration, BYPASSRLS, isolation, test, and quality gates, but G-FINAL
+  did not run. The attempted closeout exposed that removing SA135 makes
+  `test_v88_unknown_roadmap_dependency_is_expected_red_canary` stale; correcting that future-closeout
+  canary lacked reviewed-plan scope, so the closeout edits were rolled back. **SA135 remains open and
+  unchecked.** This entry does not claim Phase G acceptance, terminal attestation, or merge.
+
+- **The shared-PostgreSQL constraint re-derived from the script, and W2's standing-cluster claim
+  removed (2026-08-31).** The roadmap had recorded "one PostgreSQL 18 cluster on `localhost:5432`" as a
+  constraint binding all three lanes. Read against `scripts/provision_ci_postgres.sh` itself, it binds
+  only commands that address 5432 directly. `run --profile {restricted,isolation,bypassrls}` creates
+  its own ephemeral `postgres:18` container (`docker create … --tmpfs /var/lib/postgresql --publish
+  127.0.0.1::5432`, `:496`), reads back the dynamic loopback port (`:500`), provisions the role and
+  the module databases inside it, and exports `QS_<MODULE>_DB_{NAME,USER,HOST,PORT}` at that private
+  endpoint for the child command (`:231-248`). It never connects to `pg18-af10` and removes its
+  container on exit. Consequence for the release: SA167c's acceptance step 2 — its only
+  cluster-addressed command — now runs as `provision_ci_postgres.sh run --profile restricted -- make
+  MODULE=orgs test -- --modules`, which supplies the `quickscale_test_role` the criterion names
+  (`:151`) without claiming the shared cluster. W1's bare `make test` likewise delegates its
+  integration leg to the private restricted profile. **W1 and W2 therefore do not contend for the
+  standing cluster.** Their helper-routed gates are still Docker-backed and remain subject to W3's
+  documented priority whenever a W3 Docker leg is active.
+
+- **Lane divergence re-measured after `7765dd96` (2026-08-31).** `wt-track2` and `wt-track3` are both
+  at `7765dd96`, **0 ahead / 0 behind `v88`** — W3 no longer owes the 20-commit sync previously
+  recorded, so SA135 E1 starts from the integration state. `wt-track1` is at `f392641c`, **15 ahead /
+  25 behind** (was 24; `v88` advanced one commit). W1 and W3 are in process; W2 is idle and startable.
+
+- **`ci-environment-hand-replicated` reconciliation-log narrative trimmed to a pointer
+  (2026-08-31).** The structural audit still restated the finding's full fix-regression scoring in its
+  reconciliation log, duplicating the archive already held here. The audit now carries the resolution
+  line and its live residue only.
+
 - **SA173 merged; the W2 lane is released and idle (2026-08-31).** The terminally reviewed
   `wt-track2` tip merged into the `v88` integration branch at `06007624`. Measured after the merge:
   `wt-track2` is **0 ahead / 0 behind `v88`**, clean, with no unmerged delta — so the next W2 run

@@ -19,7 +19,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make format` - Shared formatting entrypoint.
 - `make test` - Shared unit and integration test entrypoint.
 - `make test-unit` - Shared unit-only entrypoint with section and module scoping.
-- `make test-integration` - Shared integration-test entrypoint for module suites against a NOBYPASSRLS PostgreSQL 18 role.
+- `make test-integration` - Shared integration-test entrypoint for module suites through the owned PostgreSQL 18 lifecycle and its NOBYPASSRLS role.
 - `make test-cov` - Combined coverage path (core + CLI + optional backups module) with dual-threshold enforcement.
 - `make test-e2e` - End-to-end validation with PostgreSQL and browser automation.
 - `make ci-e2e` - CI-parity release-gate validation including E2E.
@@ -38,7 +38,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 - Use `make ci-e2e` for release-gate validation when the full hardening and release path needs E2E coverage.
 - Use `make version-check` when verifying repository package-version parity.
 - Use `make check-gate-suites` when validating the registry's complete `scripts/` conformance population; it is cache-free and does not contribute product coverage.
-- Use `make isolation-conformance` when PostgreSQL 18, its pre-created test databases, the restricted role, and Poetry dependencies are already available. The target is a thin delegation and does not provision a local database.
+- Use `make isolation-conformance` when Docker, PostgreSQL 18 client tools, and Poetry dependencies are available. The target delegates to the owned isolation profile, which provisions scoped databases on a dynamic loopback endpoint; hosted service/lease behavior remains distinct.
 - Do not invent or document nonexistent helper scripts such as `./scripts/test_all.sh`.
 
 <a id="validation-tiers"></a>
@@ -87,7 +87,7 @@ pick the tier, run its command once.
 | Gate | Make target | Scope | Database | Role |
 |------|-------------|-------|----------|------|
 | Unit | `make test-unit` | `quickscale_core/tests`, `quickscale_cli/tests` (DB-free, marked `not integration and not e2e`) | None | N/A |
-| Integration | `make test-integration` | `quickscale_modules/*/tests` (PostgreSQL-required, marked `not e2e`) | PostgreSQL 18 per-module test DB | `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` |
+| Integration | `make test-integration` | `quickscale_modules/*/tests` (PostgreSQL-required, marked `not e2e`) | Owned, dynamically scoped PostgreSQL 18 per-module test DB | `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` |
 
 `make test` runs both gates sequentially as a combined check.
 
@@ -128,9 +128,11 @@ The scripts directory remains outside `.coveragerc`; the product coverage source
 and `fail_under = 90` are unchanged. The hosted CI job set also contains six
 separately justified unowned jobs, for fourteen jobs total. `isolation-conformance` is
 one of those hosted-unowned jobs: Make exposes the same runner for local verification,
-but local execution still requires the PostgreSQL 18 service, pre-created databases,
-restricted role, and Poetry environment described by `scripts/test_isolation_conformance.sh`.
-No local PostgreSQL provisioning is implied by this target or policy.
+but local execution uses the owned PostgreSQL 18 lifecycle described by
+`scripts/provision_ci_postgres.sh`: Docker allocates a dynamic loopback endpoint and
+scoped databases, and the profile validates the restricted role before the runner starts.
+Hosted execution consumes its separately provisioned service and lease; no pre-created
+local host server or database set is implied by this target or policy.
 
 Trivy is acquired on demand from the v0.74.0 release for Linux x86_64/arm64 or
 macOS x86_64/arm64 and verified against the official release-manifest SHA-256

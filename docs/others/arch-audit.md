@@ -34,14 +34,18 @@ generated-project updater. Ten open v88 ticket entries run on three tracks acros
 positions; **W2 sets the release date** (SA167c is the longest open chain). W3 holds the exclusive
 PostgreSQL/Docker slot. The prior pass's leading finding rode inside SA135 and has landed.
 
-**Accepted-open SA167d checkpoint (2026-08-28).** SA167d remains open and active at merge position
-**#18**, with SA165 still dependent on it. Phases A-E are accepted at E0 tip
+**Accepted-open SA167d checkpoint (2026-08-28; current status reconciled 2026-08-31).** SA167d
+remains open and active at merge position **#18**, with SA165 still dependent on it. Phases A-E
+are accepted at E0 tip
 `bd2c291ba2d40494970464741ac51bfd45445a19`; E0 made no tracked edits. The focused command
 passed **282 tests**, Core/CLI passed **2,880 / 2,098** with **1 skipped** on Core, all module
 integration suites passed with documented skips/warnings at **94.54% overall mean coverage**,
 `make check` passed **1,318** with zero unsuppressed findings, and quality passed with zero
-regressions and monotonicity. Independent review and merge-back remain pending; this is not a
-completion or convergence claim.
+regressions and monotonicity. Retained-partial convergence and terminal attestation are complete,
+and retained-partial-only merge-back is authorized for the reviewed partial plus the latest-v88
+status reconciliation without closing SA167d. Completion-grade Phase C convergence, terminal
+attestation, and exact-tip integration remain pending. ***Terminal-remediation wording applied
+after attestation — not independently graded.***
 
 **Read fully:** the four workflows, `scripts/gate_registry.json`, `scripts/check_gate_parity.py` (context extraction and comparison), `scripts/sync_ci_gate_jobs.py` (generation and job-set validation), the `Makefile` test/gate targets, `scripts/check_ci_locally.sh` gate stations, `scripts/test_isolation_conformance.sh`, and the three behavioral diffs. **Sampled:** module sources, generator, beta migration, orgs tenancy (prior-finding anchor re-verification only). **Skipped:** generated-project template internals, frontend theme sources.
 **Scope decision.** With the delta this small, the pass's value is re-verification plus depth
@@ -526,14 +530,9 @@ Recorded here only so a future pass using an older interpreter does not re-raise
 
 ## Reconciliation log
 
-- 2026-08-28 — `ci-environment-hand-replicated`: **resolved** by `202a4a00` "centralize hosted postgres
-  provisioning" and its follow-ups (`9f2878c0`, `6cdff32c`, `203fcd61`), landing the prior pass's
-  recommended Option 1. Fix-regression audit passed all three questions: mechanism removed (module list
-  derived from the discovery shim, not re-listed), prior sound decisions preserved (restricted-role and
-  `bypassrls` postures survive as named profiles), and the replacement oracle binds to the helper's
-  `describe` JSON while asserting the absence of the old shell. Two minor hand-pinned literals minted
-  inside the new derivation; carried to the watchlist, not promoted. The prior pass's document ranked this
-  first without re-verifying its anchors against the landed fix — re-derived from current code this pass.
+- 2026-08-28 — `ci-environment-hand-replicated`: **resolved** and archived; the full fix-regression
+  narrative is in [CHANGELOG.md](../../CHANGELOG.md). Only its residue stays live here — the two
+  hand-pinned literals on the watchlist, owned by SA164.
 - 2026-08-28 — `privileged-command-set-multi-owner`: **new**, promoted from the prior watchlist item
   "privileged-command template/runtime pair", whose trigger ("a third sanctioned command, or a mismatch")
   **fired** — not as a value mismatch but as a third and fourth *owner*. `3523f9f8` (2026-08-18, labeled

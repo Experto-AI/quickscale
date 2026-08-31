@@ -19,11 +19,13 @@ from here rather than marked done. No checked entry is permitted.
 - Shared closeout conflict surfaces are `CHANGELOG.md`, `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md` when a ticket's concepts change, and `docs/technical/decisions.md` when policy changes. Both audit docs join that surface only when a ticket changes or closes a live finding.
 - A roadmap edit that changes a W1/W2/W3 state block must re-run `quickscale_core/tests/test_v88_ticket_context_consistency.py` in the same change, and two state blocks must never share a state header — a duplicate header makes the test's anchors bind to the wrong block.
 - PostgreSQL/Docker work is serialized across worktrees. **W3 holds the exclusive PostgreSQL/Docker slot** and takes scheduling priority whenever one of its legs is active.
-- **Local database-lane operating constraint:** `make test-integration` and `make test-bypassrls`
-  use the same twelve databases and differ only by role. `scripts/provision_ci_postgres.sh run
-  --profile {restricted,bypassrls}` owns that ownership flip; drive both lanes through it rather
-  than by hand, and leave `quickscale_test_role` owning all twelve afterwards. Hosted CI uses
-  separate ephemeral servers; this applies to the shared local cluster only.
+- **Local database-lane operating constraint:** `make test-integration`, `make test-bypassrls`,
+  and `make isolation-conformance` use the owned profiles in
+  `scripts/provision_ci_postgres.sh`. Local profiles allocate disjoint, dynamically scoped
+  databases on loopback and validate their own role; restricted and BYPASSRLS runs do not flip
+  ownership of the standing twelve databases. Commands intentionally pointed at `localhost:5432`
+  still require the standing service, but helper-routed module gates take a private server instead
+  of queueing for it. Hosted CI uses its separate service/lease setup.
 - **W1's wiring leg (SA167d) may not touch `scripts/gate_registry.json` or any `module.yml`.** Those are W2-owned surfaces.
 - A ticket whose deliverable is Git ref state cannot be delegated to a file-editing worker. Route it to a maintainer session with ref authority and push credentials.
 - **A run killed by a cutoff returns no exit code and is not evidence** — neither of green nor of
@@ -82,8 +84,11 @@ W3 (service lifecycle — exclusive PostgreSQL/Docker slot)
 ```
 
 **W1 carries SA167d's accepted-open closeout and its dependent SA165.** W3 carries the shared
-SA135/SA163 lifecycle work and its bounded follow-ons. The accepted-open checkpoint does not claim
-that any of these entries has converged, been attested, or merged.
+SA135/SA163 lifecycle work and its bounded follow-ons. For SA167d, retained-partial convergence and
+terminal attestation are complete, and retained-partial-only merge-back is authorized for the
+reviewed partial plus the latest-v88 status reconciliation without closing the ticket.
+Completion-grade Phase C convergence, terminal attestation, and exact-tip integration remain pending.
+***Terminal-remediation wording applied after attestation — not independently graded.***
 
 **No cross-worktree dependency edges remain.** One cross-worktree *shared file* does, made
 one-directional by merge order: `scripts/test_isolation_conformance.sh` — SA135's merged partial wrote
@@ -105,7 +110,7 @@ The manifest-reading `entry_point.py`, the fail-hard `QUICKSCALE_LOCAL_WHEELHOUS
 the regenerated migration baseline, and `scripts/provision_ci_postgres.sh` are settled tree state that
 open tickets build on rather than re-open.
 
-### Track rebalance — evaluated 2026-08-31, **no move made**
+### Track rebalance — re-evaluated 2026-08-31 (second pass), **no move made**
 
 Lanes are **W1 7 · W2 0 · W3 5**, and every open ticket carries a track. This checkpoint retains
 the accepted-open W1/W3 worktree split; no track move is implied by the documentation merge.
@@ -120,8 +125,9 @@ The retained ordering keeps the shared documentation and database surfaces one-d
 additional move is authorized by this status reconciliation.
 
 **The current lane shape is not a track-assignment problem.** W1 and W3 carry the accepted-open
-work; W2 has no open entry in this checkpoint. The single PostgreSQL cluster remains a scheduling
-constraint for the database-backed W1/W3 actions.
+work; W2 has no open entry in this checkpoint. W1's helper-routed database gates do not consume the
+standing PostgreSQL cluster; W3's exclusive Docker scheduling priority remains the relevant resource
+constraint whenever one of its Docker-backed legs is active.
 
 **Conflict surface, unchanged by this pass.** No move above adds a *code* file to a second lane, so no
 new conflict surface is created. The standing closeout surface is `CHANGELOG.md`, this file,
@@ -138,11 +144,21 @@ No ahead/behind count is asserted here; that is a root-owned version-control fac
 
 ### Next action per lane
 
-- **W1 — SA167d (#18):** restart the reviewed Phase C campaign from its first command on a freshly
-  frozen candidate, then author the conditional ledger image and repeat completion-grade convergence
-  and attestation only after the complete campaign is green.
-- **W3 — SA135/SA163 (#15):** retain its accepted-open lifecycle evidence; no W3 action is implied by
-  this documentation checkpoint.
+- **W1 — SA167d's original phases A-E and closeout phases A-B are accepted; closeout Phase C remains.**
+  The source-bound pre-merge measurement compared exact `v88` tip
+  `1b68395ec43de18319c39d87e6b2b8f8af9a0508` with exact `wt-track1` pre-merge HEAD
+  `0930b50049eed83fb86f19dde55d7c2488b477bd`; `git rev-list --left-right --count v88...HEAD`
+  returned **7 left / 16 right** (seven `v88`-only commits and sixteen worktree-only commits).
+  This is evidence for that pre-merge state, not a persisted current divergence count: any sync or
+  merge changes it, so measure both exact tips again immediately before acting. Then restart Phase C
+  from its first command on one freshly frozen candidate, author the conditional ledger image after
+  the complete campaign is green, and run fresh completion-grade convergence and one terminal
+  attestation **supplied with the complete base-to-tip patch as a file**. Bare `make test` reaches
+  its integration leg through `make test-integration`, which uses the private restricted profile
+  locally; W1 therefore has no standing `localhost:5432` service claim.
+- **W3 — keep SA135/SA163 (#15) open while lifecycle closeout proceeds.** E1 lifecycle evidence and
+  Phase F policy/status reconciliation remain accepted open work; this checkpoint does not claim
+  G-FINAL, terminal attestation, or merge-back.
 
 ### Track readiness — the three states
 
@@ -152,31 +168,27 @@ merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W1** | SA167d (#18) | **yes** — the sync and deterministic lint repair are retained; restart Phase C | **yes** — its own validation and closeout are W1-owned; `make test` needs the cluster | **yes for the retained partial only** — completion still requires the fresh Phase C campaign | no |
+| **W1** | SA167d (#18) | **yes** — freshly measure exact tips, sync, restart Phase C; helper-routed module gates use private profiles | **yes** — its own acceptance and closeout are W1-owned | **yes for the retained partial only** — retained-partial-only merge-back is authorized for reviewed tree `542dcc5130cbe2093f19a8a3a603248f295a84cc` plus the latest-v88 status reconciliation; it keeps SA167d open and does not establish completion-grade Phase C, ticket completion, or release green | no |
 | **W3** | SA135/SA163 (#15) | **pending** — retained evidence only | **pending** — lifecycle closeout remains open | **pending** — exact-tip integration remains open | no |
 
-**The accepted-open checkpoint is not a completion claim.** SA167d remains open at #18, SA165 remains
-dependent, and the complete release campaign, conditional transition, and completion-grade
-integration remain pending.
+The accepted-open checkpoint is not a completion claim. Retained-partial convergence and terminal
+attestation are complete; retained-partial-only merge-back is authorized as bounded above. SA167d
+remains open at #18, SA165 remains dependent, and completion-grade Phase C convergence, terminal
+attestation, exact-tip integration, the complete release campaign, and the conditional transition
+remain pending.
 
 ### Open maintainer decisions
 
-Three items are the maintainer's to settle. None of them blocks *can start* on the critical path;
+Two items are the maintainer's to settle. None of them blocks *can start* on the critical path;
 each is named with the state it moves.
 
-1. **Cluster order between W1 and W3 — clears a scheduling contention, not a gate.** Both lanes can
-   start today and both need the single PostgreSQL 18 cluster: SA167d for `make test`, SA135's E1 for
-   a strict *no-server* window. The standing rule gives W3 priority whenever one of its legs is
-   active, so the default is **W3 first**; that default is only worth overriding if SA167d's
-   attestation is wanted sooner. Either way W2 runs unaffected. *Moves:* W1/W3 *can start* in
-   practice (both are formally yes today). A decision of yours clears it; no upstream work can.
-2. **The four `sqlparse` CVE suppressions expire 2026-09-30 — thirty days out.** They are currently
+1. **The four `sqlparse` CVE suppressions expire 2026-09-30 — thirty days out.** They are currently
    listed as deliberately not ticketed, on the grounds that dependency maintenance is not v88 scope.
    That reasoning held when the expiry was distant; it now lands inside the release window and will
    re-block CI on the day. Either open a ticket for it or accept a red CI on 2026-09-30. *Moves:*
    nothing today, but it becomes a hard *can merge* blocker on every lane if the release slips past
    that date. Only your decision opens the ticket.
-3. **The arch audit's two ranking questions.** *Is the sanctioned privileged-command set intended to
+2. **The arch audit's two ranking questions.** *Is the sanctioned privileged-command set intended to
    stay at two commands permanently?* — if yes, `privileged-command-set-multi-owner` downgrades from
    rank 1 to a watchlist item plus a docstring correction, and **SA174 (#31) shrinks to acceptance
    criterion 5 alone**. *Will `quickscale_devtools` ever be published?* — a yes promotes
@@ -194,11 +206,12 @@ Before any ticket work, measure each lane against current `v88`; when a worktree
    Expect a conflict in `docs/technical/roadmap.md`; keep this file's structure.
 2. **Re-run the consistency test in the same change** if a W1/W2/W3 state block moved:
    `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`.
-3. **Claim the cluster.** `make test`, `make test-integration`, and `make test-bypassrls` all use
-   the twelve shared `test_quickscale_*` databases. Drive the lane flip through
-   `scripts/provision_ci_postgres.sh run --profile {restricted,bypassrls}` and leave
-   `quickscale_test_role` owning all twelve afterwards. **W3 has priority whenever one of its legs
-   is active.**
+3. **Route database-backed gates through their owned profiles.** `make test` delegates its
+   integration leg to `make test-integration`; that target, `make test-bypassrls`, and
+   `make isolation-conformance` use the repository-owned helper profiles. Local runs allocate
+   disjoint, dynamically scoped databases on loopback and do not flip ownership of the standing
+   twelve `test_quickscale_*` databases. **W3 has priority whenever one of its Docker-backed legs
+   is active; E1's strict no-listener window is complete and its standing state was restored.**
 4. **Announce core-package edits.** A change under `quickscale_core/contracts/` or
    `quickscale_core/manifest/` can turn another lane red without sharing a file — see the recorded
    `203fcd61` precedent. No open ticket may touch the settled presence-contract surfaces.
@@ -212,7 +225,8 @@ Before any ticket work, measure each lane against current `v88`; when a worktree
 - **W3 holds the exclusive PostgreSQL/Docker slot.** W3 may stop the container `pg18-af10` for a
   strict-acceptance window and **must restart it afterwards** (`docker start pg18-af10`); the
   container must not be removed, its volume must not be pruned, and the twelve `test_quickscale_*`
-  databases plus `quickscale_test_role` ownership must be intact when W1 and W2 next run.
+  databases plus `quickscale_test_role` ownership must be restored as standing state after the
+  window. Helper-routed W1 and W2 database gates do not consume that standing state.
 - **Neither `teams` nor a third generated-project updater is in v88.** The arch audit's
   `generated-file-ownership-unmodeled`, `deletion-invariants-per-boundary-reimplementation`, and
   `org-model-universe-hand-enumerated` stay behind their growth triggers. A v88 ticket may not
@@ -223,9 +237,10 @@ Before any ticket work, measure each lane against current `v88`; when a worktree
   disposition metadata, emit an ownership manifest, or change any file's current disposition, and
   the finding stays open with its trigger intact.
 - **Roadmap documentation ownership is Option A** — open work only; completed work is archived.
-- **Local database-lane ownership flip** — whichever of `make test-integration` and
-  `make test-bypassrls` is about to run must own the twelve test databases first. The closed SA163
-  made the two lanes coexist through per-profile ownership, but the local cluster is still shared.
+- **Local database-lane profile isolation** — `make test-integration`, `make test-bypassrls`, and
+  `make isolation-conformance` must run through their corresponding helper profiles. Each local
+  profile owns disjoint, dynamically scoped databases and its validated role; it does not alter
+  ownership of the standing twelve test databases.
 - **SA165 (#22) stays behind SA167d (#18) on W1** (decided 2026-08-27). W1 runs one reviewed child
   at a time, so band-C filler does not preempt an open band-B acceptance even when the two share no
   file. Revisit only if SA167d is abandoned rather than merged.
@@ -267,9 +282,10 @@ reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELO
 
 The per-lane heads are **#18 (W1) and #15 (W3)**. W1's original SA167d phases A-E are accepted at E0
 tip `bd2c291ba2d40494970464741ac51bfd45445a19`; the current closeout phases A and B are retained, while
-Phase C remains outstanding after its release campaign halted. Partial-delta convergence and terminal
-attestation ran, but neither is completion-grade evidence. W3's SA135/SA163 lifecycle evidence remains
-open.
+Phase C remains outstanding after its release campaign halted. Retained-partial convergence and terminal
+attestation are complete and retained-partial-only merge-back is authorized for the reviewed partial
+plus the latest-v88 status reconciliation; none is completion-grade Phase C evidence or ticket closure.
+W3's SA135/SA163 lifecycle evidence remains open.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable only by the upstream work
 or by a maintainer reordering the lane. Three are **hard content dependencies** that no reorder
@@ -363,8 +379,9 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   no production path read it, and one SA92 helper used it before falling back to a guessed path.
   **Acceptance:** `django_apps:` is either derived from the `apps` wiring projection or removed from all manifests, `ModuleManifest`, and the loader, with no key parsed-but-unread remaining; a conformance gate fails when a module ships models or a migration without declaring at least one Django app, registered in `scripts/gate_registry.json` and passing `scripts/check_gate_parity.py`; the gate is proved by deleting a module's app declaration and observing red, reverted before merge; `test_sa92_migration_squash_guardrail.py` no longer depends on the retired key.
   **State (2026-08-31): Phase-A product slice merged at `f6f3bbce`; Phase A not yet accepted; B-F not
-  reached. The candidate is current `v88` at `06007624`, which `wt-track2` already matches exactly —
-  no sync is owed before the acceptance chain runs.** Terminal review found no defect in the merged
+  reached. The candidate is current `v88` at `0754f43f`, which `wt-track2` already matches exactly —
+  no sync is owed before the acceptance chain runs, and no step in the chain claims the shared
+  cluster.** Terminal review found no defect in the merged
   bytes; the acceptance run's evidence is archived in
   [CHANGELOG.md](../../CHANGELOG.md). What carries forward: the one red command was two tests
   in `TestRegenerateManagedWiringSkipManifestNotFound`
@@ -384,8 +401,15 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
 
      1. `poetry run pytest quickscale_core/tests/test_manifest_loader.py -q -o addopts= --no-cov`
         — expect exit 0.
-     2. `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules`
-        — expect exit 0 under the restricted PostgreSQL role.
+     2. `scripts/provision_ci_postgres.sh run --profile restricted -- make MODULE=orgs test -- --modules`
+        — expect exit 0 under the restricted PostgreSQL role. The helper provisions a private
+        ephemeral `postgres:18` server on a dynamic loopback port and exports
+        `QS_ORGS_DB_{NAME,USER,HOST,PORT}` at it, so this step does **not** claim the shared
+        `pg18-af10` cluster or queue behind W1 for that service. Because the helper is Docker-backed,
+        the standing W3 priority still applies whenever a W3 Docker leg is active. The bare
+        `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules` form is equivalent
+        in role but falls through to `localhost:5432`; use it only if the helper is unavailable, and
+        only in a window W3 has released.
      3. `make check-manifest-sync`
         — expect exit 0 with all twelve source and bundled manifests in sync.
      4. `make check-gate-parity`
@@ -476,11 +500,18 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   E0 tip `bd2c291ba2d40494970464741ac51bfd45445a19` made no tracked edits and records the accepted
   E0 history: 282 focused tests, the prior lint/type/test/check/quality outcomes, and the documented
   review input. Those facts are historical evidence only.
-  **Completed in the retained checkpoint:** closeout phases A and B were accepted; convergence applied
+  **Retained-delivery checkpoint (2026-08-31):** source branch `wt-track1`; retained product object
+  `0930b50049eed83fb86f19dde55d7c2488b477bd`. This checkpoint records an intentionally unfinished,
+  merge-authorized partial and does not stand in for Phase C or ticket completion.
+  **Completed:** closeout phases A and B were accepted; convergence applied
   the configured Ruff formatter to `quickscale_core/tests/test_v88_ticket_context_consistency.py` and
   passed its format, lint, and 22-test closure; terminal attestation found no new defect and approved
   Git tree `542dcc5130cbe2093f19a8a3a603248f295a84cc` only as a retained partial checkpoint.
-  ***corrected after checkpoint attestation — not independently graded***
+  Retained-partial convergence and terminal attestation are complete. Retained-partial-only merge-back
+  is authorized for that reviewed tree plus the latest-v88 status reconciliation; merge-back retains
+  SA167d as open at #18, leaves SA165 dependent, and does not imply Phase C acceptance, ticket
+  completion, or release green. ***Terminal-remediation wording applied after attestation — not
+  independently graded.***
   **Pending:** Phase C must run again from its first command on one freshly frozen candidate. The prior
   attempt observed 285 focused tests and 22 consistency tests green, then stopped at `make lint` because
   the consistency test needed Ruff formatting. The formatter defect is now corrected, but the
@@ -515,60 +546,62 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
    `scripts/test_isolation_conformance.sh`, and the hosted workflow projections.
 
  - [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Band B · Tier 2 · W3 · merge #15 · deps: none · PostgreSQL + Docker slot`
-  Provision and tear down the server used by repository gates; replace the current out-of-band host assumption while retaining an asserted unavailability negative control.
-  **Acceptance:** the integration gate provisions its own PostgreSQL 18 server and tears it down, with no reliance on a pre-existing host server; the `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract is preserved; the asserted-unavailability negative control still fails loudly when the server cannot be provisioned, rather than skipping; `make test-integration` passes on a machine with no PostgreSQL running; [validation_policy.md](validation_policy.md) is updated to drop the out-of-band host precondition; image identity follows the settled content-addressed backend-image convention.
-  **State (measured 2026-08-27): partial delivery merged into `v88` at `f070f39b`.** Phases P/A/B and
-  C/D are accepted — the hermetic Docker-unavailable probe, the strict no-host-server window, and the
-  single four-caller provisioning authority; **do not repeat C or D.** E0 is accepted (unchanged
-  external-state baseline; `pg18-af10` retained its exact container, image, mount, and running identity;
-  all twelve databases owned by `quickscale_test_role`). E1 recorded green runs without changing a file
-  but could not produce the deterministic red-before/green-after evidence it was asked for; F/G were not
-  reached.
-  **No blocker of its own remains, and a compliant plan is written below** — no plan-authoring step
-  remains before dispatch. The prior plan-shape blocker and the E2-scope transfer to SA170 are
-  archived in [CHANGELOG.md](../../CHANGELOG.md). `wt-track3` is an ancestor of `v88` and **20 behind**;
-  sync it before E1.
-  **What remains here is the local PostgreSQL lifecycle and its documented precondition, nothing else.**
-  Do not reopen `.github/workflows/`, `scripts/provision_ci_postgres.sh`, or
-  `scripts/test_gate_parity.py`, and do not run the full E2E campaign — it is SA170's.
-  **Remaining plan (serial; P/A/B/C/D and accepted E0 are not repeated). Stage order is E1, F,
-  G-sync/G-validate, G-closeout/G-final, serial convergence, one terminal attestation — no review
-  dispatch may be placed between G-sync/G-validate and G-closeout/G-final.**
-  1. **E1 — PostgreSQL-lifecycle evidence only.** All four items are deterministic today and need no
-     flake reproduction. Take the exclusive slot first; W3 has priority.
-     - `make test-integration` on a host with **no** PostgreSQL running — the gate provisions its own
-       server and tears it down. Stop `pg18-af10` for the window and **restart it afterwards**
-       (`docker start pg18-af10`); do not remove the container or prune its volume.
-     - The `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract is preserved.
-     - The hermetic Docker-unavailable probe still passes.
-     - The asserted-unavailability negative control **fails loudly rather than skipping** when the
-       server cannot be provisioned. Prove it by denying provisioning and observing the loud failure,
-       then restore.
-     - Leave `quickscale_test_role` owning all twelve `test_quickscale_*` databases, and drive any
-       lane flip through `scripts/provision_ci_postgres.sh run --profile {restricted,bypassrls}`.
-     Do **not** attempt the two E2E Docker failures, and do not run the full E2E campaign — both are
-     SA170's.
-  2. **F — policy and status reconciliation.** Update `validation_policy.md` at `:41` and `:94`,
-     which still state "No local PostgreSQL provisioning is implied by this target or policy" against
-     a Makefile that now provisions. Then ticket context, roadmap counts and dependencies, changelog
-     evidence, docs navigation, and the executable consistency consumer. Keep the ticket open if any
-     required gate is red.
-  3. **G-sync / G-validate.** Sync current `v88` into W3, preserve concurrent closeout entries, and
-     run the complete focused, provisioning, parity, lint, type, check, integration, BYPASSRLS,
-     isolation, test, and quality campaign on **one frozen candidate**, unexcluded — the known-red
-      protocol is retired and no `PYTEST_ADDOPTS` is authorized. **Run `make test` and `make quality`
-      detached, polling for an exit-code file**;
-     `make check` measures 184 s green and may run in the foreground. A truncated run is not evidence.
-     The serial and CI E2E campaigns are **not** part of this stage.
-  4. **G-closeout / G-final.** Only after G-validate is green: archive and remove SA135 from this
-     open-work-only roadmap, then rerun the final frozen-tip campaign.
-  5. **Serial convergence** over the complete product-and-closeout delta, then **exactly one terminal
-     attestation**. Supply it with the complete base-to-tip patch as a file and a clean-byte binding
-     (`git status --porcelain` empty at the exact tip) — SA167d's attestation returned no grade for
-     want of exactly that input, and the same mistake must not be paid twice.
-   6. **Merge only that attested exact tip** — and only after G-validate has been re-run on a candidate
-      synced to the current `v88`, fully green. Report final changed lines and
-     lines-per-hour metrics from the `2026-08-26 16:07:35 +0200` measurement start.
+  Provision and tear down the server used by repository gates; replace the former out-of-band host
+  assumption while retaining an asserted unavailability negative control.
+  **Acceptance:** the integration gate provisions its own PostgreSQL 18 server and tears it down,
+  with no reliance on a pre-existing host server; the `LOGIN CREATEDB NOINHERIT NOBYPASSRLS
+  NOSUPERUSER` role contract is preserved; the asserted-unavailability negative control still fails
+  loudly when the server cannot be provisioned, rather than skipping; `make test-integration` passes
+  on a machine with no PostgreSQL running; [validation_policy.md](validation_policy.md) records the
+  owned local lifecycle; image identity follows the settled content-addressed backend-image convention.
+  **State (measured 2026-08-31): phases P/A/B/C/D/E0 and E1 are accepted.** E1 proved the owned
+  dynamic-loopback lifecycle with the standing listener absent, the restricted role contract intact,
+  exact-scope cleanup, a loud denied-provisioning failure, and exact restoration of the standing
+  container, image, mount, twelve database owners, and role tuple. Its external evidence is archived in
+  [CHANGELOG.md](../../CHANGELOG.md). **Phase F is also accepted. Phase G's synchronized validation
+  campaign returned all eleven commands green, but G-FINAL did not run, so SA135 stays open and
+  unchecked.**
+  The E2 scope transfer to SA170 and the earlier plan-shape blocker are archived in the changelog.
+  `wt-track3` synchronized current `v88` for Phase G; that sync does not reopen accepted evidence.
+  The attempted closeout exposed that removing SA135 makes
+  `test_v88_unknown_roadmap_dependency_is_expected_red_canary` stale because its mutation source is
+  the roadmap's SA170 dependency metadata. Correcting that future-closeout canary was outside the
+  granted scope, the closeout edits were rolled back, and fresh reviewed-plan authority is required
+  before G can resume. **What remains here is closeout reconciliation and G-FINAL, not another
+  validation campaign.** Do not reopen `.github/workflows/`, `scripts/provision_ci_postgres.sh`, or
+  `scripts/test_gate_parity.py`,
+  and do not run the full E2E campaign — it is SA170's.
+  **Remaining plan (serial; P/A/B/C/D/E0/E1/F and the returned-green G validation campaign are not
+  repeated).** Obtain fresh reviewed-plan authority for the future-closeout canary reconciliation,
+  then complete closeout and G-FINAL on the settled candidate. Serial convergence and patch-backed
+  terminal attestation follow; no implementation phase is re-entered after convergence.
+  **Retained-delivery checkpoint (2026-08-31).**
+  - **Completed:** E1 lifecycle evidence and Phase F policy/status reconciliation are accepted; the
+    synchronized Phase G validation campaign returned green. Two roadmap corrections made after
+    terminal attestation reconciled local helper routing and current W1/W2 divergence; they are
+    retained but were not independently graded.
+  - **Pending:** Phase G remains outstanding. SA135 stays open and unchecked; its closeout archive,
+    roadmap removal, SA170 dependency transition, G-FINAL, convergence, and patch-backed terminal
+    attestation have not completed.
+  - **Blocking:** ***corrected after checkpoint attestation — not independently graded.*** Removing
+    SA135 makes the current expected-red dependency canary stale because its mutation source is
+    SA170's dependency metadata naming SA135. This closes only when fresh reviewed-plan scope admits
+    the canary reconciliation and the resulting closeout candidate passes G-FINAL unchanged.
+  - **Decisions needed:** none; the scope boundary, required canary reconciliation, and retained
+    validation evidence are known.
+  - **Resume object and remaining plan:** ***corrected after checkpoint attestation — not independently
+    graded.*** Continue in W3 worktree `wt-track3` from retained object
+    `f745c81959834a636a14a82c1cd9d6c1f757872c`; if a fresh W3 branch is required, create it from
+    current `v88` and merge that exact retained object before any closeout edit. Then obtain fresh
+    reviewed-plan authority admitting the consistency-test canary and all same-fact closeout
+    consumers, update that canary while removing SA135 and clearing SA170's dependency, run G-FINAL
+    once on the unchanged closeout candidate, run serial convergence, materialize the complete patch,
+    attest once, and merge the exact reviewed tip. Do not repeat the already-green Phase G validation
+    campaign or any accepted earlier phase.
+  - **Checkpoint verification:** ***corrected after checkpoint attestation — not independently
+    graded.*** The exact same-change consistency command returned **21 passed** on the final checkpoint
+    bytes: `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o
+    addopts= --no-cov`.
   **Cross-worktree surface:** the merged partial edits `scripts/test_isolation_conformance.sh`,
   which SA165 (#22, W1) also owns; merge order #15 before #22 covers it.
 
@@ -706,7 +739,7 @@ triggers.
      stated in writing.
   7. Emission parity is rebaselined with per-file rationale — this changes emitted bytes.
   8. `docs/others/arch-audit.md` retires the finding in the same change.
-  **Verification:** `poetry run pytest quickscale_core/tests/test_generator quickscale_cli/tests quickscale_modules/orgs/tests -q -o addopts= --no-cov`; `make check-module-core-imports`; `make lint`, `make typecheck`, `make check`, `make quality` no worse than found. Schedule any `make test` outside W3's cluster window.
+  **Verification:** `poetry run pytest quickscale_core/tests/test_generator quickscale_cli/tests quickscale_modules/orgs/tests -q -o addopts= --no-cov`; `make check-module-core-imports`; `make lint`, `make typecheck`, `make check`, `make quality` no worse than found. Local `make test` routes its integration leg through the private restricted profile and does not need the standing service; W3 priority still applies to explicitly Docker-backed legs.
   **Why W1, and why it *reduces* the cross-lane surface.** This is generated-output plus module
   wiring — W1's charter exactly. It touches `quickscale_core/generator/`, never
    `quickscale_core/contracts/` or `quickscale_core/manifest/`, so it does not collide with the archived
@@ -844,7 +877,7 @@ Recorded so the absence is a decision rather than an oversight.
 | `org-model-universe-hand-enumerated` (arch rank 4) | arch, deferred | Same rule. Trigger: `teams` adds a tenant model, or a module adds a `PROTECT`/non-deferrable dependency among purge-owned rows. |
 | Tooling gaps — dependency-vulnerability scanner, security static analysis | tech | Closed by SA123's implemented and accepted Trivy/Bandit gates; evidence archived in [CHANGELOG.md](../../CHANGELOG.md). |
 | Watch items recorded as deliberate | tech *Notes* | Integration-branch CI, generator lock-generation policy, the DB-free healthcheck, CRM/billing cross-tenant `all_objects` count fallbacks, and rename-atomic-but-not-durable state writes are each argued and accepted in the audit; re-examine only on the triggers stated there. |
-| Four suppressed `sqlparse` CVEs | tech *Notes* | `CVE-2026-54284/-59893/-71491/-59894` are accountable and unexpired, but all four expire **2026-09-30**, now thirty days out, and will re-block CI on the same day. Held as dependency maintenance rather than v88 scope — **but this is now item 2 of [Open maintainer decisions](#open-maintainer-decisions)**, not a settled exclusion. |
+| Four suppressed `sqlparse` CVEs | tech *Notes* | `CVE-2026-54284/-59893/-71491/-59894` are accountable and unexpired, but all four expire **2026-09-30**, now thirty days out, and will re-block CI on the same day. Held as dependency maintenance rather than v88 scope — **but this is now item 1 of [Open maintainer decisions](#open-maintainer-decisions)**, not a settled exclusion. |
 | `blog/feeds.py` double System-org resolution | tech *Notes* | Narrow trigger (a corrupt singleton row). Not promoted; re-examine if a second fail-closed feed path appears. |
 | `table_has_force_rls` schema qualification | tech *Notes* | Single-schema deployments unaffected. Trigger: a schema-per-tenant option. |
 | Tooling gap — CSRF helper test | tech | An acceptance criterion inside **SA160**, not a separate item. |

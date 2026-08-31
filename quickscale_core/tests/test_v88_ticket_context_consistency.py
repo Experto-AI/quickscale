@@ -34,6 +34,18 @@ OPEN_TICKET_RE = re.compile(
 )
 SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
 E0_ACCEPTED_TIP = "bd2c291ba2d40494970464741ac51bfd45445a19"
+RETAINED_PARTIAL_ATTESTED = (
+    "retained-partial convergence and terminal attestation are complete"
+)
+RETAINED_PARTIAL_MERGE_AUTHORIZED = "retained-partial-only merge-back is authorized"
+STALE_RETAINED_PARTIAL_STATUS_RE = re.compile(
+    r"(?ix)"
+    r"independent\s+review(?:,\s+terminal\s+attestation)?(?:,\s+|\s+)and\s+merge-back\s+"
+    r"(?:are|remain|still)\s+pending"
+    r"|pending\s+independent\s+review\s+and\s+merge-back"
+    r"|does\s+not\s+claim\s+convergence,\s+terminal\s+attestation,\s+or\s+merge-back"
+    r"|no\s+(?:independent\s+)?(?:terminal\s+)?attestation\b"
+)
 
 UMBRELLA_TITLE = "SA167c — module wiring standardization"
 UMBRELLA_MEMBERS = frozenset({"SA167c", "SA167d"})
@@ -376,6 +388,17 @@ def _assert_sa167d_status(
         for path, text in status_consumers.items():
             assert E0_ACCEPTED_TIP in text, path
             assert "SA167d" in text, path
+            normalized_text = " ".join(text.lower().split())
+            assert RETAINED_PARTIAL_ATTESTED in normalized_text, path
+            assert RETAINED_PARTIAL_MERGE_AUTHORIZED in normalized_text, path
+            assert re.search(
+                r"completion-grade phase c[^.]{0,160}\bpending", normalized_text
+            ), path
+            stale_status = STALE_RETAINED_PARTIAL_STATUS_RE.search(normalized_text)
+            assert not stale_status, (
+                path,
+                stale_status.group(0) if stale_status else None,
+            )
         # The accepted E0 evidence is task-specific and remains required while
         # the ticket is open; unrelated audit findings are deliberately not pinned.
         assert "282 tests" in changelog_text
@@ -438,6 +461,35 @@ def test_v88_integration_ready_state_rejects_accepted_open_candidate() -> None:
             ),
             (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
             "integration-ready",
+        )
+
+
+@pytest.mark.parametrize(
+    "stale_claim",
+    [
+        "SA167d independent review, terminal attestation, and merge-back are pending.",
+        "SA167d is pending independent review and merge-back.",
+        "SA167d does not claim convergence, terminal attestation, or merge-back.",
+        "SA167d has no terminal attestation.",
+    ],
+)
+def test_v88_retained_partial_status_rejects_stale_attestation_wording(
+    stale_claim: str,
+) -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    with pytest.raises(AssertionError):
+        _assert_sa167d_status(
+            roadmap,
+            CONTEXT.read_text(encoding="utf-8") + f"\n{stale_claim}\n",
+            DOCS_INDEX.read_text(encoding="utf-8"),
+            (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
+            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+            (ROOT / "docs/technical/decisions.md").read_text(encoding="utf-8"),
+            (ROOT / "docs/technical/implementation_contract.md").read_text(
+                encoding="utf-8"
+            ),
+            (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
+            "accepted-open",
         )
 
 

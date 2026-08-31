@@ -336,8 +336,12 @@ yourself editing either to register a module, the module's own declaration is in
 > The former CLI wiring deviation is retired: the desired-configuration-only boundary is
 > implemented and accepted through phase E at E0 tip
 > `bd2c291ba2d40494970464741ac51bfd45445a19`. **`SA167d`** remains open at active merge
-> position #18 pending independent review and merge-back; SA165 remains dependent. This is an
-> accepted-open checkpoint, not a completion claim.
+> position #18; retained-partial convergence and terminal attestation are complete, and
+> retained-partial-only merge-back is authorized for the reviewed partial plus the latest-v88
+> status reconciliation without closing the ticket. Completion-grade Phase C convergence,
+> terminal attestation, and exact-tip integration remain pending; SA165 remains dependent.
+> This is an accepted-open checkpoint, not a completion claim. *Terminal-remediation wording
+> applied after attestation — not independently graded.*
 
 **5. Template Integration (showcase_react theme):**
 - [ ] Module sections in `navigation.html.j2` and `index.html.j2` use the React frontend structure
