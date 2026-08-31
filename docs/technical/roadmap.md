@@ -143,8 +143,9 @@ file with SA135 or SA170, and touches neither `contracts/` nor `manifest/`. Its 
 ("the backups suite needs the cluster") does not hold for SA171's own acceptance criteria.
 
 **This reorder is filler, not release progress** — SA171 is band C and off the critical path — but it
-converts W3 from *idle and blocked* to *executable today*, and it costs nothing on W2 or W1. It does
-require relaxing one standing rule; see [Open maintainer decisions](#open-maintainer-decisions), item 4.
+converts W3 from *idle and blocked* to *executable today*, and it costs nothing on W2 or W1. It
+required relaxing one standing rule to name a *runnable* band-B leg; that was settled as decision 4
+on 2026-08-31 and the reorder stands.
 
 **W1 is the longest lane at six positions and that is deliberate**: it is off the critical path, so
 band-C work accumulates there rather than behind the release-setting chain. Band-C positions are
@@ -213,66 +214,56 @@ merge-back is not order-gated behind another lane.
 |---|---|---|---|---|---|
 | **W2** | SA167c (#21) | **yes** — sync one commit, then revalidate C on the merged bytes | **yes** — C-F and the numbering advisory are W2-owned | **yes** — nothing is ordered ahead of #21 | **yes** — release-committed |
 | **W1** | SA167d (#18) | **yes** — finish the sync, settle the staged index, validate, attest | **yes** — its own acceptance and closeout are W1-owned | **yes** — no cross-lane branch-state gate remains | no |
-| **W3** | SA171 (#28) | **yes** — DB-free, independent, no slot needed *(after decision 4)* | **yes** — both locks, both suites, and TA71's retirement are W3-owned | **yes** — reordered to the lane head; nothing precedes it | no |
-| **W3** | SA135 (#15) | **no** — G-FINAL needs scope for the canary reconciliation *(decision 3)* | **no** — the current scope cannot reconcile that canary and close SA135 | **yes** — no cross-lane branch-state gate remains | no |
+| **W3** | SA171 (#28) | **yes** — DB-free, independent, no slot needed | **yes** — both locks, both suites, and TA71's retirement are W3-owned | **yes** — reordered to the lane head; nothing precedes it | no |
+| **W3** | SA135 (#15) | **no** — blocked until decision 3's removal scope is set | **no** — the same blocker | **yes** — no cross-lane branch-state gate remains | no |
 
 **W2, W1, and W3-via-SA171 are truly green; SA135 is not.** Of those, only **SA167c (#21)** is on the
 critical path and constitutes real release progress. **SA167d (#18)** and **SA171 (#28)** are truly
 green but off it — filler that fills otherwise-idle lanes. **No lane is blocked by another lane's
 ticket.** SA135's single blocker is a decision, not an upstream dependency.
 
-### Open maintainer decisions
+### Maintainer decisions — settled 2026-08-31
 
-Four items are yours to settle. Each is named with the state it moves and with whether it is a
-decision or a hard dependency. **Every current blocker on this board is a decision — nothing is
-waiting on upstream work.**
+Four were open; **three are now settled and one clarifying question is outstanding.** Settled items
+are recorded here with their consequence, then enforced wherever they bind.
 
-1. **The four `sqlparse` CVE suppressions expire 2026-09-30 — thirty days out.** *Context:* CI runs a
-   dependency-vulnerability scanner; four known `sqlparse` advisories are currently suppressed with a
-   dated expiry, and on that date the scanner stops honouring the suppression and CI goes red. They
-   are listed as deliberately not ticketed on the grounds that dependency maintenance is not v88
-   scope — reasoning that held when the expiry was distant and now lands inside the release window.
-   *Alternatives:* **(a)** open a ticket to upgrade or re-justify before the date — costs a band-C
-   slot, and fits the existing pattern of ticketing anything that can turn a gate red; **(b)** accept
-   a red CI on 2026-09-30 — free today, but it violates the standing rule that a red gate is
-   attributed to exactly one ticket, with no owner to attribute it to. *(a)* fits previous decisions
-   better. *Moves:* nothing today; becomes a hard *can merge* blocker on **every** lane if the
-   release slips past that date. **Decision, not a dependency.**
-2. **The arch audit's two ranking questions.** *Context:* two open findings are scored on assumptions
-   only you can confirm. *Is the sanctioned privileged-command set intended to stay at two commands
-   permanently?* — if yes, `privileged-command-set-multi-owner` drops from rank 1 to a watchlist item
-   plus a docstring correction, and **SA174 (#31) shrinks to acceptance criterion 5 alone**. *Will
-   `quickscale_devtools` ever be published?* — a yes promotes `generated-file-ownership-unmodeled` to
-   the `now` horizon and would widen SA175 (#32) beyond its deliberate one-assertion scope. *Moves:*
-   the *scope* of two W1 band-C tickets, not any of the three states. **Decision, not a dependency —
-   the code cannot answer an intent question.**
-3. **Admit the future-closeout canary reconciliation into SA135's scope.** *Context:*
-   `test_v88_unknown_roadmap_dependency_is_expected_red_canary` proves the consistency test really
-   fails when a ticket names a dependency that does not exist. It does that by mutating a hardcoded
-   dependency literal naming SA135 in this roadmap — so archiving SA135 silently disarms the canary,
-   and so does any prose here that happens to spell the same literal first. The last
-   closeout attempt was rolled back because fixing it was outside the granted scope. *Alternatives:*
-   **(a)** authorize the reconciliation inside SA135's closeout, deriving the mutation target from
-   whatever open ticket currently carries a `deps:` edge instead of pinning an ID — this is what the
-   same test file's own docstring already demands ("literal ticket IDs … go stale on the next planning
-   pass"), so it removes the defect class rather than moving it; **(b)** re-pin the literal to a
-   different surviving ticket — cheapest, but reintroduces the same trap for whoever archives *that*
-   ticket; **(c)** split it into its own ticket — clean separation, but adds a fourteenth position and
-   leaves SA135 open meanwhile. *(a)* fits previous decisions best: this repository has repeatedly
-   chosen to remove a mechanism rather than relocate it, and the audit scores remediations on exactly
-   that. *Moves:* SA135's **can start** and **can finish** from no to yes. **Decision, not a
-   dependency — no upstream work clears it.**
-4. **Relax "band-C filler must not displace a band-B leg" to name a *runnable* band-B leg.**
-   *Context:* that rule exists so cheap work does not jump the queue ahead of committed release work.
-   It currently blocks the SA171 reorder above, because SA171 is band C and SA135 is band B — even
-   though SA135 cannot run at all until decision 3 lands. *Alternatives:* **(a)** amend the rule to
-   "must not displace a *runnable* band-B leg" — keeps the intent (no queue-jumping ahead of work that
-   could actually proceed) and lets a halted lane do something; **(b)** leave the rule literal and W3
-   idle until decision 3 — simplest, and costs one lane's throughput for as long as the decision takes.
-   *(a)* fits previous decisions: the same reasoning already governs W1, where band-C tails accumulate
-   precisely because they cannot displace anything runnable. *Moves:* W3's **can start** from no to
-   yes on SA171. **Decision, not a dependency.** *If you take (b), the SA171 reorder above should be
-   reverted and W3's readiness row reads "no — waiting on decision 3".*
+1. **`sqlparse` CVE suppressions — SETTLED: leave as-is, no ticket.** The four suppressions in
+   `scripts/security_suppressions.json` keep their `2026-09-30` expiry and dependency maintenance
+   stays out of v88 scope. **Consequence, accepted knowingly:** `check_security_gates.py:545` compares
+   `expires` against `date.today()` and raises `GateError` on a stale entry. That check is a pure date
+   comparison — it needs no scanner and no network — so from **2026-10-01** the security gate fails
+   **locally as well as in CI**, on the suppression file rather than on any finding, and it fails even
+   if `sqlparse` is patched. This is the one accepted red with no owning ticket, by explicit decision
+   rather than oversight. *Cheapest exit if the release slips:* nothing pins `sqlparse` (Django's
+   constraint is `>=0.5.0`, unbounded) and 0.6.0 is published, so a lockfile bump plus a rescan is the
+   likely fix. **Revisit on 2026-09-30, not before.**
+2. **`quickscale_devtools` publication — SETTLED: no publishing; maintainer-internal use only.**
+   This confirms the assumption that currently holds `generated-file-ownership-unmodeled` (arch rank 2)
+   down: the beta-migration tooling runs only from a maintainer checkout, never from an installed
+   package, so a drifted ownership taxonomy cannot reach a user's project. The finding **stays
+   deferred at rank 2 behind its trigger**, and **SA175 (#32) stays at its deliberate one-assertion
+   scope** and may not widen. `quickscale_devtools/pyproject.toml`'s exclusion from the publish
+   `PACKAGES` list is now a decision, not just a default — adding it there re-opens this finding at
+   the `now` horizon and is a scope finding requiring its own ticket.
+3. **The roadmap consistency test — DIRECTION SET: remove it as overengineered; scope question
+   outstanding.** Measured: `quickscale_core/tests/test_v88_ticket_context_consistency.py` is **496
+   lines and 15 test functions, of which 12 are canaries** — tests asserting the other three fail
+   when fed broken input. Only three do real work: docs-hub count agreement, roadmap↔context ticket
+   parity, and the no-schedulable-metadata-restatement guard. It is registered in **no** gate:
+   not `scripts/gate_registry.json`, not the `Makefile`, not any CI workflow — it runs only inside
+   the ordinary pytest suite, so removal touches no registry and no parity oracle. Removing it also
+   dissolves SA135's closeout blocker outright rather than reconciling it. **Outstanding: whether to
+   delete the whole file or keep the three real checks and drop the twelve canaries.** Until that is
+   answered, the file stays as-is and SA135's *can start* / *can finish* remain **no**.
+4. **Band-C displacement rule — SETTLED: amended to name a *runnable* band-B leg.** Band-C filler may
+   now proceed on a lane whose band-B head is halted on an open decision, which is what the rule
+   always intended: no queue-jumping ahead of work that could actually proceed. **The SA171 (#28)
+   reorder to W3's head stands**, and W3's *can start* is **yes**. The amended rule is carried in
+   [Standing rules](#standing-rules-carried-from-closed-decisions).
+
+**Still open for you:** whether the privileged-command set is intended to stay at two commands
+permanently (see [SA174](#), acceptance criterion 5) — it sizes SA174 and moves none of the three
+states — and decision 3's removal scope above.
 
 D3 and the placeholder-declaration policy remain settled and are not reopened here.
 
@@ -305,6 +296,10 @@ Before any ticket work, measure each lane against current `v88`; when a worktree
   container must not be removed, its volume must not be pruned, and the twelve `test_quickscale_*`
   databases plus `quickscale_test_role` ownership must be restored as standing state after the
   window. Helper-routed W1 and W2 database gates do not consume that standing state.
+- **`quickscale_devtools` is maintainer-internal and will not be published** (decision 2b, settled
+  2026-08-31). Its absence from the publish `PACKAGES` list is a decision, not a default; adding it
+  there promotes `generated-file-ownership-unmodeled` to the `now` horizon and is a scope finding
+  requiring its own ticket. SA175 (#32) may not widen beyond its single assertion.
 - **Neither `teams` nor a third generated-project updater is in v88.** The arch audit's
   `generated-file-ownership-unmodeled`, `deletion-invariants-per-boundary-reimplementation`, and
   `org-model-universe-hand-enumerated` stay behind their growth triggers. A v88 ticket may not
@@ -331,8 +326,10 @@ Before any ticket work, measure each lane against current `v88`; when a worktree
 - **`quickscale_core/contracts/` and `quickscale_core/manifest/` are cross-lane surfaces.** Every
   lane reads them, so a behavioural change there can turn another lane red without sharing a file.
   no open ticket owns those settled surfaces; any exceptional touch must be announced in the merge queue.
-- **Band-C filler must not displace a *runnable* band-B leg** (amended 2026-08-31, pending
-  confirmation as decision 4). A band-B leg halted on an open decision does not hold its lane idle.
+- **Band-C filler must not displace a *runnable* band-B leg** (amended 2026-08-31, decision 4,
+  settled). A band-B leg halted on an open decision does not hold its lane idle; the intent is no
+  queue-jumping ahead of work that could actually proceed. This is what authorizes SA171 (#28) to
+  run as W3's head while SA135 (#15) waits.
 
 ### Merge order
 
@@ -873,12 +870,12 @@ Recorded so the absence is a decision rather than an oversight.
 
 | Item | Source | Why no ticket |
 |---|---|---|
-| `generated-file-ownership-unmodeled` (arch rank 2) — **substance only** | arch, deferred | Held by the standing **"neither"** rule. Trigger: a third generated-project consumer, public updater, emitted-file expansion, or second theme. Options 1 and 2 (typed disposition metadata; a versioned ownership manifest with vintage negotiation) stay behind it. Its **trigger-independent first step is ticketed as SA175 (#32)** under the carve-out in the standing rules. Related weakness tracked in SA152. |
+| `generated-file-ownership-unmodeled` (arch rank 2) — **substance only** | arch, deferred | Held by the standing **"neither"** rule, and by the settled decision that **`quickscale_devtools` is maintainer-internal and will not be published** (2026-08-31) — the fact that holds this finding's severity down. Trigger: a third generated-project consumer, public updater, emitted-file expansion, or second theme. Options 1 and 2 (typed disposition metadata; a versioned ownership manifest with vintage negotiation) stay behind it. Its **trigger-independent first step is ticketed as SA175 (#32)** under the carve-out in the standing rules. Related weakness tracked in SA152. |
 | `deletion-invariants-per-boundary-reimplementation` (arch rank 3) | arch, deferred | Same rule. Trigger: `teams`, a GDPR erasure command, bulk-admin deletion, or a second deletion boundary. Design together with `org-model-universe-hand-enumerated` at `teams` kickoff. |
 | `org-model-universe-hand-enumerated` (arch rank 4) | arch, deferred | Same rule. Trigger: `teams` adds a tenant model, or a module adds a `PROTECT`/non-deferrable dependency among purge-owned rows. |
 | Tooling gaps — dependency-vulnerability scanner, security static analysis | tech | Closed by SA123's implemented and accepted Trivy/Bandit gates; evidence archived in [CHANGELOG.md](../../CHANGELOG.md). |
 | Watch items recorded as deliberate | tech *Notes* | Integration-branch CI, generator lock-generation policy, the DB-free healthcheck, CRM/billing cross-tenant `all_objects` count fallbacks, and rename-atomic-but-not-durable state writes are each argued and accepted in the audit; re-examine only on the triggers stated there. |
-| Four suppressed `sqlparse` CVEs | tech *Notes* | `CVE-2026-54284/-59893/-71491/-59894` are accountable and unexpired, but all four expire **2026-09-30**, now thirty days out, and will re-block CI on the same day. Held as dependency maintenance rather than v88 scope — **but this is now item 1 of [Open maintainer decisions](#open-maintainer-decisions)**, not a settled exclusion. |
+| Four suppressed `sqlparse` CVEs | tech *Notes* | **Settled 2026-08-31: left as-is by explicit decision.** `CVE-2026-54284/-59893/-71491/-59894` expire **2026-09-30**; from **2026-10-01** `check_security_gates.py:545` raises `GateError` on the stale entries — a pure date check, so it fails locally as well as in CI, on the file rather than on any finding. This is the one knowingly accepted red with no owning ticket. Revisit on the expiry date. |
 | `blog/feeds.py` double System-org resolution | tech *Notes* | Narrow trigger (a corrupt singleton row). Not promoted; re-examine if a second fail-closed feed path appears. |
 | `table_has_force_rls` schema qualification | tech *Notes* | Single-schema deployments unaffected. Trigger: a schema-per-tenant option. |
 | Tooling gap — CSRF helper test | tech | An acceptance criterion inside **SA160**, not a separate item. |

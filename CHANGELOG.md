@@ -4,6 +4,22 @@
 
 ## v88 development — 2026-08-21
 
+- **Three maintainer decisions settled (2026-08-31).** *(1)* The four `sqlparse` CVE suppressions are
+  **left as-is by explicit decision**; dependency maintenance stays out of v88 scope. The accepted
+  consequence is recorded rather than discovered: `check_security_gates.py:545` compares `expires`
+  against `date.today()` and raises `GateError` on a stale entry, and because that is a pure date
+  comparison needing no scanner and no network, the security gate fails **locally as well as in CI**
+  from 2026-10-01, on the suppression file rather than on any finding, and it fails even if `sqlparse`
+  is patched. Nothing in the repository pins `sqlparse` — Django's constraint is `>=0.5.0` with no
+  upper bound and 0.6.0 is published — so a lockfile bump plus a rescan remains the cheap exit if the
+  release slips. *(2b)* **`quickscale_devtools` will not be published; maintainer-internal use only.**
+  This confirms the fact that holds `generated-file-ownership-unmodeled` (arch rank 2) down: the
+  beta-migration taxonomy cannot reach a user's project. The finding stays deferred and SA175 (#32)
+  stays at one assertion. Its exclusion from the publish `PACKAGES` list is now a decision, not a
+  default. *(4)* The standing rule **"band-C filler must not displace a band-B leg" is amended to name
+  a *runnable* band-B leg** — a band-B head halted on an open decision no longer holds its lane idle,
+  which is what the rule always intended. This authorizes the SA171 (#28) reorder to W3's head.
+
 - **SA167c Phases A and B accepted; Phase C's product delta merged as retained delivery
   (2026-08-31).** Phase A's ordered seven-command unchanged-candidate chain passed on a candidate
   carrying the retained presence contract: `test_manifest_loader.py`; `provision_ci_postgres.sh run
