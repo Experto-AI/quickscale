@@ -92,18 +92,16 @@ reconciliation log. No finding sits at the `now` horizon this pass.
 
 ## Fix-regression audit
 
-Two remediations were in scope this pass: the landed environment centralization and the delta's gate
-edits. Both were re-audited and scored **resolved with the mechanism removed rather than relocated**;
-the full narrative — station counts, the `describe --format json` binding that replaced the literal
-oracle, the absence-of-the-old-shape anti-regression assertion, and the `990f660f`/`48e0a62a`
-de-compounding of the conformance gate — is archived in [CHANGELOG.md](../../CHANGELOG.md) and is not
-restated here.
+Both remediations in scope this pass — the landed environment centralization and the delta's gate
+edits — scored **resolved with the mechanism removed rather than relocated**. The narrative is
+archived in [CHANGELOG.md](../../CHANGELOG.md); nothing about it is live.
 
-*New commitments minted, carried to the [watchlist](#watchlist) and owned by SA164:* two hand-pinned
-literals inside the new derivation — `((${#MODULES[@]} == 12))` and `[[ "$item" != teams ]]`
-(`provision_ci_postgres.sh:93,96`) — and a second copy of the PostgreSQL major (`POSTGRES_MAJOR=18` at
-`:15`, against `runtime_pins.POSTGRES_VERSION = "18"`). Both are small and fail loudly, so they were
-carried rather than promoted.
+What *is* live is the residue: two hand-pinned literals minted inside the new derivation
+(`((${#MODULES[@]} == 12))` and `[[ "$item" != teams ]]`, `provision_ci_postgres.sh:93,96`) and a
+second copy of the PostgreSQL major (`POSTGRES_MAJOR=18` at `:15`, against
+`runtime_pins.POSTGRES_VERSION = "18"`). Both fail loudly, so both were carried rather than
+promoted. They are stated in full with their triggers on the [watchlist](#watchlist) and owned by
+SA164.
 
 ---
 

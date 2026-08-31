@@ -4,6 +4,38 @@
 
 ## v88 development — 2026-08-21
 
+- **SA173 merged; the W2 lane is released and idle (2026-08-31).** The terminally reviewed
+  `wt-track2` tip merged into the `v88` integration branch at `06007624`. Measured after the merge:
+  `wt-track2` is **0 ahead / 0 behind `v88`**, clean, with no unmerged delta — so the next W2 run
+  (SA167c, #21) starts from the integration state directly and needs no fast-forward sync. This
+  discharges the last remaining item on SA173's recorded handoff checkpoint; nothing of SA173's
+  scope stays open. The roadmap's lane-state block, its per-lane next actions, and the
+  track-readiness table were re-measured against the branches on the same date rather than carried
+  forward from the 2026-08-29 transcription.
+
+- **Worktree divergence re-measured, and the reading convention corrected (2026-08-31).**
+  `git rev-list --left-right --count v88...<worktree>` prints *`v88`-only* first and
+  *worktree-only* second, so the left column is **behind** and the right column is **ahead** —
+  the roadmap's snippet had been read the other way round. Measured on 2026-08-31:
+  `wt-track1` **15 ahead / 24 behind** (was recorded as 18 behind on 2026-08-29; `v88` has advanced
+  three commits since), `wt-track2` **0 / 0**, `wt-track3` **0 ahead / 20 behind** (was recorded as
+  14 behind). No lane carries an unmeasured delta: `wt-track1`'s 15 commits are SA167d's accepted
+  product delta and `wt-track3` is an ancestor of `v88`.
+
+- **`ci-environment-hand-replicated` fix-regression narrative archived out of the structural audit
+  (2026-08-31).** The finding resolved on 2026-08-28 and its remediation was re-audited and scored
+  **resolved with the mechanism removed rather than relocated**: the hosted-provisioning module list
+  is derived from the discovery shim rather than re-listed, the restricted-role and `bypassrls`
+  postures survive as named profiles, and the replacement oracle binds to the helper's
+  `describe --format json` output while asserting the absence of the old shell shape. The delta's
+  two behavioural commits (`990f660f`, `48e0a62a`) were audited in the same pass and scored
+  **compounding removed, not relocated**: literal ticket IDs, merge positions, dependency edges,
+  dates and prose were deleted from the planning conformance gate and replaced with roadmap-derived
+  counts plus a red canary, and every structural invariant survived with its own canary. No
+  invariant was weakened and no station was minted. The audit document now carries only the pointer
+  and the *live* residue — the two hand-pinned literals and the second PostgreSQL-major copy minted
+  inside the new derivation, which are restated in full on its watchlist and owned by SA164 (#25).
+
 - **SA173 closeout release gate green after convergence repair (2026-08-31; terminal review
   pending).** The accepted Phase-A candidate `b380f0164f1a9c885271e104b3c8d16a85185de0` was
   revalidated without reimplementing product work: the focused caller, storage, status,
