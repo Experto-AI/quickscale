@@ -516,14 +516,9 @@ Recorded here only so a future pass using an older interpreter does not re-raise
 
 ## Reconciliation log
 
-- 2026-08-28 — `ci-environment-hand-replicated`: **resolved** by `202a4a00` "centralize hosted postgres
-  provisioning" and its follow-ups (`9f2878c0`, `6cdff32c`, `203fcd61`), landing the prior pass's
-  recommended Option 1. Fix-regression audit passed all three questions: mechanism removed (module list
-  derived from the discovery shim, not re-listed), prior sound decisions preserved (restricted-role and
-  `bypassrls` postures survive as named profiles), and the replacement oracle binds to the helper's
-  `describe` JSON while asserting the absence of the old shell. Two minor hand-pinned literals minted
-  inside the new derivation; carried to the watchlist, not promoted. The prior pass's document ranked this
-  first without re-verifying its anchors against the landed fix — re-derived from current code this pass.
+- 2026-08-28 — `ci-environment-hand-replicated`: **resolved** and archived; the full fix-regression
+  narrative is in [CHANGELOG.md](../../CHANGELOG.md). Only its residue stays live here — the two
+  hand-pinned literals on the watchlist, owned by SA164.
 - 2026-08-28 — `privileged-command-set-multi-owner`: **new**, promoted from the prior watchlist item
   "privileged-command template/runtime pair", whose trigger ("a third sanctioned command, or a mismatch")
   **fired** — not as a value mismatch but as a third and fourth *owner*. `3523f9f8` (2026-08-18, labeled

@@ -20,7 +20,11 @@ from here rather than marked done. No checked entry is permitted.
 - A roadmap edit that changes a W1/W2/W3 state block must re-run `quickscale_core/tests/test_v88_ticket_context_consistency.py` in the same change, and two state blocks must never share a state header — a duplicate header makes the test's anchors bind to the wrong block.
 - PostgreSQL/Docker work is serialized across worktrees. **W3 holds the exclusive PostgreSQL/Docker slot** and takes scheduling priority whenever one of its legs is active.
 - **Local database-lane operating constraint:** `make test-integration` and `make test-bypassrls`
-  use the same twelve databases and differ only by role. `scripts/provision_ci_postgres.sh run
+  use the same twelve databases and differ only by role. **The constraint binds only commands that
+  address `localhost:5432` directly.** `scripts/provision_ci_postgres.sh run` allocates a private
+  ephemeral container on a dynamic loopback port and exports the `QS_*_DB_*` mapping at it, so a lane
+  needing a role-scoped module database rather than the twelve shared ones takes its own server
+  instead of queueing for the slot. `scripts/provision_ci_postgres.sh run
   --profile {restricted,bypassrls}` owns that ownership flip; drive both lanes through it rather
   than by hand, and leave `quickscale_test_role` owning all twelve afterwards. Hosted CI uses
   separate ephemeral servers; this applies to the shared local cluster only.
@@ -111,12 +115,13 @@ The manifest-reading `entry_point.py`, the fail-hard `QUICKSCALE_LOCAL_WHEELHOUS
 the regenerated migration baseline, and `scripts/provision_ci_postgres.sh` are settled tree state that
 open tickets build on rather than re-open.
 
-### Track rebalance — evaluated 2026-08-31, **no move made**
+### Track rebalance — re-evaluated 2026-08-31 (second pass), **no move made**
 
 Lanes are **W1 6 · W2 3 · W3 4**, and every open ticket already carries a track. Each was re-tested
 against the three questions — is it independent of the rest of its lane, is another lane idle, and is it
-on or feeding the critical path. **All three lanes are idle** now that SA173 has merged, so question
-two passes everywhere; no ticket passes all three.
+on or feeding the critical path. **W1 and W3 are now in process and W2 is idle and startable**, so
+question two passes only toward W2 — and W2 is the release-setting lane, which its own bullet below
+rules out as a destination. No ticket passes all three.
 
 - **The critical path cannot be shortened by moving work off W2.** `scripts/gate_registry.json` and
   `quickscale_modules/*/module.yml` are W2-owned surfaces that never cross worktrees, and all three of
@@ -174,33 +179,62 @@ for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-r
 **Read that output as `behind ahead`** — the left column counts commits on `v88` and not on the
 worktree, the right column the reverse. It had been read the other way round before 2026-08-31.
 
-- **`wt-track2`** is clean at `06007624`, **0 ahead / 0 behind `v88`** — SA173 merged, so this lane
-  *is* the integration state. It needs no sync and can begin SA167c immediately.
-- **`wt-track1`** is clean at `f392641c`, **15 ahead / 24 behind `v88`** — the release's only
-  unmerged product delta, carrying SA167d's accepted E0 tip and the convergence corrections at
-  `8b20800d`. It must sync before validating; expect a conflict in this file and keep its structure.
-- **`wt-track3`** is an ancestor of `v88` — **0 ahead / 20 behind**, fully merged, clean, idle.
-  Sync before starting SA135.
+- **`wt-track2`** is at `7765dd96`, **0 ahead / 0 behind `v88`** — SA173 merged, so this lane *is*
+  the integration state. It needs no sync and can begin SA167c immediately.
+- **`wt-track1`** is at `f392641c`, **15 ahead / 25 behind `v88`** — the release's only unmerged
+  product delta, carrying SA167d's accepted E0 tip and the convergence corrections at `8b20800d`.
+  It must sync before validating; expect a conflict in this file and keep its structure. **In
+  process.**
+- **`wt-track3`** is at `7765dd96`, **0 ahead / 0 behind** — fully merged and synced, so SA135 starts
+  from the integration state with no sync owed. **In process.**
 
-The binding constraint is physical, not a ticket edge: one PostgreSQL 18 cluster on `localhost:5432`
-holding the twelve shared `test_quickscale_*` databases, which W3 needs *empty*. W1's SA167d `make test`
-and W3's SA135 E1 campaign both need it and cannot both run today. No ticket move relieves that; only
-scheduling does — and with all three lanes now startable, that ordering is the one live scheduling
-call (see *Open maintainer decisions*).
+### The shared-cluster constraint is narrower than previously recorded
+
+One PostgreSQL 18 container (`pg18-af10`) publishes `localhost:5432` and holds the twelve shared
+`test_quickscale_*` databases, which W3's SA135 E1 needs *empty*. **That contention applies only to
+commands that address port 5432 directly** — a bare `make test`, `make test-integration`, or a bare
+`make MODULE=<name> test -- --modules`, all of which fall through to the `QS_*_DB_HOST/PORT`
+defaults of `localhost:5432`.
+
+**It does not apply to work routed through `scripts/provision_ci_postgres.sh run`.** Verified against
+the script on 2026-08-31: `run --profile {restricted,isolation,bypassrls}` creates its *own* ephemeral
+`postgres:18` container (`docker create … --tmpfs /var/lib/postgresql --publish 127.0.0.1::5432`,
+`:496`), reads back the dynamically assigned loopback port (`:500`), provisions the role and databases
+inside it, and exports `QS_<MODULE>_DB_{NAME,USER,HOST,PORT}` at that private endpoint (`:231-248`)
+for the child command. It never connects to `pg18-af10`, and it removes its container on exit.
+
+So the cluster is a **contended resource for two of the three lanes at most, and only for their
+5432-addressed commands**. Any lane needing a role-scoped module database — rather than the twelve
+shared ones specifically — can take a private server instead of queueing. This is what unblocks W2
+(see *Next action per lane*).
 
 ### Next action per lane
 
 - **W2 — resume SA167c (#21) from its retained Phase-A slice; do not reimplement merged work.** Run
   its remaining acceptance chain and closeout on the current candidate. `wt-track2` is already at the
-  integration state (`06007624`, 0/0), so this lane needs no sync and no cluster slot for its first
-  four steps — it is the one lane that can start with zero setup, and it is the only one on the
-  critical path. **Start here.**
+  integration state (`7765dd96`, 0/0), so this lane needs no sync. It is the only lane on the critical
+  path. **Start here.**
+  **Its one cluster-addressed step is step 2, and it does not need the shared cluster.** Acceptance
+  step 2 (`make MODULE=orgs test -- --modules` under `quickscale_test_role`) reaches PostgreSQL through
+  `quickscale_modules/orgs/tests/settings.py`, whose `QS_ORGS_DB_{NAME,USER,HOST,PORT}` default to
+  `localhost:5432` only when nothing sets them. Run it under the provisioning helper instead, which
+  sets all four at a private ephemeral endpoint:
+
+  ```bash
+  scripts/provision_ci_postgres.sh run --profile restricted -- \
+      make MODULE=orgs test -- --modules
+  ```
+
+  `restricted` is the correct profile: it maps all twelve modules and provisions exactly
+  `quickscale_test_role` with `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEROLE`
+  (`provision_ci_postgres.sh:151`) — the role the acceptance criterion names. W2 therefore contends
+  for **no** exclusive resource and is not scheduled against W1 or W3.
 - **W1 — SA167d's phase E is accepted; the lane needs closeout, not re-implementation.** Sync
-  `wt-track1` (**24 behind**), run one validation campaign on the synced frozen candidate, and perform
+  `wt-track1` (**25 behind**), run one validation campaign on the synced frozen candidate, and perform
   one terminal attestation **supplied with the complete base-to-tip patch as a file** — the missing
   input, not any finding, is what ungraded the last attempt. Its `make test` needs the cluster, so it
   contends with W3.
-- **W3 — resume SA135 (#15) at phase E1, unexcluded.** Sync `wt-track3` (**20 behind**) first. Do not
+- **W3 — resume SA135 (#15) at phase E1, unexcluded.** `wt-track3` is already synced (0/0). Do not
   redo C or D, and do not attempt the E2E Docker failures — they are SA170's. Remaining scope is **the
   PostgreSQL-lifecycle evidence and the `validation_policy.md` precondition update only**. An
   executable plan is written into the ticket below; no plan-authoring step remains. E1 needs the
@@ -214,15 +248,16 @@ merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W2** | SA167c (#21) | **yes** — no sync, no cluster, no pending decision; resume from the retained Phase-A slice | **yes** — remaining acceptance and closeout are W2-owned | **yes** — nothing is ordered ahead of #21 | **yes** — release-committed |
-| **W1** | SA167d (#18) | **yes** — sync (24 behind), validate, attest; its `make test` needs the cluster | **yes** — its own acceptance and closeout are W1-owned | **yes** — no cross-lane branch-state gate remains | no |
-| **W3** | SA135 (#15) | **yes** — sync (20 behind), then take the exclusive slot; the plan is written | **yes** — its own acceptance and closeout are W3-owned | **yes** — no cross-lane branch-state gate remains | no |
+| **W2** | SA167c (#21) | **yes** — no sync, no pending decision, and no shared-cluster claim once step 2 runs under `provision_ci_postgres.sh run --profile restricted` | **yes** — remaining acceptance and closeout are W2-owned | **yes** — nothing is ordered ahead of #21 | **yes** — release-committed |
+| **W1** | SA167d (#18) | **yes** — sync (25 behind), validate, attest; its bare `make test` addresses `localhost:5432` | **yes** — its own acceptance and closeout are W1-owned | **yes** — no cross-lane branch-state gate remains | no |
+| **W3** | SA135 (#15) | **yes** — no sync owed (0/0); the plan is written; E1 needs the shared cluster with no server running | **yes** — its own acceptance and closeout are W3-owned | **yes** — no cross-lane branch-state gate remains | no |
 
 **All three lanes are truly green.** Of the three, only **SA167c (#21)** is on the critical path and
 therefore constitutes real release progress; **SA167d (#18)** and **SA135 (#15)** are truly green but
 off it — band-B work that must land, and that banks durable artifacts, but that does not move the
-release date. **No lane is blocked by another lane's ticket.** The only cross-lane coupling left is
-physical: W1 and W3 share one PostgreSQL cluster.
+release date. **No lane is blocked by another lane's ticket.** The one remaining cross-lane coupling
+is physical and now involves **two** lanes, not three: W1's bare `make test` and W3's SA135 E1 both
+address `localhost:5432`. W2 is out of that contention entirely.
 
 ### Open maintainer decisions
 
@@ -230,11 +265,18 @@ Three items are the maintainer's to settle. None of them blocks *can start* on t
 each is named with the state it moves.
 
 1. **Cluster order between W1 and W3 — clears a scheduling contention, not a gate.** Both lanes can
-   start today and both need the single PostgreSQL 18 cluster: SA167d for `make test`, SA135's E1 for
-   a strict *no-server* window. The standing rule gives W3 priority whenever one of its legs is
-   active, so the default is **W3 first**; that default is only worth overriding if SA167d's
-   attestation is wanted sooner. Either way W2 runs unaffected. *Moves:* W1/W3 *can start* in
-   practice (both are formally yes today). A decision of yours clears it; no upstream work can.
+   start today and both address `localhost:5432`: SA167d for a bare `make test`, SA135's E1 for a
+   strict *no-server* window. The standing rule gives W3 priority whenever one of its legs is active,
+   so the default is **W3 first**; that default is only worth overriding if SA167d's attestation is
+   wanted sooner. W2 is no longer part of this decision — it takes a private ephemeral server.
+   *Moves:* W1/W3 *can start* in practice (both are formally yes today). A decision of yours clears
+   it; no upstream work can.
+   **A third option now exists and is worth weighing:** SA167d's `make test` could also be routed
+   through `provision_ci_postgres.sh run --profile restricted`, removing the contention rather than
+   ordering it. The reason it is a decision and not an obvious win is that SA167d's acceptance is a
+   *validation campaign on a frozen candidate* — changing the command that produces its evidence
+   changes the environment that evidence attests to, mid-acceptance. Routing W2's step 2 carries no
+   such cost because W2's chain is being rerun from the start on one unchanged candidate anyway.
 2. **The four `sqlparse` CVE suppressions expire 2026-09-30 — thirty days out.** They are currently
    listed as deliberately not ticketed, on the grounds that dependency maintenance is not v88 scope.
    That reasoning held when the expiry was distant; it now lands inside the release window and will
@@ -335,7 +377,7 @@ reused**; their tickets are closed and archived in [CHANGELOG.md](../../CHANGELO
 
 The per-lane heads are **#21 (W2), #18 (W1), and #15 (W3)**, all three partial: #21 has a merged
 Phase-A slice at `f6f3bbce` with acceptance and B-F outstanding, on a lane already at the integration
-state; #18 is a phase-E-accepted candidate on `wt-track1` at `f392641c` awaiting one validation
+state (`7765dd96`, 0/0); #18 is a phase-E-accepted candidate on `wt-track1` at `f392641c` awaiting one validation
 campaign and one attestation; #15 has a merged partial with C/D accepted and E outstanding.
 
 Most "Merges after" edges are lane ordering — a queue position, clearable only by the upstream work
@@ -430,8 +472,9 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   no production path read it, and one SA92 helper used it before falling back to a guessed path.
   **Acceptance:** `django_apps:` is either derived from the `apps` wiring projection or removed from all manifests, `ModuleManifest`, and the loader, with no key parsed-but-unread remaining; a conformance gate fails when a module ships models or a migration without declaring at least one Django app, registered in `scripts/gate_registry.json` and passing `scripts/check_gate_parity.py`; the gate is proved by deleting a module's app declaration and observing red, reverted before merge; `test_sa92_migration_squash_guardrail.py` no longer depends on the retired key.
   **State (2026-08-31): Phase-A product slice merged at `f6f3bbce`; Phase A not yet accepted; B-F not
-  reached. The candidate is current `v88` at `06007624`, which `wt-track2` already matches exactly —
-  no sync is owed before the acceptance chain runs.** Terminal review found no defect in the merged
+  reached. The candidate is current `v88` at `7765dd96`, which `wt-track2` already matches exactly —
+  no sync is owed before the acceptance chain runs, and no step in the chain claims the shared
+  cluster.** Terminal review found no defect in the merged
   bytes; the acceptance run's evidence is archived in
   [CHANGELOG.md](../../CHANGELOG.md). What carries forward: the one red command was two tests
   in `TestRegenerateManagedWiringSkipManifestNotFound`
@@ -451,8 +494,14 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
 
      1. `poetry run pytest quickscale_core/tests/test_manifest_loader.py -q -o addopts= --no-cov`
         — expect exit 0.
-     2. `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules`
-        — expect exit 0 under the restricted PostgreSQL role.
+     2. `scripts/provision_ci_postgres.sh run --profile restricted -- make MODULE=orgs test -- --modules`
+        — expect exit 0 under the restricted PostgreSQL role. The helper provisions a private
+        ephemeral `postgres:18` server on a dynamic loopback port and exports
+        `QS_ORGS_DB_{NAME,USER,HOST,PORT}` at it, so this step does **not** claim the shared
+        `pg18-af10` cluster and W2 never queues behind W1 or W3. The bare
+        `QS_ORGS_DB_USER=quickscale_test_role make MODULE=orgs test -- --modules` form is equivalent
+        in role but falls through to `localhost:5432`; use it only if the helper is unavailable, and
+        only in a window W3 has released.
      3. `make check-manifest-sync`
         — expect exit 0 with all twelve source and bundled manifests in sync.
      4. `make check-gate-parity`
@@ -539,7 +588,7 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   in [module-extension.md §Building a Module](module-extension.md#building-a-module-authoring-checklist)
   is retired once the deviation it names is gone.
   **State (measured 2026-08-31 against the branch): phases A-E accepted; closeout is all that remains.**
-  `wt-track1` is **clean at `f392641c`, 15 ahead / 24 behind `v88`** — the release's only unmerged
+  `wt-track1` is **clean at `f392641c`, 15 ahead / 25 behind `v88`** — the release's only unmerged
   product delta, accepted at E0 tip `bd2c291b` and retained inside `8b20800d`. Measured product delta
   `c50de1c1..8b20800d`: **30 files, 1,012 insertions, 2,228 deletions**. The E0 evidence and the
   convergence corrections are archived in [CHANGELOG.md](../../CHANGELOG.md).
@@ -551,7 +600,7 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   pipeline is **not** required — convergence has already run and corrected this delta, every gate has
   been green on it once, and re-running the full staging would re-prove passed work.
   **Remaining plan (serial; do not re-implement anything):**
-  1. **Sync.** Merge current `v88` (`06007624`, 24 commits ahead of this worktree) into `wt-track1`
+  1. **Sync.** Merge current `v88` (`7765dd96`, 25 commits ahead of this worktree) into `wt-track1`
      and resolve there, preserving the retained candidate and the closeout checkpoint. Expect a
      conflict in this file — keep its structure.
   2. **Validate on one frozen candidate,** unexcluded — the known-red protocol is retired and no
@@ -589,8 +638,8 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   reached.
   **No blocker of its own remains, and a compliant plan is written below** — no plan-authoring step
   remains before dispatch. The prior plan-shape blocker and the E2-scope transfer to SA170 are
-  archived in [CHANGELOG.md](../../CHANGELOG.md). `wt-track3` is an ancestor of `v88` and **20 behind**;
-  sync it before E1.
+  archived in [CHANGELOG.md](../../CHANGELOG.md). `wt-track3` is at `7765dd96`, **0 ahead / 0 behind**;
+  no sync is owed before E1.
   **What remains here is the local PostgreSQL lifecycle and its documented precondition, nothing else.**
   Do not reopen `.github/workflows/`, `scripts/provision_ci_postgres.sh`, or
   `scripts/test_gate_parity.py`, and do not run the full E2E campaign — it is SA170's.
