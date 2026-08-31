@@ -4,6 +4,64 @@
 
 ## v88 development — 2026-08-21
 
+- **SA167c Phases A and B accepted; Phase C's product delta merged as retained delivery
+  (2026-08-31).** Phase A's ordered seven-command unchanged-candidate chain passed on a candidate
+  carrying the retained presence contract: `test_manifest_loader.py`; `provision_ci_postgres.sh run
+  --profile restricted -- make MODULE=orgs test -- --modules`; `make check-manifest-sync` with all
+  twelve source and bundled manifests in sync; `make check-gate-parity`; the four-file CLI manifest
+  suite; a read-only source-bound probe printing `verified 12 source-bound module app projections`
+  by asserting each manifest carries exactly one static `apps` wiring projection and that
+  `build_manifest_wiring_spec` reproduces it exactly; and a final `git diff --exit-code`. Phase B
+  added the fail-hard `scripts/check_module_app_declaration.py` checker (332 lines) with a 409-line
+  hermetic suite covering model/migration evidence, empty and malformed projections, malformed
+  manifests, inventory and filesystem failures, evidence-free modules, and deterministic diagnostics.
+  Phase C's integration bytes merged into `v88` at `d31c6b41` (10 files, +862/-28): the Make target,
+  the gate-registry entry, `check_ci_locally.sh` and `sync_ci_gate_jobs.py`, the generated `ci.yml`
+  job, and 48 lines of `test_gate_parity.py` oracle updates. Convergence repaired four blocking
+  defects and returned green with **1,348 passed** in the scripts suite; terminal review found a
+  fail-open traversal defect, and terminal remediation replaced it with explicit fail-closed
+  enumeration plus partial-scan regressions, green across **30 focused tests**, lint, format, MyPy,
+  and current-tree execution. **This is retained delivery: it clears no gate.** Phase C was never
+  adjudicated, D-F have not run, `make ci-e2e` has not run, and SA167c remains open and unchecked.
+  The inert key is nonetheless fully gone — `grep -rn django_apps` over `quickscale_core`,
+  `quickscale_modules`, and `quickscale_cli` returns nothing — so `quickscale_core/manifest/` leaves
+  the ticket's forward conflict surface.
+
+- **SA171 reordered to W3's head; the "backups suite needs the cluster" rationale was wrong
+  (2026-08-31).** SA171's placement behind SA170 was worktree ordering only, never a content
+  dependency, and its stated reason for living on the exclusive-slot lane does not survive contact
+  with its own acceptance criteria. Verified against the tree: SA171 touches
+  `quickscale_core/advisory_lock.py` and `quickscale_core/dr_engine/_lock.py`, whose suites
+  `test_advisory_lock.py` (239 lines) and `test_dr_engine_lock.py` (280 lines) contain no
+  `django_db` marker and no PostgreSQL reference — the two-thread barrier test the ticket specifies
+  is pure filesystem. SA171 shares no file with SA135 or SA170, touches neither `contracts/` nor
+  `manifest/`, and needs no exclusive slot. Merge order becomes **#28 → #15 → #27 → #29**, SA172's
+  ordering edge moves from SA171 to SA170, and W3 gains a runnable head while SA135 waits on a
+  scope decision. The reorder is filler — band C, off the critical path — but it costs nothing on
+  W1 or W2 and it depends on relaxing the standing "band-C filler must not displace a band-B leg"
+  rule to name a *runnable* band-B leg.
+
+- **Lane divergence re-measured against the branches (2026-08-31, third pass).** `wt-track1` is at
+  merge commit `0930b500`, **16 ahead / 11 behind `v88`**, carrying SA167d's accepted E0 delta (29
+  files, +1,075/-2,329 against the merge base) plus staged, uncommitted ledger edits to five closeout
+  files — a partial sync through `7765dd96` already landed. `wt-track2` is clean at `88a0778a`,
+  **0 ahead / 1 behind**, its SA167c Phase-C delta merged. `wt-track3` is clean at `c78d9957`,
+  **0 ahead / 5 behind**, its SA135 E1/F delta merged.
+
+- **The roadmap reduced to planner shape (2026-08-31).** Removed from
+  `docs/technical/roadmap.md` and archived here: SA167c's full "Original A-F plan (retained as
+  evidence)" block, including the seven-command Phase-A chain and the inline source-bound projection
+  probe, and its superseded "Prior state" narrative — 143 lines replaced by 47 carrying the state,
+  the four remaining phases, and the resume object. SA135's retained-delivery checkpoint, which
+  restated completed/pending/blocking/verification across four sub-bullets with repeated
+  "corrected after checkpoint attestation" annotations, collapsed to one state paragraph plus a named
+  blocker and its proposed fix. The second-pass track-rebalance analysis, the standalone
+  shared-cluster re-derivation section, and the `203fcd61` cross-lane hazard narrative were condensed
+  to their operative rules, all three of which are already carried in the execution rules and the
+  handoff checklist. Corrected while there: `scripts/test_gate_parity.py` and `.github/workflows/ci.yml`
+  were still recorded as having no open owner, which stopped being true when SA167c's Phase-C delta
+  merged.
+
 - **SA135 E1 lifecycle evidence and Phase F policy reconciliation accepted; Phase G remains open
   (2026-08-31).**
   The E1 integration run exited **0** with **2,547 passed, 87 skipped, and 12 deselected**;
