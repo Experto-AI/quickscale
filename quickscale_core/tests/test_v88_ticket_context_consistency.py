@@ -5,6 +5,15 @@ concepts, but it must not restate bands, positions, dependencies, or readiness. 
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167 umbrella may still
 explain the archived SA167a handoff as settled tree state.
+
+Scope, deliberately narrow (2026-08-31).  This module holds **three** checks and no
+canaries.  It previously carried twelve canaries -- tests asserting these three fail when
+fed mutated input -- across 496 lines, a 4:1 ratio of test-testing-the-test to test.  They
+were removed as overengineering for a planning document.  One of them also mutated a
+hardcoded ``deps:`` literal naming a specific ticket, so archiving that ticket silently
+disarmed the canary, and so did any roadmap prose that happened to spell the same literal
+first; that trap blocked a release ticket's closeout.  **Do not reintroduce a canary layer
+here, and do not pin a ticket ID, count, position, or date anywhere in this file.**
 """
 
 from __future__ import annotations
@@ -13,9 +22,6 @@ import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-
-import pytest
-
 
 ROOT = Path(__file__).parents[2]
 ROADMAP = ROOT / "docs/technical/roadmap.md"
@@ -323,13 +329,6 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
     )
 
 
-def test_v88_status_consumer_count_drift_is_expected_red_canary() -> None:
-    roadmap = ROADMAP.read_text(encoding="utf-8")
-    mutated_index = "The queue holds forty open v88 ticket entries across two open merge positions.\n"
-    with pytest.raises(AssertionError, match="does not restate the roadmap"):
-        _assert_status_consumers_agree(roadmap, mutated_index)
-
-
 def test_v88_current_context_covers_roadmap_open_tickets() -> None:
     roadmap, context = _load_documents()
     _assert_consistent(roadmap, context)
@@ -339,158 +338,3 @@ def test_v88_context_restates_no_schedulable_roadmap_metadata() -> None:
     _, context = _load_documents()
     assert not SCHEDULABLE_METADATA_RE.findall(context)
     assert not SEMANTIC_SCHEDULING_RE.findall(context)
-
-
-@pytest.mark.parametrize(
-    "claim",
-    [
-        "SA167a must be merged before SA118.",
-        "SA118 follows SA167a.",
-        "SA118 cannot start until SA167a closes.",
-        "SA167a is a prerequisite for SA118.",
-        "SA167a → SA118.",
-        "Merge SA167a first, then SA118.",
-    ],
-)
-def test_v88_semantic_scheduling_restatement_is_expected_red_canary(
-    claim: str,
-) -> None:
-    _, context = _load_documents()
-    assert SEMANTIC_SCHEDULING_RE.findall(context + f"\n{claim}\n")
-
-
-@pytest.mark.parametrize(
-    "explanation",
-    [
-        "SA118, SA161, and SA160 touch the same fixture.",
-        "SA167a and SA167c share one conceptual umbrella.",
-    ],
-)
-def test_v88_semantic_scheduling_guard_avoids_explanatory_false_positives(
-    explanation: str,
-) -> None:
-    assert not SEMANTIC_SCHEDULING_RE.findall(explanation)
-
-
-def test_v88_schedulable_metadata_restatement_is_expected_red_canary() -> None:
-    _, context = _load_documents()
-    assert SCHEDULABLE_METADATA_RE.findall(
-        context + "\n`Band B · Tier 1 · W2 · merge #11 · deps: SA167a`\n"
-    )
-
-
-def test_v88_missing_roadmap_open_ticket_is_expected_red_canary() -> None:
-    roadmap, context = _load_documents()
-    mutated = (
-        roadmap
-        + "\n- [ ] **SA999 — expected-red coverage canary.** `Post-v88 · Tier 3 · deps: none`\n"
-    )
-    with pytest.raises(AssertionError, match="ticket coverage drift"):
-        _assert_consistent(mutated, context)
-
-
-def test_v88_unexpected_current_context_ticket_is_expected_red_canary() -> None:
-    roadmap, context = _load_documents()
-    mutated = context + "\n## SA999 — unexpected expected-red canary\n\nbody\n"
-    with pytest.raises(AssertionError, match="ticket coverage drift"):
-        _assert_consistent(roadmap, mutated)
-
-
-def test_v88_unexpected_checked_roadmap_entry_is_expected_red_canary() -> None:
-    roadmap, context = _load_documents()
-    mutated = (
-        roadmap
-        + "\n- [x] **SA997 — closed-ticket exclusion canary.** `Post-v88 · Tier 3 · deps: none`\n"
-    )
-    with pytest.raises(AssertionError, match="checked roadmap tickets"):
-        _assert_consistent(mutated, context)
-
-
-def test_v88_unsupported_roadmap_entry_shape_is_expected_red_canary() -> None:
-    roadmap, context = _load_documents()
-    mutated = (
-        roadmap
-        + "\n- [-] **SA996 — unsupported expected-red canary.** `Post-v88 · Tier 3 · deps: none`\n"
-    )
-    with pytest.raises(AssertionError, match="unsupported roadmap ticket entry shape"):
-        _assert_consistent(mutated, context)
-
-
-def test_v88_missing_roadmap_dependency_metadata_is_expected_red_canary() -> None:
-    """Strip the ``deps:`` clause off whichever ticket the roadmap lists first."""
-    roadmap, context = _load_documents()
-    entry = OPEN_TICKET_RE.search(roadmap)
-    assert entry is not None
-    ticket, metadata = entry.groups()
-    mutated = roadmap.replace(
-        metadata, re.sub(r"\s*·?\s*deps:[^·`]*", "", metadata, count=1), 1
-    )
-    assert mutated != roadmap
-    with pytest.raises(
-        AssertionError, match=rf"missing roadmap dependency metadata: {ticket}"
-    ):
-        _assert_consistent(mutated, context)
-
-
-def test_v88_unknown_roadmap_dependency_is_expected_red_canary() -> None:
-    roadmap, context = _load_documents()
-    mutated = roadmap.replace("deps: SA135", "deps: SA999", 1)
-    with pytest.raises(AssertionError, match="dependencies do not name open tickets"):
-        _assert_consistent(mutated, context)
-
-
-def test_v88_dependency_status_contradiction_is_expected_red_canary() -> None:
-    roadmap, context = _load_documents()
-    tickets = _roadmap_tickets(roadmap)
-    dependent_ticket = next(
-        ticket
-        for ticket, metadata in tickets.items()
-        if metadata.dependencies - RETAINED_CLOSED_TICKETS
-    )
-    dependency = next(
-        iter(tickets[dependent_ticket].dependencies - RETAINED_CLOSED_TICKETS)
-    )
-    section = _context_sections(context)[dependent_ticket]
-    mutated = context.replace(section, section + f"\n{dependency} is closed.\n", 1)
-    with pytest.raises(
-        AssertionError,
-        match=rf"claims roadmap-open dependency {re.escape(dependency)}",
-    ):
-        _assert_consistent(roadmap, mutated)
-
-
-def test_v88_shared_merge_position_drift_is_expected_red_canary() -> None:
-    """Point one v88 ticket at another's merge position and expect the drift error.
-
-    Derived from whatever the roadmap currently holds, so no ticket ID, position, or
-    shared-group literal is pinned here.
-    """
-    roadmap, context = _load_documents()
-    v88 = [
-        (ticket, metadata)
-        for ticket, metadata in _roadmap_tickets(roadmap).items()
-        if metadata.kind == "v88" and metadata.merge_position is not None
-    ]
-    assert len(v88) >= 2
-    (victim, victim_metadata), (_, donor_metadata) = v88[0], v88[1]
-    entry = re.search(
-        rf"^\s*- \[ \] \*\*{victim}\b.*?`((?:Band|Post-v88)[^`]*)`",
-        roadmap,
-        re.MULTILINE,
-    )
-    assert entry is not None
-    mutated_roadmap = roadmap.replace(
-        entry.group(1),
-        entry.group(1).replace(
-            f"merge #{victim_metadata.merge_position}",
-            f"merge #{donor_metadata.merge_position}",
-            1,
-        ),
-        1,
-    )
-    assert mutated_roadmap != roadmap
-
-    with pytest.raises(
-        AssertionError, match="shared-position roadmap classification drift"
-    ):
-        _assert_consistent(mutated_roadmap, context)

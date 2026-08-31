@@ -496,15 +496,24 @@ independent of the other two and should be designed together at `teams` kickoff.
   `trigger_inputs` — **not fired**; verified this pass that lines 498-524 validate it only as path strings
   and no skip logic consumes it.
 
-## Questions that would change the ranking
+## Questions that would change the ranking — **both answered 2026-08-31**
+
+Both were open assumptions this pass scored against. The maintainer settled both; the answers are
+recorded here so the next pass does not re-ask them, and the ranking consequences are carried by the
+tickets named below rather than applied to the table in this edit.
 
 - **Is the sanctioned privileged-command set intended to stay at two commands permanently?**
-  (`privileged-command-set-multi-owner`) — if yes, the finding downgrades to a watchlist item plus a
-  docstring correction, because the compounding never fires. If a third command is foreseeable, the
-  recommendation should land before it, not with it.
+  (`privileged-command-set-multi-owner`) — **answered: yes, permanent.** The compounding therefore
+  never fires and the finding **downgrades from rank 1 to a watchlist item plus a docstring
+  correction**, with its trigger armed: a third sanctioned command, or any two of the four stations
+  disagreeing. **SA174 performs the demotion in this document** as its acceptance criterion 2; until
+  it merges, the rank-1 row above is stale by decision rather than by evidence.
 - **Will `quickscale_devtools` ever be published, or a generated-project updater offered to users?**
-  (`generated-file-ownership-unmodeled`) — a public updater promotes that finding to `now` and makes the
-  producer/validator disposition split a user-facing upgrade hazard rather than a maintainer-side one.
+  (`generated-file-ownership-unmodeled`) — **answered: no; maintainer-internal use only.** This
+  confirms the fact already holding the finding's severity down, so it **stays deferred at rank 2
+  behind its unchanged trigger** and no re-ranking is owed. The package's absence from the publish
+  `PACKAGES` list is now a recorded decision, not a default; adding it there promotes this finding to
+  the `now` horizon.
 
 ## Red flags (out of scope — fix now)
 

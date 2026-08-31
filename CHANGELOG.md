@@ -4,6 +4,51 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap consistency test reduced to its three real checks; SA135's closeout blocker dissolved
+  (2026-08-31, maintainer decision 3).** `quickscale_core/tests/test_v88_ticket_context_consistency.py`
+  was **496 lines and 15 test functions, of which 12 were canaries** — tests asserting the other three
+  fail when fed mutated input. A 4:1 ratio of test-testing-the-test to test, policing a markdown
+  planning document. The twelve canaries are deleted and the three real checks kept: docs-hub count
+  agreement, roadmap↔context ticket parity (which also enforces the no-checked-entries policy), and
+  the no-schedulable-metadata-restatement guard. Result: **340 lines, 3 tests, ruff-clean.** The file
+  was registered in **no** gate — not `scripts/gate_registry.json`, not the `Makefile`, not any CI
+  workflow — so nothing was deregistered and no parity oracle moved. **This dissolved SA135's
+  closeout blocker outright** rather than reconciling it: the stale hardcoded `deps:` literal that
+  went inert when SA135 was archived lived in a deleted canary. SA135 needs no reviewed-plan scope
+  extension and its *can start* / *can finish* are now yes. The file's docstring records the standing
+  ban on reintroducing a canary layer or pinning any ticket ID, count, position, or date.
+
+- **SA174 shrunk to a comment correction; the privileged-command consolidation is archived
+  unimplemented (2026-08-31, maintainer decision 2a).** The sanctioned privileged-command set is
+  confirmed **permanent at `{"migrate", "createcachetable"}`**, so the drift SA174 existed to prevent
+  cannot occur. `privileged-command-set-multi-owner` **demotes from arch rank 1 to the watchlist**,
+  trigger armed (a third sanctioned command, or any two of the four stations disagreeing), and is not
+  closed. SA174 goes from eight acceptance criteria to three: correct the false *"single source of
+  truth"* docstring at `quickscale_modules/orgs/.../apps.py:52` and the *"add new commands here"*
+  comment at `:34` — both false when written, and following them yields a value the generated
+  project's guard rejects at startup — demote the finding, and change no emitted bytes. **Archived
+  unimplemented and reinstated only if the trigger fires:** the audit's Option 1, rendering the set
+  through the existing `generator/runtime_pins.py` seam exactly as `POSTGRES_VERSION` already is,
+  with the CLI copy deleted in favour of an import, the `orgs` copy reading through
+  `quickscale_core.runtime` while keeping its independent fail-closed guard, and the station-4 literal
+  oracle at `test_templates.py:4278` rewritten to derive. **Cascade reconciled across the roadmap:**
+  SA174 no longer changes emitted bytes, so it leaves the ordered `sa90_emission_manifests.json`
+  rebaseline run (now the pair #19 → #20), stops touching `.../settings/production.py.j2` (so that
+  file keeps two lanes and its one-directional #19-before-#25 caution), and drops its SA160
+  dependency. SA175's only content dependency was SA174's single declaration, which no longer exists,
+  so SA175 now names its own three contract paths and carries `deps: none` too.
+
+- **The SA171 reorder was made and then unwound in the same pass (2026-08-31).** With W3 halted,
+  SA171 (#28) was moved to the lane head under the amended band-C rule, after verifying that its
+  stated reason for needing the exclusive slot was **factually wrong**: `test_advisory_lock.py` (239
+  lines) and `test_dr_engine_lock.py` (280 lines) carry no `django_db` marker and no PostgreSQL
+  reference, so its two-thread barrier test is pure filesystem. Decision 3 then unblocked SA135,
+  restoring a *runnable* band-B head to W3 — which the amended rule protects — so #28 returned to its
+  original position and W3's queue is `#15 → #27 → #28 → #29` again. The two decisions interact and
+  the order matters: had only decision 4 landed, the reorder would stand. What survives is the
+  measurement — SA171's slot-free status is recorded fact, making it W3's fallback without
+  re-analysis if SA135 stalls again.
+
 - **Three maintainer decisions settled (2026-08-31).** *(1)* The four `sqlparse` CVE suppressions are
   **left as-is by explicit decision**; dependency maintenance stays out of v88 scope. The accepted
   consequence is recorded rather than discovered: `check_security_gates.py:545` compares `expires`
