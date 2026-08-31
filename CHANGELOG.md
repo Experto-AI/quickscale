@@ -17,6 +17,31 @@
   reconciliation and Phase G's release campaign remain pending. G, convergence, terminal attestation,
   and merge are not claimed here.
 
+- **The shared-PostgreSQL constraint re-derived from the script, and W2 taken out of the slot
+  queue (2026-08-31).** The roadmap had recorded "one PostgreSQL 18 cluster on `localhost:5432`" as a
+  constraint binding all three lanes. Read against `scripts/provision_ci_postgres.sh` itself, it binds
+  only commands that address 5432 directly. `run --profile {restricted,isolation,bypassrls}` creates
+  its own ephemeral `postgres:18` container (`docker create … --tmpfs /var/lib/postgresql --publish
+  127.0.0.1::5432`, `:496`), reads back the dynamic loopback port (`:500`), provisions the role and
+  the module databases inside it, and exports `QS_<MODULE>_DB_{NAME,USER,HOST,PORT}` at that private
+  endpoint for the child command (`:231-248`). It never connects to `pg18-af10` and removes its
+  container on exit. Consequence for the release: SA167c's acceptance step 2 — its only
+  cluster-addressed command — now runs as `provision_ci_postgres.sh run --profile restricted -- make
+  MODULE=orgs test -- --modules`, which supplies the `quickscale_test_role` the criterion names
+  (`:151`) without claiming the shared cluster. **W2, the critical path, no longer contends for any
+  exclusive resource**; the cluster-order decision narrows from three lanes to two (W1's bare
+  `make test` and W3's SA135 E1).
+
+- **Lane divergence re-measured after `7765dd96` (2026-08-31).** `wt-track2` and `wt-track3` are both
+  at `7765dd96`, **0 ahead / 0 behind `v88`** — W3 no longer owes the 20-commit sync previously
+  recorded, so SA135 E1 starts from the integration state. `wt-track1` is at `f392641c`, **15 ahead /
+  25 behind** (was 24; `v88` advanced one commit). W1 and W3 are in process; W2 is idle and startable.
+
+- **`ci-environment-hand-replicated` reconciliation-log narrative trimmed to a pointer
+  (2026-08-31).** The structural audit still restated the finding's full fix-regression scoring in its
+  reconciliation log, duplicating the archive already held here. The audit now carries the resolution
+  line and its live residue only.
+
 - **SA173 merged; the W2 lane is released and idle (2026-08-31).** The terminally reviewed
   `wt-track2` tip merged into the `v88` integration branch at `06007624`. Measured after the merge:
   `wt-track2` is **0 ahead / 0 behind `v88`**, clean, with no unmerged delta — so the next W2 run
