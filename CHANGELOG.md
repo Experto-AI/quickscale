@@ -25,6 +25,21 @@
   Exact-label cleanup left no scoped container. Terminal attestation/merge remain root-owned
   later events and are not claimed here.
 
+- **SA173 truthful handoff checkpoint (2026-08-31; recorded after terminal review).**
+  **Completed:** the retained three-state module-presence implementation, behavior-preserving
+  status-command complexity repair, detached signal-test correction, same-fact documentation
+  reconciliation, focused/profile campaign, quality gate, and full release gate are complete at
+  terminally reviewed W2 product state `fe4c89f4a138fb0875cacb4ddee94c82104788eb`; terminal review
+  reported no blocking or advisory finding. **Pending:** reviewed-plan phase B remains formally
+  unaccepted because its implementation handback was partial when the first release run was red;
+  convergence subsequently corrected that release-only signal-harness defect and returned the
+  complete release gate green, but the phase ledger is not retroactively rewritten. No product or
+  documentation correction remains for that phase. **Blocking:** none for merge. **Decisions
+  needed:** none. **Remaining plan:** attest this status-only checkpoint, then merge the exact clean
+  `wt-track2` tip into `v88`, which was still at
+  `5678ab2fb39b62490e8445b4890111d0f1e9d670` when the reviewed product state was frozen; the next W2
+  run begins SA167c from the resulting integration state.
+
 - **SA173's "scripts gate has no returned verdict" blocker was a budget error, and the gate is green (2026-08-29).**
   Run detached on `v88` at `fd42d56c`, clean tree:
   `poetry run pytest scripts/ -q -o addopts= --no-cov -p no:cacheprovider` returned **1319 passed, exit 0,
