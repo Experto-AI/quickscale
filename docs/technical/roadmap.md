@@ -19,11 +19,11 @@ from here rather than marked done. No checked entry is permitted.
 - Shared closeout conflict surfaces are `CHANGELOG.md`, `docs/technical/roadmap.md`, `docs/technical/v88_ticket_context.md` when a ticket's concepts change, and `docs/technical/decisions.md` when policy changes. Both audit docs join that surface only when a ticket changes or closes a live finding.
 - A roadmap edit that changes a W1/W2/W3 state block must re-run `quickscale_core/tests/test_v88_ticket_context_consistency.py` in the same change, and two state blocks must never share a state header — a duplicate header makes the test's anchors bind to the wrong block.
 - PostgreSQL/Docker work is serialized across worktrees. **W3 holds the exclusive PostgreSQL/Docker slot** and takes scheduling priority whenever one of its legs is active.
-- **Local database-lane operating constraint:** `make test-integration` and `make test-bypassrls`
-  use the same twelve databases and differ only by role. `scripts/provision_ci_postgres.sh run
-  --profile {restricted,bypassrls}` owns that ownership flip; drive both lanes through it rather
-  than by hand, and leave `quickscale_test_role` owning all twelve afterwards. Hosted CI uses
-  separate ephemeral servers; this applies to the shared local cluster only.
+- **Local database-lane operating constraint:** `make test-integration`, `make test-bypassrls`,
+  and `make isolation-conformance` use the owned profiles in
+  `scripts/provision_ci_postgres.sh`. Local profiles allocate disjoint, dynamically scoped
+  databases on loopback and validate their own role; restricted and BYPASSRLS runs do not flip
+  ownership of the standing twelve databases. Hosted CI uses its separate service/lease setup.
 - **W1's wiring leg (SA167d) may not touch `scripts/gate_registry.json` or any `module.yml`.** Those are W2-owned surfaces.
 - A ticket whose deliverable is Git ref state cannot be delegated to a file-editing worker. Route it to a maintainer session with ref authority and push credentials.
 - **A run killed by a cutoff returns no exit code and is not evidence** — neither of green nor of
@@ -180,13 +180,14 @@ worktree, the right column the reverse. It had been read the other way round bef
   unmerged product delta, carrying SA167d's accepted E0 tip and the convergence corrections at
   `8b20800d`. It must sync before validating; expect a conflict in this file and keep its structure.
 - **`wt-track3`** is an ancestor of `v88` — **0 ahead / 20 behind**, fully merged, clean, idle.
-  Sync before starting SA135.
+  E1 is accepted; no lifecycle rerun or sync is owed for this documentation phase.
 
-The binding constraint is physical, not a ticket edge: one PostgreSQL 18 cluster on `localhost:5432`
-holding the twelve shared `test_quickscale_*` databases, which W3 needs *empty*. W1's SA167d `make test`
-and W3's SA135 E1 campaign both need it and cannot both run today. No ticket move relieves that; only
-scheduling does — and with all three lanes now startable, that ordering is the one live scheduling
-call (see *Open maintainer decisions*).
+The E1 lifecycle proof's binding constraint was physical, not a ticket edge: W3 needed the exclusive
+PostgreSQL/Docker slot, had to stop the standing container, and had to observe no listener on
+`localhost:5432`. Its owned profile then allocated disjoint dynamic-loopback databases; it did not
+reuse or flip ownership of the standing twelve. E1 restored the standing container, image, mount,
+database owners, and restricted role tuple exactly. The temporary W1/W3 cluster-order decision is
+therefore obsolete; W3 retains slot priority for any later Docker-backed leg.
 
 ### Next action per lane
 
@@ -200,11 +201,10 @@ call (see *Open maintainer decisions*).
   one terminal attestation **supplied with the complete base-to-tip patch as a file** — the missing
   input, not any finding, is what ungraded the last attempt. Its `make test` needs the cluster, so it
   contends with W3.
-- **W3 — resume SA135 (#15) at phase E1, unexcluded.** Sync `wt-track3` (**20 behind**) first. Do not
-  redo C or D, and do not attempt the E2E Docker failures — they are SA170's. Remaining scope is **the
-  PostgreSQL-lifecycle evidence and the `validation_policy.md` precondition update only**. An
-  executable plan is written into the ticket below; no plan-authoring step remains. E1 needs the
-  cluster *empty*, which is the strictest claim on it.
+- **W3 — continue SA135 (#15) at Phase F.** E1's owned PostgreSQL-lifecycle evidence is accepted and
+  archived in [CHANGELOG.md](../../CHANGELOG.md); do not repeat E1, C, or D, and do not attempt the
+  E2E Docker failures, which are SA170's. Reconcile the four documentation files in the ticket's
+  Phase-F scope, keep SA135 open, then leave Phase G as the sole remaining release campaign.
 
 ### Track readiness — the three states
 
@@ -216,7 +216,7 @@ merge-back is not order-gated behind another lane.
 |---|---|---|---|---|---|
 | **W2** | SA167c (#21) | **yes** — no sync, no cluster, no pending decision; resume from the retained Phase-A slice | **yes** — remaining acceptance and closeout are W2-owned | **yes** — nothing is ordered ahead of #21 | **yes** — release-committed |
 | **W1** | SA167d (#18) | **yes** — sync (24 behind), validate, attest; its `make test` needs the cluster | **yes** — its own acceptance and closeout are W1-owned | **yes** — no cross-lane branch-state gate remains | no |
-| **W3** | SA135 (#15) | **yes** — sync (20 behind), then take the exclusive slot; the plan is written | **yes** — its own acceptance and closeout are W3-owned | **yes** — no cross-lane branch-state gate remains | no |
+| **W3** | SA135 (#15) | **yes** — E1 is accepted; Phase F is documentation-only and needs no cluster slot | **yes** — its own acceptance and closeout are W3-owned | **yes** — no cross-lane branch-state gate remains | no |
 
 **All three lanes are truly green.** Of the three, only **SA167c (#21)** is on the critical path and
 therefore constitutes real release progress; **SA167d (#18)** and **SA135 (#15)** are truly green but
@@ -226,22 +226,16 @@ physical: W1 and W3 share one PostgreSQL cluster.
 
 ### Open maintainer decisions
 
-Three items are the maintainer's to settle. None of them blocks *can start* on the critical path;
+Two items are the maintainer's to settle. None of them blocks *can start* on the critical path;
 each is named with the state it moves.
 
-1. **Cluster order between W1 and W3 — clears a scheduling contention, not a gate.** Both lanes can
-   start today and both need the single PostgreSQL 18 cluster: SA167d for `make test`, SA135's E1 for
-   a strict *no-server* window. The standing rule gives W3 priority whenever one of its legs is
-   active, so the default is **W3 first**; that default is only worth overriding if SA167d's
-   attestation is wanted sooner. Either way W2 runs unaffected. *Moves:* W1/W3 *can start* in
-   practice (both are formally yes today). A decision of yours clears it; no upstream work can.
-2. **The four `sqlparse` CVE suppressions expire 2026-09-30 — thirty days out.** They are currently
+1. **The four `sqlparse` CVE suppressions expire 2026-09-30 — thirty days out.** They are currently
    listed as deliberately not ticketed, on the grounds that dependency maintenance is not v88 scope.
    That reasoning held when the expiry was distant; it now lands inside the release window and will
    re-block CI on the day. Either open a ticket for it or accept a red CI on 2026-09-30. *Moves:*
    nothing today, but it becomes a hard *can merge* blocker on every lane if the release slips past
    that date. Only your decision opens the ticket.
-3. **The arch audit's two ranking questions.** *Is the sanctioned privileged-command set intended to
+2. **The arch audit's two ranking questions.** *Is the sanctioned privileged-command set intended to
    stay at two commands permanently?* — if yes, `privileged-command-set-multi-owner` downgrades from
    rank 1 to a watchlist item plus a docstring correction, and **SA174 (#31) shrinks to acceptance
    criterion 5 alone**. *Will `quickscale_devtools` ever be published?* — a yes promotes
@@ -259,11 +253,11 @@ Before any ticket work, measure each lane against current `v88`; when a worktree
    Expect a conflict in `docs/technical/roadmap.md`; keep this file's structure.
 2. **Re-run the consistency test in the same change** if a W1/W2/W3 state block moved:
    `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o addopts= --no-cov`.
-3. **Claim the cluster.** `make test`, `make test-integration`, and `make test-bypassrls` all use
-   the twelve shared `test_quickscale_*` databases. Drive the lane flip through
-   `scripts/provision_ci_postgres.sh run --profile {restricted,bypassrls}` and leave
-   `quickscale_test_role` owning all twelve afterwards. **W3 has priority whenever one of its legs
-   is active.**
+3. **Claim the service slot.** `make test`, `make test-integration`, `make test-bypassrls`, and
+   `make isolation-conformance` use the repository-owned helper profiles. Local runs allocate
+   disjoint, dynamically scoped databases on loopback and do not flip ownership of the standing
+   twelve `test_quickscale_*` databases. **W3 has priority whenever one of its Docker-backed legs
+   is active; E1's strict no-listener window is complete and its standing state was restored.**
 4. **Announce core-package edits.** A change under `quickscale_core/contracts/` or
    `quickscale_core/manifest/` can turn another lane red without sharing a file — see the recorded
    `203fcd61` precedent. No open ticket may touch the settled presence-contract surfaces.
@@ -288,9 +282,10 @@ Before any ticket work, measure each lane against current `v88`; when a worktree
   disposition metadata, emit an ownership manifest, or change any file's current disposition, and
   the finding stays open with its trigger intact.
 - **Roadmap documentation ownership is Option A** — open work only; completed work is archived.
-- **Local database-lane ownership flip** — whichever of `make test-integration` and
-  `make test-bypassrls` is about to run must own the twelve test databases first. The closed SA163
-  made the two lanes coexist through per-profile ownership, but the local cluster is still shared.
+- **Local database-lane profile isolation** — `make test-integration`, `make test-bypassrls`, and
+  `make isolation-conformance` must run through their corresponding helper profiles. Each local
+  profile owns disjoint, dynamically scoped databases and its validated role; it does not alter
+  ownership of the standing twelve test databases.
 - **SA165 (#22) stays behind SA167d (#18) on W1** (decided 2026-08-27). W1 runs one reviewed child
   at a time, so band-C filler does not preempt an open band-B acceptance even when the two share no
   file. Revisit only if SA167d is abandoned rather than merged.
@@ -578,60 +573,29 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   **Shared conflict surface:** `quickscale_cli/src/quickscale_cli/commands/module_config.py`, `docs/technical/module-extension.md`, plus the ledger-reconciliation files listed above.
 
 - [ ] **SA135 — Give test suites an owned PostgreSQL lifecycle.** `Band B · Tier 2 · W3 · merge #15 · deps: none · PostgreSQL + Docker slot`
-  Provision and tear down the server used by repository gates; replace the current out-of-band host assumption while retaining an asserted unavailability negative control.
-  **Acceptance:** the integration gate provisions its own PostgreSQL 18 server and tears it down, with no reliance on a pre-existing host server; the `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract is preserved; the asserted-unavailability negative control still fails loudly when the server cannot be provisioned, rather than skipping; `make test-integration` passes on a machine with no PostgreSQL running; [validation_policy.md](validation_policy.md) is updated to drop the out-of-band host precondition; image identity follows the settled content-addressed backend-image convention.
-  **State (measured 2026-08-27): partial delivery merged into `v88` at `f070f39b`.** Phases P/A/B and
-  C/D are accepted — the hermetic Docker-unavailable probe, the strict no-host-server window, and the
-  single four-caller provisioning authority; **do not repeat C or D.** E0 is accepted (unchanged
-  external-state baseline; `pg18-af10` retained its exact container, image, mount, and running identity;
-  all twelve databases owned by `quickscale_test_role`). E1 recorded green runs without changing a file
-  but could not produce the deterministic red-before/green-after evidence it was asked for; F/G were not
-  reached.
-  **No blocker of its own remains, and a compliant plan is written below** — no plan-authoring step
-  remains before dispatch. The prior plan-shape blocker and the E2-scope transfer to SA170 are
-  archived in [CHANGELOG.md](../../CHANGELOG.md). `wt-track3` is an ancestor of `v88` and **20 behind**;
-  sync it before E1.
-  **What remains here is the local PostgreSQL lifecycle and its documented precondition, nothing else.**
-  Do not reopen `.github/workflows/`, `scripts/provision_ci_postgres.sh`, or
-  `scripts/test_gate_parity.py`, and do not run the full E2E campaign — it is SA170's.
-  **Remaining plan (serial; P/A/B/C/D and accepted E0 are not repeated). Stage order is E1, F,
-  G-sync/G-validate, G-closeout/G-final, serial convergence, one terminal attestation — no review
-  dispatch may be placed between G-sync/G-validate and G-closeout/G-final.**
-  1. **E1 — PostgreSQL-lifecycle evidence only.** All four items are deterministic today and need no
-     flake reproduction. Take the exclusive slot first; W3 has priority.
-     - `make test-integration` on a host with **no** PostgreSQL running — the gate provisions its own
-       server and tears it down. Stop `pg18-af10` for the window and **restart it afterwards**
-       (`docker start pg18-af10`); do not remove the container or prune its volume.
-     - The `LOGIN CREATEDB NOINHERIT NOBYPASSRLS NOSUPERUSER` role contract is preserved.
-     - The hermetic Docker-unavailable probe still passes.
-     - The asserted-unavailability negative control **fails loudly rather than skipping** when the
-       server cannot be provisioned. Prove it by denying provisioning and observing the loud failure,
-       then restore.
-     - Leave `quickscale_test_role` owning all twelve `test_quickscale_*` databases, and drive any
-       lane flip through `scripts/provision_ci_postgres.sh run --profile {restricted,bypassrls}`.
-     Do **not** attempt the two E2E Docker failures, and do not run the full E2E campaign — both are
-     SA170's.
-  2. **F — policy and status reconciliation.** Update `validation_policy.md` at `:41` and `:94`,
-     which still state "No local PostgreSQL provisioning is implied by this target or policy" against
-     a Makefile that now provisions. Then ticket context, roadmap counts and dependencies, changelog
-     evidence, docs navigation, and the executable consistency consumer. Keep the ticket open if any
-     required gate is red.
-  3. **G-sync / G-validate.** Sync current `v88` into W3, preserve concurrent closeout entries, and
-     run the complete focused, provisioning, parity, lint, type, check, integration, BYPASSRLS,
-     isolation, test, and quality campaign on **one frozen candidate**, unexcluded — the known-red
-      protocol is retired and no `PYTEST_ADDOPTS` is authorized. **Run `make test` and `make quality`
-      detached, polling for an exit-code file**;
-     `make check` measures 184 s green and may run in the foreground. A truncated run is not evidence.
-     The serial and CI E2E campaigns are **not** part of this stage.
-  4. **G-closeout / G-final.** Only after G-validate is green: archive and remove SA135 from this
-     open-work-only roadmap, then rerun the final frozen-tip campaign.
-  5. **Serial convergence** over the complete product-and-closeout delta, then **exactly one terminal
-     attestation**. Supply it with the complete base-to-tip patch as a file and a clean-byte binding
-     (`git status --porcelain` empty at the exact tip) — SA167d's attestation returned no grade for
-     want of exactly that input, and the same mistake must not be paid twice.
-   6. **Merge only that attested exact tip** — and only after G-validate has been re-run on a candidate
-      synced to the current `v88`, fully green. Report final changed lines and
-     lines-per-hour metrics from the `2026-08-26 16:07:35 +0200` measurement start.
+  Provision and tear down the server used by repository gates; replace the former out-of-band host
+  assumption while retaining an asserted unavailability negative control.
+  **Acceptance:** the integration gate provisions its own PostgreSQL 18 server and tears it down,
+  with no reliance on a pre-existing host server; the `LOGIN CREATEDB NOINHERIT NOBYPASSRLS
+  NOSUPERUSER` role contract is preserved; the asserted-unavailability negative control still fails
+  loudly when the server cannot be provisioned, rather than skipping; `make test-integration` passes
+  on a machine with no PostgreSQL running; [validation_policy.md](validation_policy.md) records the
+  owned local lifecycle; image identity follows the settled content-addressed backend-image convention.
+  **State (measured 2026-08-31): phases P/A/B/C/D/E0 and E1 are accepted.** E1 proved the owned
+  dynamic-loopback lifecycle with the standing listener absent, the restricted role contract intact,
+  exact-scope cleanup, a loud denied-provisioning failure, and exact restoration of the standing
+  container, image, mount, twelve database owners, and role tuple. Its external evidence is archived in
+  [CHANGELOG.md](../../CHANGELOG.md). **F and G remain pending; SA135 remains open and unchecked.**
+  The E2 scope transfer to SA170 and the earlier plan-shape blocker are archived in the changelog.
+  `wt-track3` remains an ancestor of `v88` and **20 behind**; its current documentation work does not
+  reopen the accepted lifecycle evidence.
+  **What remains here is policy/status reconciliation and release closeout, nothing else.** Do not
+  reopen `.github/workflows/`, `scripts/provision_ci_postgres.sh`, or `scripts/test_gate_parity.py`,
+  and do not run the full E2E campaign — it is SA170's.
+  **Remaining plan (serial; P/A/B/C/D/E0/E1 are not repeated).** F reconciles the four owned
+  documentation files and leaves SA135 open. G then syncs and runs the sole release campaign, archives
+  closure only after green, and freezes its final external evidence. Serial convergence and
+  patch-backed terminal attestation follow; no implementation phase is re-entered after convergence.
   **Cross-worktree surface:** the merged partial edits `scripts/test_isolation_conformance.sh`,
   which SA165 (#22, W1) also owns; merge order #15 before #22 covers it.
 
@@ -907,7 +871,7 @@ Recorded so the absence is a decision rather than an oversight.
 | `org-model-universe-hand-enumerated` (arch rank 4) | arch, deferred | Same rule. Trigger: `teams` adds a tenant model, or a module adds a `PROTECT`/non-deferrable dependency among purge-owned rows. |
 | Tooling gaps — dependency-vulnerability scanner, security static analysis | tech | Closed by SA123's implemented and accepted Trivy/Bandit gates; evidence archived in [CHANGELOG.md](../../CHANGELOG.md). |
 | Watch items recorded as deliberate | tech *Notes* | Integration-branch CI, generator lock-generation policy, the DB-free healthcheck, CRM/billing cross-tenant `all_objects` count fallbacks, and rename-atomic-but-not-durable state writes are each argued and accepted in the audit; re-examine only on the triggers stated there. |
-| Four suppressed `sqlparse` CVEs | tech *Notes* | `CVE-2026-54284/-59893/-71491/-59894` are accountable and unexpired, but all four expire **2026-09-30**, now thirty days out, and will re-block CI on the same day. Held as dependency maintenance rather than v88 scope — **but this is now item 2 of [Open maintainer decisions](#open-maintainer-decisions)**, not a settled exclusion. |
+| Four suppressed `sqlparse` CVEs | tech *Notes* | `CVE-2026-54284/-59893/-71491/-59894` are accountable and unexpired, but all four expire **2026-09-30**, now thirty days out, and will re-block CI on the same day. Held as dependency maintenance rather than v88 scope — **but this is now item 1 of [Open maintainer decisions](#open-maintainer-decisions)**, not a settled exclusion. |
 | `blog/feeds.py` double System-org resolution | tech *Notes* | Narrow trigger (a corrupt singleton row). Not promoted; re-examine if a second fail-closed feed path appears. |
 | `table_has_force_rls` schema qualification | tech *Notes* | Single-schema deployments unaffected. Trigger: a schema-per-tenant option. |
 | Tooling gap — CSRF helper test | tech | An acceptance criterion inside **SA160**, not a separate item. |

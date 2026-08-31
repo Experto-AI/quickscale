@@ -4,6 +4,19 @@
 
 ## v88 development — 2026-08-21
 
+- **SA135 E1 lifecycle evidence accepted; policy reconciliation remains open (2026-08-31).**
+  The E1 integration run exited **0** with **2,547 passed, 87 skipped, and 12 deselected**;
+  listener sampling on port 5432 was **0/282**. `make test-postgres-provisioning`
+  exited **0** with **33 passed**. A denied-provisioning run exited **1** with the exact
+  terminal error `ERROR: unable to pull postgres:18`, executed no child, and left no resource
+  in its exact scope; the restored scoped run exited **0**. All three E1 scopes were empty after
+  cleanup. Root's restoration check matched the standing container, image, mount, twelve database
+  owners, and the `quickscale_test_role` tuple `t|t|f|f|f|f`. This proves the owned dynamic-loopback
+  lifecycle, restricted-role preservation, loud provisioning denial, exact-scope cleanup, and
+  standing-state restoration. **SA135 remains open:** E1 is complete, while Phase F documentation
+  reconciliation and Phase G's release campaign remain pending. G, convergence, terminal attestation,
+  and merge are not claimed here.
+
 - **SA173 merged; the W2 lane is released and idle (2026-08-31).** The terminally reviewed
   `wt-track2` tip merged into the `v88` integration branch at `06007624`. Measured after the merge:
   `wt-track2` is **0 ahead / 0 behind `v88`**, clean, with no unmerged delta — so the next W2 run
