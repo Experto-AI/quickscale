@@ -643,6 +643,33 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   repeated).** Obtain fresh reviewed-plan authority for the future-closeout canary reconciliation,
   then complete closeout and G-FINAL on the settled candidate. Serial convergence and patch-backed
   terminal attestation follow; no implementation phase is re-entered after convergence.
+  **Retained-delivery checkpoint (2026-08-31).**
+  - **Completed:** E1 lifecycle evidence and Phase F policy/status reconciliation are accepted; the
+    synchronized Phase G validation campaign returned green. Two roadmap corrections made after
+    terminal attestation reconciled local helper routing and current W1/W2 divergence; they are
+    retained but were not independently graded.
+  - **Pending:** Phase G remains outstanding. SA135 stays open and unchecked; its closeout archive,
+    roadmap removal, SA170 dependency transition, G-FINAL, convergence, and patch-backed terminal
+    attestation have not completed.
+  - **Blocking:** ***corrected after checkpoint attestation — not independently graded.*** Removing
+    SA135 makes the current expected-red dependency canary stale because its mutation source is
+    SA170's dependency metadata naming SA135. This closes only when fresh reviewed-plan scope admits
+    the canary reconciliation and the resulting closeout candidate passes G-FINAL unchanged.
+  - **Decisions needed:** none; the scope boundary, required canary reconciliation, and retained
+    validation evidence are known.
+  - **Resume object and remaining plan:** ***corrected after checkpoint attestation — not independently
+    graded.*** Continue in W3 worktree `wt-track3` from retained object
+    `f745c81959834a636a14a82c1cd9d6c1f757872c`; if a fresh W3 branch is required, create it from
+    current `v88` and merge that exact retained object before any closeout edit. Then obtain fresh
+    reviewed-plan authority admitting the consistency-test canary and all same-fact closeout
+    consumers, update that canary while removing SA135 and clearing SA170's dependency, run G-FINAL
+    once on the unchanged closeout candidate, run serial convergence, materialize the complete patch,
+    attest once, and merge the exact reviewed tip. Do not repeat the already-green Phase G validation
+    campaign or any accepted earlier phase.
+  - **Checkpoint verification:** ***corrected after checkpoint attestation — not independently
+    graded.*** The exact same-change consistency command returned **21 passed** on the final checkpoint
+    bytes: `poetry run pytest quickscale_core/tests/test_v88_ticket_context_consistency.py -q -o
+    addopts= --no-cov`.
   **Cross-worktree surface:** the merged partial edits `scripts/test_isolation_conformance.sh`,
   which SA165 (#22, W1) also owns; merge order #15 before #22 covers it.
 
