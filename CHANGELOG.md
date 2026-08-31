@@ -4,6 +4,50 @@
 
 ## v88 development — 2026-08-21
 
+- **Roadmap cleanup and rebalance review (2026-08-31, fourth pass).** **No ticket closed and no audit
+  finding closed since the previous pass**, so nothing was archived as complete from
+  `docs/technical/roadmap.md`, `docs/others/arch-audit.md`, or `docs/others/tech-audit.md`; the live
+  counts stand unchanged at tech S3 **2** / S4 **3** / **5 open**, arch rank-1
+  `privileged-command-set-multi-owner` stale-by-decision until SA174 demotes it in that document, and
+  the queue is unchanged in size, one open ticket entry per open merge position. Spent
+  narrative was pruned instead: the third-pass rebalance log (the SA171 reorder made and unwound in
+  one pass) and the full five-item *Maintainer decisions — settled 2026-08-31* section were removed
+  from the roadmap, both already archived above with their complete reasoning; only their standing
+  consequences remain, in the standing-rules list, the shrunk SA174/SA175 bodies, and the
+  deliberately-not-ticketed table. Numbered *decision 1/2a/2b/3/4* cross-references were rewritten
+  into their substance so the roadmap resolves without the changelog. SA167d's and SA135's state
+  blocks were condensed from campaign transcripts to the work that actually remains. Roadmap length
+  fell **942 → 879 lines** with no open ticket, dependency, or acceptance criterion lost.
+  **Lane state re-measured against the branches and materially changed:** `wt-track1` is now
+  **0 ahead / 0 behind `v88`** at `c0ebf34b` — SA167d's retained partial (`0930b500`) and the
+  settled-decision reconciliation are merged, the previously staged ledger edits are committed, and
+  **no unmerged product delta remains anywhere in the release**. `wt-track2` is 23 behind and
+  `wt-track3` 27 behind, both clean and both behind only on integration-branch documentation plus the
+  deltas they themselves contributed; neither sync carries a foreign code change into its lane. The
+  stale `f24f7297` tip reference, the "16 ahead / 11 behind" W1 figures, and SA135's "5 behind" were
+  all corrected, and SA135's resume object was replaced with a plain sync instruction now that its
+  retained object is in `v88`.
+  **Track readiness: all three lanes remain truly green on all three states.** W2 (SA167c, #21) can
+  start after a sync, finishes on W2-owned work, and is ordered behind nothing; W1 (SA167d, #18) now
+  needs no sync at all and owes one whole Phase C campaign plus a patch-backed attestation; W3
+  (SA135, #15) syncs then performs archive-and-G-FINAL. **Only SA167c is on the critical path** and
+  constitutes real release progress; SA167d and SA135 are truly green but off it, and the nine band-C
+  positions are filler. **No lane is blocked by another lane's ticket and no maintainer decision is
+  open** — every remaining blocker is ordinary upstream work on its owning lane.
+  **Rebalance outcome: no cross-lane move stands, fourth consecutive pass.** All three W2 tickets own
+  `scripts/gate_registry.json`, which never crosses worktrees; W1's `sa90_emission_manifests.json`
+  rebaseline is the ordered pair #19 → #20 and may not be split; SA174/SA175 carry no content
+  dependency but moving band-C slack onto W3's exclusive-slot queue or W2's release-setting queue buys
+  no release progress; and moving SA165 (#22) to W3 would make
+  `scripts/test_isolation_conformance.sh` single-lane but park DB-free work behind the slot queue. The
+  surviving measurement from the third pass is preserved as fact in the roadmap: **SA171 (#28) needs
+  no exclusive slot** and is W3's fallback if SA135 stalls again. No *code* file gained a second lane;
+  the closeout conflict surface (`CHANGELOG.md`, the roadmap, `docs/technical/v88_ticket_context.md`,
+  and an audit document when a ticket closes a live finding) is unchanged and remains covered by the
+  execution rules' sync-resolve-rerun-review merge procedure.
+  `quickscale_core/tests/test_v88_ticket_context_consistency.py` was re-run in the same change and
+  exited 0 with **29 passed**.
+
 - **SA167d phase E accepted; accepted-open ledger pending final closeout (2026-08-28).** The
   retained CLI wiring-drain candidate reached `E0_ACCEPTED_TIP`
   `bd2c291ba2d40494970464741ac51bfd45445a19` with no tracked edits in E0. The focused
