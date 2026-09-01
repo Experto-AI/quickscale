@@ -4,6 +4,22 @@
 
 ## v88 development — 2026-08-21
 
+- **SA167c Phase E accepted; Phase F halted on its release gate (2026-09-01).** The current status
+  consumers now agree that phases A-E are accepted on retained product object
+  `91fd3bb6e6b638735361b511c1515cddccce5d15`, while SA167c remains open at #21. SA166 remains
+  dependent on SA167c and SA164 remains downstream; the existing open queue and merge-position layout
+  are unchanged. The historical post-attestation lifecycle
+  correction is archived here and was applied after terminal attestation without independent
+  grading. E's ordered validation checkpoint passed: `make lint`, `make typecheck`, and the focused
+  ticket context consistency suite each exited 0. F froze its candidate at
+  `f60fe2bcb6efba654782c96ee1113ea6c90b74ee` and ran
+  `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` once; stages 1-11 passed, stage 12 ran, and the command
+  exited **2** after Core reported **2 failed / 36 passed** and CLI reported **8 failed / 32 passed**.
+  Exact-scope cleanup passed. Those E2E failures belong to SA170/W3 and are not accepted here.
+  Phase F is unaccepted and outstanding, the retained nine-file candidate stays unmerged, and no
+  completion or release-readiness claim is made. During the run `v88` advanced to
+  `3aa0c67f843eddd779f9766de4c274a5a249f485`, so merge-back is unavailable in this checkpoint too.
+
 - **SA167c phases C and D accepted; the coupled child-probe lifecycle race fixed (2026-09-01).**
   Archived out of the roadmap, which now carries only what SA167c still owes. Phase C accepted the
   retained Make/registry/local/hosted/parity surface and aligned `check_ci_locally.sh`'s help with the

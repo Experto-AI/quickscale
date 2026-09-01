@@ -4,8 +4,8 @@ The roadmap is the sole home for schedulable metadata.  The context page may exp
 concepts, but it must not restate bands, positions, dependencies, or readiness.  The roadmap
 holds open work only and carries no checked entry.  Completed tickets are archived in the
 changelog.  The shared SA167 umbrella may still explain the archived SA167a handoff as settled
-tree state.  The accepted-open SA167d retained-partial status is checked as a current consumer
-contract below; those checks are not mutation canaries.
+tree state.  The accepted-open SA167d retained-partial and halted SA167c statuses are checked as
+current consumer contracts below; those checks are not mutation canaries.
 
 Scope, deliberately narrow (2026-08-31).  This module holds **three** checks and no
 canaries.  It previously carried twelve canaries -- tests asserting these three fail when
@@ -45,6 +45,9 @@ OPEN_TICKET_RE = re.compile(
 )
 SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
 E0_ACCEPTED_TIP = "bd2c291ba2d40494970464741ac51bfd45445a19"
+SA167C_RETAINED_PRODUCT = "91fd3bb6e6b638735361b511c1515cddccce5d15"
+SA167C_FROZEN_BASE = "f60fe2bcb6efba654782c96ee1113ea6c90b74ee"
+SA167C_MOVED_V88 = "3aa0c67f843eddd779f9766de4c274a5a249f485"
 RETAINED_PARTIAL_ATTESTED = (
     "retained-partial convergence and terminal attestation are complete"
 )
@@ -256,6 +259,11 @@ SEMANTIC_SCHEDULING_RE = re.compile(
     r"[^.\n]{0,100}\bSA\d+[a-z]?\b"
     r"|\bSA\d+[a-z]?\b\s*(?:→|->)\s*\bSA\d+[a-z]?\b"
 )
+RETIRED_DJANGO_APPS_DEPENDENCY_RE = re.compile(
+    r"\b_migdir\(\)[^.\n]{0,160}\b(?:reads?|uses?|depends?\s+on)\b"
+    r"[^.\n]{0,100}`?django_apps:?`?",
+    re.IGNORECASE,
+)
 
 
 def _load_documents() -> tuple[str, str]:
@@ -339,6 +347,63 @@ def _assert_status_consumers_agree(roadmap_text: str, docs_index_text: str) -> N
                 f"{name} does not restate the roadmap's derived counts "
                 f"({len(v88)} entries / {len(positions)} positions): expected {pattern!r}"
             )
+
+
+def _assert_sa167c_halted_status(
+    roadmap_text: str,
+    context_text: str,
+    docs_index_text: str,
+    arch_audit_text: str,
+    changelog_text: str,
+    decisions_text: str,
+    implementation_contract_text: str,
+    module_extension_text: str,
+) -> None:
+    """Keep the retained A-E product distinct from the failed F release verdict."""
+    roadmap = _roadmap_tickets(roadmap_text)
+    assert roadmap["SA167c"].merge_position == 21
+    assert roadmap["SA166"].dependencies == frozenset({"SA167c"})
+    assert roadmap["SA164"].dependencies == frozenset({"SA166"})
+
+    latest_changelog_entry = re.search(
+        r"(?ms)^- \*\*SA167c Phase E accepted; Phase F halted\b.*?(?=^- \*\*)",
+        changelog_text,
+    )
+    assert latest_changelog_entry is not None
+    current_status_consumers = {
+        "CHANGELOG.md": latest_changelog_entry.group(0),
+        "docs/index.md": docs_index_text,
+        "docs/others/arch-audit.md": arch_audit_text,
+        "docs/technical/decisions.md": decisions_text,
+        "docs/technical/implementation_contract.md": implementation_contract_text,
+        "docs/technical/module-extension.md": module_extension_text,
+        "docs/technical/roadmap.md": roadmap_text,
+        "docs/technical/v88_ticket_context.md": context_text,
+    }
+    for path, text in current_status_consumers.items():
+        normalized_text = " ".join(text.split())
+        assert SA167C_RETAINED_PRODUCT in normalized_text, path
+        assert re.search(r"phases A-E (?:are )?accepted", normalized_text, re.I), path
+        assert re.search(
+            r"F (?:is |remains )?(?:outstanding|unaccepted)|Phase F halted",
+            normalized_text,
+            re.I,
+        ), path
+        assert "QS_E2E_INTEGRATION_REF=v88 make ci-e2e" in normalized_text, path
+        assert re.search(r"exit(?:ed)? \**2\b", normalized_text, re.I), path
+        assert re.search(r"\b2 Core\b|Core reported \**2\b", normalized_text), path
+        assert re.search(r"\b8 CLI\b|CLI reported \**8\b", normalized_text), path
+        assert re.search(
+            r"no completion or release-readiness claim|not complete or release-ready",
+            normalized_text,
+            re.I,
+        ), path
+
+    assert SA167C_FROZEN_BASE in roadmap_text
+    assert SA167C_MOVED_V88 in roadmap_text
+    assert "plan authority `EV-6` remains binding" in roadmap_text
+    assert "do not redo A-E" in roadmap_text
+    assert "obtain fresh reviewed authority" in roadmap_text
 
 
 def _assert_sa167d_status(
@@ -450,6 +515,18 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
         (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
         "accepted-open",
     )
+    _assert_sa167c_halted_status(
+        roadmap,
+        CONTEXT.read_text(encoding="utf-8"),
+        docs_index,
+        (ROOT / "docs/others/arch-audit.md").read_text(encoding="utf-8"),
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
+        (ROOT / "docs/technical/decisions.md").read_text(encoding="utf-8"),
+        (ROOT / "docs/technical/implementation_contract.md").read_text(
+            encoding="utf-8"
+        ),
+        (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
+    )
 
 
 def test_v88_integration_ready_state_rejects_accepted_open_candidate() -> None:
@@ -516,6 +593,12 @@ def test_v88_context_restates_no_schedulable_roadmap_metadata() -> None:
     _, context = _load_documents()
     assert not SCHEDULABLE_METADATA_RE.findall(context)
     assert not SEMANTIC_SCHEDULING_RE.findall(context)
+
+
+def test_v88_sa164_context_rejects_retired_django_apps_dependency_claim() -> None:
+    _, context = _load_documents()
+    sa164_context = _context_sections(context)["SA164"]
+    assert not RETIRED_DJANGO_APPS_DEPENDENCY_RE.search(sa164_context)
 
 
 @pytest.mark.parametrize(

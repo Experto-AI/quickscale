@@ -31,7 +31,10 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
 generated-project updater. Thirteen open v88 ticket entries run on three tracks across thirteen open merge
-positions; **W2 sets the release date** (SA167c is the longest open chain). W3 holds the exclusive
+positions; **W2 sets the release date** because SA167c remains open at #21 with phases A-E accepted
+on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15` and F outstanding after
+`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
+SA170/W3. No completion or release-readiness claim is made. W3 holds the exclusive
 PostgreSQL/Docker slot. The prior pass's leading finding rode inside SA135 and has landed.
 
 **Accepted-open SA167d checkpoint (2026-08-28; current status reconciled 2026-08-31).** SA167d

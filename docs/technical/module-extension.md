@@ -342,9 +342,11 @@ yourself editing either to register a module, the module's own declaration is in
 > terminal attestation, and exact-tip integration remain pending; SA165 remains dependent.
 > This is an accepted-open checkpoint, not a completion claim.
 
-The companion declaration-gate work is retained in current `v88` under **`SA167c`** (merge
-#21): phases A and B are accepted, Phase C's product delta is merged as retained delivery, and
-C acceptance plus phases D-F remain pending. This does not alter the module-extension contract
+The companion declaration-gate work remains open under **`SA167c`** at merge #21. Phases A-E are
+accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`; F is outstanding
+after `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
+SA170/W3. No completion or release-readiness claim is made, SA166 remains dependent, and SA164
+remains after SA166. This does not alter the module-extension contract
 or authorize edits to the settled manifest implementation.
 
 **5. Template Integration (showcase_react theme):**
