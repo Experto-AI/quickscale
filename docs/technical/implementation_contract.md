@@ -283,8 +283,9 @@ state, not an alternate wiring path.
 The "compatibility fallback for bundled/installed contexts" rationale previously recorded
 here was retired by the AF7 fail-hard decision, which removed the context it described. The
 inert ``django_apps:`` surface and its parsed-but-unread implementation have been removed;
-the declaration gate's Phase-C product delta is retained in `v88` under **`SA167c`** (merge
-#21), with C acceptance and D-F pending. The settled product bytes no longer carry CLI per-module
+the declaration gate's product delta is retained in `v88` at
+`91fd3bb6e6b638735361b511c1515cddccce5d15` under **`SA167c`** (merge #21), with phases A-D
+accepted and E/F pending. The settled product bytes no longer carry CLI per-module
 wiring logic. **`SA167d`**
 (v88, active merge #18) remains open: phases A-E are accepted at
 `bd2c291ba2d40494970464741ac51bfd45445a19`, with no tracked E0 edits; SA165 remains dependent

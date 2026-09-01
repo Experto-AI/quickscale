@@ -142,19 +142,23 @@ unwound it, are archived in [CHANGELOG.md](../../CHANGELOG.md).
 band-C work accumulates there rather than behind the release-setting chain. Band-C positions are
 *earliest-eligible*, not commitments; the five W1 band-C positions are the slip budget.
 
-**Conflict surface, expanded by this closeout.** No *code* file gains a second lane. This candidate's
-current same-fact surface is `CHANGELOG.md`, this file, `docs/technical/v88_ticket_context.md`,
+**Conflict surface, expanded by this closeout.** No *code* file gains a second lane. SA135's current
+scheduling/count surface is `CHANGELOG.md`, this file, `docs/technical/v88_ticket_context.md`,
 `docs/index.md`, `docs/planning/frontend-e2e-coverage.md`, `docs/others/arch-audit.md`, and
 `quickscale_core/tests/test_v88_ticket_context_consistency.py`; the planning analysis joined for its
 current prerequisite claim, the audit joined for its current queue count, and the executable
-consumer carries the reviewed count contract. All are covered by the merge procedure's
+consumer carries the reviewed count contract. The incoming SA167c A-D checkpoint additionally
+couples `docs/technical/decisions.md`, `docs/technical/implementation_contract.md`, and
+`docs/technical/module-extension.md`. All are covered by the merge procedure's
 sync-resolve-rerun-review step in the execution rules.
 
 ### Lane state
 
-**Measured 2026-09-01 against the branches themselves**, with `v88` at `4fe2d8eb`. Never trust a
-transcribed count. The pre-merge measurement was W1 **0 ahead / 2 behind**, W2 **0 ahead / 0 behind**,
-and W3 **1 ahead / 2 behind**; this pass has now synced `v88` into the W3 candidate.
+**Pre-closeout measurement (2026-09-01)** used `v88` at
+`f60fe2bcb6efba654782c96ee1113ea6c90b74ee`. Never trust a transcribed count. At that checkpoint W1
+was **0 ahead / 3 behind**, W2 **0 ahead / 0 behind**, and retained closeout object `07607c49` was
+**1 ahead / 3 behind**; the current W3 candidate has synced that integration base. These are
+checkpoint figures, not instructions: every lane must sync current `v88` before its next ticket.
 
 ```bash
 for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-right --count v88...$w; done
@@ -164,19 +168,21 @@ git -C ../quickscale-wt-track3 status --porcelain
 **Read that output as `behind ahead`** — the left column counts commits on `v88` and not on the
 worktree, the right column the reverse.
 
-- **`wt-track1`** is at `dc53bacd`, **0 ahead / 2 behind `v88`**, with uncommitted roadmap notes in
-  its working tree. Those notes record a Phase C attempt that halted at `make check` on an
-  **inherited** exit-141 provisioning failure; the two commits it is behind are exactly the fix
-  (`91fd3bb6`) and this planner's checkpoint. The halt wrote no tracked SA167d byte. **Discard the
-  local roadmap scribble, sync two commits, and Phase C is startable.**
-- **`wt-track2`** is at `4fe2d8eb`, **0 ahead / 0 behind `v88`**, clean. SA167c's A-D product delta is
-  merged; the ticket stays open with E and F outstanding. **Startable with no sync.**
+- **`wt-track1`** was at `dc53bacd`, **0 ahead / 3 behind the pre-closeout integration base**, with
+  uncommitted roadmap notes in its working tree. Those notes record a Phase C attempt that halted at
+  `make check` on an **inherited** exit-141 provisioning failure. The halt wrote no tracked SA167d
+  byte. **Discard the local roadmap scribble, sync current `v88`, and Phase C is startable.**
+- **`wt-track2`** was level with the pre-closeout integration base and clean. SA167c's A-D product
+  delta is retained; the ticket stays open with E and F outstanding. **Sync current `v88` before
+  resuming at E.**
 - **`wt-track3`** is the current synced candidate. It retains the authored SA135 closeout and the
-  incoming `v88` script bytes; the candidate is ready for the required consistency test and release
-  campaign. **Startable with no further sync.**
+  incoming `v88` script bytes; the exact consistency test and SA135 release campaign returned green
+  after conflict resolution. **No further sync or lifecycle reimplementation is owed on this
+  candidate.**
 
-Neither lagging sync carries a foreign code change into its lane: W1 is behind only on integration
-documentation plus the provisioning fix it benefits from; W3 is now the merged candidate.
+At the checkpoint, neither lagging lane carried a foreign code change: W1 lacked integration
+documentation plus the provisioning fix it benefits from, while W2 was level. W3 now carries the
+synced closeout candidate.
 
 ### PostgreSQL routing — who actually claims the standing service
 
@@ -203,32 +209,33 @@ complete and the standing state was restored exactly.
   resulting bytes, but cannot retroactively change phase coverage. The originating merge-back request
   remains pending until this newly resolved candidate is reviewed and accepted by root.
 - **Current candidate:** `v88` has now been merged into `wt-track3` for this conflict-resolution pass.
-  The candidate must run the consistency test and exact SA135 release campaign before fresh
-  convergence, patch-backed terminal review, and root-owned merge. The prior approval is bound to the
-  pre-conflict object and does not carry across the resolution.
+  The exact consistency test and SA135 release campaign returned green after resolution. This roadmap
+  is not an attestation ledger: before merging, root must require fresh convergence and patch-backed
+  terminal review bound to the exact settled bytes. The prior approval is bound to the pre-conflict
+  object and does not carry across the resolution.
 - **Decisions needed:** none. This is ordinary integration-conflict resolution, not a product or
   scheduling choice.
-- **Remaining plan:** preserve the archived SA135 state and the incoming SA167c accepted evidence,
-  validate this synced candidate, then perform fresh convergence and attestation over its exact tip.
-  Do not reimplement the settled PostgreSQL lifecycle, recreate SA135 as open work, or attempt SA170's
-  E2E Docker work.
+- **Remaining plan:** preserve the archived SA135 state and the incoming SA167c accepted evidence.
+  Root may merge only exact settled bytes whose external closeout ledger records fresh convergence
+  and terminal attestation. Do not reimplement the settled PostgreSQL lifecycle, recreate SA135 as
+  open work, or attempt SA170's E2E Docker work.
 
-- **W2 — resume SA167c (#21) at E-closeout.** `wt-track2` is already level with `v88`, so no sync is
-  owed. Retained product commit `91fd3bb6e6b638735361b511c1515cddccce5d15` carries accepted A-D. Do
-  not reimplement A-D. Reconcile E, then run F's frozen-candidate release validation including
-  `make ci-e2e`. W2 claims no standing service.
-- **W1 — discard the local roadmap scribble, sync two commits, then restart SA167d (#18) Phase C from
+- **W2 — sync current `v88`, then resume SA167c (#21) at E-closeout.** Retained product commit
+  `91fd3bb6e6b638735361b511c1515cddccce5d15` carries accepted A-D. Do not reimplement A-D. Reconcile
+  E, then run F's frozen-candidate release validation including `make ci-e2e`. W2 claims no standing
+  service.
+- **W1 — discard the local roadmap scribble, sync current `v88`, then restart SA167d (#18) Phase C from
   command 1.** The gate that halted the last attempt is fixed upstream, not by W1: the exit-141
   provisioning failure is repaired on `v88` by `91fd3bb6`, and the suite returns 35 passed on the
   current tip. **Open no repair ticket and write no byte in `scripts/provision_ci_postgres.sh`** —
   that surface has no open owner. No green prefix from the halted run is reusable. Finish with one
   terminal attestation **supplied with the complete base-to-tip patch as a file**.
-- **W3 — validate the retained SA135 closeout candidate; do not re-author it.** The closeout commit
-  `07607c49` passed its campaign and holds terminal approval; this candidate now contains current
-  `v88` after same-fact conflict resolution. Re-run the consistency test and the exact SA135 release
-  campaign, then converge and attest against a materialized patch before root-owned merge. Do not
-  reopen the settled PostgreSQL lifecycle, recreate SA135 as open work, or attempt SA170's E2E Docker
-  work. SA171 (#28) stays the lane's DB-free fallback if this recovery stalls.
+- **W3 — carry the retained SA135 closeout candidate through external review; do not re-author it.**
+  The resolved candidate contains current `v88` and its exact consistency test and SA135 release
+  campaign are green. Root may merge only the exact bytes bound by fresh convergence and a
+  materialized-patch terminal attestation. Do not reopen the settled PostgreSQL lifecycle, recreate
+  SA135 as open work, or attempt SA170's E2E Docker work. SA171 (#28) stays the lane's DB-free fallback
+  if closeout stalls.
 
 ### Track readiness — the three states
 
@@ -238,8 +245,8 @@ merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W2** | SA167c (#21) | **yes** — level with `v88`, no sync owed; E is the first resumable phase | **yes** — E and F are W2-owned; `make ci-e2e` is a command, not another lane's output | **yes** — nothing is ordered ahead of #21 | **yes** — release-committed |
-| **W1** | SA167d (#18) | **yes** — discard the local roadmap scribble, sync two commits; the exit-141 gate is already green | **yes** — the restarted Phase C, ledger reconciliation, and attestation are W1-owned | **yes** — no cross-lane branch-state gate remains | no |
+| **W2** | SA167c (#21) | **yes** — sync current `v88`; E is the first resumable phase | **yes** — E and F are W2-owned; `make ci-e2e` is a command, not another lane's output | **yes** — nothing is ordered ahead of #21 | **yes** — release-committed |
+| **W1** | SA167d (#18) | **yes** — discard the local roadmap scribble and sync current `v88`; the exit-141 gate is already green | **yes** — the restarted Phase C, ledger reconciliation, and attestation are W1-owned | **yes** — no cross-lane branch-state gate remains | no |
 | **W3** | SA170 (#27) | **yes** — follows the archived lifecycle closeout and the retained SA135 checkpoint | **yes** — Docker/E2E work is W3-owned | **yes** — no ticket is ordered ahead of #27 | no |
 
 **All three lanes are truly green on all three states.** Only **SA167c (#21)** is on the critical
@@ -369,7 +376,7 @@ The per-lane heads are **#21 (W2), #18 (W1), and #27 (W3)**. #21 has accepted A-
 product commit `91fd3bb6e6b638735361b511c1515cddccce5d15`; E closeout and F release validation remain
 outstanding, so the retained checkpoint clears no gate. #18 is a phase-E-accepted candidate whose
 2026-09-01 Phase C attempt halted before any tracked edit on an inherited gate that is now green
-upstream; it owes a two-commit sync, one whole restarted campaign, and one patch-backed attestation.
+upstream; it owes a sync to current `v88`, one whole restarted campaign, and one patch-backed attestation.
 #27 follows the archived SA135 lifecycle closeout and carries the transferred Docker/E2E obligation
 with **no content dependency**.
 
@@ -490,9 +497,10 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   [decisions.md → Module Presence States](decisions.md#module-presence-states). No PostgreSQL
   scheduling decision is required — W2's only cluster-addressed command runs through
   `provision_ci_postgres.sh run --profile restricted`, a private ephemeral server.
-  **Remaining plan (serial; do not reimplement A-D).** `wt-track2` is level with `v88` at `4fe2d8eb`,
-  so no sync is owed. Reviewed plan authority `EV-4` covers phases C-F; C and D are accepted. The
-  first resumable phase is E because all of its dependencies are accepted. If that reference no longer resolves, this paragraph is the cold-start resume object and
+  **Remaining plan (serial; do not reimplement A-D).** Sync `wt-track2` to current `v88`; its retained
+  product object stays `91fd3bb6e6b638735361b511c1515cddccce5d15`. Reviewed plan authority `EV-4`
+  covers phases C-F; C and D are accepted. The first resumable phase is E because all of its
+  dependencies are accepted. If that reference no longer resolves, this paragraph is the cold-start resume object and
   fresh reviewed-plan authority must preserve the accepted A-D boundary.
   1. **E-closeout.** Reconcile decisions, implementation contract, validation policy, ticket context,
      docs index, roadmap queue/counts, and changelog evidence. Retain the SA164 and SA166 boundaries.
@@ -539,8 +547,8 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   five-file suite, the consistency suite, `make lint` and `make typecheck`, then halted at `make check`
   on `scripts/test_provision_ci_postgres.py::test_immediate_children_preserve_status_and_cleanup[success]`
   returning 141. **That failure was inherited, not caused, and is already repaired on `v88` by
-  SA167c's `91fd3bb6`** — the suite returns 35 passed on the current tip. `wt-track1` was simply two
-  commits behind. **W1 therefore owns no provisioning repair and must write no byte in
+  SA167c's `91fd3bb6`** — the suite returns 35 passed on the current tip. `wt-track1` was behind the
+  pre-closeout integration base. **W1 therefore owns no provisioning repair and must write no byte in
   `scripts/provision_ci_postgres.sh`.** The halt wrote no tracked SA167d byte, `make test`,
   `make quality`, the conditional evidence/status transition and the final consistency check never
   ran, so no green prefix is reusable and the phase restarts from its first command on a synced
@@ -551,7 +559,7 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   **Decisions needed:** none.
   **Remaining plan.** Reviewed plan authority `EV-6` covers closeout phases A-C; A and B are accepted
   and must not be redone. First discard `wt-track1`'s uncommitted roadmap notes — this planner
-  supersedes them — and fast-forward the two commits to `v88`. Then on one frozen candidate
+  supersedes them — and sync current `v88`. Then on one frozen candidate
   run in order: the five-file focused suite, the accepted-open consistency suite, `make lint`,
   `make typecheck`, `make check`, `make test`, `make quality`. Only when all are green, author the
   conditional post-integration ledger image and run the final consistency check. Then perform fresh

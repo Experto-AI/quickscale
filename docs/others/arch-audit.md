@@ -54,7 +54,7 @@ status reconciliation without closing SA167d. Completion-grade Phase C convergen
 attestation, and exact-tip integration remain pending.
 The 2026-09-01 Phase C attempt then halted at `make check` on the inherited exit-141 provisioning
 probe; `scripts/test_provision_ci_postgres.py` returns **35 passed** on current `v88`, so W1 owns no
-repair and must restart its campaign after syncing two commits. No SA167d tracked byte was written.
+repair and must restart its campaign after syncing current `v88`. No SA167d tracked byte was written.
 
 **Read fully:** the four workflows, `scripts/gate_registry.json`, `scripts/check_gate_parity.py` (context extraction and comparison), `scripts/sync_ci_gate_jobs.py` (generation and job-set validation), the `Makefile` test/gate targets, `scripts/check_ci_locally.sh` gate stations, `scripts/test_isolation_conformance.sh`, and the three behavioral diffs. **Sampled:** module sources, generator, beta migration, orgs tenancy (prior-finding anchor re-verification only). **Skipped:** generated-project template internals, frontend theme sources.
 **Scope decision.** With the delta this small, the pass's value is re-verification plus depth
