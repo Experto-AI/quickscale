@@ -150,29 +150,54 @@ sync-resolve-rerun-review step in the execution rules.
 
 ### Lane state
 
-**Measured 2026-08-31 against the branches themselves.** Never trust a transcribed count:
+**Measured 2026-09-01 against the branches themselves.** Never trust a transcribed count:
 
 ```bash
 for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-right --count v88...$w; done
 ```
 
 **Read that output as `behind ahead`** — the left column counts commits on `v88` and not on the
-worktree, the right column the reverse. **All three worktrees are clean** (`git status --porcelain`
-empty), and **no unmerged product delta remains anywhere in the release.**
+worktree, the right column the reverse. The measured counts are **W1 `2 0`, W2 `0 0`, W3 `2 1`**.
+W2 is clean; W1 and W3 each carry a roadmap edit, and W3 retains one reviewed closeout commit that is
+not merged into `v88`.
 
-- **`wt-track1`** is at `c0ebf34b`, **0 ahead / 0 behind `v88`**. SA167d's retained partial and the
-  settled-decision reconciliation are both merged; the previously staged ledger edits are committed
-  and the sync is finished. **Startable with no sync**; what remains is one Phase C campaign, not
-  re-implementation.
-- **`wt-track2`** is at `88a0778a`, **0 ahead / 23 behind `v88`**. SA167c's Phase-C product delta
-  merged into `v88` at `d31c6b41` as retained delivery; the ticket remains open with C unaccepted and
-  D-F not run. **Startable after a sync.**
+- **`wt-track1`** is **0 ahead / 2 behind `v88`** with a roadmap edit. SA167d's retained partial is
+  merged, but its closeout lane must reconcile that edit and sync before the remaining Phase C
+  campaign. **Startable after preserving and reconciling its roadmap state.**
+- ***corrected after checkpoint attestation — not independently graded*** **`wt-track2`** is clean and
+  level with `v88`. SA167c's retained Phase-C product delta is integrated, but C acceptance and D-F
+  remain open. **Startable with no sync.**
 - **`wt-track3`** is the closeout lane for the current candidate; its integrated `v88` state remains
   authoritative until root accepts and merges the exact reviewed tip. **Startable after the closeout
   candidate is bound.**
 
-Both lagging worktrees are behind only on integration-branch documentation and the two merged product
-deltas they already contributed; neither sync carries a foreign code change into its lane.
+#### SA135 retained closeout checkpoint — 2026-09-01
+
+- **Completed:** the Track 3 closeout archived SA135, retired merge position #15, made SA170 the W3
+  head with no SA135 dependency, reconciled all seven current scheduling/count consumers, passed the
+  ticket's release campaign, and received independent terminal approval at exact `wt-track3` object
+  `07607c49d7e45929b8938d7a7d2c0a9909057c0a`.
+- **Pending:** plan phase `G-CLOSEOUT` remains unaccepted because its implementation handback was
+  partial; the later convergence pass corrected every reported same-fact defect and revalidated the
+  resulting bytes, but cannot retroactively change phase coverage. The originating merge-back request
+  also remains unmet.
+- **Blocking:** `v88` advanced to `4fe2d8ebb4c2d57035e2e7f45e6f4470b9d7edb5` during closeout, and
+  merging the reviewed object produced a content conflict in `docs/technical/roadmap.md`. Closure
+  requires syncing that exact `v88` state into `wt-track3`, reconciling the roadmap in the track
+  worktree, rerunning the release campaign, independently reviewing the new exact tip, and merging it.
+  The failed integration attempt was aborted cleanly; `v88` does not contain this SA135 closeout.
+- **Decisions needed:** none. This is ordinary integration-conflict resolution, not a product or
+  scheduling choice.
+- ***corrected after checkpoint attestation — not independently graded*** **Remaining plan:** W3 HEAD
+  is the retained product object above with this checkpoint roadmap edit still present. First commit
+  this checkpoint to bind it and restore a clean `wt-track3`; then merge current `v88` into that
+  worktree, resolve only the same-fact roadmap conflict while preserving both lanes' accepted
+  evidence, run the v88 consistency test and the SA135 release campaign, and perform serial
+  convergence plus patch-backed terminal review before merging the newly reviewed exact tip. Do not
+  reimplement the settled PostgreSQL lifecycle or recreate SA135 as open work.
+
+The W1 and W3 lanes must each reconcile their roadmap state while syncing current `v88`; W3 also
+carries the retained SA135 closeout commit described above.
 
 ### PostgreSQL routing — who actually claims the standing service
 
