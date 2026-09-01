@@ -163,10 +163,10 @@ sync-resolve-rerun-review step in the execution rules.
 
 ### Lane state
 
-**Pre-integration measurement (2026-09-01)** uses current `v88` at
-`8385780fe624893dc66e1382f2f68ce1ea759a02` and the synchronized W2 retained-checkpoint merge at
-`eacad160d92b37f81f593085a64e18db4fb271f0`. Never trust a transcribed count; re-measure before
-acting. The `v88` tip includes the retained SA135 integration; the W2 object is not yet integrated.
+**Post-integration measurement (2026-09-01)** is pinned to `v88` product-integration object
+`ef712e2d649d73aec0bdd9b4d3ca0b23913da419`, whose exact W2 parent is
+`cb7517470df4f7e5c6890310de1a39ae0ca2c395`. Never trust a transcribed count; re-measure before
+acting. The bookkeeping commit carrying this checkpoint is a successor of that measured object.
 
 ```bash
 for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-right --count v88...$w; done
@@ -175,16 +175,15 @@ for w in wt-track1 wt-track2 wt-track3; do echo -n "$w: "; git rev-list --left-r
 **Read that output as `behind ahead`** — the left column counts commits on `v88` and not on the
 worktree, the right column the reverse.
 
-- **`wt-track1`** — **10 behind / 0 ahead** current `v88`. Its retained checkpoint changed no SA167d
+- **`wt-track1`** — **15 behind / 0 ahead** the measured integration object. Its retained checkpoint changed no SA167d
   product byte. Phase C is outstanding and no green prefix from its halted attempt is reusable; sync
   current `v88` before restarting it.
-- **`wt-track2`** — **0 behind / 2 ahead** current `v88`, at synchronized retained checkpoint
-  `eacad160d92b37f81f593085a64e18db4fb271f0`; the working tree was clean at measurement. SA167c's
-  retained A-E product object remains authoritative, and F remains halted on the SA170/W3 E2E
-  failures.
-- **`wt-track3`** — **1 behind / 0 ahead**, clean at
+- **`wt-track2`** — **1 behind / 0 ahead** the measured integration object after exact tip
+  `cb7517470df4f7e5c6890310de1a39ae0ca2c395` merged. SA167c's retained A-E product object remains
+  authoritative, and F remains halted on the SA170/W3 E2E failures.
+- **`wt-track3`** — **6 behind / 0 ahead** the measured integration object, at
   `b530deaea9ffd1a3f52a7b55eea20488ac46bf03`. Its retained SA135 partial is integrated into current
-  `v88`; sync the one newer integration commit before starting SA170.
+  `v88`; sync current `v88` before starting SA170.
 
 W1's checkpoint is bookkeeping-only and does not complete SA167d. W3's retained SA135 delivery is
 now integration-branch state; it closes no SA167c, SA167d, or SA170 acceptance gate.
@@ -206,11 +205,13 @@ complete and the standing state was restored exactly.
 - **W2 — retain SA167c (#21); do not start SA166.** Phases A-E are accepted on retained product
   object `91fd3bb6e6b638735361b511c1515cddce5d15`. F is unaccepted after its sole
   `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` run exited 2 with 2 Core and 8 CLI E2E failures owned by
-  SA170/W3. The nine-file retained checkpoint is now synchronized; retained-partial-only merge-back
-  is authorized after fresh exact-tip convergence and patch-backed terminal attestation. That
-  integration must not accept F, close SA167c, unblock SA166, or claim release readiness. Do not
-  rerun the release gate or remediate W3 here. SA166 remains dependent on SA167c and SA164 remains
-  after SA166.
+  SA170/W3. The nine-file retained checkpoint completed exact-tip convergence and patch-backed
+  terminal attestation, received one bounded two-finding remediation, and merged through exact tip
+  `cb7517470df4f7e5c6890310de1a39ae0ca2c395` at `v88` object
+  `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. Its two bounded terminal-remediation corrections were
+  self-validated on the focused status surface. This retained integration does not accept F, close
+  SA167c, unblock SA166, or claim release readiness. Do not rerun the release gate or remediate W3
+  here. SA166 remains dependent on SA167c and SA164 remains after SA166.
 
 #### Retained SA135 closeout integration checkpoint — 2026-09-01
 
@@ -234,18 +235,18 @@ phase became accepted.
   declared validation and acceptance work; this merge clears no open-ticket gate.
 - **Decisions needed:** none. Do not reopen the settled PostgreSQL lifecycle, redo SA167c A-D, or
   move SA170's E2E work back onto SA135.
-- **Remaining plan:** (1) W2 integrates only the authorized retained SA167c status checkpoint, then
+- **Remaining plan:** (1) W2 has integrated only the authorized retained SA167c status checkpoint and
   remains halted until SA170 makes the owned E2E surface green; a later continuation obtains fresh
   authority, freezes the then-current base, and reruns F without redoing accepted A-E; (2) W1 syncs
   current `v88` and restarts SA167d Phase C from command 1 with no reused green prefix; (3) W3 starts
   SA170 and owns its full Docker/E2E acceptance. No continuation reimplements SA135 or SA167c A-D.
 
-- **W2 — integrate the authorized retained SA167c (#21) checkpoint, then halt.** Retained product
+- **W2 — retain the integrated SA167c (#21) checkpoint and remain halted.** Retained product
   commit `91fd3bb6e6b638735361b511c1515cddccce5d15` carries accepted A-E; do not reimplement or
-  re-close E. The synchronized nine-file status checkpoint may merge only as retained partial
-  delivery and clears no gate. After SA170/W3 is green, obtain fresh reviewed authority, freeze the
-  then-current `v88`, and run one fresh F release verdict including `make ci-e2e`. W2 claims no
-  standing service.
+  re-close E. The synchronized nine-file status checkpoint merged only as retained partial delivery
+  at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419` and clears no gate. After SA170/W3 is green,
+  obtain fresh reviewed authority, freeze the then-current `v88`, and run one fresh F release verdict
+  including `make ci-e2e`. W2 claims no standing service.
 - **W1 — discard the local roadmap scribble, sync current `v88`, then restart SA167d (#18) Phase C from
   command 1.** The gate that halted the last attempt is fixed upstream, not by W1: the exit-141
   provisioning failure is repaired on `v88` by `91fd3bb6`, and its recorded verification returned
@@ -264,9 +265,9 @@ merge-back is not order-gated behind another lane.
 
 | Lane | Head | Can start | Can finish | Can merge | On the critical path |
 |---|---|---|---|---|---|
-| **W2** | SA167c (#21) | **no** — F is halted on 2 Core and 8 CLI E2E failures owned by SA170/W3 | **no** — F requires a fresh release verdict after its owner is green | **yes for retained partial only** — the synchronized status checkpoint is authorized after exact-tip attestation; **no for ticket completion** until F is green | **yes** — release-committed |
+| **W2** | SA167c (#21) | **no** — F is halted on 2 Core and 8 CLI E2E failures owned by SA170/W3 | **no** — F requires a fresh release verdict after its owner is green | **retained partial merged**; **no for ticket completion** until F is green | **yes** — release-committed |
 | **W1** | SA167d (#18) | **yes** — discard the local roadmap scribble and sync current `v88`; the exit-141 gate is already green | **yes** — the restarted Phase C, ledger reconciliation, and attestation are W1-owned | **yes** — no cross-lane branch-state gate remains | no |
-| **W3** | SA170 (#27) | **yes** — sync the one newer `v88` commit; SA135 is archived and #27 has `deps: none` | **yes** — Docker/E2E work is W3-owned | **yes** — no ticket is ordered ahead of #27 | no |
+| **W3** | SA170 (#27) | **yes** — sync current `v88`; SA135 is archived and #27 has `deps: none` | **yes** — Docker/E2E work is W3-owned | **yes** — no ticket is ordered ahead of #27 | no |
 
 **W2 is not green:** SA167c (#21) remains the release-committed critical-path head, and its F
 verdict is halted on the SA170/W3-owned E2E failures. W1 and W3 can start their own lane work after
@@ -383,8 +384,8 @@ into its worktree, resolves there, reruns its own verification, then merges its 
 | 31 | **SA174** | C | 3 | W1 | SA160 *(lane only)* | no |
 | 32 | **SA175** | C | 3 | W1 | SA174 *(lane only)* | no |
 
-SA167c's synchronized status checkpoint may merge only under its retained-partial authorization,
-after fresh exact-tip convergence and patch-backed terminal attestation. That integration does not
+SA167c's synchronized status checkpoint merged under its retained-partial authorization after fresh
+exact-tip convergence and patch-backed terminal attestation. That integration does not
 accept F, close the ticket, unblock SA166, or clear any release gate. Other entries carry their
 declared queue or content dependencies, subject to fresh branch remeasurement before execution.
 
@@ -513,8 +514,9 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   passed**; exact-scope cleanup passed. Those failures are owned by SA170/W3 and are not accepted or
   repaired in this worktree. F is therefore unaccepted, SA167c remains open at #21, SA166 remains
   dependent on it, SA164 remains after SA166, and no completion or release-readiness claim is made.
-  During F, `v88` advanced to `3aa0c67f843eddd779f9766de4c274a5a249f485`; the frozen candidate
-  cannot merge back in this run.
+  During F, `v88` advanced to `3aa0c67f843eddd779f9766de4c274a5a249f485`; the frozen F candidate
+  could not merge then. The later retained status checkpoint reconciled the moved base and merged
+  without accepting F.
 
   **Completed:** phases A-E and the retained product object above. **Pending:** F release validation,
   then completion-grade convergence, patch-backed terminal attestation, and exact-tip integration.
@@ -530,23 +532,26 @@ implementation notes for every ticket live in [v88_ticket_context.md](v88_ticket
   `f60fe2bcb6efba654782c96ee1113ea6c90b74ee`, and observed moved `v88`
   `3aa0c67f843eddd779f9766de4c274a5a249f485`. That retained checkpoint is committed as `4de75d39`
   and synchronized with `v88` base `8385780fe624893dc66e1382f2f68ce1ea759a02` at
-  `eacad160d92b37f81f593085a64e18db4fb271f0`. Treat that merge as synchronized provenance; integrate
-  only the final corrected exact tip after fresh convergence and patch-backed attestation, under the
-  retained-partial authorization. Then halt until SA170/W3 makes its owned E2E surface green; obtain
-  fresh reviewed authority preserving `EV-6`, re-freeze the then-current `v88`, reconcile only the
-  retained status surface, and run one newly authorized F release verdict before completion-grade
-  convergence and patch-backed attestation. Retain rather than restore any halted candidate, and
-  never redo accepted A-E.
+  `eacad160d92b37f81f593085a64e18db4fb271f0`. Treat that merge as synchronized provenance. Fresh
+  convergence and patch-backed attestation ran over final reviewed tip
+  `32f78db07ab44a5cc962a172f575156554fe267b`; terminal remediation then closed two roadmap/test
+  consistency findings at final exact tip `cb7517470df4f7e5c6890310de1a39ae0ca2c395`, and root merged
+  it at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. Those two bounded corrections were self-validated
+  on the focused status surface. Halt until SA170/W3 makes its owned E2E surface green; obtain fresh
+  reviewed authority preserving `EV-6`, re-freeze the then-current `v88`, reconcile only the retained
+  status surface, and run one newly authorized F release verdict before completion-grade convergence
+  and patch-backed attestation. Retain rather than restore any halted candidate, and never redo
+  accepted A-E.
 
   **Retained-partial review checkpoint.** Task-tier convergence and patch-backed terminal
   attestation ran over the retained checkpoint, not over a completion candidate. The terminal review
-  confirmed that SA167c is not release-ready and authorized only retained-partial merge-back; it did
-  not accept F or authorize ticket completion. Its blocking stale SA164 context claim was corrected
-  together with a focused guard; the changelog preserves that correction's post-attestation,
-  not-independently-graded provenance. The carried advisory is now resolved: the consistency test
-  module's scope prose distinguishes its three primary live invariants from retained expected-red
-  canaries and current-status contracts. The retained checkpoint is committed and synchronized but
-  not yet integrated into `v88`; exact-tip attestation and integration remain pending.
+  preserved SA167c as not release-ready and first raised two blocking roadmap/test contradictions:
+  stale E-open/no-red wording and a false W3 lane count. One bounded terminal-remediation pass
+  corrected both and passed the 35-test focused suite plus Ruff, MyPy, py_compile, and diff checks;
+  the corrections remain identified as bounded terminal-remediation work. Exact tip
+  `cb7517470df4f7e5c6890310de1a39ae0ca2c395` is integrated into `v88` by
+  `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. This records retained partial delivery only: F,
+  SA167c completion, SA166 unblocking, and release readiness remain open.
 
   **The key itself is already gone.** `grep -rn django_apps` over `quickscale_core`,
   `quickscale_modules`, and `quickscale_cli` returns nothing: the manifests, `ModuleManifest`, loader,
