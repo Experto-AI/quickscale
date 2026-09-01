@@ -35,12 +35,7 @@ positions; **W2 sets the release date** because SA167c remains open at #21 with 
 on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15` and F outstanding after
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
 SA170/W3. No completion or release-readiness claim is made. W3 holds the exclusive
-PostgreSQL/Docker slot. The prior pass's leading finding rode inside SA135 and has landed.
-positions; **W2 sets the release date** because SA167c remains open at #21 with phases A-E accepted
-on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15` and F outstanding after
-`QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
-SA170/W3. No completion or release-readiness claim is made. W3 holds the exclusive PostgreSQL/Docker
-slot. The prior pass's leading finding landed and is archived under SA135.
+PostgreSQL/Docker slot. The prior pass's leading finding landed and is archived under SA135.
 
 **Accepted-open SA167c checkpoint (2026-09-01).** SA167c remains open at merge position **#21**
 with SA166 still dependent on it. Phases A-E are accepted on retained product object
@@ -49,7 +44,10 @@ campaign are accepted, and D's fail-hard missing-app proof restored the exact by
 related gates returned green. E's ordered lint/typecheck/context checkpoint passed; F halted after
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by SA170/W3.
 F remains outstanding and unaccepted; this retained delivery clears no release gate, and no completion
-or release-readiness claim is made. Its accepted evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
+or release-readiness claim is made. Retained-partial-only merge-back of the synchronized nine-file
+status checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip
+attestation and integration remain pending. Its accepted evidence is archived in
+[CHANGELOG.md](../../CHANGELOG.md).
 
 **Accepted-open SA167d checkpoint (2026-08-28; current status reconciled 2026-09-01).** SA167d
 remains open and active at merge position **#18**, with SA165 still dependent on it. Phases A-E

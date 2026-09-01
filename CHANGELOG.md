@@ -9,16 +9,20 @@
   `91fd3bb6e6b638735361b511c1515cddccce5d15`, while SA167c remains open at #21. SA166 remains
   dependent on SA167c and SA164 remains downstream; after SA135's archival, the current queue has
   twelve v88 entries occupying twelve open merge positions. The historical post-attestation lifecycle
-  correction is archived here and was applied after terminal attestation without independent
-  grading. E's ordered validation checkpoint passed: `make lint`, `make typecheck`, and the focused
-  ticket context consistency suite each exited 0. F froze its candidate at
+  correction is archived here and was ***applied after terminal attestation —
+  not independently graded***. E's ordered validation checkpoint passed: `make lint`, `make
+  typecheck`, and the focused ticket context consistency suite each exited 0. F froze its candidate at
   `f60fe2bcb6efba654782c96ee1113ea6c90b74ee` and ran
   `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` once; stages 1-11 passed, stage 12 ran, and the command
   exited **2** after Core reported **2 failed / 36 passed** and CLI reported **8 failed / 32 passed**.
   Exact-scope cleanup passed. Those E2E failures belong to SA170/W3 and are not accepted here.
-  Phase F is unaccepted and outstanding, the retained nine-file candidate stays unmerged, and no
-  completion or release-readiness claim is made. During the run `v88` advanced to
-  `3aa0c67f843eddd779f9766de4c274a5a249f485`, so merge-back is unavailable in this checkpoint too.
+  Phase F is unaccepted and outstanding, and no completion or release-readiness claim is made.
+  Retained checkpoint `4de75d39` was synchronized with `v88` base
+  `8385780fe624893dc66e1382f2f68ce1ea759a02` at merge
+  `eacad160d92b37f81f593085a64e18db4fb271f0`. Retained-partial-only merge-back of that synchronized
+  nine-file status checkpoint is authorized, subject to fresh exact-tip convergence and patch-backed
+  terminal attestation; integration is still pending. This authorization does not accept F, close
+  SA167c, unblock SA166, or claim release readiness.
 
 - **SA135 archive and closeout reconciliation prepared; external closeout obligations remain (2026-09-01).** SA135's accepted P/A/B/C/D/E0/E1/F evidence and returned-green Phase G campaign are archived here. This repository reconciliation removes SA135's open roadmap entry and merge position **#15**, retires its current context, updates every live scheduling and queue-count consumer, and clears SA170's former worktree-ordering dependency while preserving its transferred Docker/E2E obligations. The frozen G-FINAL campaign remains unrun and is not claimed by this archive. Release-tier convergence is complete on the settled post-correction bytes; plan phase `G-CLOSEOUT` remains a historical unaccepted partial. Terminal review, root acceptance, and exact-tip integration remain external closeout obligations. No merge into `v88` is claimed.
 - **Roadmap cleanup and rebalance review (2026-09-01, sixth pass) — and one false red disproved

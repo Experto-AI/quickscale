@@ -346,7 +346,9 @@ The companion declaration-gate work remains open under **`SA167c`** at merge #21
 accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`; F is outstanding
 after `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
 SA170/W3. No completion or release-readiness claim is made, SA166 remains dependent, and SA164
-remains after SA166. This does not alter the module-extension contract
+remains after SA166. Retained-partial-only merge-back of the synchronized nine-file status checkpoint
+is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation and
+integration remain pending. This does not alter the module-extension contract
 or authorize edits to the settled manifest implementation.
 
 **5. Template Integration (showcase_react theme):**

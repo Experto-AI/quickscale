@@ -704,7 +704,9 @@ SA167a and SA167b handoffs are archived in [CHANGELOG.md](../../CHANGELOG.md). S
 phases A-E are accepted on retained product object
 `91fd3bb6e6b638735361b511c1515cddccce5d15`; F is outstanding after
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
-SA170/W3, so no completion or release-readiness claim is made. SA167d remains open:
+SA170/W3, so no completion or release-readiness claim is made. Retained-partial-only merge-back of
+the synchronized nine-file status checkpoint is authorized without accepting F, closing SA167c, or
+unblocking SA166; exact-tip attestation and integration remain pending. SA167d remains open:
 phases A-E are accepted at E0 tip `bd2c291ba2d40494970464741ac51bfd45445a19`; retained-partial
 convergence and terminal attestation are complete, and retained-partial-only merge-back is
 authorized for the reviewed partial plus the latest-v88 status reconciliation without closing the

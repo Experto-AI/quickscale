@@ -7,16 +7,15 @@ changelog.  The shared SA167 umbrella may still explain the archived SA167a hand
 tree state.  The accepted-open SA167d retained-partial and halted SA167c statuses are checked as
 current consumer contracts below; those checks are not mutation canaries.
 
-Scope, deliberately narrow (2026-08-31).  This module holds **three** checks and no
-canaries.  It previously carried twelve canaries -- tests asserting these three fail when
-fed mutated input -- across 496 lines, a 4:1 ratio of test-testing-the-test to test.  They
-were removed as overengineering for a planning document.  One of them also mutated a
-hardcoded ``deps:`` literal naming a specific ticket, so archiving that ticket silently
-disarmed the canary, and so did any roadmap prose that happened to spell the same literal
-first; that trap blocked a release ticket's closeout.  The reconciled suite retains expected-red
-checks for still-current roadmap invariants.  The SA167d status contract is also intentionally
-checked below because this merge must preserve its reviewed retained-partial state; it is a current
-consumer contract, not a mutation canary.
+Scope, deliberately narrow (2026-08-31).  The three primary live invariants are current-count
+agreement, roadmap/context ticket coverage, and the ban on schedulable metadata in conceptual
+context.  Retained expected-red canaries prove those parser/guard boundaries, while explicit
+current-status contracts preserve the accepted-open SA167d retained partial and the halted SA167c
+checkpoint.  The suite previously carried twelve mutation canaries across 496 lines, including one
+that mutated a hardcoded ``deps:`` literal naming a specific ticket; archiving that ticket silently
+disarmed it, as did roadmap prose that happened to spell the same literal first.  The remaining
+canaries are derived from current structure or exercise still-live invariant boundaries rather than
+pinning a closed ticket.
 """
 
 from __future__ import annotations
@@ -48,6 +47,9 @@ E0_ACCEPTED_TIP = "bd2c291ba2d40494970464741ac51bfd45445a19"
 SA167C_RETAINED_PRODUCT = "91fd3bb6e6b638735361b511c1515cddccce5d15"
 SA167C_FROZEN_BASE = "f60fe2bcb6efba654782c96ee1113ea6c90b74ee"
 SA167C_MOVED_V88 = "3aa0c67f843eddd779f9766de4c274a5a249f485"
+SA167C_RETAINED_CHECKPOINT = "4de75d39"
+SA167C_SYNC_BASE = "8385780fe624893dc66e1382f2f68ce1ea759a02"
+SA167C_SYNC_MERGE = "eacad160d92b37f81f593085a64e18db4fb271f0"
 RETAINED_PARTIAL_ATTESTED = (
     "retained-partial convergence and terminal attestation are complete"
 )
@@ -398,9 +400,21 @@ def _assert_sa167c_halted_status(
             normalized_text,
             re.I,
         ), path
+        assert "retained-partial-only merge-back" in normalized_text.lower(), path
+        assert re.search(
+            r"without accepting F|does not accept F", normalized_text, re.I
+        ), path
+        assert re.search(
+            r"without (?:accepting F, )?closing SA167c|does not .*close SA167c",
+            normalized_text,
+            re.I,
+        ), path
 
     assert SA167C_FROZEN_BASE in roadmap_text
     assert SA167C_MOVED_V88 in roadmap_text
+    assert SA167C_RETAINED_CHECKPOINT in roadmap_text
+    assert SA167C_SYNC_BASE in roadmap_text
+    assert SA167C_SYNC_MERGE in roadmap_text
     assert "plan authority `EV-6` remains binding" in roadmap_text
     assert "do not redo A-E" in roadmap_text
     assert "obtain fresh reviewed authority" in roadmap_text
@@ -737,6 +751,12 @@ def test_v88_current_reconciliation_is_not_labelled_ungraded() -> None:
     latest_sa167d_entry = re.search(r"(?ms)^- \*\*SA167d\b.*?(?=^- \*\*)", changelog)
     assert latest_sa167d_entry is not None
     assert "not independently graded" in latest_sa167d_entry.group(0)
+    latest_sa167c_entry = re.search(
+        r"(?ms)^- \*\*SA167c Phase E accepted; Phase F halted\b.*?(?=^- \*\*)",
+        changelog,
+    )
+    assert latest_sa167c_entry is not None
+    assert "not independently graded" in latest_sa167c_entry.group(0)
 
 
 def _assert_latest_changelog_status_uses_current_queue_counts(
