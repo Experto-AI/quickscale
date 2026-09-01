@@ -42,6 +42,10 @@ OPEN_TICKET_RE = re.compile(
     r"^\s*- \[ \] \*\*(SA\d+[a-z]?)\b.*?`((?:Band|Post-v88)[^`]*)`",
     re.MULTILINE,
 )
+MERGE_ORDER_ENTRY_RE = re.compile(
+    r"^\|\s*\d+\s*\|\s*\*\*(SA\d+[a-z]?)\*\*\s*\|[^|\n]*\|[^|\n]*\|\s*(W[123])\s*\|",
+    re.MULTILINE,
+)
 SECTION_RE = re.compile(r"^## (SA\d+[a-z]?[^\n]*)$", re.MULTILINE)
 E0_ACCEPTED_TIP = "bd2c291ba2d40494970464741ac51bfd45445a19"
 SA167C_RETAINED_PRODUCT = "91fd3bb6e6b638735361b511c1515cddccce5d15"
@@ -76,6 +80,7 @@ class TicketMetadata:
     dependencies: frozenset[str]
     kind: str
     merge_position: int | None
+    worktree: str | None
 
 
 def _dependencies(metadata: str) -> frozenset[str]:
@@ -100,6 +105,15 @@ def _merge_position(metadata: str, kind: str, ticket: str) -> int | None:
             f"post-v88 ticket unexpectedly has merge position: {ticket}"
         )
     return int(match.group(1)) if match else None
+
+
+def _worktree(metadata: str, kind: str, ticket: str) -> str | None:
+    match = re.search(r"\bW([123])\b", metadata)
+    if kind == "v88" and not match:
+        raise AssertionError(f"v88 ticket lacks worktree assignment: {ticket}")
+    if kind == "post-v88" and match:
+        raise AssertionError(f"post-v88 ticket unexpectedly has worktree: {ticket}")
+    return f"W{match.group(1)}" if match else None
 
 
 def _roadmap_tickets(text: str) -> dict[str, TicketMetadata]:
@@ -145,6 +159,7 @@ def _roadmap_tickets(text: str) -> dict[str, TicketMetadata]:
             dependencies=_dependencies(metadata),
             kind=kind,
             merge_position=_merge_position(metadata, kind, ticket),
+            worktree=_worktree(metadata, kind, ticket),
         )
 
     unknown = {
@@ -266,6 +281,13 @@ RETIRED_DJANGO_APPS_DEPENDENCY_RE = re.compile(
     r"[^.\n]{0,100}`?django_apps:?`?",
     re.IGNORECASE,
 )
+BROAD_NO_RED_GATE_RE = re.compile(r"\bno gates? (?:is|are) red\b", re.IGNORECASE)
+STALE_SA167C_E_OPEN_RE = re.compile(
+    r"(?ix)"
+    r"\bopen\s+product\s+work\s+is\s+SA167c\s+E/F\b"
+    r"|\bSA167c\b[^.\n]{0,80}\b(?:E/F|E\s+(?:and|then)\s+F)\b"
+    r"[^.\n]{0,80}\b(?:open|pending|outstanding)\b"
+)
 
 
 def _load_documents() -> tuple[str, str]:
@@ -300,6 +322,111 @@ def _number_word(value: int) -> str:
     if value not in _NUMBER_WORDS:
         raise AssertionError(f"no spelled form for count {value}; extend _NUMBER_WORDS")
     return _NUMBER_WORDS[value]
+
+
+def _roadmap_block(text: str, start: str, end: str) -> str:
+    _, start_separator, remainder = text.partition(start)
+    if not start_separator:
+        raise AssertionError(f"roadmap block start is missing: {start}")
+    block, end_separator, _ = remainder.partition(end)
+    if not end_separator:
+        raise AssertionError(f"roadmap block end is missing: {end}")
+    return block
+
+
+def _assert_sa167c_current_roadmap_blocks(roadmap_text: str) -> None:
+    """Reject contradictions inside the current Band-A and open-work blocks."""
+    priority_model = _roadmap_block(
+        roadmap_text, "### Priority model", "### Dependency graph and critical path"
+    )
+    dependency_graph = _roadmap_block(
+        roadmap_text,
+        "### Dependency graph and critical path",
+        "### Track rebalance",
+    )
+    next_actions = _roadmap_block(
+        roadmap_text, "### Next action per lane", "### Track readiness"
+    )
+    sa167c_ticket = _roadmap_block(
+        roadmap_text,
+        "- [ ] **SA167c — Retire `django_apps:` and gate the app declaration.**",
+        "- [ ] **SA167d — Complete the CLI wiring-drain acceptance.**",
+    )
+
+    applicable_current_blocks = "\n".join(
+        (priority_model, dependency_graph, next_actions, sa167c_ticket)
+    )
+    broad_no_red = BROAD_NO_RED_GATE_RE.search(applicable_current_blocks)
+    assert not broad_no_red, broad_no_red.group(0) if broad_no_red else None
+    stale_e_open = STALE_SA167C_E_OPEN_RE.search(applicable_current_blocks)
+    assert not stale_e_open, stale_e_open.group(0) if stale_e_open else None
+
+    assert "no provisioning gate is red" in priority_model.lower()
+    assert "F halted on the red release gate" in dependency_graph
+    assert re.search(
+        r"\bOpen product work is\s+SA167c F on W2\b",
+        next_actions,
+        re.IGNORECASE,
+    )
+
+
+def _assert_lane_assignment_parity(roadmap_text: str) -> None:
+    """Derive lane counts from ticket metadata and bind every merge-table row."""
+    roadmap = _roadmap_tickets(roadmap_text)
+    expected_assignments = {
+        ticket: metadata.worktree
+        for ticket, metadata in roadmap.items()
+        if metadata.kind == "v88"
+    }
+    merge_entries = MERGE_ORDER_ENTRY_RE.findall(roadmap_text)
+    duplicate_merge_entries = sorted(
+        ticket
+        for ticket, count in Counter(ticket for ticket, _ in merge_entries).items()
+        if count > 1
+    )
+    if duplicate_merge_entries:
+        raise AssertionError(
+            f"duplicate merge-order ticket rows: {duplicate_merge_entries}"
+        )
+    merge_assignments = dict(merge_entries)
+    if merge_assignments != expected_assignments:
+        raise AssertionError(
+            "roadmap lane assignment drift between ticket metadata and merge table: "
+            f"expected={expected_assignments}, actual={merge_assignments}"
+        )
+
+    derived_counts = Counter(expected_assignments.values())
+    census = re.search(
+        r"Lanes are \*\*W1 (\d+) · W2 (\d+) · W3 (\d+)\*\*", roadmap_text
+    )
+    assert census is not None
+    stated_counts = {
+        "W1": int(census.group(1)),
+        "W2": int(census.group(2)),
+        "W3": int(census.group(3)),
+    }
+    expected_counts = {lane: derived_counts[lane] for lane in ("W1", "W2", "W3")}
+    if stated_counts != expected_counts:
+        raise AssertionError(
+            "roadmap lane count drift from ticket metadata: "
+            f"expected={expected_counts}, actual={stated_counts}"
+        )
+
+    dependency_graph = _roadmap_block(
+        roadmap_text,
+        "### Dependency graph and critical path",
+        "### Track rebalance",
+    )
+    w3_count_word = _number_word(expected_counts["W3"])
+    if not re.search(
+        rf"\bits {w3_count_word} positions are a \*queue\*",
+        dependency_graph,
+        re.IGNORECASE,
+    ):
+        raise AssertionError(
+            "W3 dependency-graph prose does not use its derived lane count: "
+            f"expected={w3_count_word}"
+        )
 
 
 def _assert_status_consumers_agree(roadmap_text: str, docs_index_text: str) -> None:
@@ -516,6 +643,8 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
     roadmap = ROADMAP.read_text(encoding="utf-8")
     docs_index = DOCS_INDEX.read_text(encoding="utf-8")
     _assert_status_consumers_agree(roadmap, docs_index)
+    _assert_sa167c_current_roadmap_blocks(roadmap)
+    _assert_lane_assignment_parity(roadmap)
     _assert_sa167d_status(
         roadmap,
         CONTEXT.read_text(encoding="utf-8"),
@@ -541,6 +670,61 @@ def test_v88_live_status_consumers_derive_current_counts() -> None:
         ),
         (ROOT / "docs/technical/module-extension.md").read_text(encoding="utf-8"),
     )
+
+
+@pytest.mark.parametrize(
+    ("current_claim", "contradiction", "error_match"),
+    [
+        (
+            "no provisioning gate is red",
+            "no gate is red",
+            "no gate is red",
+        ),
+        (
+            "Open product work is\n  SA167c F on W2",
+            "Open product work is\n  SA167c E/F on W2",
+            "SA167c E/F",
+        ),
+    ],
+)
+def test_v88_sa167c_current_roadmap_blocks_reject_contradictions(
+    current_claim: str,
+    contradiction: str,
+    error_match: str,
+) -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    mutated = roadmap.replace(current_claim, contradiction, 1)
+    assert mutated != roadmap
+    with pytest.raises(AssertionError, match=error_match):
+        _assert_sa167c_current_roadmap_blocks(mutated)
+
+
+@pytest.mark.parametrize(
+    ("current_claim", "drifted_claim", "error_match"),
+    [
+        ("W3 3**", "W3 4**", "lane count drift"),
+        (
+            "its three positions are a *queue*",
+            "its four positions are a *queue*",
+            "W3 dependency-graph prose",
+        ),
+        (
+            "| 29 | **SA172** | C | 3 | W3 |",
+            "| 29 | **SA172** | C | 3 | W2 |",
+            "lane assignment drift",
+        ),
+    ],
+)
+def test_v88_lane_assignment_drift_is_expected_red_canary(
+    current_claim: str,
+    drifted_claim: str,
+    error_match: str,
+) -> None:
+    roadmap = ROADMAP.read_text(encoding="utf-8")
+    mutated = roadmap.replace(current_claim, drifted_claim, 1)
+    assert mutated != roadmap
+    with pytest.raises(AssertionError, match=error_match):
+        _assert_lane_assignment_parity(mutated)
 
 
 def test_v88_integration_ready_state_rejects_accepted_open_candidate() -> None:

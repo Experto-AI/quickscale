@@ -73,7 +73,7 @@ Audit-derived prerequisites and implementation tickets share one ranked queue.
 
 | Band | Rule | Tickets |
 |---|---|---|
-| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **Empty — re-verified 2026-09-01 on `v88` at `3aa0c67f`.** `poetry run pytest scripts/test_provision_ci_postgres.py -q -o addopts= --no-cov` returns **35 passed** in the foreground. The exit-141 red W1 hit mid-campaign was inherited and is repaired by SA167c's merged `91fd3bb6`. No provisioning repair is owed and no gate is red. |
+| **A — Restore enforcement** | Gate layer reports green while not running, or runs red on HEAD. | **Empty — re-verified 2026-09-01 on `v88` at `3aa0c67f`.** `poetry run pytest scripts/test_provision_ci_postgres.py -q -o addopts= --no-cov` returns **35 passed** in the foreground. The exit-141 red W1 hit mid-campaign was inherited and is repaired by SA167c's merged `91fd3bb6`. No provisioning repair is owed and no provisioning gate is red. |
 | **B — Release work on the critical paths** | The two longest serialized chains, one holding the exclusive service slot. | SA167c; SA170; SA167d |
 | **C — Bounded independent fixes** | No dependants, small blast radius; absorbed as slack filler. | SA160, SA161, SA164, SA165, SA166, SA171, SA172, SA174, SA175 |
 
@@ -98,7 +98,7 @@ W3 (service lifecycle — exclusive PostgreSQL/Docker slot)
 tail positions that may slip past the release. The release-committed critical path is therefore
 **SA167c**. Its formal ticket chain is entirely inside W2, but the current F release verdict is
 blocked on failures already owned by SA170/W3. W3 holds the exclusive slot and takes scheduling
-priority while one of its Docker-backed legs is active, but its four positions are a *queue*, not a
+priority while one of its Docker-backed legs is active, but its three positions are a *queue*, not a
 chain. W1 is the longest lane at six positions, and its tails are band C, so it does not set the date
 either.
 
@@ -229,7 +229,7 @@ phase became accepted.
   A-E with F pending.
 - **Pending:** no SA135 implementation or merge work remains. Plan phase `G-CLOSEOUT` remains a
   historical unaccepted partial and is not re-entered or relabelled accepted. Open product work is
-  SA167c E/F on W2, SA167d Phase C on W1, and SA170's transferred Docker/E2E contract on W3.
+  SA167c F on W2, SA167d Phase C on W1, and SA170's transferred Docker/E2E contract on W3.
 - **Blocking:** none for the retained SA135 checkpoint. Each open ticket is blocked only by its own
   declared validation and acceptance work; this merge clears no open-ticket gate.
 - **Decisions needed:** none. Do not reopen the settled PostgreSQL lifecycle, redo SA167c A-D, or
