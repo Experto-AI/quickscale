@@ -335,12 +335,9 @@ yourself editing either to register a module, the module's own declaration is in
 > `module_config.py` are absent from the settled product bytes and remain a pattern not to copy.
 > The former CLI wiring deviation is retired: the desired-configuration-only boundary is
 > implemented and accepted through phase E at E0 tip
-> `bd2c291ba2d40494970464741ac51bfd45445a19`. **`SA167d`** remains open at active merge
-> position #18; retained-partial convergence and terminal attestation are complete, and
-> retained-partial-only merge-back is authorized for the reviewed partial plus the latest-v88
-> status reconciliation without closing the ticket. Completion-grade Phase C convergence,
-> terminal attestation, and exact-tip integration remain pending; SA165 remains dependent.
-> This is an accepted-open checkpoint, not a completion claim.
+> `bd2c291ba2d40494970464741ac51bfd45445a19`. **`SA167d`** completion-grade Phase C is a
+> conditional post-integration candidate; exact-tip integration remains pending. SA165 is released
+> with `deps: none`. This is a closeout candidate, not an exact-tip integration claim.
 
 The companion declaration-gate work remains open under **`SA167c`** at merge #21. Phases A-E are
 accepted on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15`; F is outstanding

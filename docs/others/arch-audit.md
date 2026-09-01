@@ -30,7 +30,7 @@ documents pinning this audit's finding IDs or counts, which this pass complies w
 
 **Growth direction (from the planning surface, authoritative).** The roadmap's recorded
 prioritization decision remains **"neither"** — no `teams` domain work and no third
-generated-project updater. Twelve open v88 ticket entries run on three tracks across twelve open merge
+generated-project updater. Eleven open v88 ticket entries run on three tracks across eleven open merge
 positions; **W2 sets the release date** because SA167c remains open at #21 with phases A-E accepted
 on retained product object `91fd3bb6e6b638735361b511c1515cddccce5d15` and F outstanding after
 `QS_E2E_INTEGRATION_REF=v88 make ci-e2e` exited 2 with 2 Core and 8 CLI E2E failures owned by
@@ -48,20 +48,13 @@ or release-readiness claim is made. Retained-partial-only merge-back of the sync
 status checkpoint is authorized without accepting F, closing SA167c, or unblocking SA166; exact-tip attestation is complete and that checkpoint merged at `ef712e2d649d73aec0bdd9b4d3ca0b23913da419`. Its accepted evidence is archived in
 [CHANGELOG.md](../../CHANGELOG.md).
 
-**Accepted-open SA167d checkpoint (2026-08-28; current status reconciled 2026-09-01).** SA167d
-remains open and active at merge position **#18**, with SA165 still dependent on it. Phases A-E
-are accepted at E0 tip
-`bd2c291ba2d40494970464741ac51bfd45445a19`; E0 made no tracked edits. The focused command
-passed **282 tests**, Core/CLI passed **2,880 / 2,098** with **1 skipped** on Core, all module
-integration suites passed with documented skips/warnings at **94.54% overall mean coverage**,
-`make check` passed **1,318** with zero unsuppressed findings, and quality passed with zero
-regressions and monotonicity. Retained-partial convergence and terminal attestation are complete,
-and retained-partial-only merge-back is authorized for the reviewed partial plus the latest-v88
-status reconciliation without closing SA167d. Completion-grade Phase C convergence, terminal
-attestation, and exact-tip integration remain pending.
-The 2026-09-01 Phase C attempt then halted at `make check` on the inherited exit-141 provisioning
-probe; `scripts/test_provision_ci_postgres.py` returns **35 passed** on current `v88`, so W1 owns no
-repair and must restart its campaign after syncing current `v88`. No SA167d tracked byte was written.
+**SA167d completion candidate (2026-09-01).** The seven distinct closeout commands ultimately returned exit 0,
+and the completion ledger archived SA167d and retired merge position #18. SA165 is released with
+`deps: none`; the current queue is eleven open v88 ticket entries across eleven open merge positions.
+The ledger is a **conditional post-integration** candidate with **exact-tip** integration and terminal
+attestation still pending in the root closeout path. The first
+foreground `make check` invocation terminated with exit 143 after Make reported no child processes
+and supplied no verdict; the exact command rerun returned exit 0.
 
 **Read fully:** the four workflows, `scripts/gate_registry.json`, `scripts/check_gate_parity.py` (context extraction and comparison), `scripts/sync_ci_gate_jobs.py` (generation and job-set validation), the `Makefile` test/gate targets, `scripts/check_ci_locally.sh` gate stations, `scripts/test_isolation_conformance.sh`, and the three behavioral diffs. **Sampled:** module sources, generator, beta migration, orgs tenancy (prior-finding anchor re-verification only). **Skipped:** generated-project template internals, frontend theme sources.
 **Scope decision.** With the delta this small, the pass's value is re-verification plus depth
